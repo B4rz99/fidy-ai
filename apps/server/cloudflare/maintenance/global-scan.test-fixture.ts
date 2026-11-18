@@ -48,7 +48,8 @@ import { recoverConnections } from "../connections/runtime";
 import { advanceProactivityWork } from "../insights/runtime";
 import { advanceRecurringWork } from "../recurring/runtime";
 import { repairDashboardProjections } from "../transactions/runtime";
-import { dispatchWhatsAppWork, sweepExpiredWhatsAppWindows } from "../whatsapp/runtime";
+import { dispatchWhatsAppWork } from "../whatsapp/historical-whatsapp.test-fixture";
+import { sweepExpiredWhatsAppWindows } from "../whatsapp/runtime";
 
 const activity = <E>(
   operation: ScheduledOperation,

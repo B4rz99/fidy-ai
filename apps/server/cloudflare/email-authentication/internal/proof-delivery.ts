@@ -1,4 +1,4 @@
-import { OutboundHttpLive } from "../../outbound-http/runtime";
+import { OutboundHttpLive, installedProviderFetch } from "../../outbound-http/runtime";
 import { Cause, Context, Effect, Exit, Layer, Redacted } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import type {
@@ -11,7 +11,6 @@ import {
 } from "../../../src/shell/email-authentication/runtime";
 import { makeResendOutboundHttp } from "../../../src/shell/outbound-http/operations";
 import {
-  captureObservedProviderFetch,
   cloudflareWorkerTelemetry,
   observeWorkerExecution,
   workerRelease,
@@ -42,7 +41,7 @@ export const sendClaimedProof = (
         const clients = yield* Layer.build(OutboundHttpLive).pipe(
           Effect.provideService(
             FetchHttpClient.Fetch,
-            yield* captureObservedProviderFetch(globalThis.fetch, {
+            yield* installedProviderFetch({
               provider: "resend",
               environment: input.environment,
               telemetry: cloudflareWorkerTelemetry,

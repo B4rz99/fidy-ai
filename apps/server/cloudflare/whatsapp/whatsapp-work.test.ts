@@ -3,8 +3,9 @@ import { type Mock, expect, it, vi } from "vitest";
 import { UserId } from "../../src/core/identity/contract";
 import { TranscriptTurnId } from "../../src/core/agent/contract";
 import { WhatsAppWork } from "./contract";
-import { receiveWhatsAppWork } from "./runtime";
-import { receiveWhatsAppWork as receiveOwnedWhatsAppWork } from "./internal/whatsapp-work";
+import { receiveWhatsAppWork } from "./historical-whatsapp.test-fixture";
+
+import { receiveWhatsAppWork as receiveOwnedWhatsAppWork } from "./internal/historical-whatsapp-work.test-fixture";
 
 it("removes raw trace metadata before coordinator persistence without altering WhatsApp work", () =>
   Effect.runPromise(

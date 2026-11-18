@@ -8,7 +8,7 @@ import {
   voiceRefusalUrl,
 } from "../contract";
 import { Digest, SecureRandom } from "effect/crypto";
-import { OutboundHttpLive } from "../../outbound-http/runtime";
+import { OutboundHttpLive, installedProviderFetch } from "../../outbound-http/runtime";
 import { makeNativeStatusAdmission } from "./registered-send";
 import { routeNativeInvitation } from "../../provider-authentication/runtime";
 import { TranscriptText } from "../../../src/core/agent/contract";
@@ -38,10 +38,7 @@ import {
 import { Hex } from "effect/encoding";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { UserId } from "../../../src/core/identity/contract";
-import {
-  captureObservedProviderFetch,
-  cloudflareWorkerTelemetry,
-} from "../../runtime/telemetry/operations";
+import { cloudflareWorkerTelemetry } from "../../runtime/telemetry/operations";
 
 const HTTP_OK = 200;
 const HTTP_UNAUTHORIZED = 401;
@@ -438,7 +435,7 @@ export const receiveIngress =
   (request) =>
     Effect.scoped(
       Effect.gen(function* () {
-        const fetcher = yield* captureObservedProviderFetch(globalThis.fetch, {
+        const fetcher = yield* installedProviderFetch({
           provider: "kapso",
           environment,
           telemetry: cloudflareWorkerTelemetry,

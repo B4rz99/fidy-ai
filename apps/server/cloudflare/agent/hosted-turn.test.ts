@@ -54,8 +54,8 @@ import {
 import {
   dispatchWhatsAppWork,
   receiveWhatsAppWork,
-  sweepExpiredWhatsAppWindows,
-} from "../whatsapp/runtime";
+} from "../whatsapp/historical-whatsapp.test-fixture";
+import { sweepExpiredWhatsAppWindows } from "../whatsapp/runtime";
 import {
   acknowledgeVisibleReply,
   captureReplyAddresses,

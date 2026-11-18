@@ -69,7 +69,7 @@ import { projections as erasureProjections } from "./internal/erasure";
 import { makeErasureStore } from "../erasure-store/runtime";
 import type { ErasureStore } from "../erasure-store/contract";
 import { makeWompiTransport } from "./internal/wompi-runtime";
-import { OutboundHttpLive } from "../outbound-http/runtime";
+import { OutboundHttpLive, installedProviderFetch } from "../outbound-http/runtime";
 import { dispatchCancellations } from "./internal/source-cancellation";
 import { dispatchSubscriptionRenewals as dispatchRenewals } from "./internal/subscription-renewal";
 import {
@@ -89,7 +89,6 @@ import {
 } from "../../src/shell/outbound-http/operations";
 import { handleRefundSupport as supportRefund } from "./internal/refund-support";
 import {
-  captureObservedProviderFetch,
   cloudflareWorkerTelemetry,
   observeWorkerPromise,
   workTraceParent,
@@ -139,7 +138,7 @@ export const wompiOutboundHttp = (
 ): Effect.Effect<ReturnType<typeof makeWompiOutboundHttp>> =>
   Effect.scoped(
     Effect.gen(function* () {
-      const fetcher = yield* captureObservedProviderFetch(globalThis.fetch, {
+      const fetcher = yield* installedProviderFetch({
         provider: "wompi",
         environment,
         telemetry: cloudflareWorkerTelemetry,
@@ -186,7 +185,7 @@ export const handleRefundSupport = (
         const clients = yield* Layer.build(OutboundHttpLive).pipe(
           Effect.provideService(
             FetchHttpClient.Fetch,
-            yield* captureObservedProviderFetch(globalThis.fetch, {
+            yield* installedProviderFetch({
               provider: "cloudflare-access",
               environment: workerRelease(input.environment),
               telemetry: cloudflareWorkerTelemetry,

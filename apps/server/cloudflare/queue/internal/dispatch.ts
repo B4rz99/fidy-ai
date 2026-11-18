@@ -1,6 +1,6 @@
 import { SynchronizationWork } from "../../connections/contract";
-import { WhatsAppLifecycleWork, WhatsAppWork } from "../../whatsapp/contract";
-import { receiveWhatsAppWork, routeWhatsAppStatus } from "../../whatsapp/runtime";
+import { WhatsAppLifecycleWork } from "../../whatsapp/contract";
+import { routeWhatsAppStatus } from "../../whatsapp/runtime";
 import {
   LocalBillingCollection,
   LocalRefundWork,
@@ -194,16 +194,6 @@ const receiveIdentityOnlyQueue = ({
         ...(environment.USER_STORE === undefined ? {} : { users: environment.USER_STORE }),
         coordinator: environment.USER_TRANSACTION_COORDINATOR,
       }).pipe(Effect.mapError(deliveryFailure))
-    );
-  }
-  if (batch.messages.some((message) => Schema.is(WhatsAppWork)(message.body))) {
-    return Option.some(
-      nativeDelivery(() =>
-        receiveWhatsAppWork({
-          messages: batch.messages,
-          coordinator: environment.USER_TRANSACTION_COORDINATOR,
-        })
-      )
     );
   }
   return Option.none();

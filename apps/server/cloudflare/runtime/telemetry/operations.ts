@@ -1,4 +1,3 @@
-import { fetchForInstalledRelease } from "../../release-isolation/runtime";
 import {
   Telemetry,
   encodeTraceParent,
@@ -420,7 +419,7 @@ const observeProviderFetchWork = (
       input: Parameters<typeof globalThis.fetch>[0],
       init?: Parameters<typeof globalThis.fetch>[1]
     ) =>
-      observeResponsePromise(() => fetchForInstalledRelease({ transport: fetcher })(input, init), {
+      observeResponsePromise(() => fetcher(input, init), {
         ...observation,
         operation: "provider.request",
       }),

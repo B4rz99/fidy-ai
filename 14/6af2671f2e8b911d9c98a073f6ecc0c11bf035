@@ -1,0 +1,35 @@
+apps/server/cloudflare/budgets/internal/native-thresholds.ts
+  s_a1be23a656acf0::t_78e4cff72f078e 128
+apps/server/cloudflare/insights/internal/local-category-messages.ts
+  s_a1be23a656acf0::t_e46da0b6b10db5 33,43,50,65
+apps/server/cloudflare/insights/internal/local-reminder-choice.ts
+  s_a1be23a656acf0::t_738e7b49fbf813 1,124,288-290
+apps/server/cloudflare/insights/internal/local-reminder.ts
+  s_a1be23a656acf0::t_6de10bfcb38c4c 1,148,224
+apps/server/cloudflare/insights/internal/native-recurring-digest.ts
+  s_a1be23a656acf0::t_52e251164a98b4 1-192
+apps/server/cloudflare/insights/internal/recurring-materialization.ts
+  s_a1be23a656acf0::t_2899c0555f42a0 1,4,190,202
+apps/server/cloudflare/insights/internal/recurring-presentation.ts
+  s_a1be23a656acf0::t_571199ffbe145a 1-31
+apps/server/cloudflare/insights/native-reminder-consent.test.ts
+  s_a1be23a656acf0::t_5b67c2850c59ec 1,207-312
+apps/server/cloudflare/user-store/operations.ts
+  s_a1be23a656acf0::t_3d4fb1850acd70 1081-1092
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "146af2671f2e8b911d9c98a073f6ecc0c11bf035",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

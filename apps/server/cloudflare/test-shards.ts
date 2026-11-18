@@ -8,7 +8,6 @@ const estimatedSeconds: Readonly<Record<string, number>> = {
   "oauth-agents/oauth-ingress.test.ts": 27.79,
   "oauth-agents/oauth-discovery.test.ts": 26.93,
   "erasure/restore.test.ts": 25.89,
-  "maintenance/idle-budget.test.ts": 24.84,
   "ingestion/statement-processing.test.ts": 23.67,
   "budgets/budgets.test.ts": 23.02,
   "oauth-agents/oauth-canonical.test.ts": 20.78,
@@ -162,8 +161,6 @@ const estimatedSeconds: Readonly<Record<string, number>> = {
   "test-shards.test.ts": 0.02,
   "runtime/operational-health/alerts.test.ts": 0.01,
   "runtime/release-smoke/platform.test.ts": 0.01,
-  "maintenance/performance.test.ts": 0.0,
-  "transactions/performance.test.ts": 0.0,
 };
 
 /** Assigns every discovered file once, longest estimated work first, to the lightest shard. */

@@ -1,0 +1,29 @@
+apps/server/cloudflare/whatsapp/native-callback.test.ts
+  s_a1be23a656acf0::t_3db64cff04f396 140-141,155,162-165,176
+apps/web/src/app/application.tsx
+  s_a1be23a656acf0::t_a53c845682d0bf 10,51-54
+apps/web/src/app/mount.tsx
+  s_a1be23a656acf0::t_e11c30a9e1ee02 4,15-18
+apps/web/src/transport/origin.test.ts
+  s_a1be23a656acf0::t_926022857f2845 2,11-19,25
+apps/web/src/transport/origin.ts
+  s_a1be23a656acf0::t_a91c1034cf9825 9,24-43
+apps/web/vite.config.ts
+  s_a1be23a656acf0::t_9fa30efdba85d1 3,60,65,67,70-79
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f1a13184c047978239240e29702fd37f00d358e0",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

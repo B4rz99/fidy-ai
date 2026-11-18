@@ -1,0 +1,44 @@
+apps/server/cloudflare/consent/internal/local-processing.ts
+  s_a1be23a656acf0::t_d9796a2d23a3af 32,159
+  s_a1be23a656acf0::t_9a12b82df17b04 1-31,33-158,160-211
+apps/server/cloudflare/canonical-admission/internal/local-mutation.ts
+  s_a1be23a656acf0::t_493e054010b18d 617-645,652
+apps/server/cloudflare/canonical-admission/operations.ts
+  s_a1be23a656acf0::t_4d2a32f828ade0 16-17,1339-1342
+apps/server/cloudflare/canonical-operations/operations.ts
+  s_a1be23a656acf0::t_40d7ccfc543b67 26,30,756,835-843,920-921,1009-1012
+apps/server/cloudflare/consent/native-browser.test.ts
+  s_a1be23a656acf0::t_e598c6cec24963 1-91
+apps/server/cloudflare/consent/runtime.ts
+  s_a1be23a656acf0::t_7096e126b8600d 1,231-233
+apps/server/cloudflare/core-http/internal/http.ts
+  s_a1be23a656acf0::t_35d16151864f17 1665
+apps/server/cloudflare/core-http/native-listings.test.ts
+  s_a1be23a656acf0::t_caccc2f802170b 1-65
+apps/server/cloudflare/core-worker.ts
+  s_a1be23a656acf0::t_c467d197dcaaee 356
+apps/server/cloudflare/public-worker-browser-entry.test.ts
+  s_a1be23a656acf0::t_b8b1c198af31ba 23-25,41,48,52
+apps/server/cloudflare/public-worker.ts
+  s_a1be23a656acf0::t_d0b51403f3373c 820-824,831-833,855
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_2ebd8c8270e9c9 1-2,738,766-781
+infra/cloudflare/alchemy.run.ts
+  s_a1be23a656acf0::t_8d3e5a12092463 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "13fb090187bbdfc03dc5bc047a1d11ca2916c5d2",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

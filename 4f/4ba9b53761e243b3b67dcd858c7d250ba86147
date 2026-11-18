@@ -1,0 +1,27 @@
+apps/server/cloudflare/erasure/native-admission.test.ts
+  s_a1be23a656acf0::t_42b09540081001 13-21,168-226
+apps/server/package.json
+  s_a1be23a656acf0::t_75c3c8a70c0e5f 341
+bun.lock
+  s_a1be23a656acf0::t_1546469b71732c 75,770,908,910,912,914,916,918,920,922,924,926,928,930,932,934,936,938,1914
+tools/astro/bun.lock
+  s_a1be23a656acf0::t_006681c95e1ab4 9,112
+tools/astro/package.json
+  s_a1be23a656acf0::t_bd17ef249bdf4a 9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4f4ba9b53761e243b3b67dcd858c7d250ba86147",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

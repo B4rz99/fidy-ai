@@ -1,19 +1,28 @@
 infra/cloudflare/workers.test.ts
   s_a1be23a656acf0::t_018acb67f447f2 1028-1039,1052,1059,1062
+  s_a1be23a656acf0::t_30a52794e970db 1028,1059,1062
+  s_a1be23a656acf0::t_49e4d4ba478732 1029-1039,1052
 infra/cloudflare/local-emulation.test.ts
   s_a1be23a656acf0::t_018acb67f447f2 82-85
+  s_a1be23a656acf0::t_30a52794e970db 82-85
 apps/server/cloudflare/oauth-agents/native-allowance.test.ts
   s_a1be23a656acf0::t_018acb67f447f2 83-87
+  s_a1be23a656acf0::t_30a52794e970db 83-87
 apps/server/cloudflare/canonical-admission/internal/local-mutation.ts
   s_a1be23a656acf0::t_018acb67f447f2 117
+  s_a1be23a656acf0::t_30a52794e970db 117
 infra/cloudflare/verify-edge-policy.ts
   s_a1be23a656acf0::t_018acb67f447f2 5
 apps/server/cloudflare/oauth-agents/native-grant.test.ts
   s_a1be23a656acf0::t_018acb67f447f2 92-94,303-305
+  s_a1be23a656acf0::t_30a52794e970db 93
+  s_a1be23a656acf0::t_bb417869ca6dac 92,94,303-305
 apps/server/cloudflare/tokens/native-pairing.test.ts
   s_a1be23a656acf0::t_018acb67f447f2 311-322
+  s_a1be23a656acf0::t_30a52794e970db 311-322
 apps/server/cloudflare/tokens/native-authority.test.ts
   s_a1be23a656acf0::t_018acb67f447f2 86-89,91-100
+  s_a1be23a656acf0::t_30a52794e970db 86-89,91-100
 ---
 {
   "schema_version": "authorship/3.0.0",

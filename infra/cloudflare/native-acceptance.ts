@@ -90,10 +90,19 @@ const runner = ({ origins, send, proof, revision }: Inputs): Driver => {
   });
   return { call, post };
 };
-const cookie = Effect.fn(function* (reply: Response) {
-  const first = reply.headers.get("set-cookie")?.split(";")[0];
-  if (first === undefined) {
-    return yield* Effect.fail(Error("Missing original cookie in closed signup"));
+const cookie = Effect.fn(function* (reply: Response, name: string) {
+  const [first, ...attributes] = (reply.headers.get("set-cookie") ?? "")
+    .split(";")
+    .map((item) => item.trim());
+  const required = ["Path=/", "Secure", "HttpOnly", "SameSite=Lax"];
+  if (
+    first === undefined ||
+    !first.startsWith(name + "=") ||
+    first.length <= name.length + 1 ||
+    !required.every((item) => attributes.includes(item)) ||
+    attributes.some((item) => item.toLowerCase().startsWith("domain="))
+  ) {
+    return yield* Effect.fail(Error("Missing host-only browser credential in protected signup"));
   }
   return first;
 });
@@ -108,7 +117,7 @@ const boot = Effect.fn(function* (input: Inputs, ordinal: number) {
     intent: "signup",
     consentRevision: webSignupDisclosure().revision,
   });
-  const transient = yield* cookie(start),
+  const transient = yield* cookie(start, "__Host-fidy_google"),
     auth = new URL(
       (yield* result(start, Schema.Struct({ authorizationUrl: Schema.String }))).authorizationUrl
     );
@@ -140,7 +149,7 @@ const boot = Effect.fn(function* (input: Inputs, ordinal: number) {
     return yield* Effect.fail(Error("Original User did not complete synthetic signup"));
   }
   const session = yield* validStatus(yield* post("/web/pairings/redeem", proof), ok);
-  const mounted = yield* cookie(session);
+  const mounted = yield* cookie(session, "__Host-fidy_session");
   yield* Effect.tryPromise(() => session.arrayBuffer());
   const { binding } = yield* result(
     yield* call("/web/session/binding", { headers: { cookie: mounted } }),

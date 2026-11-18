@@ -1,3 +1,8 @@
+import { readProviderList } from "./native-provider-list";
+import { verifyInstalledWebsite } from "./native-deployed-web";
+import { inspectDeployedEdge } from "./native-deployed-edge";
+import { inspectNativeResources, requireDeployedRole } from "./native-deployed-graph";
+import type { NativeRole } from "./native-graph";
 import { exerciseClosedUsers } from "./native-acceptance";
 import { installedOrigins } from "@fidy/server/browser-transport";
 import { verifyNativeEdge } from "./native-edge";
@@ -76,52 +81,27 @@ const installedDomains = Effect.fn(function* (
     )
   )).flat();
 });
-const firstInstallInventory = Effect.fn(function* (env: Config, client: HttpClient.HttpClient) {
-  const get = (path: string): Effect.Effect<unknown, Error> =>
+const accountReader =
+  (env: Config, client: HttpClient.HttpClient) =>
+  (path: string): Effect.Effect<unknown, Error> =>
     providerJson(
       HttpClientRequest.get(
         `https://api.cloudflare.com/client/v4/accounts/${env.account}/${path}`,
         { headers: { authorization: `Bearer ${env.token}` } }
       )
     ).pipe(Effect.provideService(HttpClient.HttpClient, client));
+const firstInstallInventory = Effect.fn(function* (env: Config, client: HttpClient.HttpClient) {
+  const get = accountReader(env, client);
   const scripts = yield* Schema.decodeUnknownEffect(
     Schema.Struct({
       success: Schema.Literal(true),
       result: Schema.Array(Schema.Struct({ id: Schema.NonEmptyString })),
     })
   )(yield* get("workers/scripts"));
-  const pages = Effect.fn(function* <A>(path: string, item: Schema.Codec<A>) {
-    const result: A[] = [];
-    for (let page = 1; ; page++) {
-      const limit = 100;
-      const body = yield* Schema.decodeUnknownEffect(
-        Schema.Struct({
-          success: Schema.Literal(true),
-          result: Schema.Array(item),
-          result_info: Schema.optional(
-            Schema.Struct({ page: Schema.Int, total_pages: Schema.optional(Schema.Int) })
-          ),
-        })
-      )(yield* get(`${path}?per_page=${limit}&page=${page}`));
-      if (body.result_info !== undefined && body.result_info.page !== page) {
-        return yield* new ReleaseFailure({ message: "Inventory pagination changed" });
-      }
-      result.push(...body.result);
-      if (
-        body.result_info?.total_pages !== undefined
-          ? page >= body.result_info.total_pages
-          : body.result.length < limit
-      ) {
-        return result;
-      }
-      if (page === 100) {
-        return yield* new ReleaseFailure({ message: "Inventory exceeds the bounded release scan" });
-      }
-    }
-  });
   return {
     scripts: scripts.result,
-    namespaces: yield* pages(
+    namespaces: yield* readProviderList(
+      get,
       "workers/durable_objects/namespaces",
       Schema.Struct({
         script: Schema.NonEmptyString,
@@ -181,6 +161,11 @@ const verifyFreshTarget = Effect.fn(function* (
 ) {
   yield* releaseController.requireTrunk(port, env.revision);
   const inventory = yield* firstInstallInventory(env, client);
+  if (inventory.scripts.some((item) => item.id === "fidy-native-smoke-" + env.revision)) {
+    return yield* new ReleaseFailure({ message: "Revision smoke Worker already exists" });
+  }
+  yield* inspectNativeResources(accountReader(env, client), env.revision, false);
+  yield* inspectDeployedEdge(env, client, { installed: false, bindings: {} });
   yield* Effect.try({
     try: () => requireAbsentInstallation(inventory),
     catch: () =>
@@ -320,13 +305,63 @@ const verifySyntheticUsers = Effect.fn(function* (env: Config, client: HttpClien
   yield* response.pipe(Effect.retry({ times: 20, schedule: Schedule.spaced("500 millis") }));
   return { ...proof, callback: { ...proof.callback, workflowStatus: "complete" } };
 });
-const verifyFirstInstall = Effect.fn(function* (
+const verifyDeployedWorkers = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
   port: ReleasePort
 ) {
-  yield* releaseController.requireTrunk(port, env.revision);
-  yield* verifyNativeEdge(env, client, false);
+  const workers: ReadonlyArray<readonly [NativeRole, string]> = [
+    ["Ingress", installationNames.Ingress],
+    ["Core", installationNames.Core],
+    ["Web", installationNames.Web],
+    ["Smoke", "fidy-native-smoke-" + env.revision],
+    ["ForwardedEmail", installationNames.ForwardedEmail],
+  ];
+  return yield* Effect.forEach(
+    workers,
+    Effect.fn(function* ([role, name]) {
+      const deployment = yield* port.current(name);
+      const id = yield* releaseController.servingVersion(deployment);
+      const version = yield* versionResources(env, client, { name, id, revision: env.revision });
+      yield* Effect.try(() =>
+        requireDeployedRole({ role, revision: env.revision, bindings: version.bindings })
+      );
+      if (role === "Core" || role === "Smoke" || role === "ForwardedEmail") {
+        yield* proveRecoveryCorePrivate(env, client, name);
+      }
+      return { role, name, versionId: id, deploymentId: deployment.id };
+    }),
+    { concurrency: 3 }
+  );
+});
+const verifyInstalledTopology = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  input: {
+    port: ReleasePort;
+    bindings: Readonly<Record<string, unknown>>;
+    publicStable: string;
+    coreStable: string;
+  }
+) {
+  const workers = yield* verifyDeployedWorkers(env, client, input.port);
+  if (
+    workers.find((item) => item.role === "Ingress")?.versionId !== input.publicStable ||
+    workers.find((item) => item.role === "Core")?.versionId !== input.coreStable
+  ) {
+    return yield* new ReleaseFailure({
+      message: "Application versions changed during verification",
+    });
+  }
+  const resources = yield* inspectNativeResources(accountReader(env, client), env.revision, true);
+  const edge = yield* inspectDeployedEdge(env, client, {
+    installed: true,
+    bindings: input.bindings,
+  });
+  const website = yield* verifyInstalledWebsite(client, env.revision);
+  return { workers, resources, edge, website };
+});
+const firstInstallWorkers = Effect.fn(function* () {
   const receipts = yield* workersFromState("capture", nativeStack);
   if (
     receipts.core.workerName !== installationNames.Core ||
@@ -336,6 +371,16 @@ const verifyFirstInstall = Effect.fn(function* (
   ) {
     return yield* new ReleaseFailure({ message: "First-install resource identity unavailable" });
   }
+  return receipts;
+});
+const verifyFirstInstall = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  port: ReleasePort
+) {
+  yield* releaseController.requireTrunk(port, env.revision);
+  yield* verifyNativeEdge(env, client, false);
+  const receipts = yield* firstInstallWorkers();
   const pair = yield* readStablePair(
     {
       port,
@@ -365,6 +410,12 @@ const verifyFirstInstall = Effect.fn(function* (
     verifiedStoragePair({ ingress: ingress.bindings, core: core.bindings })
   );
   yield* verifyInstalledNamespaces({ env, client, storage, workers: [ingress, core] });
+  const topology = yield* verifyInstalledTopology(env, client, {
+    port,
+    bindings: core.bindings,
+    publicStable: pair.publicStable,
+    coreStable: pair.coreStable,
+  });
   const proof = yield* verifyInstalledMarkers({ env, client, pair, storage });
   const synthetic = yield* verifySyntheticUsers(env, client);
   yield* writeFile(
@@ -375,6 +426,8 @@ const verifyFirstInstall = Effect.fn(function* (
       coreVersionId: pair.coreStable,
       namespaces: storage.namespaces,
       markers: proof.markers,
+      ...topology,
+      protectedRunUrl: yield* ReleaseConfig.String("RELEASE_RUN_URL"),
       synthetic,
       admission: "closed",
     })

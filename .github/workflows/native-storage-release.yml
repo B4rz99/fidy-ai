@@ -73,6 +73,10 @@ jobs:
         if: inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback'
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts promote
+      - name: Build the expected browser artifact for independent verification
+        if: inputs.operation == 'verify'
+        working-directory: apps/web
+        run: bun run build:production
       - name: Verify the installed application and retained schema markers
         id: verify
         working-directory: infra/cloudflare

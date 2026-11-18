@@ -25,6 +25,9 @@ export class CategoryProbe extends DurableObject<ConstructorParameters<typeof Us
       ceilingBytes: env.SQLITE_STORE_CAPACITY_BYTES,
     });
   }
+  override alarm(): Promise<void> {
+    return this.store.alarm();
+  }
   override fetch(request: Request): Promise<Response> {
     if (new URL(request.url).pathname !== "/fixture/capture") return this.store.fetch(request);
     const owns = (id: string): boolean => this.ctx.id.equals(this.env.USER_STORE.idFromName(id));

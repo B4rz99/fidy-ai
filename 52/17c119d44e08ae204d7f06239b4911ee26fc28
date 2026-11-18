@@ -1,0 +1,33 @@
+package.json
+  s_a1be23a656acf0::t_4e1071d934dc3a 69
+apps/site/package.json
+  s_a1be23a656acf0::t_4e1071d934dc3a 13,15
+apps/web/src/transport/wompi-daviplata.ts
+  s_a1be23a656acf0::t_4e1071d934dc3a 511
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_4e1071d934dc3a 5
+apps/server/cloudflare/mcp/runtime.ts
+  s_a1be23a656acf0::t_4e1071d934dc3a 931-934
+apps/docs/package.json
+  s_a1be23a656acf0::t_4e1071d934dc3a 16
+scripts/dev-browser.ts
+  s_a1be23a656acf0::t_4e1071d934dc3a 151
+bun.lock
+  s_a1be23a656acf0::t_cbdb4060c22a89 12,47,85,87,254,256,258,266,464,466,468,470,472,474,476,478,1168,2306
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5217c119d44e08ae204d7f06239b4911ee26fc28",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

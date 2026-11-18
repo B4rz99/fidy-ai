@@ -1,0 +1,33 @@
+apps/server/cloudflare/ingestion/email-worker.ts
+  s_a1be23a656acf0::t_41f069f4ed7afe 19
+apps/server/cloudflare/ingestion/forwarded-email.test.ts
+  s_a1be23a656acf0::t_dc2d545912f2bc 1,3,10-13
+apps/server/cloudflare/ingestion/internal/email-envelope.ts
+  s_a1be23a656acf0::t_db608b779a43ad 1-67
+apps/server/cloudflare/ingestion/internal/forwarded-email-processing.ts
+  s_a1be23a656acf0::t_fd5460ff460afd 12
+apps/server/cloudflare/ingestion/internal/forwarded-email.ts
+  s_a1be23a656acf0::t_8a6453a88f7950 2-16,34
+apps/server/cloudflare/ingestion/internal/local-email.ts
+  s_a1be23a656acf0::t_4e372e350f02fd 45
+apps/server/cloudflare/ingestion/internal/sample-review.ts
+  s_a1be23a656acf0::t_56669ebd5e3d83 1
+apps/server/cloudflare/maintenance/core-schedule.test.ts
+  s_a1be23a656acf0::t_044d1318d6c9a7 3,19-24,42-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "52a969b6dbbb22e5fd28f20d11c6fdf5b54cd0ed",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

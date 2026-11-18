@@ -1,0 +1,21 @@
+.github/workflows/production.yml
+  s_a1be23a656acf0::t_8ad1a7259f5d16 32
+apps/web/scripts/production-workflow.test.ts
+  s_a1be23a656acf0::t_2b19f756749726 170-173
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b3b25420b365ea0518657fdc3df52496ac7e8f5a",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

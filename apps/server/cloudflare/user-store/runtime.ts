@@ -69,8 +69,8 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
   }
 
   override alarm(): Promise<void> {
-    return this.registration().then((registered) =>
-      registered
+    return this.registration().then((registration) =>
+      registration === "registered"
         ? this.checkWork().then((summary) => {
             if (summary.failedFamilies > 0) throw new Error("User work discovery unavailable");
           })
@@ -131,7 +131,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
   private readonly owns = (userId: string): boolean =>
     this.ctx.id.equals(this.env.USER_STORE.idFromName(userId));
 
-  private registration(): Promise<boolean> {
+  private registration(): Promise<Effect.Success<ReturnType<typeof observeUserRegistration>>> {
     return this.runtime.runPromise(observeUserRegistration(this.env.MAINTENANCE, this.owns));
   }
 
@@ -142,7 +142,12 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
       );
     }
     return this.registration().then(
-      (registered) => this.dispatch(request, registered),
+      (registration) => {
+        if (registration === "unavailable" && ownerCheckRequest(request)) {
+          return new Response(null, { status: uncertainCheckStatus });
+        }
+        return this.dispatch(request, registration === "registered");
+      },
       () => canonicalAdmissionUnavailable()
     );
   }

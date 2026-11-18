@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "d06df69b0a3245d023e4cec1e1b2fd97b794f2d783386a39adf66879c55e1883";
+const expectedEdgePolicyDigest = "fce9387e5392c21633fb84e95c61831071c99c360401d26398d0ac551bf2445d";
 const securityArtifacts = [
   await Bun.file(
     new URL("../../apps/server/cloudflare/maintenance/internal/watchdog.ts", import.meta.url)

@@ -793,17 +793,17 @@ export const observeUserRegistration = Effect.fn(function* (
 ) {
   const sql = yield* SqliteClient;
   const [row] = yield* sql`SELECT id,lifetime_registered FROM users LIMIT 1`;
-  if (row === undefined) return false;
+  if (row === undefined) return "empty" as const;
   const user = yield* Schema.decodeUnknownEffect(
     Schema.Struct({
       id: UserId,
       lifetime_registered: Schema.Literals([0, 1]),
     })
   )(row);
-  if (!owns(user.id)) return false;
-  if (user.lifetime_registered === 1) return true;
+  if (!owns(user.id)) return "unavailable" as const;
+  if (user.lifetime_registered === 1) return "registered" as const;
   yield* registerUserLifetime(maintenance, user.id);
   const confirmed = yield* sql`UPDATE users SET lifetime_registered=1 WHERE id=${user.id}
     AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE user_id=${user.id}) RETURNING id`;
-  return confirmed.length === 1;
+  return confirmed.length === 1 ? ("registered" as const) : ("unavailable" as const);
 });

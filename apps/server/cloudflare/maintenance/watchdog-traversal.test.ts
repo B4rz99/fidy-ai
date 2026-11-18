@@ -186,7 +186,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             "SELECT admitted,attempted,observed,failed,unknown,repaired,wraps FROM watchdog_progress"
           );
           yield* Effect.logInfo({ elapsed, peak: ledger.peak, aborted: ledger.aborted, counts });
-          expect(ledger.names.length).toBeGreaterThan(200);
+          const [result] = yield* fixture.exec("SELECT halt FROM watchdog_progress");
+          expect(["deadline", "cleanup"]).toContain(result?.["halt"]);
+          if (result?.["halt"] === "deadline") expect(elapsed).toBeGreaterThan(53000);
           expect(ledger.names.length).toBeLessThan(259);
           expect(elapsed).toBeLessThan(56000);
           expect(ledger.peak).toBe(5);

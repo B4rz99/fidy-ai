@@ -390,7 +390,7 @@ export class Maintenance extends DurableObject<MaintenanceEnvironment> {
     return this.runtime
       .runPromise(
         runWatchdog(this.env, scheduled, this.pending).pipe(
-          Effect.tap(() => reportWatchdog()),
+          Effect.tap(reportWatchdog),
           Effect.timeout("55 seconds")
         )
       )

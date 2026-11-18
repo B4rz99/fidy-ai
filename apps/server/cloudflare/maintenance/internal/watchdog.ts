@@ -114,13 +114,13 @@ const inspectPage = Effect.fnUntraced(function* ({
 }>) {
   let cursor = startCursor;
   for (let offset = 0; offset < targets.length; offset += concurrency) {
-    if ((yield* Clock.currentTimeMillis) + probeMs > deadline) return Option.none<string>();
+    if ((yield* Clock.currentTimeMillis) + probeMs > deadline) return "deadline" as const;
     const batch = targets.slice(offset, offset + concurrency);
     const last = batch.at(-1);
     if (last?.family === "user") cursor = last.name;
-    if (yield* inspectBatch(cursor, batch, pending)) return Option.none<string>();
+    if (yield* inspectBatch(cursor, batch, pending)) return "cleanup" as const;
   }
-  return Option.some(cursor);
+  return { cursor };
 });
 
 /** Freeze this tick's upper key. New tail registrations enter the next page, and inserts behind the cursor enter after wrap. */
@@ -132,10 +132,11 @@ export const runWatchdog = Effect.fn(function* (
   const sql = yield* SqliteClient;
   const started = yield* Clock.currentTimeMillis;
   const minute = Math.floor(started / minuteMs);
-  const claimed = yield* sql`UPDATE watchdog_progress SET minute=${minute},scheduled=${scheduled},
+  const claimed =
+    yield* sql`UPDATE watchdog_progress SET minute=${minute},scheduled=${scheduled},halt='running',
     admitted=0,attempted=0,observed=0,failed=0,unknown=0,repaired=0
     WHERE singleton=1 AND minute<${minute} AND scheduled<${scheduled} RETURNING cursor,coalesce((SELECT max(user_id) FROM lifetime_registry WHERE retired=0),'') AS last_user`;
-  if (claimed.length === 0) return;
+  if (claimed.length === 0) return "coalesced" as const;
   const [window] = yield* Schema.decodeUnknownEffect(Schema.Tuple([Window]))(claimed);
   let cursor = window.cursor;
   let remaining = maximumUsers;
@@ -160,20 +161,24 @@ export const runWatchdog = Effect.fn(function* (
       deadline: started + tickMs,
       pending,
     });
-    if (Option.isNone(next)) return;
-    cursor = next.value;
+    if (typeof next === "string") return next;
+    cursor = next.cursor;
     remaining -= page.length;
     if (page.length < limit || cursor === window.last_user) {
       const wrapped = yield* Clock.currentTimeMillis;
       yield* sql`UPDATE watchdog_progress SET cursor='',wraps=wraps+1,wrapped_at=${wrapped} WHERE singleton=1`;
-      return;
+      return "wrapped" as const;
     }
   }
+  return "capacity" as const;
 });
 
-export const reportWatchdog = Effect.fnUntraced(function* () {
+export const reportWatchdog = Effect.fnUntraced(function* (
+  halt: Effect.Success<ReturnType<typeof runWatchdog>>
+) {
+  if (halt === "coalesced") return;
   const sql = yield* SqliteClient;
   const [counts] =
-    yield* sql`SELECT admitted,attempted,observed,failed,unknown,repaired,wraps,wrapped_at FROM watchdog_progress WHERE singleton=1`;
+    yield* sql`UPDATE watchdog_progress SET halt=${halt} WHERE singleton=1 RETURNING halt,admitted,attempted,observed,failed,unknown,repaired,wraps,wrapped_at`;
   yield* Effect.logInfo({ component: "watchdog", ...counts });
 });

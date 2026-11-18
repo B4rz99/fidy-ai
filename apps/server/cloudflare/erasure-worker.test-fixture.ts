@@ -110,7 +110,11 @@ export class Directory extends NativeDirectory {
     if (instant === null) return super.fetch(request);
     const original = Date.now;
     Date.now = (): number => Number(instant);
-    return super.fetch(request).finally(() => {
+    return (
+      request.url === "https://fixture.invalid/directory-alarm"
+        ? super.alarm().then(() => new Response(null, { status: 204 }))
+        : super.fetch(request)
+    ).finally(() => {
       Date.now = original;
     });
   }

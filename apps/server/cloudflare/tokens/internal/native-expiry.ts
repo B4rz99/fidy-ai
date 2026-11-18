@@ -19,7 +19,7 @@ export const repairPATExpiry = Effect.fn(function* (
   const sql = yield* SqliteClient;
   const [row] = yield* sql`SELECT min(deadline) AS deadline FROM(
       SELECT min(expires_at_ms) AS deadline FROM pats WHERE revoked_at_ms IS NULL
-      UNION ALL SELECT min(expires_at_ms) FROM pat_pairings WHERE state='approved_awaiting_claim')`;
+      UNION ALL SELECT min(expires_at_ms) FROM pat_pairings WHERE state='approved_awaiting_claim' UNION ALL SELECT min(expires_at_ms) FROM pat_review_events)`;
   const { deadline } = yield* Schema.decodeUnknownEffect(
     Schema.Struct({ deadline: Schema.OptionFromNullOr(Schema.Int) })
   )(row);
@@ -56,6 +56,8 @@ export const sweepPATExpiry = Effect.fn(function* (current: number, storage: Dur
       expirePATConsents({ current, candidates: pats }),
       expireFixedPATs(current)
     );
+    const sql = yield* SqliteClient;
+    yield* sql`DELETE FROM pat_review_events WHERE id IN(SELECT id FROM pat_review_events WHERE expires_at_ms<=${current} ORDER BY expires_at_ms LIMIT ${pageSize})`;
     yield* repairPATExpiry(current, storage);
     return { attempted: approvals + tokens, failed: 0 };
   }).pipe(withStoreCapacity("required"));

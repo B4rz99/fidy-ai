@@ -246,6 +246,7 @@ const validateOutput = Effect.fn(function* (
   yield* Schema.decodeEffect(codec, { onExcessProperty: "error" })(body);
 });
 const receiptCleanupPageSize = 32;
+const refilledBucketIdleMs = 60000;
 /** Expire one bounded page, both on active use and when the maintenance owner visits an idle User. */
 export const sweepLocalReceipts = Effect.fn(function* (current: number) {
   const sql = yield* SqliteClient;
@@ -672,18 +673,14 @@ export const repairReceiptAlarm = Effect.fnUntraced(function* (
   storage: DurableObjectStorage
 ) {
   const sql = yield* SqliteClient;
-  const next =
-    yield* sql`SELECT accepted_at_ms FROM canonical_request_receipts ORDER BY accepted_at_ms LIMIT 1`;
-  if (next.length > 0) {
-    const [row] = yield* Schema.decodeUnknownEffect(
-      Schema.Tuple([Schema.Struct({ accepted_at_ms: Schema.Int })])
-    )(next);
-    return yield* preserveStoreAlarm(
-      storage,
-      Math.max(current, row.accepted_at_ms + canonicalRetryLifetimeMs)
-    );
-  }
-  return false;
+  const [row] =
+    yield* sql`SELECT min(deadline) AS deadline FROM (SELECT min(accepted_at_ms)+${canonicalRetryLifetimeMs} AS deadline FROM canonical_request_receipts UNION ALL SELECT min(expires_at_ms) FROM canonical_request_leases UNION ALL SELECT min(virtual_at_ms)+${refilledBucketIdleMs} FROM canonical_request_buckets)`;
+  const deadline = yield* Schema.decodeUnknownEffect(Schema.OptionFromNullOr(Schema.Int))(
+    row?.deadline
+  );
+  return Option.isSome(deadline)
+    ? yield* preserveStoreAlarm(storage, Math.max(current, deadline.value))
+    : false;
 });
 
 export const sweepReceiptWork = Effect.fnUntraced(function* (
@@ -693,6 +690,9 @@ export const sweepReceiptWork = Effect.fnUntraced(function* (
   return yield* withStoreCapacity("required")(
     Effect.gen(function* () {
       yield* sweepLocalReceipts(current);
+      const sql = yield* SqliteClient;
+      yield* sql`DELETE FROM canonical_request_leases WHERE id IN(SELECT id FROM canonical_request_leases WHERE expires_at_ms<=${current} ORDER BY expires_at_ms LIMIT ${receiptCleanupPageSize})`;
+      yield* sql`DELETE FROM canonical_request_buckets WHERE subject IN(SELECT subject FROM canonical_request_buckets WHERE virtual_at_ms<=${current - refilledBucketIdleMs} ORDER BY virtual_at_ms LIMIT ${receiptCleanupPageSize})`;
       yield* repairReceiptAlarm(current, storage);
       return { attempted: 0, failed: 0 };
     })

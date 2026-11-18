@@ -1,0 +1,53 @@
+apps/server/cloudflare/oauth-agents/internal/native-directory.ts
+  s_a1be23a656acf0::t_c4fdaf0e5c9ef4 64
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_e0b55224e4fc19 5
+  s_a1be23a656acf0::t_e9b96852f11ebd 7-129
+apps/server/cloudflare/oauth-agents/internal/native-access.ts
+  s_a1be23a656acf0::t_5ea579b927586a 99-101
+apps/server/cloudflare/oauth-agents/native-grant.test.ts
+  s_a1be23a656acf0::t_c4fdaf0e5c9ef4 58-110,113-117
+  s_a1be23a656acf0::t_209c662ad00fa8 111-112
+  s_a1be23a656acf0::t_5ea579b927586a 45-54
+apps/server/cloudflare/tokens/internal/native-management.ts
+  s_a1be23a656acf0::t_54888f7bce3ddd 21-27,42-44,82,108,144,151-152,154-155
+apps/server/cloudflare/canonical-admission/internal/local-batch.ts
+  s_a1be23a656acf0::t_209c662ad00fa8 46
+  s_a1be23a656acf0::t_54888f7bce3ddd 321
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_eaf60f7e2af109 369-371,384-389
+  s_a1be23a656acf0::t_209c662ad00fa8 396-398
+  s_a1be23a656acf0::t_54888f7bce3ddd 229-230,235-238,243-244
+apps/server/cloudflare/tokens/native-pairing.test.ts
+  s_a1be23a656acf0::t_c4fdaf0e5c9ef4 218-222
+  s_a1be23a656acf0::t_54888f7bce3ddd 199-216,233-244
+  s_a1be23a656acf0::t_eaf60f7e2af109 217,223-229
+apps/server/cloudflare/oauth-agents/internal/native-management.ts
+  s_a1be23a656acf0::t_eaf60f7e2af109 120-125,149-152
+apps/server/cloudflare/oauth-agents/internal/native-token.ts
+  s_a1be23a656acf0::t_5ea579b927586a 95,127-129,134-135,138,162-163
+  s_a1be23a656acf0::t_eaf60f7e2af109 167-170,260-261,301
+  s_a1be23a656acf0::t_209c662ad00fa8 226-238,259
+  s_a1be23a656acf0::t_e0b55224e4fc19 123-124,136-137,296
+  s_a1be23a656acf0::t_ab9baa9e45caa4 14,239-244,246,290-295,297-300
+apps/server/cloudflare/canonical-admission/internal/local-mutation.ts
+  s_a1be23a656acf0::t_209c662ad00fa8 88-98,148,508-511,516
+  s_a1be23a656acf0::t_54888f7bce3ddd 340,353-356,564
+  s_a1be23a656acf0::t_eaf60f7e2af109 30,100,102-106,114-118
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "829f8dfed74dedc541e915b1e555a93903d1d7a5",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

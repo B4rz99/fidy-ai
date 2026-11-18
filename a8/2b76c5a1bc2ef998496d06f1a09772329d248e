@@ -1,0 +1,81 @@
+apps/server/cloudflare/agent/internal/local-whatsapp.ts
+  s_a1be23a656acf0::t_4f05449a065421 39-41,44-45,47-48,78-80,88-90
+  s_a1be23a656acf0::t_74a6f08973ae2f 14-25,29-38,42,46,50,54-61,65-67,69-77,83-87,91-100,104-112
+  s_a1be23a656acf0::t_6c822dbe2d33fd 1-13,52-53,82
+  s_a1be23a656acf0::t_449fe3f11b90a6 26-28,43,49,51,62-64,68,81,101-103
+  s_a1be23a656acf0::t_472b6c2742993e 113
+apps/server/cloudflare/agent/internal/local-channel-delivery.ts
+  s_a1be23a656acf0::t_5777a8c75f5b53 18
+  s_a1be23a656acf0::t_74a6f08973ae2f 4-17,20-108
+  s_a1be23a656acf0::t_d459e0168bc5b3 1-3,19
+apps/server/cloudflare/ingestion/native-document.test.ts
+  s_a1be23a656acf0::t_1b00912c0e8cb7 1,67-69,88-89,93,96-97,481,530-531
+  s_a1be23a656acf0::t_0a924824ea4804 2-3,27,29-30,250,367,433
+  s_a1be23a656acf0::t_74a6f08973ae2f 70-87,429-432,435-437,479-480
+apps/server/cloudflare/user-store/operations.ts
+  s_a1be23a656acf0::t_74a6f08973ae2f 1-6,931
+apps/server/cloudflare/agent/operations.ts
+  s_a1be23a656acf0::t_74a6f08973ae2f 1,136-137
+  s_a1be23a656acf0::t_95829eb11474e6 135
+apps/server/cloudflare/core-http/internal/http.ts
+  s_a1be23a656acf0::t_74a6f08973ae2f 164,266-277
+  s_a1be23a656acf0::t_df2dcf65807619 165,174,259,288
+  s_a1be23a656acf0::t_449fe3f11b90a6 285,1771
+apps/server/cloudflare/user-store/internal/hosted-schema.ts
+  s_a1be23a656acf0::t_95829eb11474e6 43
+  s_a1be23a656acf0::t_5184704944c65a 41-42,44
+apps/server/cloudflare/whatsapp/internal/native-delivery.ts
+  s_a1be23a656acf0::t_449fe3f11b90a6 115-116,141
+  s_a1be23a656acf0::t_95829eb11474e6 1,83-84
+  s_a1be23a656acf0::t_4f05449a065421 105-114
+  s_a1be23a656acf0::t_5a48ec1a798f37 117,135
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_74a6f08973ae2f 278-280
+  s_a1be23a656acf0::t_95829eb11474e6 12
+  s_a1be23a656acf0::t_5777a8c75f5b53 8-9
+  s_a1be23a656acf0::t_a2af1e9e57f3ac 497,650-652
+apps/server/cloudflare/agent/internal/local-turn-store.ts
+  s_a1be23a656acf0::t_95829eb11474e6 253-255
+  s_a1be23a656acf0::t_74a6f08973ae2f 157-171,173-175
+  s_a1be23a656acf0::t_449fe3f11b90a6 47,125,154,252,257
+  s_a1be23a656acf0::t_5184704944c65a 124,182,184-185
+  s_a1be23a656acf0::t_4f05449a065421 172
+apps/server/cloudflare/insights/internal/local-reminder.ts
+  s_a1be23a656acf0::t_4f05449a065421 216-218
+  s_a1be23a656acf0::t_1b00912c0e8cb7 235,246
+  s_a1be23a656acf0::t_74a6f08973ae2f 214-215,236-245
+apps/server/cloudflare/agent/runtime.ts
+  s_a1be23a656acf0::t_df2dcf65807619 2,52-54
+  s_a1be23a656acf0::t_95829eb11474e6 1,55-56
+apps/server/cloudflare/ingestion/internal/local-document.ts
+  s_a1be23a656acf0::t_449fe3f11b90a6 48,117,119-131,243
+  s_a1be23a656acf0::t_74a6f08973ae2f 45-47,134-135,328-329
+  s_a1be23a656acf0::t_4f05449a065421 93,110-111,132-133,136
+  s_a1be23a656acf0::t_cc00a3926937b2 112,137,246,275,280,330
+apps/server/cloudflare/agent/internal/local-recovery.ts
+  s_a1be23a656acf0::t_95829eb11474e6 30
+apps/server/cloudflare/agent/internal/local-channel-receipt.ts
+  s_a1be23a656acf0::t_74a6f08973ae2f 1-9,11-35
+  s_a1be23a656acf0::t_5777a8c75f5b53 10
+apps/server/cloudflare/insights/internal/reminder-claim.ts
+  s_a1be23a656acf0::t_74a6f08973ae2f 67-74,78
+  s_a1be23a656acf0::t_4f05449a065421 75-77
+apps/server/cloudflare/agent/internal/local-inference.ts
+  s_a1be23a656acf0::t_449fe3f11b90a6 42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a82b76c5a1bc2ef998496d06f1a09772329d248e",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -22,7 +22,7 @@ import { Clock, Effect, Option, Schema } from "effect";
 
 import { RequestBodyPolicy } from "../../http/contract";
 import { boundedJsonBody } from "../../http/operations";
-import { SmokeWork, smokeExecutionId, smokeLifetimeMs } from "./internal/protocol";
+import { SmokeWork, smokeExecutionId, smokeLifetimeMs, smokeMarkerKey } from "./internal/protocol";
 import { SmokeBindingFailed, platform } from "./internal/platform";
 
 /** The runner must compare observed Worker identities with its upload receipts, never trust a 2xx alone. */
@@ -40,7 +40,6 @@ const fail = (stage: SmokeFailureStage = "platform"): Response =>
     { status: 503, headers: { [smokeFailureHeader]: stage } }
   );
 const refused = (): Response => Response.json({}, { status: 404 });
-const markerKey = "_release-smoke/marker-v1";
 const maxBodyBytes = 512;
 const acceptedStatus = 202;
 const completedStatus = 200;
@@ -62,7 +61,7 @@ const responseFor = (environment: SmokeEnvironment, status: string, httpStatus: 
     { status: httpStatus }
   );
 
-const checkBindings = Effect.fn(function* (environment: SmokeEnvironment) {
+const checkBindings = Effect.fn(function* (environment: SmokeEnvironment, work: SmokeWork) {
   const secrets = [
     environment.SMOKE_PROOF,
     environment.KAPSO_API_KEY,
@@ -88,14 +87,15 @@ const checkBindings = Effect.fn(function* (environment: SmokeEnvironment) {
     return yield* new SmokeBindingFailed({ stage: "schema" });
   }
   yield* platform({
-    tryWork: () => environment.SMOKE_BUCKET.put(markerKey, "smoke-v1"),
+    tryWork: () => environment.SMOKE_BUCKET.put(smokeMarkerKey(work), work.contractDigest),
     stage: "storage",
   });
   if (
     (yield* platform({
-      tryWork: () => environment.SMOKE_BUCKET.get(markerKey),
+      tryWork: () =>
+        environment.SMOKE_BUCKET.get(smokeMarkerKey(work)).then((value) => value?.text()),
       stage: "storage",
-    })) === null
+    })) !== work.contractDigest
   ) {
     return yield* new SmokeBindingFailed({ stage: "storage" });
   }
@@ -143,12 +143,6 @@ const startProbe = Effect.fn(function* (
   });
   if (!admitted.success) return fail("admission");
   const now = yield* Clock.currentTimeMillis;
-  yield* checkBindings(environment);
-  if (probe.verifyBancolombiaSandbox === true) {
-    yield* bankAuthentication.pipe(
-      Effect.mapError((error) => new SmokeBindingFailed({ stage: error.stage }))
-    );
-  }
   const work: SmokeWork = {
     protocolVersion: 2,
     probeId: probe.probeId,
@@ -157,6 +151,12 @@ const startProbe = Effect.fn(function* (
     coreVersionId: environment.CF_VERSION_METADATA.id,
     expiresAtMs: now + smokeLifetimeMs,
   };
+  yield* checkBindings(environment, work);
+  if (probe.verifyBancolombiaSandbox === true) {
+    yield* bankAuthentication.pipe(
+      Effect.mapError((error) => new SmokeBindingFailed({ stage: error.stage }))
+    );
+  }
   yield* platform({ stage: "publication", tryWork: () => environment.SMOKE_QUEUE.send(work) });
   return responseFor(environment, "pending", acceptedStatus);
 });

@@ -15,3 +15,8 @@ export const smokeLifetimeMs = 300_000;
 export const smokeExecutionId = (
   work: Readonly<{ probeId: string; coreVersionId: string }>
 ): string => `smoke-v2-${work.coreVersionId}-${work.probeId}`;
+
+/** Only this Core release, concrete serving version and probe can supply the Workflow receipt. */
+export const smokeMarkerKey = (
+  work: Pick<SmokeWork, "probeId" | "coreVersionId" | "gitRevision">
+): string => `_release-smoke/${work.gitRevision}/${smokeExecutionId(work)}`;

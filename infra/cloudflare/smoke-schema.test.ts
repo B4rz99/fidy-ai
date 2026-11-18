@@ -111,7 +111,11 @@ const nativeSmokeJourney = Effect.fnUntraced(function* () {
   let bankCalls = 0;
   let offered: unknown;
   const environment = smokeEnvironment({
-    ...ownersBindings,
+    USER_STORE: ownersBindings.USER_STORE,
+    DIRECTORY: ownersBindings.DIRECTORY,
+    PRICING: ownersBindings.PRICING,
+    MAINTENANCE: ownersBindings.MAINTENANCE,
+    ERASURE: ownersBindings.ERASURE,
     SMOKE_LIMITER: bindings.SMOKE_LIMITER,
     SMOKE_QUEUE_NAME: release.RELEASE_GIT_SHA,
     SMOKE_WORKFLOW: bindings.SMOKE_WORKFLOW,
@@ -165,6 +169,12 @@ const nativeSmokeJourney = Effect.fnUntraced(function* () {
   expect(yield* Effect.tryPromise(() => poll().then((response) => response.json()))).toMatchObject({
     status: "pending",
   });
+  const markerKey = `_release-smoke/${environment.RELEASE_GIT_SHA}/smoke-v2-${environment.CF_VERSION_METADATA.id}-${"a".repeat(32)}`;
+  expect(
+    yield* Effect.tryPromise(() =>
+      bindings.SMOKE_BUCKET.get(markerKey).then((marker) => marker?.text())
+    )
+  ).toBe(environment.CONTRACT_DIGEST);
   const now = yield* Clock.currentTimeMillis;
   // Native Queue transport invokes the dedicated executor, not candidate Core by hand.
   yield* Effect.tryPromise(() => bindings.SMOKE_QUEUE.send(offered));

@@ -97,9 +97,9 @@ and the decision on #2226 before collecting observations.
 ```sh
 git worktree add --detach ../fidy-d1-reference fb53d9e755c14393048dc945fc0b7f117730d872
 (cd ../fidy-d1-reference && bun install --frozen-lockfile)
-cp apps/server/cloudflare/browser-assessment.test-fixture.ts \
-  apps/server/cloudflare/browser-acceptance-preview.ts apps/server/cloudflare/browser-acceptance-seed.ts \
-  ../fidy-d1-reference/apps/server/cloudflare/
+git -C ../fidy-d1-reference restore --source=972ecaa22bb58ab472de2e9458c76290c72aa09d --worktree -- \
+  apps/server/cloudflare/browser-assessment.test-fixture.ts \
+  apps/server/cloudflare/browser-acceptance-preview.ts apps/server/cloudflare/browser-acceptance-seed.ts
 bun install --frozen-lockfile
 bunx playwright install chromium
 python3 scripts/infra-performance/reference/run.py --d1 ../fidy-d1-reference --dataset production

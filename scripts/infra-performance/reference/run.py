@@ -16,6 +16,7 @@ import tempfile
 import time
 import urllib.request
 
+INSTRUMENTATION = "972ecaa22bb58ab472de2e9458c76290c72aa09d"
 PIN = "fb53d9e755c14393048dc945fc0b7f117730d872"
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
@@ -54,7 +55,9 @@ def revision(path, variant):
         raise ValueError(f"{variant} tracked runtime or build configuration differs from {sha}")
     if variant == "d1" and any(
         (path / "apps/server/cloudflare" / f).read_bytes()
-        != (ROOT / "apps/server/cloudflare" / f).read_bytes()
+        != subprocess.check_output(
+            ["git", "show", f"{INSTRUMENTATION}:apps/server/cloudflare/{f}"], cwd=ROOT
+        )
         for f in FIXTURES
     ):
         raise ValueError(

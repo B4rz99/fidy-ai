@@ -141,8 +141,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           })
         );
         expect(response.status).toBe(200);
-        yield* native(() => response.text());
-        expect((yield* check(pricing)).status).toBe(503);
+        expect(yield* native(() => response.json())).toMatchObject(registration);
+        const scheduled = yield* check(pricing);
+        expect(scheduled.status).toBe(204);
+        expect(scheduled.headers.get("fidy-alarm-repaired")).toBe("0");
         expect((yield* check(erasure)).status).toBe(404);
       })
   );

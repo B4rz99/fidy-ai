@@ -13,6 +13,38 @@ export class PricingFixture extends Pricing {
     super(state, env);
     this.storage = state.storage;
   }
+  private inspectRecovery(): Promise<Response> {
+    const rows = this.storage.sql
+      .exec(
+        "SELECT request,price_id,outcome,next_check_ms FROM price_registrations ORDER BY operation_id"
+      )
+      .toArray();
+    return this.storage.getAlarm().then((alarm) => Response.json({ alarm, rows }));
+  }
+  private recoveryFixture(request: Request): Promise<Response> {
+    switch (new URL(request.url).pathname) {
+      case "/fixture/forget-registration-wake":
+        this.storage.sql.exec("UPDATE price_registrations SET next_check_ms=NULL");
+        return this.storage.deleteAlarm().then(() => new Response(null, { status: 204 }));
+      case "/fixture/drop-alarm":
+        return this.storage.deleteAlarm().then(() => new Response(null, { status: 204 }));
+      case "/fixture/inspect-recovery":
+        return this.inspectRecovery();
+      case "/billing/registration-outcome":
+        return request
+          .text()
+          .then((body) =>
+            this.storage
+              .put("last-probe", body)
+              .then(() => new Response(null, { status: unavailable }))
+          );
+      case "/fixture/last-probe":
+        return this.storage.get<string>("last-probe").then((body) => new Response(body ?? "null"));
+
+      default:
+        return super.fetch(request);
+    }
+  }
   override fetch(request: Request): Promise<Response> {
     switch (new URL(request.url).pathname) {
       case "/fixture/restrict-growth": {
@@ -47,7 +79,7 @@ export class PricingFixture extends Pricing {
           );
       }
       default:
-        return super.fetch(request);
+        return this.recoveryFixture(request);
     }
   }
 }

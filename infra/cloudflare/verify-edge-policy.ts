@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "1145deb54721e8bc1f5b8d5b0705c6d2a1877361b7fd9564a2daef79dced9c87";
+const expectedEdgePolicyDigest = "84ad61a7e082c71e18880bb01cb588e6fae82f000aa9f10d3657b0fc4a326bcf";
 const securityArtifacts = [
   await Bun.file(
     new URL("../../apps/server/cloudflare/directory/internal/email-capacity.ts", import.meta.url)

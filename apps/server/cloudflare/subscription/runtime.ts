@@ -343,7 +343,7 @@ export class Pricing {
       );
     }
     return this.runtime.runPromise(
-      pricingResponse(request, this.state.storage).pipe(
+      pricingResponse(request, this.state.storage, Option.isSome(this.users)).pipe(
         Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
       )
     );

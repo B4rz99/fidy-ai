@@ -1,8 +1,9 @@
 import { it } from "@effect/vitest";
-import { Clock, Effect, FileSystem, Schema } from "effect";
+import { Clock, Effect, FileSystem, Schedule, Schema } from "effect";
 import { NodeFileSystem } from "@effect/platform-node";
 import { expect } from "vitest";
 import { Miniflare } from "miniflare";
+import { ownerCheckUrl } from "../maintenance/contract";
 import type { Price } from "../../src/core/subscription/contract";
 
 const price = {
@@ -30,7 +31,7 @@ const makePublication = Effect.map(Clock.currentTimeMillis, (now) => ({
   price,
 }));
 const encode = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
-const platform = Effect.gen(function* () {
+const platform = Effect.fnUntraced(function* (routeUsers: boolean = false) {
   const fs = yield* FileSystem.FileSystem;
   const directory = yield* fs.makeTempDirectoryScoped({ prefix: "fidy-pricing-" });
   const build = yield* Effect.tryPromise(() =>
@@ -57,6 +58,15 @@ const platform = Effect.gen(function* () {
             env: {
               SQLITE_STORE_CAPACITY_BYTES: { type: "text", value: "131072" },
               CF_VERSION_METADATA: { type: "version-metadata" },
+              ...(routeUsers
+                ? {
+                    USER_STORE: {
+                      type: "durable-object" as const,
+                      worker: "pricing-test",
+                      exportName: "PricingFixture",
+                    },
+                  }
+                : {}),
               PRICING: {
                 type: "durable-object",
                 worker: "pricing-test",
@@ -108,15 +118,103 @@ const platform = Effect.gen(function* () {
       })
     )
   );
-  return { request, restart, publication: yield* makePublication };
+  const check = Effect.gen(function* () {
+    const namespace = yield* Effect.tryPromise(() => runtime.getDurableObjectNamespace("PRICING"));
+    const reply = yield* Effect.tryPromise(() =>
+      namespace.getByName("pricing").fetch(ownerCheckUrl, { method: "POST" })
+    );
+    return { status: reply.status, repaired: reply.headers.get("fidy-alarm-repaired") };
+  });
+  return { request, restart, check, publication: yield* makePublication };
 });
 
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
+    "repairs the registered deadline and retains the exact receipt after its User is unavailable",
+    () =>
+      Effect.gen(function* () {
+        const { request, restart, check } = yield* platform(true);
+        expect(yield* check).toEqual({ status: 204, repaired: "0" });
+        const deadline = (yield* Clock.currentTimeMillis) + 3000;
+        const registration = {
+          userId: "12700000-0000-4000-8000-000000000001",
+          operationId: "22700000-0000-4000-8000-000000000014",
+          admission: {
+            kind: "renewal",
+            previousPaidAttemptId: "22700000-0000-4000-8000-000000000008",
+          },
+          billingPeriod: "weekly",
+          inputsDigest: "a".repeat(64),
+          deadlineMs: deadline,
+        };
+        const priceId = "22700000-0000-4000-8000-000000000001";
+        expect((yield* request("register", registration)).body).toMatchObject({
+          ...registration,
+          price: { id: priceId },
+        });
+        expect(yield* check).toEqual({ status: 204, repaired: "0" });
+        yield* request("fixture/drop-alarm");
+        expect((yield* request("fixture/inspect-recovery")).body).toMatchObject({ alarm: null });
+        expect(yield* check).toEqual({ status: 204, repaired: "1" });
+        expect((yield* request("fixture/inspect-recovery")).body).toMatchObject({
+          alarm: deadline,
+        });
+        expect(yield* check).toEqual({ status: 204, repaired: "0" });
+        yield* request("fixture/forget-registration-wake");
+        expect(yield* check).toEqual({ status: 204, repaired: "1" });
+        expect((yield* request("fixture/inspect-recovery")).body).toMatchObject({
+          alarm: deadline,
+          rows: [{ next_check_ms: deadline, outcome: null }],
+        });
+        const probe = yield* request("fixture/last-probe", undefined, registration.userId).pipe(
+          Effect.repeat({
+            until: (reply) => reply.body !== null,
+            schedule: Schedule.spaced("50 millis"),
+          }),
+          Effect.timeout("10 seconds")
+        );
+        expect(probe.body).toEqual(registration);
+        yield* restart;
+        const retained = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({
+            alarm: Schema.Int,
+            rows: Schema.Array(
+              Schema.Struct({
+                outcome: Schema.Null,
+                request: Schema.String,
+                price_id: Schema.String,
+                next_check_ms: Schema.Int,
+              })
+            ),
+          })
+        )((yield* request("fixture/inspect-recovery")).body);
+        expect(retained.rows).toHaveLength(1);
+        expect(retained.rows[0]).toMatchObject({
+          outcome: null,
+          price_id: priceId,
+          next_check_ms: retained.alarm,
+        });
+        expect(
+          yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(
+            String(retained.rows[0]?.request)
+          )
+        ).toEqual(registration);
+        expect(retained.alarm).toBeGreaterThan(deadline);
+        expect(yield* check).toEqual({ status: 204, repaired: "0" });
+        expect(
+          (yield* request("ack", { request: registration, outcome: "committed" })).status
+        ).toBe(204);
+        expect((yield* request("fixture/inspect-recovery")).body).toMatchObject({
+          rows: [{ outcome: "committed", next_check_ms: null }],
+        });
+      }),
+    25000
+  );
+  test.effect(
     "keeps exact accepted Price work available when pricing reaches its growth restriction",
     () =>
       Effect.gen(function* () {
-        const { request, publication } = yield* platform;
+        const { request, publication } = yield* platform();
         const enrollment = {
           userId: "12700000-0000-4000-8000-000000000001",
           operationId: "22700000-0000-4000-8000-000000000018",
@@ -150,7 +248,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   );
   test.effect("publishes immutable weekly terms without changing the other offers", () =>
     Effect.gen(function* () {
-      const { request, publication } = yield* platform;
+      const { request, publication } = yield* platform();
       expect(yield* request("publish", publication)).toEqual({
         status: 200,
         body: { publicationId: publication.publicationId, priceId: price.id },
@@ -174,7 +272,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     "recovers exact registrations for unavailable Users without holding up publication",
     () =>
       Effect.gen(function* () {
-        const { request, restart, publication } = yield* platform;
+        const { request, restart, check, publication } = yield* platform();
         const next = {
           ...publication,
           publicationId: "22700000-0000-4000-8000-000000000098",
@@ -198,7 +296,8 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         };
         const registered = yield* request("register", first);
         expect(registered).toEqual({ status: 200, body: { ...first, price } });
-        // No User binding exists in this installation. The first registration stays unresolved.
+        // Publication remains available when this installation cannot route outcome recovery.
+        expect(yield* check).toEqual({ status: 503, repaired: null });
         expect((yield* request("publish", next)).status).toBe(200);
         yield* restart;
         expect((yield* request("publish", publication)).body).toEqual({
@@ -248,7 +347,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     "rolls back a failed publication receipt and recovers a lost response after reconstruction",
     () =>
       Effect.gen(function* () {
-        const { request, restart, publication } = yield* platform;
+        const { request, restart, publication } = yield* platform();
         const original = yield* request("offers");
         expect((yield* request("fixture/fail-before-receipt", publication)).status).toBe(503);
         yield* restart;

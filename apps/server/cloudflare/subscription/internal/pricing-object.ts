@@ -137,9 +137,12 @@ const register = Effect.fn(function* (
 
 export const pricingResponse = Effect.fn(function* (
   request: Request,
-  storage: DurableObjectStorage
+  storage: DurableObjectStorage,
+  hasUserRoute: boolean
 ) {
-  if (ownerCheckRequest(request)) return yield* inspectPricing(storage);
+  if (ownerCheckRequest(request)) {
+    return yield* inspectPricing(storage, hasUserRoute).pipe(withStoreCapacity("required"));
+  }
   return yield* pricingCommand(request, storage);
 });
 const pricingCommand = Effect.fn(function* (request: Request, storage: DurableObjectStorage) {
@@ -176,6 +179,31 @@ const acknowledge = Effect.fn(function* (body: typeof RegistrationOutcome.Type) 
     status: body.outcome === "cancelled" && absent.length === 0 ? noContent : conflict,
   });
 });
+const firstRegistrationCheck = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  const [row] =
+    yield* sql`SELECT next_check_ms FROM price_registrations WHERE outcome IS NULL ORDER BY next_check_ms LIMIT 1`;
+  return row === undefined
+    ? undefined
+    : yield* Schema.decodeUnknownEffect(Schema.NullOr(Schema.Int))(row.next_check_ms);
+});
+
+const nextRegistrationCheck = Effect.gen(function* () {
+  const first = yield* firstRegistrationCheck;
+  if (first !== null) return Option.fromUndefinedOr(first);
+  // Pricing v1 retained the exact deadline in the registration before v2 added its wake column.
+  const sql = yield* SqlClient.SqlClient;
+  const restored =
+    yield* sql`UPDATE price_registrations SET next_check_ms=json_extract(request,'$.deadlineMs')
+    WHERE operation_id IN (SELECT operation_id FROM price_registrations WHERE outcome IS NULL AND next_check_ms IS NULL LIMIT 16)
+    RETURNING next_check_ms`;
+  yield* Schema.decodeUnknownEffect(
+    Schema.NonEmptyArray(Schema.Struct({ next_check_ms: Schema.Int }))
+  )(restored);
+  const next = yield* firstRegistrationCheck;
+  return Option.some(next ?? (yield* Clock.currentTimeMillis));
+});
+
 export const recoverPricing = Effect.fn(function* (
   storage: DurableObjectStorage,
   users: DurableObjectNamespace
@@ -186,9 +214,8 @@ export const recoverPricing = Effect.fn(function* (
     Effect.gen(function* () {
       const due =
         yield* sql`UPDATE price_registrations SET next_check_ms=${now + checkCooldownMs} WHERE operation_id IN(SELECT operation_id FROM price_registrations WHERE outcome IS NULL AND next_check_ms<=${now} ORDER BY next_check_ms LIMIT 16) RETURNING user_id,request`;
-      const [next] =
-        yield* sql`SELECT next_check_ms FROM price_registrations WHERE outcome IS NULL ORDER BY next_check_ms LIMIT 1`;
-      if (next !== undefined) yield* preserveStoreAlarm(storage, Number(next.next_check_ms));
+      const next = yield* nextRegistrationCheck;
+      if (Option.isSome(next)) yield* preserveStoreAlarm(storage, next.value);
       return due;
     })
   );
@@ -200,15 +227,11 @@ export const recoverPricing = Effect.fn(function* (
   );
 });
 
-const inspectPricing = Effect.fn(function* (storage: DurableObjectStorage) {
-  const sql = yield* SqlClient.SqlClient;
-  const outstanding =
-    yield* sql`SELECT next_check_ms FROM price_registrations WHERE outcome IS NULL ORDER BY next_check_ms LIMIT 1`;
-  // Exact end-of-registration reconciliation belongs to Pricing; an unresolved registration is never healthy zero.
-  return ownerCheckResponse(
-    outstanding.length > 0 &&
-      (yield* preserveStoreAlarm(storage, Number(outstanding[0]?.next_check_ms)))
-  );
+const inspectPricing = Effect.fn(function* (storage: DurableObjectStorage, hasUserRoute: boolean) {
+  const next = yield* nextRegistrationCheck;
+  if (Option.isNone(next)) return ownerCheckResponse();
+  if (!hasUserRoute) return new Response(null, { status: 503 });
+  return ownerCheckResponse(yield* preserveStoreAlarm(storage, next.value));
 });
 const allowEnrollment = Effect.fn(function* (request: Request) {
   const body = yield* boundedJsonBody({

@@ -576,7 +576,7 @@ const seedNativeSource = ({
   db
     .owner(userId)
     .exec(
-      "INSERT INTO source_attestations VALUES (?,?,?,'manual','CO','es-CO','America/Bogota','manual-v1',0)",
+      "INSERT INTO source_attestations(id,user_id,transaction_id,kind,service_market,locale,time_zone,interpretation_revision,created_at_ms) VALUES (?,?,?,'manual','CO','es-CO','America/Bogota','manual-v1',0)",
       id,
       userId,
       transactionId

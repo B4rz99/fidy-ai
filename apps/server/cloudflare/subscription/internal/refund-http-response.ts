@@ -13,12 +13,12 @@ const statuses: Readonly<Record<RefundStartFailure, number>> = {
 const headers = { "cache-control": "no-store" };
 export const refundFailureResponse = (failure: RefundStartFailure): Response =>
   Response.json({ error: { code: failure } }, { status: statuses[failure], headers });
-export const refundResultResponse = (
+export const refundResultResponse = <R>(
   input: Readonly<{
-    result: Effect.Effect<RefundAttempt, RefundStartFailure>;
+    result: Effect.Effect<RefundAttempt, RefundStartFailure, R>;
     status: number;
   }>
-): Effect.Effect<Response> =>
+): Effect.Effect<Response, never, R> =>
   input.result.pipe(
     Effect.flatMap(Schema.encodeEffect(Schema.toCodecJson(RefundAttempt))),
     Effect.map((data) => Response.json({ data }, { status: input.status, headers })),

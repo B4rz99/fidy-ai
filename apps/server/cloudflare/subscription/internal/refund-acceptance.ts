@@ -16,7 +16,7 @@ import {
 } from "../contract";
 
 type NativeRefundError = RefundStartFailure | Schema.SchemaError | Cause.UnknownError;
-const RefundRow = Schema.Struct({
+export const RefundRow = Schema.Struct({
   id: Schema.String,
   intent_json: Schema.String,
   user_id: Schema.String,
@@ -36,7 +36,7 @@ const RefundRow = Schema.Struct({
     Schema.Literals(["provider-declined", "provider-cancelled", "provider-refused"])
   ),
 });
-const Charge = Schema.Struct({
+export const Charge = Schema.Struct({
   id: Schema.String,
   price_id: Schema.String,
   amount: Schema.String,
@@ -54,9 +54,15 @@ type RefundLifecycle =
   | Pick<Extract<EncodedRefund, { status: "failed" }>, "status" | "failedAt" | "failure">;
 const reject = (reason: RefundStartFailure): Effect.Effect<never, RefundStartFailure> =>
   Effect.fail(reason);
-const safeFailure = (error: unknown): RefundStartFailure =>
+export const safeFailure = (error: unknown): RefundStartFailure =>
   Schema.is(RefundStartFailure)(error) ? error : "unavailable";
-const liveRefundAuthority = (authority: RefundAuthority, current: number): boolean =>
+export const liveRefundAuthority = ({
+  authority,
+  current,
+}: {
+  authority: RefundAuthority;
+  current: number;
+}): boolean =>
   Schema.is(RefundSupportAdmission.fields.authority)(authority) && authority.expiresAtMs > current;
 
 const lifecycle = (
@@ -74,7 +80,7 @@ const lifecycle = (
   return Effect.succeed({ status: row.status, failedAt: finalized, failure: row.failure });
 };
 /** Decode a bounded, closed retained view without exposing any Wompi correlation facts. */
-const view = (
+export const view = (
   row: typeof RefundRow.Type
 ): Effect.Effect<RefundAttempt, Schema.SchemaError | RefundStartFailure> =>
   Effect.gen(function* () {
@@ -118,16 +124,15 @@ const readRow = (
       .bind(userId, requestId)
       .first()
   ).pipe(Effect.flatMap(decodeRow));
-const replayView = (
-  row: typeof RefundRow.Type,
-  intent: string
-): Effect.Effect<RefundAttempt, NativeRefundError> =>
-  row.intent_json === intent ? view(row) : reject("idempotency-conflict");
-
+export const replayView = Effect.fnUntraced(function* (row: typeof RefundRow.Type, intent: string) {
+  return row.intent_json === intent ? yield* view(row) : yield* reject("idempotency-conflict");
+});
 export const getRefund = (call: RefundReadCall): Effect.Effect<RefundAttempt, RefundStartFailure> =>
   Effect.gen(function* () {
     const current = yield* Clock.currentTimeMillis;
-    if (!liveRefundAuthority(call.authority, current)) return yield* reject("unsupported");
+    if (!liveRefundAuthority({ authority: call.authority, current })) {
+      return yield* reject("unsupported");
+    }
     const row = yield* Effect.tryPromise(() =>
       call.db
         .prepare("SELECT * FROM refund_attempt_context r WHERE r.user_id=? AND r.id=?")
@@ -169,39 +174,43 @@ type PreparedRefund = Readonly<{
   now: number;
   treatment: string;
 }>;
-const prepareRefund = (call: RefundStartCall): Effect.Effect<PreparedRefund, NativeRefundError> =>
-  Effect.gen(function* () {
-    const charge = yield* loadCharge(call);
-    const original = yield* Schema.decodeEffect(Money)({
-      amount: charge.amount,
-      currency: charge.currency,
-    });
-    const money =
-      call.input.intent.kind === "refund"
-        ? yield* Schema.decodeEffect(Money)(call.input.intent.money)
-        : original;
-    if (money.currency !== original.currency) return yield* reject("currency-mismatch");
-    const total = refundMinorUnits(original);
-    const requested = refundMinorUnits(money);
-    if (Option.isNone(total) || Option.isNone(requested)) return yield* reject("unsupported");
-    const now = yield* Clock.currentTimeMillis;
-    const id = newId();
-    const treatment = yield* Schema.encodeEffect(treatmentCodec)({
-      policyId: "refund-ends-paid-period-v1",
-      taxTreatment: charge.tax_treatment,
-      paidPeriodEffect: "end-refunded-period-at-verification",
-      renewalEffect: "stop-future-renewals",
-      accounting: { kind: "sandbox-only" },
-    });
-    return {
-      charge,
-      requested: requested.value,
-      total: total.value,
-      id,
-      now,
-      treatment,
-    };
+export const prepareRefundTerms = Effect.fnUntraced(function* (
+  input: RefundStartCall["input"],
+  charge: typeof Charge.Type
+) {
+  const original = yield* Schema.decodeEffect(Money)({
+    amount: charge.amount,
+    currency: charge.currency,
   });
+  const money =
+    input.intent.kind === "refund"
+      ? yield* Schema.decodeEffect(Money)(input.intent.money)
+      : original;
+  if (money.currency !== original.currency) return yield* reject("currency-mismatch");
+  const total = refundMinorUnits(original);
+  const requested = refundMinorUnits(money);
+  if (Option.isNone(total) || Option.isNone(requested)) return yield* reject("unsupported");
+  const now = yield* Clock.currentTimeMillis;
+  const id = newId();
+  const treatment = yield* Schema.encodeEffect(treatmentCodec)({
+    policyId: "refund-ends-paid-period-v1",
+    taxTreatment: charge.tax_treatment,
+    paidPeriodEffect: "end-refunded-period-at-verification",
+    renewalEffect: "stop-future-renewals",
+    accounting: { kind: "sandbox-only" },
+  });
+  return {
+    charge,
+    requested: requested.value,
+    total: total.value,
+    id,
+    now,
+    treatment,
+  };
+});
+const prepareRefund = (call: RefundStartCall): Effect.Effect<PreparedRefund, NativeRefundError> =>
+  loadCharge(call).pipe(Effect.flatMap((charge) => prepareRefundTerms(call.input, charge)));
+
 const reserve = (
   call: RefundStartCall,
   prepared: PreparedRefund,
@@ -257,7 +266,10 @@ export const startRefund = (
 ): Effect.Effect<RefundAttempt, RefundStartFailure> =>
   Effect.gen(function* () {
     const current = yield* Clock.currentTimeMillis;
-    if (call.environment !== "sandbox" || !liveRefundAuthority(call.authority, current)) {
+    if (
+      call.environment !== "sandbox" ||
+      !liveRefundAuthority({ authority: call.authority, current })
+    ) {
       return yield* reject("unsupported");
     }
     const input = yield* Schema.decodeEffect(StartRefundInput)(call.input).pipe(

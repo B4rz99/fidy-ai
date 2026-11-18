@@ -1,3 +1,4 @@
+import { refundSchema } from "./internal/refund-schema";
 import { sampleSchema } from "./internal/sample-schema";
 import { hostedSchema } from "./internal/hosted-schema";
 import { ingestionSchema } from "./internal/ingestion-schema";
@@ -1034,6 +1035,7 @@ export const userStoreHistory: StoreHistory = {
         "CREATE TRIGGER recurring_digest_immutable BEFORE UPDATE ON recurring_digest_reports BEGIN SELECT RAISE(ABORT,'digest_immutable'); END",
       ],
     },
+    { version: 27, id: "native-billing-refunds", statements: refundSchema },
   ],
 };
 

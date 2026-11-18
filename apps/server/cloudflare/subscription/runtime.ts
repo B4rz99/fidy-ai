@@ -1,3 +1,10 @@
+import {
+  offerRefunds,
+  refundWake,
+  runOwnerRefund,
+  runRefundStep,
+} from "./internal/native-refund-work";
+import { handleLocalRefund } from "./internal/native-refund";
 import { ownerCheckRequest } from "../maintenance/contract";
 import {
   fenceErasureParticipant,
@@ -20,6 +27,7 @@ import {
   type BillingWorkflowActivity,
   type EnrollmentEnvironment,
   type LocalBillingCollection,
+  LocalRefundWork,
   LocalSourceCancellationWork,
   type PricingEnvironment,
   type RefundDispatchInput,
@@ -203,15 +211,23 @@ export const runRefundWorkflow = (input: RefundWorkflowExecution): Promise<void>
     })
   );
 
-export class BillingRefundWorkflowV1 extends WorkflowEntrypoint<BillingRuntime, unknown> {
+export class BillingRefundWorkflowV1 extends WorkflowEntrypoint<
+  { USER_STORE: DurableObjectNamespace; RELEASE_GIT_SHA: string; RECOVERY_ISOLATION: string },
+  unknown
+> {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
     return observeWorkerPromise(
       () =>
-        runRefundWorkflow({
-          environment: withErasureRecovery(this.env),
-          payload: event.payload,
-          activity: (name, options, activity) => step.do(name, options, activity),
-        }),
+        this.env.RECOVERY_ISOLATION === "isolated"
+          ? Promise.resolve()
+          : step.do(
+              "submit-or-verify-correction-v1",
+              {
+                retries: { limit: 0, delay: "1 second", backoff: "constant" },
+                timeout: "30 seconds",
+              },
+              () => Effect.runPromise(runRefundStep(event.payload, this.env.USER_STORE))
+            ),
       {
         environment: workerRelease(this.env),
         telemetry: cloudflareWorkerTelemetry,
@@ -472,14 +488,29 @@ const acceptedWorkflowStates: ReadonlySet<InstanceStatus["status"]> = new Set([
   "complete",
 ]);
 
+const workflowId = Effect.fnUntraced(function* (
+  work:
+    | typeof LocalBillingCollection.Type
+    | typeof LocalRefundWork.Type
+    | typeof WompiBillingEvent.Type
+) {
+  switch (work._tag) {
+    case "WompiBillingEvent":
+      return yield* callbackWorkflowId(work);
+    case "RunUserRefund":
+      return "refund-" + work.userId + "-" + work.refundAttemptId + "-" + work.verification;
+    case "CollectUserBillingAttempt":
+      return "collect-" + work.userId + "-" + work.attemptId;
+  }
+});
 export const offerNativeBillingWork = Effect.fn(function* (
   workflow: BillingObservationWorkflow,
-  work: typeof LocalBillingCollection.Type | typeof WompiBillingEvent.Type
+  work:
+    | typeof LocalBillingCollection.Type
+    | typeof WompiBillingEvent.Type
+    | typeof LocalRefundWork.Type
 ) {
-  const id =
-    work._tag === "WompiBillingEvent"
-      ? yield* callbackWorkflowId(work)
-      : "collect-" + work.userId + "-" + work.attemptId;
+  const id = yield* workflowId(work);
   const started = yield* Effect.result(
     Effect.tryPromise(() =>
       workflow.create({
@@ -495,4 +526,25 @@ export const offerNativeBillingWork = Effect.fn(function* (
   if (acceptedWorkflowStates.has(status)) return;
   if (status === "errored") return yield* Effect.tryPromise(() => instance.restart());
   return yield* Effect.fail("billing-workflow-unavailable" as const);
+});
+
+export const handleNativeRefund: typeof handleLocalRefund = (...args) => handleLocalRefund(...args);
+
+export const recoverNativeRefunds = Effect.fnUntraced(function* (
+  input: Parameters<typeof offerRefunds>[0]
+) {
+  return yield* offerRefunds(input).pipe(Effect.mapError((cause) => new Cause.UnknownError(cause)));
+});
+export const repairRefundAlarm = Effect.fnUntraced(function* (storage: DurableObjectStorage) {
+  return yield* refundWake(storage).pipe(withStoreCapacity("required"));
+});
+export const handleNativeRefundWork = Effect.fnUntraced(function* (
+  request: Request,
+  context: Omit<Parameters<typeof runOwnerRefund>[1], "transport">
+) {
+  const work = yield* Effect.tryPromise(() => request.json()).pipe(
+    Effect.flatMap(Schema.decodeUnknownEffect(LocalRefundWork))
+  );
+  yield* runOwnerRefund(work, { ...context, transport: wompiOutboundHttp });
+  return new Response(null, { status: 204 });
 });

@@ -7,7 +7,7 @@ import {
   PaymentEnrollmentId,
   Price,
   PriceId,
-  type RefundAttemptId,
+  RefundAttemptId,
   StartRefundInput,
 } from "../../src/core/subscription/contract";
 import { Data, type Option, Schema } from "effect";
@@ -49,14 +49,29 @@ export const RefundSupportAdmission = Schema.TaggedStruct("BillingRefundSupport"
 });
 
 /** Origin-verified support transport has a separate Access application audience. */
+export const RefundRead = Schema.TaggedStruct("ReadBillingRefund", {
+  authority: RefundSupportAdmission.fields.authority,
+  userId: UserId,
+  refundAttemptId: RefundAttemptId,
+});
+export const LocalRefundWork = Schema.TaggedStruct("RunUserRefund", {
+  userId: UserId,
+  refundAttemptId: RefundAttemptId,
+  verification: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 8 })),
+});
 export type RefundSupportEnvironment = Readonly<{
-  DB: D1Database;
   WOMPI_ENVIRONMENT: string;
   CLOUDFLARE_ACCESS_ISSUER: string;
   CLOUDFLARE_ACCESS_AUDIENCE: string;
-  USER_TRANSACTION_COORDINATOR: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
 }> &
-  Partial<Readonly<{ BILLING_SUPPORT_AUDIENCE: string }>>;
+  Partial<
+    Readonly<{
+      BILLING_SUPPORT_AUDIENCE: string;
+      USER_STORE: {
+        getByName: (name: string) => Pick<Fetcher, "fetch">;
+      };
+    }>
+  >;
 
 /** Canonical safe observation under the caller's live credential and User. */
 export type SubscriptionQueryInput = Readonly<{

@@ -147,6 +147,7 @@ import {
 import { nativeDeliveryRequest } from "../whatsapp/runtime";
 import {
   type LocalBillingCollection,
+  type LocalRefundWork,
   type LocalSourceCancellationWork,
   type WompiBindings,
   collectUserBillingUrl,
@@ -158,8 +159,12 @@ import {
   billingWake,
   handleLocalEnrollment,
   handleNativeBillingCallback,
+  handleNativeRefund,
+  handleNativeRefundWork,
   handleSourceCancellationWork,
   offerLocalBilling,
+  recoverNativeRefunds,
+  repairRefundAlarm,
 } from "../subscription/runtime";
 import {
   dispatchLocalForwarding,
@@ -230,7 +235,9 @@ type UserStoreEnvironment = NativeReminderEnvironment &
     MAINTENANCE: DurableObjectNamespace;
     CONNECTION_SYNCHRONIZATION_QUEUE: Queue<SynchronizationWork>;
     BILLING_COLLECTION_QUEUE: Queue<
-      typeof LocalSourceCancellationWork.Type | typeof LocalBillingCollection.Type
+      | typeof LocalSourceCancellationWork.Type
+      | typeof LocalBillingCollection.Type
+      | typeof LocalRefundWork.Type
     >;
   }>;
 const isBrowserObservation = (command: string, request: Request): boolean =>
@@ -341,6 +348,25 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     ];
   }
 
+  private billingOffers(
+    current: number
+  ): readonly [
+    ReturnType<typeof recoverNativeRefunds>,
+    ReturnType<typeof offerDueSourceCancellations>,
+  ] {
+    return [
+      recoverNativeRefunds({
+        current,
+        storage: this.ctx.storage,
+        queue: this.env.BILLING_COLLECTION_QUEUE,
+      }),
+      offerDueSourceCancellations({
+        current,
+        storage: this.ctx.storage,
+        queue: this.env.BILLING_COLLECTION_QUEUE,
+      }),
+    ] as const;
+  }
   private checkWork(): Promise<
     Readonly<{ failedFamilies: number; attempted: number; failedOffers: number }>
   > {
@@ -377,11 +403,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
           ).pipe(Effect.mapError((cause) => new Cause.UnknownError(cause))),
           ...this.connectionFamilies(current),
           recoverLocalPATExpiry(current, this.ctx.storage),
-          offerDueSourceCancellations({
-            current,
-            storage: this.ctx.storage,
-            queue: this.env.BILLING_COLLECTION_QUEUE,
-          }),
+          ...this.billingOffers(current),
           offerLocalHostedReply(this.env, this.ctx.storage, this.owns).pipe(
             Effect.mapError((cause) => new Cause.UnknownError(cause))
           ),
@@ -602,6 +624,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
             repairLocalPATExpiry(current, storage),
             repairCancellationAlarm(storage),
             billingWake(storage),
+            repairRefundAlarm(storage),
             repairLocalRecurringAlarm(current, storage, ownsUser),
           ],
           { mode: "result", concurrency: 1 }
@@ -964,6 +987,26 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
   ): Option.Option<Promise<Response>> {
     const path = new URL(request.url).pathname;
     const command = request.method + " " + path;
+    if (command === "POST /work/refund") {
+      return Option.some(
+        this.runtime.runPromise(
+          handleNativeRefundWork(request, { owns, storage: this.ctx.storage, env: this.env }).pipe(
+            Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
+          )
+        )
+      );
+    }
+    if (command === "POST /billing/refund-support") {
+      return Option.some(
+        this.runtime.runPromise(
+          handleNativeRefund(request, {
+            owns,
+            storage: this.ctx.storage,
+            environment: this.env.WOMPI_ENVIRONMENT,
+          })
+        )
+      );
+    }
     if (
       ["POST /billing/registration-outcome", "POST /billing/registration-cancel"].includes(command)
     ) {

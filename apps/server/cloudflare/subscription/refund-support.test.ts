@@ -1,11 +1,13 @@
+import type { CoreHttpEnvironment } from "../core-http/contract";
+import { refundResultResponse } from "./internal/refund-http-response";
 import { openAiTestKey, withOpenAiFetch } from "../openai.test-fixture";
 import { type Cause, Clock, Effect, Exit, Schema } from "effect";
-import { RefundSupportAdmission, type RefundSupportEnvironment } from "./contract";
+import { RefundRead, RefundSupportAdmission, type RefundSupportEnvironment } from "./contract";
 import { afterEach, expect, it, vi } from "vitest";
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
 import { makePaymentEnrollmentD1 } from "./payment-enrollment-d1.test-fixture";
 import { seedRefundCharge } from "./refund-charge.test-fixture";
-import { startRefund } from "./operations";
+import { getRefund, startRefund } from "./operations";
 import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
@@ -45,11 +47,24 @@ const setup = Effect.fnUntraced(function* () {
     CLOUDFLARE_ACCESS_AUDIENCE: "recovery-permission",
     BILLING_SUPPORT_AUDIENCE: "refund-permission",
     USER_TRANSACTION_COORDINATOR: {
+      getByName: (): Pick<Fetcher, "fetch"> => ({
+        fetch: (): Promise<Response> => Promise.reject(new Error("Unexpected legacy coordinator")),
+      }),
+    },
+    USER_STORE: {
       getByName: (name: string): Pick<Fetcher, "fetch"> => ({
         fetch: (request: RequestInfo | URL): Promise<Response> =>
           Effect.runPromiseWith(services)(
             Effect.gen(function* () {
               const candidate = yield* Effect.tryPromise(() => new Request(request).json());
+              const read = Schema.decodeUnknownOption(RefundRead)(candidate);
+              if (read._tag === "Some") {
+                expect(read.value.userId).toBe(name);
+                return yield* refundResultResponse({
+                  status: 200,
+                  result: getRefund({ ...read.value, db: made.db }),
+                });
+              }
               const admission =
                 yield* Schema.decodeUnknownEffect(RefundSupportAdmission)(candidate);
               expect(admission.input.userId).toBe(name);
@@ -77,7 +92,8 @@ const setup = Effect.fnUntraced(function* () {
 });
 const publicSupport = (
   request: Request,
-  environment: RefundSupportEnvironment
+  environment: RefundSupportEnvironment &
+    Pick<CoreHttpEnvironment, "DB" | "USER_TRANSACTION_COORDINATOR">
 ): Promise<Response> =>
   publicWorker.fetch(request, {
     BROWSER_ORIGIN: "https://app.fidyapp.com",

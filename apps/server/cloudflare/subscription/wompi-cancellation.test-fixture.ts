@@ -127,6 +127,50 @@ const enrollmentProvider = Effect.fn(function* (request: Request, path: string, 
   return new Response(null, { status: 404 });
 });
 /** Local outbound Worker only. Accept a void and lose its response, then expose the independent provider state. */
+const refundFixture = Effect.fnUntraced(function* (request: Request, env: Environment) {
+  const material = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({
+      transaction_id: Schema.String,
+      amount_in_cents: Schema.Int,
+      reference: Schema.String,
+    })
+  )(yield* Effect.tryPromise(() => request.json()));
+  yield* Effect.tryPromise(() =>
+    env.PROVIDER_STATE.prepare("INSERT INTO refund_requests(reference,amount) VALUES(?,?)")
+      .bind(material.reference, material.amount_in_cents)
+      .run()
+  );
+  return Response.json(
+    { data: { ...material, id: 91, v2_refund_id: "verified-sandbox-refund", status: "APPROVED" } },
+    { status: 201 }
+  );
+});
+const cancellationResponse = Effect.fnUntraced(function* (
+  request: Request,
+  env: Environment,
+  path: string
+) {
+  const command = request.method + " " + path;
+  if (command === "PUT /v1/payment_sources/78001/void") {
+    yield* Effect.tryPromise(() =>
+      env.PROVIDER_STATE.prepare("INSERT INTO received_voids(source) VALUES (78001)").run()
+    );
+    return new Response(null, { status: 503 });
+  }
+  if (command === "GET /v1/payment_sources/78001") {
+    const present = yield* Effect.tryPromise(() =>
+      env.PROVIDER_STATE.prepare("SELECT 1 FROM received_voids WHERE source=78001 LIMIT 1").first()
+    );
+    return Response.json({
+      data: {
+        id: 78001,
+        type: "DAVIPLATA",
+        status: present === null ? "AVAILABLE" : "VOIDED",
+      },
+    });
+  }
+  return new Response(null, { status: 404 });
+});
 export class CancellationProviderFixture extends WorkerEntrypoint<Environment> {
   override fetch(request: Request): Promise<Response> {
     const env = this.env;
@@ -139,32 +183,14 @@ export class CancellationProviderFixture extends WorkerEntrypoint<Environment> {
           return yield* Effect.tryPromise(() => statementProvider(request));
         }
         const path = new URL(request.url).pathname;
+        if (request.method === "POST" && path === "/v1/refunds") {
+          return yield* refundFixture(request, env);
+        }
         if (isEnrollmentPath(path)) {
           return yield* enrollmentProvider(request, path, env);
         }
         if (path.startsWith("/v1/transactions")) return yield* chargeFixture(request, env, path);
-        const command = request.method + " " + path;
-        if (command === "PUT /v1/payment_sources/78001/void") {
-          yield* Effect.tryPromise(() =>
-            env.PROVIDER_STATE.prepare("INSERT INTO received_voids(source) VALUES (78001)").run()
-          );
-          return new Response(null, { status: 503 });
-        }
-        if (command === "GET /v1/payment_sources/78001") {
-          const present = yield* Effect.tryPromise(() =>
-            env.PROVIDER_STATE.prepare(
-              "SELECT 1 FROM received_voids WHERE source=78001 LIMIT 1"
-            ).first()
-          );
-          return Response.json({
-            data: {
-              id: 78001,
-              type: "DAVIPLATA",
-              status: present === null ? "AVAILABLE" : "VOIDED",
-            },
-          });
-        }
-        return new Response(null, { status: 404 });
+        return yield* cancellationResponse(request, env, path);
       })
     );
   }

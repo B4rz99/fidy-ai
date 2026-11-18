@@ -1,7 +1,11 @@
 import { SynchronizationWork } from "../../connections/contract";
 import { WhatsAppLifecycleWork, WhatsAppWork } from "../../whatsapp/contract";
 import { receiveWhatsAppWork, routeWhatsAppStatus } from "../../whatsapp/runtime";
-import { LocalBillingCollection, WompiBillingEvent } from "../../subscription/contract";
+import {
+  LocalBillingCollection,
+  LocalRefundWork,
+  WompiBillingEvent,
+} from "../../subscription/contract";
 import {
   isBillingCollectionWork,
   isRefundWork,
@@ -312,6 +316,7 @@ const receiveWorkQueue = (input: QueueInput): Effect.Effect<void, QueueDeliveryU
 };
 
 const CallbackWork = Schema.Union([
+  LocalRefundWork,
   WhatsAppLifecycleWork,
   WompiBillingEvent,
   LocalBillingCollection,
@@ -330,7 +335,9 @@ const deliverCallback = Effect.fn(function* (packet: unknown, environment: CoreQ
       USER_TRANSACTION_COORDINATOR,
     });
   }
-  const workflow = environment.BILLING_COLLECTION_WORKFLOW;
+  const workflow = Schema.is(LocalRefundWork)(body)
+    ? environment.BILLING_REFUND_WORKFLOW
+    : environment.BILLING_COLLECTION_WORKFLOW;
   if (workflow === undefined) return yield* deliveryFailure("Billing workflow unavailable");
   yield* offerNativeBillingWork(workflow, body);
 });

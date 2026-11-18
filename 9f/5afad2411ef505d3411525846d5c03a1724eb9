@@ -1,0 +1,36 @@
+apps/server/cloudflare/email-authentication/native-replacement.test.ts
+  s_a1be23a656acf0::t_4057d78456e707 133-134,144-154,165-166,212,222,268,270,272,274-275,328-329,331-332
+  s_a1be23a656acf0::t_b577956e7cdb34 223,265,267,269,271,273,324-327,330,353-356
+apps/server/cloudflare/email-authentication/internal/local-replacement.ts
+  s_a1be23a656acf0::t_4057d78456e707 223
+apps/server/cloudflare/user-store/internal/browser-session.ts
+  s_a1be23a656acf0::t_4057d78456e707 53-58,110
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_cdfcdc541e513e 5,7-64
+apps/server/cloudflare/directory/internal/recovery-rotation.ts
+  s_a1be23a656acf0::t_f50e59452bc652 29-36
+apps/server/cloudflare/directory/internal/replacement.ts
+  s_a1be23a656acf0::t_20bd4a939f05d8 86-101
+apps/server/cloudflare/identity/whatsapp-replacement.test.ts
+  s_a1be23a656acf0::t_286d32da6afd5a 94
+apps/server/cloudflare/recovery/native-rotation.test.ts
+  s_a1be23a656acf0::t_776da7fc1935ad 66
+apps/server/cloudflare/web-authentication/bound-user.test.ts
+  s_a1be23a656acf0::t_7b9ba83991dddb 117-142,144-147
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9f5afad2411ef505d3411525846d5c03a1724eb9",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

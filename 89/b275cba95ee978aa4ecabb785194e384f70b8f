@@ -1,0 +1,33 @@
+apps/server/package.json
+  s_da89ee483d772f::t_93d261f7d25d7f 341
+bun.lock
+  s_da89ee483d772f::t_92699152d7123d 75,770,908,910,912,914,916,918,920,922,924,926,928,930,932,934,936,938,1914
+tools/astro/bun.lock
+  s_a1be23a656acf0::t_d941104542a0cb 9,112
+tools/astro/package.json
+  s_da89ee483d772f::t_cdbc04df740880 9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "89b275cba95ee978aa4ecabb785194e384f70b8f",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_da89ee483d772f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ed5c-1474-72d1-8bb3-88f47c654cc5",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -73,6 +73,15 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const cursor = yield* Schema.encodeEffect(
           Schema.toCodecJson(Schema.NullOr(PrivacyTransactionCursor))
         )(page.next);
+        const peer = yield* privacyRequest(runtime, cursor, {
+          cookie: "__Host-fidy_session=" + bob.bearer,
+          "fidy-session-binding": bob.session,
+        });
+        expect(peer.status).toBe(200);
+        const peerPage = yield* Schema.decodeUnknownEffect(PrivacyTransactionPage)(
+          yield* native(() => peer.json())
+        );
+        expect(peerPage.data.map(({ id }) => id)).toEqual([transaction]);
         const second = yield* privacyRequest(runtime, cursor);
         const final = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(PrivacyTransactionPage))(
           yield* native(() => second.json())

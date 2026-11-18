@@ -690,6 +690,10 @@ const rejectsSmokeIngress = (
   (Option.isSome(origin) ||
     !smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" }));
 
+const mixedConsentCredentials = (request: Request, path: string): boolean =>
+  Option.isSome(processingConsentTransport(path)) &&
+  request.headers.has("authorization") &&
+  request.headers.has("cookie");
 /** MCP serves native clients only; validate public coordinates before private forwarding erases them. */
 const rejectsMcpIngress = (request: Request, browserOrigin: string): boolean => {
   const url = new URL(request.url);
@@ -705,6 +709,17 @@ const rejectsMcpIngress = (request: Request, browserOrigin: string): boolean => 
   return url.origin !== apiOrigin || (host !== null && host.toLowerCase() !== url.host);
 };
 
+const rejectedBrowserProof = (
+  request: Request,
+  environment: PublicEnvironment,
+  origin: Option.Option<string>
+): boolean => {
+  const path = new URL(request.url).pathname;
+  return (
+    mixedConsentCredentials(request, path) ||
+    (requiresBrowserOrigin(request, path) && !Option.contains(origin, environment.BROWSER_ORIGIN))
+  );
+};
 const gateOwnedRequest = (
   request: Request,
   environment: PublicEnvironment,
@@ -740,10 +755,7 @@ const gateOwnedRequest = (
       )
     );
   }
-  if (
-    requiresBrowserOrigin(request, path) &&
-    !Option.contains(origin, environment.BROWSER_ORIGIN)
-  ) {
+  if (rejectedBrowserProof(request, environment, origin)) {
     return policy(forbiddenOrigin());
   }
   return Option.map(categoryAuthorizationFailure(request, environment), (response) =>

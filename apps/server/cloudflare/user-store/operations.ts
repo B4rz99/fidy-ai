@@ -1050,6 +1050,13 @@ export const userStoreHistory: StoreHistory = {
         "CREATE INDEX voice_refusal_expiry ON whatsapp_voice_refusals(user_id,claimed_ms)",
       ],
     },
+    {
+      version: 29,
+      id: "retained-consent-evidence",
+      statements: [
+        "CREATE TRIGGER consent_history_no_delete BEFORE DELETE ON consent_history BEGIN SELECT RAISE(ABORT,'consent_history_retention_required'); END",
+      ],
+    },
   ],
 };
 

@@ -5,6 +5,7 @@ import {
 } from "../../apps/server/cloudflare/subscription/contract";
 import { Clock, DateTime, Effect, Option, Redacted, Schedule, Schema } from "effect";
 import { type installedOrigins } from "@fidy/server/browser-transport";
+import { ProcessingAuthorization } from "../../apps/server/src/shell/processing-consent/contract";
 import { webSignupDisclosure } from "../../apps/server/src/shell/consent/operations";
 import { signAcceptanceRequest } from "../../apps/server/cloudflare/release-isolation/operations";
 import {
@@ -106,6 +107,18 @@ const cookie = Effect.fn(function* (reply: Response, name: string) {
   }
   return first;
 });
+const verifyOriginalDisclosure = Effect.fn(function* (
+  call: Driver["call"],
+  headers: Readonly<Record<string, string>>
+) {
+  const legal = yield* result(
+    yield* call("/web/consent/authorization", { headers }),
+    ProcessingAuthorization
+  );
+  if (legal.authorization?.disclosure.contentSha256 !== webSignupDisclosure().contentSha256) {
+    return yield* Effect.fail(Error("Missing original provider signup disclosure"));
+  }
+});
 const boot = Effect.fn(function* (input: Inputs, ordinal: number) {
   const { post, call } = runner(input),
     proof = yield* result(
@@ -156,6 +169,7 @@ const boot = Effect.fn(function* (input: Inputs, ordinal: number) {
     Schema.Struct({ binding: Schema.NonEmptyString })
   );
   const headers = { cookie: mounted, "fidy-session-binding": binding };
+  yield* verifyOriginalDisclosure(call, headers);
   yield* consume(yield* call("/transactions", { headers }), ok);
   yield* consume(yield* call("/transactions", { headers }, false), isolated);
   return { headers, subject, outcome: complete.status };

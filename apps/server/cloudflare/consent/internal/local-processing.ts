@@ -1,5 +1,5 @@
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, Effect, Option, Schema } from "effect";
+import { Clock, Data, Effect, Option, Result, Schema } from "effect";
 import { DisclosureSnapshot } from "../../../src/core/consent/contract";
 import { UserId } from "../../../src/core/identity/contract";
 import {
@@ -135,6 +135,7 @@ type Decision =
   | { action: "status" | "authorization" | "withdraw" }
   | { action: "renew"; body: typeof ProcessingConsentRenewal.Type };
 const readDecision = Effect.fnUntraced(function* (request: Request, action: string) {
+  if (request.signal.aborted) return yield* Effect.fail("consent_request_aborted" as const);
   if (action === "status" || action === "authorization") return Option.some<Decision>({ action });
   const raw = yield* boundedJsonBody({ request, policy: bodyPolicy, schema: Schema.Unknown });
   const strict = { onExcessProperty: "error" } as const;
@@ -170,22 +171,40 @@ const observeDecision = Effect.fnUntraced(function* (
       return Option.match(yield* receipt(subject, current), { onNone: noAuthority, onSome: ok });
   }
 });
+class RetiredConsentProof extends Data.TaggedError("RetiredConsentProof")<{}> {}
+type DecisionProof = { binding: string; digest: Uint8Array; signal: AbortSignal };
+const decisionOwner = Effect.fnUntraced(function* (
+  proof: DecisionProof,
+  action: Decision["action"],
+  current: number
+) {
+  if (proof.signal.aborted) return yield* Effect.fail("consent_request_aborted" as const);
+  const sql = yield* SqliteClient;
+  const [row] =
+    yield* sql`SELECT user_id FROM web_sessions WHERE id=${proof.binding} AND token_digest=${proof.digest} AND revoked_at_ms IS NULL
+    AND hard_expires_at_ms>${current} AND idle_expires_at_ms>${current} AND (${action}!='renew' OR fresh_until_ms>${current})
+    AND NOT EXISTS(SELECT 1 FROM erasure_requests)`;
+  return Schema.decodeUnknownOption(UserId)(row?.user_id);
+});
 const authorizedDecision = Effect.fnUntraced(function* (
   decision: Decision,
-  proof: { binding: string; digest: Uint8Array },
+  proof: DecisionProof,
   owns: (id: string) => boolean
 ) {
-  const { binding, digest } = proof;
-  const sql = yield* SqliteClient;
   const current = yield* Clock.currentTimeMillis;
-  const [row] =
-    yield* sql`SELECT user_id FROM web_sessions WHERE id=${binding} AND token_digest=${digest} AND revoked_at_ms IS NULL
-    AND hard_expires_at_ms>${current} AND idle_expires_at_ms>${current} AND (${decision.action}!='renew' OR fresh_until_ms>${current})
-    AND NOT EXISTS(SELECT 1 FROM erasure_requests)`;
-  const user = Schema.decodeUnknownOption(UserId)(row?.user_id);
+  const user = yield* decisionOwner(proof, decision.action, current);
   if (Option.isNone(user) || !owns(user.value)) return noAuthority();
   if ((yield* admitLocalRequest({ user: user.value, current })).length !== 1) return rateLimited();
-  return yield* observeDecision(decision, { userId: user.value, id: binding, digest }, current);
+  const response = yield* Effect.result(
+    observeDecision(
+      decision,
+      { userId: user.value, id: proof.binding, digest: proof.digest },
+      current
+    )
+  );
+  const retained = yield* decisionOwner(proof, decision.action, yield* Clock.currentTimeMillis);
+  if (!Option.contains(retained, user.value)) return yield* new RetiredConsentProof();
+  return Result.isFailure(response) ? yield* Effect.fail(response.failure) : response.success;
 });
 const missingRoute = 404,
   wrongMethod = 405;
@@ -203,8 +222,13 @@ export const localProcessingConsent = Effect.fn(
     if (Option.isNone(proof)) return noAuthority();
     const decision = yield* readDecision(request, transport.value.operation);
     if (Option.isNone(decision)) return consentResponse(badInput);
-    return yield* authorizedDecision(decision.value, proof.value, owns).pipe(
-      withStoreCapacity("required")
+    return yield* authorizedDecision(
+      decision.value,
+      { ...proof.value, signal: request.signal },
+      owns
+    ).pipe(
+      withStoreCapacity("required"),
+      Effect.catchTag("RetiredConsentProof", () => Effect.succeed(noAuthority()))
     );
   },
   Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))

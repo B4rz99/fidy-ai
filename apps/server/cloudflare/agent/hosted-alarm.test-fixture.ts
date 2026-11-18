@@ -43,7 +43,33 @@ export class UserStore extends NativeUserStore {
     }
     return Option.none();
   }
+  private clocked<Value>(instant: number, run: () => Promise<Value>): Promise<Value> {
+    const clock = Date.now;
+    Date.now = (): number => instant;
+    return run().finally(() => {
+      Date.now = clock;
+    });
+  }
+  private clockRequest(request: Request): Option.Option<Promise<Response>> {
+    const url = new URL(request.url);
+    if (url.origin === "https://fixture.invalid" && url.pathname === "/clocked-alarm") {
+      const instant = Number(url.searchParams.get("now"));
+      return Option.some(
+        this.clocked(instant, () => super.alarm()).then(() => new Response(null, { status: 204 }))
+      );
+    }
+    if (url.origin === "https://fixture.invalid" && url.pathname === "/set-opportunity-clock") {
+      return Option.some(
+        this.ctx.storage
+          .put("fixture-opportunity-clock", Number(url.searchParams.get("now")))
+          .then(() => new Response(null, { status: 204 }))
+      );
+    }
+    return Option.none();
+  }
   override fetch(request: Request): Promise<Response> {
+    const clocked = this.clockRequest(request);
+    if (Option.isSome(clocked)) return clocked.value;
     const paused = this.pausedRequest(request);
     if (Option.isSome(paused)) return paused.value;
     if (request.url === "https://fixture.invalid/hold-alarm") {
@@ -61,7 +87,13 @@ export class UserStore extends NativeUserStore {
         .delete("fixture-hold-alarm")
         .then(() => new Response(null, { status: 204 }));
     }
-    return super.fetch(request);
+    return this.ctx.storage
+      .get<number>("fixture-opportunity-clock")
+      .then((instant) =>
+        instant === undefined
+          ? super.fetch(request)
+          : this.clocked(instant, () => super.fetch(request))
+      );
   }
   override alarm(): Promise<void> {
     return this.ctx.storage

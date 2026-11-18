@@ -1,3 +1,4 @@
+import { disclosureWindowAt } from "./category-window";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Clock, Effect, Option, Schema } from "effect";
 import {
@@ -93,6 +94,11 @@ export const dispatchDisclosure = Effect.fn(function* (
     message: Option.getOrNull(outcome.providerMessageId),
   });
 });
+const unattendedDisclosureAllowed = (
+  offer: Readonly<Record<string, unknown>>,
+  now: number
+): boolean =>
+  offer.automatic !== 1 || (disclosureWindowAt(now) === now && offer.active_grant !== 1);
 export const claimDisclosure = Effect.fn(function* (
   work: typeof DeliverySend.Type,
   enabled: { category: boolean; weekly: boolean }
@@ -100,8 +106,9 @@ export const claimDisclosure = Effect.fn(function* (
   const sql = yield* SqliteClient,
     now = yield* Clock.currentTimeMillis;
   const [offer] =
-    yield* sql`SELECT id,kind FROM reminder_disclosures WHERE id=${work.operationId} AND user_id=${work.userId}`;
+    yield* sql`SELECT o.id,o.kind,EXISTS(SELECT 1 FROM category_opportunities q WHERE q.user_id=o.user_id AND q.offer_id=o.id) AS automatic,EXISTS(SELECT 1 FROM proactive_grants g WHERE g.user_id=o.user_id AND g.kind=o.kind AND g.revoked_at_ms IS NULL) AS active_grant FROM reminder_disclosures o WHERE o.id=${work.operationId} AND o.user_id=${work.userId}`;
   if (offer === undefined) return true;
+  if (!unattendedDisclosureAllowed(offer, now)) return false;
   if (!(offer.kind === "weekly-summary" ? enabled.weekly : enabled.category)) return false;
   const [ready] =
     yield* sql`SELECT 1 FROM reminder_disclosures o JOIN whatsapp_deliveries w ON w.user_id=o.user_id AND w.operation_id=o.id AND w.family='disclosure' AND w.state='staged' AND w.route_ready=1 AND w.started_ms IS NULL WHERE o.id=${work.operationId} AND o.state='ready' AND (o.grant_id IS NULL OR EXISTS(SELECT 1 FROM proactive_grants g WHERE g.id=o.grant_id AND g.user_id=o.user_id AND g.revoked_at_ms IS NULL)) AND o.user_id=${work.userId} AND o.portfolio=${work.portfolio} AND o.bsuid=${work.bsuid} AND o.endpoint=${work.endpoint} AND o.correlation=${work.correlation} AND o.digest=${work.contentDigest} AND o.expires_ms=${work.deadline} AND o.expires_ms>${now} AND ${work.sandboxPhone} IS NULL`;

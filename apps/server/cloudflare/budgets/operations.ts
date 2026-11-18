@@ -1,3 +1,4 @@
+import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { detectLocalThresholds } from "./internal/native-thresholds";
 import { CanonicalAdmissionUnavailable } from "../canonical-admission/contract";
 import { preserveStoreAlarm } from "../runtime/sqlite/operations";
@@ -874,7 +875,11 @@ export const readLocalBudget: typeof queryLocalBudget = (...args) => queryLocalB
 
 export const retainLocalBudgetThresholds = Effect.fn(
   function* (user: UserId, current: number, storage: DurableObjectStorage) {
-    if (yield* detectLocalThresholds(user, DateTime.makeUnsafe(current))) {
+    const thresholds = yield* detectLocalThresholds(user, DateTime.makeUnsafe(current));
+    const sql = yield* SqliteClient;
+    const pendingOffer =
+      yield* sql`SELECT 1 FROM category_opportunities WHERE user_id=${user} AND kind='budget-threshold' AND next_ms<=${current}`;
+    if (thresholds || pendingOffer.length > 0) {
       yield* preserveStoreAlarm(storage, current);
     }
   },

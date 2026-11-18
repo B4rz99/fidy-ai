@@ -1252,6 +1252,16 @@ export const userStoreHistory: StoreHistory = {
         "CREATE INDEX pending_disclosure_observation ON reminder_disclosures(kind,created_ms,id) WHERE terminal_receipt=0 AND state IN('ready','claimed')",
       ],
     },
+    {
+      version: 37,
+      id: "native-category-disclosure-opportunities",
+      statements: [
+        "CREATE TABLE insight_contacts(user_id TEXT PRIMARY KEY REFERENCES users(id),portfolio TEXT NOT NULL,bsuid TEXT NOT NULL,endpoint TEXT NOT NULL,observed_ms INTEGER NOT NULL) STRICT",
+        "CREATE TABLE category_opportunities(user_id TEXT NOT NULL REFERENCES users(id),kind TEXT NOT NULL CHECK(kind IN ('budget-threshold','new-recurring-series')),source TEXT NOT NULL,offer_id TEXT,next_ms INTEGER,closed_ms INTEGER,PRIMARY KEY(user_id,kind)) STRICT",
+        "CREATE TRIGGER first_budget_offer AFTER INSERT ON budgets BEGIN INSERT OR IGNORE INTO category_opportunities(user_id,kind,source,next_ms) VALUES(NEW.user_id,'budget-threshold',NEW.id,(SELECT NEW.created_at_ms FROM insight_contacts c WHERE c.user_id=NEW.user_id)); END",
+        "INSERT INTO category_opportunities(user_id,kind,source) SELECT user_id,'budget-threshold',id FROM (SELECT user_id,id,row_number() OVER(PARTITION BY user_id ORDER BY created_at_ms,id) AS ordinal FROM budgets) WHERE ordinal=1",
+      ],
+    },
   ],
 };
 

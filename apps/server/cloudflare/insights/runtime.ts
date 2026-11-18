@@ -1,3 +1,7 @@
+import {
+  discoverCategoryOpportunity,
+  materializeCategoryOpportunity,
+} from "./internal/native-category-opportunity";
 import { materializeWeekly } from "./internal/native-weekly-summary";
 import type { UserStoreBindings } from "../directory/contract";
 import {
@@ -545,6 +549,12 @@ export const observedReminderChoice = Effect.fn(function* (
   yield* recordWeeklyReply(event).pipe(withStoreCapacity("required"));
   yield* recordReminderReply(event).pipe(withStoreCapacity("required"));
   if (!activeChoiceText(event.text)) {
+    if (environment.PROACTIVITY_ENABLED === "enabled") {
+      yield* discoverCategoryOpportunity(event, storage).pipe(
+        withStoreCapacity("growth"),
+        Effect.result
+      );
+    }
     return Option.none<Response>();
   }
   const negative =
@@ -594,6 +604,9 @@ export const recoverLocalReminders = Effect.fn(function* (
       : yield* Effect.scoped(
           Effect.flatMap(localSender(environment), (sender) =>
             Effect.gen(function* () {
+              yield* materializeCategoryOpportunity(sender, storage).pipe(
+                withStoreCapacity("growth")
+              );
               const offer = yield* dispatchDisclosure(
                 environment,
                 { category: sender },
@@ -666,10 +679,11 @@ export const nativeReminderActivity = Effect.fn(function* (
     yield* Effect.tryPromise(() => request.json())
   );
   if (!owns(work.userId)) return Response.json({ _tag: "Done" });
-  if (work.kind === "weekly-question" || work.kind === "weekly-summary")
-    {return environment.WEEKLY_SUMMARY_ENABLED === "enabled"
+  if (work.kind === "weekly-question" || work.kind === "weekly-summary") {
+    return environment.WEEKLY_SUMMARY_ENABLED === "enabled"
       ? yield* weeklyActivity(work, environment, storage)
-      : Response.json({ _tag: "Done" });}
+      : Response.json({ _tag: "Done" });
+  }
   if (work.kind === "proactivity-recover") return yield* recoverDelivery(work, environment);
   if (work.kind !== "proactivity-delivery" || environment.PROACTIVITY_ENABLED !== "enabled") {
     return Response.json({ _tag: "Done" });

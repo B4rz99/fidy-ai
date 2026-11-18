@@ -147,7 +147,7 @@ export const repairReminder = Effect.fn(function* (
     },
   });
   const [time] = yield* sql.unsafe(
-    `SELECT min(at) AS at FROM (${schedule.sql} UNION ALL SELECT d.offer_ms FROM reminder_deliveries d JOIN proactive_grants g ON g.id=d.grant_id WHERE d.state='ready' AND g.kind<>'weekly-summary' UNION ALL SELECT attempt_ms FROM reminder_disclosures WHERE state='ready' AND kind<>'weekly-summary' UNION ALL SELECT due_ms FROM category_alert_groups UNION ALL SELECT i.next_ms FROM recurring_digest_instructions i JOIN proactive_grants g ON g.id=i.grant_id AND g.revoked_at_ms IS NULL WHERE i.next_ms IS NOT NULL)`,
+    `SELECT min(at) AS at FROM (SELECT min(at) AS at FROM (${schedule.sql} UNION ALL SELECT d.offer_ms FROM reminder_deliveries d JOIN proactive_grants g ON g.id=d.grant_id WHERE d.state='ready' AND g.kind<>'weekly-summary' UNION ALL SELECT attempt_ms FROM reminder_disclosures WHERE state='ready' AND kind<>'weekly-summary' UNION ALL SELECT due_ms FROM category_alert_groups UNION ALL SELECT i.next_ms FROM recurring_digest_instructions i JOIN proactive_grants g ON g.id=i.grant_id AND g.revoked_at_ms IS NULL WHERE i.next_ms IS NOT NULL) UNION ALL SELECT next_ms FROM category_opportunities WHERE next_ms IS NOT NULL)`,
     schedule.params
   );
   const row = yield* Schema.decodeUnknownEffect(Schema.Struct({ at: Schema.NullOr(Schema.Int) }))(

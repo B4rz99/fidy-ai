@@ -34,7 +34,7 @@ const life = 600000,
 const json = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown));
 const refused = (): Response => new Response(null, { status: 422 }),
   success = (): Response => new Response(null, { status: 200 });
-const available = Effect.fn(function* (
+export const available = Effect.fn(function* (
   event: WhatsAppTurnAdmission,
   privacy: boolean,
   now: number
@@ -92,21 +92,15 @@ export const activeChoiceText = (input: string): boolean => {
     /^(?:s[ií]|no|desactivar)$/u.test(text)
   );
 };
-const offer = Effect.fn(function* (
-  event: WhatsAppTurnAdmission,
-  {
-    senders,
-    kind,
-    storage,
-  }: {
-    senders: ChoiceSenders;
-    kind: OfferKind;
-    storage: DurableObjectStorage;
-  }
+type DisclosureAddress = Pick<
+  WhatsAppTurnAdmission,
+  "userId" | "portfolioId" | "bsuid" | "businessPhoneNumberId" | "occurredAtMs"
+> & { messageId: string };
+export const enqueueDisclosure = Effect.fn(function* (
+  event: DisclosureAddress,
+  { senders, kind, now }: { senders: ChoiceSenders; kind: OfferKind; now: number }
 ) {
-  const sql = yield* SqliteClient,
-    now = yield* Clock.currentTimeMillis;
-  if (!(yield* available(event, false, now))) return refused();
+  const sql = yield* SqliteClient;
   const [grant] =
     yield* sql`SELECT id FROM proactive_grants WHERE user_id=${event.userId} AND kind=${kind} AND revoked_at_ms IS NULL`;
   const disclosure =
@@ -129,10 +123,28 @@ const offer = Effect.fn(function* (
     disclosure
   );
   const expires = event.occurredAtMs + life;
-  if (expires <= now) return refused();
-  yield* sql`INSERT INTO reminder_disclosures(id,user_id,portfolio,bsuid,endpoint,request_message,created_ms,expires_ms,attempt_ms,correlation,disclosure,body,digest,grant_id,kind)
+  if (expires <= now) return Option.none<string>();
+  const inserted =
+    yield* sql`INSERT INTO reminder_disclosures(id,user_id,portfolio,bsuid,endpoint,request_message,created_ms,expires_ms,attempt_ms,correlation,disclosure,body,digest,grant_id,kind)
     SELECT ${id},${event.userId},${event.portfolioId},${event.bsuid},${event.businessPhoneNumberId},${event.messageId},${event.occurredAtMs},${expires},${now},${newId()},${serialized},${body},${digest},${typeof grant?.id === "string" ? grant.id : null},${kind}
-    WHERE (SELECT count(*) FROM reminder_disclosures WHERE user_id=${event.userId} AND created_ms>${now - day})<8 AND NOT EXISTS(SELECT 1 FROM reminder_disclosures o WHERE o.user_id=${event.userId} AND o.kind=${kind} AND o.expires_ms>${now} AND NOT EXISTS(SELECT 1 FROM reminder_choices c WHERE c.offer_id=o.id)) ON CONFLICT DO NOTHING`;
+    WHERE (SELECT count(*) FROM reminder_disclosures WHERE user_id=${event.userId} AND created_ms>${now - day})<8 AND NOT EXISTS(SELECT 1 FROM reminder_disclosures o WHERE o.user_id=${event.userId} AND o.kind=${kind} AND o.expires_ms>${now} AND NOT EXISTS(SELECT 1 FROM reminder_choices c WHERE c.offer_id=o.id)) ON CONFLICT DO NOTHING RETURNING id`;
+  return inserted.length === 1 ? Option.some(id) : Option.none<string>();
+});
+const offer = Effect.fn(function* (
+  event: WhatsAppTurnAdmission,
+  {
+    senders,
+    kind,
+    storage,
+  }: {
+    senders: ChoiceSenders;
+    kind: OfferKind;
+    storage: DurableObjectStorage;
+  }
+) {
+  const now = yield* Clock.currentTimeMillis;
+  if (!(yield* available(event, false, now))) return refused();
+  yield* enqueueDisclosure(event, { senders, kind, now });
   yield* preserveStoreAlarm(storage, now);
   return new Response(null, { status: 202 });
 });

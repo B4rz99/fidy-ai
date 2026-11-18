@@ -1,0 +1,21 @@
+apps/server/cloudflare/canonical-admission/internal/local-batch.ts
+  s_e6869521adbefb::t_843dfd1c151601 216-217,219-231
+apps/server/cloudflare/transactions/transactions.test.ts
+  s_e6869521adbefb::t_ab9b125da45fec 5227-5235
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a59d9e46be609af1286962b4b33dea176377f9ad",
+  "prompts": {},
+  "sessions": {
+    "s_e6869521adbefb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eed0-bb9c-7f52-93b5-dd430e56cc9a",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

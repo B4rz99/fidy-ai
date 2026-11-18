@@ -57,7 +57,13 @@ import { patBrowserRoute, patDirectRoute, patMethods, patRoute } from "./tokens/
 import { canonicalMethods, canonicalOperation, canonicalRoute } from "./routing/operations";
 import { bancolombiaSandboxResponse } from "./bancolombia-sandbox/operations";
 import { connectionCallbackPath } from "./connections/contract";
-import { recoveryIsolationResponse } from "./release-isolation/operations";
+import {
+  isAcceptanceReceipt,
+  isAcceptanceWindow,
+  releaseAdmission,
+  signAcceptanceRequest,
+} from "./release-isolation/operations";
+import { acceptanceProofHeader } from "./release-isolation/contract";
 
 type PublicEnvironment = WorkerTelemetryEnvironment & {
   readonly BROWSER_ORIGIN: string;
@@ -68,6 +74,8 @@ type PublicEnvironment = WorkerTelemetryEnvironment & {
     Readonly<{
       SMOKE_PROOF: string;
       RECOVERY_ISOLATION: string;
+      NATIVE_STORAGE_ADMISSION: string;
+      SQLITE_STORAGE_RELEASE: string;
       CONTRACT_DIGEST: string;
       CF_VERSION_METADATA: { readonly id: string };
     }>
@@ -90,8 +98,9 @@ const apiSecurityHeaders = {
 const resolveBrowserOrigin = (configuredOrigin: string): Option.Option<string> => {
   if (configuredOrigin === browserOrigins.local) return Option.some(browserOrigins.local);
   if (configuredOrigin === browserOrigins.acceptance) return Option.some(browserOrigins.acceptance);
-  if (configuredOrigin === browserOrigins.nativeAcceptance)
-    {return Option.some(browserOrigins.nativeAcceptance);}
+  if (configuredOrigin === browserOrigins.nativeAcceptance) {
+    return Option.some(browserOrigins.nativeAcceptance);
+  }
   if (configuredOrigin === browserOrigins.production) return Option.some(browserOrigins.production);
   return Option.none();
 };
@@ -811,10 +820,33 @@ const hasMixedQueryCredentials = (request: Request): boolean =>
   request.headers.has("cookie") &&
   canonicalRoute(new URL(request.url).pathname);
 
+const bindCoreAcceptance = Effect.fn(function* (
+  forwarded: Request,
+  environment: PublicEnvironment,
+  deadline: Option.Option<number>
+) {
+  forwarded.headers.delete(acceptanceProofHeader);
+  if (Option.isSome(deadline)) {
+    forwarded.headers.set(
+      acceptanceProofHeader,
+      yield* signAcceptanceRequest({
+        request: forwarded,
+        environment,
+        boundary: "core",
+        deadline: deadline.value,
+      })
+    );
+  }
+});
+type OwnedRouting = {
+  origin: Option.Option<string>;
+  telemetry: TelemetryService;
+  deadline: Option.Option<number>;
+};
 const routeOwnedRequest = (
   request: Request,
   environment: PublicEnvironment,
-  { origin, telemetry }: Readonly<{ origin: Option.Option<string>; telemetry: TelemetryService }>
+  { origin, telemetry, deadline }: OwnedRouting
 ): Effect.Effect<Response> => {
   if (hasMixedQueryCredentials(request)) {
     return Effect.succeed(applyApiPolicy(unauthenticated(), environment.BROWSER_ORIGIN, origin));
@@ -834,6 +866,7 @@ const routeOwnedRequest = (
   }
   return Effect.gen(function* () {
     const forwarded = yield* coreRequest(request, environment);
+    yield* bindCoreAcceptance(forwarded, environment, deadline);
     forwarded.headers.delete(workerInternalTraceHeader);
     const trace = yield* telemetry.captureDurableContext;
     if (Option.isSome(trace)) {
@@ -905,6 +938,8 @@ const forwardStorageProbe = Effect.fn(function* (request: Request, environment: 
   return new Response(result.body, { status: result.status, headers });
 });
 
+const privateReleaseRequest = (request: Request): boolean =>
+  isStorageProbe(request) || isAcceptanceWindow(request) || isAcceptanceReceipt(request);
 const fetchEffect = (
   request: Request,
   environment: PublicEnvironment,
@@ -924,17 +959,11 @@ const fetchEffect = (
     if (Option.exists(origin, (value) => value !== browserOrigin.value)) {
       return applyApiPolicy(forbiddenOrigin(), browserOrigin.value, origin);
     }
-    const recoveryResponse = recoveryIsolationResponse({
-      request,
-      environment: {
-        mode: Option.fromUndefinedOr(environment.RECOVERY_ISOLATION),
-        proof: Option.fromUndefinedOr(environment.SMOKE_PROOF),
-      },
-    });
-    if (Option.isSome(recoveryResponse)) {
-      return applyApiPolicy(recoveryResponse.value, browserOrigin.value, origin);
+    const admitted = yield* releaseAdmission(request, environment, "ingress");
+    if (Option.isSome(admitted.denial)) {
+      return applyApiPolicy(admitted.denial.value, browserOrigin.value, origin);
     }
-    if (isStorageProbe(request)) {
+    if (privateReleaseRequest(request)) {
       return yield* forwardStorageProbe(request, environment);
     }
     const distributionResponse = yield* cliDistributionResponse(request);
@@ -948,7 +977,7 @@ const fetchEffect = (
     return yield* routeOwnedRequest(
       request,
       { ...environment, BROWSER_ORIGIN: browserOrigin.value },
-      { origin, telemetry }
+      { origin, telemetry, deadline: admitted.deadline }
     );
   }).pipe(
     Effect.catchCauseIf(

@@ -1,3 +1,5 @@
+import { acceptanceSubject } from "../release-isolation/operations";
+import type { NativeAcceptanceSettings } from "../release-isolation/contract";
 import { refundSchema } from "./internal/refund-schema";
 import { sampleSchema } from "./internal/sample-schema";
 import { hostedSchema } from "./internal/hosted-schema";
@@ -1096,9 +1098,28 @@ export const recoverUserWork = <E, R>(
 /** An empty store has no work. Its reserved bootstrap registers independently before creating the User. */
 export const observeUserRegistration = Effect.fn(function* (
   maintenance: Pick<DurableObjectNamespace, "getByName">,
-  owns: (id: string) => boolean
+  owns: (id: string) => boolean,
+  settings: NativeAcceptanceSettings
 ) {
   const sql = yield* SqliteClient;
+  if (settings.NATIVE_STORAGE_ADMISSION === "closed") {
+    const credentials =
+      yield* sql`SELECT issuer,subject FROM provider_credentials WHERE user_id IN(SELECT id FROM users LIMIT 1)`;
+    if (
+      !credentials.some(
+        (credential) =>
+          typeof credential.issuer === "string" &&
+          typeof credential.subject === "string" &&
+          acceptanceSubject({
+            revision: settings.RELEASE_GIT_SHA ?? "",
+            issuer: credential.issuer,
+            subject: credential.subject,
+          })
+      )
+    ) {
+      return "isolated" as const;
+    }
+  }
   const [row] = yield* sql`SELECT id,lifetime_registered FROM users LIMIT 1`;
   if (row === undefined) return "empty" as const;
   const user = yield* Schema.decodeUnknownEffect(

@@ -1,3 +1,5 @@
+import { backgroundWorkAllowed } from "../release-isolation/operations";
+import type { AcceptanceWindowBindings } from "../release-isolation/contract";
 import { scopeDirectoryUrl } from "../erasure/contract";
 import { providerAllowanceUrl } from "../resource-admission/contract";
 import { admitSharedProvider } from "../resource-admission/operations";
@@ -104,7 +106,8 @@ import { Clock, Context, Effect, Layer, Option, Schema } from "effect";
 import { TokenShortId } from "../../src/core/tokens/contract";
 import { canonicalRequestProtection } from "../canonical-admission/contract";
 
-type DirectoryEnvironment = StoreReleaseEnvironment &
+type DirectoryEnvironment = AcceptanceWindowBindings &
+  StoreReleaseEnvironment &
   ProviderConfiguration &
   Readonly<{
     DIRECTORY: DurableObjectNamespace;
@@ -173,6 +176,11 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
     );
   }
   override alarm(): Promise<void> {
+    return Effect.runPromise(backgroundWorkAllowed(this.env)).then((allowed) =>
+      allowed ? this.recoverAlarm() : undefined
+    );
+  }
+  private recoverAlarm(): Promise<void> {
     return this.runtime.runPromise(
       Effect.andThen(
         Effect.andThen(

@@ -1,3 +1,5 @@
+import { backgroundWorkAllowed } from "../release-isolation/operations";
+import type { AcceptanceWindowBindings } from "../release-isolation/contract";
 import {
   cloudflareWorkerTelemetry,
   observeWorkerExecution,
@@ -225,7 +227,7 @@ import {
 import { ownerCheckRequest, ownerCheckResponse } from "../maintenance/contract";
 
 const uncertainCheckStatus = 503;
-type UserStoreEnvironment = {
+type UserStoreEnvironment = AcceptanceWindowBindings & {
   WHATSAPP_SANDBOX_PHONE_NUMBER_ID: string;
 } & NativeReminderEnvironment &
   WompiBindings &
@@ -444,8 +446,12 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
 
   override alarm(): Promise<void> {
     if (this.erased) return Promise.resolve();
-    return this.registration().then((registration) =>
-      registration === "registered" ? this.checkWork() : undefined
+    return Effect.runPromise(backgroundWorkAllowed(this.env)).then((allowed) =>
+      allowed
+        ? this.registration().then((registration) =>
+            registration === "registered" ? this.checkWork() : undefined
+          )
+        : undefined
     );
   }
 
@@ -543,7 +549,9 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     this.ctx.id.equals(this.env.USER_STORE.idFromName(userId));
 
   private registration(): Promise<Effect.Success<ReturnType<typeof observeUserRegistration>>> {
-    return this.runtime.runPromise(observeUserRegistration(this.env.MAINTENANCE, this.owns));
+    return this.runtime.runPromise(
+      observeUserRegistration(this.env.MAINTENANCE, this.owns, this.env)
+    );
   }
 
   private erasedResponse(request: Request): Promise<Response> {
@@ -579,9 +587,19 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
       )
     );
   }
+  private scopedErasureCommand(request: Request): Promise<Response> {
+    if (this.env.NATIVE_STORAGE_ADMISSION === "closed" && !this.erased) {
+      return this.registration().then((registration) =>
+        registration === "registered"
+          ? this.erasureCommand(request)
+          : canonicalAdmissionUnavailable()
+      );
+    }
+    return this.erasureCommand(request);
+  }
   override fetch(request: Request): Promise<Response> {
     if (request.method === "POST" && [localDrainUrl, localPurgeUrl].includes(request.url)) {
-      return this.erasureCommand(request);
+      return this.scopedErasureCommand(request);
     }
     if (this.erased) return this.erasedResponse(request);
     if (this.isReleaseProbe(request)) {
@@ -606,6 +624,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     }
     return this.registration().then(
       (registration) => {
+        if (registration === "isolated") return canonicalAdmissionUnavailable();
         if (registration === "unavailable" && ownerCheckRequest(request)) {
           return new Response(null, { status: uncertainCheckStatus });
         }

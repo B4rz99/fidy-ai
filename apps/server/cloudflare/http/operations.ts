@@ -8,7 +8,9 @@ import {
 } from "./contract";
 
 /** Fails when the request aborts and removes its listener when the waiting fiber is interrupted. */
-export const awaitRequestAbort = (request: Request): Effect.Effect<never, BoundedBodyReadFailed> =>
+export const awaitRequestAbort = (
+  request: Pick<Request, "signal">
+): Effect.Effect<never, BoundedBodyReadFailed> =>
   Effect.callback((resume, fiberSignal) => {
     const onAbort = (): void => {
       // A synchronous resume bypasses callback's returned finalizer in installed Effect 4.
@@ -117,7 +119,7 @@ const collectBody = Effect.fn(function* (
  * waiting on an untrusted cancellation promise; failures retain no body detail.
  */
 export const readBoundedRequestBody = Effect.fn(function* (
-  request: Request,
+  request: Pick<Request, "signal" | "body">,
   policy: RequestBodyPolicy
 ) {
   if (request.signal.aborted) return yield* Effect.failCause(Cause.interrupt());

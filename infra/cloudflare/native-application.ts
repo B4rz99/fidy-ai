@@ -90,6 +90,7 @@ const coreWorker = Effect.fn(function* ({
         namespaceId: 2257,
         simple: { limit: 8, period: 60 },
       }),
+      RELEASE_FIXTURE: executor.smoke,
       SMOKE_QUEUE_NAME: queues.SMOKE_QUEUE.queueName,
       SMOKE_WORKFLOW: executor.reference,
       CONNECTION_SYNCHRONIZATION_QUEUE_NAME: queues.CONNECTION_SYNCHRONIZATION_QUEUE.queueName,
@@ -184,7 +185,12 @@ export const nativeApplication = Effect.gen(function* () {
     version: candidate(release),
     dev: { host: "127.0.0.1", port: productionTopology.ingress.localPort, strictPort: true },
     domain: network(release, nativeIngressHost, productionTopology.ingress.hostname),
-    env: { ...release.shared, ...(yield* ingressBindings(release)), CORE: core },
+    env: {
+      ...release.shared,
+      ...(yield* ingressBindings(release)),
+      CORE: core,
+      RELEASE_FIXTURE: executor.smoke,
+    },
   });
   const web = yield* webApplication(release);
   if (release.development) yield* localSite(release);

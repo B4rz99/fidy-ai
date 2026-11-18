@@ -1,3 +1,5 @@
+import { backgroundWorkAllowed } from "../release-isolation/operations";
+import type { AcceptanceWindowBindings } from "../release-isolation/contract";
 import { confirmCleanup } from "./internal/settlement";
 import { confirmPurge, emptyUserDisposition } from "./internal/local-purge";
 import {
@@ -60,13 +62,14 @@ export const makeErasureOriginals = (
   discard: (scope) => originals.discard({ configuration, scope }),
 });
 
-type ErasureEnvironment = StoreReleaseEnvironment & {
-  USER_STORE: DurableObjectNamespace;
-  ERASURE: DurableObjectNamespace;
-  DIRECTORY: DurableObjectNamespace;
-  PRICING: DurableObjectNamespace;
-  MAINTENANCE: DurableObjectNamespace;
-};
+type ErasureEnvironment = AcceptanceWindowBindings &
+  StoreReleaseEnvironment & {
+    USER_STORE: DurableObjectNamespace;
+    ERASURE: DurableObjectNamespace;
+    DIRECTORY: DurableObjectNamespace;
+    PRICING: DurableObjectNamespace;
+    MAINTENANCE: DurableObjectNamespace;
+  };
 export class Erasure extends DurableObject<ErasureEnvironment> {
   private readonly runtime;
   constructor(state: DurableObjectState, env: ErasureEnvironment) {
@@ -85,6 +88,11 @@ export class Erasure extends DurableObject<ErasureEnvironment> {
     }
   }
   override alarm(): Promise<void> {
+    return Effect.runPromise(backgroundWorkAllowed(this.env)).then((allowed) =>
+      allowed ? this.recoverAlarm() : undefined
+    );
+  }
+  private recoverAlarm(): Promise<void> {
     return this.runtime.runPromise(advanceErasureCases(this.ctx.storage, this.env));
   }
   private command(request: Request): Promise<Response> {

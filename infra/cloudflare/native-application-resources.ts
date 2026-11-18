@@ -90,6 +90,11 @@ export const nativeSmokeExecutor = Effect.fn(function* (input: {
     observability: freeTierWorkerObservability,
     env: {
       SMOKE_BUCKET: input.buckets.SMOKE_BUCKET,
+      NATIVE_STORAGE_ADMISSION: input.release.shared.NATIVE_STORAGE_ADMISSION,
+      ACCEPTANCE_API_ORIGIN: input.release.origin.api,
+      ACCEPTANCE_CODE_KEY: input.release.fixtureSecret("oidc-code"),
+      ACCEPTANCE_GOOGLE_SECRET: input.release.fixtureSecret("google"),
+      ACCEPTANCE_MICROSOFT_SECRET: input.release.fixtureSecret("microsoft"),
       SMOKE_QUEUE_NAME: input.queues.SMOKE_QUEUE.queueName,
       SMOKE_WORKFLOW: Cloudflare.Workflow("ReleaseSmokeWorkflowV2-" + revision, {
         workflowName,

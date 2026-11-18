@@ -1,6 +1,17 @@
+import { exerciseClosedUsers } from "./native-acceptance";
+import { installedOrigins } from "@fidy/server/browser-transport";
 import { verifyNativeEdge } from "./native-edge";
-import { Context, Effect, Layer, Option, Config as ReleaseConfig, Schema } from "effect";
-import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
+import {
+  Context,
+  Effect,
+  Layer,
+  Option,
+  Redacted,
+  Config as ReleaseConfig,
+  Schedule,
+  Schema,
+} from "effect";
+import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 import { SmokeIdentity } from "../../apps/server/cloudflare/runtime/release-smoke/contract";
 import {
   SharedStoreMarkers,
@@ -273,6 +284,42 @@ const requireClosedAdmission = Effect.fn(function* (client: HttpClient.HttpClien
     return yield* new ReleaseFailure({ message: "Normal admission is not closed" });
   }
 });
+const verifySyntheticUsers = Effect.fn(function* (env: Config, client: HttpClient.HttpClient) {
+  const send = Effect.fn(function* (request: Request) {
+    const reply = yield* client
+      .execute(HttpClientRequest.fromWeb(request))
+      .pipe(Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }));
+    const native = HttpClientResponse.toWeb(reply);
+    if (Option.isNone(native)) {
+      return yield* new ReleaseFailure({
+        message: "Closed acceptance requires a native HTTP response",
+      });
+    }
+    return native.value;
+  });
+  const proof = yield* exerciseClosedUsers({
+    revision: env.revision,
+    proof: Redacted.make(env.smokeProof),
+    origins: installedOrigins.acceptance,
+    send,
+  });
+  const path = `https://api.cloudflare.com/client/v4/accounts/${env.account}/workflows/fidy-native-billing/instances/${proof.callback.workflow}`;
+  const response = providerJson(
+    HttpClientRequest.get(path, { headers: { authorization: `Bearer ${env.token}` } })
+  ).pipe(
+    Effect.provideService(HttpClient.HttpClient, client),
+    Effect.flatMap(
+      Schema.decodeUnknownEffect(
+        Schema.Struct({
+          success: Schema.Literal(true),
+          result: Schema.Struct({ status: Schema.Literal("complete") }),
+        })
+      )
+    )
+  );
+  yield* response.pipe(Effect.retry({ times: 20, schedule: Schedule.spaced("500 millis") }));
+  return { ...proof, callback: { ...proof.callback, workflowStatus: "complete" } };
+});
 const verifyFirstInstall = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
@@ -319,6 +366,7 @@ const verifyFirstInstall = Effect.fn(function* (
   );
   yield* verifyInstalledNamespaces({ env, client, storage, workers: [ingress, core] });
   const proof = yield* verifyInstalledMarkers({ env, client, pair, storage });
+  const synthetic = yield* verifySyntheticUsers(env, client);
   yield* writeFile(
     env.smokeAttestationFile,
     encodeJson({
@@ -327,6 +375,7 @@ const verifyFirstInstall = Effect.fn(function* (
       coreVersionId: pair.coreStable,
       namespaces: storage.namespaces,
       markers: proof.markers,
+      synthetic,
       admission: "closed",
     })
   );

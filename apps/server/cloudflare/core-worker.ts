@@ -1,3 +1,5 @@
+import { backgroundWorkAllowed } from "./release-isolation/operations";
+import type { AcceptanceWindowBindings } from "./release-isolation/contract";
 import type { SharedBindings } from "./storage-bootstrap/contract";
 import { type ErasureRegistry, type ErasureRegistryNamespace } from "./erasure/contract";
 import { registeredConnectionInstitutionIds } from "../src/shell/connections/contract";
@@ -38,7 +40,8 @@ export {
 export { ProactivityDeliveryWorkflow } from "./insights/runtime";
 export { StatementExtractionWorkflowV1 } from "./ingestion/runtime";
 
-type CoreEnvironment = Pick<SharedBindings, "MAINTENANCE"> &
+type CoreEnvironment = AcceptanceWindowBindings &
+  Pick<SharedBindings, "MAINTENANCE"> &
   ProviderEnvironment &
   WorkerTelemetryEnvironment &
   ProactivityEnvironment &
@@ -146,10 +149,14 @@ export const makeCoreWorker = ({
   institutions,
 }: Parameters<typeof makeCoreHttp>[0]): CoreWorker => ({
   fetch: makeCoreHttp({ telemetry, institutions }),
-  queue: (batch, environment) => makeCoreQueue(telemetry)(batch, environment),
+  queue: (batch, environment) =>
+    Effect.runPromise(backgroundWorkAllowed(environment)).then((allowed) => {
+      if (allowed) return makeCoreQueue(telemetry)(batch, environment);
+      return batch.retryAll({ delaySeconds: 60 });
+    }),
   scheduled: (controller, environment) =>
     Effect.gen(function* () {
-      if (environment.RECOVERY_ISOLATION === "isolated") return;
+      if (!(yield* backgroundWorkAllowed(environment))) return;
       const tick = maintenanceTick(controller.scheduledTime);
       const results = yield* Effect.all(
         [

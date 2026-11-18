@@ -1,3 +1,4 @@
+export const env = {};
 export class WorkflowEntrypoint<Environment, _Parameters> {
   readonly env: Environment;
   constructor(_context: unknown, env: Environment) {

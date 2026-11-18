@@ -1,3 +1,5 @@
+import { backgroundWorkAllowed } from "../release-isolation/operations";
+import type { AcceptanceWindowBindings } from "../release-isolation/contract";
 import { reportWatchdog, runWatchdog } from "./internal/watchdog";
 import type { SharedBindings } from "../storage-bootstrap/contract";
 import { handleLifetimeRegistration, lifetimeRequest, maintenanceStoreHistory } from "./operations";
@@ -8,7 +10,8 @@ import { type StoreReleaseEnvironment, storeReadinessUrl } from "../runtime/sqli
 import { Effect, Option } from "effect";
 import { maintenanceName, watchdogRequest } from "./contract";
 
-type MaintenanceEnvironment = StoreReleaseEnvironment &
+type MaintenanceEnvironment = AcceptanceWindowBindings &
+  StoreReleaseEnvironment &
   SharedBindings &
   Partial<Readonly<{ RECOVERY_ISOLATION: string }>>;
 export class Maintenance extends DurableObject<MaintenanceEnvironment> {
@@ -33,9 +36,11 @@ export class Maintenance extends DurableObject<MaintenanceEnvironment> {
     }
   }
   private watchdog(request: Request): Promise<Response> {
-    if (this.env.RECOVERY_ISOLATION === "isolated") {
-      return Promise.resolve(new Response(null, { status: 403 }));
-    }
+    return Effect.runPromise(backgroundWorkAllowed(this.env)).then((allowed) =>
+      allowed ? this.watchdogTick(request) : new Response(null, { status: 403 })
+    );
+  }
+  private watchdogTick(request: Request): Promise<Response> {
     const raw = request.headers.get("x-maintenance-scheduled-at");
     const scheduled = Number(raw);
     if (raw === null || !Number.isSafeInteger(scheduled) || scheduled <= 0) {

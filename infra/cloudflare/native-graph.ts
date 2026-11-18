@@ -62,7 +62,14 @@ const kinds: Readonly<Record<NativeRole, Readonly<Record<string, ReadonlyArray<s
   Smoke: {
     r2_bucket: ["SMOKE_BUCKET"],
     version_metadata: ["CF_VERSION_METADATA"],
-    plain_text: ["SMOKE_QUEUE_NAME", "RELEASE_GIT_SHA", "CONTRACT_DIGEST"],
+    plain_text: [
+      "SMOKE_QUEUE_NAME",
+      "RELEASE_GIT_SHA",
+      "CONTRACT_DIGEST",
+      "NATIVE_STORAGE_ADMISSION",
+      "ACCEPTANCE_API_ORIGIN",
+    ],
+    secret_text: ["ACCEPTANCE_CODE_KEY", "ACCEPTANCE_GOOGLE_SECRET", "ACCEPTANCE_MICROSOFT_SECRET"],
     workflow: ["SMOKE_WORKFLOW"],
   },
   Core: {
@@ -146,6 +153,7 @@ const kinds: Readonly<Record<NativeRole, Readonly<Record<string, ReadonlyArray<s
       "BILLING_REFUND_WORKFLOW",
       "BROWSER_PAIRING_EMAIL_WORKFLOW",
     ],
+    service: ["RELEASE_FIXTURE"],
     durable_object_namespace: ["USER_STORE", "DIRECTORY", "PRICING", "MAINTENANCE", "ERASURE"],
   },
   ForwardedEmail: {
@@ -163,7 +171,7 @@ const kinds: Readonly<Record<NativeRole, Readonly<Record<string, ReadonlyArray<s
     ],
     version_metadata: ["CF_VERSION_METADATA"],
     secret_text: ["SMOKE_PROOF", "PAT_ADMISSION_KEY"],
-    service: ["CORE"],
+    service: ["CORE", "RELEASE_FIXTURE"],
   },
   Web: {
     plain_text: ["CONTRACT_DIGEST", "RELEASE_GIT_SHA"],

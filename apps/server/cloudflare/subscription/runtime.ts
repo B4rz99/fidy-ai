@@ -1,3 +1,5 @@
+import { backgroundWorkAllowed } from "../release-isolation/operations";
+import type { AcceptanceWindowBindings } from "../release-isolation/contract";
 import {
   offerRefunds,
   refundWake,
@@ -211,22 +213,30 @@ export const runRefundWorkflow = (input: RefundWorkflowExecution): Promise<void>
   );
 
 export class BillingRefundWorkflowV1 extends WorkflowEntrypoint<
-  { USER_STORE: DurableObjectNamespace; RELEASE_GIT_SHA: string; RECOVERY_ISOLATION: string },
+  {
+    USER_STORE: DurableObjectNamespace;
+    RELEASE_GIT_SHA: string;
+    RECOVERY_ISOLATION: string;
+  } & AcceptanceWindowBindings,
   unknown
 > {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
+    return Effect.runPromise(backgroundWorkAllowed(this.env)).then((allowed) => {
+      if (!allowed) throw Error("Billing execution is closed");
+      return this.execute(event, step);
+    });
+  }
+  private execute(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
     return observeWorkerPromise(
       () =>
-        this.env.RECOVERY_ISOLATION === "isolated"
-          ? Promise.resolve()
-          : step.do(
-              "submit-or-verify-correction-v1",
-              {
-                retries: { limit: 0, delay: "1 second", backoff: "constant" },
-                timeout: "30 seconds",
-              },
-              () => Effect.runPromise(runRefundStep(event.payload, this.env.USER_STORE))
-            ),
+        step.do(
+          "submit-or-verify-correction-v1",
+          {
+            retries: { limit: 0, delay: "1 second", backoff: "constant" },
+            timeout: "30 seconds",
+          },
+          () => Effect.runPromise(runRefundStep(event.payload, this.env.USER_STORE))
+        ),
       {
         environment: workerRelease(this.env),
         telemetry: cloudflareWorkerTelemetry,
@@ -275,13 +285,16 @@ export const sweepExpiredEnrollmentAdmission = (
 ): Effect.Effect<void, Cause.UnknownError> => sweep(input);
 
 export class BillingCollectionWorkflowV1 extends WorkflowEntrypoint<
-  Omit<BillingRuntime, "DB"> & Partial<Readonly<{ RECOVERY_ISOLATION: string }>>,
+  Omit<BillingRuntime, "DB"> & AcceptanceWindowBindings,
   unknown
 > {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    if (this.env.RECOVERY_ISOLATION === "isolated") {
-      return Promise.reject(Error("Billing execution is closed"));
-    }
+    return Effect.runPromise(backgroundWorkAllowed(this.env)).then((allowed) => {
+      if (!allowed) throw Error("Billing execution is closed");
+      return this.execute(event, step);
+    });
+  }
+  private execute(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
     return observeWorkerPromise(
       () =>
         runBillingCollectionWorkflow({
@@ -341,15 +354,18 @@ export const makeSubscriptionErasureStores = (db: D1Database): ReadonlyArray<Era
 export class Pricing {
   private readonly version: string;
   private readonly state: DurableObjectState;
+  private readonly window: AcceptanceWindowBindings;
   private readonly erasure: Option.Option<DurableObjectNamespace>;
   private readonly users: Option.Option<DurableObjectNamespace>;
   private readonly runtime;
   constructor(
     state: DurableObjectState,
     env: StoreReleaseEnvironment &
+      AcceptanceWindowBindings &
       Partial<Readonly<{ USER_STORE: DurableObjectNamespace; ERASURE: DurableObjectNamespace }>>
   ) {
     this.state = state;
+    this.window = env;
     this.erasure = Option.fromUndefinedOr(env.ERASURE);
     this.users = Option.fromUndefinedOr(env.USER_STORE);
     this.version = env.CF_VERSION_METADATA.id;
@@ -368,11 +384,17 @@ export class Pricing {
   }
 
   alarm(): Promise<void> {
-    return Option.match(this.users, {
-      onNone: () => Promise.resolve(),
-      onSome: (users) =>
-        this.runtime.runPromise(recoverPricing(this.state.storage, users)).then(() => undefined),
-    });
+    return Effect.runPromise(backgroundWorkAllowed(this.window)).then((allowed) =>
+      allowed
+        ? Option.match(this.users, {
+            onNone: () => Promise.resolve(),
+            onSome: (users) =>
+              this.runtime
+                .runPromise(recoverPricing(this.state.storage, users))
+                .then(() => undefined),
+          })
+        : undefined
+    );
   }
   private erasureCommand(request: Request): Promise<Response> {
     if (request.url === participantCleanupUrl && Option.isSome(this.erasure)) {
@@ -481,6 +503,7 @@ export const handleNativeBillingCallback = Effect.fn(function* (
 ) {
   return yield* nativeBillingRequest({ ...input, transport: wompiOutboundHttp });
 });
+
 const callbackWorkflowId = Effect.fn(function* (event: typeof WompiBillingEvent.Type) {
   const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(WompiBillingEvent))(event);
   return "wompi-event-" + Hex.encode(yield* digestBytes(new TextEncoder().encode(encoded)));

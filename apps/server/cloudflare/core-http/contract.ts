@@ -29,6 +29,8 @@ export type CoreHttpEnvironment = ProviderEnvironment &
   Partial<
     Readonly<{
       RECOVERY_ISOLATION: string;
+      NATIVE_STORAGE_ADMISSION: string;
+      SQLITE_STORAGE_RELEASE: string;
       SAMPLE_REVIEW_AUDIENCE: string;
       SAMPLE_REVIEWER_EMAIL: string;
       SAMPLE_BUCKET: R2Bucket;

@@ -22,7 +22,13 @@ import type { TelemetryService } from "../../src/shell/observability/contract";
 import type { CoreHttpEnvironment, CoreHttpHandler } from "./contract";
 import { executeCoreHttp } from "./internal/http";
 import { observeWorkerRequest } from "../runtime/telemetry/operations";
-import { recoveryIsolationResponse } from "../release-isolation/operations";
+import {
+  fixtureChargeReceipt,
+  isAcceptanceReceipt,
+  isAcceptanceWindow,
+  releaseAdmission,
+  renewAcceptanceWindow,
+} from "../release-isolation/operations";
 
 const rejectionBoundary = (request: Request): CoreRejectionBoundary => {
   const pathname = new URL(request.url).pathname;
@@ -78,14 +84,10 @@ export const makeCoreHttp = ({ telemetry, institutions }: CoreComposition): Core
   const observeRejections = makeCoreRejectionObserver();
   return (request, environment) =>
     Effect.gen(function* () {
-      const isolated = recoveryIsolationResponse({
-        request,
-        environment: {
-          mode: Option.fromUndefinedOr(environment.RECOVERY_ISOLATION),
-          proof: Option.fromUndefinedOr(environment.SMOKE_PROOF),
-        },
-      });
-      if (Option.isSome(isolated)) return isolated.value;
+      const admission = yield* releaseAdmission(request, environment, "core");
+      if (Option.isSome(admission.denial)) return admission.denial.value;
+      if (isAcceptanceReceipt(request)) return yield* fixtureChargeReceipt(request, environment);
+      if (isAcceptanceWindow(request)) return yield* renewAcceptanceWindow(request, environment);
       const storage = yield* storageProbe(request, environment);
       if (Option.isSome(storage)) return storage.value;
       const clients = yield* Layer.build(OutboundHttpLive).pipe(

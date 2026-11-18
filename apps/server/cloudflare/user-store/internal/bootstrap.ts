@@ -1,3 +1,5 @@
+import { acceptanceSubject } from "../../release-isolation/operations";
+import type { NativeAcceptanceSettings } from "../../release-isolation/contract";
 import { proofPolicy } from "../../browser-login/contract";
 import { Hex } from "effect/encoding";
 import { Clock, Data, Effect, Option, Schema } from "effect";
@@ -64,10 +66,11 @@ type Recovery = Readonly<{
   recoveryDigest: Uint8Array;
   generation: number;
 }>;
-type Environment = Readonly<{
-  DIRECTORY: Pick<DurableObjectNamespace, "getByName">;
-  MAINTENANCE: Pick<DurableObjectNamespace, "getByName">;
-}>;
+type Environment = NativeAcceptanceSettings &
+  Readonly<{
+    DIRECTORY: Pick<DurableObjectNamespace, "getByName">;
+    MAINTENANCE: Pick<DurableObjectNamespace, "getByName">;
+  }>;
 const establishUser = Effect.fn(function* (
   handoff: Handoff,
   now: number,
@@ -246,6 +249,15 @@ const completeVerified = Effect.fn(function* (
   return yield* reserveAndActivate(handoff, digest, env);
 });
 
+const failedLookup = (status: number): Response =>
+  status === missingStatus ? invalidProvider() : unavailable();
+const admittedHandoff = (handoff: Handoff, env: Environment): boolean =>
+  env.NATIVE_STORAGE_ADMISSION !== "closed" ||
+  acceptanceSubject({
+    revision: env.RELEASE_GIT_SHA ?? "",
+    issuer: handoff.issuer,
+    subject: handoff.subject,
+  });
 export const completeLocalBootstrap = Effect.fn(function* (
   request: Request,
   env: Environment,
@@ -268,11 +280,12 @@ export const completeLocalBootstrap = Effect.fn(function* (
       signal,
     })
   );
-  if (!lookup.ok) return lookup.status === missingStatus ? invalidProvider() : unavailable();
+  if (!lookup.ok) return failedLookup(lookup.status);
   const handoff = yield* Schema.decodeUnknownEffect(FrozenBrowserHandoff)(
     yield* Effect.tryPromise(() => lookup.json())
   );
   if (!owns(handoff.user_id) || handoff.pairing_id !== input.pairingId) return invalidProvider();
+  if (!admittedHandoff(handoff, env)) return unavailable();
   if (cancel) return yield* cancelHandoff(handoff);
   return yield* completeVerified(input, handoff, { request, env });
 });

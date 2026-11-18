@@ -1,0 +1,62 @@
+apps/server/cloudflare/oauth-agents/internal/native-browser.ts
+  s_a1be23a656acf0::t_34de4c7774ea8e 10-146
+  s_a1be23a656acf0::t_d0681502218378 1-9,147-179
+apps/server/cloudflare/oauth-agents/internal/discovery.ts
+  s_a1be23a656acf0::t_34de4c7774ea8e 3
+  s_a1be23a656acf0::t_a354e2c4acccf5 1-2,4-44
+apps/server/cloudflare/oauth-agents/internal/native-directory.ts
+  s_a1be23a656acf0::t_34de4c7774ea8e 4-96
+  s_a1be23a656acf0::t_8f13fa9b261bc1 1-3,97-161
+apps/server/cloudflare/oauth-agents/internal/bootstrap.ts
+  s_a1be23a656acf0::t_34de4c7774ea8e 46-50,64,76-107
+  s_a1be23a656acf0::t_e6a5ed22246464 14-15,45,108-113,191-195
+apps/server/cloudflare/oauth-agents/internal/approval.ts
+  s_a1be23a656acf0::t_34de4c7774ea8e 40
+  s_a1be23a656acf0::t_2eeabd2cb5c2b5 39,41-45,77
+apps/server/cloudflare/core-http/internal/http.ts
+  s_a1be23a656acf0::t_b3f131b587e1f0 2008-2020
+apps/server/cloudflare/directory/runtime.ts
+  s_a1be23a656acf0::t_ab482bc66809fe 1-6,214-215,238-254
+apps/server/cloudflare/directory/schema/operations.ts
+  s_a1be23a656acf0::t_b9ef6e39c52e3a 1,52
+apps/server/cloudflare/oauth-agents/internal/exchange.ts
+  s_a1be23a656acf0::t_8475233018ac64 80
+apps/server/cloudflare/oauth-agents/internal/native-registration.ts
+  s_a1be23a656acf0::t_4b29d78c54b18f 1-80
+apps/server/cloudflare/oauth-agents/internal/native-schema.ts
+  s_a1be23a656acf0::t_ddf94d7ac10546 1-35
+apps/server/cloudflare/oauth-agents/internal/native-token.ts
+  s_a1be23a656acf0::t_c5ae97a3fd87be 1-234
+apps/server/cloudflare/oauth-agents/internal/review.ts
+  s_a1be23a656acf0::t_99fd9b892ee82f 60,106
+apps/server/cloudflare/oauth-agents/native-grant.test.ts
+  s_a1be23a656acf0::t_eb9f463e30d7a6 1-155
+apps/server/cloudflare/oauth-agents/operations.ts
+  s_a1be23a656acf0::t_84b367d0501437 1-5,163-175
+apps/server/cloudflare/oauth-agents/runtime.ts
+  s_a1be23a656acf0::t_e6a90da87f5577 1,139
+apps/server/cloudflare/tokens/internal/native-grants.ts
+  s_a1be23a656acf0::t_7c819b26199982 297-302
+apps/server/cloudflare/tokens/internal/native-schema.ts
+  s_a1be23a656acf0::t_9d3d18a4ce4e63 14-15
+apps/server/cloudflare/user-store/operations.ts
+  s_a1be23a656acf0::t_a686d016d69823 1,855-859
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_511dc6153f4ff8 1-6,58,234-244
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8533623427714eeeb8a5d4e681d2b8bae072c6b5",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

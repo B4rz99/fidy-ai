@@ -144,7 +144,6 @@ const reservedRateLimitPaths = [
   "/recovery/backup-code/rotate",
   "/internal/support-recovery",
   "/internal/sample-review",
-  "/internal/storage-operations",
   refundSupportBasePath,
   "/user",
   "/pat-pairings",

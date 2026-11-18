@@ -64,7 +64,6 @@
       "import": "./src/shell/categories/contract.ts",
       "default": "./src/shell/categories/contract.ts"
     },
-    "./storage-operations": "./src/shell/storage-operations/contract.ts",
     "./client": {
       "types": "./src/client.ts",
       "import": "./src/client.ts",

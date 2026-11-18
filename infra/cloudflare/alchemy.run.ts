@@ -150,46 +150,9 @@ const resolvePatAdmissionKey = (development: boolean): typeof patAdmissionKey =>
       )
     : patAdmissionKey;
 
-const resolveStorageAccess = Effect.fn(function* (identityProviderId: Output.Output<string>) {
-  const value = yield* Config.String("STORAGE_OPERATOR_EMAIL").pipe(Config.withDefault(""));
-  if (value === "") return { storageOperator: "", storageAudience: "", storageRepair: "disabled" };
-  const email = yield* Config.schema(EmailAddress, "STORAGE_OPERATOR_EMAIL");
-  const repair = yield* Config.schema(
-    Schema.Literals(["enabled", "disabled"]),
-    "STORAGE_REPAIR_ENABLED"
-  ).pipe(Config.withDefault("disabled"));
-  const app = yield* Cloudflare.Access.Application("StorageOperationsAccess", {
-    type: "self_hosted",
-    name: "Fidy storage operations",
-    domain: "api.fidyapp.com/internal/storage-operations",
-    sessionDuration: "15m",
-    appLauncherVisible: false,
-    allowedIdps: [identityProviderId],
-    autoRedirectToIdentity: true,
-    policies: [
-      {
-        name: "storage-operator",
-        decision: "allow",
-        precedence: 1,
-        sessionDuration: "15m",
-        include: [{ email: { email } }],
-      },
-    ],
-  });
-  return { storageOperator: email, storageAudience: app.aud, storageRepair: repair };
-});
 const resolveAccessConfig = Effect.fn(function* (development: boolean) {
   if (development) {
-    return {
-      issuer: "",
-      audience: "",
-      erasureAudience: "",
-      reviewAudience: "",
-      reviewerEmail: "",
-      storageOperator: "",
-      storageAudience: "",
-      storageRepair: "disabled",
-    };
+    return { issuer: "", audience: "", erasureAudience: "", reviewAudience: "", reviewerEmail: "" };
   }
   const issuer = yield* accessIssuer;
   const operatorEmail = yield* recoveryOperatorEmail;
@@ -237,14 +200,12 @@ const resolveAccessConfig = Effect.fn(function* (development: boolean) {
       },
     ],
   });
-  const storageAccess = yield* resolveStorageAccess(identity.identityProviderId);
   const reviewerEmail = yield* Config.String("SAMPLE_REVIEWER_EMAIL").pipe(Config.withDefault(""));
   if (reviewerEmail === "") {
     return {
       issuer,
       audience: application.aud,
       erasureAudience: erasureApplication.aud,
-      ...storageAccess,
       reviewAudience: "",
       reviewerEmail: "",
     };
@@ -272,7 +233,6 @@ const resolveAccessConfig = Effect.fn(function* (development: boolean) {
     issuer,
     audience: application.aud,
     erasureAudience: erasureApplication.aud,
-    ...storageAccess,
     reviewAudience: reviewApplication.aud,
     reviewerEmail: assignedReviewer,
   };
@@ -596,9 +556,6 @@ export default Alchemy.Stack(
         CLOUDFLARE_ACCESS_AUDIENCE: accessConfig.audience,
         SAMPLE_REVIEW_AUDIENCE: accessConfig.reviewAudience,
         SAMPLE_REVIEWER_EMAIL: accessConfig.reviewerEmail,
-        STORAGE_OPERATOR_EMAIL: accessConfig.storageOperator,
-        STORAGE_OPERATOR_AUDIENCE: accessConfig.storageAudience,
-        STORAGE_REPAIR_ENABLED: accessConfig.storageRepair,
         SAMPLE_BUCKET: sampleBucket,
         WHATSAPP_BUSINESS_PORTFOLIO_ID: kapsoBindings.portfolioId,
         WHATSAPP_SANDBOX_PHONE_NUMBER_ID: kapsoBindings.sandboxPhoneNumberId,

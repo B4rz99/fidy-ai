@@ -35,10 +35,3 @@ export const watchdogCoverage = Effect.gen(function* () {
     lastObservedMs: row.lastObservedMs,
   };
 });
-
-export const watchProgress = Effect.gen(function* () {
-  const sql = yield* SqliteClient;
-  const [row] =
-    yield* sql`SELECT scheduled,halt,wraps,wrapped_at,admitted,attempted,observed,failed,unsupported,unknown,repaired FROM watchdog_progress WHERE singleton=1`;
-  return { ...row, ...(yield* watchdogCoverage) };
-});

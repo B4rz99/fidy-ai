@@ -3,7 +3,7 @@ import { it } from "@effect/vitest";
 import { Clock, Effect, Schedule } from "effect";
 import type { Miniflare } from "miniflare";
 import { expect } from "vitest";
-import { native, nativeUserPlatform } from "../user-store.test-fixture";
+import { native, nativeBrowserPlatform, nativeUserPlatform } from "../user-store.test-fixture";
 
 const user = "22530000-0000-4000-8000-000000000001";
 const maintenance = Effect.fn(function* (runtime: Miniflare) {
@@ -146,6 +146,114 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(scheduled.status).toBe(204);
         expect(scheduled.headers.get("fidy-alarm-repaired")).toBe("0");
         expect((yield* check(erasure)).status).toBe(204);
+      })
+  );
+});
+
+it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
+  test.effect(
+    "warns at five minutes, escalates by ten and retains unknown schema coverage after a completed wrap",
+    () =>
+      Effect.gen(function* () {
+        const logs: string[] = [];
+        const runtime = yield* (yield* nativeBrowserPlatform)(undefined, logs);
+        const executor = yield* maintenance(runtime);
+        const now = yield* Clock.currentTimeMillis;
+        yield* native(() =>
+          executor.fetch("https://maintenance.invalid/watchdog", {
+            method: "POST",
+            headers: { "x-maintenance-scheduled-at": String(now) },
+          })
+        );
+        const registry = yield* native(() =>
+          runtime.unsafeGetDurableObjectStorage("core", "Maintenance", {
+            name: "core-maintenance-v1",
+          })
+        );
+        const maintenanceNamespace = yield* native(() =>
+          runtime.getDurableObjectNamespace("MAINTENANCE", "core")
+        );
+        const id = "22550000-0000-4000-8000-000000000088";
+        yield* native(() =>
+          registry.exec("INSERT INTO lifetime_registry(user_id,registered_ms) VALUES(?,1)", id)
+        );
+        for (const [age, severity] of [
+          [299000, "none"],
+          [300000, "warning"],
+          [599000, "warning"],
+          [600000, "critical"],
+        ] as const) {
+          const now = yield* Clock.currentTimeMillis;
+          yield* native(() =>
+            registry.exec(
+              "UPDATE lifetime_registry SET registered_ms=? WHERE user_id=?",
+              now - age,
+              id
+            )
+          );
+          yield* native(() =>
+            registry.exec(
+              "UPDATE watchdog_progress SET minute=-1,scheduled=-1,started_ms=?,wrapped_at=?",
+              now - age,
+              now
+            )
+          );
+          const tick = yield* native(() =>
+            maintenanceNamespace
+              .getByName("core-maintenance-v1")
+              .fetch("https://maintenance.invalid/watchdog", {
+                method: "POST",
+                headers: { "x-maintenance-scheduled-at": String(now) },
+              })
+          );
+          expect(tick.status).toBe(204);
+          expect(
+            logs.some((line) =>
+              line.includes(
+                "fidy.operational component=watchdog operation=coverage state=wrapped severity=" +
+                  severity
+              )
+            )
+          ).toBe(true);
+        }
+        expect(
+          logs.filter((line) => line.includes("fidy.operational")).some((line) => line.includes(id))
+        ).toBe(false);
+      })
+  );
+  test.effect(
+    "emits the monitored restricted-capacity critical signal and a native-only completed sweep",
+    () =>
+      Effect.gen(function* () {
+        const logs: string[] = [];
+        const runtime = yield* (yield* nativeBrowserPlatform)("1", logs);
+        const ns = yield* native(() => runtime.getDurableObjectNamespace("MAINTENANCE", "core"));
+        const now = yield* Clock.currentTimeMillis;
+        expect(
+          (yield* native(() =>
+            ns.getByName("core-maintenance-v1").fetch("https://maintenance.invalid/watchdog", {
+              method: "POST",
+              headers: {
+                "x-maintenance-scheduled-at": String(now),
+                "fidy-native-inspection": "1",
+              },
+            })
+          )).status
+        ).toBe(204);
+        expect(
+          logs.some((line) =>
+            line.includes(
+              "fidy.operational component=sqlite operation=directory state=restricted severity=critical"
+            )
+          )
+        ).toBe(true);
+        expect(
+          logs.some((line) =>
+            line.includes(
+              "fidy.operational component=inspection-coverage operation=ownerInspections state=complete"
+            )
+          )
+        ).toBe(true);
       })
   );
 });

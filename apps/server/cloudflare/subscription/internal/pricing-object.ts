@@ -1,4 +1,3 @@
-import type { StorageCommand } from "../../storage-operations/contract";
 import type { CleanupCommand } from "../../erasure-store/contract";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { ownerCheckRequest, ownerCheckResponse } from "../../maintenance/contract";
@@ -19,8 +18,6 @@ import {
   AdmittedPricePublication as publication,
   BillingRegistration as registration,
 } from "../contract";
-
-const pendingStatus = 202;
 
 const hourlyWindowMs = 3600000;
 const checkCooldownMs = 60000;
@@ -175,13 +172,9 @@ const RegistrationOutcome = Schema.Struct({
   request: registration,
   outcome: Schema.Literals(["committed", "cancelled"]),
 });
-const acknowledge = Effect.fn(function* (
-  body: typeof RegistrationOutcome.Type,
-  deadline = Number.POSITIVE_INFINITY
-) {
+const acknowledge = Effect.fn(function* (body: typeof RegistrationOutcome.Type) {
   const sql = yield* SqlClient.SqlClient;
   const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(registration))(body.request);
-  if ((yield* Clock.currentTimeMillis) >= deadline) return new Response(null, { status: 503 });
   const row =
     yield* sql`UPDATE price_registrations SET outcome=${body.outcome},next_check_ms=NULL WHERE operation_id=${body.request.operationId} AND user_id=${body.request.userId} AND request=${encoded} AND (outcome IS NULL OR outcome=${body.outcome}) RETURNING 1`;
   if (row.length === 1) return new Response(null, { status: 204 });
@@ -270,8 +263,7 @@ const acknowledgeRequest = Effect.fn(function* (request: Request) {
 
 const recoverRegistration = Effect.fn(function* (
   users: DurableObjectNamespace,
-  row: Readonly<Record<string, unknown>>,
-  deadline = Number.POSITIVE_INFINITY
+  row: Readonly<Record<string, unknown>>
 ) {
   const request = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(registration))(
     row.request
@@ -287,13 +279,11 @@ const recoverRegistration = Effect.fn(function* (
       body: String(row.request),
     })
   );
-  if (!res.ok || (yield* Clock.currentTimeMillis) >= deadline) return;
+  if (!res.ok) return;
   const reply = yield* Schema.decodeUnknownEffect(RegistrationOutcome)(
     yield* Effect.tryPromise(() => res.json())
   );
-  if (Schema.toEquivalence(registration)(reply.request, request)) {
-    yield* acknowledge(reply, deadline);
-  }
+  if (Schema.toEquivalence(registration)(reply.request, request)) yield* acknowledge(reply);
 });
 
 export const outstandingPricingRegistrations = (userId: string): OwnedStatement => ({
@@ -317,70 +307,4 @@ export const cleanPricingCase = Effect.fn(function* (scope: typeof CleanupComman
   const allowances =
     yield* sql`DELETE FROM enrollment_allowances WHERE id IN(SELECT id FROM enrollment_allowances WHERE user_id=${scope.userId} LIMIT 32) RETURNING 1`;
   return removed.length < erasurePage && allowances.length < erasurePage;
-});
-
-/** A committed publication is immutable. Reconciliation observes its receipt even after a later Price supersedes it. */
-export const inspectPricingOperation = Effect.fn(function* (
-  command: StorageCommand,
-  users: Option.Option<DurableObjectNamespace>,
-  deadline: number
-) {
-  if (command.owner !== "pricing" || !("operationId" in command)) {
-    return new Response(null, { status: 409 });
-  }
-  const sql = yield* SqlClient.SqlClient;
-  const id = command.operationId;
-  if (command.action.endsWith("publication")) {
-    const [published] =
-      yield* sql`SELECT price_id AS priceId,published_at_ms AS publishedAtMs,EXISTS(SELECT 1 FROM selected_prices s WHERE s.price_id=p.price_id) AS selected FROM price_publications p WHERE id=${id}`;
-    return published === undefined
-      ? new Response(null, { status: 404 })
-      : Response.json({ outcome: "committed", ...published });
-  }
-  return yield* inspectRegistration({
-    id,
-    repair: command.action === "reconcile-registration",
-    users,
-    deadline,
-  });
-});
-const eligibleRegistrationCheck = Effect.fnUntraced(function* (
-  prior: Readonly<Record<string, unknown>>,
-  deadline: number
-) {
-  const now = yield* Clock.currentTimeMillis;
-  return now < deadline && typeof prior.nextCheckMs === "number" && prior.nextCheckMs <= now;
-});
-const observationOk = 200;
-const registrationObservation = (actual: Readonly<Record<string, unknown>> | void): Response =>
-  actual === undefined
-    ? new Response(null, { status: 409 })
-    : Response.json(actual, { status: actual.outcome === null ? pendingStatus : observationOk });
-const inspectRegistration = Effect.fn(function* ({
-  id,
-  repair,
-  users,
-  deadline,
-}: {
-  id: string;
-  repair: boolean;
-  users: Option.Option<DurableObjectNamespace>;
-  deadline: number;
-}) {
-  const sql = yield* SqlClient.SqlClient;
-  const observation = sql`SELECT outcome,next_check_ms AS nextCheckMs,price_id AS priceId,json_extract(request,'$.deadlineMs') AS deadlineMs FROM price_registrations WHERE operation_id=${id}`;
-  const [prior] = yield* observation;
-  if (prior === undefined) return new Response(null, { status: 404 });
-  if (!repair || prior.outcome !== null) {
-    return Response.json(prior);
-  }
-  if (!(yield* eligibleRegistrationCheck(prior, deadline))) {
-    return new Response(null, { status: 409 });
-  }
-  if (Option.isNone(users)) return new Response(null, { status: 503 });
-  const [retained] =
-    yield* sql`SELECT request,EXISTS(SELECT 1 FROM erasure_barriers WHERE user_id=r.user_id) AS fenced FROM price_registrations r WHERE operation_id=${id} AND outcome IS NULL`;
-  if (retained !== undefined) yield* recoverRegistration(users.value, retained, deadline);
-  const [actual] = yield* observation;
-  return registrationObservation(actual);
 });

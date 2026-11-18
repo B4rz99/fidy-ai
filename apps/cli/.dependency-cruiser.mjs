@@ -23,8 +23,7 @@ export default {
       from: { path: "^(src|test)/" },
       to: {
         path: "^\\.\\./server/",
-        pathNot:
-          "^\\.\\./server/src/(?:client\\.ts|shell/native-http/runtime\\.ts|shell/storage-operations/contract\\.ts)$",
+        pathNot: "^\\.\\./server/src/(?:client\\.ts|shell/native-http/runtime\\.ts)$",
       },
     },
     {

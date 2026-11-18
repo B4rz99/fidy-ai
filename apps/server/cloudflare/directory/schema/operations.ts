@@ -1,4 +1,3 @@
-import { deleteTargetEvidence, operationEvidenceSchema } from "../../storage-operations/contract";
 import { providerAllowanceSchema } from "../../resource-admission/contract";
 import {
   cleanupBarrierColumns,
@@ -194,23 +193,6 @@ export const directoryHistory: StoreHistory = {
           deadline: "OLD.expires_at_ms+86400000",
           owner:
             "coalesce((SELECT user_id FROM browser_pairings WHERE id=OLD.pairing_id),(SELECT user_id FROM whatsapp_routes WHERE portfolio=OLD.portfolio AND bsuid=OLD.bsuid))",
-        }),
-      ],
-    },
-    {
-      version: 12,
-      id: "exact-operator-evidence",
-      statements: [
-        ...operationEvidenceSchema,
-        deleteTargetEvidence({
-          family: "bootstrap",
-          table: "provider_attempts",
-          column: "pairing_id",
-        }),
-        deleteTargetEvidence({
-          family: "replacement",
-          table: "identity_replacements",
-          column: "id",
         }),
       ],
     },

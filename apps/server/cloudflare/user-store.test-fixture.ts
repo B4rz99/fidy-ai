@@ -141,9 +141,6 @@ const browserBindings = {
   },
   SAMPLE_BUCKET: { type: "r2", name: "anonymous-samples" },
   EMAIL_BUCKET: { type: "r2", name: "sample-controls-test" },
-  STORAGE_OPERATOR_EMAIL: { type: "text", value: "storage@example.test" },
-  STORAGE_OPERATOR_AUDIENCE: { type: "text", value: "fixture-storage" },
-  STORAGE_REPAIR_ENABLED: { type: "text", value: "enabled" },
   SAMPLE_REVIEWER_EMAIL: { type: "text", value: "reviewer@example.test" },
   SAMPLE_REVIEW_AUDIENCE: { type: "text", value: "fixture-review" },
   FIXTURE_PROVIDER: {
@@ -434,14 +431,9 @@ const hostedOptions = (
     : { outbound: {}, env: {}, triggers: {} };
 const textBindings = (
   deployment: Readonly<Record<string, string>>
-): Record<string, { type: "text"; value: string } | { type: "json"; value: { id: string } }> =>
+): Record<string, { type: "text"; value: string }> =>
   Object.fromEntries(
-    Object.entries(deployment).map(([key, value]) => [
-      key,
-      key === "CF_VERSION_METADATA"
-        ? { type: "json", value: { id: value } }
-        : { type: "text", value },
-    ])
+    Object.entries(deployment).map(([key, value]) => [key, { type: "text" as const, value }])
   );
 const captureLogs = (
   logs: Array<string>
@@ -487,27 +479,6 @@ const fixtureFeatures = Effect.fnUntraced(function* (mode: NativeFixture) {
     connection: yield* connectionPlatformOptions(mode === "connection"),
   };
 });
-const scopedPlatform =
-  (
-    create: (
-      ceiling: string,
-      logs: string[],
-      deployment: Readonly<Record<string, string>>
-    ) => Miniflare
-  ): ((
-    ceiling?: string,
-    logs?: string[],
-    deployment?: Readonly<Record<string, string>>
-  ) => Effect.Effect<Miniflare, never, Scope.Scope>) =>
-  (
-    ceiling = "1000000000",
-    logs: Array<string> = [],
-    deployment: Readonly<Record<string, string>> = {}
-  ): Effect.Effect<Miniflare, never, Scope.Scope> =>
-    Effect.acquireRelease(
-      Effect.sync(() => create(ceiling, logs, deployment)),
-      (runtime) => native(() => runtime.dispose())
-    );
 const createUserPlatform = Effect.fnUntraced(function* (mode: NativeFixture) {
   const { withBilling, withOidc, coreModule, ingressOptions } = fixtureWorkers(mode);
   const fs = yield* FileSystem.FileSystem;
@@ -551,7 +522,6 @@ const createUserPlatform = Effect.fnUntraced(function* (mode: NativeFixture) {
               SQLITE_STORE_CAPACITY_BYTES: { type: "text", value: ceiling },
               ...(withBilling ? billingBindings : {}),
               ...textBindings(deployment),
-
               ...nativeOwnerBindings,
             },
           },
@@ -559,7 +529,15 @@ const createUserPlatform = Effect.fnUntraced(function* (mode: NativeFixture) {
         ...providers,
       ],
     });
-  return scopedPlatform(create);
+  return (
+    ceiling = "1000000000",
+    logs: Array<string> = [],
+    deployment: Readonly<Record<string, string>> = {}
+  ): Effect.Effect<Miniflare, never, Scope.Scope> =>
+    Effect.acquireRelease(
+      Effect.sync(() => create(ceiling, logs, deployment)),
+      (runtime) => native(() => runtime.dispose())
+    );
 });
 
 export const nativeCustodyPlatform = createUserPlatform("custody");

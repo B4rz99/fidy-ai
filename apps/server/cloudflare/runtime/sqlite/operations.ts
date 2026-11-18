@@ -1,3 +1,4 @@
+import type { UnknownError } from "effect/Cause";
 import type * as Sql from "effect/sql/SqlClient";
 import { SqliteClient, layer } from "@effect/sql-sqlite-do/SqliteClient";
 import {
@@ -7,7 +8,6 @@ import {
   Effect,
   Layer,
   ManagedRuntime,
-  Option,
   type PlatformError,
   Predicate,
   Ref,
@@ -124,39 +124,21 @@ const retryable = (error: unknown): boolean => {
     (Predicate.hasProperty(cause, "overloaded") && cause.overloaded === true)
   );
 };
-type ManualRetry = Readonly<{
-  version: number;
-  attempt: number;
-  retryAtMs: number;
-  deadline: number;
-}>;
 const tryStep = Effect.fnUntraced(function* ({
   history,
   step,
   digest,
   release,
-  manual,
-}: Readonly<{
-  history: StoreHistory;
-  step: StoreMigration;
-  digest: string;
-  release: string;
-  manual: Option.Option<ManualRetry>;
-}>) {
+}: Readonly<{ history: StoreHistory; step: StoreMigration; digest: string; release: string }>) {
   const sql = yield* SqliteClient;
   const now = yield* Clock.currentTimeMillis;
   // A lost reply or crash cannot move the next attempt earlier than a full activation plus its delay.
-  const claim = yield* sql.withTransaction(
-    Option.isSome(manual) && manual.value.version === step.version
-      ? sql`UPDATE store_migration_attempts SET attempts=min(attempts+1,3),terminal=1,retry_at_ms=max(retry_at_ms+1,${now + activationLimitMs})
-        WHERE version=${step.version} AND release=${release} AND attempts=${manual.value.attempt}
-        AND retry_at_ms=${manual.value.retryAtMs} AND (terminal=1 OR attempts=3) AND ${now}<${manual.value.deadline} RETURNING attempts`
-      : sql`INSERT INTO store_migration_attempts(version,release,attempts,retry_at_ms,terminal)
+  const claim =
+    yield* sql.withTransaction(sql`INSERT INTO store_migration_attempts(version,release,attempts,retry_at_ms,terminal)
     VALUES(${step.version},${release},1,${now + activationLimitMs + firstRetryMs},0)
     ON CONFLICT(version,release) DO UPDATE SET attempts=attempts+1,retry_at_ms=${now + activationLimitMs + secondRetryMs}
     WHERE terminal=0 AND attempts<3 AND retry_at_ms<=${now}
-    RETURNING attempts`
-  );
+    RETURNING attempts`);
   if (claim.length === 0) return yield* refuse("attempt_refused");
   const [attempt] = yield* Schema.decodeUnknownEffect(
     Schema.Tuple([Schema.Struct({ attempts: Schema.Int })])
@@ -166,16 +148,35 @@ const tryStep = Effect.fnUntraced(function* ({
       Effect.gen(function* () {
         const failedAt = yield* Clock.currentTimeMillis;
         yield* sql.withTransaction(sql`UPDATE store_migration_attempts
-      SET terminal=${retryable(error) ? 0 : 1},retry_at_ms=CASE WHEN ${Option.isNone(manual) ? 0 : 1}=1 THEN max(retry_at_ms,${failedAt + secondRetryMs}) ELSE ${failedAt + (attempt.attempts === 1 ? firstRetryMs : secondRetryMs)} END
+      SET terminal=${retryable(error) ? 0 : 1},retry_at_ms=${failedAt + (attempt.attempts === 1 ? firstRetryMs : secondRetryMs)}
       WHERE version=${step.version} AND release=${release} AND attempts=${attempt.attempts}`);
         return yield* refuse("step_failed");
       })
     )
   );
 });
+const reportMigrationFailure = Effect.fnUntraced(function* (
+  history: StoreHistory,
+  release: string,
+  error: MigrationUnavailable
+) {
+  const sql = yield* SqliteClient;
+  const [attempt] =
+    yield* sql`SELECT attempts,terminal FROM store_migration_attempts WHERE release=${release} AND version=(SELECT coalesce(max(version),0)+1 FROM store_migrations WHERE owner=${history.owner})`.pipe(
+      Effect.orElseSucceed(() => [])
+    );
+  const critical =
+    attempt?.terminal === 1 ||
+    ["history_mismatch", "layout_mismatch", "invalid_history"].includes(error.reason);
+  yield* Effect.logWarning({
+    message: `fidy.operational component=sqlite operation=${history.owner} state=migration-failed severity=${critical ? "critical" : "warning"}`,
+    reason: error.reason,
+    attempts: attempt?.attempts ?? null,
+  });
+});
 /** A constructor owns this gate. Reconstructing an object always checks the full retained prefix. */
 export const openSqliteStore = Effect.fnUntraced(
-  function* (history: StoreHistory, release: string, manual?: ManualRetry) {
+  function* (history: StoreHistory, release: string) {
     if (
       release.length === 0 ||
       history.steps.length === 0 ||
@@ -189,13 +190,10 @@ export const openSqliteStore = Effect.fnUntraced(
       checksum([history.owner, step.version, step.id, step.statements])
     );
     const completed = yield* readProgress(history, digests);
-    if (manual !== undefined && completed + 1 !== manual.version) {
-      return yield* refuse("attempt_refused");
-    }
     for (const step of history.steps.slice(completed)) {
       const digest = digests[step.version - 1];
       if (digest === undefined) return yield* refuse("invalid_history");
-      yield* tryStep({ history, step, digest, release, manual: Option.fromUndefinedOr(manual) });
+      yield* tryStep({ history, step, digest, release });
     }
     yield* capacity.observe;
   },
@@ -203,8 +201,57 @@ export const openSqliteStore = Effect.fnUntraced(
     error instanceof MigrationUnavailable
       ? error
       : new MigrationUnavailable({ reason: "metadata_unavailable" })
-  )
+  ),
+  (effect, history, release) =>
+    effect.pipe(Effect.tapError((error) => reportMigrationFailure(history, release, error)))
 );
+const reportAlarm = Effect.fnUntraced(function* ({
+  before,
+  owner,
+  repaired,
+}: {
+  before: Awaited<ReturnType<DurableObjectStorage["getAlarm"]>>;
+  owner: StoreHistory["owner"];
+  repaired: boolean;
+}) {
+  const now = yield* Clock.currentTimeMillis;
+
+  if (repaired || (before !== null && before < now)) {
+    let alarm = "rescheduled";
+    if (before === null) alarm = "missing";
+    else if (before < now) alarm = "overdue";
+    yield* Effect.logInfo({
+      message: `fidy.operational component=watchdog operation=${owner} state=alarm-${alarm} severity=${alarm === "missing" ? "warning" : "none"}`,
+      overdueAgeMs: before === null ? null : Math.max(0, now - before),
+    });
+  }
+});
+const completedOwnerCheck = 204;
+/** Attach only native schema/capacity evidence to a successful watchdog probe. */
+export const observeStoreCheck =
+  ({
+    storage,
+    history,
+    release,
+  }: Readonly<{ storage: DurableObjectStorage; history: StoreHistory; release: string }>) =>
+  <E, R>(
+    work: Effect.Effect<Response, E, R>
+  ): Effect.Effect<Response, E | StoreCapacityUnavailable | UnknownError, R | StoreCapacity> =>
+    Effect.gen(function* () {
+      const before = yield* Effect.tryPromise(() => storage.getAlarm());
+      const response = yield* work;
+      if (response.status !== completedOwnerCheck) return response;
+      yield* reportAlarm({
+        before,
+        owner: history.owner,
+        repaired: response.headers.get("fidy-alarm-repaired") === "1",
+      });
+      const capacity = yield* (yield* StoreCapacity).measure;
+      response.headers.set("fidy-schema-version", String(history.steps.length));
+      response.headers.set("fidy-storage-band", capacity.band);
+      response.headers.set("fidy-schema-release", release);
+      return response;
+    });
 const largestPlatformCeiling = 10_000_000_000;
 const warningFraction = 0.7;
 const restrictedFraction = 0.8;

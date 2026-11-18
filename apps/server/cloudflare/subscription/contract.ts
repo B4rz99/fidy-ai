@@ -226,7 +226,6 @@ export type PricingEnvironment = Readonly<{
 }> &
   Partial<
     Readonly<{
-      STORAGE_OPERATOR_AUDIENCE: string;
       ERASURE_SUPPORT_AUDIENCE: string;
       BILLING_SUPPORT_AUDIENCE: string;
       PRICING_PUBLISH_AUDIENCE: string;

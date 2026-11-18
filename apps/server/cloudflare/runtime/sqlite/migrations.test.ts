@@ -7,6 +7,8 @@ import { Config, Effect, FileSystem, Schema } from "effect";
 import { Miniflare } from "miniflare";
 import { native } from "../../user-store.test-fixture";
 
+const criticalMigration = (message: string): boolean =>
+  message.includes("component=sqlite operation=user state=migration-failed severity=critical");
 const probe = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const directory = yield* fs.makeTempDirectoryScoped({ prefix: "fidy-native-migrations-" });
@@ -23,7 +25,11 @@ const probe = Effect.gen(function* () {
   }
   const contents = yield* native(() => output.text());
   const activate = Effect.fnUntraced(function* (mode: string, release: string, now = 1000) {
+    const messages: string[] = [];
     const mf = new Miniflare({
+      handleStructuredLogs: (log): void => {
+        messages.push(log.message);
+      },
       unsafeInspectDurableObjects: true,
       resourcePersistencePath: directory,
       workers: [
@@ -71,7 +77,7 @@ const probe = Effect.gen(function* () {
         .fetch("https://schema.test/metrics")
         .then((reply) => reply.json())
     );
-    return { request, exec, measure };
+    return { request, exec, measure, messages };
   });
   return activate;
 });
@@ -173,6 +179,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           Effect.gen(function* () {
             const broken = yield* activate("invalid", "broken");
             expect(yield* broken.request, startup).toBe(503);
+            expect(broken.messages.some(criticalMigration)).toBe(true);
           })
         );
         yield* Effect.scoped(

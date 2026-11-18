@@ -377,21 +377,14 @@ writer guards. Implementation must replace both automatic approval and the exist
 sample deletion prohibition. The initial fresh installation discards all existing samples rather
 than importing or approving them; future samples follow the human-approval and withdrawal protocol.
 
-Use a private CLI with short-lived, capability-specific operator authority and attributable evidence
-for metadata inspection, exact migration retry, retained-work continuation, reconciliation, erasure
-cleanup and sample review. Existing identity-recovery permission does not grant these capabilities.
-Commands invoke owner protocols and live guards; they cannot manufacture User authority, force
-uncertain outcomes to success or blindly repeat external effects. Do not introduce a general SQL
-editor or unrestricted User-data dump. Preserve current scoped privacy access; a new complete
-User-data export/download feature is outside this migration.
+Use the existing short-lived, capability-specific authority for structural sample review and
+Titular erasure. Identity-recovery permission remains separate. Preserve fresh, scoped browser
+access to effective Transactions and record Audit for each page.
 
-Reuse metadata-only monitoring, adding schema coverage, migration failures, storage bands, watchdog
-coverage/age and scoped uncertainty. Unknown remains distinct from healthy zero, and completed
-inspection is not completed recovery. Operator procedures inspect the exact owner and release,
-repair through the guarded operation or compatible forward release, and verify the owner outcome.
-Adjustable retry, page, concurrency, deadline and alert settings live in the resolution; implementation
-must publish repeatable procedures beside the real commands. Current-runtime runbooks continue to
-describe D1 until that implementation exists.
+Monitor schema coverage, migration failures, storage bands, watchdog age and scoped uncertainty.
+Unknown observations remain distinct from healthy ones. Bounded automatic retries keep their
+existing deadlines. A deterministic failure or exhausted retry budget requires a corrected
+release. Verify recovery through the original owner and subsequent watchdog observations.
 
 ## Adoption evidence
 
@@ -431,7 +424,7 @@ it does not establish finished-implementation acceptance, browser or verified co
 hosted full-lifetime/shared-load behavior, partitioning benefit or complete migration guarantees.
 The resolution specifies the remaining measurements and owner-by-owner correctness evidence,
 including isolation, atomicity, revocation, retries, directory races, discovery, schema failures,
-account erasure and private operator authority. Missing or failed evidence remains explicit.
+account erasure and separate authority for sample review and Titular erasure. Missing or failed evidence remains explicit.
 
 ## Fresh installation and cutover
 
@@ -459,8 +452,8 @@ resources are comparison evidence, not a runtime fallback. A D1 quota-deferral e
 satisfy DO acceptance.
 
 The first installation has no required old-D1 rollback target. After new retained state exists,
-preserve current state during incidents: isolate the affected capability, inspect bounded metadata,
-repair through guarded owner operations or a forward release, and verify the result. Code-only
+preserve current state during incidents. Isolate the affected capability, inspect its monitoring
+records and verify the owner outcome after automatic recovery or a corrected release. Code-only
 rollback requires a tested target compatible with every reachable schema, protocol and Category
 revision and with the resource lifecycle. It cannot restore deleted resources, return to stale D1,
 down-migrate storage or justify replaying an uncertain external effect. Normal releases preserve

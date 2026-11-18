@@ -29,7 +29,6 @@ const authenticateReviewer = Effect.fn(function* (
       requiredEmail: Option.some(reviewerEmail),
       audience: environment.SAMPLE_REVIEW_AUDIENCE ?? "",
       otherAudiences: [
-        environment.STORAGE_OPERATOR_AUDIENCE ?? "",
         environment.CLOUDFLARE_ACCESS_AUDIENCE,
         environment.BILLING_SUPPORT_AUDIENCE ?? "",
         environment.PRICING_PUBLISH_AUDIENCE ?? "",

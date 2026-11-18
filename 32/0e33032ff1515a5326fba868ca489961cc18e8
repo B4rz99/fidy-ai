@@ -1,0 +1,45 @@
+infra/cloudflare/storage-release.test.ts
+  s_a1be23a656acf0::t_56d9eeb17c8612 2-5,127-128,130,133-142,145-148,151-156,160,162-168,172,174-176,187,191-195,202-205,210-212,214-216
+  s_a1be23a656acf0::t_7a797206efa3ac 1,206-209
+infra/cloudflare/native-storage-resources.ts
+  s_a1be23a656acf0::t_73d12692ef6822 3,8,24
+  s_a1be23a656acf0::t_4998b3b49a69e0 33-34
+infra/cloudflare/storage-installation.ts
+  s_a1be23a656acf0::t_73d12692ef6822 1-6,10-11,20-21,41-43,60-64,68,70,72,74-75,79-91,96,101-111,113-116,119-120,123-136
+  s_a1be23a656acf0::t_c776b8149e8295 59,117-118,145
+infra/cloudflare/native-storage-release.ts
+  s_a1be23a656acf0::t_73d12692ef6822 122
+  s_a1be23a656acf0::t_db654d60402b01 31,58-67
+infra/cloudflare/native-application-bindings.ts
+  s_a1be23a656acf0::t_1122fd30bb50a2 2-21,23-40,42-142,144-162,164-166,168-229,231,233-251,261,270,279-287
+  s_a1be23a656acf0::t_ad1cf8dd1beb1c 1,22,41,143,163,167,230,232,252-260,262-269,271-278
+infra/cloudflare/native-graph.ts
+  s_a1be23a656acf0::t_0fe9e797af5ae8 1-194,198-204,206-245,248-253
+  s_a1be23a656acf0::t_b05c6e96058339 195-197,205,246-247
+.github/workflows/native-storage-release.yml
+  s_a1be23a656acf0::t_75a7fac2ec07e7 1,16,26-32,53,60,76
+infra/cloudflare/alchemy.run.ts
+  s_a1be23a656acf0::t_26b9bdf150be44 3-4,7-9
+infra/cloudflare/alchemy.storage.ts
+  s_a1be23a656acf0::t_adc4ae3d79e2cf 3-4,8-9
+infra/cloudflare/native-application-resources.ts
+  s_a1be23a656acf0::t_eafbfc537692a2 1-148
+infra/cloudflare/native-application.ts
+  s_a1be23a656acf0::t_305ddec6852e4c 1-192
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "320e33032ff1515a5326fba868ca489961cc18e8",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

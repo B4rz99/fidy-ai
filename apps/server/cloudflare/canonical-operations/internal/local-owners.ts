@@ -1,13 +1,22 @@
 import { preserveStoreAlarm } from "../../runtime/sqlite/operations";
 import { recurringDiscoveryIntervalMs } from "../../recurring/contract";
-import { prepareLocalInsight, prepareLocalReminder } from "../../insights/operations";
+import {
+  prepareLocalInsight,
+  prepareLocalReminder,
+  readLocalDigestReport,
+} from "../../insights/operations";
 import { prepareLocalMemory } from "../../memory/operations";
 import { prepareLocalConnection } from "../../connections/operations";
 import { userOwnedAgentCapability } from "../../../src/shell/canonical-policy/contract";
 import { getBoundOperationCatalog } from "../../../src/shell/canonical-catalog/contract";
 import type { OAuthCanonicalAdmission } from "../../../src/shell/mcp/contract";
 import type { OAuthReviewBinding } from "../../oauth-confirmation/contract";
-import { repairLocalPATExpiry, stageLocalPATGrant } from "../../tokens/operations";
+import {
+  readLocalPATActivity,
+  readLocalPATMetadata,
+  repairLocalPATExpiry,
+  stageLocalPATGrant,
+} from "../../tokens/operations";
 import { prepareLocalPreferences } from "../../identity/operations";
 import type { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Effect, Option, Schema } from "effect";
@@ -39,6 +48,9 @@ import {
   prepareLocalReviewEdit,
   prepareLocalStatementAbandonment,
   prepareLocalStatementDecision,
+  readLocalForwarding,
+  readLocalReviewItem,
+  readLocalReviewWorkspace,
 } from "../../ingestion/operations";
 import { cancelLocalSubscription, localCancellationReview } from "../../subscription/operations";
 import {
@@ -52,6 +64,7 @@ import { prepareLocalWrite } from "../../canonical-admission/operations";
 const firstFailureStatus = 400;
 type Context = { user: UserId; current: number; storage: DurableObjectStorage } & Partial<{
   hostedTurn: string;
+  accountability: { turnId: string; sessionId: string };
 }>;
 type Prepare = (
   input: unknown,
@@ -130,7 +143,53 @@ const readOwner = <Id extends OperationId, E>(
     )
   );
 
+const credentialMetadata = Effect.fnUntraced(function* ({
+  user,
+  current,
+  accountability,
+}: Context) {
+  if (accountability === undefined) {
+    return yield* new CanonicalAdmissionUnavailable({ cause: "missing hosted authority" });
+  }
+  return {
+    userId: user,
+    current,
+    authority: {
+      table: "hosted_turns" as const,
+      predicate: "id=? AND user_id=? AND session_id=? AND state='running' AND deadline_ms>?",
+      bindings: [accountability.turnId, user, accountability.sessionId, current],
+    },
+  };
+});
 export const hostedQueryOwners = new Map<string, Prepare>([
+  readOwner("ingestion.getReviewWorkspace", ({ query }, { user, current, hostedTurn }) =>
+    readLocalReviewWorkspace(query, user, {
+      context: false,
+      current,
+      hostedTurn: Option.fromUndefinedOr(hostedTurn),
+    })
+  ),
+  readOwner("ingestion.getReviewItem", ({ params }, { user, current, hostedTurn }) =>
+    readLocalReviewItem(user, params.id, {
+      current,
+      hostedTurn: Option.fromUndefinedOr(hostedTurn),
+    })
+  ),
+  readOwner("ingestion.getEmailForwarding", (_, { user, current }) =>
+    readLocalForwarding(user, current)
+  ),
+  readOwner("insights.getRecurringDigestReport", ({ params }, { user }) =>
+    readLocalDigestReport({ userId: user, id: params.id })
+  ),
+  readOwner("pats.listPATs", (_, context) =>
+    credentialMetadata(context).pipe(Effect.flatMap(readLocalPATMetadata))
+  ),
+  readOwner("pats.getPATActivity", ({ params }, context) =>
+    credentialMetadata(context).pipe(
+      Effect.flatMap((proof) => readLocalPATActivity({ ...proof, shortId: params.shortId }))
+    )
+  ),
+
   readOwner("budgets.getBudget", ({ params }, { user, current }) =>
     readLocalBudget({ id: Option.some(params.id), query: Option.none() }, user, current)
   ),

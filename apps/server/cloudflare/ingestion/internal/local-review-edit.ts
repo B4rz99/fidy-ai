@@ -10,7 +10,7 @@ import {
 } from "../../canonical-admission/contract";
 import { prepareSourcedCapture } from "../../transactions/operations";
 import { reviewDraftJson } from "./review-store";
-import { readDetail, result } from "./local-review-snapshot";
+import { readOwnedDetail, result } from "./local-review-snapshot";
 
 export const invalid = (): LocalMutationResult => ({
   status: 400,
@@ -102,7 +102,7 @@ export const prepareLocalReviewEdit = Effect.fn(function* (
         if (changed.length !== 1) {
           return yield* new CanonicalAdmissionUnavailable({ cause: "review_revision" });
         }
-        const detail = yield* readDetail(user, ref.id, current);
+        const detail = yield* readOwnedDetail(user, ref.id, current);
         if (Option.isNone(detail)) {
           return yield* new CanonicalAdmissionUnavailable({ cause: "review_readback" });
         }

@@ -6,6 +6,7 @@ import { billingAdmissionSchema } from "./internal/billing-admission-schema";
 import { connectionSchema } from "./internal/connection-schema";
 import {
   connectionAuditSchema,
+  hostedMetadataAuditSchema,
   oauthUserSchema,
   userPATSchema,
 } from "./internal/credential-schema";
@@ -1036,6 +1037,16 @@ export const userStoreHistory: StoreHistory = {
         "ALTER TABLE original_writers ADD COLUMN opened_ms INTEGER NOT NULL DEFAULT 0",
         "CREATE TRIGGER observe_original_writer AFTER INSERT ON original_writers BEGIN UPDATE original_writers SET opened_ms=CAST(round(unixepoch('subsec')*1000) AS INTEGER) WHERE nonce=NEW.nonce; END",
         "CREATE INDEX uncertain_original_write ON original_writers(opened_ms)",
+      ],
+    },
+    {
+      version: 26,
+      id: "hosted-credential-and-digest-evidence",
+      statements: [
+        ...hostedMetadataAuditSchema(),
+        `CREATE TABLE recurring_digest_reports(event_id TEXT PRIMARY KEY REFERENCES insight_events(id) ON DELETE CASCADE,
+         report_json TEXT NOT NULL CHECK(json_valid(report_json) AND json_extract(report_json,'$.insightEventId')=event_id)) STRICT`,
+        "CREATE TRIGGER recurring_digest_immutable BEFORE UPDATE ON recurring_digest_reports BEGIN SELECT RAISE(ABORT,'digest_immutable'); END",
       ],
     },
   ],

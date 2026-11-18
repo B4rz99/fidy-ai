@@ -58,6 +58,16 @@ const financialQueries = [
   ["recurring__listRecurringSeries", { query: {} }],
   ["recurringPlans__getRecurringWorkspace", { query: { month: "2026-10", view: "compact" } }],
 ] as const;
+const accountQueries = [
+  ["ingestion__getEmailForwarding", {}],
+  ["ingestion__getReviewWorkspace", { query: {} }],
+  ["ingestion__getReviewItem", { params: { id: alice.user } }],
+  ["insights__getRecurringDigestReport", { params: { id: alice.user } }],
+  ["pats__listPATs", {}],
+  ["pats__getPATActivity", { params: { shortId: "abcdefgh" } }],
+] as const;
+const queryCases = (mode: string): typeof financialQueries | typeof accountQueries =>
+  mode === "planning" ? financialQueries : accountQueries;
 type HostedRuntime = Parameters<typeof seed>[0];
 type HostedProvider = ReturnType<
   Awaited<ReturnType<HostedRuntime["getDurableObjectNamespace"]>>["getByName"]
@@ -67,7 +77,7 @@ const prepareQueries = Effect.fnUntraced(function* (
   runtime: HostedRuntime,
   provider: HostedProvider
 ) {
-  if (mode !== "planning") return;
+  if (!["planning", "account"].includes(mode)) return;
   const initialized = yield* native(() =>
     runtime.dispatchFetch("https://api.fidyapp.com/dashboard/initialize", {
       method: "POST",
@@ -84,7 +94,7 @@ const prepareQueries = Effect.fnUntraced(function* (
     provider.fetch("https://fixture.invalid/tools", {
       method: "POST",
       body: JSON.stringify(
-        financialQueries.map(([name, args]) => ({ name, arguments: JSON.stringify(args) }))
+        queryCases(mode).map(([name, args]) => ({ name, arguments: JSON.stringify(args) }))
       ),
     })
   );
@@ -94,22 +104,40 @@ const verifyQueryTools = Effect.fnUntraced(function* (
   proposal: typeof HostedTurnProposal.Type,
   { owner, provider }: { owner: Effect.Success<ReturnType<typeof seed>>; provider: HostedProvider }
 ) {
-  if (mode === "planning") {
+  if (["planning", "account"].includes(mode)) {
     const listing = yield* native(() => provider.fetch("https://fixture.invalid/tools"));
     expect(yield* native(() => listing.json())).toEqual(
-      expect.arrayContaining(financialQueries.map(([name]) => name))
+      expect.arrayContaining(queryCases(mode).map(([name]) => name))
     );
     const results = yield* owner.exec(
       "SELECT operation,outcome FROM hosted_tool_calls ORDER BY operation"
     );
     expect(results).toEqual(
-      financialQueries
+      queryCases(mode)
         .map(([name]) => ({
           operation: name.replace("__", "."),
-          outcome: name === "budgets__getBudget" ? "CanonicalOperationFailed" : "Succeeded",
+          outcome: [
+            "budgets__getBudget",
+            "ingestion__getReviewItem",
+            "insights__getRecurringDigestReport",
+            "pats__getPATActivity",
+          ].includes(name)
+            ? "CanonicalOperationFailed"
+            : "Succeeded",
         }))
         .sort((left, right) => left.operation.localeCompare(right.operation, "en-US"))
     );
+    if (mode === "account") {
+      expect(
+        yield* owner.exec(
+          "SELECT operation,outcome FROM audit_entries WHERE hosted_turn_id IS NOT NULL AND user_id=? ORDER BY operation",
+          alice.user
+        )
+      ).toEqual([
+        { operation: "pats.getPATActivity", outcome: "rejected" },
+        { operation: "pats.listPATs", outcome: "accepted" },
+      ]);
+    }
     return true;
   }
   if (mode === "connection") {
@@ -130,6 +158,7 @@ const verifyQueryTools = Effect.fnUntraced(function* (
 });
 const nativeTurnJourney = Effect.fnUntraced(function* (
   mode:
+    | "account"
     | "planning"
     | "ordinary"
     | "confirm"
@@ -176,6 +205,7 @@ const nativeTurnJourney = Effect.fnUntraced(function* (
   );
   const provider = controls.getByName("provider");
   const providerPath = {
+    account: "waiting",
     planning: "waiting",
     connection: "connect",
     batch: "batch",
@@ -344,6 +374,10 @@ const nativeTurnJourney = Effect.fnUntraced(function* (
 });
 
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
+  test.effect(
+    "reads statement, digest and credential metadata under the admitted hosted Turn",
+    () => nativeTurnJourney("account")
+  );
   test.effect(
     "serves financial queries from a hosted Turn through the caller's native owners",
     () => nativeTurnJourney("planning")

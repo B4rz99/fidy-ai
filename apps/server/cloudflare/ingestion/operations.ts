@@ -4,6 +4,7 @@ import {
   dispatchLocalForwarding as dispatchLocalForwardingOwned,
   isLocalForwardingOperation as isLocalForwardingOperationOwned,
   prepareLocalForwardingEnable as prepareAddress,
+  readForwarding,
   reserveBatchForwarding as reserveBatchAddress,
 } from "./internal/native-forwarding";
 import {
@@ -15,6 +16,8 @@ import { prepareLocalReviewEdit as localEdit } from "./internal/local-review-edi
 import {
   dispatchLocalReview as localReview,
   isLocalReviewOperation as localReviewOperation,
+  readReviewItem,
+  workspace as reviewWorkspace,
 } from "./internal/local-review";
 
 import {
@@ -330,3 +333,8 @@ export const retainLocalStatementDocumentOrigin: typeof retainOrigin = (input) =
 export const localHostedStatementOrigin: typeof resolveOrigin = (...args) => resolveOrigin(...args);
 export const readLocalSubmission: typeof localSubmission = (...args) => localSubmission(...args);
 export const readLocalReviewPage: typeof localReviewPage = (...args) => localReviewPage(...args);
+
+export const readLocalReviewItem: typeof readReviewItem = (...args) => readReviewItem(...args);
+export const readLocalReviewWorkspace: typeof reviewWorkspace = (...args) =>
+  reviewWorkspace(...args);
+export const readLocalForwarding: typeof readForwarding = (...args) => readForwarding(...args);

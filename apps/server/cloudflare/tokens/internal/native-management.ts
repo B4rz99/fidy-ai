@@ -1,3 +1,4 @@
+import type { PATActivityAuthority } from "../../../src/shell/audit/contract";
 import type { UserId } from "../../../src/core/identity/contract";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Effect, Option, Schema } from "effect";
@@ -138,27 +139,9 @@ export const dispatchManagement = Effect.fn(function* (unit: {
         subject: { id: binding, userId, digest },
         current,
       });
-      if (id === "pats.listPATs") {
-        const select = preparePATMetadata({ userId, current, authority });
-        const { data } = yield* select.decode(yield* read(select.statement));
-        yield* record(recordPATList({ authority, input: { id: newId(), current } }));
-        return ok(yield* Schema.encodeEffect(Schema.toCodecJson(ActivePATList))(data));
-      }
+      if (id === "pats.listPATs") return yield* readMetadata({ authority, userId, current });
       if (id === "pats.getPATActivity") {
-        const input = { userId, current, authority, shortId };
-        const select = preparePATActivityMetadata(input);
-        const pat = yield* select.decode(yield* read(select.statement));
-        const activityInput = { ...input, grant: patIdentityQuery(input) };
-        const activity = preparePATActivity(activityInput);
-        const history = yield* activity.decode(yield* read(activity.statement));
-        yield* record(recordPATActivityQuery({ ...activityInput, id: newId() }));
-        if (Option.isNone(pat)) return missing;
-        return ok(
-          yield* Schema.encodeEffect(Schema.toCodecJson(PATActivity))({
-            pat: pat.value,
-            ...history,
-          })
-        );
+        return yield* readActivity({ authority, userId, current, shortId });
       }
       const session = { id: binding, user_id: userId };
       const fresh =
@@ -172,4 +155,33 @@ export const dispatchManagement = Effect.fn(function* (unit: {
       return yield* revokeAll(session, current);
     }),
   };
+});
+
+type Metadata = { authority: PATActivityAuthority; userId: UserId; current: number };
+export const readMetadata = Effect.fn(function* ({ authority, userId, current }: Metadata) {
+  const select = preparePATMetadata({ userId, current, authority });
+  const { data } = yield* select.decode(yield* read(select.statement));
+  yield* record(recordPATList({ authority, input: { id: newId(), current } }));
+  return ok(yield* Schema.encodeEffect(Schema.toCodecJson(ActivePATList))(data));
+});
+export const readActivity = Effect.fn(function* ({
+  authority,
+  userId,
+  current,
+  shortId,
+}: Metadata & { shortId: string }) {
+  const input = { userId, current, authority, shortId };
+  const select = preparePATActivityMetadata(input);
+  const pat = yield* select.decode(yield* read(select.statement));
+  const activityInput = { ...input, grant: patIdentityQuery(input) };
+  const activity = preparePATActivity(activityInput);
+  const history = yield* activity.decode(yield* read(activity.statement));
+  yield* record(recordPATActivityQuery({ ...activityInput, id: newId() }));
+  if (Option.isNone(pat)) return missing;
+  return ok(
+    yield* Schema.encodeEffect(Schema.toCodecJson(PATActivity))({
+      pat: pat.value,
+      ...history,
+    })
+  );
 });

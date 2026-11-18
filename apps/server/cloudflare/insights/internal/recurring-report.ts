@@ -1,5 +1,11 @@
+import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
+import type { LocalMutationResult } from "../../canonical-admission/contract";
 import { Effect, Schema } from "effect";
-import { type InsightEventId, RecurringDigestReport } from "../../../src/core/insights/contract";
+import {
+  InsightEvent,
+  type InsightEventId,
+  RecurringDigestReport,
+} from "../../../src/core/insights/contract";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { InsightUnavailable } from "../contract";
 import { ReportJson } from "./recurring-models";
@@ -58,3 +64,44 @@ export const decodeRecurringReport = (
     }
     return report;
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
+
+export const readLocalReport = Effect.fn(function* (
+  input: Parameters<typeof recurringReportQuery>[0]
+) {
+  const sql = yield* SqliteClient;
+  const [row] =
+    yield* sql`SELECT e.event_json,r.report_json FROM insight_events e JOIN recurring_digest_reports r ON r.event_id=e.id WHERE e.user_id=${input.userId} AND e.id=${input.id}`;
+  if (row === undefined) {
+    const missing: LocalMutationResult = {
+      status: 404,
+      outcome: "not_found",
+      body: { error: { code: "not_found", message: "Recurring report unavailable." }, next: [] },
+    };
+    return missing;
+  }
+  const { event, report } = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({
+      event: Schema.fromJsonString(Schema.toCodecJson(InsightEvent)),
+      report: ReportJson,
+    })
+  )({ event: row.event_json, report: row.report_json });
+  if (
+    event.kind !== "new-recurring-series" ||
+    report.insightEventId !== event.id ||
+    report.locale !== event.locale ||
+    report.serviceMarket !== event.serviceMarket ||
+    report.payload.confirmationDay.timeZone !== event.timeZone ||
+    report.scheduledAt.epochMilliseconds !== event.scheduledAt.epochMilliseconds
+  ) {
+    return yield* new InsightUnavailable();
+  }
+  const response: LocalMutationResult = {
+    status: 200,
+    outcome: "success",
+    body: {
+      data: yield* Schema.encodeEffect(Schema.toCodecJson(RecurringDigestReport))(report),
+      next: [],
+    },
+  };
+  return response;
+});

@@ -201,6 +201,7 @@ const reserveToolRoutes = Effect.fn(function* (
         })(tool.params)
       : Option.none();
   if (
+    tool.operation === "ingestion.getEmailForwarding" ||
     tool.operation === enable ||
     Option.exists(batch, ({ payload }) => payload.calls.some((child) => child.operation === enable))
   ) {

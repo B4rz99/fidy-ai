@@ -1,5 +1,10 @@
 import { repairPATExpiry, sweepPATExpiry } from "./internal/native-expiry";
-import { dispatchManagement, isPATManagement } from "./internal/native-management";
+import {
+  dispatchManagement,
+  isPATManagement,
+  readActivity,
+  readMetadata,
+} from "./internal/native-management";
 import { localClaim } from "./internal/native-claim";
 import { dispatchGrant, isNativeGrant, stageGrant } from "./internal/native-grants";
 import { directoryPATCommand } from "./internal/native-routes";
@@ -100,3 +105,6 @@ export const dispatchLocalPATManagement: typeof dispatchManagement = (unit) =>
 
 export const repairLocalPATExpiry: typeof repairPATExpiry = (...args) => repairPATExpiry(...args);
 export const recoverLocalPATExpiry: typeof sweepPATExpiry = (...args) => sweepPATExpiry(...args);
+
+export const readLocalPATMetadata: typeof readMetadata = (input) => readMetadata(input);
+export const readLocalPATActivity: typeof readActivity = (input) => readActivity(input);

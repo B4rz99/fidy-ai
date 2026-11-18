@@ -82,6 +82,50 @@ const registerAddress = Effect.fn(function* (
     )
   );
 });
+const forwardingStatus = Effect.fn(function* ({
+  userId,
+  current,
+  data,
+}: {
+  userId: UserId;
+  current: number;
+  data: { id: string; address: string; createdAt: string };
+}) {
+  const stats = yield* forwardingAllowance(userId, current);
+  return {
+    status: 200,
+    outcome: "success",
+    body: {
+      data: {
+        address: data,
+        ...(stats.pro === 1
+          ? {}
+          : { remainingThisMonth: Math.max(0, freeForwardedEmailCap - stats.used) }),
+        deferredEmails: stats.deferred,
+        deferredCapacityRemaining: Math.max(0, freeForwardedEmailDeferredCap - stats.deferred),
+        resetsAt: DateTime.formatIso(
+          emailAllowancePeriod(DateTime.makeUnsafe(current)).toExclusive
+        ),
+      },
+      next: [],
+    },
+  } as const;
+});
+export const readForwarding = Effect.fnUntraced(function* (userId: UserId, current: number) {
+  const address = yield* addressFor(userId);
+  const [registered] =
+    yield* (yield* SqliteClient)`SELECT 1 FROM forwarding_addresses WHERE user_id=${userId} AND id=${address.id} AND route_registered=1`;
+  if (registered === undefined) return yield* new DirectoryWriteUnavailable();
+  return yield* forwardingStatus({
+    userId,
+    current,
+    data: {
+      id: address.id,
+      address: address.local_part + "@fidyapp.com",
+      createdAt: DateTime.formatIso(DateTime.makeUnsafe(address.issued_at_ms)),
+    },
+  });
+});
 export const dispatchLocalForwarding = Effect.fn(
   function* (unit: {
     request: Request;
@@ -109,28 +153,7 @@ export const dispatchLocalForwarding = Effect.fn(
           if (unit.operation.id === "ingestion.enableEmailForwarding") {
             return { status: 200, outcome: "success", body: { data, next: [] } } as const;
           }
-          const stats = yield* forwardingAllowance(userId, current);
-          return {
-            status: 200,
-            outcome: "success",
-            body: {
-              data: {
-                address: data,
-                ...(stats.pro === 1
-                  ? {}
-                  : { remainingThisMonth: Math.max(0, freeForwardedEmailCap - stats.used) }),
-                deferredEmails: stats.deferred,
-                deferredCapacityRemaining: Math.max(
-                  0,
-                  freeForwardedEmailDeferredCap - stats.deferred
-                ),
-                resetsAt: DateTime.formatIso(
-                  emailAllowancePeriod(DateTime.makeUnsafe(current)).toExclusive
-                ),
-              },
-              next: [],
-            },
-          } as const;
+          return yield* forwardingStatus({ userId, current, data });
         }),
     });
   },

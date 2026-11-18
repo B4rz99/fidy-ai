@@ -80,8 +80,12 @@ const approve = Effect.fn(function* (
   yield* stageChallenge(action.turn, tool, fresh);
   return false;
 });
-const channelContext = (turn: LocalTurn): Partial<{ hostedTurn: string }> =>
-  Option.isNone(turn.browser_id) ? { hostedTurn: turn.id } : {};
+const channelContext = (
+  turn: LocalTurn
+): { accountability: { turnId: string; sessionId: string } } & Partial<{ hostedTurn: string }> => ({
+  accountability: { turnId: turn.id, sessionId: turn.session_id },
+  ...(Option.isNone(turn.browser_id) ? { hostedTurn: turn.id } : {}),
+});
 const describeBatchChild = Effect.fnUntraced(function* (
   turn: LocalTurn,
   storage: DurableObjectStorage,

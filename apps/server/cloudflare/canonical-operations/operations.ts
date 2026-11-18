@@ -3,7 +3,12 @@ import {
   readLocalTransactionPage,
 } from "../transactions/operations";
 import type { CanonicalAuthorityRoot } from "../../src/shell/canonical-policy/contract";
-import { readLocalPendingInsights, readLocalReminder } from "../insights/operations";
+import { InsightEventId } from "../../src/core/insights/contract";
+import {
+  readLocalDigestReport,
+  readLocalPendingInsights,
+  readLocalReminder,
+} from "../insights/operations";
 import { readLocalMemories } from "../memory/operations";
 import type { UserId } from "../../src/core/identity/contract";
 import type { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
@@ -769,6 +774,7 @@ export const isLocalBatchRoute = (id: string): boolean =>
     "memory.revise",
     "memory.forget",
     "memory.recall",
+    "insights.getRecurringDigestReport",
     "insights.listPendingInsights",
     "insights.getReminderSchedule",
     "insights.updateReminderSchedule",
@@ -852,6 +858,18 @@ const localBatchQuery = Effect.fn(function* (unit: LocalBatchRoute) {
         ...unit,
         input: Effect.succeedSome(true),
         work: (_input, user) => queryLocalConnections(unit.operation.id, unit.request, user),
+      })
+    );
+  }
+  if (unit.operation.id === "insights.getRecurringDigestReport") {
+    const id = Schema.decodeUnknownOption(InsightEventId)(
+      new URL(unit.request.url).pathname.split("/").at(-1)
+    );
+    return Option.some(
+      yield* runLocalMutation({
+        ...unit,
+        input: Effect.succeed(id),
+        work: (target, user) => readLocalDigestReport({ id: target, userId: user }),
       })
     );
   }

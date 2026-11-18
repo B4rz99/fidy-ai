@@ -1,3 +1,4 @@
+import { readLocalReport } from "./internal/recurring-report";
 import { claimDisclosure, retainedDisclosure } from "./internal/local-disclosure";
 import { claimPurpose, reconcileReceipt } from "./internal/reminder-claim";
 import {
@@ -441,3 +442,5 @@ export const isRetainedDisclosure: typeof retainedDisclosure = (...args) =>
 
 export const readLocalPendingInsights: typeof pendingInsights = (...args) =>
   pendingInsights(...args);
+
+export const readLocalDigestReport: typeof readLocalReport = (input) => readLocalReport(input);

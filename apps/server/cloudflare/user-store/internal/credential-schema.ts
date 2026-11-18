@@ -84,16 +84,41 @@ export const oauthUserSchema = (): ReadonlyArray<string> =>
     "CREATE INDEX audit_entries_oauth_activity ON audit_entries(user_id,oauth_connection_id,occurred_at_ms DESC,id DESC) WHERE record_type='credential_call'",
   ] as const;
 
+const connectionAuditTable = credentialAuditTable.replace(
+  "CHECK((record_type='session_call'",
+  "CHECK((record_type='connection_synchronization' AND operation='connections.synchronize' AND outcome='success' AND session_id IS NULL AND pat_id IS NULL AND oauth_connection_id IS NULL) OR (record_type='session_call'"
+);
 /** Retain credential history while allowing a completed exact Synchronization to record system accountability. */
 export const connectionAuditSchema = (): ReadonlyArray<string> => [
   "CREATE TABLE saved_connection_audit AS SELECT * FROM audit_entries",
   "DROP TABLE audit_entries",
-  credentialAuditTable.replace(
-    "CHECK((record_type='session_call'",
-    "CHECK((record_type='connection_synchronization' AND operation='connections.synchronize' AND outcome='success' AND session_id IS NULL AND pat_id IS NULL AND oauth_connection_id IS NULL) OR (record_type='session_call'"
-  ),
+  connectionAuditTable,
   "INSERT INTO audit_entries SELECT * FROM saved_connection_audit",
   "DROP TABLE saved_connection_audit",
   "CREATE TRIGGER audit_entries_immutable BEFORE UPDATE ON audit_entries BEGIN SELECT RAISE(ABORT,'audit_immutable'); END",
   "CREATE INDEX audit_entries_oauth_activity ON audit_entries(user_id,oauth_connection_id,occurred_at_ms DESC,id DESC) WHERE record_type='credential_call'",
+];
+
+/** Keep credential accountability after the originating Turn expires without retaining its transcript. */
+export const hostedMetadataAuditSchema = (): ReadonlyArray<string> => [
+  "CREATE TABLE saved_hosted_audit AS SELECT * FROM audit_entries",
+  "DROP TABLE audit_entries",
+  connectionAuditTable
+    .replace(
+      "CHECK((oauth_connection_id",
+      `refusal_reason TEXT CHECK(refusal_reason IS NULL OR (refusal_reason='resource_limit' AND record_type='session_call' AND operation IN ('memory.remember','memory.revise') AND outcome='validation_failed')),
+    hosted_turn_id TEXT CHECK(hosted_turn_id IS NULL OR (record_type='credential_call' AND session_id IS NULL AND pat_id IS NULL AND oauth_connection_id IS NULL AND oauth_credential_id IS NULL)),
+    CHECK((oauth_connection_id`
+    )
+    .replace(
+      "(pat_id IS NOT NULL OR session_id IS NOT NULL",
+      "(hosted_turn_id IS NOT NULL OR pat_id IS NOT NULL OR session_id IS NOT NULL"
+    ),
+  "INSERT INTO audit_entries SELECT *,NULL FROM saved_hosted_audit",
+  "DROP TABLE saved_hosted_audit",
+  "CREATE TRIGGER audit_entries_immutable BEFORE UPDATE ON audit_entries BEGIN SELECT RAISE(ABORT,'audit_immutable'); END",
+  "CREATE INDEX audit_entries_oauth_activity ON audit_entries(user_id,oauth_connection_id,occurred_at_ms DESC,id DESC) WHERE record_type='credential_call'",
+  `CREATE TRIGGER hosted_credential_origin BEFORE INSERT ON audit_entries WHEN NEW.hosted_turn_id IS NOT NULL AND NOT EXISTS(
+      SELECT 1 FROM hosted_turns t WHERE t.id=NEW.hosted_turn_id AND t.user_id=NEW.user_id AND t.state='running' AND t.deadline_ms>NEW.occurred_at_ms
+    ) BEGIN SELECT RAISE(ABORT,'hosted_authority_unavailable'); END`,
 ];

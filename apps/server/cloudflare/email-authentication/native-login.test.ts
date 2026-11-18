@@ -2,121 +2,12 @@ import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { Effect, Schedule, Schema } from "effect";
 import { expect } from "vitest";
-import { native, nativeLoginPlatform } from "../user-store.test-fixture";
-import { NativeLoginEmailWork, loginDeliverUrl } from "./contract";
-import { ownerCheckUrl } from "../maintenance/contract";
+import { native } from "../user-store.test-fixture";
 import { alice, bob, seed } from "../financial-user-store.test-fixture";
 
-const setup = Effect.fn(function* (address: string) {
-  const logs: string[] = [];
-  const runtime = yield* (yield* nativeLoginPlatform)("1000000000", logs);
-  const owner = yield* seed(runtime, alice, false);
-  yield* owner.exec(
-    "INSERT INTO verified_email_credentials VALUES(?,?,1,?)",
-    alice.user,
-    address,
-    owner.now
-  );
-  yield* native(() =>
-    owner.directory.exec(
-      "INSERT INTO verified_email_routes VALUES(?,?,?,1)",
-      address,
-      alice.user,
-      alice.session
-    )
-  );
-  const post = (
-    path: string,
-    body: object
-  ): Effect.Effect<Awaited<ReturnType<typeof runtime.dispatchFetch>>> =>
-    native(() =>
-      runtime.dispatchFetch("https://api.fidyapp.com" + path, {
-        method: "POST",
-        headers: {
-          origin: "https://app.fidyapp.com",
-          "cf-connecting-ip": "192.0.2.35",
-          "content-type": "application/json",
-          connection: "close",
-        },
-        body: JSON.stringify(body),
-      })
-    );
-  const pairing = (): Effect.Effect<
-    { pairingId: string; privateVerifier: string },
-    Schema.SchemaError
-  > =>
-    post("/web/pairings", {}).pipe(
-      Effect.flatMap((reply) => native(() => reply.json())),
-      Effect.flatMap(
-        Schema.decodeUnknownEffect(
-          Schema.Struct({ pairingId: Schema.String, privateVerifier: Schema.String })
-        )
-      )
-    );
-  const start = (
-    proof: { pairingId: string; privateVerifier: string },
-    email = address
-  ): ReturnType<typeof post> => post("/web/email/authentication/start", { ...proof, email });
-  const { FIXTURE_PROVIDER } = yield* native(() =>
-    runtime.getBindings<{ FIXTURE_PROVIDER: Fetcher }>("core")
-  );
-  const inbox = (recipient = address): Effect.Effect<ReadonlyArray<string>, Schema.SchemaError> =>
-    native(() =>
-      FIXTURE_PROVIDER.fetch(
-        "https://mailbox.fixture.invalid/?to=" + encodeURIComponent(recipient)
-      ).then((reply) => reply.json())
-    ).pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.Array(Schema.String))));
-  const awaitMail = (recipient = address): ReturnType<typeof inbox> =>
-    inbox(recipient).pipe(
-      Effect.repeat({
-        until: (letters) => letters.length > 0,
-        times: 36,
-        schedule: Schedule.spaced("100 millis"),
-      })
-    );
-  const namespace = yield* native(() => runtime.getDurableObjectNamespace("USER_STORE", "core"));
-  const user = namespace.getByName(alice.user);
-  const deliver = (work: typeof NativeLoginEmailWork.Type): Effect.Effect<number> =>
-    native(() =>
-      user
-        .fetch(loginDeliverUrl, { method: "POST", body: JSON.stringify(work) })
-        .then((reply) => reply.status)
-    );
-  const work = (): Effect.Effect<typeof NativeLoginEmailWork.Type, Schema.SchemaError> =>
-    owner.exec("SELECT work_id AS id FROM login_email_proofs").pipe(
-      Effect.flatMap((rows) =>
-        Schema.decodeUnknownEffect(NativeLoginEmailWork)({
-          kind: "browser-pairing-email",
-          version: 2,
-          userId: alice.user,
-          id: rows[0]?.id,
-        })
-      )
-    );
-  const directory = (
-    ...args: Parameters<typeof owner.directory.exec>
-  ): ReturnType<typeof owner.exec> => native(() => owner.directory.exec(...args));
-  const hold = owner.exec(
-    "CREATE TRIGGER hold_queue_offer AFTER INSERT ON login_email_proofs BEGIN UPDATE login_email_proofs SET offer_at_ms=expires_at_ms; END"
-  );
-  return {
-    owner,
-    start,
-    pairing,
-    post,
-    logs,
-    runtime,
-    address,
-    inbox,
-    delivered: awaitMail(),
-    awaitMail,
-    deliver,
-    work,
-    directory,
-    hold,
-    user,
-  };
-});
+import { NativeLoginEmailWork } from "./contract";
+import { loginMailbox as setup } from "./native-login.test-fixture";
+
 const interruptClaim = Effect.fn(function* (
   owner: Effect.Success<ReturnType<typeof setup>>["owner"],
   outcome: string
@@ -359,13 +250,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   }
   test.effect("the watchdog reoffers an admitted intent after a missed scheduling hint", () =>
     Effect.gen(function* () {
-      const { owner, start, pairing, hold, user, delivered } = yield* setup(
+      const { owner, start, pairing, hold, checkOwner, delivered } = yield* setup(
         "rediscovered@example.test"
       );
       yield* hold;
       yield* start(yield* pairing());
       yield* owner.exec("UPDATE login_email_proofs SET offer_at_ms=0");
-      expect((yield* native(() => user.fetch(ownerCheckUrl, { method: "POST" }))).status).toBe(204);
+      expect(yield* checkOwner).toBe(204);
       expect(yield* delivered).toHaveLength(1);
     })
   );

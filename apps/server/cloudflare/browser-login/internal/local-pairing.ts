@@ -1,4 +1,4 @@
-import { Clock, Data, DateTime, Effect, Option, Redacted, Schema } from "effect";
+import { Clock, Data, DateTime, Effect, Exit, Option, Redacted, Schema } from "effect";
 import { proofPolicy } from "../contract";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
 import {
@@ -7,6 +7,7 @@ import {
   directoryName,
   localCallerUrl,
   registerSessionUrl,
+  releaseSessionUrl,
 } from "../../directory/contract";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Hex } from "effect/encoding";
@@ -92,6 +93,21 @@ const prepareClaim = Effect.fn(function* (
   return { user: row.user_id, attempt: row.id, current };
 });
 
+const sessionRoute = Effect.fn(function* (
+  directory: Pick<DurableObjectNamespace, "getByName">,
+  url: string,
+  body: string
+) {
+  return yield* Effect.tryPromise((signal) =>
+    directory.getByName(directoryName).fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body,
+      signal,
+    })
+  );
+});
+
 /** Register this exact credential before committing its issue with consumption of the independent browser proof. */
 export const redeemLocalPairing = Effect.fn(function* (
   request: Request,
@@ -123,17 +139,16 @@ export const redeemLocalPairing = Effect.fn(function* (
     attemptId: prepare.attempt,
     hard,
   });
-  const registration = yield* Effect.tryPromise((signal) =>
-    directory.getByName(directoryName).fetch(registerSessionUrl, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body,
-      signal,
-    })
-  );
-  if (!registration.ok) return unavailable();
   const sql = yield* SqliteClient;
-  return yield* Effect.gen(function* () {
+  const discard = Effect.gen(function* () {
+    // The transaction may have committed even if its acknowledgement was lost.
+    const cancelled =
+      yield* sql`UPDATE browser_handoffs SET claim_id=NULL,claim_at_ms=NULL WHERE id=${prepare.attempt} AND user_id=${prepare.user} AND pairing_id=${pairingId} AND claim_id=${sessionId} AND state<>'consumed' AND NOT EXISTS(SELECT 1 FROM web_sessions WHERE id=${sessionId}) RETURNING id`.pipe(
+        withStoreCapacity("required")
+      );
+    if (cancelled.length === 1) yield* sessionRoute(directory, releaseSessionUrl, body);
+  });
+  const activate = Effect.gen(function* () {
     const current = yield* Clock.currentTimeMillis;
     const changed =
       yield* sql`UPDATE browser_handoffs SET state='consumed' WHERE id=${prepare.attempt} AND outcome='committed' AND state='ready' AND user_id=${prepare.user} AND verifier_digest=${digest} AND expires_at_ms>${current} AND wrong_attempts<5 AND claim_id=${sessionId} AND NOT EXISTS(SELECT 1 FROM erasure_requests) RETURNING id`;
@@ -147,6 +162,12 @@ export const redeemLocalPairing = Effect.fn(function* (
       { headers: { "cache-control": "no-store", "set-cookie": sessionSetCookie(token) } }
     );
   }).pipe(withStoreCapacity("growth"));
+  return yield* sessionRoute(directory, registerSessionUrl, body).pipe(
+    Effect.flatMap((registered) => (registered.ok ? activate : Effect.succeed(unavailable()))),
+    Effect.onExit((exit) =>
+      Exit.isSuccess(exit) && exit.value.ok ? Effect.void : discard.pipe(Effect.ignore)
+    )
+  );
 });
 
 export const localChannelRequest = Effect.fn(function* (

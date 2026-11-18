@@ -53,6 +53,7 @@ export const handoffInspectUrl = "https://directory.invalid/bootstrap/inspect";
 export const handoffCancelUrl = "https://directory.invalid/bootstrap/cancel";
 export const bootstrapCompleteUrl = "https://user.invalid/bootstrap/complete";
 export const bootstrapCancelUrl = "https://user.invalid/bootstrap/cancel";
+export const releaseSessionUrl = "https://directory.invalid/bootstrap/session/release";
 export const registerSessionUrl = "https://directory.invalid/bootstrap/session";
 
 export const whatsappBootstrapUrl = "https://directory.invalid/bootstrap/whatsapp";

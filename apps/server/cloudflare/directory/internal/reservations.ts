@@ -32,6 +32,20 @@ export const registerBrowserSession = Effect.fn(function* (request: Request) {
   }).pipe(withStoreCapacity("growth"));
 });
 
+/** Discard only the provisional route belonging to this failed UserStore session write. */
+export const releaseBrowserSession = Effect.fn(function* (request: Request) {
+  const input = yield* Schema.decodeUnknownEffect(SessionRegistration)(
+    yield* Effect.tryPromise(() => request.json())
+  );
+  const digest = yield* Effect.fromResult(Hex.decode(input.digest));
+  const sql = yield* SqliteClient;
+  return yield* Effect.gen(function* () {
+    yield* sql`DELETE FROM session_routes WHERE token_digest=${digest} AND user_id=${input.userId} AND session_id=${input.sessionId} AND reservation_id=${input.attemptId} AND hard_expires_at_ms=${input.hard}`;
+    const remaining = yield* sql`SELECT 1 FROM session_routes WHERE token_digest=${digest}`;
+    return remaining.length === 0 ? new Response(null, { status: 204 }) : unavailable();
+  }).pipe(withStoreCapacity("required"));
+});
+
 export const cancelFrozenHandoff = Effect.fn(function* (
   request: Request,
   users: Pick<DurableObjectNamespace, "getByName">

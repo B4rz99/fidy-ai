@@ -18,6 +18,7 @@ import {
   handoffInspectUrl,
   patRouteUrl,
   registerSessionUrl,
+  releaseSessionUrl,
   replaceIdentityUrl,
   reserveRecoveryUrl,
   rotateRecoveryRouteUrl,
@@ -50,6 +51,7 @@ import {
   cancelFrozenHandoff,
   registerBrowserSession,
   registerRecoveryCredential,
+  releaseBrowserSession,
 } from "./internal/reservations";
 
 import { inspectHandoff, providerRequest } from "./internal/provider";
@@ -234,10 +236,12 @@ const routingCommands = new Map<
   string,
   | typeof handleOAuthRouteCommand
   | typeof handlePATDirectoryCommand
+  | typeof releaseBrowserSession
   | typeof externalEventRequest
   | typeof credentialLookup
   | typeof whatsappOwner
 >([
+  [releaseSessionUrl, releaseBrowserSession],
   [whatsappOwnerUrl, whatsappOwner],
   [sessionRouteUrl, credentialLookup],
   [sourcePressureUrl, credentialLookup],

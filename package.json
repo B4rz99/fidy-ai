@@ -62,9 +62,9 @@
     "docs:verify:built": "bun run docs:test"
   },
   "devDependencies": {
-    "@babel/parser": "8.1.0",
-    "@babel/traverse": "8.1.0",
-    "@babel/types": "8.1.0",
+    "@babel/parser": "8.1.2",
+    "@babel/traverse": "8.1.2",
+    "@babel/types": "8.1.2",
     "@effect/platform-bun": "4.1.4",
     "@effect/tsgo": "0.68.0",
     "@playwright/test": "1.65.0",

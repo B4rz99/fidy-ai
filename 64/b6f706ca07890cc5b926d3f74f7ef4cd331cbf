@@ -1,0 +1,19 @@
+apps/server/cloudflare/categories/taxonomy.test.ts
+  s_a1be23a656acf0::t_5b5c3d17859e82 15,82,100-104,113-126,172-184,302-318,320-321,324
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "64b6f706ca07890cc5b926d3f74f7ef4cd331cbf",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

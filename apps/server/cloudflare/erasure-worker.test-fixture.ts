@@ -1,5 +1,9 @@
 import { Effect, Option, Schedule } from "effect";
-import { UserStore as NativeUser } from "./core-worker";
+import {
+  Directory as NativeDirectory,
+  Erasure as NativeErasure,
+  UserStore as NativeUser,
+} from "./core-worker";
 
 export { default } from "./core-worker";
 export * from "./core-worker";
@@ -66,5 +70,34 @@ export class UserStore extends NativeUser {
       default:
         return super.fetch(request);
     }
+  }
+}
+
+/** The fixture invokes the production case alarm/commands at a chosen instant in its own test isolate. */
+export class Erasure extends NativeErasure {
+  override fetch(request: Request): Promise<Response> {
+    const instant = request.headers.get("fixture-erasure-clock");
+    if (instant === null) return super.fetch(request);
+    const original = Date.now;
+    Date.now = (): number => Number(instant);
+    return (
+      request.url === "https://fixture.invalid/case-alarm"
+        ? super.alarm().then(() => new Response(null, { status: 204 }))
+        : super.fetch(request)
+    ).finally(() => {
+      Date.now = original;
+    });
+  }
+}
+
+export class Directory extends NativeDirectory {
+  override fetch(request: Request): Promise<Response> {
+    const instant = request.headers.get("fixture-erasure-clock");
+    if (instant === null) return super.fetch(request);
+    const original = Date.now;
+    Date.now = (): number => Number(instant);
+    return super.fetch(request).finally(() => {
+      Date.now = original;
+    });
   }
 }

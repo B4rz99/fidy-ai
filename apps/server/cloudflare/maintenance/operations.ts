@@ -7,6 +7,7 @@ import { withStoreAdmission } from "../runtime/sqlite/operations";
 import {
   type ScheduledActivity,
   ScheduledWorkFailed,
+  expireLifetimeUrl,
   fenceLifetimeUrl,
   registerLifetimeUrl,
   registrationAcceptedStatus,
@@ -89,7 +90,9 @@ const acknowledgement = (matched: boolean): Response =>
 
 export const lifetimeRequest = (request: Request): boolean =>
   request.method === "POST" &&
-  [registerLifetimeUrl, fenceLifetimeUrl, retireLifetimeUrl].includes(request.url);
+  [registerLifetimeUrl, fenceLifetimeUrl, retireLifetimeUrl, expireLifetimeUrl].includes(
+    request.url
+  );
 
 export const handleLifetimeRegistration = Effect.fn(function* (
   request: Request,
@@ -120,13 +123,25 @@ export const handleLifetimeRegistration = Effect.fn(function* (
       })
     );
   }
+  return yield* changeLifetime(request, userId, erasure);
+});
+const changeLifetime = Effect.fn(function* (
+  request: Request,
+  userId: string,
+  erasure: Option.Option<ErasureRegistryNamespace>
+) {
+  const sql = yield* SqliteClient;
   const reference = request.headers.get("fidy-erasure-reference");
   if (!Schema.is(ErasureReference)(reference)) return new Response(null, { status: 400 });
   if (Option.isNone(erasure)) return acknowledgement(false);
   const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
     userId,
     reference,
-    action: request.url === fenceLifetimeUrl ? "fence" : "retire",
+    action: {
+      [fenceLifetimeUrl]: "fence",
+      [retireLifetimeUrl]: "retire",
+      [expireLifetimeUrl]: "expire",
+    }[request.url],
   });
   const verified = yield* Effect.tryPromise((signal) =>
     erasure.value
@@ -137,6 +152,12 @@ export const handleLifetimeRegistration = Effect.fn(function* (
 
   return yield* withStoreAdmission(() =>
     Effect.gen(function* () {
+      if (request.url === expireLifetimeUrl) {
+        yield* sql`DELETE FROM lifetime_registry WHERE user_id=${userId} AND erasure_reference=${reference} AND retired=1`;
+        return acknowledgement(
+          (yield* sql`SELECT 1 FROM lifetime_registry WHERE user_id=${userId}`).length === 0
+        );
+      }
       const matched =
         request.url === fenceLifetimeUrl
           ? yield* sql`UPDATE lifetime_registry SET erasure_reference=${reference} WHERE user_id=${userId}

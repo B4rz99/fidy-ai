@@ -1,5 +1,13 @@
-import { fenceErasureParticipant, participantDrain } from "../erasure-store/operations";
-import { participantDrainedUrl, participantFenceUrl } from "../erasure-store/contract";
+import {
+  fenceErasureParticipant,
+  handleSharedCleanup,
+  participantDrain,
+} from "../erasure-store/operations";
+import {
+  participantCleanupUrl,
+  participantDrainedUrl,
+  participantFenceUrl,
+} from "../erasure-store/contract";
 import { Hex } from "effect/encoding";
 import { digestBytes } from "../secret-material/operations";
 import {
@@ -36,6 +44,7 @@ import { type StoreReleaseEnvironment, storeReadinessUrl } from "../runtime/sqli
 
 import { pricingHistory } from "./pricing/operations";
 import {
+  cleanPricingCase,
   outstandingPricingRegistrations,
   pricingResponse,
   recoverPricing,
@@ -309,13 +318,16 @@ export const makeSubscriptionErasureStores = (db: D1Database): ReadonlyArray<Era
 export class Pricing {
   private readonly version: string;
   private readonly state: DurableObjectState;
+  private readonly erasure: Option.Option<DurableObjectNamespace>;
   private readonly users: Option.Option<DurableObjectNamespace>;
   private readonly runtime;
   constructor(
     state: DurableObjectState,
-    env: StoreReleaseEnvironment & Partial<Readonly<{ USER_STORE: DurableObjectNamespace }>>
+    env: StoreReleaseEnvironment &
+      Partial<Readonly<{ USER_STORE: DurableObjectNamespace; ERASURE: DurableObjectNamespace }>>
   ) {
     this.state = state;
+    this.erasure = Option.fromUndefinedOr(env.ERASURE);
     this.users = Option.fromUndefinedOr(env.USER_STORE);
     this.version = env.CF_VERSION_METADATA.id;
     this.runtime = createStoreRuntime({
@@ -339,27 +351,39 @@ export class Pricing {
         this.runtime.runPromise(recoverPricing(this.state.storage, users)).then(() => undefined),
     });
   }
-  fetch(request: Request): Promise<Response> {
-    if (this.state.id.name !== pricingName) {
-      return Promise.resolve(new Response(null, { status: 404 }));
+  private erasureCommand(request: Request): Promise<Response> {
+    if (request.url === participantCleanupUrl && Option.isSome(this.erasure)) {
+      return this.runtime.runPromise(
+        handleSharedCleanup(request, this.erasure.value, cleanPricingCase).pipe(
+          Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
+        )
+      );
     }
-    if (`${request.method} ${request.url}` === `POST ${participantDrainedUrl}`) {
+    if (request.url === participantDrainedUrl) {
       return this.runtime.runPromise(
         participantDrain(request, outstandingPricingRegistrations).pipe(
           Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
         )
       );
     }
-    if (
-      request.method === "POST" &&
-      request.url === participantFenceUrl &&
-      Option.isSome(this.users)
-    ) {
+    if (request.url === participantFenceUrl && Option.isSome(this.users)) {
       return this.runtime.runPromise(
         fenceErasureParticipant(request, this.users.value, this.state.storage).pipe(
           Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
         )
       );
+    }
+    return Promise.resolve(new Response(null, { status: 503 }));
+  }
+  fetch(request: Request): Promise<Response> {
+    if (this.state.id.name !== pricingName) {
+      return Promise.resolve(new Response(null, { status: 404 }));
+    }
+    if (
+      request.method === "POST" &&
+      [participantCleanupUrl, participantDrainedUrl, participantFenceUrl].includes(request.url)
+    ) {
+      return this.erasureCommand(request);
     }
     if (request.method === "GET" && request.url === storeReadinessUrl) {
       return this.runtime.runPromise(

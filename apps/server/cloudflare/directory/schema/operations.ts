@@ -1,5 +1,9 @@
 import { providerAllowanceSchema } from "../../resource-admission/contract";
-import { erasureBarrierSchema } from "../../erasure-store/operations";
+import {
+  cleanupBarrierColumns,
+  deletionWitness,
+  erasureBarrierSchema,
+} from "../../erasure-store/operations";
 import { publicDirectorySchema } from "./credential-schema";
 import { externalRoutesSchema } from "./external-events";
 import type { StoreHistory } from "../../runtime/sqlite/contract";
@@ -143,6 +147,53 @@ export const directoryHistory: StoreHistory = {
           (table) =>
             `CREATE TRIGGER fence_${table}_binding BEFORE UPDATE ON ${table} WHEN EXISTS(SELECT 1 FROM erasure_barriers WHERE user_id=NEW.user_id) BEGIN SELECT RAISE(ABORT,'user_erasure_fence'); END`
         ),
+      ],
+    },
+    {
+      version: 11,
+      id: "erasure-cleanup-receipts",
+      statements: [
+        ...cleanupBarrierColumns,
+        "CREATE INDEX erasure_wa_admission ON whatsapp_routes(('wa:'||length(portfolio)||':'||portfolio||bsuid))",
+        "CREATE INDEX erasure_poll_admission ON browser_pairings(('poll:'||verifier_digest))",
+        "CREATE INDEX erasure_invitation_pairing ON whatsapp_invitations(pairing_id)",
+        deletionWitness({
+          table: "bootstrap_admissions",
+          deadline: "OLD.expires_at_ms",
+          owner:
+            "coalesce((SELECT user_id FROM whatsapp_routes WHERE OLD.scope='wa:'||length(portfolio)||':'||portfolio||bsuid),(SELECT user_id FROM browser_pairings WHERE OLD.scope='poll:'||verifier_digest))",
+        }),
+
+        ...[
+          "browser_pairings",
+          "oauth_routes",
+          "oauth_review_requests",
+          "pat_bootstrap",
+          "pat_routes",
+          "identity_replacements",
+          "recovery_rotations",
+        ].map((table) =>
+          deletionWitness({ table, deadline: "OLD.expires_at_ms", owner: "OLD.user_id" })
+        ),
+        deletionWitness({
+          table: "session_routes",
+          deadline: "OLD.hard_expires_at_ms",
+          owner: "OLD.user_id",
+        }),
+        deletionWitness({
+          table: "support_handoffs",
+          deadline: "OLD.operator_expires_ms",
+          owner: "OLD.user_id",
+        }),
+        ...["recovery_routes", "external_event_routes", "channel_approvals"].map((table) =>
+          deletionWitness({ table, deadline: "0", owner: "OLD.user_id" })
+        ),
+        deletionWitness({
+          table: "whatsapp_invitations",
+          deadline: "OLD.expires_at_ms+86400000",
+          owner:
+            "coalesce((SELECT user_id FROM browser_pairings WHERE id=OLD.pairing_id),(SELECT user_id FROM whatsapp_routes WHERE portfolio=OLD.portfolio AND bsuid=OLD.bsuid))",
+        }),
       ],
     },
   ],

@@ -100,6 +100,11 @@ const acceptMail = Effect.fn(function* (request: Request) {
   }
   return Option.some(Response.json({ id: "fixture-delivery" }));
 });
+const operatorApplications = new Map([
+  ["/support-assertion", { email: "operator@example.test", audience: "fixture-support" }],
+  ["/reviewer-assertion", { email: "reviewer@example.test", audience: "fixture-review" }],
+  ["/erasure-assertion", { email: "obarboza@fidyapp.com", audience: "fixture-erasure" }],
+]);
 const supportAndMailbox = Effect.fn(function* (request: Request) {
   if (request.url === "https://api.resend.com/emails") return yield* acceptMail(request);
   if (new URL(request.url).hostname === "mailbox.fixture.invalid") {
@@ -107,9 +112,10 @@ const supportAndMailbox = Effect.fn(function* (request: Request) {
       Response.json(messages.get(new URL(request.url).searchParams.get("to") ?? "") ?? [])
     );
   }
-  const reviewer = new URL(request.url).pathname === "/reviewer-assertion";
-  const scenario = new URL(request.url).searchParams.get("scenario");
-  if (reviewer || request.url === "https://fixture.invalid/support-assertion") {
+  const url = new URL(request.url);
+  const application = operatorApplications.get(url.pathname);
+  const scenario = url.searchParams.get("scenario");
+  if (url.hostname === "fixture.invalid" && application !== undefined) {
     const keys = yield* Effect.tryPromise(() => signingKeys(keyId));
     const now = Math.floor((yield* Clock.currentTimeMillis) / millisecondsPerSecond);
     return Option.some(
@@ -117,17 +123,14 @@ const supportAndMailbox = Effect.fn(function* (request: Request) {
         yield* Effect.tryPromise(() =>
           new SignJWT({
             type: scenario === "organization" ? "org" : "app",
-            email:
-              reviewer && scenario !== "unassigned"
-                ? "reviewer@example.test"
-                : "operator@example.test",
+            email: scenario === "unassigned" ? "operator@example.test" : application.email,
           })
             .setProtectedHeader({ alg: "RS256", kid: keyId })
             .setIssuer("https://fixture.cloudflareaccess.com")
             .setAudience(
               scenario === "multiple"
                 ? ["fixture-review", "fixture-support"]
-                : [reviewer ? "fixture-review" : "fixture-support"]
+                : [application.audience]
             )
             .setSubject("fixture-operator")
             .setIssuedAt(now)

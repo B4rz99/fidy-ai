@@ -14,13 +14,14 @@ import {
   externalReserveUrl,
   patRouteHeader,
   patRouteUrl,
+  routeIssuedHeader,
   sessionRouteUrl,
   sourcePressureUrl,
 } from "./contract";
 import { absentSessionResponse, sessionCookie, sessionDigest } from "../web-session/operations";
 import { patRouteProof } from "../tokens/operations";
 
-import { Effect, Option, Schema } from "effect";
+import { Clock, Effect, Option, Schema } from "effect";
 import {
   canonicalAdmissionUnavailable,
   noAuthority,
@@ -200,8 +201,14 @@ export const reserveExternalEventRoute = Effect.fn(function* (
   route: typeof ExternalEventRoute.Type
 ) {
   const body = yield* Schema.encodeEffect(Schema.fromJsonString(ExternalEventRoute))(route);
+  const issuedAt = yield* Clock.currentTimeMillis;
   const reply = yield* Effect.tryPromise((signal) =>
-    directory.getByName(directoryName).fetch(externalReserveUrl, { method: "POST", body, signal })
+    directory.getByName(directoryName).fetch(externalReserveUrl, {
+      method: "POST",
+      headers: { [routeIssuedHeader]: String(issuedAt) },
+      body,
+      signal,
+    })
   );
   if (reply.status !== noContentStatus) return yield* new DirectoryWriteUnavailable();
 });

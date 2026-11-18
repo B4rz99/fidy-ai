@@ -100,3 +100,5 @@ export const ownerCheckResponse = (repaired = false): Response =>
 
 export const ownerCheckRequest = privateCheckRequest(ownerCheckUrl);
 export const watchdogRequest = privateCheckRequest(watchdogUrl);
+
+export const expireLifetimeUrl = "https://maintenance.invalid/lifetime/expire";

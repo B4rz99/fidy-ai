@@ -238,3 +238,19 @@ export const EmailCapacityCommand = Schema.Union([
   Schema.TaggedStruct("Settle", emailCapacityTarget),
   Schema.TaggedStruct("Release", emailCapacityTarget),
 ]);
+
+const routeReservationTransportMs = 60_000;
+export const routeIssuedHeader = "fidy-route-issued-ms";
+/** Long-lived credentials have a separate short window for their original Directory reservation call. */
+export const currentRouteReservation = ({
+  request,
+  now,
+}: Readonly<{ request: Request; now: number }>): boolean => {
+  const issued = Number(request.headers.get(routeIssuedHeader));
+  return (
+    Number.isSafeInteger(issued) &&
+    issued > 0 &&
+    issued <= now &&
+    now - issued < routeReservationTransportMs
+  );
+};

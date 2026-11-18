@@ -11,7 +11,11 @@ import {
   PATScopes,
   TokenShortId,
 } from "../../../src/core/tokens/contract";
-import { directoryName } from "../../directory/contract";
+import {
+  currentRouteReservation,
+  directoryName,
+  routeIssuedHeader,
+} from "../../directory/contract";
 import { withStoreCapacity } from "../../runtime/sqlite/operations";
 import { newId } from "../../secret-material/operations";
 import { newShortId } from "./pat-shared";
@@ -56,11 +60,15 @@ export const directoryEvidence = Effect.fn(function* <A, Encoded>(
   input: Command,
   schema: Schema.Codec<A, Encoded>
 ) {
+  const issuedAt = yield* Clock.currentTimeMillis;
   const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))(input);
   const response = yield* Effect.tryPromise((signal) =>
-    directory
-      .getByName(directoryName)
-      .fetch(nativePATDirectoryUrl, { method: "POST", body, signal })
+    directory.getByName(directoryName).fetch(nativePATDirectoryUrl, {
+      method: "POST",
+      headers: { [routeIssuedHeader]: String(issuedAt) },
+      body,
+      signal,
+    })
   );
   if (response.status === absentRecord) return Option.none<A>();
   if (!response.ok) return yield* new PATUnavailable();
@@ -77,7 +85,9 @@ export const directoryPATCommand = Effect.fn(function* (request: Request) {
   return yield* Effect.gen(function* () {
     const current = yield* Clock.currentTimeMillis;
     if (input.kind === "reserve") {
-      if (input.expires <= current) return new Response(null, { status: 404 });
+      if (input.expires <= current || !currentRouteReservation({ request, now: current })) {
+        return new Response(null, { status: 404 });
+      }
       const shortId = newShortId(),
         patId = newId();
       yield* sql`INSERT INTO pat_routes(short_id,user_id,pat_id,reservation_id,expires_at_ms) VALUES(${shortId},${input.user},${patId},${input.operation},${input.expires}) ON CONFLICT DO NOTHING`;

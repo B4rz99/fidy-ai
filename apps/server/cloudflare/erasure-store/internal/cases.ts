@@ -1,3 +1,4 @@
+import { finishErasure } from "./settlement";
 import { advanceLocalPurge } from "./local-purge";
 import { directoryName } from "../../directory/contract";
 import { pricingName } from "../../subscription/contract";
@@ -94,6 +95,22 @@ const fenceCase = Effect.fn(function* (record: typeof Case.Type, env: Participan
     }
   }
 });
+const advanceCase = Effect.fn(function* (
+  record: typeof Case.Type,
+  env: Participants & { USER_STORE: DurableObjectNamespace }
+) {
+  if (
+    record.directory_fenced !== 1 ||
+    record.pricing_fenced !== 1 ||
+    record.maintenance_fenced !== 1
+  ) {
+    return yield* fenceCase(record, env);
+  }
+  if (record.state === "ExternalPending" || record.state === "Complete") {
+    return yield* finishErasure(record, env);
+  }
+  yield* advanceLocalPurge(record, env);
+});
 export const advanceErasureCases = Effect.fn(function* (
   storage: DurableObjectStorage,
   env: Participants & { USER_STORE: DurableObjectNamespace }
@@ -108,20 +125,10 @@ export const advanceErasureCases = Effect.fn(function* (
       return yield* Schema.decodeUnknownEffect(Schema.Array(Case))(due);
     })
   );
-  yield* Effect.forEach(
-    page,
-    (record) =>
-      (record.directory_fenced === 1 &&
-      record.pricing_fenced === 1 &&
-      record.maintenance_fenced === 1
-        ? advanceLocalPurge(record, env)
-        : fenceCase(record, env)
-      ).pipe(Effect.result),
-    {
-      concurrency: 4,
-      discard: true,
-    }
-  );
+  yield* Effect.forEach(page, (record) => advanceCase(record, env).pipe(Effect.result), {
+    concurrency: 4,
+    discard: true,
+  });
 });
 
 /** Maintenance retains discovery until this exact independent case has completed. */
@@ -130,11 +137,11 @@ export const confirmLifetimeCase = Effect.fn(function* (request: Request) {
     Schema.Struct({
       userId: ErasureHandoff.fields.userId,
       reference: ErasureHandoff.fields.reference,
-      action: Schema.Literals(["fence", "retire"]),
+      action: Schema.Literals(["fence", "retire", "expire"]),
     })
   )(yield* Effect.tryPromise(() => request.json()));
   const sql = yield* SqliteClient;
   const present =
-    yield* sql`SELECT 1 FROM erasure_cases WHERE reference=${scope.reference} AND user_id=${scope.userId} AND (${scope.action}='fence' OR state='Complete')`;
+    yield* sql`SELECT 1 FROM erasure_cases WHERE reference=${scope.reference} AND user_id=${scope.userId} AND (${scope.action}='fence' OR (state='Complete' AND (${scope.action}='retire' OR (lifetime_retired=1 AND identity_released=1 AND protect_until_ms<=${yield* Clock.currentTimeMillis}))))`;
   return new Response(null, { status: present.length === 1 ? acknowledged : conflictStatus });
 });

@@ -237,3 +237,17 @@ takes the maximum of that time and `last_erased_at_ms` in the same transaction t
 participant's cleanup. Completion uses this maximum after all required personal-data cleanup.
 Reading a receipt, retrying an acknowledged deletion and retiring deletion metadata leave the
 timestamp unchanged.
+
+The dedicated Titular operator can inspect case-bound pages of original Resend delivery keys
+and Wompi or WhatsApp callback coordinates while the corresponding custodian is pending.
+Custody evidence binds one opaque evidence reference, disposition, recording operator and instant
+to the exact User, case and custodian. Positive local use requires verified cleanup. A reviewed
+non-applicability decision can resolve a custodian with unknown local use. Cloudflare verification
+requires confirmed Directory and Pricing cleanup and 30 days since the latest actual local erasure.
+
+Directory keeps the original identity bindings until the independent case completes. The case then
+releases those bindings, retires the matching Maintenance lifetime entry and retains separate
+acknowledgements. Directory and Pricing keep the maximum original expiry of removed routes and
+registrations. Once those windows close, the independent owner confirms disposal of the barriers
+and retired entry before expiring the case and its custody evidence. A later signup reserves a new
+UserId under a fresh provider proof.

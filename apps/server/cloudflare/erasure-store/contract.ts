@@ -76,3 +76,21 @@ export const confirmDrainUrl = "https://erasure.invalid/case/confirm-drain";
 export const confirmPurgeUrl = "https://erasure.invalid/case/confirm-purge";
 export const participantDrainedUrl = "https://owner.internal/erasure/drained";
 export const confirmLifetimeCaseUrl = "https://erasure.invalid/case/lifetime";
+
+export const participantCleanupUrl = "https://owner.internal/erasure/cleanup";
+export const confirmCleanupUrl = "https://erasure.invalid/case/confirm-cleanup";
+export const CleanupCommand = Schema.Struct({
+  ...ErasureHandoff.fields,
+  action: Schema.Literals(["clean", "release", "expire"]),
+});
+export const CleanupPermission = Schema.Struct({
+  wompi: Schema.Boolean,
+  whatsapp: Schema.Boolean,
+});
+export const CleanupProgress = Schema.Struct({
+  done: Schema.Boolean,
+  lastErasedAtMs: Schema.Int,
+  protectUntilMs: Schema.Int,
+});
+
+export const erasureRecoveryWindowMs = 2_592_000_000;

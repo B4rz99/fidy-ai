@@ -1,8 +1,22 @@
+import { scopeDirectoryUrl } from "../erasure/contract";
 import { providerAllowanceUrl } from "../resource-admission/contract";
 import { admitSharedProvider } from "../resource-admission/operations";
-import { outstandingDirectoryHandoffs, reconcileErasedHandoffs } from "./internal/erasure";
-import { fenceErasureParticipant, participantDrain } from "../erasure-store/operations";
-import { participantDrainedUrl, participantFenceUrl } from "../erasure-store/contract";
+import {
+  cleanDirectoryCase,
+  inspectDirectoryScope,
+  outstandingDirectoryHandoffs,
+  reconcileErasedHandoffs,
+} from "./internal/erasure";
+import {
+  fenceErasureParticipant,
+  handleSharedCleanup,
+  participantDrain,
+} from "../erasure-store/operations";
+import {
+  participantCleanupUrl,
+  participantDrainedUrl,
+  participantFenceUrl,
+} from "../erasure-store/contract";
 import { nativePATDirectoryUrl } from "../tokens/contract";
 import { oauthRouteCommandUrl } from "../oauth-agents/contract";
 import { routeSessionRequest } from "./operations";
@@ -90,7 +104,11 @@ import { canonicalRequestProtection } from "../canonical-admission/contract";
 
 type DirectoryEnvironment = StoreReleaseEnvironment &
   ProviderConfiguration &
-  Readonly<{ DIRECTORY: DurableObjectNamespace; USER_STORE: DurableObjectNamespace }>;
+  Readonly<{
+    DIRECTORY: DurableObjectNamespace;
+    USER_STORE: DurableObjectNamespace;
+    ERASURE: DurableObjectNamespace;
+  }>;
 
 const digestBytes = 32;
 const sourceExpiryPageSize = 32;
@@ -163,23 +181,50 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
       ).pipe(Effect.asVoid)
     );
   }
-  override fetch(request: Request): Promise<Response> {
-    if (!this.ctx.id.equals(this.env.DIRECTORY.idFromName(directoryName))) {
-      return Promise.resolve(new Response(null, { status: 404 }));
+  private erasure(request: Request): Promise<Response> {
+    if (request.url === scopeDirectoryUrl) {
+      return this.runtime.runPromise(
+        inspectDirectoryScope(request, this.env.ERASURE).pipe(
+          Effect.catchCause(() => Effect.succeed(unavailable()))
+        )
+      );
     }
-    if (request.method === "POST" && request.url === participantDrainedUrl) {
+    if (request.url === participantCleanupUrl) {
+      return this.runtime.runPromise(
+        handleSharedCleanup(request, this.env.ERASURE, cleanDirectoryCase).pipe(
+          Effect.catchCause(() => Effect.succeed(unavailable()))
+        )
+      );
+    }
+    if (request.url === participantDrainedUrl) {
       return this.runtime.runPromise(
         participantDrain(request, outstandingDirectoryHandoffs).pipe(
           Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
         )
       );
     }
-    if (request.method === "POST" && request.url === participantFenceUrl) {
+    {
       return this.runtime.runPromise(
         fenceErasureParticipant(request, this.env.USER_STORE, this.ctx.storage).pipe(
           Effect.catchCause(() => Effect.succeed(unavailable()))
         )
       );
+    }
+  }
+  override fetch(request: Request): Promise<Response> {
+    if (!this.ctx.id.equals(this.env.DIRECTORY.idFromName(directoryName))) {
+      return Promise.resolve(new Response(null, { status: 404 }));
+    }
+    if (
+      request.method === "POST" &&
+      [
+        scopeDirectoryUrl,
+        participantCleanupUrl,
+        participantDrainedUrl,
+        participantFenceUrl,
+      ].includes(request.url)
+    ) {
+      return this.erasure(request);
     }
     if (ownerCheckRequest(request)) {
       return this.runtime.runPromise(

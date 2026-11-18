@@ -1,3 +1,4 @@
+import type { CleanupCommand } from "../../erasure-store/contract";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { ownerCheckRequest, ownerCheckResponse } from "../../maintenance/contract";
 import {
@@ -288,4 +289,22 @@ const recoverRegistration = Effect.fn(function* (
 export const outstandingPricingRegistrations = (userId: string): OwnedStatement => ({
   sql: "EXISTS(SELECT 1 FROM price_registrations WHERE user_id=? AND outcome IS NULL)",
   params: [userId],
+});
+
+const erasurePage = 32;
+/** Shared Price publication remains available while the exact User's already-settled records drain. */
+export const cleanPricingCase = Effect.fn(function* (scope: typeof CleanupCommand.Type) {
+  const sql = yield* SqlClient.SqlClient;
+  if (
+    scope.action !== "clean" ||
+    (yield* sql`SELECT 1 FROM price_registrations WHERE user_id=${scope.userId} AND outcome IS NULL LIMIT 1`)
+      .length !== 0
+  ) {
+    return false;
+  }
+  const removed =
+    yield* sql`DELETE FROM price_registrations WHERE operation_id IN(SELECT operation_id FROM price_registrations WHERE user_id=${scope.userId} AND outcome IS NOT NULL LIMIT 32) RETURNING 1`;
+  const allowances =
+    yield* sql`DELETE FROM enrollment_allowances WHERE id IN(SELECT id FROM enrollment_allowances WHERE user_id=${scope.userId} LIMIT 32) RETURNING 1`;
+  return removed.length < erasurePage && allowances.length < erasurePage;
 });

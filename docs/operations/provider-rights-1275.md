@@ -37,12 +37,29 @@ the provider capabilities and their limits. Recheck the actual account before ex
 | Microsoft authentication                   | As above, preserving the tenant-qualified issuer/subject and personal versus organizational flow distinction. Do not disclose tenant/subject data publicly or request employer-tenant deletion by default.                                                                                                                                                     | A common-v2 login is not authority over an employer's records. Record the actual applicable provider/tenant route, retained scope and decision separately from Fidy's own credential deletion.                                                                                                                                                                                            |
 | SupportInbox / CaseRegister / CaseEvidence | Use exact correspondence IDs, case/evidence references and approved scope in the actual restricted mailbox/local store. Identify the inbox provider before instructing it. Apply the reviewed finite retention and approved holds to attachments, trash/archive and backups too.                                                                               | Record the real disposal or hold. Neither a mail reply nor a local database row proves mailbox/archive/backup erasure. Do not destroy unresolved case evidence just to make a completion status pass.                                                                                                                                                                                     |
 
-The #1274 `CustodyEvidence` contract has distinct Cloudflare, Kapso, Meta, Resend, Wompi,
-SupportInbox, CaseRegister and CaseEvidence custodians. It does **not** currently expose separate
-Google/Microsoft custodian outcomes. Resolve their per-flow applicability before claiming the whole
-chain is covered: a reviewed independent-controller/no-Fidy-request decision belongs in restricted
-case evidence; if the actual decision requires tracked provider erasure, extend the owner contract
-and native tests before using it. Do not disguise either provider as Meta or silently exclude it.
+### Native case evidence
+
+Use the existing Titular operator Access assertion for `POST /internal/titular-erasure`.
+`Receipt` accepts the exact UserId and ErasureReference. During ExternalPending, `CustodyScope`
+accepts the same two fields, a custodian and a numeric `after` cursor starting at zero. Follow
+`next` while it is present. Keep the response in the restricted case procedure. For Resend it
+contains the original delivery work ID used for idempotency and the request time. For Wompi it
+contains the merchant environment and reference. For Kapso and Meta it contains the WhatsApp
+endpoint and delivery correlation. Reconcile them with the actual provider account and reviewed
+case scope before submitting a provider request. An empty page leaves applicability unresolved.
+
+Submit `CustodyEvidence` with the exact UserId and evidence binding the ErasureReference, custodian,
+opaque evidence-reference UUID and observed outcome. Record acceptance as `Accepted`; enter
+`Verified` only after verified cleanup of the applicable scope. Record reviewed non-applicability
+through `NotApplicable`. For uncertain outcomes choose `Unresolved` with `capability-unverified`,
+`retention-conflict` or `request-declined`. Keep supporting correspondence in the restricted
+procedure. The case retains the recording operator and time. Retry the same observation with the
+same evidence reference. The scoped locator page closes when its owner reaches a terminal state.
+
+The executable custody contract covers Cloudflare, Kapso, Meta, Resend and Wompi. Decisions for
+Google and Microsoft, support correspondence and other separately held case records remain in
+their respective reviewed procedures. If the actual decision requires another tracked custodian,
+extend the owner contract and native tests before using it.
 
 ## Disposable rehearsal
 

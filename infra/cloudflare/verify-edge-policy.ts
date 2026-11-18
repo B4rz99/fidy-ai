@@ -2,8 +2,17 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "cf0544efd5fb0a26e8dae94c14a4002a70d7b09d6c1068369727ae014bfcc180";
+const expectedEdgePolicyDigest = "b12df413552b626bb280f0e0078e6c2b6c0d35615e09a77d11e3ea2172225879";
 const securityArtifacts = [
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/erasure-store/internal/settlement.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/erasure/internal/native-evidence.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/erasure/internal/native-scope.ts", import.meta.url)
+  ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/erasure-store/internal/local-purge.ts", import.meta.url)
   ).text(),

@@ -78,6 +78,9 @@ const prepareInvitation = Effect.fn(function* (event: typeof WhatsAppBootstrapTe
   return yield* Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
     yield* drainBootstrapExpiry(now);
+    const held =
+      yield* sql`SELECT 1 FROM whatsapp_routes w JOIN erasure_barriers b ON b.user_id=w.user_id WHERE w.portfolio=${event.portfolio} AND w.bsuid=${event.bsuid}`;
+    if (held.length !== 0) return noAction();
     const [known] =
       yield* sql`SELECT user_id FROM whatsapp_routes WHERE portfolio=${event.portfolio} AND bsuid=${event.bsuid} AND established=1`;
     if (known !== undefined) return yield* Schema.decodeUnknownEffect(Schema.String)(known.user_id);

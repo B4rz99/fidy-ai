@@ -1,4 +1,8 @@
-import { erasureBarrierSchema } from "../../erasure-store/operations";
+import {
+  cleanupBarrierColumns,
+  deletionWitness,
+  erasureBarrierSchema,
+} from "../../erasure-store/operations";
 import type { StoreHistory } from "../../runtime/sqlite/contract";
 import { Schema } from "effect";
 import { Price, SubscriptionOffers } from "../../../src/core/subscription/contract";
@@ -70,6 +74,19 @@ export const pricingHistory: StoreHistory = {
       statements: [
         erasureBarrierSchema,
         "CREATE TRIGGER reconcile_erasing_registrations AFTER INSERT ON erasure_barriers BEGIN UPDATE price_registrations SET next_check_ms=NEW.requested_at_ms WHERE user_id=NEW.user_id AND outcome IS NULL; END",
+      ],
+    },
+    {
+      version: 4,
+      id: "erasure-cleanup-receipts",
+      statements: [
+        ...cleanupBarrierColumns,
+        deletionWitness({
+          table: "price_registrations",
+          deadline: "json_extract(OLD.request,'$.deadlineMs')",
+          owner: "OLD.user_id",
+        }),
+        deletionWitness({ table: "enrollment_allowances", deadline: "0", owner: "OLD.user_id" }),
       ],
     },
   ],

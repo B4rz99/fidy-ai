@@ -426,10 +426,12 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             directory.fetch(participantFenceUrl, { method: "POST", body: JSON.stringify(wrong) })
           )).ok
         ).toBe(false);
+        const issuedAt = yield* Clock.currentTimeMillis;
         const external = (userId: string): ReturnType<typeof history> =>
           native(() =>
             directory.fetch(externalReserveUrl, {
               method: "POST",
+              headers: { "fidy-route-issued-ms": String(issuedAt) },
               body: JSON.stringify({
                 userId,
                 operationId: known.operationId,

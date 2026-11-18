@@ -1,11 +1,12 @@
 import { digestBytes } from "../../secret-material/operations";
 import { Hex } from "effect/encoding";
-import { Effect, Option, Schema } from "effect";
+import { Clock, Effect, Option, Schema } from "effect";
 import { chargeBootstrapWindows } from "./admission";
 import {
   ExternalEventKey,
   ExternalEventRoute,
   StatusLookupCoordinates,
+  currentRouteReservation,
   externalReserveUrl,
   statusLookupAdmissionUrl,
 } from "../contract";
@@ -26,6 +27,9 @@ export const externalEventRequest = Effect.fn(function* (request: Request) {
     const route = yield* Schema.decodeUnknownEffect(ExternalEventRoute)(body);
     return yield* withStoreAdmission((growth) =>
       Effect.gen(function* () {
+        if (!currentRouteReservation({ request, now: yield* Clock.currentTimeMillis })) {
+          return new Response(null, { status: conflictStatus });
+        }
         if ((yield* sql`SELECT 1 FROM erasure_barriers WHERE user_id=${route.userId}`).length > 0) {
           return new Response(null, { status: conflictStatus });
         }

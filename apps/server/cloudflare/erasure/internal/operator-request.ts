@@ -193,6 +193,8 @@ const commandPath = (
       return "erasure-continue";
     case "Receipt":
       return "erasure-receipt";
+    case "CustodyScope":
+      return "erasure-custody-scope";
     case "CustodyEvidence":
       return "erasure-custody-evidence";
   }
@@ -211,6 +213,14 @@ const commandBody = (
   if (command.action === "CustodyEvidence") {
     return { ...admission, reference: command.evidence.reference, evidence: command.evidence };
   }
+  if (command.action === "CustodyScope") {
+    return {
+      ...admission,
+      reference: command.reference,
+      custodian: command.custodian,
+      after: command.after,
+    };
+  }
   return { ...admission, reference: command.reference };
 };
 
@@ -224,6 +234,7 @@ const operatorConfiguration = (
     environment.CLOUDFLARE_ACCESS_AUDIENCE,
     environment.BILLING_SUPPORT_AUDIENCE ?? "",
     environment.PRICING_PUBLISH_AUDIENCE ?? "",
+    environment.SAMPLE_REVIEW_AUDIENCE ?? "",
   ],
 });
 

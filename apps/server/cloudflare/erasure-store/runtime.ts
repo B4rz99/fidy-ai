@@ -1,5 +1,7 @@
+import { confirmCleanup } from "./internal/settlement";
 import { confirmPurge, emptyUserDisposition } from "./internal/local-purge";
 import {
+  confirmCleanupUrl,
   confirmDrainUrl,
   confirmLifetimeCaseUrl,
   confirmPurgeUrl,
@@ -88,6 +90,8 @@ export class Erasure extends DurableObject<ErasureEnvironment> {
       return this.runtime.runPromise(confirmPurge(request).pipe(unavailable));
     }
     switch (request.url) {
+      case confirmCleanupUrl:
+        return this.runtime.runPromise(confirmCleanup(request).pipe(unavailable));
       case erasedUserUrl:
         return this.runtime.runPromise(emptyUserDisposition(request).pipe(unavailable));
       case confirmLifetimeCaseUrl:
@@ -96,15 +100,10 @@ export class Erasure extends DurableObject<ErasureEnvironment> {
         return this.runtime.runPromise(
           registerErasureCase(request, this.env.USER_STORE, this.ctx.storage).pipe(unavailable)
         );
-      case "https://coordinator.internal/erasure-receipt":
-      case "https://coordinator.internal/erasure-continue":
-        return this.runtime.runPromise(
-          caseOperatorRequest(request, this.ctx.storage).pipe(unavailable)
-        );
-      case "https://coordinator.internal/erasure-custody-evidence":
-        return Promise.resolve(new Response(null, { status: 409 }));
       default:
-        return Promise.resolve(new Response(null, { status: 404 }));
+        return this.runtime.runPromise(
+          caseOperatorRequest(request, this.ctx.storage, this.env.DIRECTORY).pipe(unavailable)
+        );
     }
   }
   override fetch(request: Request): Promise<Response> {

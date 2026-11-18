@@ -229,6 +229,7 @@ const manifests = Effect.fnUntraced(function* (module: string) {
 });
 
 type NativeFixture =
+  | "custody"
   | "erasure"
   | "capacity"
   | "connection"
@@ -310,8 +311,8 @@ const connectionPlatformOptions = Effect.fnUntraced(function* (enabled: boolean)
 });
 
 const fixtureModule = (mode: NativeFixture): string => {
-  if (mode === "erasure") return "./erasure-worker.test-fixture.ts";
   if (mode === "capacity") return "./capacity-worker.test-fixture.ts";
+  if (mode === "erasure" || mode === "custody") return "./erasure-worker.test-fixture.ts";
   if (mode === "login") return "./login-email-worker.test-fixture.ts";
   if (mode === "connection") return "./connection-worker.test-fixture.ts";
   return "./core-worker.ts";
@@ -324,8 +325,8 @@ const fixtureWorkers = (
   coreModule: string;
   ingressOptions: Pick<ConstructorParameters<typeof Miniflare>[0], "upstream">;
 }> => ({
-  withBilling: mode === "billing" || mode === "erasure",
-  withOidc: mode === "browser" || mode === "login",
+  withBilling: ["billing", "erasure", "custody"].includes(mode),
+  withOidc: ["browser", "login", "custody"].includes(mode),
   coreModule: fixtureModule(mode),
   ingressOptions: ["oauth", "connection"].includes(mode)
     ? { upstream: "https://api.fidyapp.com" }
@@ -535,6 +536,7 @@ const createUserPlatform = Effect.fnUntraced(function* (mode: NativeFixture) {
     );
 });
 
+export const nativeCustodyPlatform = createUserPlatform("custody");
 export const nativePurgePlatform = createUserPlatform("erasure");
 export const nativeLoginPlatform = createUserPlatform("login");
 export const nativeBrowserPlatform = createUserPlatform("browser");

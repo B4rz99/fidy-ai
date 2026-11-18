@@ -91,7 +91,34 @@ export const ErasureRestoreAdmission = Schema.Struct({
   ...ErasureContinuation.fields,
   generation: ErasureGeneration,
 });
+const custodyScopeFields = {
+  custodian: Schema.Literals(["Resend", "Wompi", "Kapso", "Meta"]),
+  after: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+};
+export const CustodyScopeAdmission = Schema.Struct({
+  ...ErasureContinuation.fields,
+  ...custodyScopeFields,
+});
+export const scopeDirectoryUrl = "https://directory.invalid/erasure/custody-scope";
+export const custodyScopePage = (
+  rows: ReadonlyArray<Readonly<Record<string, unknown>>>
+): Response => {
+  const pageSize = 16;
+  return Response.json(
+    {
+      entries: rows.slice(0, pageSize).map(({ cursor: _cursor, ...projection }) => projection),
+      next: rows.length > pageSize ? rows[pageSize - 1]?.cursor : null,
+    },
+    { headers: { "cache-control": "no-store" } }
+  );
+};
 export const ErasureOperatorAction = Schema.Union([
+  Schema.Struct({
+    action: Schema.Literal("CustodyScope"),
+    userId: UserId,
+    reference: ErasureReference,
+    ...custodyScopeFields,
+  }),
   Schema.Struct({ action: Schema.Literal("MigrateRegistry") }),
   Schema.Struct({ action: Schema.Literal("Initialize") }),
   Schema.Struct({ action: Schema.Literal("Restore") }),
@@ -119,6 +146,7 @@ export type ErasureOperatorEnvironment = Readonly<{
       ERASURE: ErasureRegistryNamespace;
       USER_STORE: ErasureRegistryNamespace;
       ERASURE_SUPPORT_AUDIENCE: string;
+      SAMPLE_REVIEW_AUDIENCE: string;
       PRICING_PUBLISH_AUDIENCE: string;
       BILLING_SUPPORT_AUDIENCE: string;
       ERASURE_REQUIRED: string;

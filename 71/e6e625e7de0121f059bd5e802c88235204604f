@@ -1,0 +1,33 @@
+apps/server/cloudflare/provider-authentication/internal/configuration.ts
+  s_a1be23a656acf0::t_0b9b30da1eace6 1,19-20
+apps/server/cloudflare/public-worker-browser-entry.test.ts
+  s_a1be23a656acf0::t_ddf40d59e1a7e6 76-105
+apps/server/cloudflare/public-worker.ts
+  s_a1be23a656acf0::t_0704e61d28aa57 93-94
+apps/server/cloudflare/runtime/contract.ts
+  s_a1be23a656acf0::t_9913a6469d1e21 1,93-94
+apps/server/cloudflare/subscription/internal/enrollment-policy.ts
+  s_a1be23a656acf0::t_201ed98518b49f 21
+infra/cloudflare/edge-security.ts
+  s_a1be23a656acf0::t_cc923bd38f6334 1,27-28,34-35,68,80
+infra/cloudflare/storage-installation.ts
+  s_a1be23a656acf0::t_c6497988713a1b 1,12-13,37
+infra/cloudflare/workers.test.ts
+  s_a1be23a656acf0::t_67cf7e8c33fc71 478,510,533
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "71e6e625e7de0121f059bd5e802c88235204604f",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

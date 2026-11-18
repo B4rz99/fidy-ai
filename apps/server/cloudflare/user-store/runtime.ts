@@ -14,6 +14,13 @@ import {
   recoverLocalHosted,
   repairLocalHostedAlarm,
 } from "../agent/runtime";
+import { confirmHandoffUrl } from "../erasure-store/contract";
+import {
+  confirmErasureHandoff,
+  offerErasureHandoff,
+  repairErasureHandoff,
+} from "./internal/erasure-handoff";
+import { requestLocalErasure } from "./internal/erasure-request";
 import { HttpClient } from "effect/http";
 import { Cause, Clock, Context, Effect, Layer, Option, Result } from "effect";
 import { OutboundHttpLive } from "../outbound-http/runtime";
@@ -196,6 +203,7 @@ type UserStoreEnvironment = NativeReminderEnvironment &
   BancolombiaSandboxEnvironment &
   StoreReleaseEnvironment &
   Readonly<{
+    ERASURE: DurableObjectNamespace;
     PRICING: DurableObjectNamespace;
     BROWSER_ORIGIN: string;
     RESEND_API_KEY: string;
@@ -314,6 +322,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     return this.runtime.runPromise(
       Effect.flatMap(Clock.currentTimeMillis, (current) => {
         const families = [
+          offerErasureHandoff(this.ctx.storage, this.env.ERASURE, this.owns),
           offerLoginEmail(this.env.BROWSER_PAIRING_EMAIL_QUEUE, this.ctx.storage).pipe(
             Effect.mapError((cause) => new Cause.UnknownError(cause))
           ),
@@ -514,6 +523,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
         const current = yield* Clock.currentTimeMillis;
         const inspections = yield* Effect.all(
           [
+            repairErasureHandoff(storage),
             repairLoginAlarm(current, storage),
             repairLocalHostedAlarm(current, storage),
             repairLocalReminderAlarm(current, storage, remindersEnabled),
@@ -655,6 +665,24 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     command: string,
     owns: (id: string) => boolean
   ): Option.Option<Promise<Response>> {
+    if (command === "POST /web/privacy/erasure") {
+      return Option.some(
+        this.runtime.runPromise(
+          requestLocalErasure({
+            request,
+            origin: this.env.BROWSER_ORIGIN,
+            storage: this.ctx.storage,
+            owns,
+          }).pipe(
+            Effect.tap((response) =>
+              response.ok
+                ? offerErasureHandoff(this.ctx.storage, this.env.ERASURE, owns).pipe(Effect.ignore)
+                : Effect.void
+            )
+          )
+        )
+      );
+    }
     if (isBrowserObservation(command, request)) {
       return Option.some(this.runtime.runPromise(browserSessionRequest(request, owns)));
     }
@@ -738,9 +766,11 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
   private registeredRequest(request: Request, registered: boolean): Promise<Response> {
     const owns = (userId: string): boolean => registered && this.owns(userId);
     if (request.method === "POST") {
-      if (request.url === "https://user.invalid/hosted-turn/whatsapp") {
+      if (request.url === confirmHandoffUrl) {
         return this.runtime.runPromise(
-          acceptLocalHostedText(request, owns, { storage: this.ctx.storage, env: this.env })
+          confirmErasureHandoff(request, owns).pipe(
+            Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+          )
         );
       }
       const ingestion = this.ingestionRequest(request, owns);
@@ -790,6 +820,13 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     owns: (id: string) => boolean
   ): Option.Option<Promise<Response>> {
     if (request.method !== "POST") return Option.none();
+    if (request.url === "https://user.invalid/hosted-turn/whatsapp") {
+      return Option.some(
+        this.runtime.runPromise(
+          acceptLocalHostedText(request, owns, { storage: this.ctx.storage, env: this.env })
+        )
+      );
+    }
     if (isLocalHostedPath(new URL(request.url).pathname)) {
       return Option.some(
         this.runtime.runPromise(

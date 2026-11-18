@@ -100,7 +100,10 @@ const register = Effect.fn(function* (
       : input.admission.enrollmentId;
   return yield* withStoreAdmission((admitGrowth) =>
     Effect.gen(function* () {
-      if (input.deadlineMs <= (yield* Clock.currentTimeMillis)) {
+      if (
+        (yield* sql`SELECT 1 WHERE ${input.deadlineMs}<=${yield* Clock.currentTimeMillis} OR EXISTS(SELECT 1 FROM erasure_barriers WHERE user_id=${input.userId})`)
+          .length > 0
+      ) {
         return new Response(null, { status: 410 });
       }
       const saved =
@@ -213,7 +216,7 @@ export const recoverPricing = Effect.fn(function* (
   const page = yield* withStoreCapacity("required")(
     Effect.gen(function* () {
       const due =
-        yield* sql`UPDATE price_registrations SET next_check_ms=${now + checkCooldownMs} WHERE operation_id IN(SELECT operation_id FROM price_registrations WHERE outcome IS NULL AND next_check_ms<=${now} ORDER BY next_check_ms LIMIT 16) RETURNING user_id,request`;
+        yield* sql`UPDATE price_registrations SET next_check_ms=${now + checkCooldownMs} WHERE operation_id IN(SELECT operation_id FROM price_registrations WHERE outcome IS NULL AND next_check_ms<=${now} ORDER BY next_check_ms LIMIT 16) RETURNING user_id,request,EXISTS(SELECT 1 FROM erasure_barriers e WHERE e.user_id=price_registrations.user_id) AS fenced`;
       const next = yield* nextRegistrationCheck;
       if (Option.isSome(next)) yield* preserveStoreAlarm(storage, next.value);
       return due;
@@ -246,7 +249,7 @@ const allowEnrollment = Effect.fn(function* (request: Request) {
     Effect.gen(function* () {
       yield* sql`DELETE FROM enrollment_allowances WHERE id IN(SELECT id FROM enrollment_allowances WHERE at_ms<=${at - hourlyWindowMs} ORDER BY at_ms LIMIT 32)`;
       const rows =
-        yield* sql`INSERT INTO enrollment_allowances(user_id,at_ms) SELECT ${body.value.userId},${at} WHERE (SELECT count(*) FROM enrollment_allowances WHERE at_ms>${at - hourlyWindowMs})<10000 AND (SELECT count(*) FROM enrollment_allowances WHERE user_id=${body.value.userId} AND at_ms>${at - hourlyWindowMs})<24 RETURNING id`;
+        yield* sql`INSERT INTO enrollment_allowances(user_id,at_ms) SELECT ${body.value.userId},${at} WHERE NOT EXISTS(SELECT 1 FROM erasure_barriers WHERE user_id=${body.value.userId}) AND (SELECT count(*) FROM enrollment_allowances WHERE at_ms>${at - hourlyWindowMs})<10000 AND (SELECT count(*) FROM enrollment_allowances WHERE user_id=${body.value.userId} AND at_ms>${at - hourlyWindowMs})<24 RETURNING id`;
       return new Response(null, { status: rows.length === 1 ? noContent : rateLimited });
     })
   );
@@ -263,8 +266,13 @@ const recoverRegistration = Effect.fn(function* (
   const request = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(registration))(
     row.request
   );
+  const fenced = yield* Schema.decodeUnknownEffect(Schema.Literals([0, 1]))(row.fenced);
+  const endpoint =
+    fenced === 1
+      ? "https://user.invalid/billing/registration-cancel"
+      : "https://user.invalid/billing/registration-outcome";
   const res = yield* Effect.tryPromise(() =>
-    users.getByName(request.userId).fetch("https://user.invalid/billing/registration-outcome", {
+    users.getByName(request.userId).fetch(endpoint, {
       method: "POST",
       body: String(row.request),
     })

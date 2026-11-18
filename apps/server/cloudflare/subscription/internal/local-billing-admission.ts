@@ -171,7 +171,7 @@ export const cancelRegistration = Effect.fn(function* (
           yield* sql`UPDATE billing_admissions SET outcome='cancelled',ack_due_ms=${now} WHERE operation_id=${reg.operationId} AND outcome IS NULL RETURNING operation_id`;
         if (fenced.length !== 1) return yield* Effect.fail("billing-fence-unavailable" as const);
         if (reg.admission.kind === "enrollment") {
-          yield* sql`UPDATE payment_enrollments SET state='expired',next_lookup_ms=NULL WHERE id=${reg.admission.enrollmentId} AND state<>'available'`;
+          yield* sql`UPDATE payment_enrollments SET state='expired',next_lookup_ms=NULL WHERE id=${reg.admission.enrollmentId} AND (state IN('preparing','prepared') OR NOT EXISTS(SELECT 1 FROM erasure_requests WHERE user_id=${reg.userId})) AND state<>'available'`;
         }
       }
       return json({ body: { request: reg, outcome: row.outcome ?? "cancelled" }, status: 200 });

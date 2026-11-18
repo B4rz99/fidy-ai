@@ -2,8 +2,29 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "4569c24dcb677e5ae6c184c26343e53fa47a7ea552478902757500e77ab2eb96";
+const expectedEdgePolicyDigest = "bd41ee7210fb69daa9f6643feaa242eabc7830e00583e2409c9e9a6be12bab4d";
 const securityArtifacts = [
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/directory/internal/erasure.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/erasure-store/contract.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/erasure-store/runtime.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/erasure-store/internal/cases.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/erasure/operations.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/user-store/internal/erasure-handoff.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/user-store/internal/erasure-request.ts", import.meta.url)
+  ).text(),
   await Bun.file(
     new URL(
       "../../apps/server/cloudflare/connections/internal/sqlite-activation.ts",

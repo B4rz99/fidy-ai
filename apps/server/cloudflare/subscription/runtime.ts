@@ -1,3 +1,5 @@
+import { fenceErasureParticipant } from "../erasure-store/operations";
+import { participantFenceUrl } from "../erasure-store/contract";
 import { Hex } from "effect/encoding";
 import { digestBytes } from "../secret-material/operations";
 import {
@@ -336,6 +338,17 @@ export class Pricing {
   fetch(request: Request): Promise<Response> {
     if (this.state.id.name !== pricingName) {
       return Promise.resolve(new Response(null, { status: 404 }));
+    }
+    if (
+      request.method === "POST" &&
+      request.url === participantFenceUrl &&
+      Option.isSome(this.users)
+    ) {
+      return this.runtime.runPromise(
+        fenceErasureParticipant(request, this.users.value, this.state.storage).pipe(
+          Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
+        )
+      );
     }
     if (request.method === "GET" && request.url === storeReadinessUrl) {
       return this.runtime.runPromise(

@@ -36,7 +36,9 @@ export const directoryDeadline = Effect.gen(function* () {
   const sql = yield* SqliteClient;
   const [row] = yield* sql.unsafe(
     `SELECT min(column1) AS deadline FROM (VALUES
-      ((SELECT min(expires_at_ms) FROM identity_replacements)),
+      ((SELECT min(due_ms) FROM identity_replacement_checks)),
+      ((SELECT min(expires_at_ms) FROM identity_replacements WHERE state<>'reserved')),
+      ((SELECT min(erasure_check_ms) FROM fenced_provider_handoffs)),
       ((SELECT min(expires_at_ms) FROM email_capacity_slots WHERE receipt IS NOT NULL)),
       ((SELECT min(hard_expires_at_ms) FROM session_routes)),
       ((SELECT min(expires_at_ms) FROM recovery_rotations WHERE state<>'reserved')),

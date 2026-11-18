@@ -1,4 +1,5 @@
 import { providerAllowanceSchema } from "../../resource-admission/contract";
+import { erasureBarrierSchema } from "../../erasure-store/operations";
 import { publicDirectorySchema } from "./credential-schema";
 import { externalRoutesSchema } from "./external-events";
 import type { StoreHistory } from "../../runtime/sqlite/contract";
@@ -109,5 +110,40 @@ export const directoryHistory: StoreHistory = {
       ],
     },
     { version: 9, id: "shared-provider-allowances", statements: providerAllowanceSchema },
+    {
+      version: 10,
+      id: "user-erasure-barrier",
+      statements: [
+        erasureBarrierSchema,
+        "ALTER TABLE identity_replacements ADD COLUMN retry_at_ms INTEGER",
+        "CREATE VIEW identity_replacement_checks AS SELECT r.id,coalesce(r.retry_at_ms,CASE WHEN b.user_id IS NULL THEN r.expires_at_ms ELSE 0 END) AS due_ms FROM identity_replacements r LEFT JOIN erasure_barriers b ON b.user_id=r.user_id WHERE r.state='reserved'",
+
+        "ALTER TABLE provider_attempts ADD COLUMN erasure_check_ms INTEGER NOT NULL DEFAULT 0",
+        "CREATE VIEW fenced_provider_handoffs AS SELECT a.id,a.erasure_check_ms FROM erasure_barriers e JOIN browser_pairings p ON p.user_id=e.user_id JOIN provider_attempts a ON a.pairing_id=p.id WHERE a.state='bound' AND a.acknowledged=0",
+        "CREATE INDEX bound_pairing_user ON browser_pairings(user_id) WHERE user_id IS NOT NULL",
+
+        ...[
+          "session_routes",
+          "pat_routes",
+          "provider_routes",
+          "whatsapp_routes",
+          "recovery_routes",
+          "channel_approvals",
+          "support_handoffs",
+          "verified_email_routes",
+          "identity_replacements",
+          "external_event_routes",
+          "oauth_routes",
+        ].map(
+          (table) =>
+            `CREATE TRIGGER fence_${table}_insert BEFORE INSERT ON ${table} WHEN EXISTS(SELECT 1 FROM erasure_barriers WHERE user_id=NEW.user_id) BEGIN SELECT RAISE(ABORT,'user_erasure_fence'); END`
+        ),
+        "CREATE TRIGGER fence_recovery_rotation BEFORE INSERT ON recovery_rotations WHEN NEW.state='reserved' AND EXISTS(SELECT 1 FROM erasure_barriers WHERE user_id=NEW.user_id) BEGIN SELECT RAISE(ABORT,'user_erasure_fence'); END",
+        ...["browser_pairings", "pat_bootstrap", "oauth_review_requests"].map(
+          (table) =>
+            `CREATE TRIGGER fence_${table}_binding BEFORE UPDATE ON ${table} WHEN EXISTS(SELECT 1 FROM erasure_barriers WHERE user_id=NEW.user_id) BEGIN SELECT RAISE(ABORT,'user_erasure_fence'); END`
+        ),
+      ],
+    },
   ],
 };

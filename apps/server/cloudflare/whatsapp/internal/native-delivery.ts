@@ -97,20 +97,17 @@ const start = Effect.fn(function* (work: Send, enabled: boolean) {
   return yield* withStoreCapacity("required")(
     Effect.gen(function* () {
       const sql = yield* SqliteClient;
-      const guard = sendAllowed(work, yield* Clock.currentTimeMillis);
       const now = yield* Clock.currentTimeMillis;
+      const guard = sendAllowed(work, now);
+      const [live] = yield* sql.unsafe(guard.sql, guard.params);
+      if (live === undefined) return answer(conflictStatus);
       if (work.family === "disclosure" && !(yield* claimLocalDisclosure(work, enabled))) {
         return answer(conflictStatus);
       }
       if (work.family === "proactivity") {
-        const [live] = yield* sql.unsafe(guard.sql, guard.params);
         const [ready] =
           yield* sql`SELECT 1 FROM whatsapp_deliveries WHERE user_id=${work.userId} AND family='proactivity' AND operation_id=${work.operationId} AND correlation=${work.correlation} AND route_ready=1 AND started_ms IS NULL AND state='staged'`;
-        if (
-          ready === undefined ||
-          live === undefined ||
-          !(yield* claimLocalReminderPurpose(work, enabled))
-        ) {
+        if (ready === undefined || !(yield* claimLocalReminderPurpose(work, enabled))) {
           return answer(conflictStatus);
         }
       }
@@ -162,24 +159,26 @@ const status = Effect.fn(function* (work: typeof DeliveredObservation.Type) {
   const bsuid = event.recipientUserId ?? null,
     phone = event.recipientPhone ?? null;
   const [row] =
-    yield* sql`SELECT d.state FROM whatsapp_deliveries d JOIN users u ON u.id=d.user_id AND u.whatsapp_portfolio_id=d.portfolio AND u.whatsapp_bsuid=d.bsuid
+    yield* sql`SELECT EXISTS(SELECT 1 FROM erasure_requests WHERE user_id=d.user_id) AS draining FROM whatsapp_deliveries d JOIN users u ON u.id=d.user_id AND u.whatsapp_portfolio_id=d.portfolio AND u.whatsapp_bsuid=d.bsuid
     WHERE d.user_id=${work.userId} AND d.operation_id=${work.operationId} AND d.family=${work.family} AND d.portfolio=${event.portfolio}
       AND d.endpoint=${event.businessPhoneNumberId} AND d.correlation=${event.correlationToken} AND d.started_ms IS NOT NULL
       AND (d.provider_message_id IS NULL OR d.provider_message_id=${event.providerMessageId})
       AND ((d.sandbox_phone IS NULL AND d.bsuid=${bsuid}) OR (d.sandbox_phone=${phone} AND (${bsuid} IS NULL OR d.bsuid=${bsuid})))
       AND ${event.occurredAtMs}+1000>=d.started_ms AND ${event.occurredAtMs}<=${event.receivedAtMs}+300000
-      AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE user_id=d.user_id)`;
+      AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE user_id=d.user_id AND state<>'Draining')`;
   if (row === undefined) return answer(noContentStatus);
   const [fresh] =
     yield* sql`INSERT INTO whatsapp_delivery_status(user_id,family,operation_id,provider_message_id,outcome,occurred_ms)
     VALUES(${work.userId},${work.family},${work.operationId},${event.providerMessageId},${event.outcome},${event.occurredAtMs}) ON CONFLICT DO NOTHING RETURNING 1`;
-  if (fresh === undefined) return yield* settledStatus(work);
+  const settled =
+    row.draining === 1 ? Effect.succeed(answer(noContentStatus)) : settledStatus(work);
+  if (fresh === undefined) return yield* settled;
   yield* sql`UPDATE whatsapp_deliveries SET provider_message_id=coalesce(provider_message_id,${event.providerMessageId}),
     state=CASE WHEN state='delivered' OR (family='hosted' AND state='rejected') THEN state WHEN ${event.outcome}='delivered' AND (family<>'hosted' OR ${event.receivedAtMs}<=original_deadline_ms) THEN 'delivered'
     WHEN state='rejected' THEN state WHEN ${event.outcome}='failed' THEN 'rejected' WHEN family<>'hosted' AND state IN ('sending','ambiguous') THEN 'accepted' ELSE state END,
     delivered_at_ms=CASE WHEN ${event.outcome}='delivered' AND (family<>'hosted' OR state<>'rejected') AND (family<>'hosted' OR ${event.receivedAtMs}<=original_deadline_ms) THEN coalesce(delivered_at_ms,${event.occurredAtMs}) ELSE delivered_at_ms END
     WHERE user_id=${work.userId} AND family=${work.family} AND operation_id=${work.operationId}`;
-  return yield* settledStatus(work);
+  return yield* settled;
 });
 export const nativeDeliveryRequest = Effect.fn(function* (
   request: Request,
@@ -200,7 +199,7 @@ export const nativeDeliveryRequest = Effect.fn(function* (
     if (!owns(work.userId)) return answer(noContentStatus);
     const sql = yield* SqliteClient;
     yield* sql`UPDATE whatsapp_deliveries SET state=${work.state},provider_message_id=coalesce(provider_message_id,${work.message}) WHERE user_id=${work.userId} AND family=${work.family} AND operation_id=${work.operationId} AND correlation=${work.correlation}
-      AND endpoint=${work.endpoint} AND started_ms IS NOT NULL AND state='sending' AND (provider_message_id IS NULL OR provider_message_id=${work.message}) AND NOT EXISTS(SELECT 1 FROM erasure_requests)`;
+      AND endpoint=${work.endpoint} AND started_ms IS NOT NULL AND state='sending' AND (provider_message_id IS NULL OR provider_message_id=${work.message}) AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Draining')`;
     return answer(noContentStatus);
   }
   const work = yield* Schema.decodeUnknownEffect(DeliveredObservation)(body);

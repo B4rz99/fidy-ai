@@ -1,3 +1,5 @@
+import { confirmLifetimeCaseUrl } from "../erasure-store/contract";
+import { type ErasureRegistryNamespace, erasureRegistryName } from "../erasure/contract";
 import { ErasureReference } from "../../src/core/erasure/contract";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { UserId } from "../../src/core/identity/contract";
@@ -11,7 +13,7 @@ import {
   retireLifetimeUrl,
 } from "./contract";
 import type { StoreHistory } from "../runtime/sqlite/contract";
-import { Cause, Clock, Effect, Exit, Schema } from "effect";
+import { Cause, Clock, Effect, Exit, Option, Schema } from "effect";
 import { activityDue } from "./internal/cadence";
 
 /**
@@ -89,7 +91,10 @@ export const lifetimeRequest = (request: Request): boolean =>
   request.method === "POST" &&
   [registerLifetimeUrl, fenceLifetimeUrl, retireLifetimeUrl].includes(request.url);
 
-export const handleLifetimeRegistration = Effect.fn(function* (request: Request) {
+export const handleLifetimeRegistration = Effect.fn(function* (
+  request: Request,
+  erasure: Option.Option<ErasureRegistryNamespace>
+) {
   const userId = request.headers.get("fidy-user-id");
   if (!Schema.is(UserId)(userId)) return new Response(null, { status: 400 });
   const sql = yield* SqliteClient;
@@ -117,6 +122,19 @@ export const handleLifetimeRegistration = Effect.fn(function* (request: Request)
   }
   const reference = request.headers.get("fidy-erasure-reference");
   if (!Schema.is(ErasureReference)(reference)) return new Response(null, { status: 400 });
+  if (Option.isNone(erasure)) return acknowledgement(false);
+  const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+    userId,
+    reference,
+    action: request.url === fenceLifetimeUrl ? "fence" : "retire",
+  });
+  const verified = yield* Effect.tryPromise((signal) =>
+    erasure.value
+      .getByName(erasureRegistryName)
+      .fetch(confirmLifetimeCaseUrl, { method: "POST", body, signal })
+  ).pipe(Effect.timeout("5 seconds"));
+  if (verified.status !== registrationAcceptedStatus) return acknowledgement(false);
+
   return yield* withStoreAdmission(() =>
     Effect.gen(function* () {
       const matched =

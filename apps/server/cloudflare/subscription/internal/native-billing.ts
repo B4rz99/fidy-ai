@@ -46,11 +46,14 @@ const Observation = Schema.Struct({
 type Work = typeof LocalBillingCollection.Type;
 const absent = (): Response => new Response(null, { status: noContentStatus });
 const blocked = (): Response => new Response(null, { status: 503 });
-const readAttempt = Effect.fn(function* (work: { userId: UserId; attemptId: BillingAttemptId }) {
+const readAttempt = Effect.fn(function* (
+  work: { userId: UserId; attemptId: BillingAttemptId },
+  settlement = false
+) {
   const sql = yield* SqliteClient;
   const [row] =
     yield* sql`SELECT a.*,s.method,s.billing_email,s.wompi_source_id FROM billing_attempt_context a JOIN payment_source_context s ON s.id=a.payment_source_id AND s.user_id=a.user_id
-    WHERE a.id=${work.attemptId} AND a.user_id=${work.userId} AND a.wompi_environment=s.wompi_environment AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE user_id=a.user_id)`;
+    WHERE a.id=${work.attemptId} AND a.user_id=${work.userId} AND a.wompi_environment=s.wompi_environment AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE user_id=a.user_id AND (state<>'Draining' OR ${Number(settlement)}=0 OR a.collection_state IS NOT 'sent'))`;
   if (row === undefined) return Option.none<typeof Snapshot.Type>();
   return Option.some(yield* Schema.decodeUnknownEffect(Snapshot)(row));
 });
@@ -74,7 +77,7 @@ const observe = Effect.fn(function* (
   storage: DurableObjectStorage
 ) {
   const sql = yield* SqliteClient;
-  const captured = yield* readAttempt(observation);
+  const captured = yield* readAttempt(observation, true);
   if (Option.isNone(captured)) return absent();
   const found: WompiTransaction = {
     ...observation,
@@ -198,7 +201,7 @@ const retainCandidate = Effect.fn(function* (
   const sql = yield* SqliteClient;
   yield* withStoreCapacity("required")(
     Effect.gen(function* () {
-      yield* sql`INSERT INTO billing_provider_transactions(transaction_id,attempt_id) SELECT ${candidate},a.id FROM billing_attempt_context a WHERE a.id=${work.attemptId} AND a.user_id=${work.userId} AND a.collection_state='sent' AND NOT EXISTS(SELECT 1 FROM erasure_requests) ON CONFLICT DO NOTHING`;
+      yield* sql`INSERT INTO billing_provider_transactions(transaction_id,attempt_id) SELECT ${candidate},a.id FROM billing_attempt_context a WHERE a.id=${work.attemptId} AND a.user_id=${work.userId} AND a.collection_state='sent' AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Draining') ON CONFLICT DO NOTHING`;
       yield* scheduleObservation({ id: work.attemptId, candidate, storage });
       if (captured.method === "card" && Option.isNone(captured.previous_paid_attempt_id)) {
         yield* sql`UPDATE billing_attempts SET checkout_transaction_id=${candidate} WHERE id=${work.attemptId} AND checkout_transaction_id IS NULL AND EXISTS(SELECT 1 FROM billing_provider_transactions WHERE transaction_id=${candidate} AND attempt_id=${work.attemptId})`;
@@ -360,7 +363,7 @@ export const reconcileLocalCandidates = Effect.fn(function* (context: {
   const due = yield* withStoreCapacity("required")(
     Effect.gen(function* () {
       const rows =
-        yield* sql`UPDATE billing_provider_transactions SET checks=checks+1,next_check_ms=CASE WHEN checks+1<${maximumChecks} THEN ${now + lookupCooldown} END WHERE transaction_id IN (SELECT t.transaction_id FROM billing_provider_transactions t JOIN billing_attempt_context a ON a.id=t.attempt_id WHERE t.next_check_ms<=${now} AND NOT EXISTS(SELECT 1 FROM erasure_requests) AND a.wompi_environment=${env.WOMPI_ENVIRONMENT} AND a.status='pending' ORDER BY next_check_ms LIMIT 16) RETURNING transaction_id,attempt_id,(SELECT user_id FROM billing_attempt_context a WHERE a.id=billing_provider_transactions.attempt_id) AS user_id`;
+        yield* sql`UPDATE billing_provider_transactions SET checks=checks+1,next_check_ms=CASE WHEN checks+1<${maximumChecks} THEN ${now + lookupCooldown} END WHERE transaction_id IN (SELECT t.transaction_id FROM billing_provider_transactions t JOIN billing_attempt_context a ON a.id=t.attempt_id WHERE t.next_check_ms<=${now} AND a.collection_state='sent' AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Draining') AND a.wompi_environment=${env.WOMPI_ENVIRONMENT} AND a.status='pending' ORDER BY next_check_ms LIMIT 16) RETURNING transaction_id,attempt_id,(SELECT user_id FROM billing_attempt_context a WHERE a.id=billing_provider_transactions.attempt_id) AS user_id`;
       if (rows.length > 0) yield* preserveStoreAlarm(storage, now + lookupCooldown);
       return yield* Schema.decodeUnknownEffect(
         Schema.Array(

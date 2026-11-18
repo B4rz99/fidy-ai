@@ -20,12 +20,12 @@ type Environment = NativeEnrollmentEnv & {
 export const billingWake = Effect.fn(function* (storage: DurableObjectStorage) {
   const sql = yield* SqliteClient;
   const [row] = yield* sql`SELECT
-    (SELECT min(next_offer_ms) FROM billing_attempts WHERE collection_state='armed') AS collection,
+    (SELECT min(next_offer_ms) FROM billing_attempts WHERE collection_state='armed' AND NOT EXISTS(SELECT 1 FROM erasure_requests)) AS collection,
     (SELECT min(ack_due_ms) FROM billing_admissions) AS acknowledge,
     (SELECT min(json_extract(request,'$.deadlineMs')) FROM billing_admissions WHERE outcome IS NULL) AS deadline,
     (SELECT min(next_lookup_ms) FROM payment_enrollments WHERE state IN('prepared','verifying')) AS source,
-    (SELECT min(followup_due_at_ms) FROM billing_attempts) AS renewal,
-    (SELECT min(next_check_ms) FROM billing_provider_transactions WHERE NOT EXISTS(SELECT 1 FROM erasure_requests)) AS verify`;
+    (SELECT min(followup_due_at_ms) FROM billing_attempts WHERE NOT EXISTS(SELECT 1 FROM erasure_requests)) AS renewal,
+    (SELECT min(next_check_ms) FROM billing_provider_transactions WHERE NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Draining')) AS verify`;
   const deadlines = Object.values(row ?? {}).filter(
     (value): value is number => typeof value === "number"
   );
@@ -53,12 +53,12 @@ export const recoverLocalBilling = Effect.fn(function* (context: BillingRecovery
   const now = yield* Clock.currentTimeMillis;
   yield* reconcileLocalCandidates({ env, storage, owns, transport });
   const renewals =
-    yield* sql`SELECT id FROM billing_attempts WHERE followup_due_at_ms<=${now} ORDER BY followup_due_at_ms LIMIT ${pageSize}`;
+    yield* sql`SELECT id FROM billing_attempts WHERE NOT EXISTS(SELECT 1 FROM erasure_requests) AND followup_due_at_ms<=${now} ORDER BY followup_due_at_ms LIMIT ${pageSize}`;
   for (const row of renewals) yield* processRenewal(String(row.id), context);
   const send = yield* withStoreCapacity("required")(
     Effect.gen(function* () {
       const rows =
-        yield* sql`UPDATE billing_attempts SET next_offer_ms=${now + cooldown} WHERE id IN(SELECT id FROM billing_attempts WHERE collection_state='armed' AND next_offer_ms<=${now} ORDER BY next_offer_ms LIMIT ${pageSize}) RETURNING id,(SELECT user_id FROM subscriptions WHERE id=billing_attempts.subscription_id) AS user_id`;
+        yield* sql`UPDATE billing_attempts SET next_offer_ms=${now + cooldown} WHERE id IN(SELECT id FROM billing_attempts WHERE collection_state='armed' AND NOT EXISTS(SELECT 1 FROM erasure_requests) AND next_offer_ms<=${now} ORDER BY next_offer_ms LIMIT ${pageSize}) RETURNING id,(SELECT user_id FROM subscriptions WHERE id=billing_attempts.subscription_id) AS user_id`;
       yield* billingWake(storage);
       return yield* Schema.decodeUnknownEffect(
         Schema.Array(Schema.Struct({ id: BillingAttemptId, user_id: UserId }))

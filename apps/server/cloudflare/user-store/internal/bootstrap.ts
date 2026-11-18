@@ -229,6 +229,12 @@ const completeVerified = Effect.fn(function* (
   }
   const digest = yield* digestVerifier(parsed.value.privateVerifier);
   const proofState = yield* Effect.gen(function* () {
+    const sql = yield* SqliteClient;
+    if (
+      (yield* sql`SELECT 1 FROM erasure_requests WHERE user_id=${handoff.user_id}`).length !== 0
+    ) {
+      return "invalid" as const;
+    }
     yield* importHandoff(handoff);
     return yield* checkHandoff(handoff, digest, yield* Clock.currentTimeMillis);
   }).pipe(withStoreCapacity("required"));

@@ -1,7 +1,8 @@
-import { Data } from "effect";
+import { UserId } from "../../src/core/identity/contract";
+import { type ErasureClass, ErasureReference } from "../../src/core/erasure/contract";
+import { Data, Schema } from "effect";
 import type { Effect, Option } from "effect";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
-import { type ErasureClass } from "../../src/core/erasure/contract";
 
 export class ErasureUnavailable extends Data.TaggedError("ErasureUnavailable") {}
 export type ErasureScope = Readonly<{ userId: string; reference: string }>;
@@ -41,3 +42,15 @@ export type ErasureProjection = Readonly<{
   ) => ReadonlyArray<OwnedStatement>;
   remaining: (userId: string) => OwnedStatement;
 }>;
+
+/** The named owners exchange only the exact erasure identity and its original admission time. */
+export const ErasureHandoff = Schema.Struct({
+  userId: UserId,
+  reference: ErasureReference,
+  requestedAtMs: Schema.Int.check(Schema.isGreaterThan(0)),
+});
+export const registerCaseUrl = "https://erasure.invalid/case/register";
+export const confirmHandoffUrl = "https://user.invalid/erasure/confirm";
+export const participantFenceUrl = "https://owner.internal/erasure/fence";
+
+export const confirmLifetimeCaseUrl = "https://erasure.invalid/case/lifetime";

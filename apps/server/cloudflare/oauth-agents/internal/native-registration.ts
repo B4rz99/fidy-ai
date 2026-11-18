@@ -75,7 +75,7 @@ export const oauthCredentialCommand = Effect.fn(function* (request: Request) {
     if (input.action === "bind") {
       yield* sql`UPDATE oauth_review_requests SET user_id=${input.user} WHERE id=${input.requestId} AND user_id IS NULL AND expires_at_ms>${now} AND (SELECT count(*) FROM oauth_review_requests WHERE user_id=${input.user} AND expires_at_ms>${now} AND completed=0)<5`;
       const [row] =
-        yield* sql`SELECT r.request_json,c.metadata_json,r.expires_at_ms FROM oauth_review_requests r JOIN oauth_public_clients c ON c.id=r.client_id WHERE r.id=${input.requestId} AND r.user_id=${input.user} AND r.expires_at_ms>${now}`;
+        yield* sql`SELECT r.request_json,c.metadata_json,r.expires_at_ms FROM oauth_review_requests r JOIN oauth_public_clients c ON c.id=r.client_id WHERE r.id=${input.requestId} AND r.user_id=${input.user} AND NOT EXISTS(SELECT 1 FROM erasure_barriers WHERE user_id=r.user_id) AND r.expires_at_ms>${now}`;
       return row === undefined ? new Response(null, { status: 404 }) : Response.json(row);
     }
     for (const route of input.routes) {

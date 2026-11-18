@@ -206,7 +206,7 @@ const prepareHandoff = Effect.fn(function* (
   const sql = yield* SqliteClient;
   const { pairingId } = proof;
   const [raw] =
-    yield* sql`SELECT attempt.id,attempt.intent,attempt.state,attempt.issuer,attempt.subject,attempt.invitation,p.user_id FROM provider_attempts attempt JOIN browser_pairings p ON p.id=attempt.pairing_id WHERE attempt.pairing_id=${pairingId} AND attempt.provider=${provider} AND attempt.expires_at_ms>${yield* Clock.currentTimeMillis}`;
+    yield* sql`SELECT attempt.id,attempt.intent,attempt.state,attempt.issuer,attempt.subject,attempt.invitation,p.user_id FROM provider_attempts attempt JOIN browser_pairings p ON p.id=attempt.pairing_id WHERE attempt.pairing_id=${pairingId} AND attempt.provider=${provider} AND NOT EXISTS(SELECT 1 FROM erasure_barriers WHERE user_id=p.user_id) AND attempt.expires_at_ms>${yield* Clock.currentTimeMillis}`;
   if (raw === undefined) return invalidProvider();
   const attempt = yield* Schema.decodeUnknownEffect(Attempt)(raw);
   if (attempt.user_id !== null) return { user: attempt.user_id, id: attempt.id };
@@ -257,6 +257,9 @@ const routeProvider = Effect.fn(function* (
   if (complete && response.ok) {
     yield* sql.withTransaction(
       Effect.gen(function* () {
+        if ((yield* sql`SELECT 1 FROM erasure_barriers WHERE user_id=${result.user}`).length > 0) {
+          return;
+        }
         yield* sql`UPDATE provider_attempts SET acknowledged=1 WHERE id=${result.id} AND state='bound'`;
         yield* sql`UPDATE provider_routes SET established=1 WHERE creation_attempt=${result.id} AND user_id=${result.user}`;
         yield* sql`UPDATE whatsapp_routes SET established=1 WHERE attempt_id=${result.id} AND user_id=${result.user}`;

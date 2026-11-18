@@ -1,3 +1,14 @@
+import { caseOperatorRequest } from "../erasure/operations";
+import { Effect } from "effect";
+import { confirmLifetimeCaseUrl, registerCaseUrl } from "./contract";
+import { erasureRegistryName } from "../erasure/contract";
+import { ownerCheckRequest, ownerCheckResponse } from "../maintenance/contract";
+import {
+  advanceErasureCases,
+  confirmLifetimeCase,
+  registerErasureCase,
+  repairCaseAlarm,
+} from "./internal/cases";
 import { DurableObject } from "cloudflare:workers";
 import { createStoreRuntime, openSqliteStore, storeReadiness } from "../runtime/sqlite/operations";
 import { type StoreReleaseEnvironment, storeReadinessUrl } from "../runtime/sqlite/contract";
@@ -35,16 +46,23 @@ export const makeErasureOriginals = (
   discard: (scope) => originals.discard({ configuration, scope }),
 });
 
-export class Erasure extends DurableObject<StoreReleaseEnvironment> {
+type ErasureEnvironment = StoreReleaseEnvironment & {
+  USER_STORE: DurableObjectNamespace;
+  ERASURE: DurableObjectNamespace;
+  DIRECTORY: DurableObjectNamespace;
+  PRICING: DurableObjectNamespace;
+  MAINTENANCE: DurableObjectNamespace;
+};
+export class Erasure extends DurableObject<ErasureEnvironment> {
   private readonly runtime;
-  constructor(state: DurableObjectState, env: StoreReleaseEnvironment) {
+  constructor(state: DurableObjectState, env: ErasureEnvironment) {
     super(state, env);
     this.runtime = createStoreRuntime({
       storage: state.storage,
       owner: erasureStoreHistory.owner,
       ceilingBytes: env.SQLITE_STORE_CAPACITY_BYTES,
     });
-    if (state.id.name === "erasure-registry-v1") {
+    if (state.id.equals(env.ERASURE.idFromName(erasureRegistryName))) {
       state.waitUntil(
         state.blockConcurrencyWhile(() =>
           this.runtime.runPromise(openSqliteStore(erasureStoreHistory, env.CF_VERSION_METADATA.id))
@@ -52,12 +70,42 @@ export class Erasure extends DurableObject<StoreReleaseEnvironment> {
       );
     }
   }
+  override alarm(): Promise<void> {
+    return this.runtime.runPromise(advanceErasureCases(this.ctx.storage, this.env));
+  }
+  private command(request: Request): Promise<Response> {
+    const unavailable = Effect.catchCause(() =>
+      Effect.succeed(new Response(null, { status: 503 }))
+    );
+    switch (request.url) {
+      case confirmLifetimeCaseUrl:
+        return this.runtime.runPromise(confirmLifetimeCase(request).pipe(unavailable));
+      case registerCaseUrl:
+        return this.runtime.runPromise(
+          registerErasureCase(request, this.env.USER_STORE, this.ctx.storage).pipe(unavailable)
+        );
+      case "https://coordinator.internal/erasure-receipt":
+      case "https://coordinator.internal/erasure-continue":
+        return this.runtime.runPromise(
+          caseOperatorRequest(request, this.ctx.storage).pipe(unavailable)
+        );
+      case "https://coordinator.internal/erasure-custody-evidence":
+        return Promise.resolve(new Response(null, { status: 409 }));
+      default:
+        return Promise.resolve(new Response(null, { status: 404 }));
+    }
+  }
   override fetch(request: Request): Promise<Response> {
-    if (
-      this.ctx.id.name !== "erasure-registry-v1" ||
-      request.method !== "GET" ||
-      request.url !== storeReadinessUrl
-    ) {
+    if (!this.ctx.id.equals(this.env.ERASURE.idFromName(erasureRegistryName))) {
+      return Promise.resolve(new Response(null, { status: 404 }));
+    }
+    if (ownerCheckRequest(request)) {
+      return this.runtime.runPromise(
+        repairCaseAlarm(this.ctx.storage).pipe(Effect.map(ownerCheckResponse))
+      );
+    }
+    if (request.method === "POST") return this.command(request);
+    if (request.method !== "GET" || request.url !== storeReadinessUrl) {
       return Promise.resolve(new Response(null, { status: 404 }));
     }
     return this.runtime.runPromise(

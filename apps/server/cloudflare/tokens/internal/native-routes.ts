@@ -91,8 +91,8 @@ export const directoryPATCommand = Effect.fn(function* (request: Request) {
     }
     const [row] =
       input.kind === "bind"
-        ? yield* sql`SELECT * FROM pat_bootstrap WHERE id=${input.pairing} AND user_id=${input.user} AND expires_at_ms>${current}`
-        : yield* sql`SELECT * FROM pat_bootstrap WHERE public_code=${input.code} AND expires_at_ms>${current} AND (user_id IS NULL OR user_id=${input.user})`;
+        ? yield* sql`SELECT * FROM pat_bootstrap WHERE id=${input.pairing} AND user_id=${input.user} AND NOT EXISTS(SELECT 1 FROM erasure_barriers WHERE user_id=${input.user}) AND expires_at_ms>${current}`
+        : yield* sql`SELECT * FROM pat_bootstrap WHERE public_code=${input.code} AND NOT EXISTS(SELECT 1 FROM erasure_barriers WHERE user_id=${input.user}) AND expires_at_ms>${current} AND (user_id IS NULL OR user_id=${input.user})`;
     return row === undefined ? new Response(null, { status: 404 }) : Response.json(row);
   }).pipe(withStoreCapacity(input.kind === "review" ? "required" : "growth"));
 });

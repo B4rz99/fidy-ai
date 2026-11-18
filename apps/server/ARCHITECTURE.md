@@ -188,3 +188,27 @@ Feature specifications live beside their owners in `src/core/` and `src/shell/`.
 [runbooks](../../docs/runbooks/) retain procedures. Test boundaries and security evidence belong in
 [coding standards](../../CODING_STANDARDS.md#tests) and
 [security standards](../../SECURITY_STANDARDS.md#required-security-evidence).
+
+### Account erasure admission
+
+The mounted browser sends its binding and cookie to the User through the Directory session route.
+The User checks freshness in the SQLite transaction that commits the ErasureReference, admitting
+session, request time, local admission fence and required handoff alarm. Processing Consent is
+independent of this privacy right. A retry from the same still-fresh session receives its original
+receipt. A lost handoff leaves the User fenced.
+
+The private Erasure namespace confirms the original admission with the named User before
+registering an independent case. Its alarm and the fixed Maintenance watchdog target retain
+discovery. The case records separate Directory, Pricing and Maintenance acknowledgements. Each
+shared owner preserves its exact barrier and the original operation identities. Directory can
+recover a committed or cancelled bootstrap and retains the old identity hold. Pricing reconciles
+the original BillingRegistration at the User. Maintenance checks the independent case before
+fencing the User lifetime, and requires that case to be Complete before retirement.
+
+A signed WhatsApp status or the original send reply can settle its exact started delivery during
+Draining. The disposition stays with the User and cannot start Transcript or reminder work.
+A verified Wompi observation can settle an already-issued charge during Draining. The original
+Subscription, immutable BillingAttempt and payment evidence stay at the User for settlement.
+The fence blocks new collection and renewal admission. Shared Price history remains with Pricing.
+Fencing all participants leaves the case Draining until the independent drain and custody
+protocol establishes the remaining deletion conditions.

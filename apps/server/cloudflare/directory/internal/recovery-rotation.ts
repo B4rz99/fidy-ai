@@ -4,6 +4,8 @@ import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { DirectoryWriteUnavailable, RecoveryRotation, RecoveryRouteDecision } from "../contract";
 import { withStoreCapacity } from "../../runtime/sqlite/operations";
 
+const acknowledgedStatus = 204;
+const conflictStatus = 409;
 const conflict = (): Response => new Response(null, { status: 409 });
 const acknowledged = (): Response => new Response(null, { status: 204 });
 
@@ -25,14 +27,21 @@ const settle = Effect.fn(function* ({
   if (row.state !== "reserved") {
     return row.state === value.decision ? acknowledged() : conflict();
   }
-  if (value.decision === "reserve") return acknowledged();
+  const [fence] =
+    yield* sql`SELECT 1 AS present FROM erasure_barriers WHERE user_id=${value.user_id}`;
+  if (value.decision === "reserve") {
+    return new Response(null, {
+      status: fence === undefined ? acknowledgedStatus : conflictStatus,
+    });
+  }
   const target =
     value.decision === "committed"
       ? sql`code_digest=${prior} AND user_id=${value.user_id} AND revision=${value.revision} AND attempt_id=(SELECT prior_reservation FROM recovery_rotations WHERE id=${value.id})`
       : sql`code_digest=${next} AND user_id=${value.user_id} AND revision=${value.revision + 1} AND attempt_id=${value.id}`;
-  yield* sql`DELETE FROM recovery_routes WHERE ${target}`;
+  const held = Number(fence !== undefined);
+  yield* sql`DELETE FROM recovery_routes WHERE ${target} AND ${held}=0`;
   const marked =
-    yield* sql`UPDATE recovery_rotations SET state=${value.decision} WHERE id=${value.id} AND NOT EXISTS(SELECT 1 FROM recovery_routes WHERE ${target}) RETURNING 1`;
+    yield* sql`UPDATE recovery_rotations SET state=${value.decision} WHERE id=${value.id} AND user_id=${value.user_id} AND state='reserved' AND (${held}=1 OR NOT EXISTS(SELECT 1 FROM recovery_routes WHERE ${target})) RETURNING 1`;
   if (marked.length !== 1) return yield* new DirectoryWriteUnavailable();
   return acknowledged();
 });

@@ -15,14 +15,16 @@ import { UserId } from "../../../src/core/identity/contract";
 
 type Change = typeof ReservedIdentity.Type;
 const conflictStatus = 409;
-const refusal = (): Response => new Response(null, { status: 409 });
+const refusal = (): Response => new Response(null, { status: conflictStatus });
 const replay = Effect.fn(function* (
   input: typeof ReplacementInput.Type,
   existing: Readonly<Record<string, unknown>>
 ) {
   const selected = yield* Schema.decodeUnknownEffect(ReservedIdentity)(existing);
   const match = Struct.keys(ReplacementInput.fields).every((key) => selected[key] === input[key]);
-  if (!match) return refusal();
+  const sql = yield* SqliteClient;
+  const held = yield* sql`SELECT 1 FROM erasure_barriers WHERE user_id=${selected.user_id}`;
+  if (!match || held.length > 0) return refusal();
   if (existing.state === "reserved") return selected;
   return existing.state === "committed" ? new Response(null) : refusal();
 });
@@ -47,7 +49,7 @@ const reserve = Effect.fn(function* (input: typeof ReplacementInput.Type) {
       ? yield* sql`INSERT INTO verified_email_routes VALUES(${record.next_key},${record.user_id},${record.id},${record.revision + 1}) ON CONFLICT DO NOTHING RETURNING 1`
       : yield* sql`INSERT INTO whatsapp_routes VALUES(${record.scope},${record.next_key},${record.user_id},${record.id},1,${record.revision + 1}) ON CONFLICT DO NOTHING RETURNING 1`;
   if (claimed.length !== 1) return refusal();
-  yield* sql`INSERT INTO identity_replacements VALUES(${record.id},${record.kind},${record.scope},${record.prior_key},${record.next_key},${record.occurred_at_ms},${record.expires_at_ms},${record.expected_user},${record.user_id},${record.revision},${record.prior_reservation},'reserved') RETURNING 1`.pipe(
+  yield* sql`INSERT INTO identity_replacements(id,kind,scope,prior_key,next_key,occurred_at_ms,expires_at_ms,expected_user,user_id,revision,prior_reservation,state) VALUES(${record.id},${record.kind},${record.scope},${record.prior_key},${record.next_key},${record.occurred_at_ms},${record.expires_at_ms},${record.expected_user},${record.user_id},${record.revision},${record.prior_reservation},'reserved') RETURNING 1`.pipe(
     Effect.filterOrFail(
       (rows) => rows.length === 1,
       () => new DirectoryWriteUnavailable()
@@ -87,6 +89,9 @@ const reconcile = Effect.fn(function* (
       const terminal =
         yield* sql`SELECT 1 FROM identity_replacements WHERE id=${record.id} AND state=${outcome}`;
       if (terminal.length !== 1) return yield* new DirectoryWriteUnavailable();
+      return;
+    }
+    if ((yield* sql`SELECT 1 FROM erasure_barriers WHERE user_id=${record.user_id}`).length > 0) {
       return;
     }
     const table = sql(record.kind === "email" ? "verified_email_routes" : "whatsapp_routes");
@@ -130,19 +135,23 @@ export const directoryIdentityRequest = Effect.fn(function* (
   return yield* reconcile(record, users, false);
 });
 const pageSize = 16;
+const checkCooldownMs = 60_000;
 export const reconcileIdentityReplacements = Effect.fn(function* (
   users: Pick<DurableObjectNamespace, "getByName">
 ) {
   const sql = yield* SqliteClient;
   const now = yield* Clock.currentTimeMillis;
   const rows =
-    yield* sql`SELECT * FROM identity_replacements WHERE state='reserved' AND expires_at_ms<=${now} ORDER BY expires_at_ms LIMIT ${pageSize}`;
-  for (const row of rows) {
-    const record = yield* Schema.decodeUnknownEffect(ReservedIdentity)(row);
-    const response = yield* reconcile(record, users, true);
-    if (!response.ok && response.status !== conflictStatus) {
-      return yield* new DirectoryWriteUnavailable();
-    }
-  }
+    yield* sql`UPDATE identity_replacements SET retry_at_ms=${now + checkCooldownMs} WHERE id IN (SELECT id FROM identity_replacement_checks WHERE due_ms<=${now} ORDER BY due_ms,id LIMIT ${pageSize}) RETURNING *`;
+  yield* Effect.forEach(
+    rows,
+    (row) =>
+      Schema.decodeUnknownEffect(ReservedIdentity)(row).pipe(
+        Effect.flatMap((record) => reconcile(record, users, true)),
+        Effect.timeout("5 seconds"),
+        Effect.result
+      ),
+    { concurrency: 4, discard: true }
+  );
   yield* sql`DELETE FROM identity_replacements WHERE id IN(SELECT id FROM identity_replacements WHERE state<>'reserved' AND expires_at_ms<=${now} LIMIT ${pageSize})`;
 });

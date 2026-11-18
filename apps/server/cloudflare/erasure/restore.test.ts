@@ -493,6 +493,20 @@ const verifyRestoredIdentity = Effect.fn(function* (guarded: D1Database) {
   ).toBe(1);
 });
 
+const verifyNativeOperator = Effect.fn(function* <E>(
+  send: (
+    command: unknown,
+    assertion: string,
+    route: "native" | "native-missing"
+  ) => Effect.Effect<Response, E>,
+  token: string
+) {
+  expect((yield* send({ action: "Receipt", userId, reference }, token, "native")).status).toBe(204);
+  expect((yield* send({ action: "Restore" }, token, "native")).status).toBe(400);
+  expect(
+    (yield* send({ action: "Receipt", userId, reference }, token, "native-missing")).status
+  ).toBe(503);
+});
 const verifyRestore = Effect.fn(function* (separated: boolean) {
   const platform = yield* separated ? separatedErasurePlatform : nativeErasurePlatform;
   let native = yield* Effect.tryPromise(() => platform.acquire());
@@ -578,7 +592,7 @@ const verifyRestore = Effect.fn(function* (separated: boolean) {
   const send = (
     command: unknown,
     assertion: string = token,
-    route: "owner" | "candidate" = "owner"
+    route: "owner" | "candidate" | "native-missing" | "native" = "owner"
   ): Effect.Effect<Response, Schema.SchemaError | Cause.UnknownError> =>
     Effect.gen(function* () {
       const body = yield* Schema.encodeEffect(json)(command);
@@ -590,6 +604,23 @@ const verifyRestore = Effect.fn(function* (separated: boolean) {
             storeIds: coordinatorErasureStoreIds(native.db),
             environment: {
               DB: native.db,
+              ...(["native", "native-missing"].includes(route)
+                ? { USER_STORE: native.coordinator }
+                : {}),
+              ...(route === "native"
+                ? {
+                    ERASURE: {
+                      getByName: (name: string) => ({
+                        fetch: (): Promise<Response> =>
+                          Promise.resolve(
+                            new Response(null, {
+                              status: name === "erasure-registry-v1" ? 204 : 404,
+                            })
+                          ),
+                      }),
+                    },
+                  }
+                : {}),
               ERASURE_BUCKET: native.rawErasure,
               ...(separated ? { ERASURE_REGISTRY: native.metadata } : {}),
               ERASURE_REQUIRED: "true",
@@ -599,21 +630,26 @@ const verifyRestore = Effect.fn(function* (separated: boolean) {
               USER_TRANSACTION_COORDINATOR: {
                 getByName: (name) => ({
                   fetch: (value, init) =>
-                    native.coordinator
-                      .getByName(name)
-                      .fetch(value, init)
-                      .then((response) => {
-                        if (
-                          new URL(new Request(value, init).url).pathname === "/erasure-restore" &&
-                          response.status === 202
-                        ) {
-                          const outcome = transport.reply;
-                          transport.reply = "Pass";
-                          if (outcome === "Lose") throw new Error("Accepted restore reply lost");
-                          if (outcome === "Abort") transport.cancellation.abort();
-                        }
-                        return response;
-                      }),
+                    route === "native-missing"
+                      ? Promise.resolve(new Response(null, { status: 204 }))
+                      : native.coordinator
+                          .getByName(name)
+                          .fetch(value, init)
+                          .then((response) => {
+                            if (
+                              new URL(new Request(value, init).url).pathname ===
+                                "/erasure-restore" &&
+                              response.status === 202
+                            ) {
+                              const outcome = transport.reply;
+                              transport.reply = "Pass";
+                              if (outcome === "Lose") {
+                                throw new Error("Accepted restore reply lost");
+                              }
+                              if (outcome === "Abort") transport.cancellation.abort();
+                            }
+                            return response;
+                          }),
                 }),
               },
             },
@@ -647,6 +683,7 @@ const verifyRestore = Effect.fn(function* (separated: boolean) {
         })
       );
     });
+  yield* verifyNativeOperator(send, token);
   for (const invalid of [
     {
       email: "someone@fidyapp.com",

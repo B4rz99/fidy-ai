@@ -30,6 +30,26 @@ const registry = Effect.fn(function* (runtime: Miniflare) {
     ).pipe(Effect.map((response) => response.status));
 });
 
+const seedErasure = Effect.fn(function* (runtime: Miniflare) {
+  const independent = (yield* native(() =>
+    runtime.getDurableObjectNamespace("ERASURE", "core")
+  )).getByName("erasure-registry-v1");
+  yield* native(() => independent.fetch("https://owner.internal/work/check", { method: "POST" }));
+  const cases = yield* native(() =>
+    runtime.unsafeGetDurableObjectStorage("core", "Erasure", {
+      name: "erasure-registry-v1",
+    })
+  );
+  const now = yield* Clock.currentTimeMillis;
+  yield* native(() =>
+    cases.exec(
+      "INSERT INTO erasure_cases(user_id,reference,requested_at_ms,state,next_check_ms) VALUES(?,?,1,'Draining',?)",
+      original,
+      erasure,
+      now + 60000
+    )
+  );
+});
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect("retains idle owners and matches retirement to the exact durable erasure fence", () =>
     Effect.gen(function* () {
@@ -42,6 +62,8 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           expect(yield* call("register", original)).toBe(204);
           expect(yield* call("register", original)).toBe(204);
           expect(yield* call("retire", original, erasure)).toBe(409);
+          expect(yield* call("fence", original, erasure)).toBe(409);
+          yield* seedErasure(runtime);
           expect(yield* call("fence", original, erasure)).toBe(204);
           expect(yield* call("fence", original, other)).toBe(409);
           expect(yield* call("register", original)).toBe(409);
@@ -91,6 +113,17 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         store.exec("SELECT user_id FROM lifetime_registry WHERE retired=0 ORDER BY user_id")
       );
       expect(yield* discoverable).toEqual([{ user_id: original }, { user_id: fresh }]);
+      expect(yield* call("retire", original, erasure)).toBe(409);
+      const independent = yield* native(() =>
+        runtime.unsafeGetDurableObjectStorage("core", "Erasure", { name: "erasure-registry-v1" })
+      );
+      yield* native(() =>
+        independent.exec(
+          "UPDATE erasure_cases SET state='Complete' WHERE user_id=? AND reference=?",
+          original,
+          erasure
+        )
+      );
       expect(yield* call("retire", original, erasure)).toBe(204);
       expect(yield* call("retire", original, erasure)).toBe(204);
       expect(yield* call("register", original)).toBe(409);

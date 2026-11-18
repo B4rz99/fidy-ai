@@ -46,11 +46,10 @@ export const releaseBrowserSession = Effect.fn(function* (request: Request) {
   }).pipe(withStoreCapacity("required"));
 });
 
-export const cancelFrozenHandoff = Effect.fn(function* (
-  request: Request,
+export const cancelProviderHandoff = Effect.fn(function* (
+  id: string,
   users: Pick<DurableObjectNamespace, "getByName">
 ) {
-  const id = yield* Effect.tryPromise(() => request.text());
   const handoff = yield* inspectHandoff(id);
   if (handoff === null) return invalidProvider();
   const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
@@ -72,12 +71,15 @@ export const cancelFrozenHandoff = Effect.fn(function* (
   const sql = yield* SqliteClient;
   yield* sql.withTransaction(
     Effect.gen(function* () {
+      const fenced = yield* sql`SELECT 1 FROM erasure_barriers WHERE user_id=${handoff.user_id}`;
       if (outcome === "committed") {
         yield* sql`UPDATE provider_attempts SET acknowledged=1 WHERE id=${id} AND state='bound'`;
+        if (fenced.length !== 0) return;
         yield* sql`UPDATE whatsapp_routes SET established=1 WHERE user_id=${handoff.user_id} AND attempt_id=${id}`;
         yield* sql`UPDATE provider_routes SET established=1 WHERE user_id=${handoff.user_id} AND creation_attempt=${id}`;
       } else {
         yield* sql`UPDATE provider_attempts SET state='cancelled' WHERE id=${id} AND state='bound'`;
+        if (fenced.length !== 0) return;
         yield* sql`DELETE FROM recovery_routes WHERE user_id=${handoff.user_id} AND attempt_id=${id}`;
         yield* sql`DELETE FROM whatsapp_routes WHERE user_id=${handoff.user_id} AND attempt_id=${id} AND established=0`;
         yield* sql`DELETE FROM provider_routes WHERE user_id=${handoff.user_id} AND creation_attempt=${id} AND established=0`;

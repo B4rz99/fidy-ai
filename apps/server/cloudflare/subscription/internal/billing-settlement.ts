@@ -126,7 +126,8 @@ const standingAndIntent = <Statement>(
     db
       .prepare(`UPDATE billing_attempts SET followup_due_at_ms=paid_ends_at_ms
       WHERE id=? AND paid_starts_at_ms IS NOT NULL AND followup_due_at_ms IS NULL
-      AND EXISTS(SELECT 1 FROM subscription_standing s WHERE s.attempt_id=billing_attempts.id)`)
+      AND EXISTS(SELECT 1 FROM subscription_standing s WHERE s.attempt_id=billing_attempts.id)
+      AND NOT EXISTS(SELECT 1 FROM erasure_requests e JOIN subscriptions s ON s.user_id=e.user_id WHERE s.id=billing_attempts.subscription_id)`)
       .bind(attemptId),
   ];
 };

@@ -1,3 +1,5 @@
+import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
+import { preserveStoreAlarm, withStoreCapacity } from "../runtime/sqlite/operations";
 import { admissionLifetimeMs, validContinuation } from "./internal/control-admission";
 import type { ErasureRegistry } from "./contract";
 import { initializeRegistryStorage } from "./internal/registry-initialization";
@@ -21,7 +23,11 @@ import { progress } from "./internal/progress";
 import { ErasureUnavailable } from "../erasure-store/contract";
 import type { ErasureStore } from "../erasure-store/contract";
 import { admitDeletion } from "./internal/admission";
-import { ErasureReceipt } from "../../src/core/erasure/contract";
+import {
+  ErasureCustodian,
+  ErasureOperatorReceipt,
+  ErasureReceipt,
+} from "../../src/core/erasure/contract";
 
 /** Composition inside the serialized User coordinator. Binding supplies no authority:
  * each call decodes its own admission and retains the original credentials and deadline.
@@ -287,3 +293,49 @@ export const prepareLocalErasureRegistry = <Requirements>(
   input: ErasureRegistryInitialization<Requirements>
 ): Effect.Effect<void, ErasureUnavailable, Requirements> =>
   initializeRegistryStorage({ ...input, mode: "LocalStartup" });
+
+export const caseOperatorRequest = Effect.fn(function* (
+  request: Request,
+  storage: DurableObjectStorage
+) {
+  const continuation = Schema.decodeUnknownOption(ErasureContinuation, {
+    onExcessProperty: "error",
+  })(yield* Effect.tryPromise(() => request.json()));
+  const sql = yield* SqliteClient;
+  return yield* withStoreCapacity("required")(
+    Effect.gen(function* () {
+      const now = yield* Clock.currentTimeMillis;
+      if (
+        Option.isNone(continuation) ||
+        !validContinuation({
+          admission: continuation.value,
+          current: now,
+          userId: continuation.value.userId,
+        })
+      ) {
+        return new Response(null, { status: 409 });
+      }
+      const { reference, userId } = continuation.value;
+      const [record] =
+        yield* sql`SELECT state FROM erasure_cases WHERE reference=${reference} AND user_id=${userId}`;
+      if (record?.state !== "Draining") return new Response(null, { status: 409 });
+      if (request.url === "https://coordinator.internal/erasure-continue") {
+        yield* sql`UPDATE erasure_cases SET next_check_ms=${now} WHERE reference=${reference} AND user_id=${userId}`;
+        yield* preserveStoreAlarm(storage, now);
+        return new Response(null, { status: 202 });
+      }
+      const receipt = yield* Schema.encodeEffect(ErasureOperatorReceipt)({
+        reference,
+        state: "Draining",
+        next: "admitted-work",
+        completed: [],
+        custodians: ErasureCustodian.literals.map((custodian) => ({
+          custodian,
+          status: "Pending",
+        })),
+        recoveryUntilMs: null,
+      });
+      return Response.json(receipt, { headers: { "cache-control": "no-store" } });
+    })
+  );
+});

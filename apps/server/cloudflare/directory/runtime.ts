@@ -1,5 +1,8 @@
 import { providerAllowanceUrl } from "../resource-admission/contract";
 import { admitSharedProvider } from "../resource-admission/operations";
+import { reconcileErasedHandoffs } from "./internal/erasure";
+import { fenceErasureParticipant } from "../erasure-store/operations";
+import { participantFenceUrl } from "../erasure-store/contract";
 import { nativePATDirectoryUrl } from "../tokens/contract";
 import { oauthRouteCommandUrl } from "../oauth-agents/contract";
 import { routeSessionRequest } from "./operations";
@@ -48,7 +51,7 @@ import { whatsappBootstrap, whatsappOwner } from "./internal/whatsapp";
 
 import { admitBootstrap } from "./internal/admission";
 import {
-  cancelFrozenHandoff,
+  cancelProviderHandoff,
   registerBrowserSession,
   registerRecoveryCredential,
   releaseBrowserSession,
@@ -152,7 +155,10 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
   override alarm(): Promise<void> {
     return this.runtime.runPromise(
       Effect.andThen(
-        reconcileIdentityReplacements(this.env.USER_STORE),
+        Effect.andThen(
+          reconcileErasedHandoffs(this.env.USER_STORE),
+          reconcileIdentityReplacements(this.env.USER_STORE)
+        ),
         inspectPressure(this.ctx.storage, true)
       ).pipe(Effect.asVoid)
     );
@@ -160,6 +166,13 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
   override fetch(request: Request): Promise<Response> {
     if (!this.ctx.id.equals(this.env.DIRECTORY.idFromName(directoryName))) {
       return Promise.resolve(new Response(null, { status: 404 }));
+    }
+    if (request.method === "POST" && request.url === participantFenceUrl) {
+      return this.runtime.runPromise(
+        fenceErasureParticipant(request, this.env.USER_STORE, this.ctx.storage).pipe(
+          Effect.catchCause(() => Effect.succeed(unavailable()))
+        )
+      );
     }
     if (ownerCheckRequest(request)) {
       return this.runtime.runPromise(
@@ -282,7 +295,10 @@ const internalRequest = Effect.fn(function* (request: Request, environment: Dire
     case reserveRecoveryUrl:
       return yield* registerRecoveryCredential(request);
     case handoffCancelUrl:
-      return yield* cancelFrozenHandoff(request, environment.USER_STORE);
+      return yield* cancelProviderHandoff(
+        yield* Effect.tryPromise(() => request.text()),
+        environment.USER_STORE
+      );
 
     case whatsappBootstrapUrl:
       return yield* whatsappBootstrap(request, environment.USER_STORE);

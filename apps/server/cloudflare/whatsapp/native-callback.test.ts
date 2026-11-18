@@ -6,7 +6,7 @@ import { Hex } from "effect/encoding";
 import { expect } from "vitest";
 import { alice, bob, seed } from "../financial-user-store.test-fixture";
 import { native, nativeBillingPlatform } from "../user-store.test-fixture";
-import { productionTopology } from "../runtime/contract";
+import { browserOrigins, productionTopology } from "../runtime/contract";
 import { claimDeliveryUrl, replyDeliveryUrl, reserveDeliveryUrl } from "./contract";
 
 const portfolio = "123456789012345",
@@ -64,9 +64,9 @@ const notifier = (
     );
   });
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
-  test.effect(
-    "registers the exact hosted send before delivery, rechecks its recipient, and keeps delivered proof across a lost outbound reply",
-    () =>
+  test.effect.each([false, true])(
+    "retains exact signed delivery evidence across a lost send reply with erasure requested=%s",
+    (erase) =>
       Effect.gen(function* () {
         const create = yield* nativeBillingPlatform;
         const runtime = yield* create();
@@ -111,6 +111,32 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect((yield* privateCall(reserveDeliveryUrl, claim)).status).toBe(204);
         expect((yield* privateCall(claimDeliveryUrl, claim)).status).toBe(201);
         expect((yield* privateCall(claimDeliveryUrl, claim)).status).toBe(409);
+        if (erase) {
+          const accepted = yield* native(() =>
+            runtime.dispatchFetch(
+              `https://${productionTopology.ingress.hostname}/web/privacy/erasure`,
+              {
+                method: "POST",
+                headers: {
+                  origin: browserOrigins.production,
+                  "content-type": "application/json",
+                  "Fidy-Session-Binding": alice.session,
+                  cookie: "__Host-fidy_session=" + alice.bearer,
+                },
+                body: JSON.stringify({ confirm: true }),
+              }
+            )
+          );
+          expect(accepted.status).toBe(202);
+          expect(
+            (yield* privateCall(replyDeliveryUrl, { ...claim, state: "ambiguous", message: null }))
+              .status
+          ).toBe(204);
+          expect(yield* owner.exec("SELECT state FROM whatsapp_deliveries")).toEqual([
+            { state: "ambiguous" },
+          ]);
+          expect((yield* privateCall(claimDeliveryUrl, claim)).status).toBe(409);
+        }
         const key = yield* native(() =>
           crypto.subtle.importKey(
             "raw",
@@ -126,7 +152,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         );
         expect((yield* notify(bsuid, true, now)).status).toBe(200);
         expect(yield* owner.exec("SELECT state FROM whatsapp_deliveries")).toEqual([
-          { state: "sending" },
+          { state: erase ? "ambiguous" : "sending" },
         ]);
         yield* native(() =>
           owner.directory.exec("ALTER TABLE offline RENAME TO external_event_routes")

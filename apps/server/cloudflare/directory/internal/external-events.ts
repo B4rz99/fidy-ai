@@ -26,6 +26,9 @@ export const externalEventRequest = Effect.fn(function* (request: Request) {
     const route = yield* Schema.decodeUnknownEffect(ExternalEventRoute)(body);
     return yield* withStoreAdmission((growth) =>
       Effect.gen(function* () {
+        if ((yield* sql`SELECT 1 FROM erasure_barriers WHERE user_id=${route.userId}`).length > 0) {
+          return new Response(null, { status: conflictStatus });
+        }
         const [existing] =
           yield* sql`SELECT user_id,operation_id,family FROM external_event_routes WHERE kind=${key.kind} AND endpoint=${key.endpoint} AND lookup=${key.lookup}`;
         if (existing !== undefined) {

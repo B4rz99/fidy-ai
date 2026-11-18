@@ -6,7 +6,7 @@ import { Effect, Schedule } from "effect";
 import { expect } from "vitest";
 import { alice, bob, seed } from "../financial-user-store.test-fixture";
 import { native, nativeBillingPlatform } from "../user-store.test-fixture";
-import { productionTopology } from "../runtime/contract";
+import { browserOrigins, productionTopology } from "../runtime/contract";
 import { Hex } from "effect/encoding";
 
 const attemptId = "22430000-0000-4000-8000-000000000001";
@@ -61,9 +61,9 @@ const observer = (
   });
 
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
-  test.effect(
-    "settles an authenticated Wompi callback during the charge POST, with one charge and one paid transition",
-    () =>
+  test.effect.each([false, true])(
+    "settles an authenticated Wompi callback during the charge POST with erasure requested=%s",
+    (erase) =>
       Effect.gen(function* () {
         const { owner, runtime, db } = yield* callbackFixture();
         const queue = yield* native(() =>
@@ -83,6 +83,27 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             )
           )
         ).toEqual([{ user_id: alice.user, operation_id: attemptId }]);
+        if (erase) {
+          const accepted = yield* native(() =>
+            runtime.dispatchFetch(
+              `https://${productionTopology.ingress.hostname}/web/privacy/erasure`,
+              {
+                method: "POST",
+                headers: {
+                  origin: browserOrigins.production,
+                  "content-type": "application/json",
+                  "Fidy-Session-Binding": alice.session,
+                  cookie: "__Host-fidy_session=" + alice.bearer,
+                },
+                body: JSON.stringify({ confirm: true }),
+              }
+            )
+          );
+          expect(accepted.status).toBe(202);
+          expect(yield* owner.exec("SELECT status,collection_state FROM billing_attempts")).toEqual(
+            [{ status: "pending", collection_state: "sent" }]
+          );
+        }
         const stamp = 1712345678;
         const id = "provider-callback-id";
         const checksum = Hex.encode(
@@ -132,6 +153,12 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(yield* owner.exec("SELECT current_paid_attempt_id FROM subscriptions")).toEqual([
           { current_paid_attempt_id: attemptId },
         ]);
+        if (erase) {
+          expect(yield* owner.exec("SELECT followup_due_at_ms FROM billing_attempts")).toEqual([
+            { followup_due_at_ms: null },
+          ]);
+        }
+
         expect(
           yield* native(() => db.prepare("SELECT count(*) AS n FROM charge_posts").first())
         ).toEqual({ n: 1 });

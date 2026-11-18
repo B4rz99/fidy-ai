@@ -116,6 +116,8 @@ export type ErasureOperatorEnvironment = Readonly<{
 }> &
   Partial<
     Readonly<{
+      ERASURE: ErasureRegistryNamespace;
+      USER_STORE: ErasureRegistryNamespace;
       ERASURE_SUPPORT_AUDIENCE: string;
       PRICING_PUBLISH_AUDIENCE: string;
       BILLING_SUPPORT_AUDIENCE: string;

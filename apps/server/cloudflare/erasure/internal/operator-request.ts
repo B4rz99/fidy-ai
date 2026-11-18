@@ -49,6 +49,9 @@ export const operatorRequest = (
     if (Option.isNone(action)) return reply(invalidStatus);
     const current = yield* Clock.currentTimeMillis;
     if (operator.value.expiresAtMs <= current) return reply(unauthorizedStatus);
+    if (input.environment.USER_STORE !== undefined && input.environment.ERASURE === undefined) {
+      return reply(unavailableStatus);
+    }
     return yield* dispatchOperator({
       ...input,
       command: action.value,
@@ -70,6 +73,12 @@ const dispatchOperator = (
 ): Effect.Effect<Response, ErasureUnavailable | Schema.SchemaError> =>
   Effect.gen(function* () {
     const { command, operator, current } = input;
+    if (
+      input.environment.ERASURE !== undefined &&
+      ["MigrateRegistry", "Initialize", "Restore", "ReleaseRestore"].includes(command.action)
+    ) {
+      return reply(invalidStatus);
+    }
     if (command.action === "MigrateRegistry") {
       return yield* forwardMigration({
         environment: input.environment,
@@ -158,7 +167,10 @@ const forwardCommand = (
     const path = commandPath(command);
     return yield* Effect.tryPromise({
       try: () =>
-        input.environment.USER_TRANSACTION_COORDINATOR.getByName(admission.userId).fetch(
+        (
+          input.environment.ERASURE?.getByName(erasureRegistryName) ??
+          input.environment.USER_TRANSACTION_COORDINATOR.getByName(admission.userId)
+        ).fetch(
           new Request(`https://coordinator.internal/${path}`, {
             method: "POST",
             headers: { "content-type": "application/json" },

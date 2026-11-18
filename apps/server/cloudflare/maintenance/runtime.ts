@@ -371,7 +371,7 @@ export class Maintenance extends DurableObject<MaintenanceEnvironment> {
     if (watchdogRequest(request)) return this.watchdog(request);
     if (lifetimeRequest(request)) {
       return this.runtime.runPromise(
-        handleLifetimeRegistration(request).pipe(
+        handleLifetimeRegistration(request, Option.fromUndefinedOr(this.env.ERASURE)).pipe(
           Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
         )
       );

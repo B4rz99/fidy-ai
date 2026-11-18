@@ -976,6 +976,15 @@ export const userStoreHistory: StoreHistory = {
       ],
     },
     { version: 21, id: "hosted-agent-work", statements: hostedSchema() },
+    {
+      version: 22,
+      id: "erasure-admission-handoff",
+      statements: [
+        "ALTER TABLE erasure_requests ADD COLUMN requested_at_ms INTEGER",
+        "ALTER TABLE erasure_requests ADD COLUMN session_id TEXT",
+        "ALTER TABLE erasure_requests ADD COLUMN handoff_due_ms INTEGER",
+      ],
+    },
   ],
 };
 

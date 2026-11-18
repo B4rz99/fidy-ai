@@ -1809,6 +1809,7 @@ const dispatchCoreHttp = ({
 
 const nativeSessionWrite = (path: string): boolean =>
   isLocalHostedPath(path) ||
+  path === "/web/privacy/erasure" ||
   ["/recovery/backup-code/rotate", emailReplacementPath, emailReplacementCompletionPath].includes(
     path
   );

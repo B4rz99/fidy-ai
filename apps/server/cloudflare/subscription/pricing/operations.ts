@@ -1,3 +1,4 @@
+import { erasureBarrierSchema } from "../../erasure-store/operations";
 import type { StoreHistory } from "../../runtime/sqlite/contract";
 import { Schema } from "effect";
 import { Price, SubscriptionOffers } from "../../../src/core/subscription/contract";
@@ -61,6 +62,14 @@ export const pricingHistory: StoreHistory = {
         "CREATE TABLE enrollment_allowances(id INTEGER PRIMARY KEY,user_id TEXT NOT NULL,at_ms INTEGER NOT NULL) STRICT",
         "CREATE INDEX enrollment_allowance_time ON enrollment_allowances(at_ms)",
         "CREATE INDEX enrollment_allowance_user ON enrollment_allowances(user_id,at_ms)",
+      ],
+    },
+    {
+      version: 3,
+      id: "user-erasure-barrier",
+      statements: [
+        erasureBarrierSchema,
+        "CREATE TRIGGER reconcile_erasing_registrations AFTER INSERT ON erasure_barriers BEGIN UPDATE price_registrations SET next_check_ms=NEW.requested_at_ms WHERE user_id=NEW.user_id AND outcome IS NULL; END",
       ],
     },
   ],

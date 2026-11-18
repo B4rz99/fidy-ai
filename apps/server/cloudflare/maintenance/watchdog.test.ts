@@ -68,9 +68,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         ).toEqual([
           {
             attempted: 4,
-            observed: 3,
+            observed: 4,
             failed: 0,
-            unsupported: 1,
+            unsupported: 0,
             unknown: 0,
             repaired: 1,
             wraps: 1,
@@ -145,7 +145,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const scheduled = yield* check(pricing);
         expect(scheduled.status).toBe(204);
         expect(scheduled.headers.get("fidy-alarm-repaired")).toBe("0");
-        expect((yield* check(erasure)).status).toBe(404);
+        expect((yield* check(erasure)).status).toBe(204);
       })
   );
 });

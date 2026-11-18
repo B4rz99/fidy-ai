@@ -1,0 +1,42 @@
+apps/server/cloudflare/directory/internal/reservations.ts
+  s_a1be23a656acf0::t_16294e806b513e 62
+apps/server/cloudflare/directory/bootstrap.test.ts
+  s_a1be23a656acf0::t_16294e806b513e 134,148,326-330,333-342
+  s_a1be23a656acf0::t_1fba817da96263 119-133,135-147,149-150
+apps/server/cloudflare/directory/contract.ts
+  s_a1be23a656acf0::t_547f386eb804d0 11
+apps/server/cloudflare/onboarding/consent-ingress.test.ts
+  s_a1be23a656acf0::t_8c1bf49347ab69 5,60-61,177-185,222-223,417-418,487-491
+apps/server/cloudflare/provider-authentication/journey.test-fixture.ts
+  s_a1be23a656acf0::t_028632d8848f80 1,23-27,29,50-58,66-68,86,91-92,98,101,107-108
+apps/server/cloudflare/provider-authentication/legacy-disclosure.test-fixture.ts
+  s_a1be23a656acf0::t_e2826bfff5d294 1,19-21,24-33,37-40,71-73,75-79,84-91,97-108,110,116,181-208
+apps/server/cloudflare/provider-authentication/whatsapp-association.test.ts
+  s_a1be23a656acf0::t_9b19249aa922a4 3,6,116,120
+apps/server/cloudflare/provider-authentication/whatsapp-link-signup.test.ts
+  s_a1be23a656acf0::t_9b83c7b9620353 45-60,129-153,263-301
+apps/server/cloudflare/provider-authentication/whatsapp-messages.test-fixture.ts
+  s_a1be23a656acf0::t_c81513bd8734d2 4,7,37
+apps/server/cloudflare/provider-authentication/whatsapp-sent-history.test.ts
+  s_a1be23a656acf0::t_9c9381d2fc2015 69,101
+apps/server/cloudflare/provider-authentication/whatsapp.test.ts
+  s_a1be23a656acf0::t_ef6d42c7247164 7,179-184,188,277,340-342,344,352,358,454,459
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_1f20a31cdf4c1e 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b6a42f1304e04e97153d65e3d1c7aba57cd53ace",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -516,7 +516,7 @@ export const findTransactionPresentation = ({
 
 const InspectionOriginal = Schema.Struct({
   ...Row.fields,
-  source_kinds: Schema.Array(SourceAttestationKind).check(Schema.isMaxLength(3)),
+  source_kinds: Schema.Array(SourceAttestationKind).check(Schema.isMaxLength(4)),
 });
 const InspectionRow = Schema.Struct({
   ...PresentationRow.fields,

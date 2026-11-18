@@ -1,3 +1,13 @@
+const credentialAuditTable = `CREATE TABLE audit_entries(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),record_type TEXT NOT NULL,
+   session_id TEXT REFERENCES web_sessions(id),pat_id TEXT REFERENCES pats(id),operation TEXT,outcome TEXT,occurred_at_ms INTEGER NOT NULL,
+   oauth_connection_id TEXT REFERENCES oauth_connections(id),oauth_credential_id TEXT REFERENCES oauth_credentials(access_id),
+   CHECK((oauth_connection_id IS NULL AND oauth_credential_id IS NULL) OR (record_type='credential_call' AND session_id IS NULL AND pat_id IS NULL AND oauth_connection_id IS NOT NULL AND oauth_credential_id IS NOT NULL)),
+   CHECK((record_type='session_call' AND session_id IS NOT NULL AND pat_id IS NULL AND ((operation='emailAuthentication.requestEmailReplacement' AND outcome='accepted') OR (operation='emailAuthentication.completeEmailReplacement' AND outcome IN ('replaced','rejected')))) OR
+   (record_type='security_mutation' AND session_id IS NOT NULL AND pat_id IS NULL AND operation='recovery.rotateBackupRecoveryCode' AND outcome IS NULL) OR
+   (record_type='identity_read' AND session_id IS NOT NULL AND pat_id IS NULL AND operation IS NULL AND outcome IS NULL) OR
+   (operation IS NOT NULL AND ((record_type='session_call' AND session_id IS NOT NULL AND pat_id IS NULL AND outcome IN ('success','validation_failed','not_found')) OR
+   (record_type='credential_call' AND (pat_id IS NOT NULL OR session_id IS NOT NULL OR (oauth_connection_id IS NOT NULL AND oauth_credential_id IS NOT NULL)) AND outcome IN ('accepted','rejected')) OR
+   (record_type='request_admission' AND pat_id IS NOT NULL AND session_id IS NULL AND outcome IS NULL))))) STRICT`;
 /** User-bound device proof and immutable grant evidence commit beside the bearer digest. */
 export const userPATSchema = (): ReadonlyArray<string> =>
   [
@@ -67,18 +77,23 @@ export const oauthUserSchema = (): ReadonlyArray<string> =>
     `CREATE TABLE oauth_operation_intents(reference TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),connection_id TEXT NOT NULL REFERENCES oauth_connections(id),operation TEXT NOT NULL,input_json TEXT NOT NULL,input_digest BLOB NOT NULL CHECK(length(input_digest)=32),binding_json TEXT NOT NULL,disclosure_revision TEXT NOT NULL,created_at_ms INTEGER NOT NULL,expires_at_ms INTEGER NOT NULL) STRICT`,
     "CREATE INDEX oauth_intent_expiry ON oauth_operation_intents(expires_at_ms)",
     "ALTER TABLE audit_entries RENAME TO previous_credential_audit",
-    `CREATE TABLE audit_entries(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),record_type TEXT NOT NULL,
-   session_id TEXT REFERENCES web_sessions(id),pat_id TEXT REFERENCES pats(id),operation TEXT,outcome TEXT,occurred_at_ms INTEGER NOT NULL,
-   oauth_connection_id TEXT REFERENCES oauth_connections(id),oauth_credential_id TEXT REFERENCES oauth_credentials(access_id),
-   CHECK((oauth_connection_id IS NULL AND oauth_credential_id IS NULL) OR (record_type='credential_call' AND session_id IS NULL AND pat_id IS NULL AND oauth_connection_id IS NOT NULL AND oauth_credential_id IS NOT NULL)),
-   CHECK((record_type='session_call' AND session_id IS NOT NULL AND pat_id IS NULL AND ((operation='emailAuthentication.requestEmailReplacement' AND outcome='accepted') OR (operation='emailAuthentication.completeEmailReplacement' AND outcome IN ('replaced','rejected')))) OR
-   (record_type='security_mutation' AND session_id IS NOT NULL AND pat_id IS NULL AND operation='recovery.rotateBackupRecoveryCode' AND outcome IS NULL) OR
-   (record_type='identity_read' AND session_id IS NOT NULL AND pat_id IS NULL AND operation IS NULL AND outcome IS NULL) OR
-   (operation IS NOT NULL AND ((record_type='session_call' AND session_id IS NOT NULL AND pat_id IS NULL AND outcome IN ('success','validation_failed','not_found')) OR
-   (record_type='credential_call' AND (pat_id IS NOT NULL OR session_id IS NOT NULL OR (oauth_connection_id IS NOT NULL AND oauth_credential_id IS NOT NULL)) AND outcome IN ('accepted','rejected')) OR
-   (record_type='request_admission' AND pat_id IS NOT NULL AND session_id IS NULL AND outcome IS NULL))))) STRICT`,
+    credentialAuditTable,
     "INSERT INTO audit_entries(id,user_id,record_type,session_id,pat_id,operation,outcome,occurred_at_ms) SELECT id,user_id,record_type,session_id,pat_id,operation,outcome,occurred_at_ms FROM previous_credential_audit",
     "DROP TABLE previous_credential_audit",
     "CREATE TRIGGER audit_entries_immutable BEFORE UPDATE ON audit_entries BEGIN SELECT RAISE(ABORT,'audit_immutable'); END",
     "CREATE INDEX audit_entries_oauth_activity ON audit_entries(user_id,oauth_connection_id,occurred_at_ms DESC,id DESC) WHERE record_type='credential_call'",
   ] as const;
+
+/** Retain credential history while allowing a completed exact Synchronization to record system accountability. */
+export const connectionAuditSchema = (): ReadonlyArray<string> => [
+  "CREATE TABLE saved_connection_audit AS SELECT * FROM audit_entries",
+  "DROP TABLE audit_entries",
+  credentialAuditTable.replace(
+    "CHECK((record_type='session_call'",
+    "CHECK((record_type='connection_synchronization' AND operation='connections.synchronize' AND outcome='success' AND session_id IS NULL AND pat_id IS NULL AND oauth_connection_id IS NULL) OR (record_type='session_call'"
+  ),
+  "INSERT INTO audit_entries SELECT * FROM saved_connection_audit",
+  "DROP TABLE saved_connection_audit",
+  "CREATE TRIGGER audit_entries_immutable BEFORE UPDATE ON audit_entries BEGIN SELECT RAISE(ABORT,'audit_immutable'); END",
+  "CREATE INDEX audit_entries_oauth_activity ON audit_entries(user_id,oauth_connection_id,occurred_at_ms DESC,id DESC) WHERE record_type='credential_call'",
+];

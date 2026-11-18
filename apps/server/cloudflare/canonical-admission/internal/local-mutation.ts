@@ -338,6 +338,7 @@ export const charge = Effect.fn(function* (call: Call) {
   return Option.none<Response>();
 });
 const financialGrowth = new Set<string>([
+  "connections.connectInstitution",
   "categories.createKeywordRule",
   "categories.updateKeywordRule",
   "transactions.updateTransactions",

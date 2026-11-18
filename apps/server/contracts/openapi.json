@@ -7376,6 +7376,61 @@
               },
               "kind": {
                 "enum": [
+                  "connection-movement"
+                ],
+                "type": "string"
+              },
+              "locale": {
+                "$ref": "#/components/schemas/Locale"
+              },
+              "serviceMarket": {
+                "$ref": "#/components/schemas/ServiceMarket"
+              },
+              "sourceChannel": {
+                "maxLength": 80,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+                "type": "string"
+              },
+              "sourceProvider": {
+                "maxLength": 80,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+                "type": "string"
+              },
+              "timeZone": {
+                "$ref": "#/components/schemas/IanaTimeZone"
+              },
+              "transactionId": {
+                "$ref": "#/components/schemas/TransactionId"
+              }
+            },
+            "required": [
+              "id",
+              "transactionId",
+              "serviceMarket",
+              "locale",
+              "timeZone",
+              "interpretationRevision",
+              "createdAt",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "createdAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "id": {
+                "$ref": "#/components/schemas/SourceAttestationId"
+              },
+              "interpretationRevision": {
+                "$ref": "#/components/schemas/InterpretationRevision"
+              },
+              "kind": {
+                "enum": [
                   "manual"
                 ],
                 "type": "string"
@@ -7607,6 +7662,7 @@
       },
       "SourceAttestationKind": {
         "enum": [
+          "connection-movement",
           "manual",
           "statement-line",
           "notification-email"
@@ -13421,7 +13477,7 @@
                   "items": {
                     "$ref": "#/components/schemas/SourceAttestationKind"
                   },
-                  "maxItems": 3,
+                  "maxItems": 4,
                   "type": "array"
                 },
                 "transactionId": {

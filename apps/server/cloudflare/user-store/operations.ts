@@ -1,7 +1,12 @@
 import { sampleSchema } from "./internal/sample-schema";
 import { ingestionSchema } from "./internal/ingestion-schema";
 import { billingAdmissionSchema } from "./internal/billing-admission-schema";
-import { oauthUserSchema, userPATSchema } from "./internal/credential-schema";
+import { connectionSchema } from "./internal/connection-schema";
+import {
+  connectionAuditSchema,
+  oauthUserSchema,
+  userPATSchema,
+} from "./internal/credential-schema";
 import { externalEventSchema, issueForwardingAddress } from "./internal/external-event-schema";
 import { registerUserLifetime as registerReservedLifetime } from "./internal/registration";
 import { Effect, Exit, Schema } from "effect";
@@ -11,6 +16,29 @@ import { UserId } from "../../src/core/identity/contract";
 import type { StoreHistory } from "../runtime/sqlite/contract";
 
 /** Initial User-store schema. Schema creation grants no identity, credential or Consent. */
+const sourceTable = `CREATE TABLE source_attestations (
+ id TEXT PRIMARY KEY NOT NULL, user_id TEXT NOT NULL, transaction_id TEXT NOT NULL,
+ kind TEXT NOT NULL CHECK(kind IN ('manual','statement-line','notification-email')),
+ service_market TEXT NOT NULL, locale TEXT NOT NULL, time_zone TEXT NOT NULL,
+ interpretation_revision TEXT NOT NULL, created_at_ms INTEGER NOT NULL,
+ FOREIGN KEY(user_id,transaction_id) REFERENCES transactions(user_id,id)
+) STRICT`;
+const attestationImmutable = `CREATE TRIGGER source_attestation_no_update BEFORE UPDATE ON source_attestations BEGIN SELECT RAISE(ABORT,'attestation_immutable'); END`;
+const dashboardAttestedMember = `CREATE TRIGGER dashboard_attested_member AFTER INSERT ON source_attestations
+WHEN (SELECT readiness FROM transaction_projection_state WHERE user_id=NEW.user_id)='ready'
+  AND EXISTS(SELECT 1 FROM transactions WHERE user_id=NEW.user_id AND id=NEW.transaction_id AND reconciliation_first_id IS NOT NULL)
+BEGIN
+  DELETE FROM transaction_projection_leaf WHERE user_id=NEW.user_id AND id IN (SELECT visible_transaction_id FROM transaction_reconciliation_decisions d JOIN transactions t ON t.reconciliation_first_id=d.first_transaction_id AND t.reconciliation_second_id=d.second_transaction_id AND t.user_id=d.user_id WHERE t.id=NEW.transaction_id AND t.user_id=NEW.user_id AND d.state='linked');
+  INSERT INTO transaction_projection_leaf(user_id,id,amount,currency,direction,category_id,category_revision,counterparty,notes,occurred_at_ms,created_at_ms,revision)
+    SELECT user_id,id,amount,currency,direction,category_id,category_revision,counterparty,notes,occurred_at_ms,created_at_ms,revision FROM transaction_effective_source WHERE user_id=NEW.user_id AND id IN (SELECT visible_transaction_id FROM transaction_reconciliation_decisions d JOIN transactions t ON t.reconciliation_first_id=d.first_transaction_id AND t.reconciliation_second_id=d.second_transaction_id AND t.user_id=d.user_id WHERE t.id=NEW.transaction_id AND t.user_id=NEW.user_id AND d.state='linked');
+END`;
+const transactionFactAttestation = `CREATE TRIGGER transaction_fact_attestation AFTER INSERT ON source_attestations BEGIN
+  UPDATE transaction_projection_state SET fact_revision = fact_revision + 1,
+    time_zone = CASE WHEN NEW.transaction_id = (SELECT id FROM transactions WHERE user_id = NEW.user_id ORDER BY created_at_ms, id LIMIT 1)
+      AND (SELECT count(*) FROM source_attestations WHERE user_id = NEW.user_id AND transaction_id = NEW.transaction_id) = 1
+      THEN NEW.time_zone ELSE time_zone END
+  WHERE user_id = NEW.user_id AND fact_revision IS NOT NULL;
+END`;
 const initialUserSchema = [
   `CREATE TABLE users (
   id TEXT PRIMARY KEY NOT NULL CHECK (length(id) = 36),
@@ -101,13 +129,7 @@ reconciliation_row_ref TEXT,reconciliation_first_id TEXT,reconciliation_second_i
     OR (state = 'keep-separate' AND visible_transaction_id IS NULL)
   )
 ) STRICT`,
-  `CREATE TABLE source_attestations (
- id TEXT PRIMARY KEY NOT NULL, user_id TEXT NOT NULL, transaction_id TEXT NOT NULL,
- kind TEXT NOT NULL CHECK(kind IN ('manual','statement-line','notification-email')),
- service_market TEXT NOT NULL, locale TEXT NOT NULL, time_zone TEXT NOT NULL,
- interpretation_revision TEXT NOT NULL, created_at_ms INTEGER NOT NULL,
- FOREIGN KEY(user_id,transaction_id) REFERENCES transactions(user_id,id)
-) STRICT`,
+  sourceTable,
   `CREATE VIEW reconciled_transactions AS SELECT COALESCE(reconciliation_row_ref,'member:'||id) AS rowid,user_id,id AS transaction_id,reconciliation_first_id AS first_transaction_id,reconciliation_second_id AS second_transaction_id FROM transactions WHERE reconciliation_first_id IS NOT NULL`,
   `CREATE VIEW transaction_effective_source AS
 WITH linked_decision AS (
@@ -497,7 +519,7 @@ const correctionMigration = [
   `DROP TABLE previous_capture_receipts`,
   `CREATE INDEX canonical_receipt_expiry ON canonical_request_receipts(accepted_at_ms)`,
   `CREATE TRIGGER transaction_correction_no_update BEFORE UPDATE ON transaction_corrections BEGIN SELECT RAISE(ABORT,'correction_append_only'); END`,
-  `CREATE TRIGGER source_attestation_no_update BEFORE UPDATE ON source_attestations BEGIN SELECT RAISE(ABORT,'attestation_immutable'); END`,
+  attestationImmutable,
   `CREATE TRIGGER transaction_user_decisions BEFORE UPDATE ON transactions
 WHEN (NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.amount IS NOT OLD.amount OR NEW.currency IS NOT OLD.currency OR NEW.direction IS NOT OLD.direction OR NEW.counterparty IS NOT OLD.counterparty OR NEW.category_id IS NOT OLD.category_id OR NEW.notes IS NOT OLD.notes OR NEW.occurred_at_ms IS NOT OLD.occurred_at_ms OR NEW.created_at_ms IS NOT OLD.created_at_ms OR NEW.revision IS NOT OLD.revision OR NEW.user_decisions IS NOT OLD.user_decisions OR NEW.deleted_at_ms IS NOT OLD.deleted_at_ms) AND EXISTS (
   SELECT 1 FROM json_each(OLD.user_decisions)
@@ -696,14 +718,7 @@ BEGIN
   INSERT INTO transaction_projection_leaf(user_id,id,amount,currency,direction,category_id,category_revision,counterparty,notes,occurred_at_ms,created_at_ms,revision) VALUES(NEW.user_id,NEW.id,NEW.amount,NEW.currency,NEW.direction,NEW.category_id,NEW.category_revision,NEW.counterparty,NEW.notes,NEW.occurred_at_ms,NEW.created_at_ms,NEW.revision);
   SELECT CASE WHEN changes()<>1 THEN RAISE(ABORT,'dashboard_capture') END;
 END`,
-  `CREATE TRIGGER dashboard_attested_member AFTER INSERT ON source_attestations
-WHEN (SELECT readiness FROM transaction_projection_state WHERE user_id=NEW.user_id)='ready'
-  AND EXISTS(SELECT 1 FROM transactions WHERE user_id=NEW.user_id AND id=NEW.transaction_id AND reconciliation_first_id IS NOT NULL)
-BEGIN
-  DELETE FROM transaction_projection_leaf WHERE user_id=NEW.user_id AND id IN (SELECT visible_transaction_id FROM transaction_reconciliation_decisions d JOIN transactions t ON t.reconciliation_first_id=d.first_transaction_id AND t.reconciliation_second_id=d.second_transaction_id AND t.user_id=d.user_id WHERE t.id=NEW.transaction_id AND t.user_id=NEW.user_id AND d.state='linked');
-  INSERT INTO transaction_projection_leaf(user_id,id,amount,currency,direction,category_id,category_revision,counterparty,notes,occurred_at_ms,created_at_ms,revision)
-    SELECT user_id,id,amount,currency,direction,category_id,category_revision,counterparty,notes,occurred_at_ms,created_at_ms,revision FROM transaction_effective_source WHERE user_id=NEW.user_id AND id IN (SELECT visible_transaction_id FROM transaction_reconciliation_decisions d JOIN transactions t ON t.reconciliation_first_id=d.first_transaction_id AND t.reconciliation_second_id=d.second_transaction_id AND t.user_id=d.user_id WHERE t.id=NEW.transaction_id AND t.user_id=NEW.user_id AND d.state='linked');
-END`,
+  dashboardAttestedMember,
   `CREATE TABLE transaction_projection_references (
     user_id TEXT NOT NULL REFERENCES users(id),category_revision TEXT NOT NULL,category_id TEXT NOT NULL REFERENCES categories(id),
     count INTEGER NOT NULL CHECK(count>=0),PRIMARY KEY(user_id,category_revision,category_id)
@@ -766,13 +781,7 @@ BEGIN SELECT RAISE(ABORT, 'transaction_deleted'); END`,
  PRIMARY KEY(user_id,kind,id)
 ) STRICT`,
   `CREATE INDEX recurring_facts_by_group_typed ON recurring_evaluation_records(user_id, group_key, occurred_at_ms, id) WHERE kind='fact'`,
-  `CREATE TRIGGER transaction_fact_attestation AFTER INSERT ON source_attestations BEGIN
-  UPDATE transaction_projection_state SET fact_revision = fact_revision + 1,
-    time_zone = CASE WHEN NEW.transaction_id = (SELECT id FROM transactions WHERE user_id = NEW.user_id ORDER BY created_at_ms, id LIMIT 1)
-      AND (SELECT count(*) FROM source_attestations WHERE user_id = NEW.user_id AND transaction_id = NEW.transaction_id) = 1
-      THEN NEW.time_zone ELSE time_zone END
-  WHERE user_id = NEW.user_id AND fact_revision IS NOT NULL;
-END`,
+  transactionFactAttestation,
   `CREATE TRIGGER transaction_fact_insert AFTER INSERT ON transactions BEGIN
   INSERT INTO transaction_projection_state(user_id,version,readiness,fact_revision,first_captured_at_ms,time_zone)
   SELECT NEW.user_id,0,'dirty',1,NEW.created_at_ms,time_zone FROM users WHERE id=NEW.user_id
@@ -821,6 +830,28 @@ const atomicBatchReceipts = [
     accepted_at_ms INTEGER NOT NULL,status INTEGER NOT NULL CHECK(status BETWEEN 200 AND 499),
     body TEXT, PRIMARY KEY(user_id,retry_key_digest),
     CHECK(body IS NULL OR (operation IN ('subscription.cancelSubscription','transactions.createTransaction','transactions.updateTransaction','transactions.linkTransactions','transactions.unlinkTransactions','budgets.createBudget','budgets.updateBudget','budgets.deleteBudget','dashboard.initializeDashboard','dashboard.applyDashboardEdit','recurringPlans.applyRecurringEdit','transactions.deleteTransaction','operations.executeAtomicBatch','categories.createKeywordRule','categories.updateKeywordRule','categories.deleteKeywordRule','transactions.updateTransactions') AND json_valid(body)))
+  ) STRICT`,
+  `CREATE TABLE canonical_receipt_parts(user_id TEXT NOT NULL,retry_key_digest TEXT NOT NULL,position INTEGER NOT NULL CHECK(position>=0),part TEXT NOT NULL,PRIMARY KEY(user_id,retry_key_digest,position), FOREIGN KEY(user_id,retry_key_digest) REFERENCES canonical_request_receipts(user_id,retry_key_digest) ON DELETE CASCADE) STRICT`,
+  `CREATE TRIGGER canonical_receipt_parts_parent BEFORE INSERT ON canonical_receipt_parts
+    WHEN NOT EXISTS(SELECT 1 FROM canonical_request_receipts WHERE user_id=NEW.user_id AND retry_key_digest=NEW.retry_key_digest AND operation IN ('recurringPlans.applyRecurringEdit','operations.executeAtomicBatch') AND json_type(body)='integer')
+    BEGIN SELECT RAISE(ABORT,'invalid_recurring_receipt'); END`,
+  `INSERT INTO canonical_request_receipts SELECT * FROM receipts_before_batch`,
+  `INSERT INTO canonical_receipt_parts SELECT * FROM receipt_parts_before_batch`,
+  `DROP TABLE receipt_parts_before_batch`,
+  `DROP TABLE receipts_before_batch`,
+  `CREATE INDEX canonical_receipt_expiry ON canonical_request_receipts(accepted_at_ms)`,
+] as const;
+
+const connectionReceipts = [
+  `DROP TRIGGER canonical_receipt_parts_parent`,
+  `ALTER TABLE canonical_receipt_parts RENAME TO receipt_parts_before_batch`,
+  `ALTER TABLE canonical_request_receipts RENAME TO receipts_before_batch`,
+  `CREATE TABLE canonical_request_receipts (
+    user_id TEXT NOT NULL REFERENCES users(id),retry_key_digest TEXT NOT NULL CHECK(length(retry_key_digest)=64),
+    operation TEXT NOT NULL,input_digest TEXT NOT NULL CHECK(length(input_digest)=64),
+    accepted_at_ms INTEGER NOT NULL,status INTEGER NOT NULL CHECK(status BETWEEN 200 AND 499),
+    body TEXT, PRIMARY KEY(user_id,retry_key_digest),
+    CHECK(body IS NULL OR (operation IN ('subscription.cancelSubscription','transactions.createTransaction','transactions.updateTransaction','transactions.linkTransactions','transactions.unlinkTransactions','budgets.createBudget','budgets.updateBudget','budgets.deleteBudget','dashboard.initializeDashboard','dashboard.applyDashboardEdit','recurringPlans.applyRecurringEdit','transactions.deleteTransaction','operations.executeAtomicBatch','categories.createKeywordRule','categories.updateKeywordRule','categories.deleteKeywordRule','transactions.updateTransactions','connections.connectInstitution') AND json_valid(body)))
   ) STRICT`,
   `CREATE TABLE canonical_receipt_parts(user_id TEXT NOT NULL,retry_key_digest TEXT NOT NULL,position INTEGER NOT NULL CHECK(position>=0),part TEXT NOT NULL,PRIMARY KEY(user_id,retry_key_digest,position), FOREIGN KEY(user_id,retry_key_digest) REFERENCES canonical_request_receipts(user_id,retry_key_digest) ON DELETE CASCADE) STRICT`,
   `CREATE TRIGGER canonical_receipt_parts_parent BEFORE INSERT ON canonical_receipt_parts
@@ -923,6 +954,26 @@ export const userStoreHistory: StoreHistory = {
     { version: 17, id: "retained-ingestion", statements: ingestionSchema() },
     { version: 18, id: "immutable-billing-admissions", statements: billingAdmissionSchema() },
     { version: 19, id: "human-sample-review", statements: sampleSchema() },
+    {
+      version: 20,
+      id: "user-connections",
+      statements: [
+        ...connectionSchema(),
+        ...connectionReceipts,
+        "CREATE TABLE saved_attestations AS SELECT * FROM source_attestations",
+        "DROP TABLE source_attestations",
+        sourceTable.replace("'notification-email'", "'notification-email','connection-movement'"),
+        ...ingestionSchema().filter((statement) =>
+          statement.startsWith("ALTER TABLE source_attestations ADD COLUMN")
+        ),
+        "INSERT INTO source_attestations SELECT * FROM saved_attestations",
+        "DROP TABLE saved_attestations",
+        attestationImmutable,
+        dashboardAttestedMember,
+        transactionFactAttestation,
+        ...connectionAuditSchema(),
+      ],
+    },
   ],
 };
 

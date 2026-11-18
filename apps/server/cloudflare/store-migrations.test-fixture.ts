@@ -79,8 +79,13 @@ const observeStorage = (
     },
   });
 };
+const connectionSchemaVersion = 20;
 const owners = {
   userOldest: { ...userStoreHistory, steps: userStoreHistory.steps.slice(0, 1) },
+  userBeforeConnections: {
+    ...userStoreHistory,
+    steps: userStoreHistory.steps.filter((step) => step.version < connectionSchemaVersion),
+  },
   userCurrent: userStoreHistory,
   maintenance: maintenanceStoreHistory,
   erasure: erasureStoreHistory,
@@ -89,6 +94,7 @@ const selectedHistory = (mode: keyof typeof owners | keyof typeof histories): St
   if (
     mode === "userOldest" ||
     mode === "userCurrent" ||
+    mode === "userBeforeConnections" ||
     mode === "maintenance" ||
     mode === "erasure"
   ) {

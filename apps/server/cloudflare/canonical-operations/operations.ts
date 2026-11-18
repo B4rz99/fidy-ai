@@ -2,6 +2,7 @@ import type { UserId } from "../../src/core/identity/contract";
 import type { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import type { UserStoreBindings } from "../directory/contract";
 import { reserveBatchForwarding, unavailableStatement } from "../ingestion/operations";
+import { queryLocalConnections } from "../connections/operations";
 import { readLocalProfile } from "../identity/operations";
 import { recurringDiscoveryIntervalMs } from "../recurring/contract";
 import { batchOwnersFor, localBatchOwners, localReviewBinding } from "./internal/local-owners";
@@ -735,6 +736,7 @@ export const executeCanonicalQuery = ({
 /** Native batch dispatch and the individual keyword and group-correction entry points. */
 const successfulMutationStatus = 200;
 export const isLocalBatchRoute = (id: string): boolean =>
+  id.startsWith("connections.") ||
   id === atomicBatchOperation ||
   id === "identity.updateUserPreferences" ||
   id === "identity.getCurrentUser" ||
@@ -756,14 +758,38 @@ const reserveForwardingRoute =
       Effect.asVoid,
       Effect.mapError((cause) => new CanonicalAdmissionUnavailable({ cause }))
     );
+type BatchRouteUnit = {
+  directory: Pick<DurableObjectNamespace, "getByName">;
+  operation: CatalogOperation;
+  request: Request;
+  storage: DurableObjectStorage;
+  owns: (id: string) => boolean;
+};
+const localBatchQuery = Effect.fn(function* (unit: BatchRouteUnit) {
+  if (unit.operation.id.startsWith("connections.") && unit.operation.policy.kind === "query") {
+    return Option.some(
+      yield* runLocalMutation({
+        ...unit,
+        input: Effect.succeedSome(true),
+        work: (_input, user) => queryLocalConnections(unit.operation.id, unit.request, user),
+      })
+    );
+  }
+  if (["identity.getCurrentUser", "categories.listKeywordRules"].includes(unit.operation.id)) {
+    const args = { ...unit, input: Effect.succeedSome(true) };
+    if (unit.operation.id === "identity.getCurrentUser") {
+      return Option.some(
+        yield* runLocalMutation({ ...args, work: (_input, user) => readLocalProfile(user) })
+      );
+    }
+    return Option.some(
+      yield* runLocalMutation({ ...args, work: (_input, user) => localKeywordRules(user) })
+    );
+  }
+  return Option.none<Response>();
+});
 export const dispatchLocalBatchRoute = Effect.fn(
-  function* (unit: {
-    directory: Pick<DurableObjectNamespace, "getByName">;
-    operation: CatalogOperation;
-    request: Request;
-    storage: DurableObjectStorage;
-    owns: (id: string) => boolean;
-  }) {
+  function* (unit: BatchRouteUnit) {
     if (unit.operation.id === atomicBatchOperation) {
       return yield* runLocalBatch(
         {
@@ -773,13 +799,8 @@ export const dispatchLocalBatchRoute = Effect.fn(
         batchOwnersFor(unit)
       );
     }
-    if (["identity.getCurrentUser", "categories.listKeywordRules"].includes(unit.operation.id)) {
-      const args = { ...unit, input: Effect.succeedSome(true) };
-      if (unit.operation.id === "identity.getCurrentUser") {
-        return yield* runLocalMutation({ ...args, work: (_input, user) => readLocalProfile(user) });
-      }
-      return yield* runLocalMutation({ ...args, work: (_input, user) => localKeywordRules(user) });
-    }
+    const query = yield* localBatchQuery(unit);
+    if (Option.isSome(query)) return query.value;
     const prepare = localBatchOwners.get(unit.operation.id);
     if (prepare === undefined) return canonicalAdmissionUnavailable();
     return yield* runLocalMutation(

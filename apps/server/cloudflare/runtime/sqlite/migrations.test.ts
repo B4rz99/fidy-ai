@@ -98,6 +98,73 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       );
     })
   );
+  test.effect("preserves a populated User across the Connection migration", () =>
+    Effect.gen(function* () {
+      const activate = yield* probe;
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const store = yield* activate("userBeforeConnections", "sample-review");
+          expect(yield* store.request).toBe(200);
+          yield* store.exec(
+            "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES('10000000-0000-4000-8000-000000000051','CO','es-CO','America/Bogota',0)"
+          );
+          yield* store.exec(
+            "INSERT INTO categories(id,label,display_order) VALUES('category','Food',1)"
+          );
+          yield* store.exec(
+            "INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms) SELECT 'movement',id,'100','COP','inflow','category',0,0 FROM users"
+          );
+          yield* store.exec(
+            "INSERT INTO source_attestations(id,user_id,transaction_id,kind,service_market,locale,time_zone,interpretation_revision,created_at_ms) SELECT 'source',id,'movement','manual',service_market,locale,time_zone,'manual-v1',0 FROM users"
+          );
+          yield* store.exec(
+            "INSERT INTO web_sessions(id,pairing_id,user_id,token_digest,created_at_ms,fresh_until_ms,idle_expires_at_ms,hard_expires_at_ms) SELECT id,'pair',id,zeroblob(32),0,600000,600000,7776000000 FROM users"
+          );
+          yield* store.exec(
+            "INSERT INTO audit_entries(id,user_id,record_type,session_id,operation,outcome,occurred_at_ms) SELECT 'history',id,'session_call',id,'transactions.createTransaction','success',0 FROM users"
+          );
+          yield* store.exec(
+            "INSERT INTO canonical_request_receipts SELECT id,hex(zeroblob(32)),'operations.executeAtomicBatch',hex(zeroblob(32)),0,200,'1' FROM users"
+          );
+          yield* store.exec(
+            "INSERT INTO canonical_receipt_parts SELECT id,hex(zeroblob(32)),0,'part' FROM users"
+          );
+          yield* store.exec(
+            "INSERT INTO ingest_sample_decisions(candidate_id,user_id,revision,digest,issuer,operator,decided_at_ms,phase) SELECT 'sample',id,1,'digest','review','human',0,'rejected' FROM users"
+          );
+        })
+      );
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const store = yield* activate("userCurrent", "connections");
+          expect(yield* store.request).toBe(200);
+          expect(
+            yield* store.exec(
+              "SELECT version,id FROM store_migrations WHERE version IN (19,20) ORDER BY version"
+            )
+          ).toEqual([
+            { version: 19, id: "human-sample-review" },
+            { version: 20, id: "user-connections" },
+          ]);
+          expect(
+            yield* store.exec(
+              "SELECT transaction_id AS movement,kind,operation,outcome,part,phase FROM source_attestations CROSS JOIN audit_entries CROSS JOIN canonical_receipt_parts CROSS JOIN ingest_sample_decisions"
+            )
+          ).toEqual([
+            {
+              movement: "movement",
+              kind: "manual",
+              operation: "transactions.createTransaction",
+              outcome: "success",
+              part: "part",
+              phase: "rejected",
+            },
+          ]);
+          expect(yield* store.exec("PRAGMA foreign_key_check")).toEqual([]);
+        })
+      );
+    })
+  );
   test.effect("preserves committed steps and a deterministic refusal across reconstruction", () =>
     Effect.gen(function* () {
       const activate = yield* probe;

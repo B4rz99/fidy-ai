@@ -1,4 +1,4 @@
-import { Effect, FileSystem, type Scope } from "effect";
+import { Clock, DateTime, Effect, FileSystem, Schema, type Scope } from "effect";
 import { Miniflare, type MiniflareWorkerConfig } from "miniflare";
 import { browserOrigins } from "./runtime/contract";
 
@@ -227,7 +227,80 @@ const manifests = Effect.fnUntraced(function* (module: string) {
   });
 });
 
-type NativeFixture = "user" | "billing" | "browser" | "login" | "oauth";
+type NativeFixture = "connection" | "user" | "billing" | "browser" | "login" | "oauth";
+const minuteMs = 60000;
+const attemptLifetimeMs = 600000;
+const empty: {
+  bindings: NonNullable<MiniflareWorkerConfig["env"]>;
+  owners: NonNullable<MiniflareWorkerConfig["exports"]>;
+  configuration: Pick<MiniflareWorkerConfig, "triggers">;
+} = { bindings: {}, owners: {}, configuration: {} };
+const connectionPlatformOptions = Effect.fnUntraced(function* (enabled: boolean) {
+  if (!enabled) return empty;
+  const now = yield* Clock.currentTimeMillis;
+  return {
+    bindings: {
+      CONNECTION_FIXTURE: {
+        type: "durable-object" as const,
+        worker: "core",
+        exportName: "ConnectionProviderFixture",
+      },
+      CONNECTION_SYNCHRONIZATION_QUEUE_NAME: {
+        type: "text" as const,
+        value: "connection-sync",
+      },
+      CONNECTION_SYNCHRONIZATION_QUEUE: {
+        type: "queue" as const,
+        name: "connection-sync",
+      },
+      CONNECTION_SYNCHRONIZATION_WORKFLOW: {
+        type: "workflow" as const,
+        name: "connection-sync",
+        worker: "core",
+        exportName: "ConnectionSynchronizationWorkflow",
+      },
+      BANCOLOMBIA_SANDBOX_CONSENT_PROFILE: {
+        type: "text" as const,
+        value: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))({
+          contract: "bancolombia-sandbox-consent-2026-10-27",
+          userId: "10000000-0000-4000-8000-000000000051",
+          admission: {
+            startsAt: DateTime.formatIso(DateTime.makeUnsafe(now - minuteMs)),
+            expiresAt: DateTime.formatIso(DateTime.makeUnsafe(now + attemptLifetimeMs)),
+          },
+          financialId: "",
+          accountOwner: { SchemeName: "CC", Identification: "fixture" },
+          intent: {
+            permissions: ["ReadAccountsBasic", "ReadTransactionsDetail"],
+            historyPolicy: "bank-default",
+            expiryPolicy: "bank-default",
+          },
+        }).pipe(Effect.orDie),
+      },
+    },
+    owners: {
+      ConnectionProviderFixture: { type: "durable-object" as const, storage: "sqlite" as const },
+    },
+    configuration: {
+      triggers: [
+        {
+          type: "queue" as const,
+          name: "connection-sync",
+          maxBatchSize: 4,
+          maxBatchTimeout: 0,
+          maxRetries: 2,
+          retryDelay: 0,
+        },
+      ],
+    },
+  };
+});
+
+const fixtureModule = (mode: NativeFixture): string => {
+  if (mode === "login") return "./login-email-worker.test-fixture.ts";
+  if (mode === "connection") return "./connection-worker.test-fixture.ts";
+  return "./core-worker.ts";
+};
 const fixtureWorkers = (
   mode: NativeFixture
 ): Readonly<{
@@ -238,8 +311,10 @@ const fixtureWorkers = (
 }> => ({
   withBilling: mode === "billing",
   withOidc: mode === "browser" || mode === "login",
-  coreModule: mode === "login" ? "./login-email-worker.test-fixture.ts" : "./core-worker.ts",
-  ingressOptions: mode === "oauth" ? { upstream: "https://api.fidyapp.com" } : {},
+  coreModule: fixtureModule(mode),
+  ingressOptions: ["oauth", "connection"].includes(mode)
+    ? { upstream: "https://api.fidyapp.com" }
+    : {},
 });
 
 const textBindings = (
@@ -285,15 +360,21 @@ const privateEmailWorker = Effect.fnUntraced(function* (withBilling: boolean) {
     : [];
   return emailFixture;
 });
+const testServices = Effect.fnUntraced(function* (billing: boolean, oidc: boolean) {
+  return [
+    ...(yield* billingProvider(billing)),
+    ...(yield* privateEmailWorker(billing)),
+    ...(yield* oidcWorkers(oidc)),
+  ];
+});
 const createUserPlatform = Effect.fnUntraced(function* (mode: NativeFixture) {
   const { withBilling, withOidc, coreModule, ingressOptions } = fixtureWorkers(mode);
   const fs = yield* FileSystem.FileSystem;
   const directory = yield* fs.makeTempDirectoryScoped({ prefix: "fidy-user-store-" });
   const [ingress, core] = yield* manifests(coreModule);
 
-  const provider = yield* billingProvider(withBilling);
-  const emailFixture = yield* privateEmailWorker(withBilling);
-  const oidc = yield* oidcWorkers(withOidc);
+  const services = yield* testServices(withBilling, withOidc);
+  const connection = yield* connectionPlatformOptions(mode === "connection");
   const create = (
     ceiling: string,
     logs: Array<string>,
@@ -312,14 +393,16 @@ const createUserPlatform = Effect.fnUntraced(function* (mode: NativeFixture) {
           config: {
             type: "worker",
             name: "core",
+            ...connection.configuration,
             ...(withBilling ? billingTrigger : {}),
             ...(withOidc ? loginEmailTrigger : {}),
             compatibilityDate: "2026-09-08",
             compatibilityFlags: ["nodejs_compat"],
             manifest: core,
-            exports: nativeOwners,
+            exports: { ...nativeOwners, ...connection.owners },
             env: {
               BROWSER_ORIGIN: origin,
+              ...connection.bindings,
               ...(withOidc ? browserBindings : {}),
               CF_VERSION_METADATA: { type: "version-metadata" },
               SQLITE_STORE_CAPACITY_BYTES: { type: "text", value: ceiling },
@@ -329,9 +412,7 @@ const createUserPlatform = Effect.fnUntraced(function* (mode: NativeFixture) {
             },
           },
         },
-        ...provider,
-        ...emailFixture,
-        ...oidc,
+        ...services,
       ],
     });
   return (
@@ -347,6 +428,7 @@ const createUserPlatform = Effect.fnUntraced(function* (mode: NativeFixture) {
 
 export const nativeLoginPlatform = createUserPlatform("login");
 export const nativeBrowserPlatform = createUserPlatform("browser");
+export const nativeConnectionPlatform = createUserPlatform("connection");
 export const nativeUserPlatform = createUserPlatform("user");
 export const nativeBillingPlatform = createUserPlatform("billing");
 

@@ -10,7 +10,7 @@ import { grantPurpose, openGrant } from "./grant";
 const maximumEnvelopeLength = 100000;
 const leaseMilliseconds = 120000;
 const retryMilliseconds = 300000;
-const Candidate = Schema.Struct({
+export const Candidate = Schema.Struct({
   attemptId: Schema.String,
   connectionId: Schema.String,
   userId: Schema.String,

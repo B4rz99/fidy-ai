@@ -35,6 +35,7 @@ import { canonicalAdmissionUnavailable, runLocalMutation } from "../canonical-ad
 import { rawPathId } from "../http/operations";
 import {
   captureLocalTransaction as captureNative,
+  prepareConnectionMovement as prepareBankCapture,
   prepareLocalCapture as prepareNativeCapture,
   prepareSourcedCapture as prepareNativeSourcedCapture,
 } from "./internal/sqlite-capture";
@@ -501,3 +502,6 @@ export const prepareLocalDeletion: typeof prepareDeletionInStore = (id, user, cu
 
 export const prepareSourcedCapture: typeof prepareNativeSourcedCapture = (...args) =>
   prepareNativeSourcedCapture(...args);
+
+export const prepareConnectionMovement: typeof prepareBankCapture = (...args) =>
+  prepareBankCapture(...args);

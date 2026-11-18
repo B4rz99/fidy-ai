@@ -20,6 +20,7 @@ import {
 import {
   routeBootstrapRequest,
   routeBrowserSession,
+  routeConnectionCallback,
   routePATRequest,
   routeSessionRequest,
 } from "../../directory/operations";
@@ -55,10 +56,7 @@ import { processingConsentTransport } from "../../../src/shell/processing-consen
 import { handleProcessingConsentRequest } from "../../consent/runtime";
 import { connectionBrowserTransport } from "../../../src/shell/connections/runtime";
 import { connectionCallbackPath } from "../../connections/contract";
-import {
-  handleConnectionBrowserRequest,
-  handleConnectionCallback,
-} from "../../connections/runtime";
+import {} from "../../connections/runtime";
 import type { HttpClient } from "effect/http";
 import { ownsProviderAuthenticationPath } from "../../provider-authentication/operations";
 import { oauthPaths } from "../../../src/shell/oauth-agents/contract";
@@ -1835,13 +1833,41 @@ const dedicatedBrowserResponse = (
     browserOrigin: environment.BROWSER_ORIGIN,
   };
   if (path === connectionCallbackPath) {
-    return Option.some(handleConnectionCallback(input));
+    if (request.method !== "GET") {
+      return Option.some(
+        Effect.succeed(new Response(null, { status: 405, headers: { allow: "GET" } }))
+      );
+    }
+    return Option.some(
+      routeConnectionCallback({ request, environment }).pipe(
+        Effect.as(
+          new Response(null, {
+            status: 303,
+            headers: {
+              location: environment.BROWSER_ORIGIN + "/connections/result",
+              "cache-control": "no-store",
+              "referrer-policy": "no-referrer",
+            },
+          })
+        )
+      )
+    );
   }
   if (Option.isSome(processingConsentTransport(path))) {
     return Option.some(handleProcessingConsentRequest(input));
   }
   if (Option.isSome(connectionBrowserTransport(path))) {
-    return Option.some(handleConnectionBrowserRequest(input));
+    if (request.headers.get("origin") !== environment.BROWSER_ORIGIN) {
+      return Option.some(
+        Effect.succeed(
+          Response.json(
+            { error: { code: "continuation_unavailable" } },
+            { status: 403, headers: { "cache-control": "no-store" } }
+          )
+        )
+      );
+    }
+    return Option.some(routeSessionRequest({ request, environment }));
   }
   return Option.none();
 };
@@ -1909,7 +1935,9 @@ const reservedBindingResponse = <E, R>(
   environment: CoreHttpEnvironment,
   work: Effect.Effect<Response, E, R>
 ): Effect.Effect<Response, E, R> =>
-  Option.isSome(processingConsentTransport(new URL(request.url).pathname))
+  Option.isSome(processingConsentTransport(new URL(request.url).pathname)) ||
+  Option.isSome(connectionBrowserTransport(new URL(request.url).pathname)) ||
+  new URL(request.url).pathname === connectionCallbackPath
     ? work
     : withBrowserBinding(request, environment, work);
 

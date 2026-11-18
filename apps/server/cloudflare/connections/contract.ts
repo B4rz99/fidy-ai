@@ -139,3 +139,28 @@ export type ConnectionBankCleanup = Readonly<{
     }>
   ) => Effect.Effect<void, ConnectionAuthorizationUnavailable>;
 }>;
+
+export const SynchronizationWork = Schema.Struct({
+  kind: Schema.Literal("connection-synchronization"),
+  userId: UserId,
+  jobId: Schema.String.check(Schema.isUUID()),
+});
+export type SynchronizationWork = typeof SynchronizationWork.Type;
+/** Only replay-safe, read-only pages at the exact cursor may implement this capability. */
+export type SynchronizationProvider = {
+  clientId: string;
+  refreshIntervalMs: number;
+  page: (input: {
+    accountReference: string;
+    cursor: Option.Option<string>;
+    work: SynchronizationWork;
+    grant: ConnectionBankGrant;
+  }) => Effect.Effect<unknown, ConnectionAuthorizationUnavailable>;
+};
+export type ConnectionAdapters = {
+  preparation: Option.Option<ConnectionBankPreparation>;
+  activation: Option.Option<ConnectionBankActivation>;
+  cleanup: Option.Option<ConnectionBankCleanup>;
+  synchronization: Option.Option<SynchronizationProvider>;
+  grantKey: Option.Option<Redacted.Redacted<string>>;
+};

@@ -112,8 +112,11 @@ const approved = Effect.fn(function* (
   const code = new URL(callback).searchParams.get("code") ?? "";
   return { owner, session, connectionId, code };
 });
-export const nativeGrantWithScopes = Effect.fn(function* (scopes: ReadonlyArray<string>) {
-  const create = yield* nativeOAuthPlatform,
+export const nativeGrantWithScopes = Effect.fn(function* (
+  scopes: ReadonlyArray<string>,
+  platform: typeof nativeOAuthPlatform = nativeOAuthPlatform
+) {
+  const create = yield* platform,
     runtime = yield* create();
   const { start, client_id, verifier } = yield* publicClient(runtime, scopes);
   const { owner, session, code, connectionId } = yield* approved(runtime, start, scopes);

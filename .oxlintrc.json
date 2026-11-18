@@ -317,6 +317,7 @@
         "apps/server/cloudflare/release-smoke-worker.ts",
         "apps/server/cloudflare/d1-migration-test-worker.fixture.ts",
         "apps/server/cloudflare/login-email-worker.test-fixture.ts",
+        "apps/server/cloudflare/connection-worker.test-fixture.ts",
         "apps/server/cloudflare/storage-forward-repair.test-fixture.ts",
         "apps/server/cloudflare/ingestion/email-worker.ts",
         "apps/server/cloudflare/ingestion/private-email.test-fixture.ts",

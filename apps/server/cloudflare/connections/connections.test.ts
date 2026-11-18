@@ -1,3 +1,8 @@
+import { retainedWork } from "../core-http/retained-credential-owners.test-fixture";
+import { browserSessionBindingResponse } from "../web-session/operations";
+import { ConnectionInstitutions } from "../../src/shell/connections/contract";
+import { connectionBrowserTransport } from "../../src/shell/connections/runtime";
+import { bancolombiaSandboxAdmission } from "../bancolombia-authentication/runtime";
 import { openAiTestKey } from "../openai.test-fixture";
 import assert from "node:assert/strict";
 import { sweepAttempts as sweepConnectionAttempts } from "./internal/retention";
@@ -21,17 +26,14 @@ import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import { UserTransactionCoordinator } from "../transactions/runtime";
-import { makeCoreWorker } from "../core-worker";
-import {
-  cloudflareWorkerTelemetry,
-  makeWorkerTelemetry,
-  observeWorkerExecution,
-} from "../runtime/telemetry/operations";
+import { type makeCoreWorker } from "../core-worker";
+import { makeWorkerTelemetry, observeWorkerExecution } from "../runtime/telemetry/operations";
 import type { WorkerTelemetryEvent } from "../runtime/telemetry/contract";
 import publicWorker from "../public-worker";
 import { ConnectInstitutionResult, InstitutionId } from "../../src/core/connections/contract";
 import {
   handleConnectionBrowserRequest,
+  handleConnectionCallback,
   makeConnectionsErasureStores,
   recoverConnections,
 } from "./runtime";
@@ -44,6 +46,8 @@ import {
   ConnectionConsentIntent,
   ConnectionGrantKey,
   ConnectionRetentionUnavailable,
+  ConnectionSandboxAdmission,
+  connectionCallbackPath,
 } from "./contract";
 
 const institutionRegistration = { enabled: false };
@@ -149,16 +153,43 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 const coordinatorByDatabase = new WeakMap<D1Database, Map<string, UserTransactionCoordinator>>();
+// The retained D1 migration images exercise the old owner's constraints and provider failure matrix.
+const retainedConnectionRequest = (
+  request: Request,
+  environment: Parameters<ReturnType<typeof makeCoreWorker>["fetch"]>[1],
+  institutions: ReadonlyArray<InstitutionId>
+): Promise<Response> => {
+  const path = new URL(request.url).pathname;
+  const browser = {
+    request,
+    db: environment.DB,
+    browserOrigin: environment.BROWSER_ORIGIN,
+    coordinator: environment.USER_TRANSACTION_COORDINATOR,
+  };
+  const browserWork = (): ReturnType<typeof retainedWork> => {
+    if (path === connectionCallbackPath) return Option.some(handleConnectionCallback(browser));
+    if (Option.isSome(connectionBrowserTransport(path))) {
+      return Option.some(handleConnectionBrowserRequest(browser));
+    }
+    return retainedWork({ request, environment, path });
+  };
+  const work = browserWork();
+  if (Option.isNone(work)) throw new Error("Unexpected retained Connection request");
+  return Effect.runPromise(
+    browserSessionBindingResponse({ request, db: environment.DB }).pipe(
+      Effect.flatMap(Option.match({ onSome: Effect.succeed, onNone: () => work.value })),
+      Effect.provideService(ConnectionInstitutions, institutions),
+      Effect.provideService(ConnectionSandboxAdmission, bancolombiaSandboxAdmission(environment))
+    )
+  );
+};
 const send = (
   db: D1Database,
   request: Request,
   beforeCoordinate?: (database: D1Database) => Promise<unknown>
 ): Promise<Response> => {
   const institutions = institutionRegistration.enabled ? [InstitutionId.make("bancolombia")] : [];
-  const coreWorker = makeCoreWorker({
-    telemetry: cloudflareWorkerTelemetry,
-    institutions,
-  });
+
   vi.setSystemTime(DateTime.nowUnsafe().epochMilliseconds + 1000);
   request.headers.set("cf-connecting-ip", "192.0.2.35");
   const coordinators =
@@ -171,64 +202,68 @@ const send = (
     RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
     CORE: {
       fetch: (internal) =>
-        coreWorker.fetch(new Request(internal), {
-          DB: db,
-          BANCOLOMBIA_SANDBOX_CONSENT_PROFILE: Option.getOrUndefined(sandboxProfile),
-          OPENAI_API_KEY: openAiTestKey({
-            run: (): Promise<never> => Promise.reject(new Error("unused")),
-          }),
-          CONTRACT_DIGEST: "a".repeat(64),
-          RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
-          HOSTED_AI_MODEL: approvedOpenAiModel,
-          BROWSER_ORIGIN: "https://app.fidyapp.com",
-          WOMPI_ENVIRONMENT: "",
-          WOMPI_PUBLIC_KEY: "",
-          WOMPI_PRIVATE_KEY: "",
-          WOMPI_INTEGRITY_SECRET: "",
-          USER_TRANSACTION_COORDINATOR: {
-            getByName: (name) => ({
-              fetch: (command) => {
-                let coordinator = coordinators.get(`${name}:${institutionRegistration.enabled}`);
-                if (coordinator === undefined) {
-                  coordinator = new UserTransactionCoordinator(
-                    {
-                      id: { name },
-                      storage: {
-                        getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> =>
-                          Promise.resolve(null),
-                        deleteAlarm: (): Promise<void> => Promise.resolve(),
-                        setAlarm: (): Promise<void> => Promise.resolve(),
-                      },
-                    },
-                    {
-                      DB: db,
-                      BANCOLOMBIA_SANDBOX_CONSENT_PROFILE: Option.getOrUndefined(sandboxProfile),
-                      BANCOLOMBIA_SANDBOX_GRANT_KEY: "A".repeat(43),
-                      OPENAI_API_KEY: openAiTestKey({
-                        run: (): Promise<never> => Promise.reject(new Error("unused")),
-                      }),
-                      HOSTED_AI_MODEL: approvedOpenAiModel,
-                    },
-                    { institutions, bank: bankPreparation, activation: bankActivation }
-                  );
-                  coordinators.set(`${name}:${institutionRegistration.enabled}`, coordinator);
-                }
-                const admittedCoordinator = coordinator;
-                return beforeCoordinate === undefined
-                  ? admittedCoordinator.fetch(new Request(command))
-                  : beforeCoordinate(db).then(() =>
-                      admittedCoordinator.fetch(new Request(command))
-                    );
-              },
+        retainedConnectionRequest(
+          new Request(internal),
+          {
+            DB: db,
+            BANCOLOMBIA_SANDBOX_CONSENT_PROFILE: Option.getOrUndefined(sandboxProfile),
+            OPENAI_API_KEY: openAiTestKey({
+              run: (): Promise<never> => Promise.reject(new Error("unused")),
             }),
+            CONTRACT_DIGEST: "a".repeat(64),
+            RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
+            HOSTED_AI_MODEL: approvedOpenAiModel,
+            BROWSER_ORIGIN: "https://app.fidyapp.com",
+            WOMPI_ENVIRONMENT: "",
+            WOMPI_PUBLIC_KEY: "",
+            WOMPI_PRIVATE_KEY: "",
+            WOMPI_INTEGRITY_SECRET: "",
+            USER_TRANSACTION_COORDINATOR: {
+              getByName: (name) => ({
+                fetch: (command) => {
+                  let coordinator = coordinators.get(`${name}:${institutionRegistration.enabled}`);
+                  if (coordinator === undefined) {
+                    coordinator = new UserTransactionCoordinator(
+                      {
+                        id: { name },
+                        storage: {
+                          getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> =>
+                            Promise.resolve(null),
+                          deleteAlarm: (): Promise<void> => Promise.resolve(),
+                          setAlarm: (): Promise<void> => Promise.resolve(),
+                        },
+                      },
+                      {
+                        DB: db,
+                        BANCOLOMBIA_SANDBOX_CONSENT_PROFILE: Option.getOrUndefined(sandboxProfile),
+                        BANCOLOMBIA_SANDBOX_GRANT_KEY: "A".repeat(43),
+                        OPENAI_API_KEY: openAiTestKey({
+                          run: (): Promise<never> => Promise.reject(new Error("unused")),
+                        }),
+                        HOSTED_AI_MODEL: approvedOpenAiModel,
+                      },
+                      { institutions, bank: bankPreparation, activation: bankActivation }
+                    );
+                    coordinators.set(`${name}:${institutionRegistration.enabled}`, coordinator);
+                  }
+                  const admittedCoordinator = coordinator;
+                  return beforeCoordinate === undefined
+                    ? admittedCoordinator.fetch(new Request(command))
+                    : beforeCoordinate(db).then(() =>
+                        admittedCoordinator.fetch(new Request(command))
+                      );
+                },
+              }),
+            },
+            KAPSO_API_KEY: "",
+            WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
+            KAPSO_WEBHOOK_SECRET: "",
+            WHATSAPP_BUSINESS_PORTFOLIO_ID: "portfolio",
+            CLOUDFLARE_ACCESS_ISSUER: "",
+            CLOUDFLARE_ACCESS_AUDIENCE: "",
           },
-          KAPSO_API_KEY: "",
-          WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
-          KAPSO_WEBHOOK_SECRET: "",
-          WHATSAPP_BUSINESS_PORTFOLIO_ID: "portfolio",
-          CLOUDFLARE_ACCESS_ISSUER: "",
-          CLOUDFLARE_ACCESS_AUDIENCE: "",
-        }),
+          institutions
+        ),
     },
   });
 };

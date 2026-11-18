@@ -13,6 +13,8 @@ export type CoreQueueEnvironment = BillingWorkRouting &
   }> &
   Partial<
     Readonly<{
+      CONNECTION_SYNCHRONIZATION_WORKFLOW: Workflow;
+      CONNECTION_SYNCHRONIZATION_QUEUE_NAME: string;
       EMAIL_BUCKET: R2Bucket;
       RESEND_API_KEY: string;
       BROWSER_PAIRING_EMAIL_WORKFLOW: Workflow;

@@ -99,9 +99,24 @@ const captureReadback = Effect.fn(function* (userId: UserId, id: string) {
   const data = yield* Schema.encodeEffect(TransactionOutput)(decoded.value);
   return { status: 201, outcome: "success" as const, body: { data, next: [] } };
 });
+const captureProvenance = (
+  source: Option.Option<CaptureSource>,
+  movementId: Option.Option<string>
+): { kind: string; revision: string } =>
+  Option.getOrElse(
+    Option.map(source, (value) => ({ kind: value.kind, revision: value.revision })),
+    () =>
+      Option.isNone(movementId)
+        ? { kind: "manual" as const, revision: "manual-v1" }
+        : { kind: "connection-movement" as const, revision: "connection-v1" }
+  );
 const prepareCapture = Effect.fn(function* (
   input: CreateTransactionInput,
-  { userId, current }: { userId: UserId; current: number },
+  {
+    userId,
+    current,
+    movementId,
+  }: { userId: UserId; current: number; movementId: Option.Option<string> },
   source: Option.Option<CaptureSource>
 ) {
   const occurredAt = DateTime.toEpochMillis(input.occurredAt);
@@ -118,10 +133,7 @@ const prepareCapture = Effect.fn(function* (
   const context = Option.isSome(source)
     ? source.value.context
     : yield* Schema.decodeUnknownEffect(UserContext)(owner);
-  const { kind, revision } = Option.getOrElse(
-    Option.map(source, (value) => ({ kind: value.kind, revision: value.revision })),
-    () => ({ kind: "manual" as const, revision: "manual-v1" })
-  );
+  const { kind, revision } = captureProvenance(source, movementId);
   const evidence = yield* sourceFields(source, input);
   const reference = yield* resolveLocalCategory({
     userId,
@@ -145,7 +157,7 @@ const prepareCapture = Effect.fn(function* (
     targets: [],
     commit: Effect.gen(function* () {
       yield* retainLocalCategory(reference.value);
-      const id = newId();
+      const id = Option.getOrElse(movementId, newId);
       yield* sql`INSERT INTO transactions(id,user_id,amount,currency,direction,counterparty,category_id,category_revision,notes,occurred_at_ms,created_at_ms,user_decisions)
     VALUES (${id},${userId},${encodeMoneyAmount(input.money.amount)},${input.money.currency},${input.direction},${Option.getOrNull(input.counterparty)},${reference.value.categoryId},${reference.value.revision},${Option.getOrNull(input.notes)},${occurredAt},${current},${yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Boolean)))(kind === "manual" ? captureDecisions(input) : {})})`;
       const sources =
@@ -163,14 +175,18 @@ export const prepareLocalCapture = Effect.fnUntraced(function* (
   userId: UserId,
   current: number
 ) {
-  return yield* prepareCapture(input, { userId, current }, Option.none());
+  return yield* prepareCapture(
+    input,
+    { userId, current, movementId: Option.none() },
+    Option.none()
+  );
 });
 export const prepareSourcedCapture = Effect.fnUntraced(function* (
   input: CreateTransactionInput,
   owner: { userId: UserId; current: number },
   source: CaptureSource
 ) {
-  return yield* prepareCapture(input, owner, Option.some(source));
+  return yield* prepareCapture(input, { ...owner, movementId: Option.none() }, Option.some(source));
 });
 export const captureLocalTransaction = Effect.fnUntraced(function* (
   input: CreateTransactionInput,
@@ -178,4 +194,15 @@ export const captureLocalTransaction = Effect.fnUntraced(function* (
   current: number
 ) {
   return yield* prepareLocalCapture(input, user, current).pipe(Effect.flatMap(commitLocalWrite));
+});
+
+export const prepareConnectionMovement = Effect.fn(function* (
+  input: CreateTransactionInput,
+  owner: { userId: UserId; current: number; movementId: string }
+) {
+  return yield* prepareCapture(
+    input,
+    { ...owner, movementId: Option.some(owner.movementId) },
+    Option.none()
+  );
 });

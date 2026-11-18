@@ -116,9 +116,34 @@ const nativeWorkCheck = (
       status: response.status,
       repaired: response.headers.get("fidy-alarm-repaired") ?? "unreported",
     }));
+const sendNativeRequest = (runtime: Miniflare, request: Request): Promise<Response> => {
+  const headers = new Headers(request.headers);
+  headers.set("cf-connecting-ip", "192.0.2.35");
+  return (request.body === null ? Promise.resolve({}) : request.text().then((body) => ({ body })))
+    .then((body) =>
+      runtime.dispatchFetch(request.url, {
+        method: request.method,
+        headers: { ...Object.fromEntries(headers), connection: "close" },
+        ...body,
+      })
+    )
+    .then((response) =>
+      response.text().then(
+        (text) =>
+          new Response(text, {
+            status: response.status,
+            headers: Object.fromEntries(response.headers),
+          })
+      )
+    );
+};
+
 /** Production ingress and two isolated User stores; only fixture setup and invariant probes see SQL. */
-export const makeNativeTransactionJourney = Effect.fn(function* (ceiling?: string) {
-  const create = yield* nativeUserPlatform;
+export const makeNativeTransactionJourney = Effect.fn(function* (
+  ceiling?: string,
+  platform: typeof nativeUserPlatform = nativeUserPlatform
+) {
+  const create = yield* platform;
   const runtime = yield* create(ceiling);
   const first = yield* seed(runtime, alice, false);
   const other = yield* seed(runtime, bob, false);
@@ -135,27 +160,7 @@ export const makeNativeTransactionJourney = Effect.fn(function* (ceiling?: strin
   const exec = (
     ...args: Parameters<typeof first.local.exec>
   ): ReturnType<typeof first.local.exec> => first.local.exec(...args);
-  const send = (request: Request): Promise<Response> => {
-    const headers = new Headers(request.headers);
-    headers.set("cf-connecting-ip", "192.0.2.35");
-    return (request.body === null ? Promise.resolve({}) : request.text().then((body) => ({ body })))
-      .then((body) =>
-        runtime.dispatchFetch(request.url, {
-          method: request.method,
-          headers: { ...Object.fromEntries(headers), connection: "close" },
-          ...body,
-        })
-      )
-      .then((response) =>
-        response.text().then(
-          (text) =>
-            new Response(text, {
-              status: response.status,
-              headers: Object.fromEntries(response.headers),
-            })
-        )
-      );
-  };
+  const send = (request: Request): Promise<Response> => sendNativeRequest(runtime, request);
   const browser = (index: number, path = "/transactions"): Promise<Response> => {
     const subject = index === 0 ? alice : bob;
     return send(
@@ -169,6 +174,7 @@ export const makeNativeTransactionJourney = Effect.fn(function* (ceiling?: strin
     );
   };
   return {
+    runtime,
     owner,
     exec,
     send,

@@ -92,7 +92,6 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         runtime.dispatchFetch("https://api.fidyapp.com/internal/sample-review", {
           method: "POST",
           headers: { "content-type": "application/json", "cf-access-jwt-assertion": token },
-          body: "{}",
         })
       );
       expect(denied.status).toBe(401);
@@ -104,7 +103,6 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         runtime.dispatchFetch("https://api.fidyapp.com/internal/support-recovery", {
           method: "POST",
           headers: { "content-type": "application/json", "cf-access-jwt-assertion": assertion },
-          body: "{}",
         })
       );
       expect(recovery.status).toBe(401);
@@ -112,7 +110,6 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         runtime.dispatchFetch("https://api.fidyapp.com/internal/sample-review", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: "{}",
         })
       );
       expect(unauthenticated.status).toBe(401);

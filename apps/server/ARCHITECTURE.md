@@ -160,6 +160,8 @@ cleanup and uses an independent registry to prevent restored data from regaining
 See [atomic accountability](../../docs/adr/0029-atomic-batch-accountability-boundaries.md) and
 [statement staging](../../docs/adr/0028-statement-bytes-are-staged-outside-atomic-batches.md).
 
+Connections retains each User’s ConnectionAttempts, encrypted grants, Accounts, and Synchronization progress in that User’s SQLite store. Account discovery commits the grant generation and first eligible Synchronization with its recovery alarm. Queue messages and Workflow instances carry the User and job identities. The User claims one read of the captured Account and cursor, releases SQLite during the provider wait, and checks the grant, cursor, registration, erasure standing, and original deadline again before committing a page. The financial owner commits each new institution movement with its source attestation. A unique Account and movement reference prevents a later page from duplicating a Transaction. Recurring admissions check live processing Consent. The deployed institution registry stays closed and the Bancolombia sandbox exposes only its implemented capabilities.
+
 ## 6. Hosted execution and delivery
 
 Agent owns hosted context, inference, canonical tool use, confirmation and Turn settlement. Memory

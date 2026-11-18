@@ -17,12 +17,7 @@ import {
   sessionRouteUrl,
   sourcePressureUrl,
 } from "./contract";
-import {
-  absentSessionResponse,
-  readBoundWebSessionProof,
-  sessionCookie,
-  sessionDigest,
-} from "../web-session/operations";
+import { absentSessionResponse, sessionCookie, sessionDigest } from "../web-session/operations";
 import { patRouteProof } from "../tokens/operations";
 
 import { Effect, Option, Schema } from "effect";
@@ -40,22 +35,26 @@ const missingRouteStatus = 404;
 const unauthorizedStatus = 401;
 const pressureStatus = 429;
 
-export const routeSessionRequest = ({
+type SessionRequest = { request: Request; environment: Partial<UserStoreBindings> };
+const missingMountedSession = (handoff: boolean, expected: Option.Option<string>): boolean =>
+  !handoff && Option.isNone(expected);
+const routeCookie = ({
   request,
   environment,
-}: Readonly<{
-  request: Request;
-  environment: Partial<UserStoreBindings>;
-}>): Effect.Effect<Response> =>
+  browserHandoff,
+}: SessionRequest & { browserHandoff: boolean }): Effect.Effect<Response> =>
   Effect.gen(function* () {
-    const lookup = yield* Effect.tryPromise(() => readBoundWebSessionProof(request));
-    if (Option.isNone(lookup)) return noAuthority();
+    const cookie = sessionCookie(request);
+    if (Option.isNone(cookie)) return noAuthority();
+    const expected = Option.fromNullishOr(request.headers.get(browserSessionBindingHeader));
+    if (missingMountedSession(browserHandoff, expected)) return noAuthority();
+    const digest = yield* Effect.tryPromise(() => sessionDigest(cookie.value));
     const { DIRECTORY, USER_STORE } = environment;
     if (DIRECTORY === undefined || USER_STORE === undefined) return canonicalAdmissionUnavailable();
     const response = yield* Effect.tryPromise((signal) =>
       DIRECTORY.getByName(directoryName).fetch(sessionRouteUrl, {
         method: "POST",
-        body: new Uint8Array(lookup.value.digest).buffer,
+        body: new Uint8Array(digest).buffer,
         signal,
       })
     );
@@ -64,12 +63,19 @@ export const routeSessionRequest = ({
     const route = yield* Effect.tryPromise(() => response.json()).pipe(
       Effect.flatMap(Schema.decodeUnknownEffect(SessionRoute))
     );
-    if (route.sessionId !== lookup.value.binding) return noAuthority();
+    if (Option.exists(expected, (id) => id !== route.sessionId)) return noAuthority();
+    const headers = new Headers(request.headers);
+    headers.set(browserSessionBindingHeader, route.sessionId);
     return yield* Effect.tryPromise((signal) =>
-      USER_STORE.getByName(route.userId).fetch(new Request(request, { signal }))
+      USER_STORE.getByName(route.userId).fetch(new Request(request, { signal, headers }))
     );
   }).pipe(Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable())));
 
+export const routeSessionRequest = (input: SessionRequest): Effect.Effect<Response> =>
+  routeCookie({ ...input, browserHandoff: false });
+/** The institution redirect cannot attach a mounted-session header. The User rechecks the exact cookie and original session. */
+export const routeConnectionCallback = (input: SessionRequest): Effect.Effect<Response> =>
+  routeCookie({ ...input, browserHandoff: true });
 const includesMountedSession = (request: Request): boolean =>
   (request.headers.get("cookie") ?? "")
     .split(";")

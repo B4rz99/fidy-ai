@@ -1,3 +1,4 @@
+import { SynchronizationWork } from "../../connections/contract";
 import { WhatsAppLifecycleWork, WhatsAppWork } from "../../whatsapp/contract";
 import { receiveWhatsAppWork, routeWhatsAppStatus } from "../../whatsapp/runtime";
 import { LocalBillingCollection, WompiBillingEvent } from "../../subscription/contract";
@@ -348,6 +349,40 @@ const receiveCallbackBatch = ({
     }).pipe(Effect.mapError(deliveryFailure))
   );
 const selectQueue = (input: QueueInput): Effect.Effect<void, QueueDeliveryUnavailable> => {
+  if (input.batch.queue === input.environment.CONNECTION_SYNCHRONIZATION_QUEUE_NAME) {
+    return receiveWorkflowBatch(
+      input.batch,
+      (entry) =>
+        Effect.gen(function* () {
+          const [message] = entry.messages;
+          if (message === undefined) return;
+          const work = yield* Schema.decodeUnknownEffect(SynchronizationWork, {
+            onExcessProperty: "error",
+          })(message.body);
+          const workflow = input.environment.CONNECTION_SYNCHRONIZATION_WORKFLOW;
+          if (workflow === undefined) {
+            return yield* deliveryFailure("Synchronization Workflow unavailable");
+          }
+          const started = yield* Effect.tryPromise(() =>
+            workflow.create({ id: work.jobId, params: work })
+          ).pipe(Effect.result);
+          if (started._tag === "Failure") {
+            const instance = yield* Effect.tryPromise(() => workflow.get(work.jobId));
+            const status = (yield* Effect.tryPromise(() => instance.status())).status;
+            if (status === "errored") yield* Effect.tryPromise(() => instance.restart());
+            else if (
+              !["queued", "running", "waiting", "waitingForPause", "paused", "complete"].includes(
+                status
+              )
+            ) {
+              return yield* deliveryFailure("Synchronization handoff unavailable");
+            }
+          }
+          message.ack();
+        }).pipe(Effect.mapError(deliveryFailure)),
+      4
+    );
+  }
   if (input.batch.queue === input.environment.OPERATIONAL_CANARY_QUEUE_NAME) {
     return receiveCanaryBatch(input);
   }

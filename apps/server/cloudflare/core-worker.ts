@@ -40,6 +40,7 @@ import { UserTransactionCoordinator as UserCoordinatorRuntime } from "./transact
 
 export { Erasure } from "./erasure-store/runtime";
 export { Maintenance } from "./maintenance/runtime";
+export { ConnectionSynchronizationWorkflow } from "./connections/runtime";
 export { Directory } from "./directory/runtime";
 export { UserStore } from "./user-store/runtime";
 export {

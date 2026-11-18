@@ -69,7 +69,12 @@ export const NotificationEmailSourceAttestation = Schema.Struct({
 export type NotificationEmailSourceAttestation = typeof NotificationEmailSourceAttestation.Type;
 
 /** Immutable evidence of the context and mechanism that interpreted one Transaction. */
+const ConnectionMovementSource = Schema.Struct({
+  ...SourceAttestationCommon.fields,
+  kind: Schema.Literal("connection-movement"),
+});
 export const SourceAttestation = Schema.Union([
+  ConnectionMovementSource,
   ManualSourceAttestation,
   StatementLineSourceAttestation,
   NotificationEmailSourceAttestation,
@@ -77,6 +82,7 @@ export const SourceAttestation = Schema.Union([
 export type SourceAttestation = typeof SourceAttestation.Type;
 
 export const SourceAttestationKind = Schema.Union([
+  ConnectionMovementSource.fields.kind,
   ManualSourceAttestation.fields.kind,
   StatementLineSourceAttestation.fields.kind,
   NotificationEmailSourceAttestation.fields.kind,

@@ -17,6 +17,25 @@ import {
   recoverLocalIngestion,
   repairLocalIngestionAlarm,
 } from "../ingestion/runtime";
+import {
+  checkConnectionAlarm,
+  cleanConnectionGrants,
+  expireConnectionAttempts,
+  nativeConnectionBrowser,
+  offerConnectionWork,
+  repairConnectionRetention,
+  runConnectionWork,
+  sandboxConnectionAdapters,
+} from "../connections/runtime";
+import {
+  type ConnectionAdapters,
+  ConnectionSandboxAdmission,
+  type SynchronizationWork,
+  connectionCallbackPath,
+} from "../connections/contract";
+import { connectionBrowserTransport } from "../../src/shell/connections/runtime";
+import type { BancolombiaSandboxEnvironment } from "../bancolombia-authentication/contract";
+import { bancolombiaSandboxAdmission } from "../bancolombia-authentication/runtime";
 import { localPATClaimUrl } from "../tokens/contract";
 import { type McpResidency, localProtocolAdmission, makeMcpResidency } from "../mcp/runtime";
 import {
@@ -157,6 +176,7 @@ import { ownerCheckRequest, ownerCheckResponse } from "../maintenance/contract";
 const uncertainCheckStatus = 503;
 type UserStoreEnvironment = WompiBindings &
   LocalIngestionEnvironment &
+  BancolombiaSandboxEnvironment &
   StoreReleaseEnvironment &
   Readonly<{
     PRICING: DurableObjectNamespace;
@@ -166,6 +186,7 @@ type UserStoreEnvironment = WompiBindings &
     DIRECTORY: DurableObjectNamespace;
     USER_STORE: DurableObjectNamespace;
     MAINTENANCE: DurableObjectNamespace;
+    CONNECTION_SYNCHRONIZATION_QUEUE: Queue<SynchronizationWork>;
     BILLING_COLLECTION_QUEUE: Queue<
       typeof LocalSourceCancellationWork.Type | typeof LocalBillingCollection.Type
     >;
@@ -174,6 +195,9 @@ const isBrowserObservation = (command: string, request: Request): boolean =>
   ["GET /web/session/binding", "POST /web/session/logout"].includes(command) ||
   (command === "GET /user" && !request.headers.has("authorization"));
 export class UserStore extends DurableObject<UserStoreEnvironment> {
+  protected connectionAdapters(): ConnectionAdapters {
+    return sandboxConnectionAdapters({ environment: this.env, userId: this.ctx.id.name ?? "" });
+  }
   private readonly runtime;
   private mcp?: McpResidency;
   private protocol(request: Request, owns: (id: string) => boolean): Promise<Response> {
@@ -267,6 +291,23 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
               )
             )
           ).pipe(Effect.mapError((cause) => new Cause.UnknownError(cause))),
+          expireConnectionAttempts({
+            storage: this.ctx.storage,
+            now: current,
+            adapters: this.connectionAdapters(),
+          }),
+          cleanConnectionGrants({
+            storage: this.ctx.storage,
+            adapters: this.connectionAdapters(),
+            owns: this.owns,
+          }),
+          offerConnectionWork({
+            now: current,
+            storage: this.ctx.storage,
+            queue: this.env.CONNECTION_SYNCHRONIZATION_QUEUE,
+            owns: this.owns,
+            environment: this.env,
+          }),
           recoverLocalPATExpiry(current, this.ctx.storage),
           offerDueSourceCancellations({
             current,
@@ -323,7 +364,11 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     const pat = this.patOperation(unit);
     if (Option.isSome(pat)) return pat;
     if (isLocalBatchRoute(operation.id)) {
-      return Option.some(dispatchLocalBatchRoute({ ...unit, directory }));
+      return Option.some(
+        dispatchLocalBatchRoute({ ...unit, directory }).pipe(
+          Effect.provideService(ConnectionSandboxAdmission, bancolombiaSandboxAdmission(this.env))
+        )
+      );
     }
     if (operation.id === "subscription.cancelSubscription") {
       return Option.some(
@@ -415,6 +460,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
   private inspectWork(): Promise<Response> {
     const storage = this.ctx.storage;
     const ownsUser = this.owns;
+    const adapters = this.connectionAdapters();
     return this.runtime.runPromise(
       Effect.gen(function* () {
         const current = yield* Clock.currentTimeMillis;
@@ -425,6 +471,8 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
             repairRecoveryAlarm(current, storage),
             repairReceiptAlarm(current, storage),
             repairLocalIngestionAlarm(current, storage),
+            checkConnectionAlarm(storage),
+            repairConnectionRetention({ storage, adapters }),
             repairLocalPATExpiry(current, storage),
             repairCancellationAlarm(storage),
             billingWake(storage),
@@ -671,6 +719,23 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     return this.dispatch(request, registered);
   }
 
+  private connectionRequest(
+    input: { request: Request; owns: (user: string) => boolean },
+    path: string,
+    command: string
+  ): Option.Option<Promise<Response>> {
+    const unit = { ...input, storage: this.ctx.storage, environment: this.env };
+    if (path === connectionCallbackPath || Option.isSome(connectionBrowserTransport(path))) {
+      return Option.some(
+        this.runtime.runPromise(
+          nativeConnectionBrowser({ unit, adapters: this.connectionAdapters() })
+        )
+      );
+    }
+    return command === "POST /work/connection-synchronization"
+      ? Option.some(this.runtime.runPromise(runConnectionWork(unit, this.connectionAdapters())))
+      : Option.none();
+  }
   private enrollmentRequest(
     request: Request,
     owns: (id: string) => boolean
@@ -705,6 +770,8 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     const path = new URL(request.url).pathname;
     const command = request.method + " " + path;
     const owns = (userId: string): boolean => registered && this.owns(userId);
+    const connection = this.connectionRequest({ request, owns }, path, command);
+    if (Option.isSome(connection)) return connection.value;
     const billing = this.enrollmentRequest(request, owns);
     if (Option.isSome(billing)) return billing.value;
     const identity = this.identityRequest(request, owns);

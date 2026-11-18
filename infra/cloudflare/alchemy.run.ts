@@ -336,6 +336,13 @@ export default Alchemy.Stack(
       : "true";
     const emailQueue = yield* Cloudflare.Queues.Queue("ForwardedEmailQueue");
 
+    const connectionSynchronizationQueue = yield* Cloudflare.Queues.Queue(
+      "ConnectionSynchronizationQueue"
+    );
+    const connectionSynchronizationWorkflow = Cloudflare.Workflow(
+      "ConnectionSynchronizationWorkflow",
+      { className: "ConnectionSynchronizationWorkflow" }
+    );
     const statementExtractionQueue = yield* Cloudflare.Queues.Queue("StatementExtractionQueue");
     const statementExtractionWorkflow = Cloudflare.Workflow("StatementExtractionWorkflowV1", {
       className: "StatementExtractionWorkflowV1",
@@ -447,6 +454,9 @@ export default Alchemy.Stack(
         ERASURE_BUCKET: erasureBucket,
         ERASURE_REQUIRED: erasureRequired,
         STATEMENT_STAGING_BUCKET: statementStagingBucket,
+        CONNECTION_SYNCHRONIZATION_QUEUE: connectionSynchronizationQueue,
+        CONNECTION_SYNCHRONIZATION_QUEUE_NAME: connectionSynchronizationQueue.queueName,
+        CONNECTION_SYNCHRONIZATION_WORKFLOW: connectionSynchronizationWorkflow,
         STATEMENT_EXTRACTION_QUEUE: statementExtractionQueue,
         HOSTED_WHATSAPP_QUEUE: hostedWhatsAppQueue,
         WEEKLY_DELIVERY_QUEUE: weeklyDeliveryQueue,
@@ -592,6 +602,12 @@ export default Alchemy.Stack(
       settings: { batchSize: 10, maxRetries: 3, maxWaitTimeMs: 0 },
     });
 
+    yield* Cloudflare.Queues.Consumer("ConnectionSynchronizationConsumer", {
+      queueId: connectionSynchronizationQueue.queueId,
+      scriptName: core.workerName,
+      deadLetterQueue: asyncDeadLetters.queueName,
+      settings: { batchSize: 10, maxRetries: 3, maxWaitTimeMs: 0 },
+    });
     yield* Cloudflare.Queues.Consumer("StatementExtractionConsumer", {
       queueId: statementExtractionQueue.queueId,
       scriptName: core.workerName,

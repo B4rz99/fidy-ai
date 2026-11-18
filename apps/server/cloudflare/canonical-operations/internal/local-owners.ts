@@ -1,3 +1,4 @@
+import { prepareLocalConnection } from "../../connections/operations";
 import { userOwnedAgentCapability } from "../../../src/shell/canonical-policy/contract";
 import { getBoundOperationCatalog } from "../../../src/shell/canonical-catalog/contract";
 import type { OAuthCanonicalAdmission } from "../../../src/shell/mcp/contract";
@@ -95,6 +96,9 @@ export const localBatchOwners = new Map<string, Prepare>([
   ),
   owner("ingestion.applyReviewEdit", ({ payload }, { user, current }) =>
     prepareLocalReviewEdit(payload, user, current)
+  ),
+  owner("connections.connectInstitution", ({ payload }, { user, current, storage }) =>
+    prepareLocalConnection(payload.institutionId, { user, current, storage })
   ),
   owner("identity.updateUserPreferences", ({ payload }, { user }) =>
     Effect.succeed(prepareLocalPreferences({ user, preferences: payload }))

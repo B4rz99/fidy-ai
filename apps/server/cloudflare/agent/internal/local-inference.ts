@@ -1,3 +1,5 @@
+import { reserveBatchForwarding } from "../../ingestion/operations";
+import { getAtomicBatchInputSchema } from "../../../src/shell/operations/contract";
 import { captureWithoutCommit } from "./capture-reply";
 import { type HostedToolAction, committedAnswer, failedQueryReply } from "./tool-reply";
 import { documentReply } from "./local-document-reply";
@@ -186,12 +188,37 @@ const invalidToolGroup = (
       (tool) =>
         catalog.find((op) => op.id === tool.operation)?.policy.agentConfirmation === "required"
     ));
-const runTools = Effect.fn(function* (calls: ReadonlyArray<HostedTextToolCall>, round: ToolRound) {
+const reserveToolRoutes = Effect.fn(function* (
+  tool: HostedTextToolCall,
+  turn: LocalTurn,
+  directory: Environment["DIRECTORY"]
+) {
+  const enable = "ingestion.enableEmailForwarding";
+  const batch =
+    tool.operation === "operations.executeAtomicBatch"
+      ? Schema.decodeUnknownOption(Schema.Struct({ payload: getAtomicBatchInputSchema() }), {
+          onExcessProperty: "error",
+        })(tool.params)
+      : Option.none();
+  if (
+    tool.operation === enable ||
+    Option.exists(batch, ({ payload }) => payload.calls.some((child) => child.operation === enable))
+  ) {
+    yield* liveTurn(turn, yield* Clock.currentTimeMillis).pipe(withStoreCapacity("required"));
+    yield* reserveBatchForwarding(turn.user_id, directory);
+  }
+});
+const runTools = Effect.fn(function* (
+  calls: ReadonlyArray<HostedTextToolCall>,
+  round: ToolRound,
+  directory: Environment["DIRECTORY"]
+) {
   const { turn, iteration, storage } = round;
   const catalog = localHostedCatalog(channelAuthority(turn));
   if (invalidToolGroup(calls, catalog)) return yield* new AgentUnavailable();
   const actions: ToolResult[] = [];
   for (const tool of calls) {
+    yield* reserveToolRoutes(tool, turn, directory);
     const applied = yield* Effect.gen(function* () {
       const event = yield* applyTool(tool, { turn, iteration, storage });
       const challenge = yield* visibleChallenge(turn.id, yield* Clock.currentTimeMillis);
@@ -215,7 +242,7 @@ const runTools = Effect.fn(function* (calls: ReadonlyArray<HostedTextToolCall>, 
 const runRounds = Effect.fn(function* (
   inference: HostedInferenceService,
   turn: LocalTurn,
-  storage: DurableObjectStorage
+  { storage, directory }: { storage: DurableObjectStorage; directory: Environment["DIRECTORY"] }
 ) {
   const context = yield* contextFor(turn).pipe(withStoreCapacity("required"));
   const catalog = localHostedCatalog(channelAuthority(turn));
@@ -246,7 +273,7 @@ const runRounds = Effect.fn(function* (
     if (result.finishReason !== "tool-calls" || total > maximumToolCallsPerTurn) {
       return yield* new AgentUnavailable();
     }
-    const events = yield* runTools(result.toolCalls, { turn, iteration, storage });
+    const events = yield* runTools(result.toolCalls, { turn, iteration, storage }, directory);
     if (Option.isNone(events)) return;
     prepared = yield* result.continuation.prepare(events.value);
   }
@@ -268,5 +295,5 @@ export const executeTurn = Effect.fn(function* (
   }
   const inference = yield* modelFor(env, turn);
   yield* compact(turn, inference).pipe(Effect.ignore);
-  yield* runRounds(inference, turn, storage);
+  yield* runRounds(inference, turn, { storage, directory: env.DIRECTORY });
 });

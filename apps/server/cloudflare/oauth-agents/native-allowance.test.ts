@@ -51,7 +51,7 @@ const mixedClients = Effect.gen(function* () {
     );
   const invoke = (token: string, retryKey: string): ReturnType<typeof session> =>
     protocol(token, "tools/call", { name: "budgets.createBudget", args: { payload }, retryKey });
-  return { owner, credential, pair, post, invoke, protocol };
+  return { owner, credential, pair, post, invoke, protocol, runtime, bearer };
 });
 const seedLastUnit = Effect.fn(function* (owner: Effect.Success<typeof nativeGrant>["owner"]) {
   const current = yield* Clock.currentTimeMillis;
@@ -97,6 +97,55 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(yield* native(() => replay.json())).toEqual(first);
         expect(yield* owner.exec("SELECT count(*) AS n FROM budgets")).toEqual([{ n: 1 }]);
       })
+  );
+  test.effect("replays a committed mixed MCP batch through PAT HTTP under the same User key", () =>
+    Effect.gen(function* () {
+      const { owner, pair, protocol, runtime, bearer } = yield* mixedClients;
+      const key = "mixed-protocols";
+      const payload = {
+        calls: [
+          {
+            callId: "22460000-0000-4000-8000-000000000011",
+            operation: "budgets.createBudget",
+            input: { payload: { categoryId: category, cap: { currency: "COP", amount: "129" } } },
+          },
+          {
+            callId: "22460000-0000-4000-8000-000000000012",
+            operation: "categories.createKeywordRule",
+            input: { payload: { categoryId: category, keyword: "Café familiar" } },
+          },
+        ],
+      };
+      const oauth = yield* protocol(pair.access_token, "tools/call", {
+        name: "operations.executeAtomicBatch",
+        args: { payload },
+        retryKey: key,
+      });
+      const answer = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({
+          result: Schema.Struct({ isError: Schema.Literal(false), structuredContent: Schema.Json }),
+        })
+      )(yield* native(() => oauth.json()));
+      const response = yield* native(() =>
+        runtime.dispatchFetch(oauthIssuer + "/operations/atomic-batch", {
+          method: "POST",
+          headers: {
+            authorization: "Bearer " + bearer,
+            "Fidy-Retry-Key": key,
+            "content-type": "application/json",
+            "cf-connecting-ip": "192.0.2.49",
+          },
+          body: JSON.stringify(payload),
+        })
+      );
+      expect(response.status).toBe(200);
+      expect(yield* native(() => response.json())).toEqual(answer.result.structuredContent);
+      expect(
+        yield* owner.exec(
+          "SELECT (SELECT count(*) FROM budgets) AS budgets,(SELECT count(*) FROM keyword_rules) AS rules,(SELECT count(*) FROM canonical_request_receipts) AS receipts,(SELECT count(*) FROM commercial_allowance_consumptions WHERE allowance='canonical_call') AS charges"
+        )
+      ).toEqual([{ budgets: 1, rules: 1, receipts: 1, charges: 1 }]);
+    })
   );
   test.effect(
     "linearizes PAT and OAuth at the last Free canonical unit without a partial second effect",

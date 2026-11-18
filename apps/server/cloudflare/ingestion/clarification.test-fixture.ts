@@ -51,10 +51,29 @@ const waitForEvidence = (
     );
     return yield* Schema.decodeUnknownEffect(Schema.Struct({ value: Schema.String }))(row);
   });
+const checkCompleted = Effect.fnUntraced(function* (
+  owner: Effect.Success<ReturnType<typeof seed>>,
+  batched: boolean
+) {
+  expect(
+    yield* owner.exec(
+      "SELECT outcome FROM hosted_tool_calls WHERE operation=? ORDER BY occurred_ms",
+      batched ? "operations.executeAtomicBatch" : "ingestion.skipNeedsReviewItem"
+    )
+  ).toEqual([{ outcome: "CanonicalOperationFailed" }, { outcome: "Succeeded" }]);
+  if (batched) {
+    expect(
+      yield* owner.exec("SELECT operation,outcome FROM hosted_batch_child_audit ORDER BY position")
+    ).toEqual([
+      { operation: "ingestion.skipNeedsReviewItem", outcome: "success" },
+      { operation: "dashboard.initializeDashboard", outcome: "success" },
+    ]);
+  }
+});
 export const completeHostedClarification = Effect.fnUntraced(function* (
   runtime: Miniflare,
   owner: Effect.Success<ReturnType<typeof seed>>,
-  item: string
+  { item, batched }: { item: string; batched: boolean }
 ) {
   const webhook = signedWebhook(runtime);
   const say = Effect.fnUntraced(function* (id: string, text: string) {
@@ -94,7 +113,10 @@ export const completeHostedClarification = Effect.fnUntraced(function* (
     );
   });
   yield* delivered("wamid.document-ready");
-  yield* say("wamid.statement-skip", "Omite la fila-prueba " + item);
+  yield* say(
+    "wamid.statement-skip",
+    (batched ? "Confirma el lote fila-prueba " : "Omite la fila-prueba ") + item
+  );
   const challenge = yield* observe("SELECT command AS value FROM hosted_confirmations");
   expect(
     yield* owner.exec("SELECT workspace_state FROM ingestion_review_items WHERE id=?", item)
@@ -104,9 +126,5 @@ export const completeHostedClarification = Effect.fnUntraced(function* (
   yield* observe(
     "SELECT 'skipped' AS value FROM ingestion_review_items WHERE workspace_state='skipped'"
   );
-  expect(
-    yield* owner.exec(
-      "SELECT outcome FROM hosted_tool_calls WHERE operation='ingestion.skipNeedsReviewItem' ORDER BY occurred_ms"
-    )
-  ).toEqual([{ outcome: "CanonicalOperationFailed" }, { outcome: "Succeeded" }]);
+  yield* checkCompleted(owner, batched);
 });

@@ -1,3 +1,5 @@
+import { preserveStoreAlarm } from "../../runtime/sqlite/operations";
+import { recurringDiscoveryIntervalMs } from "../../recurring/contract";
 import { prepareLocalInsight, prepareLocalReminder } from "../../insights/operations";
 import { prepareLocalMemory } from "../../memory/operations";
 import { prepareLocalConnection } from "../../connections/operations";
@@ -84,6 +86,24 @@ const decisionOwner = Effect.fn(function* (target: string, context: Context) {
       : yield* localHostedStatementOrigin(context.hostedTurn, target, context.user);
   return { ...context, origin, requiresOrigin: context.hostedTurn !== undefined };
 });
+/** A resolved review may introduce the first Transaction even when the batch has no Transaction-named child. */
+const wakeAfterCapture = (
+  plan: LocalMutationPreparation,
+  { current, storage }: Context
+): LocalMutationPreparation =>
+  "commit" in plan
+    ? {
+        ...plan,
+        commit: plan.commit.pipe(
+          Effect.tap((result) =>
+            result.outcome === "success"
+              ? preserveStoreAlarm(storage, current + recurringDiscoveryIntervalMs)
+              : Effect.void
+          ),
+          Effect.mapError((cause) => new CanonicalAdmissionUnavailable({ cause }))
+        ),
+      }
+    : plan;
 /** Only local, transaction-composable commands. Catalog policy controls eligibility and disclosure. */
 export const localBatchOwners = new Map<string, Prepare>([
   owner("insights.markInsightDelivered", ({ params, payload }, { user }) =>
@@ -125,7 +145,7 @@ export const localBatchOwners = new Map<string, Prepare>([
         params.id,
         Option.some(payload.extraction),
         yield* decisionOwner(params.id, context)
-      );
+      ).pipe(Effect.map((plan) => wakeAfterCapture(plan, context)));
     })
   ),
   owner("ingestion.abandonStatementSubmission", ({ params }, context) =>
@@ -136,8 +156,10 @@ export const localBatchOwners = new Map<string, Prepare>([
       );
     })
   ),
-  owner("ingestion.applyReviewEdit", ({ payload }, { user, current }) =>
-    prepareLocalReviewEdit(payload, user, current)
+  owner("ingestion.applyReviewEdit", ({ payload }, context) =>
+    prepareLocalReviewEdit(payload, context.user, context.current).pipe(
+      Effect.map((plan) => (payload._tag === "Create" ? wakeAfterCapture(plan, context) : plan))
+    )
   ),
   owner("connections.connectInstitution", ({ payload }, { user, current, storage }) =>
     prepareLocalConnection(payload.institutionId, { user, current, storage })

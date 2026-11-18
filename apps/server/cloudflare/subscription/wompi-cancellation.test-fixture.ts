@@ -157,6 +157,25 @@ const statementModel = Effect.fnUntraced(function* (request: Request) {
   const input = yield* Effect.tryPromise(() => request.text());
   const item = /fila-prueba ([0-9a-f-]{36})/u.exec(input)?.[1];
   if (item === undefined) return new Response(null, { status: 400 });
+  const batched = input.includes("lote fila-prueba");
+  const args = batched
+    ? {
+        payload: {
+          calls: [
+            {
+              callId: "22460000-0000-4000-8000-000000000011",
+              operation: "ingestion.skipNeedsReviewItem",
+              input: { params: { id: item } },
+            },
+            {
+              callId: "22460000-0000-4000-8000-000000000012",
+              operation: "dashboard.initializeDashboard",
+              input: {},
+            },
+          ],
+        },
+      }
+    : { params: { id: item } };
   return Response.json({
     choices: [
       {
@@ -168,10 +187,8 @@ const statementModel = Effect.fnUntraced(function* (request: Request) {
               id: "skip-review",
               type: "function",
               function: {
-                name: "ingestion__skipNeedsReviewItem",
-                arguments: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))({
-                  params: { id: item },
-                }),
+                name: batched ? "operations__executeAtomicBatch" : "ingestion__skipNeedsReviewItem",
+                arguments: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(args),
               },
             },
           ],

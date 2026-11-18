@@ -1,3 +1,4 @@
+import { type ConfirmationRead, describeConfirmation } from "./confirmation-description";
 import { meterHistory } from "./local-history";
 import { stageChallenge } from "./local-challenge";
 import type {
@@ -20,7 +21,11 @@ import type {
 } from "../../../src/shell/hosted-inference/contract";
 import { activeProUserCondition } from "../../../src/shell/access-tier/operations";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
-import { localHostedCatalog, prepareHostedOwner } from "../../canonical-operations/operations";
+import {
+  localHostedCatalog,
+  prepareHostedBatchOwner,
+  prepareHostedOwner,
+} from "../../canonical-operations/operations";
 import { admitLocalRequest, commitLocalWrite } from "../../canonical-admission/operations";
 import { type LocalTurn, channelAuthority } from "./local-turn";
 import { appendEntry, entryIdentity, liveTurn } from "./local-turn-store";
@@ -66,7 +71,8 @@ const approve = Effect.fn(function* (
   { action, required }: { action: Action; required: boolean }
 ) {
   if (!required) return true;
-  if (!("review" in plan) || Option.isNone(plan.review)) return false;
+  if (!("commit" in plan)) return tool.operation === "operations.executeAtomicBatch";
+  if (Option.isNone(plan.review)) return false;
   const fresh = yield* plan.review.value;
   if (action.confirmed !== undefined) {
     return action.confirmed.effect === fresh.effect && action.confirmed.revision === fresh.revision;
@@ -76,6 +82,58 @@ const approve = Effect.fn(function* (
 });
 const channelContext = (turn: LocalTurn): Partial<{ hostedTurn: string }> =>
   Option.isNone(turn.browser_id) ? { hostedTurn: turn.id } : {};
+const describeBatchChild = Effect.fnUntraced(function* (
+  turn: LocalTurn,
+  storage: DurableObjectStorage,
+  current: number
+) {
+  const client = yield* SqliteClient;
+  const user = yield* liveTurn(turn, current);
+  const allowed = localHostedCatalog(channelAuthority(turn));
+  const read: ConfirmationRead = (id, args) =>
+    Effect.gen(function* () {
+      const query = allowed.find((op) => op.id === id && op.policy.kind === "query");
+      if (query === undefined) return Option.none<Schema.Json>();
+      const prepared = yield* prepareHostedOwner(query, args, {
+        user: turn.user_id,
+        storage,
+        current,
+        ...channelContext(turn),
+      });
+      if (Option.isNone(prepared)) return Option.none<Schema.Json>();
+      const result = yield* commitLocalWrite(prepared.value);
+      return result.outcome === "success" ? Option.some(result.body) : Option.none();
+    }).pipe(
+      Effect.provideService(SqliteClient, client),
+      Effect.orElseSucceed(() => Option.none())
+    );
+  return (operation: string, input: Schema.Json): Effect.Effect<Option.Option<string>> =>
+    describeConfirmation({ context: { timeZone: user.timeZone, read }, operation, input });
+});
+const ownerForTool = Effect.fnUntraced(function* (
+  operation: CatalogOperation,
+  input: CanonicalToolEvidence,
+  { tool, action, now }: { tool: HostedTextToolCall; action: Action; now: number }
+) {
+  const { turn } = action;
+  const context = {
+    user: turn.user_id,
+    current: now,
+    storage: action.storage,
+    ...channelContext(turn),
+  };
+  return operation.id === "operations.executeAtomicBatch"
+    ? Option.some(
+        yield* prepareHostedBatchOwner(input, {
+          ...context,
+          turnId: turn.id,
+          toolCallId: tool.id,
+          describe: yield* describeBatchChild(turn, action.storage, now),
+          authorityRoot: channelAuthority(turn),
+        })
+      )
+    : yield* prepareHostedOwner(operation, input, context);
+});
 const executeOwner = Effect.fn(function* (
   tool: HostedTextToolCall,
   input: CanonicalToolEvidence,
@@ -98,12 +156,7 @@ const executeOwner = Effect.fn(function* (
   if ((yield* admitLocalRequest({ user: turn.user_id, current: now })).length !== 1) {
     return failure("rate_limited");
   }
-  const plan = yield* prepareHostedOwner(operation, input, {
-    user: turn.user_id,
-    current: now,
-    storage: action.storage,
-    ...channelContext(turn),
-  });
+  const plan = yield* ownerForTool(operation, input, { tool, action, now });
   if (Option.isNone(plan)) return failure("unavailable");
   if (
     !(yield* approve(plan.value, tool, {

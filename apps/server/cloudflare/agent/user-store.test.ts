@@ -15,8 +15,41 @@ import {
   seed,
 } from "../financial-user-store.test-fixture";
 
+const checkBatchEffects = Effect.fnUntraced(function* (
+  mode: string,
+  owner: Effect.Success<ReturnType<typeof seed>>,
+  turnId: string
+) {
+  if (mode === "batch-stale") {
+    expect(
+      yield* owner.exec(
+        "SELECT count(*) AS n FROM hosted_batch_child_audit WHERE turn_id=? AND outcome='success'",
+        turnId
+      )
+    ).toEqual([{ n: 0 }]);
+    expect(
+      yield* owner.exec("SELECT count(*) AS n FROM user_documents WHERE kind='dashboard'")
+    ).toEqual([{ n: 0 }]);
+  }
+  if (mode === "batch") {
+    expect(
+      yield* owner.exec("SELECT count(*) AS n FROM user_documents WHERE kind='dashboard'")
+    ).toEqual([{ n: 1 }]);
+    expect(
+      yield* owner.exec(
+        "SELECT operation,outcome FROM hosted_batch_child_audit WHERE turn_id=? ORDER BY position",
+        turnId
+      )
+    ).toEqual([
+      { operation: "memory.forget", outcome: "success" },
+      { operation: "dashboard.initializeDashboard", outcome: "success" },
+      { operation: "ingestion.enableEmailForwarding", outcome: "success" },
+    ]);
+  }
+});
+
 const nativeTurnJourney = Effect.fnUntraced(function* (
-  mode: "ordinary" | "confirm" | "stale" | "withdraw" | "connection"
+  mode: "ordinary" | "confirm" | "stale" | "withdraw" | "connection" | "batch" | "batch-stale"
 ) {
   const create = yield* nativeHostedPlatform;
   const runtime = yield* create(undefined, [], {
@@ -56,6 +89,8 @@ const nativeTurnJourney = Effect.fnUntraced(function* (
   const provider = controls.getByName("provider");
   const providerPath = {
     connection: "connect",
+    batch: "batch",
+    "batch-stale": "batch",
     confirm: "forget",
     stale: "forget",
     withdraw: "waiting",
@@ -64,7 +99,7 @@ const nativeTurnJourney = Effect.fnUntraced(function* (
   yield* native(() => provider.fetch("https://fixture.invalid/" + providerPath));
   const id = "22460000-0000-4000-8000-000000000020";
 
-  if (["confirm", "stale"].includes(mode)) {
+  if (["confirm", "stale", "batch", "batch-stale"].includes(mode)) {
     yield* owner.exec(
       "INSERT INTO memories VALUES(?,?,'Preparo almuerzos',?,?)",
       id,
@@ -146,13 +181,19 @@ const nativeTurnJourney = Effect.fnUntraced(function* (
     expect((yield* post(alice, "", { text: "Otro turno" })).status).toBe(403);
     return;
   }
-  if (["confirm", "stale"].includes(mode)) {
+  if (["confirm", "stale", "batch", "batch-stale"].includes(mode)) {
     const assertReviewed = Effect.fnUntraced(function* () {
       expect(proposal.text).toContain("Preparo almuerzos");
       expect(proposal.confirmation?.command).toMatch(/^CONFIRMAR [a-f0-9]{64}$/u);
       expect(yield* owner.exec("SELECT count(*) AS n FROM memories")).toEqual([{ n: 1 }]);
-      if (mode === "stale") {
+      if (["stale", "batch-stale"].includes(mode)) {
         yield* owner.exec("UPDATE memories SET text='Estado nuevo' WHERE id=?", id);
+      }
+      if (mode.startsWith("batch")) {
+        expect(proposal.text).toContain("Activar tu dirección de correo");
+        expect(
+          yield* owner.exec("SELECT count(*) AS n FROM user_documents WHERE kind='dashboard'")
+        ).toEqual([{ n: 0 }]);
       }
       const confirmed = yield* post(alice, "", { text: proposal.confirmation?.command });
       const accepted = yield* Schema.decodeUnknownEffect(HostedTurnProcessing)(
@@ -168,11 +209,18 @@ const nativeTurnJourney = Effect.fnUntraced(function* (
         { times: 50, schedule: Schedule.spaced("50 millis") }
       );
       expect(yield* owner.exec("SELECT count(*) AS n FROM memories")).toEqual([
-        { n: mode === "confirm" ? 0 : 1 },
+        { n: ["stale", "batch-stale"].includes(mode) ? 1 : 0 },
       ]);
+      yield* checkBatchEffects(mode, owner, accepted.turnId);
       expect(
         yield* owner.exec("SELECT outcome FROM hosted_tool_calls WHERE turn_id=?", accepted.turnId)
-      ).toEqual([{ outcome: mode === "confirm" ? "Succeeded" : "CanonicalOperationFailed" }]);
+      ).toEqual([
+        {
+          outcome: ["stale", "batch-stale"].includes(mode)
+            ? "CanonicalOperationFailed"
+            : "Succeeded",
+        },
+      ]);
     });
     return yield* assertReviewed();
   }
@@ -225,6 +273,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   );
   test.effect("consumes a host-issued destructive Memory review only after its delivery", () =>
     nativeTurnJourney("confirm")
+  );
+  test.effect(
+    "confirms a native hosted atomic batch and attributes both children in its Turn",
+    () => nativeTurnJourney("batch")
+  );
+  test.effect("refuses the complete hosted batch when a reviewed child changed", () =>
+    nativeTurnJourney("batch-stale")
   );
   test.effect("refuses confirmation after the reviewed Memory changes", () =>
     nativeTurnJourney("stale")

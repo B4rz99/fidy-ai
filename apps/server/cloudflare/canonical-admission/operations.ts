@@ -1,3 +1,4 @@
+import { prepareHostedBatch as prepareBatchForTurn } from "./internal/local-hosted-batch";
 import { runLocalBatch as executeBatch } from "./internal/local-batch";
 import type { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 
@@ -1334,3 +1335,6 @@ export const localPreparationSubject: typeof localPreparationSubjectOwned = (...
   localPreparationSubjectOwned(...args);
 
 export const dispatchNativeExternalRead: typeof externalRead = (input) => externalRead(input);
+
+export const prepareHostedBatch: typeof prepareBatchForTurn = (input, context, owners) =>
+  prepareBatchForTurn(input, context, owners);

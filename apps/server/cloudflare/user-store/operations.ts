@@ -985,6 +985,14 @@ export const userStoreHistory: StoreHistory = {
         "ALTER TABLE erasure_requests ADD COLUMN handoff_due_ms INTEGER",
       ],
     },
+    {
+      version: 23,
+      id: "hosted-batch-child-audit",
+      statements: [
+        `CREATE TABLE hosted_batch_child_audit(turn_id TEXT NOT NULL REFERENCES hosted_turns(id) ON DELETE CASCADE, tool_call_id TEXT NOT NULL, position INTEGER NOT NULL CHECK(position BETWEEN 0 AND 11), operation TEXT NOT NULL, outcome TEXT NOT NULL CHECK(outcome IN ('success','not_found','validation_failed','resource_limit')), occurred_ms INTEGER NOT NULL,PRIMARY KEY(turn_id,tool_call_id,position)) STRICT`,
+        `CREATE TRIGGER hosted_batch_child_audit_immutable BEFORE UPDATE ON hosted_batch_child_audit BEGIN SELECT RAISE(ABORT,'audit_immutable'); END`,
+      ],
+    },
   ],
 };
 

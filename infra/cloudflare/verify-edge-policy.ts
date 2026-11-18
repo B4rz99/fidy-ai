@@ -2,8 +2,26 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "bd41ee7210fb69daa9f6643feaa242eabc7830e00583e2409c9e9a6be12bab4d";
+const expectedEdgePolicyDigest = "522204171622f6be1178a06dce14e16ddf0f793e417a52f0edfecaa4704e1af9";
 const securityArtifacts = [
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/agent/internal/confirmation-description.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/canonical-admission/internal/local-batch-plans.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/canonical-admission/internal/local-hosted-batch.ts",
+      import.meta.url
+    )
+  ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/directory/internal/erasure.ts", import.meta.url)
   ).text(),

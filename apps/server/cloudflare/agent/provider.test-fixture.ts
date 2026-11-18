@@ -7,11 +7,45 @@ const completion = (content: string): Response =>
     choices: [{ message: { role: "assistant", content }, finish_reason: "stop" }],
     usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
   });
+const fixtureTool = (mode: string): { name: string; arguments: string } => {
+  const id = "22460000-0000-4000-8000-000000000020";
+  if (mode === "/batch") {
+    return {
+      name: "operations__executeAtomicBatch",
+      arguments: JSON.stringify({
+        payload: {
+          calls: [
+            {
+              callId: "22460000-0000-4000-8000-000000000011",
+              operation: "memory.forget",
+              input: { params: { id } },
+            },
+            {
+              callId: "22460000-0000-4000-8000-000000000012",
+              operation: "dashboard.initializeDashboard",
+              input: {},
+            },
+            {
+              callId: "22460000-0000-4000-8000-000000000013",
+              operation: "ingestion.enableEmailForwarding",
+              input: {},
+            },
+          ],
+        },
+      }),
+    };
+  }
+  if (mode === "/forget") {
+    return { name: "memory__forget", arguments: JSON.stringify({ params: { id } }) };
+  }
+  return { name: "memory__recall", arguments: "{}" };
+};
+
 export class HostedProviderControl extends DurableObject {
   private readonly released = Deferred.makeUnsafe<void>();
   private waiting = false;
   private rounds = 0;
-  private forget = false;
+  private mode = "/recall";
   private connection = false;
   private sends = 0;
   private correlation = "";
@@ -50,12 +84,7 @@ export class HostedProviderControl extends DurableObject {
             {
               id: "first-call",
               type: "function",
-              function: this.forget
-                ? {
-                    name: "memory__forget",
-                    arguments: '{"params":{"id":"22460000-0000-4000-8000-000000000020"}}',
-                  }
-                : { name: "memory__recall", arguments: "{}" },
+              function: fixtureTool(this.mode),
             },
           ],
     };
@@ -72,8 +101,8 @@ export class HostedProviderControl extends DurableObject {
           this.connection = true;
           return new Response(null, { status: 204 });
         }
-        if (path === "/forget") {
-          this.forget = true;
+        if (["/batch", "/forget"].includes(path)) {
+          this.mode = path;
           return new Response(null, { status: 204 });
         }
         if (path === "/sends") {

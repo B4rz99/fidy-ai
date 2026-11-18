@@ -24,6 +24,7 @@ import {
   canonicalAdmissionUnavailable,
   commitLocalWrite,
   localCanonicalArguments,
+  prepareHostedBatch,
   prepareLocalWrite,
   runLocalBatch,
   runLocalMutation,
@@ -920,7 +921,8 @@ export const localHostedCatalog = (
 ): ReadonlyArray<CatalogOperation> =>
   operationCatalog.operations.filter(
     (operation) =>
-      (localBatchOwners.has(operation.id) ||
+      (operation.id === atomicBatchOperation ||
+        localBatchOwners.has(operation.id) ||
         localReads.has(operation.id) ||
         parameterizedReads.includes(operation.id)) &&
       decideOperationAccess(operation.policy.access, {
@@ -974,6 +976,12 @@ const readParameter = Effect.fn(function* (
           current: context.current,
         }))
       );
+});
+export const prepareHostedBatchOwner = Effect.fnUntraced(function* (
+  input: Schema.Json,
+  context: Parameters<typeof prepareHostedBatch>[1]
+) {
+  return yield* prepareHostedBatch(input, context, localBatchOwners);
 });
 export const prepareHostedOwner = Effect.fn(function* (
   operation: CatalogOperation,

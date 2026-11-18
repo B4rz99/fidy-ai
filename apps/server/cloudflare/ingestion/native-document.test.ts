@@ -414,81 +414,83 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       })
   );
 
-  test.effect("ties statement decisions to the originating Hosted Agent Session and Turn", () =>
-    Effect.gen(function* () {
-      const { owner, runtime, deliver } = yield* documentJourney();
-      expect((yield* deliver()).status).toBe(202);
-      const [item] = yield* owner
-        .exec(
-          "SELECT r.id,s.id AS submission,s.hosted_session_id,s.hosted_turn_id,s.hosted_expires_at_ms FROM ingestion_review_items r JOIN statement_submissions s ON s.id=r.statement_submission_id"
-        )
-        .pipe(
-          Effect.filterOrFail(
-            (rows) => rows.length === 2,
-            () => "pending" as const
-          ),
-          Effect.retry({ times: 100, schedule: Schedule.spaced("50 millis") })
-        );
-      if (item === undefined) return yield* Effect.die("Missing hosted row");
-      const [reply] = yield* owner
-        .exec("SELECT answer FROM hosted_turns WHERE answer IS NOT NULL")
-        .pipe(
-          Effect.filterOrFail(
-            (rows) => rows.length === 1,
-            () => "waiting for exact statement"
-          ),
-          Effect.retry({ times: 80, schedule: Schedule.spaced("50 millis") })
-        );
-      expect(reply?.answer).toContain("fila 1");
-      expect(yield* owner.exec("SELECT operation,outcome FROM hosted_tool_calls")).toEqual([
-        { operation: "ingestion.submitForExtraction", outcome: "Succeeded" },
-      ]);
-      const [origin] = yield* owner.exec(
-        "SELECT o.session_id,o.turn_id,o.expires_at_ms FROM statement_document_origins o JOIN hosted_turns t ON t.id=o.turn_id AND t.session_id=o.session_id AND t.user_id=o.user_id JOIN hosted_agent_sessions s ON s.id=t.session_id AND s.user_id=t.user_id WHERE o.message='wamid.native.statement' AND o.user_id=?",
-        alice.user
+  const verifyHostedOrigin = Effect.fnUntraced(function* (batched: boolean) {
+    const { owner, runtime, deliver } = yield* documentJourney();
+    expect((yield* deliver()).status).toBe(202);
+    const [item] = yield* owner
+      .exec(
+        "SELECT r.id,s.id AS submission,s.hosted_session_id,s.hosted_turn_id,s.hosted_expires_at_ms FROM ingestion_review_items r JOIN statement_submissions s ON s.id=r.statement_submission_id"
+      )
+      .pipe(
+        Effect.filterOrFail(
+          (rows) => rows.length === 2,
+          () => "pending" as const
+        ),
+        Effect.retry({ times: 100, schedule: Schedule.spaced("50 millis") })
       );
-      expect(origin).toBeDefined();
-      expect(item).toMatchObject({
-        hosted_session_id: origin?.session_id,
-        hosted_turn_id: origin?.turn_id,
-        hosted_expires_at_ms: origin?.expires_at_ms,
-      });
-      const invoke = (
-        path: string,
-        payload?: unknown
-      ): Effect.Effect<Awaited<ReturnType<typeof runtime.dispatchFetch>>> =>
-        native(() =>
-          runtime.dispatchFetch("https://api.fidyapp.com/" + path, {
-            method: "POST",
-            headers: {
-              origin: "https://app.fidyapp.com",
-              cookie: "__Host-fidy_session=" + alice.bearer,
-              "Fidy-Session-Binding": alice.session,
-              "content-type": "application/json",
-            },
-            ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
-          })
-        );
-      expect(
-        (yield* invoke("ingestion/needs-review/" + storedText(item.id) + "/skip")).status
-      ).toBe(404);
-      expect(
-        (yield* invoke("ingestion/statements/" + storedText(item.submission) + "/abandon")).status
-      ).toBe(404);
-      expect(
-        (yield* invoke("ingestion/review-workspace/edits", {
-          _tag: "Skip",
-          items: [{ id: item.id, revision: 0 }],
-        })).status
-      ).toBeGreaterThanOrEqual(400);
-      expect(
-        yield* owner.exec(
-          "SELECT workspace_revision FROM ingestion_review_items WHERE id=?",
-          item.id
-        )
-      ).toEqual([{ workspace_revision: null }]);
-      yield* completeHostedClarification(runtime, owner, storedText(item.id));
-    })
+    if (item === undefined) return yield* Effect.die("Missing hosted row");
+    const [reply] = yield* owner
+      .exec("SELECT answer FROM hosted_turns WHERE answer IS NOT NULL")
+      .pipe(
+        Effect.filterOrFail(
+          (rows) => rows.length === 1,
+          () => "waiting for exact statement"
+        ),
+        Effect.retry({ times: 80, schedule: Schedule.spaced("50 millis") })
+      );
+    expect(reply?.answer).toContain("fila 1");
+    expect(yield* owner.exec("SELECT operation,outcome FROM hosted_tool_calls")).toEqual([
+      { operation: "ingestion.submitForExtraction", outcome: "Succeeded" },
+    ]);
+    const [origin] = yield* owner.exec(
+      "SELECT o.session_id,o.turn_id,o.expires_at_ms FROM statement_document_origins o JOIN hosted_turns t ON t.id=o.turn_id AND t.session_id=o.session_id AND t.user_id=o.user_id JOIN hosted_agent_sessions s ON s.id=t.session_id AND s.user_id=t.user_id WHERE o.message='wamid.native.statement' AND o.user_id=?",
+      alice.user
+    );
+    expect(origin).toBeDefined();
+    expect(item).toMatchObject({
+      hosted_session_id: origin?.session_id,
+      hosted_turn_id: origin?.turn_id,
+      hosted_expires_at_ms: origin?.expires_at_ms,
+    });
+    const invoke = (
+      path: string,
+      payload?: unknown
+    ): Effect.Effect<Awaited<ReturnType<typeof runtime.dispatchFetch>>> =>
+      native(() =>
+        runtime.dispatchFetch("https://api.fidyapp.com/" + path, {
+          method: "POST",
+          headers: {
+            origin: "https://app.fidyapp.com",
+            cookie: "__Host-fidy_session=" + alice.bearer,
+            "Fidy-Session-Binding": alice.session,
+            "content-type": "application/json",
+          },
+          ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+        })
+      );
+    expect((yield* invoke("ingestion/needs-review/" + storedText(item.id) + "/skip")).status).toBe(
+      404
+    );
+    expect(
+      (yield* invoke("ingestion/statements/" + storedText(item.submission) + "/abandon")).status
+    ).toBe(404);
+    expect(
+      (yield* invoke("ingestion/review-workspace/edits", {
+        _tag: "Skip",
+        items: [{ id: item.id, revision: 0 }],
+      })).status
+    ).toBeGreaterThanOrEqual(400);
+    expect(
+      yield* owner.exec("SELECT workspace_revision FROM ingestion_review_items WHERE id=?", item.id)
+    ).toEqual([{ workspace_revision: null }]);
+    yield* completeHostedClarification(runtime, owner, { item: storedText(item.id), batched });
+  });
+  test.effect("ties statement decisions to the originating Hosted Agent Session and Turn", () =>
+    verifyHostedOrigin(false)
+  );
+  test.effect(
+    "confirms a signed WhatsApp batch against its originating statement and commits both owners",
+    () => verifyHostedOrigin(true)
   );
   test.effect(
     "captures a clean line once and retains its consumed Free grant when the ambiguous line is skipped",

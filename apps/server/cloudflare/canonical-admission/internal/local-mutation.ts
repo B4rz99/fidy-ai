@@ -379,6 +379,17 @@ export const replayableOperations = new Set<string>([
   "transactions.unlinkTransactions",
   "transactions.deleteTransaction",
 ]);
+// The envelope has its own chunked receipt schema. These additional children return ordinary, repeatable data.
+const remainingReplayableChildren = new Set([
+  "identity.updateUserPreferences",
+  "ingestion.enableEmailForwarding",
+  "ingestion.applyReviewEdit",
+  "ingestion.abandonStatementSubmission",
+  "ingestion.resolveNeedsReviewItem",
+  "ingestion.skipNeedsReviewItem",
+]);
+export const replayableBatchChild = (id: string): boolean =>
+  replayableOperations.has(id) || remainingReplayableChildren.has(id);
 const usesAgentReceiptBody = (operation: string): boolean =>
   operation.startsWith("memory.") || operation.startsWith("insights.");
 const highSurrogateStart = 0xd800;

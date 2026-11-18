@@ -112,7 +112,9 @@ export const prepareDashboardDocument = Effect.fn(function* (
       return {
         revision: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
           revision: Option.isSome(stored) ? stored.value.revision : 0,
-          document: yield* Schema.encodeEffect(documentJson)(base),
+          document: Option.isSome(stored)
+            ? yield* Schema.encodeEffect(documentJson)(stored.value.document_json)
+            : null,
         }),
         effect: describeDashboardEffect({ edit, firstEdit: Option.isNone(stored) }),
       };

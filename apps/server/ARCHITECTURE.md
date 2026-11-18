@@ -91,12 +91,12 @@ User-local checkpoints under current Processing Consent. Financial changes inval
 revision and schedule discovery within an hour. The User alarm advances due evaluation.
 Maintenance checks the retained revision and repairs the alarm when needed.
 
-Browser and PAT atomic batches use the canonical catalog to identify eligible children. The
-UserStore checks every child's current authority before a receipt can be disclosed. Local owners
-prepare decisions from the same starting snapshot and reserve any conflicting targets. Their
-guarded writes, per-child Audit, one commercial admission and one batch receipt commit together.
-PAT retries retain reviewed result types under the original 24-hour expiry and split large results
-across receipt rows. Browser batches execute under their current WebSession. Uninstalled owners return a child-addressed failure.
+WebSession, PAT, OAuth MCP and hosted Turns compose eligible mutations from one initial UserStore
+snapshot. Each child keeps its authority, tier and conflicting-target checks. Guarded writes,
+per-child accountability and the batch result share one commit. PAT replay uses the original
+24-hour window and rechecks current authority. Raw one-time credential results stay out of
+retained response bodies. Hosted confirmation binds ordered child effects and revisions to the
+original Session. The confirming Turn records each child outcome with the parent tool call.
 
 The Core minute Cron calls Maintenance to traverse the lifetime registry and check Directory,
 Pricing and independent Erasure. A private check inspects retained owner work and repairs the

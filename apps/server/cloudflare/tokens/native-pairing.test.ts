@@ -320,6 +320,15 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         })
       )(reply);
       expect(result.data.results[0].output.data.bearer).toMatch(/^fin_/u);
+      const raw = result.data.results[0].output.data.bearer;
+      expect(
+        yield* owner.exec(
+          "SELECT (SELECT count(*) FROM canonical_request_receipts WHERE instr(body,?)>0) + (SELECT count(*) FROM canonical_receipt_parts WHERE instr(part,?)>0) + (SELECT count(*) FROM agent_operation_receipt_bodies WHERE instr(body,?)>0) AS retained",
+          raw,
+          raw,
+          raw
+        )
+      ).toEqual([{ retained: 0 }]);
       const replay = yield* post([issue]);
       expect(replay.status).toBe(400);
       expect(yield* native(() => replay.text())).not.toContain("fin_");

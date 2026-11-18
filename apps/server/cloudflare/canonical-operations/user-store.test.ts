@@ -10,6 +10,7 @@ import {
   seedNativePAT,
 } from "../financial-user-store.test-fixture";
 import { native } from "../user-store.test-fixture";
+import { canonicalRequestProtection } from "../canonical-admission/contract";
 
 const successfulBody = (response: Response): Effect.Effect<string> => {
   expect(response.status).toBe(200);
@@ -265,6 +266,22 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           [alice.user, aliceToken],
           [bob.user, bobToken],
         ] as const) {
+          yield* native(() =>
+            db
+              .owner(userId)
+              .exec(
+                "UPDATE users SET trial_started_at_ms=created_at_ms,trial_ends_at_ms=created_at_ms+604800000"
+              )
+          );
+          yield* native(() =>
+            db
+              .owner(userId)
+              .exec(
+                "INSERT INTO consent_history(id,user_id,record_type,occurred_at_ms) VALUES(?,?,'processing_grant',1)",
+                userId,
+                userId
+              )
+          );
           yield* seedNativePAT({
             db,
             userId,
@@ -283,7 +300,16 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
                   "content-type": "application/json",
                   "Fidy-Retry-Key": "same-pat-key",
                 },
-                body: JSON.stringify(capture),
+                body: JSON.stringify({
+                  calls: [
+                    ...capture.calls,
+                    {
+                      callId: bob.session,
+                      operation: "identity.updateUserPreferences",
+                      input: { payload: { locale: "es-CO", timeZone: "America/Lima" } },
+                    },
+                  ],
+                }),
               })
             )
           ).pipe(Effect.flatMap(successfulBody));
@@ -299,9 +325,21 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(
           yield* native(() => db.exec("SELECT accepted_at_ms FROM canonical_request_receipts"))
         ).toEqual(before);
+        // The reset bucket records this request's exact admission instant plus one policy interval.
+        // Place the receipt against that same instant to exercise both sides without a wall-clock race.
+        const originalWindowMs = 86_400_000;
+        yield* native(() => db.exec("UPDATE canonical_request_buckets SET virtual_at_ms=0"));
         yield* native(() =>
-          db.exec("UPDATE canonical_request_receipts SET accepted_at_ms=accepted_at_ms-101000")
+          db.exec("CREATE TABLE fixture_receipt_boundary(remaining_ms INTEGER NOT NULL)")
         );
+        yield* native(() => db.exec("INSERT INTO fixture_receipt_boundary VALUES(1)"));
+        yield* native(() =>
+          db.exec(`CREATE TRIGGER fixture_receipt_boundary_at_admission AFTER UPDATE ON canonical_request_buckets WHEN NEW.virtual_at_ms>0
+          BEGIN UPDATE canonical_request_receipts SET accepted_at_ms=NEW.virtual_at_ms-${canonicalRequestProtection.intervalMs}-${originalWindowMs}+(SELECT remaining_ms FROM fixture_receipt_boundary); END`)
+        );
+        expect(yield* submit(aliceToken)).toBe(original);
+        yield* native(() => db.exec("UPDATE fixture_receipt_boundary SET remaining_ms=0"));
+        yield* native(() => db.exec("UPDATE canonical_request_buckets SET virtual_at_ms=0"));
         expect(yield* submit(aliceToken)).not.toBe(original);
         expect(
           yield* native(() => db.exec("SELECT count(*) AS movements FROM transactions"))

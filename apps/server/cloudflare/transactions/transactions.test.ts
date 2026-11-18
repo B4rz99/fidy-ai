@@ -2899,9 +2899,9 @@ it("links and unlinks under the caller's live credential scope and records only 
       ).toBe(200);
       const audits = yield* fromTestPromise(() =>
         db.exec(
-          `SELECT operation, outcome FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE user_id = ?
+          `SELECT operation,outcome FROM audit_entries WHERE record_type='credential_call' AND user_id=?
               AND operation IN ('transactions.linkTransactions', 'transactions.unlinkTransactions')
-              ORDER BY operation`,
+              ORDER BY operation,rowid`,
           owner
         )
       );
@@ -5224,6 +5224,15 @@ it("raw PAT batches cannot turn query, recursive, browser-only or under-scoped c
         expect(response.status).toBe(
           child.operation === "dashboard.initializeDashboard" ? 403 : 400
         );
+        if (child.operation === "pats.inspectPATPairing") {
+          expect(yield* fromTestPromise(() => response.clone().json())).toMatchObject({
+            error: {
+              code: "scope_missing",
+              failedCallIndex: 1,
+              operation: "pats.inspectPATPairing",
+            },
+          });
+        }
         const body = yield* fromTestPromise(() => response.text());
         expect(body).not.toContain("fin_");
         expect(
@@ -5322,7 +5331,7 @@ it("enforces each child's live PAT scope and commits a mixed two-child batch und
       expect(body.data.results).toHaveLength(2);
       const audits = yield* fromTestPromise(() =>
         db.exec(
-          "SELECT operation, outcome FROM audit_entries WHERE record_type='credential_call' AND operation LIKE 'transactions.%' ORDER BY operation"
+          "SELECT operation, outcome FROM audit_entries WHERE record_type='credential_call' AND operation LIKE 'transactions.%' ORDER BY operation,rowid"
         )
       );
       expect(audits).toEqual([

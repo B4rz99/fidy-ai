@@ -137,6 +137,8 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           ]);
           expect((yield* privateCall(claimDeliveryUrl, claim)).status).toBe(409);
         }
+        // Provider evidence follows the actual claim even when a busy Worker spends a second admitting it.
+        const deliveredAt = yield* Clock.currentTimeMillis;
         const key = yield* native(() =>
           crypto.subtle.importKey(
             "raw",
@@ -150,17 +152,17 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         yield* native(() =>
           owner.directory.exec("ALTER TABLE external_event_routes RENAME TO offline")
         );
-        expect((yield* notify(bsuid, true, now)).status).toBe(200);
+        expect((yield* notify(bsuid, true, deliveredAt)).status).toBe(200);
         expect(yield* owner.exec("SELECT state FROM whatsapp_deliveries")).toEqual([
           { state: erase ? "ambiguous" : "sending" },
         ]);
         yield* native(() =>
           owner.directory.exec("ALTER TABLE offline RENAME TO external_event_routes")
         );
-        expect((yield* notify(bsuid, false, now)).status).toBe(401);
-        expect((yield* notify("CO.13491208655302741919", true, now)).status).toBe(200);
-        expect((yield* notify(bsuid, true, now - 60000)).status).toBe(200);
-        expect((yield* notify(bsuid, true, now)).status).toBe(200);
+        expect((yield* notify(bsuid, false, deliveredAt)).status).toBe(401);
+        expect((yield* notify("CO.13491208655302741919", true, deliveredAt)).status).toBe(200);
+        expect((yield* notify(bsuid, true, deliveredAt - 60000)).status).toBe(200);
+        expect((yield* notify(bsuid, true, deliveredAt)).status).toBe(200);
         const proof = owner.exec(
           "SELECT provider_message_id,state,delivered_at_ms IS NOT NULL AS confirmed FROM whatsapp_deliveries"
         );
@@ -171,7 +173,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           ),
           Effect.retry({ times: 120, schedule: Schedule.spaced("50 millis") })
         );
-        expect((yield* notify(bsuid, true, now)).status).toBe(200);
+        expect((yield* notify(bsuid, true, deliveredAt)).status).toBe(200);
         expect(
           (yield* privateCall(replyDeliveryUrl, { ...claim, state: "ambiguous", message: null }))
             .status

@@ -7,7 +7,7 @@ import { Data, Effect, Result } from "effect";
 import { AsyncResult, Atom } from "effect/reactivity";
 import { type JSX } from "react";
 import { SessionRegistryProvider } from "@/session/session";
-import { parseApiOrigin } from "@/transport/origin";
+import { browserApiOrigin } from "@/transport/origin";
 import type { BrowserSessionLifetime } from "@/transport/session-binding";
 import type { BrowserSessionObservation } from "@/transport/session-entry";
 
@@ -48,7 +48,10 @@ const BoundApplication = ({
 const RoutedApplication = ({
   initial,
 }: Readonly<{ initial: InitialBrowserSession }>): JSX.Element => {
-  const apiOrigin = parseApiOrigin(import.meta.env.VITE_API_ORIGIN, window.location.origin);
+  const apiOrigin = browserApiOrigin({
+    configured: import.meta.env.VITE_API_ORIGIN,
+    browserOrigin: window.location.origin,
+  });
   return (
     <BrowserSessionBoundary
       apiOrigin={apiOrigin}

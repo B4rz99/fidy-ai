@@ -1,7 +1,7 @@
 import { preloadWebRouteCode } from "./entry-code";
 import { tryMountProviderReturn } from "./provider-return";
 import { beginInitialBrowserRequest } from "@/transport/initial-request";
-import { parseApiOrigin } from "@/transport/origin";
+import { browserApiOrigin } from "@/transport/origin";
 import { observeInitialBrowserRequest } from "@/session/initial-request";
 
 export const mountWebApplication = (): void => {
@@ -12,7 +12,10 @@ export const mountWebApplication = (): void => {
   } else ready.resolve();
   const request = observeInitialBrowserRequest(
     beginInitialBrowserRequest({
-      apiOrigin: parseApiOrigin(import.meta.env.VITE_API_ORIGIN, window.location.origin),
+      apiOrigin: browserApiOrigin({
+        configured: import.meta.env.VITE_API_ORIGIN,
+        browserOrigin: window.location.origin,
+      }),
       context: window.location.pathname.startsWith("/app/"),
       transactions: window.location.pathname === "/app/transactions",
     })

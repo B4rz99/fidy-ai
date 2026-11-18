@@ -6,16 +6,7 @@ const originConfigurationMessage = "VITE_API_ORIGIN must be an HTTP origin";
  * Parses required browser configuration as one credential-free HTTP(S) API origin. Paths, queries,
  * fragments, credentials, and non-URL values fail closed before the transport is constructed.
  */
-export const parseApiOrigin = (configured: unknown, browserOrigin?: string): string => {
-  if (configured === "installed") {
-    if (browserOrigin === installedOrigins.acceptance.browser) {
-      return installedOrigins.acceptance.api;
-    }
-    if (browserOrigin === installedOrigins.production.browser) {
-      return installedOrigins.production.api;
-    }
-    throw new Error("Unexpected installed browser origin");
-  }
+export const parseApiOrigin = (configured: unknown): string => {
   if (typeof configured !== "string" || configured.length === 0) {
     throw new Error(originConfigurationMessage);
   }
@@ -29,4 +20,24 @@ export const parseApiOrigin = (configured: unknown, browserOrigin?: string): str
   } catch {
     throw new Error(originConfigurationMessage);
   }
+};
+
+/** Select the matched API for the installed host pair before constructing the browser transport. */
+export const browserApiOrigin = ({
+  configured,
+  browserOrigin,
+}: {
+  configured: unknown;
+  browserOrigin: string;
+}): string => {
+  if (configured === "installed") {
+    if (browserOrigin === installedOrigins.acceptance.browser) {
+      return installedOrigins.acceptance.api;
+    }
+    if (browserOrigin === installedOrigins.production.browser) {
+      return installedOrigins.production.api;
+    }
+    throw new Error("Unexpected installed browser origin");
+  }
+  return parseApiOrigin(configured);
 };

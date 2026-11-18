@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseApiOrigin } from "./origin";
+import { browserApiOrigin, parseApiOrigin } from "./origin";
 
 describe("browser API origin", () => {
   it("accepts an explicit HTTP origin", () => {
@@ -8,16 +8,21 @@ describe("browser API origin", () => {
   });
 
   it("pairs both installed hostnames and refuses other release origins", () => {
-    expect(parseApiOrigin("installed", "https://storage-web-acceptance.fidyapp.com")).toBe(
-      "https://storage-acceptance.fidyapp.com"
-    );
-    expect(parseApiOrigin("installed", "https://app.fidyapp.com")).toBe("https://api.fidyapp.com");
+    expect(
+      browserApiOrigin({
+        configured: "installed",
+        browserOrigin: "https://storage-web-acceptance.fidyapp.com",
+      })
+    ).toBe("https://storage-acceptance.fidyapp.com");
+    expect(
+      browserApiOrigin({ configured: "installed", browserOrigin: "https://app.fidyapp.com" })
+    ).toBe("https://api.fidyapp.com");
     for (const origin of [
       "http://app.fidyapp.com",
       "https://other.fidyapp.com",
       "https://app.fidyapp.com:444",
     ]) {
-      expect(() => parseApiOrigin("installed", origin)).toThrow();
+      expect(() => browserApiOrigin({ configured: "installed", browserOrigin: origin })).toThrow();
     }
   });
 

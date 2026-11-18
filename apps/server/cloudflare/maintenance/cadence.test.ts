@@ -2,7 +2,7 @@ import { Clock, Effect, Option } from "effect";
 import { afterAll, expect, it } from "vitest";
 import { installTestSchema, isolatedTestStorage } from "../d1-test-fixture";
 import { maintenancePerformanceEnvironment } from "../maintenance-performance.test-fixture";
-import { runCoreMaintenance } from "./runtime";
+import { runCoreMaintenance } from "./global-scan.test-fixture";
 
 const storage = isolatedTestStorage();
 afterAll(() => storage.dispose());

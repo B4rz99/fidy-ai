@@ -29,9 +29,10 @@ import {
 } from "../d1-test-fixture";
 import { afterAll, afterEach, expect, vi } from "vitest";
 import emailWorker, { makeEmailWorker } from "./email-worker";
-import { runEmailMaintenance } from "../maintenance/runtime";
+import { runEmailMaintenance } from "../maintenance/global-scan.test-fixture";
 import { EmailScheduleUnavailable } from "../maintenance/contract";
-import { dispatchForwardedEmail, receiveForwardedEmailWork } from "./runtime";
+import { dispatchForwardedEmail } from "./legacy-email.test-fixture";
+import { receiveForwardedEmailWork } from "./runtime";
 import { browseReviewMaterial, listNeedsReviewItems, processForwardedEmail } from "./operations";
 import { currentMillis } from "../runtime/operations";
 import { UserTransactionCoordinator } from "../transactions/runtime";

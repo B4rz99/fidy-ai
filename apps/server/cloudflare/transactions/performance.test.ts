@@ -5,7 +5,7 @@ import {
   maintenancePerformanceDatabase,
   maintenancePerformanceEnvironment,
 } from "../maintenance-performance.test-fixture";
-import { runCoreMaintenance } from "../maintenance/runtime";
+import { runCoreMaintenance } from "../maintenance/global-scan.test-fixture";
 import { seedHistory } from "./history-growth.test-fixture";
 import { effectiveHistoryPage } from "./internal/effective-transaction";
 

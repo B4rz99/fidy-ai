@@ -7,7 +7,6 @@ import type { BillingWorkRouting } from "../subscription/contract";
 export type CoreQueueEnvironment = BillingWorkRouting &
   Partial<ExternalEventBindings> &
   Readonly<{
-    DB: D1Database;
     RELEASE_GIT_SHA: string;
     USER_TRANSACTION_COORDINATOR: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
   }> &
@@ -18,7 +17,6 @@ export type CoreQueueEnvironment = BillingWorkRouting &
       EMAIL_BUCKET: R2Bucket;
       RESEND_API_KEY: string;
       BROWSER_PAIRING_EMAIL_WORKFLOW: Workflow;
-      EMAIL_REPLACEMENT_WORKFLOW: Workflow;
       BILLING_COLLECTION_WORKFLOW: Workflow;
       BILLING_REFUND_WORKFLOW: Workflow;
       STATEMENT_EXTRACTION_WORKFLOW: Workflow;

@@ -6,7 +6,7 @@ import {
   maintenancePerformanceEnvironment,
 } from "../maintenance-performance.test-fixture";
 import { sweepErasureControlObjects } from "../erasure/operations";
-import { runCoreMaintenance, runEmailMaintenance } from "./runtime";
+import { runCoreMaintenance, runEmailMaintenance } from "./global-scan.test-fixture";
 
 const storage = isolatedTestStorage();
 afterAll(() => storage.dispose());

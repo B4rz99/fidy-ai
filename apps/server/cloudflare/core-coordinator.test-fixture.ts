@@ -9,7 +9,7 @@ import {
   withErasureRegistry,
 } from "./erasure/runtime";
 import type { CoreMaintenanceInput } from "./maintenance/contract";
-import { runCoreMaintenance } from "./maintenance/runtime";
+import { runCoreMaintenance } from "./maintenance/global-scan.test-fixture";
 import { cloudflareWorkerTelemetry, observeWorkerExecution } from "./runtime/telemetry/operations";
 import { UserTransactionCoordinator as UserCoordinatorRuntime } from "./transactions/runtime";
 

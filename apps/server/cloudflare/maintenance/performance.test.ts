@@ -5,7 +5,7 @@ import {
   maintenancePerformanceDatabase,
   maintenancePerformanceEnvironment,
 } from "../maintenance-performance.test-fixture";
-import { runCoreMaintenance, runEmailMaintenance } from "./runtime";
+import { runCoreMaintenance, runEmailMaintenance } from "./global-scan.test-fixture";
 
 const enabled =
   Effect.runSync(Config.String("INFRA_PERFORMANCE_MEASURE").pipe(Config.withDefault("0"))) === "1";

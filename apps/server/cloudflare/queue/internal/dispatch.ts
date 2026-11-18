@@ -20,18 +20,14 @@ import { ProactivityDeliveryWork } from "../../insights/contract";
 import { receiveProactivityWork } from "../../insights/runtime";
 import { Cause, Clock, Context, Data, Effect, Exit, Option, Schema } from "effect";
 import type { CoreQueueEnvironment } from "../contract";
-import {
-  isEmailReplacementWork,
-  receiveEmailReplacement,
-  startLoginWorkflow,
-} from "../../email-authentication/runtime";
+import { startLoginWorkflow } from "../../email-authentication/runtime";
 import { NativeLoginEmailWork } from "../../email-authentication/contract";
 import { receiveCanary } from "../../runtime/operational-health/operations";
 import {
   isForwardedEmailWork,
   isStatementExtractionWork,
   receiveForwardedEmailWork,
-  receiveStatementExtraction,
+  receiveNativeStatementExtraction,
 } from "../../ingestion/runtime";
 
 /** Retain a native rejection privately; the runtime unwraps it after closed telemetry observation. */
@@ -169,19 +165,6 @@ const receiveEmailQueue = ({
         4
       );
     }
-    if (batch.messages.some((message) => isEmailReplacementWork(message.body))) {
-      if (environment.EMAIL_REPLACEMENT_WORKFLOW === undefined) {
-        return yield* deliveryFailure(new Error("Email replacement unavailable"));
-      }
-      return yield* receiveWorkflowBatch(
-        batch,
-        receiveEmailReplacement({
-          DB: environment.DB,
-          EMAIL_REPLACEMENT_WORKFLOW: environment.EMAIL_REPLACEMENT_WORKFLOW,
-        }),
-        4
-      ).pipe(Effect.withSpan("emailReplacement.receive"));
-    }
     return yield* deliveryFailure(new Error("Unknown email work"));
   }).pipe(Effect.mapError(deliveryFailure));
 
@@ -259,7 +242,7 @@ const receiveWorkQueue = (input: QueueInput): Effect.Effect<void, QueueDeliveryU
     return receiveWorkflowBatch(
       batch,
       (entry) =>
-        receiveStatementExtraction({
+        receiveNativeStatementExtraction({
           environment: {
             USER_STORE: owner,
             STATEMENT_EXTRACTION_WORKFLOW: workflow,

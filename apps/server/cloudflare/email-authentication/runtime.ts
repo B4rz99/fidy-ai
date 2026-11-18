@@ -1,7 +1,6 @@
 import { checkLoginMailbox, startLoginEmail } from "./internal/login-admission";
 import { verifyLoginEmail } from "./internal/login-completion";
 import { deliverPendingReplacement as deliverLocal } from "./internal/native-mail-delivery";
-import { withErasureRecovery } from "../erasure/runtime";
 import { projections as erasureProjections } from "./internal/erasure";
 import { makeErasureStore } from "../erasure-store/runtime";
 import type { ErasureStore } from "../erasure-store/contract";
@@ -24,7 +23,6 @@ import {
 import type {
   BrowserPairingEmailEnvironment,
   BrowserPairingEmailPublisher,
-  EmailDeliveryEnvironment,
   EmailPublication,
   EmailReplacementEnvironment,
   EmailReplacementPublisher,
@@ -135,28 +133,6 @@ export const runEmailReplacementWorkflow = (input: EmailWorkflowInput): Promise<
   runReplacement(input);
 /** Select this Queue protocol without interpreting it as authority. */
 export const isEmailReplacementWork = (value: unknown): boolean => recognizesReplacement(value);
-export class EmailReplacementWorkflowV1 extends WorkflowEntrypoint<
-  EmailDeliveryEnvironment,
-  unknown
-> {
-  run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    return observeWorkerPromise(
-      () =>
-        runReplacement({
-          environment: withErasureRecovery(this.env),
-          payload: event.payload,
-          activity: (name, options, activity) => step.do(name, options, activity),
-        }),
-      {
-        environment: workerRelease(this.env),
-        telemetry: cloudflareWorkerTelemetry,
-        operation: "workflow.emailReplacement",
-        parent: workTraceParent(event.payload),
-      }
-    );
-  }
-}
-
 export const makeEmailAuthenticationErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
   erasureProjections.map((projection) => makeErasureStore({ db, projection }));
 

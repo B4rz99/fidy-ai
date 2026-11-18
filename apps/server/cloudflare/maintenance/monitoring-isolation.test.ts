@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { Clock, Effect, Exit, Option, Schema } from "effect";
 import { afterAll, expect, it, vi } from "vitest";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
-import { runCoreMaintenance } from "./runtime";
+import { runCoreMaintenance } from "./global-scan.test-fixture";
 
 const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());

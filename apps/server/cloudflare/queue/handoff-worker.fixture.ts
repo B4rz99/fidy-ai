@@ -77,7 +77,6 @@ const measureHandoffs = Effect.fn(function* (environment: Environment, payload: 
   const started = yield* Clock.monotonicTimeNanos;
   yield* Effect.tryPromise(() =>
     consume(batch, {
-      DB: environment.DB,
       RELEASE_GIT_SHA: "synthetic-handoff-proof",
       USER_TRANSACTION_COORDINATOR: { getByName: () => ({ fetch: unavailable }) },
       STATEMENT_EXTRACTION_WORKFLOW: environment.CHILD,

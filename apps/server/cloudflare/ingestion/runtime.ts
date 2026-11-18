@@ -36,11 +36,8 @@ import {
   workerRelease,
 } from "../runtime/telemetry/operations";
 import {
-  dispatchForwardedEmail as dispatchEmail,
-  sweepForwardedEmail as retainEmail,
-} from "./internal/forwarded-email";
-import {
   dispatchStatementExtraction as dispatchStatements,
+  receiveNativeStatementExtraction as receiveOwnedStatements,
   receiveStatementExtraction as receiveStatements,
   isStatementExtractionWork as recognizesStatement,
   reconcileStatementExtraction as reconcileStatements,
@@ -106,6 +103,8 @@ export const withStatementPublicationWake: typeof withPublicationWake = (schedul
 /** Decode Queue work and check current owner state before handing the stable identity to its Workflow. */
 export const receiveStatementExtraction: typeof receiveStatements = (input) =>
   receiveStatements(input);
+export const receiveNativeStatementExtraction: typeof receiveOwnedStatements = (input) =>
+  receiveOwnedStatements(input);
 /** Settle stalled extraction under its existing User coordinator, retaining visible partial accounting. */
 export const reconcileStatementExtraction: typeof reconcileStatements = (input) =>
   reconcileStatements(input);
@@ -175,13 +174,6 @@ export const receiveForwardedEmail = ({
   environment: NativeEmailEnvironment;
 }>): ReturnType<typeof acceptPrivateEmail> =>
   acceptPrivateEmail(message, environment).pipe(Effect.withSpan("forwarded-email.receive"));
-
-/** Reoffer only retained same-User receipt identities; an offer grants no processing authority. */
-export const dispatchForwardedEmail: typeof dispatchEmail = (environment) =>
-  dispatchEmail(environment);
-
-/** Expire private bytes and retain only the owner's bounded replay/review evidence. */
-export const sweepForwardedEmail: typeof retainEmail = (environment) => retainEmail(environment);
 
 /** Remove only expired Ingestion upload-admission records; live spend and other owners remain intact. now is the decision instant in Unix epoch milliseconds. */
 export const sweepExpiredUploadAdmission: typeof sweepUploadAdmission = (input) =>

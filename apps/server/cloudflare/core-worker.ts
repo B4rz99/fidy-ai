@@ -28,10 +28,7 @@ export { Maintenance } from "./maintenance/runtime";
 export { ConnectionSynchronizationWorkflow } from "./connections/runtime";
 export { Directory } from "./directory/runtime";
 export { UserStore } from "./user-store/runtime";
-export {
-  BrowserPairingEmailWorkflowV1,
-  EmailReplacementWorkflowV1,
-} from "./email-authentication/runtime";
+export { BrowserPairingEmailWorkflowV1 } from "./email-authentication/runtime";
 export { OperationalCanaryWorkflowV1 } from "./operational-canary-workflow";
 export {
   Pricing,

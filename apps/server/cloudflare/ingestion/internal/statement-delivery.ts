@@ -102,81 +102,29 @@ export const dispatchStatementExtraction = (
     if (failed) return yield* new StatementDeliveryUnavailable({ cause: "queue_unavailable" });
   }).pipe(Effect.withSpan("ingestion.statementDispatch"));
 
-type StatementReceiveEnvironment = Readonly<{ STATEMENT_EXTRACTION_WORKFLOW: StatementWorkflow }> &
-  ({ DB: D1Database } | { USER_STORE: StatementCoordinator });
-const pendingWork = Effect.fn(function* (
-  environment: StatementReceiveEnvironment,
-  work: typeof Work.Type,
-  now: number
-) {
-  if ("USER_STORE" in environment) {
-    const body = yield* Schema.encodeEffect(Schema.fromJsonString(Work))(work).pipe(
-      Effect.mapError((cause) => new StatementDeliveryUnavailable({ cause }))
-    );
-    const response = yield* attempt(() =>
-      environment.USER_STORE.getByName(work.userId).fetch(
-        "https://user.invalid/ingestion/statement/pending",
-        { method: "POST", body }
-      )
-    );
-    if (response.status === missingWorkStatus) return false;
-    if (!response.ok) return yield* new StatementDeliveryUnavailable({ cause: "statement_owner" });
-    return true;
-  }
-  const raw = yield* attempt(() =>
-    environment.DB.prepare(
-      "SELECT status FROM statement_submissions WHERE id=? AND user_id=? AND retention_expires_at_ms>?"
-    )
-      .bind(work.submissionId, work.userId, now)
-      .first()
-  );
-  if (raw === null) return false;
-  const item = yield* Schema.decodeUnknownEffect(SubmissionState)(raw).pipe(
-    Effect.mapError((cause) => new StatementDeliveryUnavailable({ cause }))
-  );
-  return item.status === "queued" || item.status === "processing";
-});
-const reconcileExistingWorkflow = Effect.fn(function* (
-  environment: StatementReceiveEnvironment,
-  work: typeof Work.Type
-) {
-  if ("USER_STORE" in environment) {
-    const state = yield* workflowState(
-      environment.STATEMENT_EXTRACTION_WORKFLOW,
-      work.submissionId
-    );
-    if (["errored", "terminated", "complete"].includes(state.status)) {
-      const owner = environment.USER_STORE;
-      yield* attempt(() => coordinatedStatementStep(owner, work, "StatementFailed"));
-    }
-  } else {
-    yield* attempt(() => environment.STATEMENT_EXTRACTION_WORKFLOW.get(work.submissionId));
-  }
-});
 const missingWorkStatus = 404;
-/** Decode before looking up authority; forged and stale work cannot start an extraction. */
-export const receiveStatementExtraction = (
-  input: Readonly<{
-    environment: StatementReceiveEnvironment;
-    messages: ReadonlyArray<Readonly<{ body: unknown; ack: () => void }>>;
-  }>
-): Effect.Effect<void, StatementDeliveryUnavailable> =>
+type MessagePage = ReadonlyArray<Readonly<{ body: unknown; ack: () => void }>>;
+const handoffStatements = (input: {
+  workflow: StatementWorkflow;
+  messages: MessagePage;
+  pending: (work: typeof Work.Type) => Effect.Effect<boolean, StatementDeliveryUnavailable>;
+  reconcile: (work: typeof Work.Type) => Effect.Effect<void, StatementDeliveryUnavailable>;
+}): Effect.Effect<void, StatementDeliveryUnavailable> =>
   Effect.gen(function* () {
-    const now = yield* Clock.currentTimeMillis;
     for (const message of input.messages) {
       const work = Schema.decodeUnknownOption(Work)(message.body);
       if (Option.isNone(work)) {
         message.ack();
         continue;
       }
-      if (!(yield* pendingWork(input.environment, work.value, now))) {
+      if (!(yield* input.pending(work.value))) {
         message.ack();
         continue;
       }
       const params = yield* sanitizeWorkTrace(work.value);
       const started = yield* Effect.exit(
         attempt(() =>
-          input.environment.STATEMENT_EXTRACTION_WORKFLOW.create({
+          input.workflow.create({
             id: work.value.submissionId,
             params,
             retention,
@@ -185,11 +133,79 @@ export const receiveStatementExtraction = (
       );
       if (Exit.isFailure(started)) {
         if (Cause.hasInterrupts(started.cause)) return yield* Effect.failCause(started.cause);
-        yield* reconcileExistingWorkflow(input.environment, work.value);
+        yield* input.reconcile(work.value);
       }
       message.ack();
     }
   }).pipe(Effect.withSpan("ingestion.statementReceive"));
+
+/** The original User rechecks pending work before each attempt and owns terminal reconciliation. */
+export const receiveNativeStatementExtraction = (input: {
+  environment: {
+    USER_STORE: StatementCoordinator;
+    STATEMENT_EXTRACTION_WORKFLOW: StatementWorkflow;
+  };
+  messages: MessagePage;
+}): Effect.Effect<void, StatementDeliveryUnavailable> => {
+  const { USER_STORE: users, STATEMENT_EXTRACTION_WORKFLOW: workflow } = input.environment;
+  return handoffStatements({
+    messages: input.messages,
+    workflow,
+    pending: (work) =>
+      Effect.gen(function* () {
+        const body = yield* Schema.encodeEffect(Schema.fromJsonString(Work))(work).pipe(
+          Effect.mapError((cause) => new StatementDeliveryUnavailable({ cause }))
+        );
+        const response = yield* attempt(() =>
+          users
+            .getByName(work.userId)
+            .fetch("https://user.invalid/ingestion/statement/pending", { method: "POST", body })
+        );
+        if (response.status === missingWorkStatus) return false;
+        if (!response.ok) {
+          return yield* new StatementDeliveryUnavailable({ cause: "statement_owner" });
+        }
+        return true;
+      }),
+    reconcile: (work) =>
+      Effect.gen(function* () {
+        const state = yield* workflowState(workflow, work.submissionId);
+        if (["errored", "terminated", "complete"].includes(state.status)) {
+          const owner = users;
+          yield* attempt(() => coordinatedStatementStep(owner, work, "StatementFailed"));
+        }
+      }),
+  });
+};
+export const receiveStatementExtraction = (input: {
+  environment: { DB: D1Database; STATEMENT_EXTRACTION_WORKFLOW: StatementWorkflow };
+  messages: MessagePage;
+}): Effect.Effect<void, StatementDeliveryUnavailable> =>
+  Effect.gen(function* () {
+    const now = yield* Clock.currentTimeMillis,
+      environment = input.environment,
+      workflow = environment.STATEMENT_EXTRACTION_WORKFLOW;
+    return yield* handoffStatements({
+      workflow,
+      messages: input.messages,
+      pending: (work) =>
+        Effect.gen(function* () {
+          const raw = yield* attempt(() =>
+            environment.DB.prepare(
+              "SELECT status FROM statement_submissions WHERE id=? AND user_id=? AND retention_expires_at_ms>?"
+            )
+              .bind(work.submissionId, work.userId, now)
+              .first()
+          );
+          if (raw === null) return false;
+          const item = yield* Schema.decodeUnknownEffect(SubmissionState)(raw).pipe(
+            Effect.mapError((cause) => new StatementDeliveryUnavailable({ cause }))
+          );
+          return item.status === "queued" || item.status === "processing";
+        }),
+      reconcile: (work) => attempt(() => workflow.get(work.submissionId)).pipe(Effect.asVoid),
+    });
+  });
 
 /** Direct handoff accelerates the committed outbox; an unavailable create/get falls back to the
  * same Queue identity. Both paths use the receiver's current eligibility and stable Workflow id.

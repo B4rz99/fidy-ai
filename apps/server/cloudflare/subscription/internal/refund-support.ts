@@ -167,7 +167,7 @@ export const handleRefundSupport = (
     }
     const userId = path.split("/").at(userPathPosition) ?? "";
     const refundAttemptId = path.split("/").at(-1) ?? "";
-    const read = Schema.decodeUnknownOption(RefundRead)({
+    const read = Schema.decodeOption(RefundRead)({
       _tag: "ReadBillingRefund",
       authority: authority.value,
       userId,

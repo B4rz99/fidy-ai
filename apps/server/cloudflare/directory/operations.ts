@@ -217,7 +217,7 @@ export const currentMountedBinding = Effect.fn(
     );
     return proof.binding === expected ? Option.none<Response>() : Option.some(noAuthority());
   },
-  Effect.catchCause(() => Effect.succeed(Option.some(canonicalAdmissionUnavailable())))
+  Effect.catchCause(() => Effect.succeedSome(canonicalAdmissionUnavailable()))
 );
 
 export const reserveExternalEventRoute = Effect.fn(function* (

@@ -1,0 +1,71 @@
+apps/server/cloudflare/maintenance/lifetime-registry.test.ts
+  s_a1be23a656acf0::t_c17dd55b663d11 76,78-79
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_c17dd55b663d11 12-16,20-26,32,42-43,88-89,163,186-191,239-254
+  s_a1be23a656acf0::t_a165b3f4aca607 11
+apps/server/cloudflare/user-store.test-fixture.ts
+  s_a1be23a656acf0::t_c17dd55b663d11 84-85,145-146
+apps/server/cloudflare/maintenance/watchdog-traversal.test.ts
+  s_a1be23a656acf0::t_c17dd55b663d11 1-286
+apps/server/cloudflare/user-store/operations.ts
+  s_a1be23a656acf0::t_c17dd55b663d11 934,941-942,946
+apps/server/cloudflare/maintenance/contract.ts
+  s_a1be23a656acf0::t_c17dd55b663d11 91-108
+apps/server/cloudflare/categories/taxonomy.test.ts
+  s_a1be23a656acf0::t_c17dd55b663d11 15,82,100-104,113-126,172-184,302-318,320-321,324
+apps/server/cloudflare/maintenance/operations.ts
+  s_a1be23a656acf0::t_c17dd55b663d11 63-76
+apps/server/cloudflare/maintenance/core-schedule.test.ts
+  s_a1be23a656acf0::t_c17dd55b663d11 277-317
+apps/server/cloudflare/runtime/sqlite/migrations.test.ts
+  s_a1be23a656acf0::t_c17dd55b663d11 1-2,241,248-249
+apps/server/cloudflare/maintenance/runtime.ts
+  s_a1be23a656acf0::t_c17dd55b663d11 1-2,25,354-357,359-361,378-410,412-416,423
+apps/server/cloudflare/canonical-admission/internal/local-mutation.ts
+  s_a1be23a656acf0::t_c17dd55b663d11 444,449-466,470
+apps/server/cloudflare/directory/runtime.ts
+  s_a1be23a656acf0::t_c17dd55b663d11 15-16,20,23,75-97,113-115,117-125,158
+apps/server/cloudflare/maintenance/watchdog.test-fixture.ts
+  s_a1be23a656acf0::t_c17dd55b663d11 1-82
+apps/server/cloudflare/runtime/sqlite/operations.ts
+  s_a1be23a656acf0::t_c17dd55b663d11 318,320
+infra/cloudflare/alchemy.run.ts
+  s_a1be23a656acf0::t_c17dd55b663d11 19,441
+apps/server/cloudflare/maintenance/internal/watchdog.ts
+  s_a1be23a656acf0::t_c17dd55b663d11 1-237
+apps/server/cloudflare/canonical-admission/operations.ts
+  s_a1be23a656acf0::t_c17dd55b663d11 2-3,15,1301-1307
+apps/server/cloudflare/maintenance/watchdog.test.ts
+  s_a1be23a656acf0::t_c17dd55b663d11 1-149
+apps/server/cloudflare/core-worker.ts
+  s_a1be23a656acf0::t_c17dd55b663d11 1,18-24,35,59-60,443-459,461-470
+apps/server/cloudflare/subscription/internal/local-cancellation.ts
+  s_a1be23a656acf0::t_c17dd55b663d11 72-85,108
+apps/server/cloudflare/subscription/internal/pricing-object.ts
+  s_a1be23a656acf0::t_c17dd55b663d11 1,147-152
+apps/server/cloudflare/subscription/cancellation-journey.test.ts
+  s_a1be23a656acf0::t_c17dd55b663d11 19,248-249
+apps/server/cloudflare/subscription/operations.ts
+  s_a1be23a656acf0::t_c17dd55b663d11 1,5,156-158
+  s_a1be23a656acf0::t_58c61e81c91fb7 159
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_c17dd55b663d11 5,7-15
+apps/server/ARCHITECTURE.md
+  s_a1be23a656acf0::t_489de8790c65bd 100-108
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "58d6575ae967d1744dabe31b7cdffc3a8d541668",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

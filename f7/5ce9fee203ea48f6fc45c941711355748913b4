@@ -1,0 +1,49 @@
+.oxlintrc.json
+  s_a1be23a656acf0::t_f227e141caf1f1 323-324
+apps/server/cloudflare/core-http/lost-read.test-fixture.ts
+  s_a1be23a656acf0::t_cc5e5f93d4475e 1-28
+apps/server/cloudflare/core-http/runtime.ts
+  s_a1be23a656acf0::t_0e7aaf32a4e515 13,23,79,97,107
+apps/server/cloudflare/directory/operations.ts
+  s_a1be23a656acf0::t_305e489abcfa19 199-222
+apps/server/cloudflare/public-worker.ts
+  s_a1be23a656acf0::t_dfd2e371290223 222
+apps/server/cloudflare/transactions/transactions.test.ts
+  s_a1be23a656acf0::t_60c233def37b6d 3,2718,2789,2791,2800,2810
+apps/server/cloudflare/user-clock.test-fixture.ts
+  s_a1be23a656acf0::t_18507f205924da 1,3-4,6,10-11,16
+apps/server/cloudflare/user-store.test-fixture.ts
+  s_a1be23a656acf0::t_7c3edffc5285a4 235-236,319-320,571-572
+apps/server/cloudflare/web-authentication/operations.ts
+  s_a1be23a656acf0::t_ce813a1474af79 70,74-78
+apps/server/cloudflare/core-http/browser-admission.test.ts
+  s_e85b14fd415424::t_d7863e8456067d 1-4,6,8-11,13-16,18-22,24-57,60-62,64-77,79-125,127,129-132,134-154,156-157,159,161-168,170-184,186-200,202-204,206-207,209,211-212,214-216,218-238,240,242-246,248-256,258-261,263-279,281-285,287-288
+apps/server/cloudflare/core-http/internal/http.ts
+  s_e85b14fd415424::t_d63ab8a71a32a5 1-2,16,18,28,49,79,93,95,1473,1489-1497,1507,1669-1670,1675,1696,1698-1699,1711-1719,1728-1732,1734,1743-1755,1798
+apps/server/cloudflare/core-http/internal/session-clock.test.ts
+  s_e85b14fd415424::t_169cae751fec8c 1-6,8-16,19-35,37-61,63-64,66,69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f75ce9fee203ea48f6fc45c941711355748913b4",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_e85b14fd415424": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eecc-3a6d-7202-88a4-6766ce0233e7",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

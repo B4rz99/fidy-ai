@@ -1,0 +1,66 @@
+docs/operations/cloudflare-background-work.md
+  s_a1be23a656acf0::t_34f5a8e5214bbd 44-51
+apps/server/cloudflare/maintenance/watchdog.test.ts
+  s_a1be23a656acf0::t_34f5a8e5214bbd 6,152-258
+  s_a1be23a656acf0::t_ddc60bce1fb288 259
+apps/server/cloudflare/directory/runtime.ts
+  s_a1be23a656acf0::t_34f5a8e5214bbd 50,84-85,169-171,234-238
+apps/server/cloudflare/runtime/sqlite/operations.ts
+  s_a1be23a656acf0::t_34f5a8e5214bbd 1,132,136-137,141,151,158-176,179,196,204-206,208-254
+apps/server/cloudflare/directory/internal/replacement.ts
+  s_a1be23a656acf0::t_34f5a8e5214bbd 63,76,109,135,150
+apps/cli/.dependency-cruiser.mjs
+  s_a1be23a656acf0::t_34f5a8e5214bbd 26
+apps/server/cloudflare/directory/internal/reservations.ts
+  s_a1be23a656acf0::t_34f5a8e5214bbd 51,67,72,77,82,89
+apps/server/cloudflare/user-store/internal/uncertainty.ts
+  s_a1be23a656acf0::t_34f5a8e5214bbd 1-35
+apps/server/cloudflare/subscription/runtime.ts
+  s_a1be23a656acf0::t_34f5a8e5214bbd 40-41,342-344,395,397-406
+apps/server/cloudflare/maintenance/runtime.ts
+  s_a1be23a656acf0::t_34f5a8e5214bbd 10,326-330,348
+apps/server/cloudflare/user-store.test-fixture.ts
+  s_a1be23a656acf0::t_34f5a8e5214bbd 434,436,532-540
+apps/server/cloudflare/runtime/sqlite/migrations.test.ts
+  s_a1be23a656acf0::t_34f5a8e5214bbd 10-11,28,30-32,80,182
+apps/server/cloudflare/erasure/native-custody.test.ts
+  s_a1be23a656acf0::t_34f5a8e5214bbd 273
+apps/cli/src/direct-client/runtime.ts
+  s_a1be23a656acf0::t_34f5a8e5214bbd 69
+apps/server/cloudflare/public-worker.ts
+  s_a1be23a656acf0::t_34f5a8e5214bbd 422-424,637-639
+apps/server/cloudflare/subscription/internal/pricing-object.ts
+  s_a1be23a656acf0::t_34f5a8e5214bbd 175,266,282,286
+apps/server/cloudflare/core-http/internal/http.ts
+  s_a1be23a656acf0::t_34f5a8e5214bbd 1674
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_34f5a8e5214bbd 4,184-189,306-308,617-623
+apps/cli/src/main.ts
+  s_a1be23a656acf0::t_34f5a8e5214bbd 64
+apps/server/cloudflare/erasure-store/runtime.ts
+  s_a1be23a656acf0::t_34f5a8e5214bbd 12,22-27,81-83,122-126
+infra/cloudflare/alchemy.run.ts
+  s_a1be23a656acf0::t_34f5a8e5214bbd 155
+apps/server/cloudflare/erasure/operations.ts
+  s_a1be23a656acf0::t_34f5a8e5214bbd 332
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_34f5a8e5214bbd 5,11
+docs/adr/0041-per-user-durable-object-storage-direction.md
+  s_a1be23a656acf0::t_34f5a8e5214bbd 380-387,427,455-456
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ceec8770e888ac08c4223ee07ca47335df004cf2",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

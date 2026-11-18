@@ -1,0 +1,305 @@
+import type coreWorker from "./core-worker";
+import { WorkerEntrypoint } from "cloudflare:workers";
+import { Effect, Option, Schema } from "effect";
+import { erasureRegistryName } from "./erasure/contract";
+import { resumeErasureCases, sweepErasureControlObjects } from "./erasure/operations";
+import {
+  makeErasureRegistryOwner,
+  withErasureRecovery,
+  withErasureRegistry,
+} from "./erasure/runtime";
+import type { CoreMaintenanceInput } from "./maintenance/contract";
+import { runCoreMaintenance } from "./maintenance/runtime";
+import { cloudflareWorkerTelemetry, observeWorkerExecution } from "./runtime/telemetry/operations";
+import { UserTransactionCoordinator as UserCoordinatorRuntime } from "./transactions/runtime";
+
+type CoreEnvironment = Parameters<typeof coreWorker.fetch>[1];
+
+const proactivityMaintenanceInput = (
+  environment: CoreEnvironment
+): Pick<
+  CoreMaintenanceInput,
+  | "WEEKLY_DELIVERY_QUEUE"
+  | "WEEKLY_DELIVERY_WORKFLOW"
+  | "WEEKLY_SUMMARY_ENABLED"
+  | "PROACTIVITY_ENABLED"
+  | "WEEKLY_SUMMARY_TEMPLATE_JSON"
+  | "WEEKLY_QUESTION_TEMPLATE_JSON"
+  | "PROACTIVITY_ASK_AFTER"
+  | "PROACTIVITY_PAUSE_AFTER"
+> => ({
+  ...(environment.WEEKLY_DELIVERY_QUEUE === undefined
+    ? {}
+    : { WEEKLY_DELIVERY_QUEUE: environment.WEEKLY_DELIVERY_QUEUE }),
+  ...(environment.WEEKLY_DELIVERY_WORKFLOW === undefined
+    ? {}
+    : { WEEKLY_DELIVERY_WORKFLOW: environment.WEEKLY_DELIVERY_WORKFLOW }),
+  ...(environment.WEEKLY_SUMMARY_ENABLED === undefined
+    ? {}
+    : { WEEKLY_SUMMARY_ENABLED: environment.WEEKLY_SUMMARY_ENABLED }),
+  PROACTIVITY_ENABLED: environment.PROACTIVITY_ENABLED,
+  ...(environment.WEEKLY_SUMMARY_TEMPLATE_JSON === undefined
+    ? {}
+    : { WEEKLY_SUMMARY_TEMPLATE_JSON: environment.WEEKLY_SUMMARY_TEMPLATE_JSON }),
+  ...(environment.WEEKLY_QUESTION_TEMPLATE_JSON === undefined
+    ? {}
+    : { WEEKLY_QUESTION_TEMPLATE_JSON: environment.WEEKLY_QUESTION_TEMPLATE_JSON }),
+  ...(environment.PROACTIVITY_ASK_AFTER === undefined
+    ? {}
+    : { PROACTIVITY_ASK_AFTER: environment.PROACTIVITY_ASK_AFTER }),
+  ...(environment.PROACTIVITY_PAUSE_AFTER === undefined
+    ? {}
+    : { PROACTIVITY_PAUSE_AFTER: environment.PROACTIVITY_PAUSE_AFTER }),
+});
+
+const maintenanceInput = (environment: CoreEnvironment): CoreMaintenanceInput => ({
+  ...(environment.BANCOLOMBIA_SANDBOX_CLIENT_ID === undefined
+    ? {}
+    : { BANCOLOMBIA_SANDBOX_CLIENT_ID: environment.BANCOLOMBIA_SANDBOX_CLIENT_ID }),
+  ...(environment.BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM === undefined
+    ? {}
+    : { BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM: environment.BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM }),
+  ...(environment.BANCOLOMBIA_SANDBOX_GRANT_KEY === undefined
+    ? {}
+    : { BANCOLOMBIA_SANDBOX_GRANT_KEY: environment.BANCOLOMBIA_SANDBOX_GRANT_KEY }),
+  ...(environment.BANCOLOMBIA_SANDBOX_MTLS === undefined
+    ? {}
+    : { BANCOLOMBIA_SANDBOX_MTLS: environment.BANCOLOMBIA_SANDBOX_MTLS }),
+  DB: environment.DB,
+  ...proactivityMaintenanceInput(environment),
+  USER_TRANSACTION_COORDINATOR: environment.USER_TRANSACTION_COORDINATOR,
+  OPENAI_API_KEY: environment.OPENAI_API_KEY,
+  RELEASE_GIT_SHA: environment.RELEASE_GIT_SHA,
+  KAPSO_API_KEY: environment.KAPSO_API_KEY,
+  KAPSO_WEBHOOK_SECRET: environment.KAPSO_WEBHOOK_SECRET,
+  WHATSAPP_SANDBOX_PHONE_NUMBER_ID: environment.WHATSAPP_SANDBOX_PHONE_NUMBER_ID,
+  HOSTED_AI_MODEL: environment.HOSTED_AI_MODEL,
+  WOMPI_ENVIRONMENT: environment.WOMPI_ENVIRONMENT,
+  WOMPI_PUBLIC_KEY: environment.WOMPI_PUBLIC_KEY,
+  WOMPI_PRIVATE_KEY: environment.WOMPI_PRIVATE_KEY,
+  WOMPI_INTEGRITY_SECRET: environment.WOMPI_INTEGRITY_SECRET,
+  ASYNC_HEALTH_ENABLED: Option.fromUndefinedOr(environment.ASYNC_HEALTH_ENABLED),
+  ASYNC_DEAD_LETTERS: Option.fromUndefinedOr(environment.ASYNC_DEAD_LETTERS),
+  FORWARDED_EMAIL_QUEUE: Option.fromUndefinedOr(environment.FORWARDED_EMAIL_QUEUE),
+  EMAIL_REPLACEMENT_HEALTH_QUEUE: Option.fromUndefinedOr(
+    environment.EMAIL_REPLACEMENT_HEALTH_QUEUE
+  ),
+  OPERATIONAL_CANARY_QUEUE: Option.fromUndefinedOr(environment.OPERATIONAL_CANARY_QUEUE),
+  OPERATIONAL_CANARY_WORKFLOW: Option.fromUndefinedOr(environment.OPERATIONAL_CANARY_WORKFLOW),
+  EMAIL_BUCKET: Option.fromUndefinedOr(environment.EMAIL_BUCKET),
+  STATEMENT_STAGING_BUCKET: Option.fromUndefinedOr(environment.STATEMENT_STAGING_BUCKET),
+  BROWSER_PAIRING_EMAIL_QUEUE: Option.fromUndefinedOr(environment.BROWSER_PAIRING_EMAIL_QUEUE),
+  EMAIL_REPLACEMENT_QUEUE: Option.fromUndefinedOr(environment.EMAIL_REPLACEMENT_QUEUE),
+  BILLING_COLLECTION_QUEUE: Option.fromUndefinedOr(environment.BILLING_COLLECTION_QUEUE),
+  STATEMENT_EXTRACTION_QUEUE: Option.fromUndefinedOr(environment.STATEMENT_EXTRACTION_QUEUE),
+  HOSTED_WHATSAPP_QUEUE: Option.fromUndefinedOr(environment.HOSTED_WHATSAPP_QUEUE),
+  BROWSER_PAIRING_EMAIL_WORKFLOW: Option.fromUndefinedOr(
+    environment.BROWSER_PAIRING_EMAIL_WORKFLOW
+  ),
+  EMAIL_REPLACEMENT_WORKFLOW: Option.fromUndefinedOr(environment.EMAIL_REPLACEMENT_WORKFLOW),
+  BILLING_COLLECTION_WORKFLOW: Option.fromUndefinedOr(environment.BILLING_COLLECTION_WORKFLOW),
+  STATEMENT_EXTRACTION_WORKFLOW: Option.fromUndefinedOr(environment.STATEMENT_EXTRACTION_WORKFLOW),
+  RESEND_API_KEY: Option.fromUndefinedOr(environment.RESEND_API_KEY),
+  WOMPI_EVENT_SECRET: Option.fromUndefinedOr(environment.WOMPI_EVENT_SECRET),
+});
+
+/** Private, non-User executor; the object key coordinates ticks and grants no domain authority. */
+class CoreMaintenanceCoordinator {
+  private active: Option.Option<Promise<void>> = Option.none();
+  private readonly state: Readonly<{ id: Pick<DurableObjectId, "name"> }>;
+  private readonly environment: CoreEnvironment;
+  private readonly erasureEnvironment: CoreEnvironment;
+
+  constructor(
+    state: Readonly<{ id: Pick<DurableObjectId, "name"> }>,
+    environment: CoreEnvironment
+  ) {
+    this.state = state;
+    this.erasureEnvironment = withErasureRegistry(environment);
+    this.environment = withErasureRecovery(environment);
+  }
+
+  private resumeErasureWork(): Effect.Effect<void> {
+    return resumeErasureCases({
+      db: this.erasureEnvironment.DB,
+      coordinator: this.erasureEnvironment.USER_TRANSACTION_COORDINATOR,
+      bucket: Option.fromUndefinedOr(
+        this.erasureEnvironment.ERASURE_REGISTRY ?? this.erasureEnvironment.ERASURE_BUCKET
+      ),
+    }).pipe(
+      Effect.ensuring(
+        sweepErasureControlObjects({
+          db: this.erasureEnvironment.DB,
+          buckets: [
+            {
+              id: "email",
+              bucket: Option.fromUndefinedOr(this.erasureEnvironment.EMAIL_BUCKET),
+            },
+            {
+              id: "statement",
+              bucket: Option.fromUndefinedOr(this.erasureEnvironment.STATEMENT_STAGING_BUCKET),
+            },
+            {
+              id: "erasure",
+              bucket: Option.fromUndefinedOr(this.erasureEnvironment.ERASURE_BUCKET),
+            },
+          ],
+        }).pipe(Effect.orDie)
+      ),
+      Effect.orDie
+    );
+  }
+
+  fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    if (
+      request.method !== "POST" ||
+      this.state.id.name !== "core-maintenance-v1" ||
+      url.origin !== "https://maintenance.invalid" ||
+      url.pathname !== "/tick" ||
+      url.search !== "" ||
+      request.body !== null
+    ) {
+      return Promise.resolve(new Response(null, { status: 404 }));
+    }
+
+    const work = Option.getOrElse(this.active, () => {
+      const scheduledAt = Option.flatMap(
+        Option.fromNullishOr(request.headers.get("x-maintenance-scheduled-at")),
+        Schema.decodeUnknownOption(
+          Schema.NumberFromString.check(
+            Schema.isFinite(),
+            Schema.isInt(),
+            Schema.isGreaterThanOrEqualTo(0)
+          )
+        )
+      );
+      const started = runCoreMaintenance(
+        Option.isSome(scheduledAt)
+          ? {
+              environment: maintenanceInput(this.environment),
+              scheduledAtEpochMs: scheduledAt.value,
+            }
+          : maintenanceInput(this.environment)
+      )
+        .pipe(
+          Effect.ensuring(this.resumeErasureWork()),
+          observeWorkerExecution({
+            environment: this.environment,
+            telemetry: cloudflareWorkerTelemetry,
+            operation: "worker.core.maintenance",
+          }),
+          Effect.runPromise
+        )
+        .finally(() => {
+          this.active = Option.none();
+        });
+      this.active = Option.some(started);
+      return started;
+    });
+    return work.then(
+      () => new Response(null, { status: 204 }),
+      () => new Response(null, { status: 503 })
+    );
+  }
+}
+
+type CoordinatorState = Omit<ConstructorParameters<typeof UserCoordinatorRuntime>[0], "id"> &
+  Readonly<{ id: Pick<DurableObjectId, "name"> & Partial<Pick<DurableObjectId, "equals">> }> &
+  Partial<Pick<DurableObjectState, "waitUntil">> &
+  Readonly<{
+    storage: Partial<Pick<DurableObjectStorage, "sql" | "transactionSync" | "sync">>;
+  }>;
+
+/** Reserved metadata state shares the deployed class, never a User's object or authority. */
+const makeRegistryCoordinator = (
+  state: CoordinatorState,
+  environment: CoreEnvironment
+): Pick<Fetcher, "fetch"> => {
+  const { sql, transactionSync, sync } = state.storage;
+  if (sql === undefined || transactionSync === undefined || sync === undefined) {
+    return { fetch: () => Promise.resolve(new Response(null, { status: 503 })) };
+  }
+  return makeErasureRegistryOwner({
+    state: {
+      id: { name: erasureRegistryName },
+      storage: {
+        sql,
+        transactionSync: transactionSync.bind(state.storage),
+        sync: sync.bind(state.storage),
+      },
+    },
+    environment,
+    read: () => Promise.resolve(new Response(null, { status: 404 })),
+  });
+};
+
+/** Email receives metadata transport only, without a binding to User coordinators or canonical HTTP. */
+export class ErasureRegistryTransport extends WorkerEntrypoint<CoreEnvironment> {
+  override fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    const namespace =
+      this.env.ERASURE_REGISTRY_COORDINATOR ?? this.env.USER_TRANSACTION_COORDINATOR;
+    if (url.origin !== "https://erasure-registry.invalid" || url.pathname !== "/metadata") {
+      return Promise.resolve(new Response(null, { status: 404 }));
+    }
+    return namespace.getByName(erasureRegistryName, { locationHint: "enam" }).fetch(request);
+  }
+}
+
+const isRegistryObject = (state: CoordinatorState, environment: CoreEnvironment): boolean => {
+  if (state.id.name === erasureRegistryName) return true;
+  const namespace =
+    environment.ERASURE_REGISTRY_COORDINATOR ?? environment.USER_TRANSACTION_COORDINATOR;
+  return (
+    namespace.idFromName !== undefined &&
+    state.id.equals?.(namespace.idFromName(erasureRegistryName)) === true
+  );
+};
+
+/** Preserve the deployed native class identity; reserved maintenance never constructs User work. */
+export class UserTransactionCoordinator {
+  private readonly delegate:
+    | CoreMaintenanceCoordinator
+    | UserCoordinatorRuntime
+    | Pick<Fetcher, "fetch">;
+
+  constructor(
+    state: CoordinatorState,
+    environment: CoreEnvironment,
+    configuration?: ConstructorParameters<typeof UserCoordinatorRuntime>[2]
+  ) {
+    if (isRegistryObject(state, environment)) {
+      this.delegate = makeRegistryCoordinator(state, environment);
+      return;
+    }
+    const name = state.id.name;
+    if (name === undefined) {
+      this.delegate = {
+        fetch: (): Promise<Response> => Promise.resolve(new Response(null, { status: 503 })),
+      };
+      return;
+    }
+    const named = { id: { name }, storage: state.storage };
+    this.delegate =
+      name === "core-maintenance-v1"
+        ? new CoreMaintenanceCoordinator(named, environment)
+        : new UserCoordinatorRuntime(named, environment, configuration);
+  }
+
+  fetch(request: Request): Promise<Response> {
+    if (
+      this.delegate instanceof UserCoordinatorRuntime &&
+      new URL(request.url).origin === "https://maintenance.invalid"
+    ) {
+      return Promise.resolve(new Response(null, { status: 404 }));
+    }
+    return this.delegate.fetch(request);
+  }
+
+  alarm(): Promise<void> {
+    return this.delegate instanceof UserCoordinatorRuntime
+      ? this.delegate.alarm()
+      : Promise.resolve();
+  }
+}

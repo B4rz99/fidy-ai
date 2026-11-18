@@ -13,7 +13,7 @@ await Effect.runPromise(
     const compiled = Bun.spawnSync([
       "bunx",
       "esbuild",
-      new URL("./core-worker.ts", import.meta.url).pathname,
+      new URL("./core-worker.test-fixture.ts", import.meta.url).pathname,
       "--bundle",
       "--platform=node",
       "--format=esm",

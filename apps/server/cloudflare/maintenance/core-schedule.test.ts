@@ -1,317 +1,55 @@
-import { openAiTestKey } from "../openai.test-fixture";
-import { Clock, Data, Effect } from "effect";
-import { afterAll, expect, it } from "vitest";
-import coreWorker, { UserTransactionCoordinator } from "../core-worker";
-import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
+import { NodeFileSystem } from "@effect/platform-node";
+import { it } from "@effect/vitest";
+import { Clock, Effect } from "effect";
+import { expect } from "vitest";
+import { native, nativeUserPlatform } from "../user-store.test-fixture";
+import { storeReadinessUrl } from "../runtime/sqlite/contract";
+import { maintenanceName } from "./contract";
 
-class TestRuntimeFailed extends Data.TaggedError("TestRuntimeFailed") {}
-const awaitPromise = <A>(work: () => Promise<A>): Effect.Effect<A, TestRuntimeFailed> =>
-  Effect.tryPromise({ try: work, catch: () => new TestRuntimeFailed() });
-
-const databases = isolatedTestDatabases();
-afterAll(() => databases.dispose());
-const environment = (DB: D1Database): Parameters<typeof coreWorker.scheduled>[1] => ({
-  DB,
-  OPENAI_API_KEY: openAiTestKey({ run: () => Promise.reject(new Error("Unused test binding")) }),
-  CONTRACT_DIGEST: "a".repeat(64),
-  RELEASE_GIT_SHA: "a".repeat(40),
-  HOSTED_AI_MODEL: "test",
-  BROWSER_ORIGIN: "https://app.fidyapp.com",
-  USER_TRANSACTION_COORDINATOR: {
-    getByName: () => ({ fetch: () => Promise.reject(new Error("Unused test binding")) }),
-  },
-  KAPSO_API_KEY: "test",
-  KAPSO_WEBHOOK_SECRET: "test",
-  WHATSAPP_BUSINESS_PORTFOLIO_ID: "test",
-  WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
-  CLOUDFLARE_ACCESS_ISSUER: "https://test.cloudflareaccess.com",
-  CLOUDFLARE_ACCESS_AUDIENCE: "test",
-  WOMPI_ENVIRONMENT: "sandbox",
-  WOMPI_PUBLIC_KEY: "",
-  WOMPI_PRIVATE_KEY: "",
-  WOMPI_INTEGRITY_SECRET: "",
-});
-
-it("keeps maintenance alarms inert while preserving the User alarm's real D1 recovery", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* awaitPromise(() => databases.acquire());
-      const storage = {
-        getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
-        deleteAlarm: (): Promise<void> => Promise.resolve(),
-        setAlarm: (): Promise<void> => Promise.resolve(),
-      };
-      const maintenance = new UserTransactionCoordinator(
-        { id: { name: "core-maintenance-v1" }, storage },
-        environment(db)
-      );
-      yield* awaitPromise(() => maintenance.alarm());
-      const user = new UserTransactionCoordinator(
-        { id: { name: "10000000-0000-4000-8000-000000000003" }, storage },
-        environment(db)
-      );
-      yield* awaitPromise(() => expect(user.alarm()).rejects.toThrow());
-    })
-  ));
-
-it("refuses an unavailable maintenance executor without falling back to cleanup on the cron Worker", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* awaitPromise(() => databases.acquire());
-      yield* awaitPromise(() => installTestSchema({ db }));
-      const created = (yield* Clock.currentTimeMillis) - 86_400_000 - 660_000;
-      yield* awaitPromise(() =>
-        db.batch([
-          db
-            .prepare(
-              "INSERT INTO browser_login_pairings(id,public_code,verifier_digest,created_at_ms,expires_at_ms) VALUES (?,?,zeroblob(32),?,?)"
-            )
-            .bind("10000000-0000-4000-8000-000000000001", "AAAA-BBBB", created, created + 600_000),
-          db
-            .prepare(
-              "INSERT INTO provider_authentication_attempts(id,pairing_id,cookie_digest,nonce,intent,created_at_ms,expires_at_ms,state,provider) VALUES (?,?,zeroblob(32),'test','login',?,?,'pending','microsoft')"
-            )
-            .bind(
-              "test-expired-attempt",
-              "10000000-0000-4000-8000-000000000001",
-              created,
-              created + 600_000
-            ),
-        ])
-      );
-      const scheduledTime = yield* Clock.currentTimeMillis;
-      yield* awaitPromise(() =>
-        expect(
-          coreWorker.scheduled(
-            {
-              cron: "* * * * *",
-              scheduledTime,
-              noRetry: () => undefined,
-            },
-            environment(db)
-          )
-        ).rejects.toThrow()
-      );
-      expect(
-        yield* awaitPromise(() =>
-          db
-            .prepare("SELECT count(*) AS count FROM provider_authentication_attempts")
-            .first("count")
-        )
-      ).toBe(1);
-    })
-  ));
-
-it(
-  "runs expired-attempt retention through the native local executor while preserving a live attempt",
-  () =>
-    Effect.runPromise(
+it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) =>
+  test.effect(
+    "runs the installed Core cron through the native Maintenance owner, coalesces repeat delivery and respects isolation",
+    () =>
       Effect.gen(function* () {
-        const { Miniflare } = yield* awaitPromise(() => import("miniflare"));
-        const compiled = Bun.spawnSync([
-          "bunx",
-          "esbuild",
-          new URL("../core-worker.test-fixture.ts", import.meta.url).pathname,
-          "--bundle",
-          "--platform=browser",
-          "--format=esm",
-          "--conditions=workerd",
-          "--external:cloudflare:workers",
-          "--external:node:*",
-          `--tsconfig=${new URL("../../tsconfig.json", import.meta.url).pathname}`,
+        const start = yield* nativeUserPlatform;
+        const scheduledTime = yield* Clock.currentTimeMillis;
+        const runtime = yield* start();
+        const core = yield* native(() => runtime.getWorker("core"));
+        for (let delivery = 0; delivery < 2; delivery++) {
+          const result = yield* native(() => core.scheduled({ cron: "* * * * *", scheduledTime }));
+          expect(result.outcome).toBe("ok");
+        }
+        const progress = yield* native(() =>
+          runtime.unsafeGetDurableObjectStorage("core", "Maintenance", { name: maintenanceName })
+        );
+        const snapshot = (): ReturnType<typeof progress.exec> =>
+          progress.exec(
+            "SELECT scheduled,wraps,shared_observed,failed,unknown FROM watchdog_progress"
+          );
+        const recorded = yield* native(snapshot);
+        expect(recorded).toEqual([
+          { scheduled: scheduledTime, wraps: 1, shared_observed: 3, failed: 0, unknown: 0 },
         ]);
-        if (compiled.exitCode !== 0) {
-          throw new Error(compiled.stderr.toString());
-        }
-        const bindings = {
-          CONTRACT_DIGEST: "a".repeat(64),
-          RELEASE_GIT_SHA: "a".repeat(40),
-          HOSTED_AI_MODEL: "test",
-          BROWSER_ORIGIN: "https://app.fidyapp.com",
-          KAPSO_API_KEY: "test",
-          KAPSO_WEBHOOK_SECRET: "test",
-          WHATSAPP_BUSINESS_PORTFOLIO_ID: "test",
-          WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
-          CLOUDFLARE_ACCESS_ISSUER: "https://test.cloudflareaccess.com",
-          CLOUDFLARE_ACCESS_AUDIENCE: "test",
-          WOMPI_ENVIRONMENT: "sandbox",
-          WOMPI_PUBLIC_KEY: "",
-          WOMPI_PRIVATE_KEY: "",
-          WOMPI_INTEGRITY_SECRET: "",
-        };
-        const runtime = new Miniflare({
-          workers: [
-            {
-              config: {
-                name: "core-maintenance-test",
-                type: "worker",
-                compatibilityDate: "2026-09-08",
-                compatibilityFlags: ["nodejs_compat"],
-                manifest: {
-                  mainModule: "index.mjs",
-                  modules: {
-                    "index.mjs": {
-                      type: "esm",
-                      contents:
-                        'export { scheduledFixture as default, UserTransactionCoordinator } from "./core.mjs";',
-                    },
-                    "core.mjs": { type: "esm", contents: compiled.stdout.toString() },
-                  },
-                },
-                exports: {
-                  UserTransactionCoordinator: { type: "durable-object", storage: "sqlite" },
-                },
-                env: {
-                  ...Object.fromEntries(
-                    Object.entries(bindings).map(([name, value]) => [
-                      name,
-                      { type: "json" as const, value },
-                    ])
-                  ),
-                  DB: { type: "d1", id: "core-maintenance-test" },
-                  USER_TRANSACTION_COORDINATOR: {
-                    type: "durable-object",
-                    worker: "core-maintenance-test",
-                    exportName: "UserTransactionCoordinator",
-                  },
-                },
-              },
-            },
-          ],
-        });
-        try {
-          const db = yield* awaitPromise(() => runtime.getD1Database("DB"));
-          yield* awaitPromise(() => installTestSchema({ db }));
-          const now = yield* Clock.currentTimeMillis;
-          yield* awaitPromise(() =>
-            db.batch(
-              (
-                [
-                  [1, now - 86_400_000 - 660_000, "AAAA-BBBB"],
-                  [2, now, "CCCC-DDDD"],
-                ] as const
-              ).flatMap(([index, created, code]) => {
-                const id = `10000000-0000-4000-8000-00000000000${index}`;
-                return [
-                  db
-                    .prepare(
-                      "INSERT INTO browser_login_pairings(id,public_code,verifier_digest,created_at_ms,expires_at_ms) VALUES (?,?,zeroblob(32),?,?)"
-                    )
-                    .bind(id, code, created, created + 600_000),
-                  db
-                    .prepare(
-                      "INSERT INTO provider_authentication_attempts(id,pairing_id,cookie_digest,nonce,intent,created_at_ms,expires_at_ms,state,provider) VALUES (?,?,zeroblob(32),'test','login',?,?,'pending','microsoft')"
-                    )
-                    .bind(`test-attempt-${index}`, id, created, created + 600_000),
-                ];
-              })
+        yield* native(() => runtime.dispose());
+        const closed = yield* start("1000000000", [], { RECOVERY_ISOLATION: "isolated" });
+        const held = yield* native(() => closed.getWorker("core"));
+        yield* native(() =>
+          held.scheduled({ cron: "* * * * *", scheduledTime: scheduledTime + 60000 })
+        );
+        const owners = yield* native(() => closed.getDurableObjectNamespace("MAINTENANCE", "core"));
+        expect(
+          (yield* native(() => owners.getByName(maintenanceName).fetch(storeReadinessUrl))).ok
+        ).toBe(true);
+        const retained = yield* native(() =>
+          closed.unsafeGetDurableObjectStorage("core", "Maintenance", { name: maintenanceName })
+        );
+        expect(
+          yield* native(() =>
+            retained.exec(
+              "SELECT scheduled,wraps,shared_observed,failed,unknown FROM watchdog_progress"
             )
-          );
-          const response = yield* awaitPromise(() =>
-            runtime.dispatchFetch("https://fixture.invalid/schedule", {
-              method: "POST",
-            })
-          );
-          expect(response.status).toBe(204);
-          expect(
-            (yield* awaitPromise(() =>
-              db.prepare("SELECT id FROM provider_authentication_attempts ORDER BY id").all()
-            )).results
-          ).toEqual([{ id: "test-attempt-2" }]);
-          const binding = yield* awaitPromise(() =>
-            runtime.getDurableObjectNamespace("USER_TRANSACTION_COORDINATOR")
-          );
-          const refused = yield* awaitPromise(() =>
-            binding.getByName("core-maintenance-v1").fetch("https://maintenance.invalid/tick", {
-              method: "POST",
-              body: "private-material-sentinel",
-            })
-          );
-          expect(refused.status).toBe(404);
-          expect(yield* awaitPromise(() => refused.text())).toBe("");
-          const refusals = yield* awaitPromise(() =>
-            Promise.all([
-              binding
-                .getByName("10000000-0000-4000-8000-000000000003")
-                .fetch("https://maintenance.invalid/tick", { method: "POST" }),
-              binding
-                .getByName("core-maintenance-v1")
-                .fetch("https://maintenance.invalid/tick?credential=private-material-sentinel", {
-                  method: "POST",
-                }),
-              binding.getByName("core-maintenance-v1").fetch("https://maintenance.invalid/tick"),
-            ])
-          );
-          expect(refusals.map((item) => item.status)).toEqual([404, 404, 404]);
-          const probe = yield* awaitPromise(() =>
-            binding
-              .getByName("operational-health-probe")
-              .fetch("https://coordinator.invalid/operational/probe")
-          );
-          expect(probe.status).toBe(204);
-          const repeated = yield* awaitPromise(() =>
-            Promise.all([
-              runtime.dispatchFetch("https://fixture.invalid/schedule", { method: "POST" }),
-              runtime.dispatchFetch("https://fixture.invalid/schedule", { method: "POST" }),
-            ])
-          );
-          expect(repeated.map((item) => item.status)).toEqual([204, 204]);
-          expect(
-            (yield* awaitPromise(() =>
-              db.prepare("SELECT id FROM provider_authentication_attempts ORDER BY id").all()
-            )).results
-          ).toEqual([{ id: "test-attempt-2" }]);
-          yield* awaitPromise(() => db.exec("DROP TABLE provider_authentication_attempts"));
-          const failed = yield* awaitPromise(() =>
-            runtime.dispatchFetch("https://fixture.invalid/schedule", { method: "POST" })
-          );
-          expect(failed.status).toBe(503);
-          expect(yield* awaitPromise(() => failed.text())).toBe("");
-        } finally {
-          yield* awaitPromise(() => runtime.dispose());
-        }
+          )
+        ).toEqual(recorded);
       })
-    ),
-  30_000
+  )
 );
-
-it("delivers the same scheduled minute to native Maintenance when the legacy executor fails and leaves isolated installations closed", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* awaitPromise(() => databases.acquire());
-      const calls: Array<Readonly<{ name: string; url: string; scheduled: string }>> = [];
-      const env = {
-        ...environment(db),
-        MAINTENANCE: {
-          getByName: (name: string): Pick<Fetcher, "fetch"> => ({
-            fetch: (input: RequestInfo | URL): Promise<Response> => {
-              const request = new Request(input);
-              calls.push({
-                name,
-                url: request.url,
-                scheduled: request.headers.get("x-maintenance-scheduled-at") ?? "",
-              });
-              return Promise.resolve(new Response(null, { status: 204 }));
-            },
-          }),
-        },
-      };
-      const controller = {
-        cron: "* * * * *",
-        scheduledTime: 60000,
-        noRetry: (): void => undefined,
-      };
-      yield* awaitPromise(() => expect(coreWorker.scheduled(controller, env)).rejects.toThrow());
-      expect(calls).toEqual([
-        {
-          name: "core-maintenance-v1",
-          url: "https://maintenance.invalid/watchdog",
-          scheduled: "60000",
-        },
-      ]);
-      yield* awaitPromise(() =>
-        coreWorker.scheduled(controller, { ...env, RECOVERY_ISOLATION: "isolated" })
-      );
-      expect(calls).toHaveLength(1);
-    })
-  ));

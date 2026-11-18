@@ -2,4 +2,4 @@ export {
   makeCoreWorker,
   UserTransactionCoordinator,
   runBillingCollectionWorkflow,
-} from "./core-worker";
+} from "./core-worker.test-fixture";

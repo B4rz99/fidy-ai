@@ -22,7 +22,8 @@ import {
   installCurrentTestObjects,
   withTestDatabaseClock,
 } from "../d1-test-fixture";
-import coreWorker, { UserTransactionCoordinator } from "../core-worker";
+import coreWorker from "../core-worker";
+import { UserTransactionCoordinator } from "../core-coordinator.test-fixture";
 import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import { activePaidSubscriptionCondition } from "../../src/shell/subscription/operations";
 import { afterEach, expect, it, vi } from "vitest";

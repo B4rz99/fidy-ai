@@ -263,3 +263,45 @@ export const operationalSeverity = (signal: AlertSignal): OperationalSeverity =>
   if (signal.operation === "whatsapp") return whatsappSeverity(signal);
   return pendingSeverity(signal);
 };
+
+/** Queue depth is a platform measurement. Domain health and eligible recovery come from native owner inspection. */
+export const inspectNativeQueues = Effect.fn(function* (
+  environment: Partial<
+    Readonly<{
+      ASYNC_HEALTH_ENABLED: string;
+      ASYNC_DEAD_LETTERS: Pick<Queue, "metrics">;
+      BROWSER_PAIRING_EMAIL_QUEUE: Pick<Queue, "metrics">;
+      FORWARDED_EMAIL_QUEUE: Pick<Queue, "metrics">;
+      BILLING_COLLECTION_QUEUE: Pick<Queue, "metrics">;
+      STATEMENT_EXTRACTION_QUEUE: Pick<Queue, "metrics">;
+      HOSTED_WHATSAPP_QUEUE: Pick<Queue, "metrics">;
+      WEEKLY_DELIVERY_QUEUE: Pick<Queue, "metrics">;
+    }>
+  >
+) {
+  if (environment.ASYNC_HEALTH_ENABLED !== "enabled") return;
+  const queues = [
+    ["deadLetters", environment.ASYNC_DEAD_LETTERS],
+    ["browserPairingQueue", environment.BROWSER_PAIRING_EMAIL_QUEUE],
+    ["forwardedEmailQueue", environment.FORWARDED_EMAIL_QUEUE],
+    ["billingQueue", environment.BILLING_COLLECTION_QUEUE],
+    ["statementQueue", environment.STATEMENT_EXTRACTION_QUEUE],
+    ["whatsappQueue", environment.HOSTED_WHATSAPP_QUEUE],
+    ["proactivityQueue", environment.WEEKLY_DELIVERY_QUEUE],
+  ] as const;
+  yield* Effect.forEach(
+    queues,
+    ([operation, binding]) =>
+      Effect.gen(function* () {
+        const signal = yield* inspectQueue({ operation, queue: Option.fromUndefinedOr(binding) });
+        const severity = operationalSeverity(signal);
+        const observation = {
+          ...signal,
+          severity,
+          message: `fidy.operational component=${signal.component} operation=${signal.operation} state=${signal.state} severity=${severity}`,
+        };
+        yield* severity === "none" ? Effect.logInfo(observation) : Effect.logWarning(observation);
+      }),
+    { concurrency: 4, discard: true }
+  );
+});

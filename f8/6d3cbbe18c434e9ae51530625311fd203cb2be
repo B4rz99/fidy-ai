@@ -1,0 +1,36 @@
+apps/server/cloudflare/user-store/operations.ts
+  s_a1be23a656acf0::t_3c5b4ceda792ce 1002-1005
+apps/server/cloudflare/erasure-store/operations.ts
+  s_a1be23a656acf0::t_3c5b4ceda792ce 95,97
+apps/server/cloudflare/erasure-store/internal/local-purge.ts
+  s_a1be23a656acf0::t_3c5b4ceda792ce 10,65-81,103,134-142
+  s_a1be23a656acf0::t_e471377e100004 16-17
+  s_a1be23a656acf0::t_4061a0bf89349c 61-64
+apps/server/cloudflare/erasure-store/contract.ts
+  s_a1be23a656acf0::t_3c5b4ceda792ce 56-65
+apps/server/cloudflare/user-store/internal/erasure-purge.ts
+  s_a1be23a656acf0::t_3c5b4ceda792ce 8,59,68,87-97
+  s_a1be23a656acf0::t_e471377e100004 13-15,142-144
+apps/server/ARCHITECTURE.md
+  s_a1be23a656acf0::t_19feae481be181 220-224
+apps/server/cloudflare/erasure/native-purge.test.ts
+  s_a1be23a656acf0::t_bf1a2fbe3c091a 183-259
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_38f642de5bf744 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f86d3cbbe18c434e9ae51530625311fd203cb2be",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

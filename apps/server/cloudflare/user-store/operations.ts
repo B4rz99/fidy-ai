@@ -1090,6 +1090,14 @@ export const userStoreHistory: StoreHistory = {
         "CREATE TRIGGER initial_digest_source AFTER INSERT ON recurring_evaluation_records WHEN NEW.kind='progress' AND NEW.phase='complete' AND NEW.evaluated_at_ms IS NOT NULL BEGIN UPDATE recurring_digest_instructions SET next_ms=min(coalesce(next_ms,NEW.evaluated_at_ms),NEW.evaluated_at_ms) WHERE user_id=NEW.user_id; END",
       ],
     },
+    {
+      version: 34,
+      id: "hosted-terminal-retention",
+      statements: [
+        "CREATE INDEX retained_turn_content ON hosted_turns(terminal_ms,id) WHERE terminal_ms IS NOT NULL AND request_text<>''",
+        "CREATE INDEX retained_compactions ON hosted_agent_sessions(active_ms,id) WHERE compacted_text IS NOT NULL",
+      ],
+    },
   ],
 };
 

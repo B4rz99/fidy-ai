@@ -9,7 +9,7 @@ import { newId } from "../../secret-material/operations";
 import { UserId } from "../../../src/core/identity/contract";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Effect, Schema } from "effect";
+import { Effect, Result, Schema } from "effect";
 import { preserveStoreAlarm, withStoreCapacity } from "../../runtime/sqlite/operations";
 import { erasePrivateObject } from "../../private-objects/operations";
 import type { LocalIngestionEnvironment } from "../contract";
@@ -47,24 +47,30 @@ export const repairIngestionAlarm = Effect.fn(function* (
   const due = yield* Schema.decodeUnknownEffect(Schema.NullOr(Schema.Int))(next?.due);
   return due === null ? false : yield* preserveStoreAlarm(storage, Math.max(current, due));
 });
-export const recoverIngestion = Effect.fn(function* (
-  current: number,
-  storage: DurableObjectStorage,
-  env: LocalIngestionEnvironment
-) {
+const expireReviewContent = Effect.fn(function* (current: number) {
   const sql = yield* SqliteClient;
-  yield* releaseDueMedia(env.DIRECTORY, current);
-  const due = yield* withStoreCapacity("required")(
+  return yield* withStoreCapacity("required")(
     Effect.gen(function* () {
       yield* sql`DELETE FROM ingest_sample_candidates WHERE id IN(SELECT id FROM ingest_sample_candidates WHERE expires_at_ms<=${current} ORDER BY expires_at_ms LIMIT ${pageSize})`;
-      yield* sql`UPDATE statement_submissions SET status='failed',started_at_ms=coalesce(started_at_ms,${current}),completed_at_ms=${current},failure_reason='retention-expired',work_published_at_ms=NULL,work_last_attempt_at_ms=NULL WHERE id IN(SELECT id FROM statement_submissions WHERE retention_expires_at_ms<=${current} AND status IN ('queued','processing') ORDER BY retention_expires_at_ms LIMIT ${pageSize})`;
-      yield* sql`DELETE FROM statement_document_origins WHERE rowid IN (SELECT rowid FROM statement_document_origins WHERE forget_at_ms<=${current} ORDER BY forget_at_ms LIMIT ${pageSize})`;
-      yield* sql`DELETE FROM statement_parts WHERE rowid IN(SELECT p.rowid FROM statement_parts p JOIN statement_submissions s ON s.id=p.submission_id WHERE s.retention_expires_at_ms<=${current} ORDER BY s.retention_expires_at_ms,p.part LIMIT ${pageSize})`;
       yield* sql`DELETE FROM whatsapp_voice_refusals WHERE rowid IN(SELECT rowid FROM whatsapp_voice_refusals WHERE claimed_ms<=${current - voiceRetentionMs} ORDER BY claimed_ms LIMIT ${pageSize})`;
       yield* sql`DELETE FROM ingestion_review_items WHERE source_kind='media' AND media_submission_id IN(SELECT id FROM media_submissions WHERE accepted_at_ms<=${current - accountabilityLifetimeMs} ORDER BY accepted_at_ms,id LIMIT ${pageSize})`;
       yield* sql`DELETE FROM media_submissions WHERE id IN(SELECT id FROM media_submissions WHERE accepted_at_ms<=${current - accountabilityLifetimeMs} ORDER BY accepted_at_ms,id LIMIT ${pageSize})`;
       yield* sql`UPDATE media_submissions SET caption=NULL,media_id=NULL,capacity_held=0 WHERE id IN(SELECT id FROM media_submissions WHERE expires_at_ms<=${current} AND (capacity_held=1 OR media_id IS NOT NULL OR caption IS NOT NULL) ORDER BY expires_at_ms LIMIT ${pageSize})`;
       yield* sql`UPDATE ingestion_review_items SET original_evidence=NULL,known_money_json=NULL,suggestions_json=NULL,draft_json=NULL,evidence_state=CASE WHEN evidence_state='retained' THEN 'expired' ELSE evidence_state END WHERE rowid IN(SELECT rowid FROM ingestion_review_items WHERE evidence_expires_at_ms<=${current} AND (evidence_state='retained' OR draft_json IS NOT NULL OR suggestions_json IS NOT NULL) ORDER BY evidence_expires_at_ms LIMIT ${pageSize})`;
+    })
+  );
+});
+const recoverStatements = Effect.fn(function* (
+  current: number,
+  storage: DurableObjectStorage,
+  env: LocalIngestionEnvironment
+) {
+  const sql = yield* SqliteClient;
+  const due = yield* withStoreCapacity("required")(
+    Effect.gen(function* () {
+      yield* sql`UPDATE statement_submissions SET status='failed',started_at_ms=coalesce(started_at_ms,${current}),completed_at_ms=${current},failure_reason='retention-expired',work_published_at_ms=NULL,work_last_attempt_at_ms=NULL WHERE id IN(SELECT id FROM statement_submissions WHERE retention_expires_at_ms<=${current} AND status IN ('queued','processing') ORDER BY retention_expires_at_ms LIMIT ${pageSize})`;
+      yield* sql`DELETE FROM statement_document_origins WHERE rowid IN (SELECT rowid FROM statement_document_origins WHERE forget_at_ms<=${current} ORDER BY forget_at_ms LIMIT ${pageSize})`;
+      yield* sql`DELETE FROM statement_parts WHERE rowid IN(SELECT p.rowid FROM statement_parts p JOIN statement_submissions s ON s.id=p.submission_id WHERE s.retention_expires_at_ms<=${current} ORDER BY s.retention_expires_at_ms,p.part LIMIT ${pageSize})`;
       yield* sql`DELETE FROM statement_backfill WHERE consumed_at_ms IS NULL AND submission_id IN(SELECT id FROM statement_documents WHERE expires_at_ms<=${current})`;
       return yield* sql`UPDATE statement_submissions SET work_last_attempt_at_ms=${current} WHERE id IN (SELECT id FROM statement_submissions WHERE work_published_at_ms IS NOT NULL AND (work_last_attempt_at_ms IS NULL OR work_last_attempt_at_ms<=${current - retryMs}) ORDER BY work_published_at_ms LIMIT ${pageSize}) RETURNING id,user_id`;
     })
@@ -85,17 +91,38 @@ export const recoverIngestion = Effect.fn(function* (
   }
   yield* expireDocuments(current, env);
   const documents = yield* recoverDocumentStages(current, storage, env);
-  const stagedEmails = yield* recoverEmailStages(current, env);
-  const emails = yield* recoverEmails(current, env);
-  const samples = yield* recoverSamples(current, env);
-  yield* repairIngestionAlarm(current, storage);
-  return {
-    attempted:
-      due.length + emails.attempted + documents.attempted + stagedEmails + samples.attempted,
-    failed: failed + emails.failed + documents.failed + samples.failed,
-  };
-});
 
+  return { attempted: due.length + documents.attempted, failed: failed + documents.failed };
+});
+const recoverEmailWork = Effect.fn(function* (current: number, env: LocalIngestionEnvironment) {
+  const staged = yield* recoverEmailStages(current, env);
+  const processed = yield* recoverEmails(current, env);
+  return { ...processed, attempted: staged + processed.attempted };
+});
+export const recoverIngestion = Effect.fn(function* (
+  current: number,
+  storage: DurableObjectStorage,
+  env: LocalIngestionEnvironment
+) {
+  const idle = { attempted: 0, failed: 0 };
+  const tasks = [
+    releaseDueMedia(env.DIRECTORY, current).pipe(Effect.as(idle)),
+    expireReviewContent(current).pipe(Effect.as(idle)),
+    recoverStatements(current, storage, env),
+    recoverEmailWork(current, env),
+    recoverSamples(current, env),
+    repairIngestionAlarm(current, storage).pipe(Effect.as(idle)),
+  ] as const;
+  const results = yield* Effect.all(tasks, { mode: "result", concurrency: 1 });
+  let attempted = 0,
+    failed = 0;
+  for (const result of results) {
+    if (Result.isFailure(result)) return yield* result.failure;
+    attempted += result.success.attempted;
+    failed += result.success.failed;
+  }
+  return { attempted, failed };
+});
 const expireDocuments = Effect.fn(function* (current: number, env: LocalIngestionEnvironment) {
   const sql = yield* SqliteClient;
   const expired =

@@ -12,7 +12,7 @@ export const mountWebApplication = (): void => {
   } else ready.resolve();
   const request = observeInitialBrowserRequest(
     beginInitialBrowserRequest({
-      apiOrigin: parseApiOrigin(import.meta.env.VITE_API_ORIGIN),
+      apiOrigin: parseApiOrigin(import.meta.env.VITE_API_ORIGIN, window.location.origin),
       context: window.location.pathname.startsWith("/app/"),
       transactions: window.location.pathname === "/app/transactions",
     })

@@ -48,7 +48,7 @@ const BoundApplication = ({
 const RoutedApplication = ({
   initial,
 }: Readonly<{ initial: InitialBrowserSession }>): JSX.Element => {
-  const apiOrigin = parseApiOrigin(import.meta.env.VITE_API_ORIGIN);
+  const apiOrigin = parseApiOrigin(import.meta.env.VITE_API_ORIGIN, window.location.origin);
   return (
     <BrowserSessionBoundary
       apiOrigin={apiOrigin}

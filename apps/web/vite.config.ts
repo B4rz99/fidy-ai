@@ -1,6 +1,6 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { type Plugin, defineConfig } from "vite";
 import { serverClientBoundary } from "./server-client-boundary.ts";
 import { entryPreload } from "./entry-preload.ts";
 
@@ -56,8 +56,20 @@ const sharedPresentationModule = (id: string): boolean => {
   );
 };
 
+// Asset response headers provide host-specific preconnects for the same installed HTML bytes.
+const installedPreconnect: Plugin = {
+  name: "installed-host-preconnect",
+  transformIndexHtml: {
+    order: "pre",
+    handler: (html): string =>
+      process.env.VITE_API_ORIGIN === "installed"
+        ? html.replace(/\s*<link rel="preconnect"[^>]+>/u, "")
+        : html,
+  },
+};
+
 export default defineConfig(({ mode }) => ({
-  plugins: [serverClientBoundary(), react(), tailwindcss(), entryPreload()],
+  plugins: [serverClientBoundary(), react(), tailwindcss(), entryPreload(), installedPreconnect],
   publicDir: publicDirectory(mode),
   build: {
     rolldownOptions: {

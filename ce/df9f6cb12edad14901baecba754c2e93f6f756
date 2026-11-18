@@ -1,0 +1,52 @@
+apps/server/cloudflare/insights/native-reminder.test.ts
+  s_a1be23a656acf0::t_e74cf3f621ce60 67-70
+  s_a1be23a656acf0::t_03136284340b35 9,117
+  s_a1be23a656acf0::t_879f336b358880 71,85,118,123-126,129
+apps/server/cloudflare/agent/provider.test-fixture.ts
+  s_a1be23a656acf0::t_e74cf3f621ce60 14,17-49,54-57
+  s_a1be23a656acf0::t_8842eda794c2e7 79
+apps/server/cloudflare/agent/user-store.test.ts
+  s_a1be23a656acf0::t_e74cf3f621ce60 18-20,55-64,84-93,104,110-112,115,118-139,142,144,185-190
+  s_a1be23a656acf0::t_5d58e6a79b2dd3 51-54,65,113-114,116-117,140-141
+  s_a1be23a656acf0::t_fb1badab1caa98 143,145,191-193,208
+apps/server/cloudflare/user-store/internal/hosted-schema.ts
+  s_a1be23a656acf0::t_e74cf3f621ce60 47
+  s_a1be23a656acf0::t_9efde107dd1b6c 45-46,48
+apps/server/cloudflare/agent/internal/local-inference.ts
+  s_a1be23a656acf0::t_e74cf3f621ce60 1-2,87-93,95-107,109,130-134,142-146,148
+  s_a1be23a656acf0::t_9efde107dd1b6c 94,108,110,147,149
+  s_a1be23a656acf0::t_51b99d671833fc 111,150-151,162-164
+apps/server/cloudflare/user-store/operations.ts
+  s_a1be23a656acf0::t_e74cf3f621ce60 933
+  s_a1be23a656acf0::t_9efde107dd1b6c 3
+apps/server/cloudflare/agent/internal/local-channel-delivery.ts
+  s_a1be23a656acf0::t_e74cf3f621ce60 80,89
+  s_a1be23a656acf0::t_9efde107dd1b6c 1
+apps/server/cloudflare/agent/internal/local-tool.ts
+  s_a1be23a656acf0::t_9efde107dd1b6c 1,67,71-72,106
+  s_a1be23a656acf0::t_e74cf3f621ce60 2-6,27-29,61-66,68-70,74,101-102
+  s_a1be23a656acf0::t_e855a478c91404 73,103-105,107-108
+apps/server/cloudflare/agent/internal/local-turn-store.ts
+  s_a1be23a656acf0::t_e74cf3f621ce60 242-248
+  s_a1be23a656acf0::t_9efde107dd1b6c 1
+  s_a1be23a656acf0::t_86c145735f85c8 249-251
+apps/server/cloudflare/agent/internal/local-challenge.ts
+  s_a1be23a656acf0::t_82540fb8cad667 1-9,19,32,41,47-49,52-54
+  s_a1be23a656acf0::t_e74cf3f621ce60 10-18,20-31,33-40,42-46,50-51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cedf9f6cb12edad14901baecba754c2e93f6f756",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

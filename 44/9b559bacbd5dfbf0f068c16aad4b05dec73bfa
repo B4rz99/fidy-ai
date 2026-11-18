@@ -1,0 +1,29 @@
+.oxlintrc.json
+  s_a1be23a656acf0::t_2743ec01d912a4 321
+apps/server/.dependency-cruiser.mjs
+  s_a1be23a656acf0::t_39d1cb6dba616f 16
+apps/server/cloudflare/capacity-worker.test-fixture.ts
+  s_a1be23a656acf0::t_5a4ffc9b87deab 1-14
+apps/server/cloudflare/dashboard/user-store.test.ts
+  s_a1be23a656acf0::t_ead7a5f6121edb 22,719-720,779-790
+  s_a1be23a656acf0::t_00dd1fbac479e4 747-762,767-778
+apps/server/cloudflare/user-store.test-fixture.ts
+  s_a1be23a656acf0::t_586d73562471f4 314,542
+  s_a1be23a656acf0::t_00dd1fbac479e4 233
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "449b559bacbd5dfbf0f068c16aad4b05dec73bfa",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

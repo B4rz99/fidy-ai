@@ -1,0 +1,92 @@
+apps/cli/src/direct-client/internal/operator-access.ts
+  s_a1be23a656acf0::t_5c27ac8c034783 1-67
+apps/server/src/core/ingestion/contract.ts
+  s_a1be23a656acf0::t_5c27ac8c034783 787-828
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_5c27ac8c034783 5,7-32
+apps/cli/ARCHITECTURE.md
+  s_a1be23a656acf0::t_5c27ac8c034783 51-53
+apps/server/cloudflare/subscription/refund-support.test.ts
+  s_a1be23a656acf0::t_5c27ac8c034783 68
+apps/server/cloudflare/ingestion/native-sample.test.ts
+  s_a1be23a656acf0::t_5c27ac8c034783 1-311
+apps/cli/src/sample-review/operations.test.ts
+  s_a1be23a656acf0::t_5c27ac8c034783 1-46
+apps/server/cloudflare/ingestion/contract.ts
+  s_a1be23a656acf0::t_5c27ac8c034783 170,186-187
+apps/server/cloudflare/ingestion/internal/sample-response.ts
+  s_a1be23a656acf0::t_5c27ac8c034783 1-14
+apps/server/cloudflare/erasure/restore.test.ts
+  s_a1be23a656acf0::t_5c27ac8c034783 565,690,716
+apps/cli/src/direct-client/runtime.ts
+  s_a1be23a656acf0::t_5c27ac8c034783 244-245
+apps/server/cloudflare/public-worker.ts
+  s_a1be23a656acf0::t_5c27ac8c034783 250,268,429-431,644-646
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_5c27ac8c034783 24,30,485,489-491
+apps/server/cloudflare/core-http/internal/http.ts
+  s_a1be23a656acf0::t_5c27ac8c034783 1,48,559,1694
+apps/server/cloudflare/core-http/contract.ts
+  s_a1be23a656acf0::t_5c27ac8c034783 32-34
+infra/cloudflare/alchemy.run.ts
+  s_a1be23a656acf0::t_5c27ac8c034783 154-156,203-238,331,547-549
+apps/cli/src/main.ts
+  s_a1be23a656acf0::t_5c27ac8c034783 20-21,41,43,45,47-51,64
+apps/server/cloudflare/ingestion/internal/sample-operator.ts
+  s_a1be23a656acf0::t_5c27ac8c034783 1-102
+apps/server/cloudflare/user-store/operations.ts
+  s_a1be23a656acf0::t_5c27ac8c034783 1,926
+  s_a1be23a656acf0::t_d493446bc01218 927
+.patterns/processes.md
+  s_a1be23a656acf0::t_5c27ac8c034783 18
+apps/server/cloudflare/ingestion/internal/local-retention.ts
+  s_a1be23a656acf0::t_5c27ac8c034783 1,29-30,50,74-88
+apps/cli/src/sample-review/operations.ts
+  s_a1be23a656acf0::t_5c27ac8c034783 1-111
+apps/server/cloudflare/directory/oidc.test-fixture.ts
+  s_a1be23a656acf0::t_5c27ac8c034783 110-112,118-124,127-131
+apps/server/cloudflare/ingestion/internal/sample-review.ts
+  s_a1be23a656acf0::t_5c27ac8c034783 1-187
+apps/server/cloudflare/ingestion/runtime.ts
+  s_a1be23a656acf0::t_5c27ac8c034783 1-2,228-230
+infra/cloudflare/edge-security.ts
+  s_a1be23a656acf0::t_5c27ac8c034783 146
+apps/server/cloudflare/core-worker.ts
+  s_a1be23a656acf0::t_5c27ac8c034783 82-84
+.github/workflows/production.yml
+  s_a1be23a656acf0::t_5c27ac8c034783 54
+apps/server/cloudflare/user-store/internal/sample-schema.ts
+  s_a1be23a656acf0::t_5c27ac8c034783 1-15
+apps/server/cloudflare/operator-access/operations.ts
+  s_a1be23a656acf0::t_5c27ac8c034783 17-22
+apps/cli/src/sample-review/runtime.ts
+  s_a1be23a656acf0::t_5c27ac8c034783 1-65
+apps/server/cloudflare/ingestion/internal/sample-publication.ts
+  s_a1be23a656acf0::t_5c27ac8c034783 1-193
+apps/server/cloudflare/user-store.test-fixture.ts
+  s_a1be23a656acf0::t_5c27ac8c034783 141-144
+apps/server/src/client.ts
+  s_a1be23a656acf0::t_5c27ac8c034783 210-215
+docs/operations/ingest-sample-review.md
+  s_a1be23a656acf0::t_5c27ac8c034783 1-17
+apps/server/cloudflare/ingestion/internal/sample-authority.ts
+  s_a1be23a656acf0::t_5c27ac8c034783 1-17
+apps/cli/src/support-recovery/runtime.ts
+  s_a1be23a656acf0::t_5c27ac8c034783 4,6,73-74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e939614e27841a773b9ecf61a0ec56ddabff471c",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

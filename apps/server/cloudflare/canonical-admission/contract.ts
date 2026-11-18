@@ -1,3 +1,4 @@
+import type { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Data, type Effect, type Option, type Schema } from "effect";
 import type { WebSessionAuthority } from "../../src/shell/web-session/contract";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
@@ -97,3 +98,12 @@ export type LocalMutationResult = Readonly<{
   outcome: "success" | "validation_failed" | "not_found";
   body: Schema.Json;
 }>;
+
+/** Prepare against the original User snapshot. Only the guarded commit may alter domain state. */
+export type LocalMutationPlan = Readonly<{
+  /** Multiple children may rely on a premise unless another child changes it. */
+  premises: ReadonlyArray<string>;
+  targets: ReadonlyArray<string>;
+  commit: Effect.Effect<LocalMutationResult, CanonicalAdmissionUnavailable, SqliteClient>;
+}>;
+export type LocalMutationPreparation = LocalMutationResult | LocalMutationPlan;

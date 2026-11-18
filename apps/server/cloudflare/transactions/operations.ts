@@ -24,12 +24,18 @@ import {
   deleteLocalTransaction as deleteNative,
   inspectLocalTransaction,
   missingLocalTransaction,
+  prepareLocalDeletion as prepareDeletionInStore,
+  prepareLocalCorrection as prepareNativeCorrection,
+  prepareLocalPair as preparePair,
   reconcileLocalTransactions,
 } from "./internal/sqlite-corrections";
 import { type CatalogOperation } from "../../src/shell/canonical-catalog/contract";
 import { canonicalAdmissionUnavailable, runLocalMutation } from "../canonical-admission/operations";
 import { rawPathId } from "../http/operations";
-import { captureLocalTransaction as captureNative } from "./internal/sqlite-capture";
+import {
+  captureLocalTransaction as captureNative,
+  prepareLocalCapture as prepareNativeCapture,
+} from "./internal/sqlite-capture";
 import { prepareGroupCorrection as ownerPrepareGroupCorrection } from "./internal/group-correction";
 import { effectiveTransactionRelation } from "./internal/effective-transaction";
 import {
@@ -45,8 +51,8 @@ import {
   revisionGuard,
   revisionProjection,
 } from "./internal/recurring-query";
-import { type UserId } from "../../src/core/identity/contract";
-import { type OwnedStatement } from "../../src/shell/owner-write/contract";
+import type { UserId } from "../../src/core/identity/contract";
+import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { readDashboardTransactions as ownerReadDashboardTransactions } from "./internal/dashboard-read";
 import {
@@ -344,7 +350,6 @@ const historyResponse = Effect.fn(function* (unit: LocalTransactionRequest) {
       })
     : readUserHistory(unit.request, unit.owns);
 });
-
 const wakeForFacts = <A, E>(
   storage: DurableObjectStorage,
   work: (
@@ -454,9 +459,6 @@ export const readLocalDashboardTransactions = Effect.fn(function* (
   return { lists, ranges };
 });
 
-export const readLocalTransactionPage: typeof nativeReadLocalTransactionPage = (...args) =>
-  nativeReadLocalTransactionPage(...args);
-
 /** Read Effective Transactions in the calling UserStore transaction. */
 export const readLocalPlanningRange: typeof planningFacts.localPlanningRange = (user, range) =>
   planningFacts.localPlanningRange(user, range);
@@ -483,3 +485,13 @@ export const readLocalFactPage: typeof localFactPage = (user, cursor) =>
   localFactPage(user, cursor);
 export const deleteLocalTransaction: typeof deleteNative = (id, user, current) =>
   deleteNative(id, user, current);
+export const readLocalTransactionPage: typeof nativeReadLocalTransactionPage = (...args) =>
+  nativeReadLocalTransactionPage(...args);
+export const prepareLocalCapture: typeof prepareNativeCapture = (input, user, current) =>
+  prepareNativeCapture(input, user, current);
+export const prepareLocalCorrection: typeof prepareNativeCorrection = (input, user, current) =>
+  prepareNativeCorrection(input, user, current);
+export const prepareLocalPair: typeof preparePair = (input, user, current) =>
+  preparePair(input, user, current);
+export const prepareLocalDeletion: typeof prepareDeletionInStore = (id, user, current) =>
+  prepareDeletionInStore(id, user, current);

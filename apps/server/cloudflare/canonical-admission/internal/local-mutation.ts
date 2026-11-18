@@ -50,7 +50,7 @@ export const admitLocalRequest = Effect.fn(function* ({
       WHERE virtual_at_ms<=${current + (policy.burst - 1) * policy.intervalMs} RETURNING 1`;
 });
 
-const localStanding = Effect.fn(function* (userId: string, current: number) {
+export const localStanding = Effect.fn(function* (userId: string, current: number) {
   const sql = yield* SqliteClient;
   const select = quotaStatusSelection({
     users: { sql: "SELECT ? AS userId", params: [userId] },
@@ -89,7 +89,7 @@ const resolveSession = Effect.fn(function* (
     userId: yield* Schema.decodeEffect(UserId)(session.value.userId),
   };
 });
-const localProof = Effect.fn(function* (request: Request, owns: (user: string) => boolean) {
+export const localProof = Effect.fn(function* (request: Request, owns: (user: string) => boolean) {
   if (request.headers.has("authorization")) {
     const candidate = patRouteProof(request);
     const id = Option.fromNullishOr(request.headers.get(patRouteHeader));
@@ -122,14 +122,14 @@ type Subject = Exclude<
   | Effect.Success<ReturnType<typeof resolveSession>>,
   string
 >;
-type Call = Readonly<{
+export type Call = Readonly<{
   storage: DurableObjectStorage;
   subject: Subject;
   operation: CatalogOperation;
   status: QuotaStatus;
   current: number;
 }>;
-type Invocation = Readonly<{ digest: Option.Option<string>; inputHash: string }>;
+export type Invocation = Readonly<{ digest: Option.Option<string>; inputHash: string }>;
 
 const oneStored = (
   rows: ReadonlyArray<unknown>
@@ -137,7 +137,7 @@ const oneStored = (
   rows.length === 1
     ? Effect.void
     : Effect.fail(new CanonicalAdmissionUnavailable({ cause: "incomplete_local_mutation" }));
-const audit = Effect.fn(function* (
+export const audit = Effect.fn(function* (
   { subject, operation, current }: Call,
   outcome: LocalMutationResult["outcome"]
 ) {
@@ -160,7 +160,7 @@ const audit = Effect.fn(function* (
     );
   }
 });
-const reject = Effect.fn(function* (call: Call, response: Response) {
+export const reject = Effect.fn(function* (call: Call, response: Response) {
   yield* audit(call, "validation_failed");
   return attachStanding({ ...call, response });
 });
@@ -181,9 +181,9 @@ export const sweepLocalReceipts = Effect.fn(function* (current: number) {
     SELECT rowid FROM canonical_request_receipts WHERE accepted_at_ms<=${current - canonicalRetryLifetimeMs}
       ORDER BY accepted_at_ms LIMIT ${receiptCleanupPageSize})`;
 });
-// The complete Recurring ledger can exceed a single SQLite row. Keep its original JSON bytes
-// under the same receipt key and expiry. Every other response keeps its reviewed replay policy.
-const largeReceiptOperation = "recurringPlans.applyRecurringEdit";
+// A full Recurring ledger or correlated batch result can exceed the SQLite row limit.
+const chunkedReceipt = (id: string): boolean =>
+  id === "recurringPlans.applyRecurringEdit" || id === "operations.executeAtomicBatch";
 const receiptPartCharacters = 200_000;
 const ReceiptPart = Schema.Struct({ position: Schema.Int, part: Schema.String });
 const fullReceiptBody = Effect.fn(function* ({
@@ -197,11 +197,11 @@ const fullReceiptBody = Effect.fn(function* ({
   user: UserId;
   digest: string;
 }) {
-  if (operation !== largeReceiptOperation || body.startsWith("{")) return body;
+  if (!chunkedReceipt(operation) || body.startsWith("{")) return body;
   const length = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Int))(body);
   const sql = yield* SqliteClient;
   const parts = yield* Schema.decodeUnknownEffect(Schema.Array(ReceiptPart))(
-    yield* sql`SELECT position,part FROM recurring_receipt_parts WHERE user_id=${user} AND retry_key_digest=${digest} ORDER BY position`
+    yield* sql`SELECT position,part FROM canonical_receipt_parts WHERE user_id=${user} AND retry_key_digest=${digest} ORDER BY position`
   );
   let next = 0;
   for (const { position, part } of parts) {
@@ -215,7 +215,7 @@ const fullReceiptBody = Effect.fn(function* ({
   }
   return parts.map((row) => row.part).join("");
 });
-const replay = Effect.fn(function* (call: Call, invocation: Invocation) {
+export const replay = Effect.fn(function* (call: Call, invocation: Invocation) {
   if (Option.isNone(invocation.digest)) return Option.none<Response>();
   const sql = yield* SqliteClient;
   const { operation, current, subject } = call;
@@ -245,7 +245,7 @@ const replay = Effect.fn(function* (call: Call, invocation: Invocation) {
   yield* audit(call, receipt.status < firstFailureStatus ? "success" : "validation_failed");
   return Option.some(attachStanding({ ...call, response: bodyResponse(receipt.status, body) }));
 });
-const charge = Effect.fn(function* (call: Call) {
+export const charge = Effect.fn(function* (call: Call) {
   const { subject, current, operation, status } = call;
   if (!("patId" in subject)) return Option.none<Response>();
   const meter = status.canonicalCalls;
@@ -265,7 +265,10 @@ const charge = Effect.fn(function* (call: Call) {
   );
   return Option.none<Response>();
 });
-const financialGrowth = new Set<string>([
+export const financialGrowth = new Set<string>([
+  "categories.createKeywordRule",
+  "categories.updateKeywordRule",
+  "transactions.updateTransactions",
   "recurringPlans.applyRecurringEdit",
   "dashboard.initializeDashboard",
   "dashboard.applyDashboardEdit",
@@ -275,8 +278,9 @@ const financialGrowth = new Set<string>([
   "transactions.updateTransaction",
   "transactions.linkTransactions",
 ]);
-const replayableOperations = new Set<string>([
+export const replayableOperations = new Set<string>([
   ...financialGrowth,
+  "categories.deleteKeywordRule",
   "budgets.deleteBudget",
   "subscription.cancelSubscription",
   "transactions.unlinkTransactions",
@@ -292,16 +296,17 @@ const writeReceiptParts = Effect.fn(function* (body: string, user: UserId, diges
     // SQLite text parameters must never split a Unicode scalar.
     const tail = body.charCodeAt(end - 1);
     if (tail >= highSurrogateStart && tail <= highSurrogateEnd && end < body.length) end -= 1;
-    yield* sql`INSERT INTO recurring_receipt_parts(user_id,retry_key_digest,position,part) VALUES(${user},${digest},${start},${body.slice(start, end)})`;
+    yield* sql`INSERT INTO canonical_receipt_parts(user_id,retry_key_digest,position,part) VALUES(${user},${digest},${start},${body.slice(start, end)})`;
     start = end;
   }
 });
-const complete = Effect.fn(function* (
+export const complete = Effect.fn(function* (
   call: Call,
   invocation: Invocation,
-  outcome: LocalMutationResult
+  outcome: LocalMutationResult & { retain: boolean }
 ) {
   const { subject, operation, current } = call;
+  const { retain } = outcome;
   yield* validateOutput(operation, outcome.status, outcome.body);
   yield* audit(call, outcome.outcome);
   const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))(outcome.body);
@@ -309,12 +314,12 @@ const complete = Effect.fn(function* (
     const sql = yield* SqliteClient;
     yield* preserveStoreAlarm(call.storage, current + canonicalRetryLifetimeMs);
     yield* sql`DELETE FROM canonical_request_receipts WHERE user_id=${subject.userId} AND retry_key_digest=${invocation.digest.value} AND accepted_at_ms<=${current - canonicalRetryLifetimeMs}`;
-    const large = operation.id === largeReceiptOperation && body.length > receiptPartCharacters;
+    const large = retain && chunkedReceipt(operation.id) && body.length > receiptPartCharacters;
     const value = large ? String(body.length) : body;
     // A positive allowlist keeps future one-time responses out of storage until explicitly reviewed.
     yield* oneStored(
       yield* sql`INSERT INTO canonical_request_receipts(user_id,retry_key_digest,operation,input_digest,accepted_at_ms,status,body)
-      VALUES(${subject.userId},${invocation.digest.value},${operation.id},${invocation.inputHash},${current},${outcome.status},${replayableOperations.has(operation.id) ? value : null}) RETURNING status`
+      VALUES(${subject.userId},${invocation.digest.value},${operation.id},${invocation.inputHash},${current},${outcome.status},${retain ? value : null}) RETURNING status`
     );
     if (large) yield* writeReceiptParts(body, subject.userId, invocation.digest.value);
   }
@@ -330,12 +335,11 @@ const deniedAccess = (call: Call): boolean =>
     _tag: "PAT",
     capabilities: call.subject.scopes,
   })._tag !== "Allowed";
+export const localRetryKey = (request: Request): ReturnType<Headers["get"]> =>
+  request.headers.has("authorization") ? request.headers.get("Fidy-Retry-Key") : null;
 const prepareIdentity = Effect.fn(function* (request: Request, operation: CatalogOperation) {
   const valid = yield* validatedCanonicalInput({ request, operation });
-  const key =
-    operation.method !== "GET" && request.headers.has("authorization")
-      ? request.headers.get("Fidy-Retry-Key")
-      : null;
+  const key = operation.method !== "GET" ? localRetryKey(request) : null;
   const validKey = Schema.decodeUnknownOption(CanonicalRetryKey)(key);
   const digest = Option.isSome(validKey)
     ? Option.some(yield* cryptoHash(validKey.value))
@@ -362,9 +366,12 @@ const authorizedWork = Effect.fn(function* <E>({
   const refusal = yield* charge(call);
   if (Option.isSome(refusal)) return refusal.value;
   yield* admission;
-  return yield* complete(call, invocation, yield* work());
+  return yield* complete(call, invocation, {
+    ...(yield* work()),
+    retain: replayableOperations.has(call.operation.id),
+  });
 });
-const withdrawn = (): Response =>
+export const withdrawn = (): Response =>
   Response.json(
     {
       error: {

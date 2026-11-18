@@ -36,8 +36,6 @@ import { UserTransactionCoordinator } from "./runtime";
 import { ErrorCode, ScopeMissing } from "../../src/shell/public-http/contract";
 import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import { DisclosureSnapshot } from "../../src/shell/consent/contract";
-import { CategoryId, CategoryKeyword, KeywordRuleId } from "../../src/core/categories/contract";
-import { keywordRuleGuardFailure } from "../categories/operations";
 import { currentDisclosureFor } from "../../src/shell/consent/operations";
 import { makeAgentRetention } from "../agent/runtime";
 import { newId } from "../secret-material/operations";
@@ -400,17 +398,6 @@ const auditedOperations = (
     .then((rows) => rows.results);
 
 /** The metadata-only PAT audit rows one User recorded, in insertion order. */
-const auditedPATOperations = (
-  db: D1Database,
-  userId: string
-): Promise<ReadonlyArray<{ operation: string; outcome: string }>> =>
-  db
-    .prepare(
-      "SELECT operation, outcome FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE user_id = ?"
-    )
-    .bind(userId)
-    .all<{ operation: string; outcome: string }>()
-    .then((rows) => rows.results);
 
 const seedTransaction = ({
   db,
@@ -594,10 +581,14 @@ const seedNativeSource = ({
       userId,
       transactionId
     );
-const nativeCountRows = (db: NativeJourney, sql: string, user: string): Promise<unknown> =>
+const nativeCountRows = (
+  db: NativeJourney,
+  sql: string,
+  ...bindings: [] | [string]
+): Promise<unknown> =>
   db
-    .owner(user)
-    .exec(sql, user)
+    .owner(bindings[0] ?? users[0] ?? "")
+    .exec(sql, ...bindings)
     .then(([row]) => row?.count);
 const nativeAuditedOperations = (
   db: NativeJourney,
@@ -607,6 +598,16 @@ const nativeAuditedOperations = (
     .owner(user)
     .exec(
       "SELECT operation,outcome FROM audit_entries WHERE user_id=? AND record_type='session_call' ORDER BY occurred_at_ms,rowid",
+      user
+    );
+const nativeRefusedChildren = (
+  db: NativeJourney,
+  user: string
+): ReturnType<NativeJourney["exec"]> =>
+  db
+    .owner(user)
+    .exec(
+      "SELECT operation,outcome FROM audit_entries WHERE user_id=? AND record_type='session_call' AND outcome='validation_failed' AND operation<>'operations.executeAtomicBatch' ORDER BY rowid",
       user
     );
 const nativeReconciliationState = (
@@ -638,38 +639,6 @@ const nativeReconciliationState = (
       };
     })
   );
-
-/** Insert the decision and both member rows one committed link leaves behind. */
-const seedLinkedPair = ({
-  db,
-  userId,
-  first,
-  second,
-  visible,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-  first: string;
-  second: string;
-  visible: string;
-}>): Promise<unknown> =>
-  db.batch([
-    db
-      .prepare(`INSERT INTO transaction_reconciliation_decisions
-        (user_id, first_transaction_id, second_transaction_id, state, visible_transaction_id, decided_at_ms)
-        VALUES (?, ?, ?, 'linked', ?, 1736078400000)`)
-      .bind(userId, first, second, visible),
-    db
-      .prepare(
-        `UPDATE transactions SET reconciliation_first_id=incoming.first_transaction_id,reconciliation_second_id=incoming.second_transaction_id FROM (SELECT column1 AS user_id,column2 AS transaction_id,column3 AS first_transaction_id,column4 AS second_transaction_id FROM (VALUES (?, ?, ?, ?))) incoming WHERE transactions.user_id=incoming.user_id AND transactions.id=incoming.transaction_id`
-      )
-      .bind(userId, first, first, second),
-    db
-      .prepare(
-        `UPDATE transactions SET reconciliation_first_id=incoming.first_transaction_id,reconciliation_second_id=incoming.second_transaction_id FROM (SELECT column1 AS user_id,column2 AS transaction_id,column3 AS first_transaction_id,column4 AS second_transaction_id FROM (VALUES (?, ?, ?, ?))) incoming WHERE transactions.user_id=incoming.user_id AND transactions.id=incoming.transaction_id`
-      )
-      .bind(userId, second, first, second),
-  ]);
 
 let seededPATSequence = 0;
 const seedPAT = ({
@@ -739,23 +708,6 @@ const publicationStatements = (
     publishes: (statements) => statements.some((statement) => writes.has(statement)),
   };
 };
-const countingDb = (db: D1Database): Readonly<{ db: D1Database; batches: () => number }> => {
-  let batches = 0;
-  const publication = publicationStatements(db);
-  return {
-    db: {
-      prepare: publication.prepare,
-      batch: (statements) => {
-        if (publication.publishes(statements)) batches += 1;
-        return db.batch(statements);
-      },
-      exec: (sql) => db.exec(sql),
-      withSession: (constraint) => db.withSession(constraint),
-      dump: () => db.dump(),
-    },
-    batches: () => batches,
-  };
-};
 const racingBatch = (db: D1Database, before: () => Promise<unknown>): D1Database => {
   const publication = publicationStatements(db);
   return {
@@ -769,56 +721,6 @@ const racingBatch = (db: D1Database, before: () => Promise<unknown>): D1Database
     dump: () => db.dump(),
   };
 };
-const concurrentCorrection = ({
-  db,
-  userId,
-  transactionId,
-  evidenceId,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-  transactionId: string;
-  evidenceId: string;
-}>): Promise<unknown> =>
-  db
-    .prepare(`INSERT INTO transaction_corrections (id, user_id, transaction_id, previous_revision, changed_fields, before_facts, after_facts, corrected_at_ms)
-      VALUES (?, ?, ?, 0, '["notes"]', '{"notes":"seed"}', '{"notes":"concurrent"}', 1736164800000)`)
-    .bind(evidenceId, userId, transactionId)
-    .run()
-    .then(() =>
-      db
-        .prepare(
-          "UPDATE transactions SET notes = 'concurrent', revision = 1 WHERE user_id = ? AND id = ? AND revision = 0"
-        )
-        .bind(userId, transactionId)
-        .run()
-    );
-const concurrentMoneyCorrection = ({
-  db,
-  userId,
-  transactionId,
-  evidenceId,
-  amount,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-  transactionId: string;
-  evidenceId: string;
-  amount: string;
-}>): Promise<unknown> =>
-  db
-    .prepare(`INSERT INTO transaction_corrections (id, user_id, transaction_id, previous_revision, changed_fields, before_facts, after_facts, corrected_at_ms)
-      VALUES (?, ?, ?, 0, '["money"]', '{"amount":"45000"}', ?, 1736164800000)`)
-    .bind(evidenceId, userId, transactionId, JSON.stringify({ amount }))
-    .run()
-    .then(() =>
-      db
-        .prepare(
-          "UPDATE transactions SET amount = ?, revision = 1 WHERE user_id = ? AND id = ? AND revision = 0"
-        )
-        .bind(amount, userId, transactionId)
-        .run()
-    );
 let measuringLoad = false;
 beforeEach(() => vi.useFakeTimers({ toFake: ["Date"] }));
 afterEach(() => vi.useRealTimers());
@@ -890,25 +792,24 @@ const groupCorrectionRequest = (index: number, payload: object): Request => {
 it("corrects a selected group of 500 Transactions in one atomic save with retained correction evidence", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const owner = users[0] ?? "";
       const prefix = "52000000-0000-4000-8000-";
-      yield* seedHistory({
-        db,
-        subject: owner,
-        transactionPrefix: prefix,
-        count: 500,
-        linked: false,
-        linkedFraction: 0,
-        spacingMinutes: 1,
-      });
+      yield* fromTestPromise(() =>
+        db.exec(
+          "WITH RECURSIVE seq(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM seq WHERE i<?) INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms) SELECT printf(?||'%012d',i),?,'10','COP','outflow',?,1736078400000,1736078400000 FROM seq",
+          500,
+          prefix,
+          owner,
+          category
+        )
+      );
       const transactions = Array.from({ length: 500 }, (_, index) => ({
         id: `${prefix}${String(index + 1).padStart(12, "0")}`,
         expectedRevision: 0,
       }));
       const result = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
+        db.send(
           groupCorrectionRequest(0, {
             transactions,
             changes: { notes: "Corregidas juntas" },
@@ -922,7 +823,7 @@ it("corrects a selected group of 500 Transactions in one atomic save with retain
       });
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
             "SELECT count(*) AS count FROM transactions WHERE user_id = ? AND revision = 1 AND notes = 'Corregidas juntas'",
             owner
@@ -931,35 +832,35 @@ it("corrects a selected group of 500 Transactions in one atomic save with retain
       ).toBe(500);
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
             "SELECT count(*) AS count FROM transaction_corrections WHERE user_id = ?",
             owner
           )
         )
       ).toBe(500);
-      expect(yield* fromTestPromise(() => auditedOperations(db, owner))).toContainEqual({
+      expect(yield* fromTestPromise(() => nativeAuditedOperations(db, owner))).toContainEqual({
         operation: "transactions.updateTransactions",
-        outcome: "accepted",
+        outcome: "success",
       });
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 it("composes a group correction larger than 4 KiB with another atomic mutation", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const owner = users[0] ?? "";
       const prefix = "53000000-0000-4000-8000-";
       const count = 64;
-      yield* seedHistory({
-        db,
-        subject: owner,
-        transactionPrefix: prefix,
-        count,
-        linked: false,
-        linkedFraction: 0,
-        spacingMinutes: 1,
-      });
+      yield* fromTestPromise(() =>
+        db.exec(
+          "WITH RECURSIVE seq(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM seq WHERE i<?) INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms) SELECT printf(?||'%012d',i),?,'10','COP','outflow',?,1736078400000,1736078400000 FROM seq",
+          count,
+          prefix,
+          owner,
+          category
+        )
+      );
       const group: AtomicBatchCall = {
         callId: batchCallId(1),
         operation: "transactions.updateTransactions",
@@ -978,37 +879,39 @@ it("composes a group correction larger than 4 KiB with another atomic mutation",
       ).pipe(Effect.orDie);
       expect(new TextEncoder().encode(encoded).length).toBeGreaterThan(4096);
       const result = yield* fromTestPromise(() =>
-        sendPublicRequest(db, batchRequest(0, [group, memoryCall(2, "Preferencia confirmada")]))
+        db.send(batchRequest(0, [group, keywordRuleCall(2, "preferencia confirmada", category)]))
       );
       expect(result.status).toBe(200);
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
             "SELECT count(*) AS count FROM transactions WHERE user_id = ? AND revision = 1 AND notes = 'Corregidas juntas'",
             owner
           )
         )
       ).toBe(count);
-      expect(yield* fromTestPromise(() => auditedOperations(db, owner))).toEqual([
-        { operation: "transactions.updateTransactions", outcome: "accepted" },
+      expect(yield* fromTestPromise(() => nativeAuditedOperations(db, owner))).toEqual([
+        { operation: "transactions.updateTransactions", outcome: "success" },
+        { operation: "categories.createKeywordRule", outcome: "success" },
+        { operation: "operations.executeAtomicBatch", outcome: "success" },
       ]);
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
-            "SELECT COUNT(*) AS count FROM memories WHERE user_id = ? AND text = 'Preferencia confirmada'",
+            "SELECT COUNT(*) AS count FROM keyword_rules WHERE user_id = ? AND keyword = 'preferencia confirmada'",
             owner
           )
         )
       ).toBe(1);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("rejects foreign, missing, duplicate, deleted and stale group members without partial corrections", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const owner = users[0] ?? "";
       const own = "52000000-0000-4000-8000-000000000001";
       const foreign = "52000000-0000-4000-8000-000000000002";
@@ -1016,22 +919,36 @@ it("rejects foreign, missing, duplicate, deleted and stale group members without
       const missing = "52000000-0000-4000-8000-000000000004";
       const stale = "52000000-0000-4000-8000-000000000005";
       yield* fromTestPromise(() =>
-        seedTransaction({ db, userId: owner, id: own, categoryId: category })
+        seedNativeTransaction({ db, notes: "seed", userId: owner, id: own, categoryId: category })
       );
       yield* fromTestPromise(() =>
-        seedTransaction({ db, userId: users[1] ?? "", id: foreign, categoryId: category })
+        seedNativeTransaction({
+          db,
+          notes: "seed",
+          userId: users[1] ?? "",
+          id: foreign,
+          categoryId: category,
+        })
       );
       yield* fromTestPromise(() =>
-        seedTransaction({ db, userId: owner, id: stale, categoryId: category })
+        seedNativeTransaction({ db, notes: "seed", userId: owner, id: stale, categoryId: category })
       );
       yield* fromTestPromise(() =>
-        seedTransaction({ db, userId: owner, id: deleted, categoryId: category })
+        seedNativeTransaction({
+          db,
+          notes: "seed",
+          userId: owner,
+          id: deleted,
+          categoryId: category,
+        })
       );
       yield* fromTestPromise(() =>
-        db
-          .prepare("UPDATE transactions SET deleted_at_ms = ? WHERE user_id = ? AND id = ?")
-          .bind(transactionNow(), owner, deleted)
-          .run()
+        db.exec(
+          "UPDATE transactions SET deleted_at_ms = ? WHERE user_id = ? AND id = ?",
+          transactionNow(),
+          owner,
+          deleted
+        )
       );
       for (const invalid of [
         { id: foreign, expectedRevision: 0 },
@@ -1041,8 +958,7 @@ it("rejects foreign, missing, duplicate, deleted and stale group members without
         { id: stale, expectedRevision: 1 },
       ]) {
         const result = yield* fromTestPromise(() =>
-          sendPublicRequest(
-            db,
+          db.send(
             groupCorrectionRequest(0, {
               transactions: [{ id: own, expectedRevision: 0 }, invalid],
               changes: { notes: "Sin guardar" },
@@ -1054,38 +970,35 @@ it("rejects foreign, missing, duplicate, deleted and stale group members without
         );
         expect(
           yield* fromTestPromise(() =>
-            countRows(db, "SELECT count(*) AS count FROM transaction_corrections")
+            nativeCountRows(db, "SELECT count(*) AS count FROM transaction_corrections")
           )
         ).toBe(0);
         expect(
           yield* fromTestPromise(() =>
-            countRows(db, "SELECT count(*) AS count FROM transactions WHERE revision != 0")
+            nativeCountRows(db, "SELECT count(*) AS count FROM transactions WHERE revision != 0")
           )
         ).toBe(0);
       }
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 it("rolls back every group correction and its evidence when final Audit is refused", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const owner = users[0] ?? "";
       const ids = ["52000000-0000-4000-8000-000000000001", "52000000-0000-4000-8000-000000000002"];
       for (const id of ids) {
         yield* fromTestPromise(() =>
-          seedTransaction({ db, userId: owner, id, categoryId: category })
+          seedNativeTransaction({ db, notes: "seed", userId: owner, id, categoryId: category })
         );
       }
       yield* fromTestPromise(() =>
-        db
-          .prepare(`CREATE TRIGGER refuse_group_audit BEFORE INSERT ON audit_entries
-    WHEN NEW.operation = 'transactions.updateTransactions' AND NEW.outcome = 'accepted'
+        db.exec(`CREATE TRIGGER refuse_group_audit BEFORE INSERT ON audit_entries
+    WHEN NEW.operation = 'transactions.updateTransactions' AND NEW.outcome = 'success'
     BEGIN SELECT RAISE(IGNORE); END`)
-          .run()
       );
       const result = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
+        db.send(
           groupCorrectionRequest(0, {
             transactions: ids.map((id) => ({ id, expectedRevision: 0 })),
             changes: { notes: "Sin guardar" },
@@ -1095,15 +1008,15 @@ it("rolls back every group correction and its evidence when final Audit is refus
       expect(result.status).not.toBe(200);
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT count(*) AS count FROM transaction_corrections")
+          nativeCountRows(db, "SELECT count(*) AS count FROM transaction_corrections")
         )
       ).toBe(0);
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT count(*) AS count FROM transactions WHERE revision != 0")
+          nativeCountRows(db, "SELECT count(*) AS count FROM transactions WHERE revision != 0")
         )
       ).toBe(0);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 effectIt.effect(
@@ -1213,20 +1126,21 @@ effectIt.effect(
 it("refuses under-scoped and oversized group corrections before changing any selected Transaction", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const userId = users[0] ?? "";
       const id = "52000000-0000-4000-8000-000000000001";
-      yield* fromTestPromise(() => seedTransaction({ db, userId, id, categoryId: category }));
+      yield* fromTestPromise(() =>
+        seedNativeTransaction({ db, notes: "seed", userId, id, categoryId: category })
+      );
       const token = `fin_${"r".repeat(8)}_${"r".repeat(43)}`;
       const current = yield* Clock.currentTimeMillis;
-      yield* seedPAT({ db, userId, token, scopes: ["read"], current });
+      yield* seedNativePAT({ db, userId, token, scopes: ["read"], current });
       const payload = {
         transactions: [{ id, expectedRevision: 0 }],
         changes: { notes: "Sin guardar" },
       };
       const denied = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
+        db.send(
           new Request("https://api.fidyapp.com/transactions/corrections", {
             method: "POST",
             headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
@@ -1236,8 +1150,7 @@ it("refuses under-scoped and oversized group corrections before changing any sel
       );
       expect(denied.status).toBe(403);
       const oversized = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
+        db.send(
           groupCorrectionRequest(0, {
             transactions: Array.from({ length: 4097 }, (_, index) => ({
               id: `52000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
@@ -1250,35 +1163,34 @@ it("refuses under-scoped and oversized group corrections before changing any sel
       expect(oversized.status).toBe(400);
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT count(*) AS count FROM transaction_corrections")
+          nativeCountRows(db, "SELECT count(*) AS count FROM transaction_corrections")
         )
       ).toBe(0);
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT count(*) AS count FROM transactions WHERE revision != 0")
+          nativeCountRows(db, "SELECT count(*) AS count FROM transactions WHERE revision != 0")
         )
       ).toBe(0);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("rolls back the whole group when one selected row stops accepting its correction at commit", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const userId = users[0] ?? "";
       const ids = ["52000000-0000-4000-8000-000000000001", "52000000-0000-4000-8000-000000000002"];
       for (const id of ids) {
-        yield* fromTestPromise(() => seedTransaction({ db, userId, id, categoryId: category }));
+        yield* fromTestPromise(() =>
+          seedNativeTransaction({ db, notes: "seed", userId, id, categoryId: category })
+        );
       }
       yield* fromTestPromise(() =>
-        db
-          .prepare(`CREATE TRIGGER refuse_one_group_row BEFORE UPDATE ON transactions
+        db.exec(`CREATE TRIGGER refuse_one_group_row BEFORE UPDATE ON transactions
       WHEN OLD.id = '52000000-0000-4000-8000-000000000002' BEGIN SELECT RAISE(IGNORE); END`)
-          .run()
       );
       const response = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
+        db.send(
           groupCorrectionRequest(0, {
             transactions: ids.map((id) => ({ id, expectedRevision: 0 })),
             changes: { notes: "Sin guardar" },
@@ -1288,15 +1200,15 @@ it("rolls back the whole group when one selected row stops accepting its correct
       expect(response.status).not.toBe(200);
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT count(*) AS count FROM transaction_corrections")
+          nativeCountRows(db, "SELECT count(*) AS count FROM transaction_corrections")
         )
       ).toBe(0);
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT count(*) AS count FROM transactions WHERE revision != 0")
+          nativeCountRows(db, "SELECT count(*) AS count FROM transactions WHERE revision != 0")
         )
       ).toBe(0);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 const hostedReceiptBrowserRequest = (index: number, body: string): Request =>
   new Request("https://api.fidyapp.com/web/hosted-turns/delivery", {
@@ -4598,14 +4510,12 @@ it("rejects an unknown Category without retaining partial Transaction, attestati
     }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
-it("commits an ordered two-child batch in one D1 unit and agrees with immediate canonical reads", () =>
+it("commits an ordered two-child batch in one User transaction and agrees with immediate canonical reads", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
-      const counted = countingDb(db);
+      const db = yield* nativeTransactionJourney;
       const response = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          counted.db,
+        db.send(
           batchRequest(0, [
             transactionCall(1, input({ counterparty: "Acme" })),
             transactionCall(
@@ -4635,17 +4545,7 @@ it("commits an ordered two-child batch in one D1 unit and agrees with immediate 
       expect(Option.getOrNull(first.counterparty)).toBe("Acme");
       expect(Option.getOrNull(second.counterparty)).toBe("Bravo");
       expect([first.revision, second.revision]).toEqual([0, 0]);
-      expect(counted.batches()).toBe(1);
-
-      const session = Option.getOrThrow(
-        yield* fromTestPromise(() =>
-          transactionSession({ request: request(0), db, current: transactionNow() })
-        )
-      );
-      const listed = yield* browseTransactions({
-        db,
-        selection: { request: request(0), subject: session, search: false, id: Option.none() },
-      });
+      const listed = yield* fromTestPromise(() => db.browser(0));
       const page = yield* Schema.decodeUnknownEffect(Listed)(
         yield* fromTestPromise(() => listed.json())
       ).pipe(Effect.orDie);
@@ -4654,7 +4554,7 @@ it("commits an ordered two-child batch in one D1 unit and agrees with immediate 
       expect(page.data.find(({ id }) => id === second.id)).toEqual(second);
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
             "SELECT COUNT(*) AS count FROM source_attestations WHERE user_id = ?",
             users[0] ?? ""
@@ -4663,27 +4563,32 @@ it("commits an ordered two-child batch in one D1 unit and agrees with immediate 
       ).toBe(2);
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
             "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch') AND user_id = ? AND outcome = 'success' AND operation = 'transactions.createTransaction'",
             users[0] ?? ""
           )
         )
       ).toBe(2);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("rolls back an earlier child when a later child's revision is stale", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const seededId = "30000000-0000-4000-8000-000000000001";
       yield* fromTestPromise(() =>
-        seedTransaction({ db, userId: users[0] ?? "", id: seededId, categoryId: category })
+        seedNativeTransaction({
+          db,
+          notes: "seed",
+          userId: users[0] ?? "",
+          id: seededId,
+          categoryId: category,
+        })
       );
       const response = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
+        db.send(
           batchRequest(0, [
             transactionCall(1, input()),
             correctionCall(2, seededId, {
@@ -4702,7 +4607,7 @@ it("rolls back an earlier child when a later child's revision is stale", () =>
       expect(rejection.error.operation).toBe("transactions.updateTransaction");
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
             "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
             users[0] ?? ""
@@ -4711,40 +4616,50 @@ it("rolls back an earlier child when a later child's revision is stale", () =>
       ).toBe(1);
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT COUNT(*) AS count FROM source_attestations")
+          nativeCountRows(db, "SELECT COUNT(*) AS count FROM source_attestations")
         )
       ).toBe(0);
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT COUNT(*) AS count FROM transaction_corrections")
+          nativeCountRows(db, "SELECT COUNT(*) AS count FROM transaction_corrections")
         )
       ).toBe(0);
-      const audits = yield* fromTestPromise(() => auditedOperations(db, users[0] ?? ""));
+      const audits = yield* fromTestPromise(() => nativeAuditedOperations(db, users[0] ?? ""));
       expect(audits).toEqual([
         { operation: "transactions.updateTransaction", outcome: "validation_failed" },
+        { operation: "operations.executeAtomicBatch", outcome: "validation_failed" },
       ]);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
-it("aborts the D1 unit and attributes the child when a guarded correction changes no row", () =>
+it("rejects a stale batch correction after a committed competing correction", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const seededId = "30000000-0000-4000-8000-000000000002";
-      const evidenceId = "30000000-0000-4000-8000-000000000012";
       yield* fromTestPromise(() =>
-        seedTransaction({ db, userId: users[0] ?? "", id: seededId, categoryId: category })
+        seedNativeTransaction({
+          db,
+          notes: "seed",
+          userId: users[0] ?? "",
+          id: seededId,
+          categoryId: category,
+        })
       );
+      expect(
+        (yield* fromTestPromise(() =>
+          db.send(
+            batchRequest(0, [
+              correctionCall(9, seededId, {
+                expectedRevision: 0,
+                changes: { notes: "concurrent" },
+              }),
+            ])
+          )
+        )).status
+      ).toBe(200);
       const response = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          racingBatch(db, () =>
-            concurrentCorrection({
-              db,
-              userId: users[0] ?? "",
-              transactionId: seededId,
-              evidenceId,
-            })
-          ),
+        db.send(
           batchRequest(0, [
             transactionCall(1, input()),
             correctionCall(2, seededId, {
@@ -4763,7 +4678,7 @@ it("aborts the D1 unit and attributes the child when a guarded correction change
       expect(rejection.error.operation).toBe("transactions.updateTransaction");
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
             "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
             users[0] ?? ""
@@ -4772,37 +4687,40 @@ it("aborts the D1 unit and attributes the child when a guarded correction change
       ).toBe(1);
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT COUNT(*) AS count FROM source_attestations")
+          nativeCountRows(db, "SELECT COUNT(*) AS count FROM source_attestations")
         )
       ).toBe(0);
       const evidence = yield* fromTestPromise(() =>
-        db.prepare("SELECT id FROM transaction_corrections").all<{ id: string }>()
+        db.exec("SELECT corrected_at_ms FROM transaction_corrections")
       );
-      expect(evidence.results).toEqual([{ id: evidenceId }]);
-      const audits = yield* fromTestPromise(() => auditedOperations(db, users[0] ?? ""));
+      expect(evidence).toHaveLength(1);
+      const audits = yield* fromTestPromise(() => nativeRefusedChildren(db, users[0] ?? ""));
       expect(audits).toEqual([
         { operation: "transactions.updateTransaction", outcome: "validation_failed" },
       ]);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("attributes a silently skipped child Audit without exposing D1 details", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const seededId = "30000000-0000-4000-8000-000000000003";
       yield* fromTestPromise(() =>
-        seedTransaction({ db, userId: users[0] ?? "", id: seededId, categoryId: category })
+        seedNativeTransaction({
+          db,
+          notes: "seed",
+          userId: users[0] ?? "",
+          id: seededId,
+          categoryId: category,
+        })
       );
       yield* fromTestPromise(() =>
-        db
-          .prepare(`CREATE TRIGGER refuse_batch_correction_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='session_call' AND NEW.operation = 'transactions.updateTransaction' AND NEW.outcome = 'success'
+        db.exec(`CREATE TRIGGER refuse_batch_correction_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='session_call' AND NEW.operation = 'transactions.updateTransaction' AND NEW.outcome = 'success'
             BEGIN SELECT RAISE(IGNORE); END`)
-          .run()
       );
       const response = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
+        db.send(
           batchRequest(0, [
             transactionCall(1, input()),
             correctionCall(2, seededId, {
@@ -4812,178 +4730,141 @@ it("attributes a silently skipped child Audit without exposing D1 details", () =
           ])
         )
       );
-      expect(response.status).toBe(400);
+      expect(response.status).toBe(503);
       const body = yield* fromTestPromise(() => response.text());
-      const rejection = yield* Schema.decodeEffect(Schema.fromJsonString(BatchRejection))(
-        body
-      ).pipe(Effect.orDie);
-      expect(rejection.error.failedCallIndex).toBe(1);
-      expect(rejection.error.operation).toBe("transactions.updateTransaction");
-      expect(body).not.toMatch(/SQL|INSERT|transaction_audit|guard_assertion/iu);
+      expect(body).not.toMatch(/SQL|INSERT|canonical_child_guard/iu);
       expect(
         yield* fromTestPromise(() =>
-          countRows(
-            db,
-            "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
-            users[0] ?? ""
+          db.exec(
+            "SELECT (SELECT count(*) FROM source_attestations) AS captured,(SELECT count(*) FROM transaction_corrections) AS corrected,(SELECT count(*) FROM keyword_rules) AS rules,(SELECT count(*) FROM audit_entries WHERE record_type='session_call') AS audits"
           )
         )
-      ).toBe(1);
-      expect(
-        yield* fromTestPromise(() =>
-          countRows(db, "SELECT COUNT(*) AS count FROM source_attestations")
-        )
-      ).toBe(0);
-      expect(
-        yield* fromTestPromise(() =>
-          countRows(db, "SELECT COUNT(*) AS count FROM transaction_corrections")
-        )
-      ).toBe(0);
-      expect(yield* fromTestPromise(() => auditedOperations(db, users[0] ?? ""))).toEqual([
-        { operation: "transactions.updateTransaction", outcome: "validation_failed" },
-      ]);
-    })
+      ).toEqual([{ captured: 0, corrected: 0, rules: 0, audits: 0 }]);
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("names the capture child when its success Audit is skipped and rolls back the unit", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       yield* fromTestPromise(() =>
-        db
-          .prepare(`CREATE TRIGGER skip_capture_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='session_call' AND NEW.operation = 'transactions.createTransaction' AND NEW.outcome = 'success'
+        db.exec(`CREATE TRIGGER skip_capture_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='session_call' AND NEW.operation = 'transactions.createTransaction' AND NEW.outcome = 'success'
           BEGIN SELECT RAISE(IGNORE); END`)
-          .run()
       );
       const response = yield* fromTestPromise(() =>
-        sendPublicRequest(db, batchRequest(0, [transactionCall(1, input())]))
+        db.send(batchRequest(0, [transactionCall(1, input())]))
       );
-      expect(response.status).toBe(400);
-      const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
-        yield* fromTestPromise(() => response.json())
-      ).pipe(Effect.orDie);
-      expect(rejection.error.failedCallIndex).toBe(0);
-      expect(rejection.error.operation).toBe("transactions.createTransaction");
+      expect(response.status).toBe(503);
+      const body = yield* fromTestPromise(() => response.text());
+      expect(body).not.toMatch(/SQL|INSERT|canonical_child_guard/iu);
       expect(
-        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
-      ).toBe(0);
-      expect(yield* fromTestPromise(() => auditedOperations(db, users[0] ?? ""))).toEqual([
-        { operation: "transactions.createTransaction", outcome: "validation_failed" },
-      ]);
-    })
+        yield* fromTestPromise(() =>
+          db.exec(
+            "SELECT (SELECT count(*) FROM source_attestations) AS captured,(SELECT count(*) FROM transaction_corrections) AS corrected,(SELECT count(*) FROM keyword_rules) AS rules,(SELECT count(*) FROM audit_entries WHERE record_type='session_call') AS audits"
+          )
+        )
+      ).toEqual([{ captured: 0, corrected: 0, rules: 0, audits: 0 }]);
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("records a skipped keyword-rule guard as that child's refusal without committing earlier work", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       yield* fromTestPromise(() =>
-        db
-          .prepare(`CREATE TRIGGER skip_rule_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='session_call' AND NEW.operation = 'categories.createKeywordRule' AND NEW.outcome = 'success'
+        db.exec(`CREATE TRIGGER skip_rule_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='session_call' AND NEW.operation = 'categories.createKeywordRule' AND NEW.outcome = 'success'
           BEGIN SELECT RAISE(IGNORE); END`)
-          .run()
       );
       const response = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
+        db.send(
           batchRequest(0, [transactionCall(1, input()), keywordRuleCall(2, "Panadería", category)])
         )
       );
-      expect(response.status).toBe(400);
-      const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
-        yield* fromTestPromise(() => response.json())
-      ).pipe(Effect.orDie);
-      expect(rejection.error.failedCallIndex).toBe(1);
-      expect(rejection.error.operation).toBe("categories.createKeywordRule");
+      expect(response.status).toBe(503);
+      const body = yield* fromTestPromise(() => response.text());
+      expect(body).not.toMatch(/SQL|INSERT|canonical_child_guard/iu);
       expect(
-        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
-      ).toBe(0);
-      expect(
-        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM keyword_rules"))
-      ).toBe(0);
-      const audits = yield* fromTestPromise(() =>
-        db
-          .prepare(
-            "SELECT operation,outcome FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'categories.*'"
+        yield* fromTestPromise(() =>
+          db.exec(
+            "SELECT (SELECT count(*) FROM source_attestations) AS captured,(SELECT count(*) FROM transaction_corrections) AS corrected,(SELECT count(*) FROM keyword_rules) AS rules,(SELECT count(*) FROM audit_entries WHERE record_type='session_call') AS audits"
           )
-          .all<{ operation: string; outcome: string }>()
-      );
-      expect(audits.results).toEqual([
-        { operation: "categories.createKeywordRule", outcome: "validation_failed" },
-      ]);
-    })
+        )
+      ).toEqual([{ captured: 0, corrected: 0, rules: 0, audits: 0 }]);
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
-it("does not infer a duplicate from a rule deleted by an earlier rolled-back child", () =>
+it("decides a normalized keyword duplicate from the snapshot before its sibling deletes the rule", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
-      const seeded = yield* fromTestPromise(() =>
-        sendPublicRequest(db, batchRequest(0, [keywordRuleCall(1, "Panadería", category)]))
+      const db = yield* nativeTransactionJourney;
+      const initial = yield* fromTestPromise(() =>
+        db.send(batchRequest(0, [keywordRuleCall(1, "Panadería", category)]))
       );
-      expect(seeded.status).toBe(200);
-      const rule = yield* fromTestPromise(() =>
-        db
-          .prepare("SELECT id FROM keyword_rules WHERE user_id = ?")
-          .bind(users[0])
-          .first<{ id: string }>()
+      expect(initial.status).toBe(200);
+      const original = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({
+          data: Schema.Struct({
+            results: Schema.Tuple([
+              Schema.Struct({
+                output: Schema.Struct({ data: Schema.Struct({ id: Schema.String }) }),
+              }),
+            ]),
+          }),
+        })
+      )(yield* fromTestPromise(() => initial.json()));
+      const id = original.data.results[0].output.data.id;
+      const refused = yield* fromTestPromise(() =>
+        db.send(
+          batchRequest(0, [deleteKeywordRuleCall(1, id), keywordRuleCall(2, "PANADERIA", category)])
+        )
       );
-      const deletedId = yield* Schema.decodeUnknownEffect(KeywordRuleId)(rule?.id);
-      const failure = yield* keywordRuleGuardFailure({
-        db,
-        userId: users[0] ?? "",
-        outcome: {
-          _tag: "KeywordRule",
-          operation: "categories.createKeywordRule",
-          ruleId: yield* Schema.decodeEffect(KeywordRuleId)("40000000-0000-4000-8000-000000000001"),
-          keyword: yield* Schema.decodeEffect(CategoryKeyword)("Panadería"),
-          categoryId: yield* Schema.decodeEffect(CategoryId)(category),
-        },
-        earlier: [
-          { _tag: "KeywordRule", operation: "categories.deleteKeywordRule", ruleId: deletedId },
-        ],
+      expect(refused.status).toBe(400);
+      expect(yield* fromTestPromise(() => refused.json())).toMatchObject({
+        error: { code: "validation_failed", failedCallIndex: 1 },
       });
-      expect(Option.isNone(failure)).toBe(true);
-    })
+      const rules = yield* fromTestPromise(() => db.browser(0, "/category-keyword-rules"));
+      expect(yield* fromTestPromise(() => rules.json())).toMatchObject({
+        data: [{ id, keyword: "panaderia" }],
+      });
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("does not assign a child to a forged guard marker from an unrelated write", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       yield* fromTestPromise(() =>
-        db
-          .prepare(`CREATE TRIGGER fake_guard BEFORE INSERT ON transactions
+        db.exec(`CREATE TRIGGER fake_guard BEFORE INSERT ON transactions
           BEGIN SELECT RAISE(ABORT, 'CHECK constraint failed: canonical_child_guard_0: SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_CHECK)'); END`)
-          .run()
       );
       const response = yield* fromTestPromise(() =>
-        sendPublicRequest(db, batchRequest(0, [transactionCall(1, input())]))
+        db.send(batchRequest(0, [transactionCall(1, input())]))
       );
       expect(response.status).toBe(503);
       const body = yield* fromTestPromise(() => response.text());
       expect(body).not.toMatch(/failedCallIndex|canonical_child_guard|INSERT|transactions/iu);
       expect(
-        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
+        yield* fromTestPromise(() =>
+          nativeCountRows(db, "SELECT COUNT(*) AS count FROM transactions")
+        )
       ).toBe(0);
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
             "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch')"
           )
         )
       ).toBe(0);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("rolls back a batch containing deletion of an absent Transaction", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const response = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
+        db.send(
           batchRequest(0, [
             transactionCall(1, input()),
             {
@@ -5002,30 +4883,32 @@ it("rolls back a batch containing deletion of an absent Transaction", () =>
       expect(rejection.error.failedCallIndex).toBe(1);
       expect(rejection.error.operation).toBe("transactions.deleteTransaction");
       expect(
-        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
+        yield* fromTestPromise(() =>
+          nativeCountRows(db, "SELECT COUNT(*) AS count FROM transactions")
+        )
       ).toBe(0);
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
             "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch')"
           )
         )
-      ).toBe(1);
-    })
+      ).toBe(2);
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("links and unlinks pair children inside one atomic batch", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const owner = users[0] ?? "";
       const visible = "30000000-0000-4000-8000-000000000901";
       const suppressed = "30000000-0000-4000-8000-000000000902";
       yield* fromTestPromise(() =>
         Promise.all([
-          seedRetainedTransaction({ db, userId: owner, id: visible, categoryId: category }),
-          seedRetainedTransaction({
+          seedNativeTransaction({ db, userId: owner, id: visible, categoryId: category }),
+          seedNativeTransaction({
             db,
             userId: owner,
             id: suppressed,
@@ -5034,7 +4917,7 @@ it("links and unlinks pair children inside one atomic batch", () =>
             createdAt: "2025-01-06T12:00:00.000Z",
           }),
         ]).then(() =>
-          seedManualAttestation({
+          seedNativeSource({
             db,
             userId: owner,
             transactionId: suppressed,
@@ -5043,10 +4926,7 @@ it("links and unlinks pair children inside one atomic batch", () =>
         )
       );
       const linked = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
-          batchRequest(0, [transactionCall(1, input()), linkCall(2, suppressed, visible)])
-        )
+        db.send(batchRequest(0, [transactionCall(1, input()), linkCall(2, suppressed, visible)]))
       );
       expect(linked.status).toBe(200);
       const linkBody = yield* Schema.decodeUnknownEffect(BatchEnvelope)(
@@ -5061,7 +4941,7 @@ it("links and unlinks pair children inside one atomic batch", () =>
       ).pipe(Effect.orDie)).data;
       expect(effectiveTransaction.id).toBe(visible);
       expect(effectiveTransaction.presentation).toEqual({ kind: "visible-member" });
-      expect(yield* fromTestPromise(() => reconciliationState(db, owner))).toEqual({
+      expect(yield* fromTestPromise(() => nativeReconciliationState(db, owner))).toEqual({
         decisions: [
           { first: visible, second: suppressed, state: "linked", visible: Option.some(visible) },
         ],
@@ -5069,7 +4949,7 @@ it("links and unlinks pair children inside one atomic batch", () =>
       });
 
       const unlinked = yield* fromTestPromise(() =>
-        sendPublicRequest(db, batchRequest(0, [unlinkCall(3, suppressed, visible)]))
+        db.send(batchRequest(0, [unlinkCall(3, suppressed, visible)]))
       );
       expect(unlinked.status).toBe(200);
       const unlinkBody = yield* Schema.decodeUnknownEffect(BatchEnvelope)(
@@ -5085,7 +4965,7 @@ it("links and unlinks pair children inside one atomic batch", () =>
       expect(restored.secondTransaction.id).toBe(suppressed);
       expect(restored.firstTransaction.presentation).toEqual({ kind: "independent" });
       expect(restored.secondTransaction.presentation).toEqual({ kind: "independent" });
-      expect(yield* fromTestPromise(() => reconciliationState(db, owner))).toEqual({
+      expect(yield* fromTestPromise(() => nativeReconciliationState(db, owner))).toEqual({
         decisions: [
           {
             first: visible,
@@ -5097,39 +4977,39 @@ it("links and unlinks pair children inside one atomic batch", () =>
         members: [],
       });
       expect(
-        (yield* fromTestPromise(() => auditedOperations(db, owner)))
+        (yield* fromTestPromise(() => nativeAuditedOperations(db, owner)))
           .map(({ operation, outcome }) => `${operation}:${outcome}`)
           .sort()
       ).toEqual([
+        "operations.executeAtomicBatch:success",
+        "operations.executeAtomicBatch:success",
         "transactions.createTransaction:success",
         "transactions.linkTransactions:success",
         "transactions.unlinkTransactions:success",
       ]);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("aborts a batch link when a competing link commits before the unit", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const owner = users[0] ?? "";
       const first = "30000000-0000-4000-8000-000000000911";
       const second = "30000000-0000-4000-8000-000000000912";
       const third = "30000000-0000-4000-8000-000000000913";
       yield* fromTestPromise(() =>
         Promise.all([
-          seedRetainedTransaction({ db, userId: owner, id: first, categoryId: category }),
-          seedRetainedTransaction({ db, userId: owner, id: second, categoryId: category }),
-          seedRetainedTransaction({ db, userId: owner, id: third, categoryId: category }),
+          seedNativeTransaction({ db, userId: owner, id: first, categoryId: category }),
+          seedNativeTransaction({ db, userId: owner, id: second, categoryId: category }),
+          seedNativeTransaction({ db, userId: owner, id: third, categoryId: category }),
         ])
       );
+      expect(
+        (yield* fromTestPromise(() => db.send(batchRequest(0, [linkCall(9, first, third)])))).status
+      ).toBe(200);
       const response = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          racingBatch(db, () =>
-            seedLinkedPair({ db, userId: owner, first, second: third, visible: first })
-          ),
-          batchRequest(0, [linkCall(1, first, second)])
-        )
+        db.send(batchRequest(0, [linkCall(1, first, second)]))
       );
       expect(response.status).toBe(400);
       const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
@@ -5138,42 +5018,43 @@ it("aborts a batch link when a competing link commits before the unit", () =>
       expect(rejection.error.code).toBe("validation_failed");
       expect(rejection.error.failedCallIndex).toBe(0);
       expect(rejection.error.operation).toBe("transactions.linkTransactions");
-      expect(yield* fromTestPromise(() => reconciliationState(db, owner))).toEqual({
+      expect(yield* fromTestPromise(() => nativeReconciliationState(db, owner))).toEqual({
         decisions: [{ first, second: third, state: "linked", visible: Option.some(first) }],
         members: [{ transaction: first }, { transaction: third }],
       });
-      expect(yield* fromTestPromise(() => auditedOperations(db, owner))).toEqual([
+      expect(yield* fromTestPromise(() => nativeRefusedChildren(db, owner))).toEqual([
         { operation: "transactions.linkTransactions", outcome: "validation_failed" },
       ]);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("aborts a batch link when a correction changes a member's Money before the unit", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const owner = users[0] ?? "";
       const first = "30000000-0000-4000-8000-000000000914";
       const second = "30000000-0000-4000-8000-000000000915";
       yield* fromTestPromise(() =>
         Promise.all([
-          seedRetainedTransaction({ db, userId: owner, id: first, categoryId: category }),
-          seedRetainedTransaction({ db, userId: owner, id: second, categoryId: category }),
+          seedNativeTransaction({ db, userId: owner, id: first, categoryId: category }),
+          seedNativeTransaction({ db, userId: owner, id: second, categoryId: category }),
         ])
       );
+      expect(
+        (yield* fromTestPromise(() =>
+          db.send(
+            batchRequest(0, [
+              correctionCall(9, second, {
+                expectedRevision: 0,
+                changes: { money: { amount: "45000.01", currency: "COP" } },
+              }),
+            ])
+          )
+        )).status
+      ).toBe(200);
       const response = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          racingBatch(db, () =>
-            concurrentMoneyCorrection({
-              db,
-              userId: owner,
-              transactionId: second,
-              evidenceId: "30000000-0000-4000-8000-000000000916",
-              amount: "45000.01",
-            })
-          ),
-          batchRequest(0, [linkCall(1, first, second)])
-        )
+        db.send(batchRequest(0, [linkCall(1, first, second)]))
       );
       expect(response.status).toBe(400);
       const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
@@ -5182,44 +5063,43 @@ it("aborts a batch link when a correction changes a member's Money before the un
       expect(rejection.error.code).toBe("validation_failed");
       expect(rejection.error.failedCallIndex).toBe(0);
       expect(rejection.error.operation).toBe("transactions.linkTransactions");
-      expect(yield* fromTestPromise(() => reconciliationState(db, owner))).toEqual({
+      expect(yield* fromTestPromise(() => nativeReconciliationState(db, owner))).toEqual({
         decisions: [],
         members: [],
       });
-      expect(yield* fromTestPromise(() => auditedOperations(db, owner))).toEqual([
+      expect(yield* fromTestPromise(() => nativeRefusedChildren(db, owner))).toEqual([
         { operation: "transactions.linkTransactions", outcome: "validation_failed" },
       ]);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("attributes the earliest provable child when a pair premise and a revision both move", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const owner = users[0] ?? "";
       const first = "30000000-0000-4000-8000-000000000931";
       const second = "30000000-0000-4000-8000-000000000932";
       const third = "30000000-0000-4000-8000-000000000933";
       yield* fromTestPromise(() =>
         Promise.all([
-          seedRetainedTransaction({ db, userId: owner, id: first, categoryId: category }),
-          seedRetainedTransaction({ db, userId: owner, id: second, categoryId: category }),
-          seedRetainedTransaction({ db, userId: owner, id: third, categoryId: category }),
+          seedNativeTransaction({ db, userId: owner, id: first, categoryId: category }),
+          seedNativeTransaction({ db, userId: owner, id: second, categoryId: category }),
+          seedNativeTransaction({ db, userId: owner, id: third, categoryId: category }),
         ])
       );
-      const response = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          racingBatch(db, () =>
-            Promise.all([
-              seedLinkedPair({ db, userId: owner, first, second, visible: first }),
-              concurrentCorrection({
-                db,
-                userId: owner,
-                transactionId: third,
-                evidenceId: "30000000-0000-4000-8000-000000000934",
-              }),
+      expect(
+        (yield* fromTestPromise(() =>
+          db.send(
+            batchRequest(0, [
+              linkCall(8, first, second),
+              correctionCall(9, third, { expectedRevision: 0, changes: { notes: "concurrent" } }),
             ])
-          ),
+          )
+        )).status
+      ).toBe(200);
+      const response = yield* fromTestPromise(() =>
+        db.send(
           batchRequest(0, [
             linkCall(1, first, second),
             correctionCall(2, third, { expectedRevision: 0, changes: { notes: "late" } }),
@@ -5233,27 +5113,27 @@ it("attributes the earliest provable child when a pair premise and a revision bo
       expect(rejection.error.code).toBe("validation_failed");
       expect(rejection.error.failedCallIndex).toBe(0);
       expect(rejection.error.operation).toBe("transactions.linkTransactions");
-      expect(yield* fromTestPromise(() => reconciliationState(db, owner))).toEqual({
+      expect(yield* fromTestPromise(() => nativeReconciliationState(db, owner))).toEqual({
         decisions: [{ first, second, state: "linked", visible: Option.some(first) }],
         members: [{ transaction: first }, { transaction: second }],
       });
-      expect(yield* fromTestPromise(() => auditedOperations(db, owner))).toEqual([
+      expect(yield* fromTestPromise(() => nativeRefusedChildren(db, owner))).toEqual([
         { operation: "transactions.linkTransactions", outcome: "validation_failed" },
       ]);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("aborts a batch unlink when a competing unlink commits before the unit", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const owner = users[0] ?? "";
       const first = "30000000-0000-4000-8000-000000000921";
       const second = "30000000-0000-4000-8000-000000000922";
       yield* fromTestPromise(() =>
         Promise.all([
-          seedRetainedTransaction({ db, userId: owner, id: first, categoryId: category }),
-          seedRetainedTransaction({
+          seedNativeTransaction({ db, userId: owner, id: first, categoryId: category }),
+          seedNativeTransaction({
             db,
             userId: owner,
             id: second,
@@ -5261,26 +5141,18 @@ it("aborts a batch unlink when a competing unlink commits before the unit", () =
             occurredAt: "2025-01-06T12:00:00.000Z",
             createdAt: "2025-01-06T12:00:00.000Z",
           }),
-        ]).then(() => seedLinkedPair({ db, userId: owner, first, second, visible: first }))
+        ])
       );
+      expect(
+        (yield* fromTestPromise(() => db.send(batchRequest(0, [linkCall(8, first, second)]))))
+          .status
+      ).toBe(200);
+      expect(
+        (yield* fromTestPromise(() => db.send(batchRequest(0, [unlinkCall(9, first, second)]))))
+          .status
+      ).toBe(200);
       const response = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          racingBatch(db, () =>
-            db.batch([
-              db
-                .prepare(`UPDATE transaction_reconciliation_decisions
-                  SET state = 'keep-separate', visible_transaction_id = NULL
-                  WHERE user_id = ? AND first_transaction_id = ? AND second_transaction_id = ?`)
-                .bind(owner, first, second),
-              db
-                .prepare(
-                  `UPDATE transactions SET reconciliation_row_ref=NULL,reconciliation_first_id=NULL,reconciliation_second_id=NULL WHERE reconciliation_first_id IS NOT NULL AND user_id = ? AND reconciliation_first_id = ? AND reconciliation_second_id = ?`
-                )
-                .bind(owner, first, second),
-            ])
-          ),
-          batchRequest(0, [unlinkCall(1, second, first)])
-        )
+        db.send(batchRequest(0, [unlinkCall(1, second, first)]))
       );
       expect(response.status).toBe(400);
       const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
@@ -5289,31 +5161,42 @@ it("aborts a batch unlink when a competing unlink commits before the unit", () =
       expect(rejection.error.code).toBe("validation_failed");
       expect(rejection.error.failedCallIndex).toBe(0);
       expect(rejection.error.operation).toBe("transactions.unlinkTransactions");
-      expect(yield* fromTestPromise(() => reconciliationState(db, owner))).toEqual({
+      expect(yield* fromTestPromise(() => nativeReconciliationState(db, owner))).toEqual({
         decisions: [{ first, second, state: "keep-separate", visible: Option.none() }],
         members: [],
       });
-      expect(yield* fromTestPromise(() => auditedOperations(db, owner))).toEqual([
+      expect(yield* fromTestPromise(() => nativeRefusedChildren(db, owner))).toEqual([
         { operation: "transactions.unlinkTransactions", outcome: "validation_failed" },
       ]);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("gives a stale correction the same refusal Audit alone and inside a batch", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const firstId = "30000000-0000-4000-8000-000000000004";
       const secondId = "30000000-0000-4000-8000-000000000005";
       yield* fromTestPromise(() =>
-        seedTransaction({ db, userId: users[0] ?? "", id: firstId, categoryId: category })
+        seedNativeTransaction({
+          db,
+          notes: "seed",
+          userId: users[0] ?? "",
+          id: firstId,
+          categoryId: category,
+        })
       );
       yield* fromTestPromise(() =>
-        seedTransaction({ db, userId: users[0] ?? "", id: secondId, categoryId: category })
+        seedNativeTransaction({
+          db,
+          notes: "seed",
+          userId: users[0] ?? "",
+          id: secondId,
+          categoryId: category,
+        })
       );
       const individual = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
+        db.send(
           new Request(`https://api.fidyapp.com/transactions/${firstId}`, {
             method: "PUT",
             headers: {
@@ -5328,8 +5211,7 @@ it("gives a stale correction the same refusal Audit alone and inside a batch", (
       );
       expect(individual.status).toBe(400);
       const batch = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
+        db.send(
           batchRequest(0, [
             transactionCall(1, input()),
             correctionCall(2, secondId, { expectedRevision: 1, changes: { notes: "batched" } }),
@@ -5339,28 +5221,29 @@ it("gives a stale correction the same refusal Audit alone and inside a batch", (
       expect(batch.status).toBe(400);
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
             "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
             users[0] ?? ""
           )
         )
       ).toBe(2);
-      const audits = yield* fromTestPromise(() => auditedOperations(db, users[0] ?? ""));
+      const audits = yield* fromTestPromise(() => nativeAuditedOperations(db, users[0] ?? ""));
       expect(audits).toEqual([
         { operation: "transactions.updateTransaction", outcome: "validation_failed" },
         { operation: "transactions.updateTransaction", outcome: "validation_failed" },
+        { operation: "operations.executeAtomicBatch", outcome: "validation_failed" },
       ]);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("raw PAT batches cannot turn query, recursive, browser-only or under-scoped children into authority", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const current = yield* Clock.currentTimeMillis;
       const token = `fin_${"a".repeat(8)}_${"b".repeat(43)}`;
-      yield* seedPAT({ db, userId: users[0] ?? "", token, scopes: ["write"], current });
+      yield* seedNativePAT({ db, userId: users[0] ?? "", token, scopes: ["write"], current });
       const children = [
         { operation: "categories.listCategories", input: {} },
         {
@@ -5372,8 +5255,7 @@ it("raw PAT batches cannot turn query, recursive, browser-only or under-scoped c
       ];
       for (const child of children) {
         const response = yield* fromTestPromise(() =>
-          sendPublicRequest(
-            db,
+          db.send(
             bearerRequest(0, token, [
               transactionCall(1, input()),
               { callId: batchCallId(2), ...child },
@@ -5386,11 +5268,13 @@ it("raw PAT batches cannot turn query, recursive, browser-only or under-scoped c
         const body = yield* fromTestPromise(() => response.text());
         expect(body).not.toContain("fin_");
         expect(
-          yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
+          yield* fromTestPromise(() =>
+            nativeCountRows(db, "SELECT COUNT(*) AS count FROM transactions")
+          )
         ).toBe(0);
         expect(
           yield* fromTestPromise(() =>
-            countRows(
+            nativeCountRows(
               db,
               "SELECT COUNT(*) AS count FROM (SELECT user_id,document_json,revision FROM user_documents WHERE kind='dashboard') AS dashboard_documents"
             )
@@ -5398,34 +5282,52 @@ it("raw PAT batches cannot turn query, recursive, browser-only or under-scoped c
         ).toBe(0);
         expect(
           yield* fromTestPromise(() =>
-            countRows(
+            nativeCountRows(
               db,
-              "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE outcome = 'accepted'"
+              "SELECT COUNT(*) AS count FROM audit_entries WHERE record_type='credential_call' AND outcome = 'accepted'"
             )
           )
         ).toBe(0);
         expect(
-          yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM pats"))
+          yield* fromTestPromise(() => nativeCountRows(db, "SELECT COUNT(*) AS count FROM pats"))
         ).toBe(1);
       }
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("enforces each child's live PAT scope and commits a mixed two-child batch under one PAT unit", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const seededId = "30000000-0000-4000-8000-000000000006";
       yield* fromTestPromise(() =>
-        seedTransaction({ db, userId: users[0] ?? "", id: seededId, categoryId: category })
+        seedNativeTransaction({
+          db,
+          notes: "seed",
+          userId: users[0] ?? "",
+          id: seededId,
+          categoryId: category,
+        })
       );
       const current = yield* Clock.currentTimeMillis;
       const writeToken = `fin_${"w".repeat(8)}_${"a".repeat(43)}`;
       const readToken = `fin_${"r".repeat(8)}_${"b".repeat(43)}`;
-      yield* seedPAT({ db, userId: users[0] ?? "", token: writeToken, scopes: ["write"], current });
-      yield* seedPAT({ db, userId: users[0] ?? "", token: readToken, scopes: ["read"], current });
+      yield* seedNativePAT({
+        db,
+        userId: users[0] ?? "",
+        token: writeToken,
+        scopes: ["write"],
+        current,
+      });
+      yield* seedNativePAT({
+        db,
+        userId: users[0] ?? "",
+        token: readToken,
+        scopes: ["read"],
+        current,
+      });
       const refused = yield* fromTestPromise(() =>
-        sendPublicRequest(db, bearerRequest(0, readToken, [transactionCall(1, input())]))
+        db.send(bearerRequest(0, readToken, [transactionCall(1, input())]))
       );
       expect(refused.status).toBe(403);
       const rejection = yield* Schema.decodeUnknownEffect(ScopeMissing)(
@@ -5433,20 +5335,21 @@ it("enforces each child's live PAT scope and commits a mixed two-child batch und
       ).pipe(Effect.orDie);
       expect(rejection.error.code).toBe("scope_missing");
       expect(
-        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
+        yield* fromTestPromise(() =>
+          nativeCountRows(db, "SELECT COUNT(*) AS count FROM transactions")
+        )
       ).toBe(1);
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
-            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE outcome = 'accepted'"
+            "SELECT COUNT(*) AS count FROM audit_entries WHERE record_type='credential_call' AND outcome = 'accepted'"
           )
         )
       ).toBe(0);
 
       const committed = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
+        db.send(
           bearerRequest(0, writeToken, [
             transactionCall(1, input({ counterparty: "Agent capture" })),
             correctionCall(2, seededId, { expectedRevision: 0, changes: { notes: "agent" } }),
@@ -5459,13 +5362,12 @@ it("enforces each child's live PAT scope and commits a mixed two-child batch und
       ).pipe(Effect.orDie);
       expect(body.data.results).toHaveLength(2);
       const audits = yield* fromTestPromise(() =>
-        db
-          .prepare(
-            "SELECT operation, outcome FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation LIKE 'transactions.%' ORDER BY operation"
-          )
-          .all<{ operation: string; outcome: string }>()
+        db.exec(
+          "SELECT operation, outcome FROM audit_entries WHERE record_type='credential_call' AND operation LIKE 'transactions.%' ORDER BY operation"
+        )
       );
-      expect(audits.results).toEqual([
+      expect(audits).toEqual([
+        { operation: "transactions.createTransaction", outcome: "rejected" },
         { operation: "transactions.createTransaction", outcome: "accepted" },
         { operation: "transactions.updateTransaction", outcome: "accepted" },
       ]);
@@ -5474,13 +5376,12 @@ it("enforces each child's live PAT scope and commits a mixed two-child batch und
       )(
         yield* fromTestPromise(() =>
           db
-            .prepare("SELECT last_used_at_ms FROM pats WHERE short_id = ?")
-            .bind(writeToken.slice(4, 12))
-            .first()
+            .exec("SELECT last_used_at_ms FROM pats WHERE short_id = ?", writeToken.slice(4, 12))
+            .then((rows) => rows[0])
         )
       ).pipe(Effect.orDie);
       expect(activity.last_used_at_ms).toBeGreaterThan(0);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("commits a mixed-owner canonical batch once with ordered correlated results and immediate reads", () =>
@@ -5581,10 +5482,9 @@ it("commits a mixed-owner canonical batch once with ordered correlated results a
 it("attributes a duplicate keyword in one batch with the owner's declared conflict and refusal Audit", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const response = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
+        db.send(
           batchRequest(0, [
             transactionCall(1, input()),
             keywordRuleCall(2, "Panadería", category),
@@ -5598,24 +5498,26 @@ it("attributes a duplicate keyword in one batch with the owner's declared confli
       ).pipe(Effect.orDie);
       expect(rejection.error.failedCallIndex).toBe(2);
       expect(rejection.error.operation).toBe("categories.createKeywordRule");
-      expect(rejection.error.message).toMatch(/equivalent keyword rule/u);
+      expect(rejection.error.code).toBe("validation_failed");
       expect(
-        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM keyword_rules"))
+        yield* fromTestPromise(() =>
+          nativeCountRows(db, "SELECT COUNT(*) AS count FROM keyword_rules")
+        )
       ).toBe(0);
       expect(
-        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
+        yield* fromTestPromise(() =>
+          nativeCountRows(db, "SELECT COUNT(*) AS count FROM transactions")
+        )
       ).toBe(0);
       expect(
-        (yield* fromTestPromise(() =>
-          db
-            .prepare(
-              "SELECT operation,outcome FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'categories.*' AND user_id = ?"
-            )
-            .bind(users[0] ?? "")
-            .all()
-        )).results
+        yield* fromTestPromise(() =>
+          db.exec(
+            "SELECT operation,outcome FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'categories.*' AND user_id = ?",
+            users[0] ?? ""
+          )
+        )
       ).toEqual([{ operation: "categories.createKeywordRule", outcome: "validation_failed" }]);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("rolls back every owner when a later mixed-owner keyword-rule child exceeds capacity", () =>
@@ -5887,11 +5789,13 @@ it("executes a mixed-owner batch under one write PAT and refuses a read PAT with
 it("rejects a duplicate call identity named across owners before any child commits", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const response = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
-          batchRequest(0, [transactionCall(6, input()), memoryCall(6, "Identidad repetida")])
+        db.send(
+          batchRequest(0, [
+            transactionCall(6, input()),
+            keywordRuleCall(6, "identidad repetida", category),
+          ])
         )
       );
       expect(response.status).toBe(400);
@@ -5900,10 +5804,10 @@ it("rejects a duplicate call identity named across owners before any child commi
       ).pipe(Effect.orDie);
       expect(rejection.error.code).toBe("validation_failed");
       expect(rejection.error.failedCallIndex).toBe(1);
-      expect(rejection.error.operation).toBe("memory.remember");
+      expect(rejection.error.operation).toBe("categories.createKeywordRule");
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
             "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch')"
           )
@@ -5911,7 +5815,7 @@ it("rejects a duplicate call identity named across owners before any child commi
       ).toBe(0);
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
             "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
             users[0] ?? ""
@@ -5920,10 +5824,14 @@ it("rejects a duplicate call identity named across owners before any child commi
       ).toBe(0);
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT COUNT(*) AS count FROM memories WHERE user_id = ?", users[0] ?? "")
+          nativeCountRows(
+            db,
+            "SELECT COUNT(*) AS count FROM keyword_rules WHERE user_id = ?",
+            users[0] ?? ""
+          )
         )
       ).toBe(0);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("refuses two children addressing one retained rule or Memory before any child commits", () =>
@@ -6235,32 +6143,9 @@ it("fails closed on a cross-owner dependency defect without partial state", () =
 it("serializes concurrent batches and individual mutations through one User coordination turn", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup(true));
-      const instance = instances.at(-1);
-      if (instance === undefined) throw new Error("Missing Miniflare runtime");
-      const namespace = yield* fromTestPromise(() =>
-        instance.getDurableObjectNamespace("USER_TRANSACTION_COORDINATOR")
-      );
-      const coordinator = {
-        getByName: (
-          name: string
-        ): Readonly<{ fetch: (command: Request) => Promise<Response> }> => ({
-          fetch: (command: Request): Promise<Response> =>
-            command.text().then((body) =>
-              namespace
-                .getByName(name)
-                .fetch(command.url, {
-                  method: command.method,
-                  headers: Object.fromEntries(command.headers),
-                  body,
-                })
-                .then(replayResponse)
-            ),
-        }),
-      };
+      const db = yield* nativeTransactionJourney;
       const individual = (index: number): Promise<Response> =>
-        sendPublicRequest(
-          db,
+        db.send(
           new Request("https://api.fidyapp.com/transactions", {
             method: "POST",
             headers: {
@@ -6270,17 +6155,14 @@ it("serializes concurrent batches and individual mutations through one User coor
               "content-type": "application/json",
             },
             body: JSON.stringify(input({ counterparty: "Single" })),
-          }),
-          coordinator
+          })
         );
       const batch = (index: number, suffix: number): Promise<Response> =>
-        sendPublicRequest(
-          db,
+        db.send(
           batchRequest(index, [
             transactionCall(suffix, input({ counterparty: `Batch ${suffix}` })),
             transactionCall(suffix + 1, input({ counterparty: `Batch ${suffix + 1}` })),
-          ]),
-          coordinator
+          ])
         );
       const responses = yield* Effect.all(
         [
@@ -6293,16 +6175,14 @@ it("serializes concurrent batches and individual mutations through one User coor
       );
       expect(responses.map(({ status }) => status)).toEqual([201, 200, 200, 201]);
       const ownerList = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
+        db.send(
           new Request("https://api.fidyapp.com/transactions", {
             headers: {
               origin: "https://app.fidyapp.com",
               "Fidy-Session-Binding": sessions[0] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(0)}`,
             },
-          }),
-          coordinator
+          })
         )
       );
       const owner = yield* Schema.decodeUnknownEffect(Listed)(
@@ -6311,41 +6191,39 @@ it("serializes concurrent batches and individual mutations through one User coor
       expect(owner.data).toHaveLength(5);
       expect(new Set(owner.data.map(({ id }) => id)).size).toBe(5);
       const neighborList = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
+        db.send(
           new Request("https://api.fidyapp.com/transactions", {
             headers: {
               origin: "https://app.fidyapp.com",
               "Fidy-Session-Binding": sessions[1] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(1)}`,
             },
-          }),
-          coordinator
+          })
         )
       );
       const neighbor = yield* Schema.decodeUnknownEffect(Listed)(
         yield* fromTestPromise(() => neighborList.json())
       ).pipe(Effect.orDie);
       expect(neighbor.data).toHaveLength(1);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("attributes keyword capacity after a deletion and earlier creates without recount guessing", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       yield* fromTestPromise(() =>
-        db
-          .prepare(`WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM seq WHERE n < 98)
-      INSERT INTO keyword_rules (id, user_id, keyword,category_id,created_at_ms,updated_at_ms)
-      SELECT printf('40000000-0000-4000-8000-%012d', n), ?, 'seed ' || n, ?,
-      1788220800000, 1788220800000 FROM seq`)
-          .bind(users[0], category)
-          .run()
+        db.exec(
+          `WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM seq WHERE n < 98)
+      INSERT INTO keyword_rules (id, user_id, keyword,category_id,category_revision,created_at_ms,updated_at_ms)
+      SELECT printf('40000000-0000-4000-8000-%012d', n), ?, 'seed ' || n, ?, 'co-1',
+      1788220800000, 1788220800000 FROM seq`,
+          users[0] ?? "",
+          category
+        )
       );
       const refused = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
+        db.send(
           batchRequest(0, [
             deleteKeywordRuleCall(1, "40000000-0000-4000-8000-000000000000"),
             keywordRuleCall(2, "one new", category),
@@ -6362,7 +6240,7 @@ it("attributes keyword capacity after a deletion and earlier creates without rec
       expect(rejection.error.operation).toBe("categories.createKeywordRule");
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
             "SELECT COUNT(*) AS count FROM keyword_rules WHERE user_id = ?",
             users[0] ?? ""
@@ -6371,31 +6249,42 @@ it("attributes keyword capacity after a deletion and earlier creates without rec
       ).toBe(99);
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
             "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'categories.*' AND user_id = ? AND outcome = 'validation_failed'",
             users[0] ?? ""
           )
         )
       ).toBe(1);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("a PAT cannot read or correct another User's Transaction individually or after an earlier batch child", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const current = yield* Clock.currentTimeMillis;
       const token = `fin_${"a".repeat(8)}_${"b".repeat(43)}`;
       const neighborId = "30000000-0000-4000-8000-000000000007";
-      yield* seedPAT({ db, userId: users[0] ?? "", token, scopes: ["read", "write"], current });
+      yield* seedNativePAT({
+        db,
+        userId: users[0] ?? "",
+        token,
+        scopes: ["read", "write"],
+        current,
+      });
       yield* fromTestPromise(() =>
-        seedTransaction({ db, userId: users[1] ?? "", id: neighborId, categoryId: category })
+        seedNativeTransaction({
+          db,
+          notes: "seed",
+          userId: users[1] ?? "",
+          id: neighborId,
+          categoryId: category,
+        })
       );
       for (const method of ["GET", "PUT"] as const) {
         const response = yield* fromTestPromise(() =>
-          sendPublicRequest(
-            db,
+          db.send(
             new Request(`https://api.fidyapp.com/transactions/${neighborId}`, {
               method,
               headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
@@ -6413,8 +6302,7 @@ it("a PAT cannot read or correct another User's Transaction individually or afte
         expect(yield* fromTestPromise(() => response.text())).not.toContain("seed");
       }
       const batch = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
+        db.send(
           bearerRequest(0, token, [
             transactionCall(1, input()),
             correctionCall(2, neighborId, {
@@ -6432,7 +6320,7 @@ it("a PAT cannot read or correct another User's Transaction individually or afte
       ).toMatchObject({ code: "not_found", failedCallIndex: 1 });
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
             "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
             users[0] ?? ""
@@ -6442,35 +6330,37 @@ it("a PAT cannot read or correct another User's Transaction individually or afte
       expect(
         yield* fromTestPromise(() =>
           db
-            .prepare("SELECT notes, revision FROM transactions WHERE user_id = ?")
-            .bind(users[1])
-            .all()
+            .owner(users[1] ?? "")
+            .exec("SELECT notes, revision FROM transactions WHERE user_id=?", users[1] ?? "")
         )
-      ).toMatchObject({
-        results: [{ notes: "seed", revision: 0 }],
-      });
+      ).toEqual([{ notes: "seed", revision: 0 }]);
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
-            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE outcome = 'accepted' AND operation != 'transactions.getTransaction'"
+            "SELECT COUNT(*) AS count FROM audit_entries WHERE record_type='credential_call' AND outcome = 'accepted' AND operation != 'transactions.getTransaction'"
           )
         )
       ).toBe(0);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("fails closed on a foreign Transaction or an unknown Category without partial state", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const neighborId = "30000000-0000-4000-8000-000000000007";
       yield* fromTestPromise(() =>
-        seedTransaction({ db, userId: users[1] ?? "", id: neighborId, categoryId: category })
+        seedNativeTransaction({
+          db,
+          notes: "seed",
+          userId: users[1] ?? "",
+          id: neighborId,
+          categoryId: category,
+        })
       );
       const foreign = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
+        db.send(
           batchRequest(0, [
             transactionCall(1, input()),
             correctionCall(2, neighborId, { expectedRevision: 0, changes: { notes: "foreign" } }),
@@ -6486,7 +6376,7 @@ it("fails closed on a foreign Transaction or an unknown Category without partial
       expect(foreignRejection.error.operation).toBe("transactions.updateTransaction");
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
             "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
             users[0] ?? ""
@@ -6495,15 +6385,13 @@ it("fails closed on a foreign Transaction or an unknown Category without partial
       ).toBe(0);
       const neighborRows = yield* fromTestPromise(() =>
         db
-          .prepare("SELECT notes, revision FROM transactions WHERE user_id = ?")
-          .bind(users[1])
-          .all<{ notes: string; revision: number }>()
+          .owner(users[1] ?? "")
+          .exec("SELECT notes, revision FROM transactions WHERE user_id = ?", users[1] ?? "")
       );
-      expect(neighborRows.results).toEqual([{ notes: "seed", revision: 0 }]);
+      expect(neighborRows).toEqual([{ notes: "seed", revision: 0 }]);
 
       const unrecognized = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
+        db.send(
           batchRequest(0, [
             transactionCall(1, input()),
             transactionCall(2, input({ categoryId: "10000000-0000-4000-8000-000000009999" })),
@@ -6519,17 +6407,21 @@ it("fails closed on a foreign Transaction or an unknown Category without partial
       expect(unrecognizedRejection.error.operation).toBe("transactions.createTransaction");
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
             "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
             users[0] ?? ""
           )
         )
       ).toBe(0);
-      const refusals = yield* fromTestPromise(() => auditedOperations(db, users[0] ?? ""));
-      expect(refusals.map(({ outcome }) => outcome)).toEqual(["not_found", "not_found"]);
-      expect(new Set(refusals.map(({ operation }) => operation)).size).toBe(2);
-    })
+      const refusals = yield* fromTestPromise(() => nativeAuditedOperations(db, users[0] ?? ""));
+      expect(refusals).toEqual([
+        { operation: "transactions.updateTransaction", outcome: "not_found" },
+        { operation: "operations.executeAtomicBatch", outcome: "validation_failed" },
+        { operation: "transactions.createTransaction", outcome: "not_found" },
+        { operation: "operations.executeAtomicBatch", outcome: "validation_failed" },
+      ]);
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("maps a batch dependency defect to the closed unavailable failure without partial state", () =>
@@ -6567,17 +6459,28 @@ it("maps a batch dependency defect to the closed unavailable failure without par
 it("records a PAT refusal Audit for a refused batch child without partial writes", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const seededId = "30000000-0000-4000-8000-000000000008";
       yield* fromTestPromise(() =>
-        seedTransaction({ db, userId: users[0] ?? "", id: seededId, categoryId: category })
+        seedNativeTransaction({
+          db,
+          notes: "seed",
+          userId: users[0] ?? "",
+          id: seededId,
+          categoryId: category,
+        })
       );
       const current = yield* Clock.currentTimeMillis;
       const writeToken = `fin_${"t".repeat(8)}_${"c".repeat(43)}`;
-      yield* seedPAT({ db, userId: users[0] ?? "", token: writeToken, scopes: ["write"], current });
+      yield* seedNativePAT({
+        db,
+        userId: users[0] ?? "",
+        token: writeToken,
+        scopes: ["write"],
+        current,
+      });
       const refused = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
+        db.send(
           bearerRequest(0, writeToken, [
             transactionCall(1, input()),
             correctionCall(2, seededId, { expectedRevision: 9, changes: { notes: "stale" } }),
@@ -6591,52 +6494,55 @@ it("records a PAT refusal Audit for a refused batch child without partial writes
       expect(rejection.error.code).toBe("validation_failed");
       expect(rejection.error.failedCallIndex).toBe(1);
       expect(rejection.error.operation).toBe("transactions.updateTransaction");
-      const refusals = yield* fromTestPromise(() => auditedPATOperations(db, users[0] ?? ""));
+      const refusals = yield* fromTestPromise(() =>
+        db.exec(
+          "SELECT operation,outcome FROM audit_entries WHERE record_type='credential_call' ORDER BY rowid"
+        )
+      );
       expect(refusals).toEqual([
         { operation: "transactions.updateTransaction", outcome: "rejected" },
+        { operation: "operations.executeAtomicBatch", outcome: "rejected" },
       ]);
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
             "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
             users[0] ?? ""
           )
         )
       ).toBe(1);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("refuses a batch under a revoked session, revoked PAT, or withdrawn Consent without writes", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const current = yield* Clock.currentTimeMillis;
       const token = `fin_${"v".repeat(8)}_${"e".repeat(43)}`;
-      yield* seedPAT({ db, userId: users[0] ?? "", token, scopes: ["write"], current });
+      yield* seedNativePAT({ db, userId: users[0] ?? "", token, scopes: ["write"], current });
       yield* fromTestPromise(() =>
-        db
-          .prepare("UPDATE web_sessions SET revoked_at_ms = ? WHERE id = ?")
-          .bind(current, sessions[0])
-          .run()
+        db.exec(
+          "UPDATE web_sessions SET revoked_at_ms = ? WHERE id = ?",
+          current,
+          sessions[0] ?? ""
+        )
       );
       const revokedSession = yield* fromTestPromise(() =>
-        sendPublicRequest(db, batchRequest(0, [transactionCall(1, input())]))
+        db.send(batchRequest(0, [transactionCall(1, input())]))
       );
       expect(revokedSession.status).toBe(401);
       yield* fromTestPromise(() =>
-        db
-          .prepare("UPDATE pats SET revoked_at_ms = ? WHERE short_id = ?")
-          .bind(current, token.slice(4, 12))
-          .run()
+        db.exec("UPDATE pats SET revoked_at_ms = ? WHERE short_id = ?", current, token.slice(4, 12))
       );
       const revokedPAT = yield* fromTestPromise(() =>
-        sendPublicRequest(db, bearerRequest(0, token, [transactionCall(1, input())]))
+        db.send(bearerRequest(0, token, [transactionCall(1, input())]))
       );
       expect(revokedPAT.status).toBe(401);
 
       const neighborToken = `fin_${"w".repeat(8)}_${"f".repeat(43)}`;
-      yield* seedPAT({
+      yield* seedNativePAT({
         db,
         userId: users[1] ?? "",
         token: neighborToken,
@@ -6646,22 +6552,29 @@ it("refuses a batch under a revoked session, revoked PAT, or withdrawn Consent w
       const grantId = "50000000-0000-4000-8000-000000000001";
       yield* fromTestPromise(() =>
         db
-          .prepare(
-            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
+          .owner(users[1] ?? "")
+          .exec(
+            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`,
+            grantId,
+            users[1] ?? "",
+            current,
+            current
           )
-          .bind(grantId, users[1], current, current)
-          .run()
       );
       yield* fromTestPromise(() =>
         db
-          .prepare(
-            `INSERT INTO consent_history(record_type,id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES ('processing_withdrawal',?,?,?,?,?)`
+          .owner(users[1] ?? "")
+          .exec(
+            `INSERT INTO consent_history(record_type,id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES ('processing_withdrawal',?,?,?,?,?)`,
+            "50000000-0000-4000-8000-000000000002",
+            users[1] ?? "",
+            grantId,
+            sessions[1] ?? "",
+            current
           )
-          .bind("50000000-0000-4000-8000-000000000002", users[1], grantId, sessions[1], current)
-          .run()
       );
       const withdrawn = yield* fromTestPromise(() =>
-        sendPublicRequest(db, bearerRequest(1, neighborToken, [transactionCall(1, input())]))
+        db.send(bearerRequest(1, neighborToken, [transactionCall(1, input())]))
       );
       expect(withdrawn.status).toBe(403);
       const withdrawal = yield* Schema.decodeUnknownEffect(CallerFailure)(
@@ -6669,31 +6582,32 @@ it("refuses a batch under a revoked session, revoked PAT, or withdrawn Consent w
       ).pipe(Effect.orDie);
       expect(withdrawal.error.code).toBe("user_action_required");
       const neighborSession = yield* fromTestPromise(() =>
-        sendPublicRequest(db, batchRequest(1, [transactionCall(1, input())]))
+        db.send(batchRequest(1, [transactionCall(1, input())]))
       );
       expect(neighborSession.status).toBe(401);
 
       expect(
-        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
+        yield* fromTestPromise(() =>
+          nativeCountRows(db, "SELECT COUNT(*) AS count FROM transactions")
+        )
       ).toBe(0);
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
             "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch')"
           )
         )
       ).toBe(0);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("attributes a malformed child to its index and Audit while an unshaped body stays unattributed", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const malformed = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
+        db.send(
           new Request("https://api.fidyapp.com/operations/atomic-batch", {
             method: "POST",
             headers: {
@@ -6721,15 +6635,17 @@ it("attributes a malformed child to its index and Audit while an unshaped body s
       expect(childFailure.error.code).toBe("validation_failed");
       expect(childFailure.error.failedCallIndex).toBe(0);
       expect(childFailure.error.operation).toBe("transactions.createTransaction");
-      const refusals = yield* fromTestPromise(() => auditedOperations(db, users[0] ?? ""));
+      const refusals = yield* fromTestPromise(() => nativeAuditedOperations(db, users[0] ?? ""));
       expect(refusals).toEqual([
         { operation: "transactions.createTransaction", outcome: "validation_failed" },
       ]);
       expect(
-        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
+        yield* fromTestPromise(() =>
+          nativeCountRows(db, "SELECT COUNT(*) AS count FROM transactions")
+        )
       ).toBe(0);
 
-      const unshaped = yield* fromTestPromise(() => sendPublicRequest(db, batchRequest(0, [])));
+      const unshaped = yield* fromTestPromise(() => db.send(batchRequest(0, [])));
       expect(unshaped.status).toBe(400);
       const unshapedFailure = yield* Schema.decodeUnknownEffect(CallerFailure)(
         yield* fromTestPromise(() => unshaped.json())
@@ -6737,23 +6653,23 @@ it("attributes a malformed child to its index and Audit while an unshaped body s
       expect(unshapedFailure.error.code).toBe("validation_failed");
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
             "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch')"
           )
         )
       ).toBe(2);
-      expect(yield* fromTestPromise(() => auditedOperations(db, users[0] ?? ""))).toEqual([
+      expect(yield* fromTestPromise(() => nativeAuditedOperations(db, users[0] ?? ""))).toEqual([
         { operation: "transactions.createTransaction", outcome: "validation_failed" },
         { operation: "operations.executeAtomicBatch", outcome: "validation_failed" },
       ]);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("records one metadata-only refusal for each malformed batch envelope", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
 
       const rawBatch = (body: object): Request =>
         new Request("https://api.fidyapp.com/operations/atomic-batch", {
@@ -6781,7 +6697,8 @@ it("records one metadata-only refusal for each malformed batch envelope", () =>
         },
       ];
       for (const body of bodies) {
-        const response = yield* fromTestPromise(() => sendPublicRequest(db, rawBatch(body)));
+        yield* Effect.sleep("100 millis");
+        const response = yield* fromTestPromise(() => db.send(rawBatch(body)));
         expect(response.status, `envelope ${bodies.indexOf(body)}`).toBe(400);
         const failure = yield* Schema.decodeUnknownEffect(CallerFailure)(
           yield* fromTestPromise(() => response.json())
@@ -6789,16 +6706,14 @@ it("records one metadata-only refusal for each malformed batch envelope", () =>
         expect(failure.error.code).toBe("validation_failed");
       }
       const audits = yield* fromTestPromise(() =>
-        db
-          .prepare(
-            "SELECT user_id, session_id, operation, outcome FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch') AND user_id = ?"
-          )
-          .bind(users[0])
-          .all()
+        db.exec(
+          "SELECT user_id, session_id, operation, outcome FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch') AND user_id = ?",
+          users[0] ?? ""
+        )
       );
-      expect(audits.results).toHaveLength(bodies.length);
+      expect(audits).toHaveLength(bodies.length);
       expect(
-        audits.results.map((row) => ({
+        audits.map((row) => ({
           user_id: row.user_id,
           session_id: row.session_id,
           operation: row.operation,
@@ -6814,26 +6729,27 @@ it("records one metadata-only refusal for each malformed batch envelope", () =>
       );
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
             "SELECT count(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'transactions.*'"
           )
         )
       ).toBe(0);
       expect(
-        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
+        yield* fromTestPromise(() =>
+          nativeCountRows(db, "SELECT COUNT(*) AS count FROM transactions")
+        )
       ).toBe(0);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("does not misattribute a repeated callId with a malformed later operation to the envelope", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const first = transactionCall(1, input());
       const response = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
+        db.send(
           new Request("https://api.fidyapp.com/operations/atomic-batch", {
             method: "POST",
             headers: {
@@ -6850,8 +6766,7 @@ it("does not misattribute a repeated callId with a malformed later operation to 
       );
       expect(response.status).toBe(400);
       const later = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
+        db.send(
           new Request("https://api.fidyapp.com/operations/atomic-batch", {
             method: "POST",
             headers: {
@@ -6868,8 +6783,7 @@ it("does not misattribute a repeated callId with a malformed later operation to 
       );
       expect(later.status).toBe(400);
       const unsupportedFirst = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
+        db.send(
           new Request("https://api.fidyapp.com/operations/atomic-batch", {
             method: "POST",
             headers: {
@@ -6890,25 +6804,26 @@ it("does not misattribute a repeated callId with a malformed later operation to 
       expect(unsupportedFirst.status).toBe(400);
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
-            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch')"
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call' AND outcome='success') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch')"
           )
         )
       ).toBe(0);
       expect(
-        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
+        yield* fromTestPromise(() =>
+          nativeCountRows(db, "SELECT COUNT(*) AS count FROM transactions")
+        )
       ).toBe(0);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("records an envelope when a non-canonical first child prevents a later child from being admitted", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const response = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
+        db.send(
           new Request("https://api.fidyapp.com/operations/atomic-batch", {
             method: "POST",
             headers: {
@@ -6927,57 +6842,59 @@ it("records an envelope when a non-canonical first child prevents a later child 
         )
       );
       expect(response.status).toBe(400);
-      expect(yield* fromTestPromise(() => auditedOperations(db, users[0] ?? ""))).toEqual([
+      expect(yield* fromTestPromise(() => nativeAuditedOperations(db, users[0] ?? ""))).toEqual([
         { operation: "operations.executeAtomicBatch", outcome: "validation_failed" },
       ]);
       expect(
-        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
+        yield* fromTestPromise(() =>
+          nativeCountRows(db, "SELECT COUNT(*) AS count FROM transactions")
+        )
       ).toBe(0);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("records a batch envelope for a PAT without the child's scope, but never for dead credentials", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const current = yield* Clock.currentTimeMillis;
       const token = `fin_${"q".repeat(8)}_${"z".repeat(43)}`;
-      yield* seedPAT({ db, userId: users[0] ?? "", token, scopes: ["read"], current });
-      const envelope = yield* fromTestPromise(() =>
-        sendPublicRequest(db, bearerRequest(0, token, []))
-      );
+      yield* seedNativePAT({ db, userId: users[0] ?? "", token, scopes: ["read"], current });
+      const envelope = yield* fromTestPromise(() => db.send(bearerRequest(0, token, [])));
       expect(envelope.status).toBe(400);
-      expect(yield* fromTestPromise(() => auditedPATOperations(db, users[0] ?? ""))).toEqual([
-        { operation: "operations.executeAtomicBatch", outcome: "rejected" },
-      ]);
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          db.exec(
+            "SELECT operation,outcome FROM audit_entries WHERE record_type='credential_call' ORDER BY rowid"
+          )
+        )
+      ).toEqual([{ operation: "operations.executeAtomicBatch", outcome: "rejected" }]);
+      expect(
+        yield* fromTestPromise(() =>
+          nativeCountRows(
             db,
             "SELECT count(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'transactions.*'"
           )
         )
       ).toBe(0);
       const child = yield* fromTestPromise(() =>
-        sendPublicRequest(db, bearerRequest(0, token, [transactionCall(1, input())]))
+        db.send(bearerRequest(0, token, [transactionCall(1, input())]))
       );
       expect(child.status).toBe(403);
-      expect(yield* fromTestPromise(() => auditedPATOperations(db, users[0] ?? ""))).toHaveLength(
-        2
-      );
-      yield* fromTestPromise(() =>
-        db
-          .prepare("UPDATE pats SET revoked_at_ms = ? WHERE short_id = ?")
-          .bind(current, token.slice(4, 12))
-          .run()
-      );
       expect(
-        (yield* fromTestPromise(() => sendPublicRequest(db, bearerRequest(0, token, [])))).status
-      ).toBe(401);
+        yield* fromTestPromise(() =>
+          db.exec(
+            "SELECT operation,outcome FROM audit_entries WHERE record_type='credential_call' ORDER BY rowid"
+          )
+        )
+      ).toHaveLength(3);
+      yield* fromTestPromise(() =>
+        db.exec("UPDATE pats SET revoked_at_ms = ? WHERE short_id = ?", current, token.slice(4, 12))
+      );
+      expect((yield* fromTestPromise(() => db.send(bearerRequest(0, token, [])))).status).toBe(401);
       expect(
         (yield* fromTestPromise(() =>
-          sendPublicRequest(
-            db,
+          db.send(
             new Request("https://api.fidyapp.com/operations/atomic-batch", {
               method: "POST",
               headers: { origin: "https://app.fidyapp.com", "content-type": "application/json" },
@@ -6986,21 +6903,27 @@ it("records a batch envelope for a PAT without the child's scope, but never for 
           )
         )).status
       ).toBe(401);
-      expect(yield* fromTestPromise(() => auditedPATOperations(db, users[0] ?? ""))).toHaveLength(
-        2
-      );
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          db.exec(
+            "SELECT operation,outcome FROM audit_entries WHERE record_type='credential_call' ORDER BY rowid"
+          )
+        )
+      ).toHaveLength(3);
+      expect(
+        yield* fromTestPromise(() =>
+          nativeCountRows(
             db,
             "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch')"
           )
         )
       ).toBe(0);
       expect(
-        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
+        yield* fromTestPromise(() =>
+          nativeCountRows(db, "SELECT COUNT(*) AS count FROM transactions")
+        )
       ).toBe(0);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it.each([
@@ -7027,10 +6950,9 @@ it.each([
   ({ path, payload, call }) =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const db = yield* fromTestPromise(() => setup());
+        const db = yield* nativeTransactionJourney;
         const individual = yield* fromTestPromise(() =>
-          sendPublicRequest(
-            db,
+          db.send(
             new Request(`https://api.fidyapp.com${path}`, {
               method: "PUT",
               headers: {
@@ -7048,10 +6970,12 @@ it.each([
           yield* fromTestPromise(() => individual.json())
         ).pipe(Effect.orDie);
         expect(individualFailure.error.code).toBe("not_found");
-        const individualAudit = yield* fromTestPromise(() => auditedOperations(db, users[0] ?? ""));
+        const individualAudit = yield* fromTestPromise(() =>
+          nativeAuditedOperations(db, users[0] ?? "")
+        );
         expect(individualAudit).toEqual([{ operation: call.operation, outcome: "not_found" }]);
 
-        const batch = yield* fromTestPromise(() => sendPublicRequest(db, batchRequest(0, [call])));
+        const batch = yield* fromTestPromise(() => db.send(batchRequest(0, [call])));
         expect(batch.status).toBe(400);
         const refusal = yield* Schema.decodeUnknownEffect(BatchRejection)(
           yield* fromTestPromise(() => batch.json())
@@ -7059,21 +6983,23 @@ it.each([
         expect(refusal.error.code).toBe(individualFailure.error.code);
         expect(refusal.error.failedCallIndex).toBe(0);
         expect(refusal.error.operation).toBe(call.operation);
-        expect(yield* fromTestPromise(() => auditedOperations(db, users[0] ?? ""))).toEqual([
+        expect(yield* fromTestPromise(() => nativeAuditedOperations(db, users[0] ?? ""))).toEqual([
           ...individualAudit,
           { operation: call.operation, outcome: individualFailure.error.code },
+          ...(path.includes("not-a-")
+            ? []
+            : [{ operation: "operations.executeAtomicBatch", outcome: "validation_failed" }]),
         ]);
-      })
+      }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
     )
 );
 
 it("answers an unstable retained id the same in a batch child as on its individual route", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const response = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
+        db.send(
           batchRequest(0, [
             transactionCall(1, input({ counterparty: "Acme" })),
             correctionCall(2, "not-a-transaction-id", {
@@ -7092,31 +7018,38 @@ it("answers an unstable retained id the same in a batch child as on its individu
       expect(rejection.error.operation).toBe("transactions.updateTransaction");
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
             "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
             users[0] ?? ""
           )
         )
       ).toBe(0);
-      const refusedAudits = yield* fromTestPromise(() => auditedOperations(db, users[0] ?? ""));
+      const refusedAudits = yield* fromTestPromise(() =>
+        nativeAuditedOperations(db, users[0] ?? "")
+      );
       expect(refusedAudits).toEqual([
         { operation: "transactions.updateTransaction", outcome: "not_found" },
       ]);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("attributes a repeated observed revision to the later correction without partial state", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const seededId = "30000000-0000-4000-8000-000000000009";
       yield* fromTestPromise(() =>
-        seedTransaction({ db, userId: users[0] ?? "", id: seededId, categoryId: category })
+        seedNativeTransaction({
+          db,
+          notes: "seed",
+          userId: users[0] ?? "",
+          id: seededId,
+          categoryId: category,
+        })
       );
       const repeated = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
+        db.send(
           batchRequest(0, [
             correctionCall(1, seededId, { expectedRevision: 0, changes: { notes: "first" } }),
             correctionCall(2, seededId, { expectedRevision: 0, changes: { notes: "second" } }),
@@ -7131,17 +7064,21 @@ it("attributes a repeated observed revision to the later correction without part
       expect(rejection.error.failedCallIndex).toBe(1);
       expect(rejection.error.operation).toBe("transactions.updateTransaction");
       const retained = yield* fromTestPromise(() =>
-        db
-          .prepare("SELECT notes, revision FROM transactions WHERE user_id = ? AND id = ?")
-          .bind(users[0], seededId)
-          .all<{ notes: string; revision: number }>()
+        db.exec(
+          "SELECT notes, revision FROM transactions WHERE user_id = ? AND id = ?",
+          users[0] ?? "",
+          seededId
+        )
       );
-      expect(retained.results).toEqual([{ notes: "seed", revision: 0 }]);
-      const refusedAudits = yield* fromTestPromise(() => auditedOperations(db, users[0] ?? ""));
+      expect(retained).toEqual([{ notes: "seed", revision: 0 }]);
+      const refusedAudits = yield* fromTestPromise(() =>
+        nativeAuditedOperations(db, users[0] ?? "")
+      );
       expect(refusedAudits).toEqual([
         { operation: "transactions.updateTransaction", outcome: "validation_failed" },
+        { operation: "operations.executeAtomicBatch", outcome: "validation_failed" },
       ]);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("does not misattribute an unrelated earlier abort to a repeated-revision correction", () =>

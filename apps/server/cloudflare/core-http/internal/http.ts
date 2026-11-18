@@ -1,4 +1,8 @@
 import {
+  executeCanonicalHttpQuery,
+  isLocalBatchRoute,
+} from "../../canonical-operations/operations";
+import {
   routeBootstrapRequest,
   routeBrowserSession,
   routePATRequest,
@@ -127,7 +131,7 @@ import {
 
 import { prepareBoundPATList, resolveCanonicalPATCredential } from "../../tokens/operations";
 import { rejectMemoryMutation } from "../../memory/operations";
-import { executeCanonicalHttpQuery } from "../../canonical-operations/operations";
+
 import { canonicalOperation, canonicalRoute } from "../../routing/operations";
 import {
   BatchInput,
@@ -1749,6 +1753,7 @@ const browserCanonicalResponse = (
   );
 
 const isUserStoreOperation = (id: string): boolean =>
+  isLocalBatchRoute(id) ||
   isLocalTransactionOperation(id) ||
   isLocalDashboardOperation(id) ||
   isLocalRecurringPlan(id) ||

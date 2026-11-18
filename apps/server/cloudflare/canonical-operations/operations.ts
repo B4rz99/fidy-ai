@@ -1,3 +1,15 @@
+import { recurringDiscoveryIntervalMs } from "../recurring/contract";
+import { localBatchOwners } from "./internal/local-owners";
+import { keywordRuleIdFromPath, localKeywordRules } from "../categories/operations";
+import {
+  admitCanonicalOperation,
+  canonicalAdmissionUnavailable,
+  commitLocalWrite,
+  localCanonicalArguments,
+  runLocalBatch,
+  runLocalMutation,
+} from "../canonical-admission/operations";
+import { preserveStoreAlarm } from "../runtime/sqlite/operations";
 import type { CanonicalReadCompletion } from "../canonical-admission/contract";
 import { requestFor } from "./internal/canonical-request";
 import { observeCanonicalResponse } from "../runtime/application-observation/operations";
@@ -5,7 +17,7 @@ import {
   executeHostedStatementCall as heldStatementCall,
   executeHostedStatementQuery as heldStatementQuery,
 } from "./internal/hosted-statement";
-import { admitCanonicalOperation } from "../canonical-admission/operations";
+
 import { Cause, Clock, Effect, Exit, Option, Schema } from "effect";
 import { type OAuthCaller } from "../../src/shell/oauth-agents/contract";
 import { HostedInference } from "../../src/shell/hosted-inference/operations";
@@ -711,3 +723,65 @@ export const executeCanonicalQuery = ({
       browserOrigin: Option.none(),
     });
   });
+
+/** Native batch dispatch and the individual keyword and group-correction entry points. */
+const successfulMutationStatus = 200;
+export const isLocalBatchRoute = (id: string): boolean =>
+  id === atomicBatchOperation ||
+  id === "transactions.updateTransactions" ||
+  [
+    "categories.createKeywordRule",
+    "categories.updateKeywordRule",
+    "categories.deleteKeywordRule",
+    "categories.listKeywordRules",
+  ].includes(id);
+export const dispatchLocalBatchRoute = Effect.fn(
+  function* (unit: {
+    operation: CatalogOperation;
+    request: Request;
+    storage: DurableObjectStorage;
+    owns: (id: string) => boolean;
+  }) {
+    if (unit.operation.id === atomicBatchOperation) {
+      return yield* runLocalBatch(unit, localBatchOwners);
+    }
+    if (unit.operation.id === "categories.listKeywordRules") {
+      return yield* runLocalMutation({
+        ...unit,
+        input: Effect.succeedSome(true),
+        work: (_empty, user) => localKeywordRules(user),
+      });
+    }
+    const prepare = localBatchOwners.get(unit.operation.id);
+    if (prepare === undefined) return canonicalAdmissionUnavailable();
+    return yield* runLocalMutation(
+      {
+        ...unit,
+        input: localCanonicalArguments(unit.request, unit.operation),
+        work: (input, user, current) =>
+          prepare(input, { user, current, storage: unit.storage }).pipe(
+            Effect.flatMap(commitLocalWrite),
+            Effect.tap((result) =>
+              unit.operation.id === "transactions.updateTransactions" &&
+              result.status === successfulMutationStatus
+                ? preserveStoreAlarm(unit.storage, current + recurringDiscoveryIntervalMs)
+                : Effect.void
+            )
+          ),
+      },
+      (unit.operation.id === "categories.updateKeywordRule" ||
+        unit.operation.id === "categories.deleteKeywordRule") &&
+        Option.isNone(keywordRuleIdFromPath(unit.request))
+        ? Option.some({
+            status: 404,
+            outcome: "not_found",
+            body: {
+              error: { code: "not_found", message: "No keyword rule with that id belongs to you." },
+              next: [],
+            },
+          })
+        : Option.none()
+    );
+  },
+  Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+);

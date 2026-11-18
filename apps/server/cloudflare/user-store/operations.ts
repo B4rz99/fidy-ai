@@ -806,6 +806,28 @@ END`,
   `CREATE INDEX recurring_series_by_order ON recurring_series(user_id, currency, counterparty_key, id)`,
 ] as const;
 
+const atomicBatchReceipts = [
+  `DROP TRIGGER recurring_receipt_parts_parent`,
+  `ALTER TABLE recurring_receipt_parts RENAME TO receipt_parts_before_batch`,
+  `ALTER TABLE canonical_request_receipts RENAME TO receipts_before_batch`,
+  `CREATE TABLE canonical_request_receipts (
+    user_id TEXT NOT NULL REFERENCES users(id),retry_key_digest TEXT NOT NULL CHECK(length(retry_key_digest)=64),
+    operation TEXT NOT NULL,input_digest TEXT NOT NULL CHECK(length(input_digest)=64),
+    accepted_at_ms INTEGER NOT NULL,status INTEGER NOT NULL CHECK(status BETWEEN 200 AND 499),
+    body TEXT, PRIMARY KEY(user_id,retry_key_digest),
+    CHECK(body IS NULL OR (operation IN ('subscription.cancelSubscription','transactions.createTransaction','transactions.updateTransaction','transactions.linkTransactions','transactions.unlinkTransactions','budgets.createBudget','budgets.updateBudget','budgets.deleteBudget','dashboard.initializeDashboard','dashboard.applyDashboardEdit','recurringPlans.applyRecurringEdit','transactions.deleteTransaction','operations.executeAtomicBatch','categories.createKeywordRule','categories.updateKeywordRule','categories.deleteKeywordRule','transactions.updateTransactions') AND json_valid(body)))
+  ) STRICT`,
+  `CREATE TABLE canonical_receipt_parts(user_id TEXT NOT NULL,retry_key_digest TEXT NOT NULL,position INTEGER NOT NULL CHECK(position>=0),part TEXT NOT NULL,PRIMARY KEY(user_id,retry_key_digest,position), FOREIGN KEY(user_id,retry_key_digest) REFERENCES canonical_request_receipts(user_id,retry_key_digest) ON DELETE CASCADE) STRICT`,
+  `CREATE TRIGGER canonical_receipt_parts_parent BEFORE INSERT ON canonical_receipt_parts
+    WHEN NOT EXISTS(SELECT 1 FROM canonical_request_receipts WHERE user_id=NEW.user_id AND retry_key_digest=NEW.retry_key_digest AND operation IN ('recurringPlans.applyRecurringEdit','operations.executeAtomicBatch') AND json_type(body)='integer')
+    BEGIN SELECT RAISE(ABORT,'invalid_recurring_receipt'); END`,
+  `INSERT INTO canonical_request_receipts SELECT * FROM receipts_before_batch`,
+  `INSERT INTO canonical_receipt_parts SELECT * FROM receipt_parts_before_batch`,
+  `DROP TABLE receipt_parts_before_batch`,
+  `DROP TABLE receipts_before_batch`,
+  `CREATE INDEX canonical_receipt_expiry ON canonical_request_receipts(accepted_at_ms)`,
+] as const;
+
 export const userStoreHistory: StoreHistory = {
   owner: "user",
   steps: [
@@ -850,6 +872,7 @@ export const userStoreHistory: StoreHistory = {
       ],
     },
     { version: 11, id: "native-recurring", statements: recurringSchema },
+    { version: 12, id: "atomic-batch-receipts", statements: atomicBatchReceipts },
   ],
 };
 

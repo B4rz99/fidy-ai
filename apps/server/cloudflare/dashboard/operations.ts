@@ -468,3 +468,5 @@ export const isLocalDashboardOperation: typeof localDashboard.isLocalDashboardOp
   localDashboard.isLocalDashboardOperation(id);
 export const dispatchLocalDashboard: typeof localDashboard.dispatchLocalDashboard = (unit) =>
   localDashboard.dispatchLocalDashboard(unit);
+export const prepareLocalDashboard: typeof localDashboard.prepareLocalDashboard = (user, edit) =>
+  localDashboard.prepareLocalDashboard(user, edit);

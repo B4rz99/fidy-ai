@@ -256,6 +256,62 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       })
   );
   test.effect(
+    "independent Currency caps share a Category and a capacity failure rolls back the batch",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* nativeTransactionJourney;
+        const calls = ["USD", "XAF"].map((currency, index) => ({
+          callId: index === 0 ? alice.session : bob.session,
+          operation: "budgets.createBudget",
+          input: { payload: { categoryId: category, cap: { amount: "1", currency } } },
+        }));
+        const submit = (): Effect.Effect<Response> =>
+          native(() =>
+            db.send(
+              new Request("https://api.fidyapp.com/operations/atomic-batch", {
+                method: "POST",
+                headers: {
+                  origin: "https://app.fidyapp.com",
+                  cookie: "__Host-fidy_session=" + alice.bearer,
+                  "Fidy-Session-Binding": alice.session,
+                  "content-type": "application/json",
+                },
+                body: JSON.stringify({
+                  calls,
+                }),
+              })
+            )
+          );
+        const accepted = yield* submit();
+        expect(accepted.status).toBe(200);
+        expect(yield* readJson(accepted)).toMatchObject({
+          data: {
+            results: [
+              { output: { data: { cap: { currency: "USD" } } } },
+              { output: { data: { cap: { currency: "XAF" } } } },
+            ],
+          },
+        });
+        yield* native(() => db.exec("DELETE FROM budgets"));
+        yield* native(() =>
+          db.exec(
+            "INSERT INTO budgets(id,user_id,category_id,category_revision,currency,cap,created_at_ms,updated_at_ms) SELECT printf('20000000-0000-4000-8000-%012d',key),?,?,'co-1',value,'1',0,0 FROM json_each(?)",
+            alice.user,
+            category,
+            JSON.stringify(Currency.literals.slice(0, 127))
+          )
+        );
+        const refused = yield* submit();
+        expect(refused.status).toBe(400);
+        expect(yield* readJson(refused)).toMatchObject({
+          error: { failedCallIndex: 1, operation: "budgets.createBudget" },
+        });
+        expect(yield* native(() => db.exec("SELECT count(*) AS budgets FROM budgets"))).toEqual([
+          { budgets: 127 },
+        ]);
+      })
+  );
+  test.effect(
     "materializes all 128 supported Budgets and refuses a concurrent create at capacity",
     () =>
       Effect.gen(function* () {

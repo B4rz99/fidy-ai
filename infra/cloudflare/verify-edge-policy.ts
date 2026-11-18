@@ -2,8 +2,29 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "5de23de4e0b427132b3cd73608e12b0b58a4303e082d94c7aad8589aa5e08c8d";
+const expectedEdgePolicyDigest = "29afae1fa36144ed1d145b3a510061cb3939f90938534f9c9a4bc2a2fb343090";
 const securityArtifacts = [
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/canonical-admission/internal/local-batch.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/canonical-operations/internal/local-owners.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/canonical-operations/operations.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/categories/internal/sqlite-keyword.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/recurring-plans/operations.ts", import.meta.url)
+  ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/recurring/internal/sqlite-series.ts", import.meta.url)
   ).text(),

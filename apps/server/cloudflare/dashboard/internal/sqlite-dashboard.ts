@@ -1,3 +1,9 @@
+import {
+  canonicalAdmissionUnavailable,
+  commitLocalWrite,
+  prepareLocalWrite,
+  runLocalMutation,
+} from "../../canonical-admission/operations";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import {
@@ -17,10 +23,7 @@ import type { CatalogOperation } from "../../../src/shell/canonical-catalog/cont
 import { DashboardUnavailable, DashboardView } from "../../../src/shell/dashboard/contract";
 import { renderDashboardView } from "../../../src/shell/dashboard/operations";
 import { type LocalMutationResult } from "../../canonical-admission/contract";
-import {
-  canonicalAdmissionUnavailable,
-  runLocalMutation,
-} from "../../canonical-admission/operations";
+
 import { boundedJsonBody } from "../../http/operations";
 import { defaultDocument } from "./dashboard-mutation";
 import { localDashboardFacts } from "./dashboard-view";
@@ -89,7 +92,7 @@ const editDocument = Effect.fn(function* (base: DashboardDocument, edit: Dashboa
   );
   return valid ? Result.succeed(result.success) : Result.fail(invalidEdit);
 });
-const writeDocument = Effect.fn(function* (
+export const prepareDashboardDocument = Effect.fn(function* (
   user: UserId,
   stored: Option.Option<typeof StoredDocument.Type>,
   edit: Option.Option<DashboardEdit>
@@ -102,16 +105,21 @@ const writeDocument = Effect.fn(function* (
   const result = Option.isSome(edit) ? yield* editDocument(base, edit.value) : Result.succeed(base);
   if (Result.isFailure(result)) return result.failure;
   const document = result.success;
-  if (Option.isNone(stored) || Option.isSome(edit)) {
-    const encoded = yield* Schema.encodeEffect(documentJson)(document);
-    const expected = Option.match(stored, { onNone: () => 0, onSome: (row) => row.revision });
-    const revision = expected + (Option.isNone(stored) && Option.isSome(edit) ? 2 : 1);
-    const written =
-      yield* sql`INSERT INTO user_documents(user_id,kind,document_json,revision) VALUES(${user},'dashboard',${encoded},${revision})
+  return prepareLocalWrite({
+    targets: ["dashboard-document"],
+    commit: Effect.gen(function* () {
+      if (Option.isNone(stored) || Option.isSome(edit)) {
+        const encoded = yield* Schema.encodeEffect(documentJson)(document);
+        const expected = Option.match(stored, { onNone: () => 0, onSome: (row) => row.revision });
+        const revision = expected + (Option.isNone(stored) && Option.isSome(edit) ? 2 : 1);
+        const written =
+          yield* sql`INSERT INTO user_documents(user_id,kind,document_json,revision) VALUES(${user},'dashboard',${encoded},${revision})
       ON CONFLICT(user_id,kind) DO UPDATE SET document_json=excluded.document_json,revision=excluded.revision WHERE revision=${expected} RETURNING revision`;
-    if (written.length !== 1) return yield* new DashboardUnavailable();
-  }
-  return success(yield* Schema.encodeEffect(Schema.toCodecJson(DashboardDocument))(document));
+        if (written.length !== 1) return yield* new DashboardUnavailable();
+      }
+      return success(yield* Schema.encodeEffect(Schema.toCodecJson(DashboardDocument))(document));
+    }),
+  });
 });
 const runDashboard = Effect.fn(function* (
   {
@@ -130,7 +138,9 @@ const runDashboard = Effect.fn(function* (
     operation === "dashboard.applyDashboardEdit" ||
     operation === "dashboard.initializeDashboard"
   ) {
-    return yield* writeDocument(user, stored, edit);
+    return yield* prepareDashboardDocument(user, stored, edit).pipe(
+      Effect.flatMap(commitLocalWrite)
+    );
   }
   if (Option.isNone(stored)) return missing;
   const document = stored.value.document_json;
@@ -168,3 +178,12 @@ export const dispatchLocalDashboard = Effect.fn(
   },
   Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
 );
+
+export const prepareLocalDashboard = Effect.fnUntraced(function* (
+  user: UserId,
+  edit: Option.Option<DashboardEdit>
+) {
+  return yield* findDocument(user).pipe(
+    Effect.flatMap((stored) => prepareDashboardDocument(user, stored, edit))
+  );
+});

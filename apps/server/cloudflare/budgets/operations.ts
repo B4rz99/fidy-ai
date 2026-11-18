@@ -2,7 +2,12 @@ import {
   dispatchLocalBudget as dispatchBudget,
   isLocalBudgetOperation as localBudget,
 } from "./internal/sqlite-dispatch";
-import { budgetUnavailable, plannedBudgets } from "./internal/sqlite-planning";
+import {
+  budgetUnavailable,
+  plannedBudgets,
+  prepareLocalBudget as prepareBudget,
+  prepareLocalBudgetDeletion as prepareDeletionInStore,
+} from "./internal/sqlite-planning";
 import { prepareBoundBudgetWorkspace as prepareBrowserWorkspace } from "./internal/bound-workspace";
 import { findDashboardAggregate } from "../transactions/operations";
 import {
@@ -856,3 +861,7 @@ export const readLocalBudgetCaps = Effect.fn(function* (userId: UserId, month: s
   if (!Schema.is(BudgetMonth)(month)) return yield* budgetUnavailable();
   return (yield* plannedBudgets(userId, Option.some(month), Option.none())).budgets;
 });
+export const prepareLocalBudget: typeof prepareBudget = (save, user, current) =>
+  prepareBudget(save, user, current);
+export const prepareLocalBudgetDeletion: typeof prepareDeletionInStore = (id, user) =>
+  prepareDeletionInStore(id, user);

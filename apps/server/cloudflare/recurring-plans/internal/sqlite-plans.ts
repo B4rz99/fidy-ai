@@ -1,3 +1,9 @@
+import {
+  canonicalAdmissionUnavailable,
+  commitLocalWrite,
+  prepareLocalWrite,
+  runLocalMutation,
+} from "../../canonical-admission/operations";
 import { localWorkspaceProjection } from "./read-projection";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { DateTime, Effect, Option, Schema } from "effect";
@@ -15,10 +21,7 @@ import {
   RecurringWorkspaceQuery,
 } from "../../../src/shell/recurring-plans/contract";
 import type { LocalMutationResult } from "../../canonical-admission/contract";
-import {
-  canonicalAdmissionUnavailable,
-  runLocalMutation,
-} from "../../canonical-admission/operations";
+
 import { RequestBodyPolicy } from "../../http/contract";
 import { boundedJsonBody } from "../../http/operations";
 import { ownsLocalRecurringSeries } from "../../recurring/operations";
@@ -84,7 +87,7 @@ const validReferences = Effect.fn(function* (
   }
   return true;
 });
-export const editLocalRecurringPlan = Effect.fn(function* (
+export const prepareLocalRecurringEdit = Effect.fn(function* (
   command: typeof ApplyRecurringCanonicalInput.Type.payload,
   user: UserId,
   current: number
@@ -119,11 +122,25 @@ export const editLocalRecurringPlan = Effect.fn(function* (
   });
   const next = yield* applyRecurringEdit({ document: retained, command }).pipe(Effect.option);
   if (Option.isNone(next) || !(yield* validReferences(user, command, next.value))) return invalid;
-  yield* writeLocalDocument(user, base, next.value);
-  return success(
-    yield* Schema.encodeEffect(Schema.toCodecJson(RecurringDocument))(
-      displayDocument({ document: next.value, compact: command.view === "compact", now })
-    )
+  return prepareLocalWrite({
+    targets: ["recurring-document"],
+    commit: Effect.gen(function* () {
+      yield* writeLocalDocument(user, base, next.value);
+      return success(
+        yield* Schema.encodeEffect(Schema.toCodecJson(RecurringDocument))(
+          displayDocument({ document: next.value, compact: command.view === "compact", now })
+        )
+      );
+    }),
+  });
+});
+export const editLocalRecurringPlan = Effect.fnUntraced(function* (
+  input: typeof ApplyRecurringCanonicalInput.Type.payload,
+  user: UserId,
+  current: number
+) {
+  return yield* prepareLocalRecurringEdit(input, user, current).pipe(
+    Effect.flatMap(commitLocalWrite)
   );
 });
 const workspace = Effect.fn(function* (

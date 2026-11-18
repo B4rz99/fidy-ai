@@ -268,3 +268,8 @@ export const editLocalRecurringPlan: typeof sqlitePlans.editLocalRecurringPlan =
   user,
   current
 ) => sqlitePlans.editLocalRecurringPlan(command, user, current);
+export const prepareLocalRecurringEdit: typeof sqlitePlans.prepareLocalRecurringEdit = (
+  command,
+  user,
+  current
+) => sqlitePlans.prepareLocalRecurringEdit(command, user, current);

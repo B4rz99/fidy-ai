@@ -1,3 +1,6 @@
+import { runLocalBatch as executeBatch } from "./internal/local-batch";
+import type { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
+
 import { withStoreCapacity } from "../runtime/sqlite/operations";
 import {
   exhausted,
@@ -23,6 +26,9 @@ import {
   type CanonicalBrowserSnapshotOperation,
   type CanonicalBrowserSourceRead,
   type CanonicalReadCompletion,
+  type LocalMutationPlan,
+  type LocalMutationPreparation,
+  type LocalMutationResult,
   type PreparedCanonicalBrowserRead,
   type PreparedCanonicalReadCompletion,
   canonicalReadCompletionHeader,
@@ -78,7 +84,11 @@ import {
 } from "../quotas/operations";
 import { newId } from "../secret-material/operations";
 
-import { cryptoHash, validatedCanonicalInput } from "./internal/request-input";
+import {
+  cryptoHash,
+  localCanonicalArguments as readArguments,
+  validatedCanonicalInput,
+} from "./internal/request-input";
 import {
   acquireBoundBrowserRequest,
   acquireRequest,
@@ -1276,6 +1286,25 @@ export const sweepLocalReceipts: typeof sweepReceipts = (current) => sweepReceip
 
 export const recoverLocalReceipts: typeof recoverReceipts = (current, storage) =>
   recoverReceipts(current, storage);
+
+export const prepareLocalWrite = <E>({
+  targets,
+  commit,
+}: {
+  targets: ReadonlyArray<string>;
+  commit: Effect.Effect<LocalMutationResult, E, SqliteClient>;
+}): LocalMutationPlan => ({
+  premises: [],
+  targets,
+  commit: commit.pipe(Effect.mapError((cause) => new CanonicalAdmissionUnavailable({ cause }))),
+});
+export const commitLocalWrite = (
+  preparation: LocalMutationPreparation
+): LocalMutationPlan["commit"] =>
+  "commit" in preparation ? preparation.commit : Effect.succeed(preparation);
+export const runLocalBatch: typeof executeBatch = (unit, owners) => executeBatch(unit, owners);
+export const localCanonicalArguments: typeof readArguments = (request, operation) =>
+  readArguments(request, operation);
 
 export const repairReceiptAlarm = Effect.fnUntraced(function* (
   current: number,

@@ -12,7 +12,7 @@ import { type CaptureCategoryInput, CategoriesUnavailable } from "../contract";
 import { keywordRulesFromRows, keywordRulesQuery } from "./keyword-rules";
 
 /** Compose in the owning User transaction after authorization. A Category reference carries no authority. */
-export const categorizeLocalCapture = Effect.fn(function* ({
+export const resolveLocalCategory = Effect.fn(function* ({
   userId,
   capture,
 }: Readonly<{
@@ -50,9 +50,22 @@ export const categorizeLocalCapture = Effect.fn(function* ({
       onNone: () => new CategoriesUnavailable(),
     });
   }
+  return reference;
+});
+export const retainLocalCategory = Effect.fn(function* (reference: CategoryReference) {
+  const sql = yield* SqliteClient;
+  const category = interpretCategory({ release: currentCategoryRelease, reference });
+  if (Option.isNone(category)) return yield* new CategoriesUnavailable();
+  const { categoryId } = reference;
   // Only the stable key participates in foreign keys. Labels and order are read from the release.
   yield* sql`INSERT INTO categories(id,label,display_order)
     SELECT ${categoryId},${category.value.label},COALESCE((SELECT MAX(display_order)+1 FROM categories),0)
     WHERE NOT EXISTS(SELECT 1 FROM categories WHERE id=${categoryId})`;
   return reference;
+});
+
+export const categorizeLocalCapture = Effect.fnUntraced(function* (
+  input: Parameters<typeof resolveLocalCategory>[0]
+) {
+  return yield* resolveLocalCategory(input).pipe(Effect.tap(retainLocalCategory));
 });

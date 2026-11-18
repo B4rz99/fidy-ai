@@ -293,16 +293,58 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(
           yield* native(() =>
             db.exec(
-              "SELECT min(length(part)>0 AND length(CAST(part AS BLOB))<1000000) AS bounded FROM recurring_receipt_parts"
+              "SELECT min(length(part)>0 AND length(CAST(part AS BLOB))<1000000) AS bounded FROM canonical_receipt_parts"
             )
           )
         ).toEqual([{ bounded: 1 }]);
         const replay = yield* fulfill();
         expect(replay.status).toBe(200);
         expect(yield* native(() => replay.text())).toBe(body);
+        const batch = (): Effect.Effect<Response> =>
+          native(() =>
+            db.send(
+              new Request("https://api.fidyapp.com/operations/atomic-batch", {
+                method: "POST",
+                headers: {
+                  authorization: "Bearer " + token,
+                  "content-type": "application/json",
+                  "Fidy-Retry-Key": "large-batch",
+                },
+                body: JSON.stringify({
+                  calls: [
+                    {
+                      callId: mark.id,
+                      operation: "recurringPlans.applyRecurringEdit",
+                      input: {
+                        payload: {
+                          expectedRevision: 2,
+                          edit: {
+                            kind: "fulfill",
+                            fulfillment: {
+                              ...mark,
+                              id: "40000000-0000-4000-8000-000000000152",
+                              date: "2024-03-31",
+                              actualDate: "2024-03-31",
+                            },
+                          },
+                        },
+                      },
+                    },
+                  ],
+                }),
+              })
+            )
+          );
+        const accepted = yield* batch();
+        expect(accepted.status).toBe(200);
+        const original = yield* native(() => accepted.text());
+        expect(original.length).toBeGreaterThan(2_097_152);
+        const recovered = yield* batch();
+        expect(recovered.status).toBe(200);
+        expect(yield* native(() => recovered.text())).toBe(original);
         yield* native(() => db.exec("UPDATE canonical_request_receipts SET accepted_at_ms=0"));
         expect((yield* native(() => db.checkWork(alice.user))).status).toBe(204);
-        yield* native(() => db.exec("SELECT 1 FROM recurring_receipt_parts LIMIT 1")).pipe(
+        yield* native(() => db.exec("SELECT 1 FROM canonical_receipt_parts LIMIT 1")).pipe(
           Effect.repeat({
             until: (rows) => rows.length === 0,
             schedule: Schedule.spaced("50 millis"),
@@ -317,7 +359,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect((yield* fulfill()).status).toBe(400);
         expect(
           yield* native(() => db.exec("SELECT count(*) AS marks FROM recurring_plan_fulfillments"))
-        ).toEqual([{ marks: 1 }]);
+        ).toEqual([{ marks: 2 }]);
       })
   );
 });

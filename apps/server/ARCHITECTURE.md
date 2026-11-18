@@ -91,6 +91,13 @@ User-local checkpoints under current Processing Consent. Financial changes inval
 revision and schedule discovery within an hour. The User alarm advances due evaluation.
 Maintenance checks the retained revision and repairs the alarm when needed.
 
+Browser and PAT atomic batches use the canonical catalog to identify eligible children. The
+UserStore checks every child's current authority before a receipt can be disclosed. Local owners
+prepare decisions from the same starting snapshot and reserve any conflicting targets. Their
+guarded writes, per-child Audit, one commercial admission and one batch receipt commit together.
+PAT retries retain reviewed result types under the original 24-hour expiry and split large results
+across receipt rows. Browser batches execute under their current WebSession. Uninstalled owners return a child-addressed failure.
+
 The Core minute Cron calls Maintenance to traverse the lifetime registry and check Directory,
 Pricing and independent Erasure. A private check inspects retained owner work and repairs the
 earliest required alarm. Owner alarms execute the continuation. Maintenance persists its cursor

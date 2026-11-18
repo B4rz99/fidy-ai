@@ -1,3 +1,4 @@
+import { commitLocalWrite, prepareLocalWrite } from "../../canonical-admission/operations";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { IanaTimeZone } from "../../../src/core/_shared/context";
@@ -10,7 +11,7 @@ import {
   CanonicalAdmissionUnavailable,
   type LocalMutationResult,
 } from "../../canonical-admission/contract";
-import { categorizeLocalCapture } from "../../categories/operations";
+import { resolveLocalCategory, retainLocalCategory } from "../../categories/operations";
 import { newId } from "../../secret-material/operations";
 import { budgetsFromRows } from "./budget-row";
 
@@ -249,13 +250,14 @@ const writeBudget = Effect.fn(function* (
   const cap = encodeMoneyAmount(input.cap.amount);
   return Option.isNone(id)
     ? yield* sql`INSERT INTO budgets(id,user_id,category_id,category_revision,currency,cap,created_at_ms,updated_at_ms,group_name,starts_month)
-      VALUES(${budgetId},${user},${input.categoryId},${revision},${input.cap.currency},${cap},${current},${current},${group},${month}) RETURNING id`
+      SELECT ${budgetId},${user},${input.categoryId},${revision},${input.cap.currency},${cap},${current},${current},${group},${month}
+      WHERE NOT EXISTS (SELECT 1 FROM budgets WHERE user_id=${user} LIMIT 1 OFFSET ${maximumBudgets - 1}) RETURNING id`
     : yield* sql`UPDATE budgets SET category_id=${input.categoryId}, category_revision=${revision},
       cap=CASE WHEN ${month} IS NULL THEN ${cap} ELSE cap END, group_name=COALESCE(${group},group_name),
       starts_month=CASE WHEN starts_month>${month} THEN ${month} ELSE starts_month END, updated_at_ms=${current}
       WHERE id=${budgetId} AND user_id=${user} RETURNING id`;
 });
-class MonthlyBudgetConflict extends Data.TaggedError("MonthlyBudgetConflict") {}
+class BudgetWriteConflict extends Data.TaggedError("BudgetWriteConflict") {}
 
 /** Only a Budget start or a group Currency change can introduce a monthly Category/Currency collision. */
 const checkMonthlyDenominations = Effect.fn(function* (user: UserId) {
@@ -275,13 +277,17 @@ const checkMonthlyDenominations = Effect.fn(function* (user: UserId) {
       ORDER BY g.month DESC LIMIT 1),b.currency) AS denomination
     FROM periods p JOIN members b ON b.category_id=p.category_id AND b.start<=p.month
   ) SELECT 1 FROM monthly GROUP BY month,category_id,denomination HAVING COUNT(*)>1 LIMIT 1`;
-  if (conflicts.length > 0) return yield* new MonthlyBudgetConflict();
+  if (conflicts.length > 0) return yield* new BudgetWriteConflict();
 });
-const saveBudgetPlan = Effect.fn(function* (save: SaveInput, user: UserId, current: number) {
-  const { id, input } = save;
-  const failure = yield* validateBudget(save, user);
-  if (Option.isSome(failure)) return failure.value;
-  const reference = yield* categorizeLocalCapture({
+const budgetTargets = ({ id, input }: SaveInput): ReadonlyArray<string> => [
+  "budget-category:" + input.categoryId + ":" + input.cap.currency,
+  ...Option.toArray(id).map((value) => "budget:" + value),
+  ...(input.groupName === undefined ? [] : ["budget-group:" + input.groupName]),
+  ...(input.groupCategoryIds ?? []).map((value) => "budget-member:" + value),
+];
+
+const budgetCategory = Effect.fnUntraced(function* (user: UserId, input: UpdateBudgetInput) {
+  return yield* resolveLocalCategory({
     userId: user,
     capture: {
       caller: Option.some(input.categoryId),
@@ -292,50 +298,81 @@ const saveBudgetPlan = Effect.fn(function* (save: SaveInput, user: UserId, curre
     Effect.asSome,
     Effect.catchTag("CategoryNotFound", () => Effect.succeedNone)
   );
+});
+
+export const prepareLocalBudget = Effect.fn(function* (
+  save: SaveInput,
+  user: UserId,
+  current: number
+) {
+  const { id, input } = save;
+  const failure = yield* validateBudget(save, user);
+  if (Option.isSome(failure)) return failure.value;
+  const reference = yield* budgetCategory(user, input);
   if (Option.isNone(reference)) return missingBudget();
-  if (input.month !== undefined) yield* freezeMonth(user, input.month);
-  yield* updateGroup(user, input, current);
-  const sql = yield* SqliteClient;
-  const budgetId = Option.getOrElse(id, () => Budget.fields.id.make(newId()));
-  const cap = encodeMoneyAmount(input.cap.amount);
-  const changed = yield* writeBudget(save, user, {
-    budgetId,
-    current,
-    revision: reference.value.revision,
-  });
-  if (changed.length !== 1) return yield* budgetUnavailable();
-  if (input.month !== undefined) {
-    yield* sql`INSERT INTO budget_month_plan_records(kind,user_id,budget_id,month,cap) VALUES('cap',${user},${budgetId},${input.month},${cap})
+  const client = yield* SqliteClient;
+  const plan = prepareLocalWrite({
+    targets: budgetTargets(save),
+    commit: client
+      .withTransaction(
+        Effect.gen(function* () {
+          yield* retainLocalCategory(reference.value);
+          if (input.month !== undefined) yield* freezeMonth(user, input.month);
+          yield* updateGroup(user, input, current);
+          const sql = yield* SqliteClient;
+          const budgetId = Option.getOrElse(id, () => Budget.fields.id.make(newId()));
+          const cap = encodeMoneyAmount(input.cap.amount);
+          const changed = yield* writeBudget(save, user, {
+            budgetId,
+            current,
+            revision: reference.value.revision,
+          });
+          if (changed.length !== 1) {
+            return yield* Option.isNone(id) ? new BudgetWriteConflict() : budgetUnavailable();
+          }
+          if (input.month !== undefined) {
+            yield* sql`INSERT INTO budget_month_plan_records(kind,user_id,budget_id,month,cap) VALUES('cap',${user},${budgetId},${input.month},${cap})
     ON CONFLICT(user_id,budget_id,month) WHERE kind='cap' DO UPDATE SET cap=excluded.cap`;
-  }
-  yield* checkMonthlyDenominations(user);
-  const [saved] = (yield* plannedBudgets(
-    user,
-    Option.fromUndefinedOr(input.month),
-    Option.some(budgetId)
-  )).budgets;
-  if (saved === undefined) return yield* budgetUnavailable();
-  return {
-    ...budgetSuccess(yield* Schema.encodeEffect(Schema.toCodecJson(Budget))(saved)),
-    status: Option.isNone(id) ? createdStatus : updatedStatus,
-  };
+          }
+          yield* checkMonthlyDenominations(user);
+          const [saved] = (yield* plannedBudgets(
+            user,
+            Option.fromUndefinedOr(input.month),
+            Option.some(budgetId)
+          )).budgets;
+          if (saved === undefined) return yield* budgetUnavailable();
+          return {
+            ...budgetSuccess(yield* Schema.encodeEffect(Schema.toCodecJson(Budget))(saved)),
+            status: Option.isNone(id) ? createdStatus : updatedStatus,
+          };
+        })
+      )
+      .pipe(Effect.catchTag("BudgetWriteConflict", () => Effect.succeed(invalid()))),
+  });
+  return { ...plan, premises: ["budget-member:" + input.categoryId] };
 });
 export const saveLocalBudget = Effect.fn(function* (
   save: SaveInput,
   user: UserId,
   current: number
 ) {
-  const sql = yield* SqliteClient;
-  return yield* sql
-    .withTransaction(saveBudgetPlan(save, user, current))
-    .pipe(Effect.catchTag("MonthlyBudgetConflict", () => Effect.succeed(invalid())));
+  return yield* prepareLocalBudget(save, user, current).pipe(Effect.flatMap(commitLocalWrite));
 });
-export const deleteLocalBudget = Effect.fn(function* (id: BudgetId, user: UserId) {
+export const prepareLocalBudgetDeletion = Effect.fn(function* (id: BudgetId, user: UserId) {
   const sql = yield* SqliteClient;
   if ((yield* plannedBudgets(user, Option.none(), Option.some(id))).budgets.length === 0) {
     return missingBudget();
   }
-  const removed = yield* sql`DELETE FROM budgets WHERE id=${id} AND user_id=${user} RETURNING id`;
-  if (removed.length !== 1) return yield* budgetUnavailable();
-  return budgetSuccess(id);
+  return prepareLocalWrite({
+    targets: ["budget:" + id],
+    commit: Effect.gen(function* () {
+      const removed =
+        yield* sql`DELETE FROM budgets WHERE id=${id} AND user_id=${user} RETURNING id`;
+      if (removed.length !== 1) return yield* budgetUnavailable();
+      return budgetSuccess(id);
+    }),
+  });
+});
+export const deleteLocalBudget = Effect.fnUntraced(function* (id: BudgetId, user: UserId) {
+  return yield* prepareLocalBudgetDeletion(id, user).pipe(Effect.flatMap(commitLocalWrite));
 });

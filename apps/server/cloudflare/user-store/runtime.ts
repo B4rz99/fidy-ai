@@ -1,3 +1,5 @@
+import type { CatalogOperation } from "../../src/shell/canonical-catalog/contract";
+import { dispatchLocalBatchRoute, isLocalBatchRoute } from "../canonical-operations/operations";
 import {
   dispatchLocalRecurringSeries,
   recoverLocalRecurringSeries,
@@ -90,35 +92,42 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     );
   }
 
+  private subscriptionCancellation(
+    request: Request,
+    owns: (id: string) => boolean,
+    operation: CatalogOperation
+  ): Promise<Response> {
+    return this.runtime.runPromise(
+      runLocalMutation({
+        request,
+        storage: this.ctx.storage,
+        operation,
+        owns,
+        input: Effect.succeedSome(true),
+        work: (_input, userId, current) =>
+          cancelLocalSubscription({ userId, current, storage: this.ctx.storage }),
+      }).pipe(
+        Effect.tap((response) =>
+          Effect.sync(() => {
+            if (response.ok) this.ctx.waitUntil(this.alarm());
+          })
+        ),
+        Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+      )
+    );
+  }
+
   private mutation(
     request: Request,
     owns: (userId: string) => boolean,
-    operation: ReturnType<typeof canonicalOperation>
+    selected: CatalogOperation
   ): Option.Option<Promise<Response>> {
-    if (Option.isNone(operation)) return Option.none();
-    const selected = operation.value;
     const unit = { request, owns, operation: selected, storage: this.ctx.storage };
+    if (isLocalBatchRoute(selected.id)) {
+      return Option.some(this.runtime.runPromise(dispatchLocalBatchRoute(unit)));
+    }
     if (selected.id === "subscription.cancelSubscription") {
-      return Option.some(
-        this.runtime.runPromise(
-          runLocalMutation({
-            request,
-            storage: this.ctx.storage,
-            operation: operation.value,
-            owns,
-            input: Effect.succeedSome(true),
-            work: (_input, userId, current) =>
-              cancelLocalSubscription({ userId, current, storage: this.ctx.storage }),
-          }).pipe(
-            Effect.tap((response) =>
-              Effect.sync(() => {
-                if (response.ok) this.ctx.waitUntil(this.alarm());
-              })
-            ),
-            Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
-          )
-        )
-      );
+      return Option.some(this.subscriptionCancellation(request, owns, selected));
     }
     if (selected.id === "recurring.listRecurringSeries") {
       return Option.some(this.runtime.runPromise(dispatchLocalRecurringSeries(unit)));
@@ -228,7 +237,9 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
       );
     }
     const operation = canonicalOperation({ method: request.method, path });
-    const mutation = this.mutation(request, owns, operation);
+    const mutation = Option.flatMap(operation, (selected) =>
+      this.mutation(request, owns, selected)
+    );
     if (Option.isSome(mutation)) return mutation.value;
     if (
       ["POST /work/source-cancellation/pending", "POST /work/source-cancellation/observe"].includes(

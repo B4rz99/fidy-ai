@@ -1,0 +1,23 @@
+apps/server/cloudflare/queue/delivery-latency.test.ts
+  s_a1be23a656acf0::t_83243dff730ec3 32,52,66,75
+apps/server/cloudflare/queue/native-recovery.test.ts
+  s_a1be23a656acf0::t_32b37a594b4ae2 8-11,52,59,61-65,97-101,104-106,109-114,116,129,131,134,136-137,149-151,155
+apps/server/cloudflare/queue/recovery-worker.fixture.ts
+  s_a1be23a656acf0::t_72f47138822bcd 1,6-9,28-79,84-86,91-94,100,104,108,116,119-126,132-133
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ec6079ea2b57d8d46920fa8ed97e86fd91fe2a69",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,22 @@
+apps/server/cloudflare/transactions/user-store.test.ts
+  s_a1be23a656acf0::t_8cb78870e32e81 2,7,23-30,330-332,339,341,343-351,353-354
+  s_a1be23a656acf0::t_08fab8456c5322 338,342,352,355-361
+apps/server/cloudflare/categories/taxonomy.test.ts
+  s_a1be23a656acf0::t_8cb78870e32e81 83-91,106,116-120,122
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2b1c8406a217a4476d3719704ce290e8422fb30d",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,29 @@
+apps/server/cloudflare/agent/internal/local-document-reply.ts
+  s_a1be23a656acf0::t_2f9d8f7c34e5ce 4-5,7,42-50,53-55
+apps/server/cloudflare/canonical-operations/internal/local-owners.ts
+  s_a1be23a656acf0::t_b14d58cdfa6bc5 51,172-180,186-188,194-196
+apps/server/cloudflare/canonical-operations/operations.ts
+  s_a1be23a656acf0::t_3bb322bff7891d 27,962,1051
+apps/server/cloudflare/ingestion/internal/local-review-list.ts
+  s_a1be23a656acf0::t_224469ab0f8f6a 8,99-118
+apps/server/cloudflare/ingestion/native-document.test.ts
+  s_a1be23a656acf0::t_a79ebc90fa9d1b 1,418-427
+apps/server/cloudflare/ingestion/operations.ts
+  s_a1be23a656acf0::t_50e94d87f527d1 1-5,345-347
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0484f6abd104bf0e3a99e7e5b87f16203431f113",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

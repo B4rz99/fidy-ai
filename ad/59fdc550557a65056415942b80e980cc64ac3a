@@ -1,0 +1,21 @@
+apps/server/cloudflare/tokens/native-authority.test.ts
+  s_a1be23a656acf0::t_8b7f6e17223e72 11,29-32,52,62-63
+apps/server/cloudflare/memory/memory.test.ts
+  s_a1be23a656acf0::t_8b7f6e17223e72 1,16,422,452,472
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ad59fdc550557a65056415942b80e980cc64ac3a",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

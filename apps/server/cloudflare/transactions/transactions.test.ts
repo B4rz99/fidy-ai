@@ -1,6 +1,13 @@
 import { retainedPlanningWork } from "../retained-planning.test-fixture";
 import { NodeFileSystem } from "@effect/platform-node";
-import { nativeTransactionJourney, seedNativePAT } from "../financial-user-store.test-fixture";
+import { nativeCorrectionPlatform } from "../user-store.test-fixture";
+import {
+  alice,
+  makeNativeTransactionJourney,
+  nativeBrowserWrite,
+  nativeTransactionJourney,
+  seedNativePAT,
+} from "../financial-user-store.test-fixture";
 import { TransactionInspection } from "../../src/shell/transactions/contract";
 import { deriveCurrentBudgetMonth } from "../../src/core/budgets/operations";
 import { IanaTimeZone } from "../../src/core/_shared/context";
@@ -2708,7 +2715,7 @@ it.each(["same-instant", "one-millisecond-newer"] as const)(
   (ordering) =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const db = yield* nativeTransactionJourney;
+        const db = yield* makeNativeTransactionJourney(undefined, nativeCorrectionPlatform);
         const owner = users[0] ?? "";
         const visible = "30000000-0000-4000-8000-000000000a01";
         const suppressed = "30000000-0000-4000-8000-000000000a02";
@@ -2777,21 +2784,44 @@ it.each(["same-instant", "one-millisecond-newer"] as const)(
         expect(Option.getOrNull(effective.counterparty)).toBe("Dos");
         expect(Option.getOrNull(effective.notes)).toBe("visible");
         expect(DateTime.formatIso(effective.occurredAt)).toBe("2025-01-05T12:00:00.000Z");
+        const instant = vi.getRealSystemTime() + 1000;
         yield* fromTestPromise(() =>
-          Promise.all(
-            [visible, suppressed].map((transactionId, index) =>
-              db.exec(
-                `INSERT INTO transaction_corrections
-                (id, user_id, transaction_id, previous_revision, changed_fields, before_facts, after_facts, corrected_at_ms)
-                VALUES (?, ?, ?, 0, '[]', '{}', '{}', ?)`,
-                `40000000-0000-4000-8000-00000000010${index}`,
-                owner,
-                transactionId,
-                ordering === "one-millisecond-newer" && index === 0 ? 1738368000001 : 1738368000000
-              )
-            )
-          )
+          db.exec("CREATE TABLE correction_clock(instant INTEGER NOT NULL)")
         );
+        yield* fromTestPromise(() => db.exec("INSERT INTO correction_clock VALUES (?)", instant));
+        const firstDate = "2025-01-07T12:00:00.000Z";
+        const secondDate = "2025-01-08T12:00:00.000Z";
+        for (const [id, occurredAt] of [
+          [visible, firstDate],
+          [suppressed, secondDate],
+        ] as const) {
+          const offset = ordering === "one-millisecond-newer" && id === visible ? 1 : 0;
+          yield* fromTestPromise(() =>
+            db.exec("UPDATE correction_clock SET instant=?", instant + offset)
+          );
+          const correctedMember = yield* nativeBrowserWrite(db)(alice, {
+            method: "PUT",
+            path: "/transactions/" + id,
+            body: { expectedRevision: 0, changes: { occurredAt } },
+          });
+          expect(correctedMember.status).toBe(200);
+          yield* fromTestPromise(() => correctedMember.arrayBuffer());
+        }
+        yield* fromTestPromise(() =>
+          db.exec("UPDATE correction_clock SET instant=?", instant + 1000)
+        );
+        const expectedDate = ordering === "same-instant" ? secondDate : firstDate;
+        const expectedSource = [{ occurred_at_ms: Date.parse(expectedDate) }];
+        expect(
+          yield* fromTestPromise(() =>
+            db.exec("SELECT occurred_at_ms FROM transaction_effective_source WHERE id=?", visible)
+          )
+        ).toEqual(expectedSource);
+        expect(
+          yield* fromTestPromise(() =>
+            db.exec("SELECT occurred_at_ms FROM transaction_projection_leaf WHERE id=?", visible)
+          )
+        ).toEqual(expectedSource);
         const corrected = (yield* Schema.decodeUnknownEffect(Listed)(
           yield* fromTestPromise(() =>
             db
@@ -2809,9 +2839,7 @@ it.each(["same-instant", "one-millisecond-newer"] as const)(
         ).pipe(Effect.orDie)).data;
         const correctedTransaction = corrected[0];
         if (correctedTransaction === undefined) throw new Error("Missing effective Transaction");
-        expect(DateTime.formatIso(correctedTransaction.occurredAt)).toBe(
-          ordering === "same-instant" ? "2025-01-06T12:00:00.000Z" : "2025-01-05T12:00:00.000Z"
-        );
+        expect(DateTime.formatIso(correctedTransaction.occurredAt)).toBe(expectedDate);
         expect(correctedTransaction.categoryId).toBe(suppressedCategory);
         expect(Option.getOrNull(correctedTransaction.counterparty)).toBe("Dos");
         expect(Option.getOrNull(correctedTransaction.notes)).toBe("visible");

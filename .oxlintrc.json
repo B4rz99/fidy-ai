@@ -320,6 +320,7 @@
         "apps/server/cloudflare/agent/provider.test-fixture.ts",
         "apps/server/cloudflare/capacity-worker.test-fixture.ts",
         "apps/server/cloudflare/connection-worker.test-fixture.ts",
+        "apps/server/cloudflare/transactions/correction-clock.test-fixture.ts",
         "apps/server/cloudflare/erasure-worker.test-fixture.ts",
         "apps/server/cloudflare/storage-forward-repair.test-fixture.ts",
         "apps/server/cloudflare/ingestion/email-worker.ts",

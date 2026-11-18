@@ -232,6 +232,7 @@ const manifests = Effect.fnUntraced(function* (module: string) {
 });
 
 type NativeFixture =
+  | "correction"
   | "custody"
   | "erasure"
   | "capacity"
@@ -314,6 +315,7 @@ const connectionPlatformOptions = Effect.fnUntraced(function* (enabled: boolean)
 });
 
 const fixtureModule = (mode: NativeFixture): string => {
+  if (mode === "correction") return "./transactions/correction-clock.test-fixture.ts";
   if (mode === "capacity") return "./capacity-worker.test-fixture.ts";
   if (mode === "erasure" || mode === "custody") return "./erasure-worker.test-fixture.ts";
   if (mode === "login") return "./login-email-worker.test-fixture.ts";
@@ -564,6 +566,7 @@ export const nativeLoginPlatform = createUserPlatform("login");
 export const nativeBrowserPlatform = createUserPlatform("browser");
 export const nativeConnectionPlatform = createUserPlatform("connection");
 export const nativeCapacityPlatform = createUserPlatform("capacity");
+export const nativeCorrectionPlatform = createUserPlatform("correction");
 export const nativeUserPlatform = createUserPlatform("user");
 export const nativeBillingPlatform = createUserPlatform("billing");
 

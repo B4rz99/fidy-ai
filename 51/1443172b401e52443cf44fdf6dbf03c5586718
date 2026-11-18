@@ -1,0 +1,21 @@
+apps/server/cloudflare/subscription/native-enrollment.test.ts
+  s_a1be23a656acf0::t_f1cc8684bdc6e9 8,14,24-25,237-271
+apps/server/cloudflare/tokens/native-pairing.test.ts
+  s_a1be23a656acf0::t_a23afe87073dfa 192-213
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "511443172b401e52443cf44fdf6dbf03c5586718",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

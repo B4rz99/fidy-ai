@@ -124,6 +124,58 @@ const liveSession = Effect.gen(function* () {
   expect((yield* state())[0]?.state).toBe("proposed");
   expect(yield* entries()).not.toContainEqual({ tag: "AssistantTranscriptEntry" });
 });
+const cancelInFlight = Effect.fn(function* (
+  db: Effect.Success<ReturnType<typeof journey>>["db"],
+  path: string,
+  body: string
+) {
+  const user = (yield* native(() =>
+    db.runtime.getDurableObjectNamespace("USER_STORE", "core")
+  )).getByName(alice.user);
+  yield* native(() =>
+    user.fetch("https://fixture.invalid/pause-" + (path === "" ? "admission" : "progress"))
+  );
+  const provider = (yield* native(() =>
+    db.runtime.getDurableObjectNamespace("CONTROL", "hosted-provider")
+  )).getByName("provider");
+  const outstanding = provider.fetch(
+    "https://fixture.invalid/browser-" + (path === "" ? "admission" : "progress"),
+    { method: "POST", body }
+  );
+  yield* till(
+    native(() =>
+      user.fetch("https://fixture.invalid/entered").then((response) => response.json())
+    ).pipe(
+      Effect.flatMap(Schema.decodeUnknownEffect(Schema.Struct({ arrived: Schema.Boolean }))),
+      Effect.orDie
+    ),
+    (value) => value.arrived
+  ).pipe(Effect.catchTag("TimeoutError", () => Effect.die("owner not entered")));
+  yield* native(() => provider.fetch("https://fixture.invalid/disconnect-browser"));
+  expect((yield* native(() => outstanding)).status).toBe(499);
+  yield* till(
+    native(() =>
+      user.fetch("https://fixture.invalid/entered").then((response) => response.json())
+    ).pipe(
+      Effect.flatMap(Schema.decodeUnknownEffect(Schema.Struct({ aborted: Schema.Boolean }))),
+      Effect.orDie
+    ),
+    (value) => value.aborted
+  ).pipe(Effect.catchTag("TimeoutError", () => Effect.die("owner did not observe disconnect")));
+  yield* native(() => user.fetch("https://fixture.invalid/resume"));
+});
+const interruptedAdmission = Effect.gen(function* () {
+  const { db, state, entries, provider } = yield* journey();
+  yield* cancelInFlight(db, "", '{"text":"Pregunta no confirmada"}');
+  yield* Effect.sleep("100 millis");
+  expect(yield* state()).toEqual([]);
+  expect(yield* entries()).toEqual([]);
+  expect(
+    yield* native(() =>
+      provider.fetch("https://fixture.invalid/waiting").then((response) => response.json())
+    )
+  ).toMatchObject({ rounds: 0 });
+});
 const abortedPoll = Effect.gen(function* () {
   const { db, start, provider, post, state, entries, now } = yield* journey();
   const turnId = yield* start();
@@ -137,20 +189,7 @@ const abortedPoll = Effect.gen(function* () {
   const body = yield* Schema.encodeEffect(
     Schema.fromJsonString(Schema.Struct({ turnId: Schema.String }))
   )({ turnId });
-  const aborted = yield* Effect.tryPromise(() =>
-    db.runtime.dispatchFetch("https://api.fidyapp.com/web/hosted-turns/progress", {
-      method: "POST",
-      signal: AbortSignal.abort(),
-      headers: {
-        origin: "https://app.fidyapp.com",
-        cookie: "__Host-fidy_session=" + alice.bearer,
-        "Fidy-Session-Binding": alice.session,
-        "content-type": "application/json",
-      },
-      body,
-    })
-  ).pipe(Effect.result);
-  expect(aborted._tag).toBe("Failure");
+  yield* cancelInFlight(db, "/progress", body);
   yield* native(() => provider.fetch("https://fixture.invalid/release"));
   yield* till(state(), (value) => value[0]?.state === "proposed");
   yield* native(() => db.exec("UPDATE hosted_turns SET deadline_ms=? WHERE id=?", now - 1, turnId));
@@ -234,6 +273,10 @@ const refusedAdmission = Effect.gen(function* () {
   ).toMatchObject({ rounds: 0 });
 });
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
+  test.effect(
+    "disconnecting admission in flight before the addressed User starts its transaction retains no Turn or provider work",
+    () => interruptedAdmission
+  );
   test.effect(
     "discards malformed model output without retaining an assistant or delivery proof",
     () => malformedModel

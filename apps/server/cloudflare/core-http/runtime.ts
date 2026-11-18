@@ -125,6 +125,6 @@ export const makeCoreHttp = ({ telemetry, institutions }: CoreComposition): Core
             ),
           })
         ),
-      Effect.runPromise
+      (program) => Effect.runPromise(program, { signal: request.signal })
     );
 };

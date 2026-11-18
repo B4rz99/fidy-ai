@@ -70,7 +70,9 @@ const routeCookie = ({
     const headers = new Headers(request.headers);
     headers.set(browserSessionBindingHeader, route.sessionId);
     return yield* Effect.tryPromise((signal) =>
-      USER_STORE.getByName(route.userId).fetch(new Request(request, { signal, headers }))
+      USER_STORE.getByName(route.userId).fetch(new Request(request, { headers }), {
+        signal: AbortSignal.any([request.signal, signal]),
+      })
     );
   }).pipe(Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable())));
 

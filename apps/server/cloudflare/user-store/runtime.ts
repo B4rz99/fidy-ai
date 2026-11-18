@@ -1036,7 +1036,8 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     if (isLocalHostedPath(new URL(request.url).pathname)) {
       return Option.some(
         this.runtime.runPromise(
-          handleLocalHosted(request, owns, { env: this.env, storage: this.ctx.storage })
+          handleLocalHosted(request, owns, { env: this.env, storage: this.ctx.storage }),
+          { signal: request.signal }
         )
       );
     }

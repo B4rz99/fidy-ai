@@ -42,6 +42,10 @@ const workerPolicy = {
   observability: freeTierWorkerObservability,
   workersDev: false,
 } as const;
+const apiCompatibility = {
+  ...workerPolicy.compatibility,
+  flags: ["enable_request_signal", "request_signal_passthrough"],
+};
 const network = (
   release: NativeRelease,
   acceptance: string,
@@ -72,6 +76,7 @@ const coreWorker = Effect.fn(function* ({
 }) {
   const core = yield* Cloudflare.Worker("Core", {
     ...workerPolicy,
+    compatibility: apiCompatibility,
     name: installationNames.Core,
     main: "../../apps/server/cloudflare/core-worker.ts",
     version: candidate(release),
@@ -180,6 +185,7 @@ export const nativeApplication = Effect.gen(function* () {
   });
   const ingress = yield* Cloudflare.Worker("Ingress", {
     ...workerPolicy,
+    compatibility: apiCompatibility,
     name: installationNames.Ingress,
     main: "../../apps/server/cloudflare/public-worker.ts",
     version: candidate(release),

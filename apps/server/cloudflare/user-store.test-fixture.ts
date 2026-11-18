@@ -208,6 +208,7 @@ const oidcWorkers = Effect.fnUntraced(function* (enabled: boolean) {
 });
 
 const origin = { type: "text", value: browserOrigins.production } as const;
+const apiFlags = ["nodejs_compat", "enable_request_signal", "request_signal_passthrough"];
 const ingressWorker = (
   ingress: Effect.Success<ReturnType<typeof workerManifest>>
 ): Readonly<{ config: MiniflareWorkerConfig }> => ({
@@ -215,7 +216,7 @@ const ingressWorker = (
     type: "worker" as const,
     name: "ingress",
     compatibilityDate: "2026-09-08",
-    compatibilityFlags: ["nodejs_compat"],
+    compatibilityFlags: apiFlags,
     manifest: ingress,
     env: {
       BROWSER_ORIGIN: origin,
@@ -352,6 +353,7 @@ const hostedFixture = Effect.fnUntraced(function* (mode: NativeFixture) {
           config: {
             type: "worker" as const,
             name: "hosted-provider",
+            compatibilityFlags: ["enable_request_signal", "request_signal_passthrough"],
             compatibilityDate: "2026-09-08",
             exports: {
               HostedProviderFixture: { type: "worker" as const },
@@ -361,6 +363,7 @@ const hostedFixture = Effect.fnUntraced(function* (mode: NativeFixture) {
               },
             },
             env: {
+              INGRESS: { type: "worker" as const, worker: "ingress" },
               CONTROL: {
                 type: "durable-object" as const,
                 worker: "hosted-provider",
@@ -518,7 +521,7 @@ const createUserPlatform = Effect.fnUntraced(function* (mode: NativeFixture) {
             ...(withBilling ? billingTrigger : {}),
             ...(withOidc ? loginEmailTrigger : {}),
             compatibilityDate: "2026-09-08",
-            compatibilityFlags: ["nodejs_compat"],
+            compatibilityFlags: apiFlags,
             manifest: core,
             exports: { ...nativeOwners, ...connection.owners },
             env: {

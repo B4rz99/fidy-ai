@@ -1,7 +1,8 @@
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
-import { Deferred, Effect, Schema } from "effect";
+import { Deferred, Effect, Option, Schema } from "effect";
 
-type Environment = { CONTROL: DurableObjectNamespace };
+type Environment = { CONTROL: DurableObjectNamespace; INGRESS: Fetcher };
+const browserBearerLength = 43;
 const completion = (content: string): Response =>
   Response.json({
     choices: [{ message: { role: "assistant", content }, finish_reason: "stop" }],
@@ -41,7 +42,8 @@ const fixtureTool = (mode: string): { name: string; arguments: string } => {
   return { name: "memory__recall", arguments: "{}" };
 };
 
-export class HostedProviderControl extends DurableObject {
+export class HostedProviderControl extends DurableObject<Environment> {
+  private readonly browserClient = new AbortController();
   private readonly released = Deferred.makeUnsafe<void>();
   private waiting = false;
   private rounds = 0;
@@ -98,7 +100,40 @@ export class HostedProviderControl extends DurableObject {
       usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
     });
   });
+  private browserRequest(request: Request): Option.Option<Promise<Response>> {
+    if (request.url === "https://fixture.invalid/disconnect-browser") {
+      this.browserClient.abort();
+      return Option.some(Promise.resolve(new Response(null, { status: 204 })));
+    }
+    if (
+      request.url === "https://fixture.invalid/browser-admission" ||
+      request.url === "https://fixture.invalid/browser-progress"
+    ) {
+      const path = request.url.endsWith("admission") ? "" : "/progress";
+      return Option.some(
+        request
+          .text()
+          .then((body) =>
+            this.env.INGRESS.fetch("https://api.fidyapp.com/web/hosted-turns" + path, {
+              method: "POST",
+              headers: {
+                origin: "https://app.fidyapp.com",
+                cookie: "__Host-fidy_session=" + "1".repeat(browserBearerLength),
+                "Fidy-Session-Binding": "10000000-0000-4000-8000-000000000061",
+                "content-type": "application/json",
+              },
+              body,
+              signal: this.browserClient.signal,
+            })
+          )
+          .catch(() => new Response(null, { status: 499 }))
+      );
+    }
+    return Option.none();
+  }
   override fetch(request: Request): Promise<Response> {
+    const browser = this.browserRequest(request);
+    if (Option.isSome(browser)) return browser.value;
     if (new URL(request.url).pathname === "/tools") {
       if (request.method !== "POST") return Promise.resolve(Response.json(this.available));
       return Effect.runPromise(

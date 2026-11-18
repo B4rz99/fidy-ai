@@ -885,7 +885,8 @@ const routeOwnedRequest = (
       forwarded.headers.set(workerInternalTraceHeader, encodeTraceParent(trace.value));
     }
     const response = yield* Effect.tryPromise({
-      try: (signal) => environment.CORE.fetch(forwarded, { signal }),
+      try: (signal) =>
+        environment.CORE.fetch(forwarded, { signal: AbortSignal.any([request.signal, signal]) }),
       catch: () => undefined,
     });
     return yield* projectCoreSmokeResponse(response, request, environment);

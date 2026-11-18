@@ -1,0 +1,172 @@
+apps/server/cloudflare/core-http/internal/http.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 2-8
+  s_a1be23a656acf0::t_6edea3d4e16313 1764
+  s_a1be23a656acf0::t_567888b0aa6d20 1
+apps/server/cloudflare/insights/recurring-digest.test.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1,552,1110
+apps/server/cloudflare/categories/taxonomy.test-fixture.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 28-30
+apps/server/ARCHITECTURE.md
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 110-122
+apps/server/cloudflare/coordinator-test-harness.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1-8,10,97-155
+apps/server/cloudflare/subscription/internal/billing-workflow.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1-3,15,18-20,30,37,57,78-79,98-99,112,151,157,162-169,174,178,190-199,213-233,235-254
+apps/server/cloudflare/whatsapp/internal/registered-send.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1-84
+apps/server/cloudflare/whatsapp/internal/whatsapp-delivery.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1-2,5,483-484,487-489,491-530,537-547,561-570,582,589
+apps/server/cloudflare/directory/runtime.ts
+  s_a1be23a656acf0::t_37d35c6e7b404c 214,216,220-222,225-226
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 13-14,22,25-28
+apps/server/cloudflare/directory/internal/external-events.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1-70
+apps/server/cloudflare/insights/internal/weekly-execution.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1-17,63,114,120-129,157,314,327-336
+apps/server/cloudflare/agent/hosted-ingestion.test-fixture.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1,92
+apps/server/cloudflare/ingestion/native-forwarding.test.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1-57
+apps/server/cloudflare/subscription/billing-collection.test.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1-4,14,1341-1344
+  s_a1be23a656acf0::t_97821cc600c7c9 1345
+apps/server/cloudflare/financial-user-store.test-fixture.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 145
+apps/server/cloudflare/directory/schema/operations.ts
+  s_a1be23a656acf0::t_6edea3d4e16313 49,51
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 2
+apps/server/cloudflare/provider-authentication/whatsapp-association.test.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 92,99
+apps/server/cloudflare/whatsapp/runtime.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1-4,39-43
+apps/server/cloudflare/agent/internal/service.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1-9,215,227,258,501-519,580,646
+apps/server/cloudflare/insights/weekly-runtime.test.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1,61
+apps/server/cloudflare/user-store/operations.ts
+  s_a1be23a656acf0::t_6edea3d4e16313 3,879,881,883
+apps/server/cloudflare/agent/whatsapp-capture.test.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1,84,146,233
+apps/server/cloudflare/subscription/internal/billing-transaction.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 25,41,90,152-183,198
+apps/server/cloudflare/whatsapp/internal/insight-delivery.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1-14,66-70,210-226,228,264-265,269
+apps/server/cloudflare/subscription/weekly-renewal.test.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1-4,33
+apps/server/cloudflare/user-store/internal/billing-callback-schema.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1-26
+apps/server/cloudflare/subscription/payment-enrollment.test.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1
+apps/server/cloudflare/canonical-admission/operations.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 17,1330-1332
+apps/server/cloudflare/subscription/internal/billing-settlement.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 25-34,88-93,114-115,135-156
+apps/server/cloudflare/subscription/contract.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1,128,146,251-276
+apps/server/cloudflare/agent/internal/hosted-turn.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1,13-17,210,2015
+apps/server/cloudflare/insights/proactivity-runtime.test.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1,72,416
+apps/server/cloudflare/agent/hosted-turn.test.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1,1262,1753,1932,2010,2101,2408,2519,2551
+apps/server/cloudflare/core-http/contract.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 45
+apps/server/cloudflare/user-store/internal/external-event-schema.ts
+  s_a1be23a656acf0::t_6edea3d4e16313 6-9,26
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1-5,10-25,27
+apps/server/cloudflare/whatsapp/internal/weekly-question.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1-8,148-164,166,201-202,205
+apps/server/cloudflare/whatsapp/insight-delivery.test.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1,145-147,174-176,219-221,243-253,257-259,309-313,324,334-341,374-376
+apps/server/cloudflare/subscription/internal/native-billing.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1-296
+apps/server/cloudflare/whatsapp/native-callback.test.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1-176
+apps/server/cloudflare/agent/hosted-statement-turn.test.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1,258,273-278,293-298,396,444,548-553,644,688
+apps/server/cloudflare/queue/internal/dispatch.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1-10,298-343,348
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 5,145-189
+apps/server/cloudflare/subscription/runtime.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1-26,53,198,354-397
+apps/server/cloudflare/subscription/wompi-cancellation.test-fixture.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 2,6-37,45
+apps/server/cloudflare/transactions/transactions.test.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 593-595,599,605-606
+apps/server/cloudflare/directory/schema/external-events.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1-6
+apps/server/cloudflare/agent/proactive-transcript.test.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1,124
+apps/server/cloudflare/directory/contract.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1,13,94-141
+apps/server/cloudflare/insights/runtime.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 93,131
+apps/server/cloudflare/whatsapp/operations.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1-4,335-339
+apps/server/cloudflare/ingestion/operations.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 2-4,291-295
+  s_a1be23a656acf0::t_9a1e05de4a485d 1
+apps/server/cloudflare/user-store.test-fixture.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 74-79
+apps/server/cloudflare/agent/whatsapp-capabilities.test-fixture.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1,76
+apps/server/cloudflare/insights/contract.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1-2,209-210
+apps/server/cloudflare/budgets/budgets.test.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 84,757,2039,2243
+apps/server/cloudflare/whatsapp/internal/ingress.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1-5,8,335,347-358,361-367
+apps/server/cloudflare/provider-authentication/journey.test-fixture.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1-5,54-63
+apps/server/cloudflare/queue/contract.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1,8
+apps/server/cloudflare/agent/hosted-turn.test-fixture.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 48
+apps/server/cloudflare/ingestion/internal/native-forwarding.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1-134
+apps/server/cloudflare/provider-authentication/legacy-disclosure.test-fixture.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1-16,223-283
+  s_a1be23a656acf0::t_1447acc2958801 284
+apps/server/cloudflare/subscription/historical-collection.test-fixture.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1-98
+apps/server/cloudflare/subscription/native-callback.test.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1-212
+apps/server/cloudflare/canonical-admission/internal/local-mutation.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 14-18,370,381-391
+  s_a1be23a656acf0::t_4c40bd9b2ec195 392
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 35-49,271,372-398
+  s_a1be23a656acf0::t_6edea3d4e16313 219-222
+apps/server/cloudflare/subscription/wompi-event.test.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1-4,78-144
+apps/server/cloudflare/insights/internal/proactivity-execution.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1-13,63,73-82,95-102,105
+apps/server/cloudflare/whatsapp/internal/proactivity-delivery.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1-12,139-155,157,183-184,201
+apps/server/cloudflare/whatsapp/internal/native-delivery.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1-168
+apps/server/cloudflare/directory/operations.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 2-16,32,178-204
+  s_a1be23a656acf0::t_72b7fadb8ce7fe 1
+apps/server/cloudflare/whatsapp/contract.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 1,250-257,289-344
+apps/server/cloudflare/weekly-summary.test-fixture.ts
+  s_a1be23a656acf0::t_5ffa1d7b57db4e 33
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "44c89b29d750d678f7d1bc4fbb143895823a1a84",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

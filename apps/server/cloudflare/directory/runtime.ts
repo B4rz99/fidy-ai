@@ -38,6 +38,7 @@ import {
   mediaCapacityUrl,
   patRouteUrl,
   registerSessionUrl,
+  rejectInvitationSendUrl,
   releaseSessionUrl,
   replaceIdentityUrl,
   reserveRecoveryUrl,
@@ -64,7 +65,7 @@ import { unavailable } from "../browser-login/operations";
 import { channelApprovalEvidence } from "./internal/channel";
 
 import { externalEventRequest } from "./internal/external-events";
-import { whatsappBootstrap, whatsappOwner } from "./internal/whatsapp";
+import { rejectInvitationSend, whatsappBootstrap, whatsappOwner } from "./internal/whatsapp";
 
 import { admitBootstrap } from "./internal/admission";
 import {
@@ -321,10 +322,12 @@ const routingCommands = new Map<
   | typeof releaseBrowserSession
   | typeof externalEventRequest
   | typeof credentialLookup
+  | typeof rejectInvitationSend
   | typeof whatsappOwner
 >([
   [releaseSessionUrl, releaseBrowserSession],
   [whatsappOwnerUrl, whatsappOwner],
+  [rejectInvitationSendUrl, rejectInvitationSend],
   [sessionRouteUrl, credentialLookup],
   [sourcePressureUrl, credentialLookup],
   [patRouteUrl, credentialLookup],

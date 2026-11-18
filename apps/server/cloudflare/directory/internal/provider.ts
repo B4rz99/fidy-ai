@@ -154,7 +154,7 @@ const checkedInvitation = Effect.fn(function* (
   const [invitation] =
     attempt.invitation === null
       ? []
-      : yield* sql`SELECT portfolio,bsuid FROM whatsapp_invitations WHERE id=${attempt.invitation} AND pairing_id=${pairingId} AND review_attempt=${attempt.id} AND review_code=${proof.associationCode ?? ""} AND decision='confirmed' AND decision_message IS NOT NULL AND expires_at_ms>${yield* Clock.currentTimeMillis}`;
+      : yield* sql`SELECT portfolio,bsuid FROM whatsapp_invitations WHERE id=${attempt.invitation} AND pairing_id=${pairingId} AND review_attempt=${attempt.id} AND review_code=${proof.associationCode ?? ""} AND decision='confirmed' AND length(decision_message)>0 AND length(review_text)>0 AND review_started_ms<confirmed_ms AND confirmed_ms<expires_at_ms AND expires_at_ms>${yield* Clock.currentTimeMillis}`;
   if (attempt.invitation !== null && invitation === undefined) return { valid: false as const };
   if (invitation !== undefined) {
     const occupied =

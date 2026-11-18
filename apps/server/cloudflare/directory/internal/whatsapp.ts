@@ -81,15 +81,15 @@ const prepareInvitation = Effect.fn(function* (event: typeof WhatsAppBootstrapTe
     const held =
       yield* sql`SELECT 1 FROM whatsapp_routes w JOIN erasure_barriers b ON b.user_id=w.user_id WHERE w.portfolio=${event.portfolio} AND w.bsuid=${event.bsuid}`;
     if (held.length !== 0) return noAction();
+    const [duplicate] =
+      yield* sql`SELECT send_rejected FROM whatsapp_invitations WHERE portfolio=${event.portfolio} AND message=${event.message}`;
+    if (duplicate !== undefined) return duplicate.send_rejected === 1 ? conflict() : noAction();
     const [known] =
       yield* sql`SELECT user_id FROM whatsapp_routes WHERE portfolio=${event.portfolio} AND bsuid=${event.bsuid} AND established=1`;
     if (known !== undefined) return yield* Schema.decodeUnknownEffect(Schema.String)(known.user_id);
     const [existing] =
       yield* sql`SELECT id FROM whatsapp_invitations WHERE portfolio=${event.portfolio} AND bsuid=${event.bsuid} AND expires_at_ms>${now} LIMIT 1`;
     if (existing !== undefined) return noAction();
-    const [duplicate] =
-      yield* sql`SELECT id FROM whatsapp_invitations WHERE portfolio=${event.portfolio} AND message=${event.message}`;
-    if (duplicate !== undefined) return noAction();
     const refusal = yield* chargeBootstrapWindows([
       { scope: "whatsapp-sends", limit: 1000, duration: 3600000 },
       {
@@ -104,6 +104,17 @@ const prepareInvitation = Effect.fn(function* (event: typeof WhatsAppBootstrapTe
     return Response.json({ invitation: id });
   }).pipe(withStoreCapacity("growth"));
 });
+/** Keep the original message fenced until the entire signed replay window expires. */
+export const rejectInvitationSend = Effect.fn(function* (request: Request) {
+  const { id, message } = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({ id: Schema.String, message: Schema.String })
+  )(yield* Effect.tryPromise(() => request.json()));
+  const now = yield* Clock.currentTimeMillis,
+    sql = yield* SqliteClient;
+  const changed =
+    yield* sql`UPDATE whatsapp_invitations SET expires_at_ms=min(expires_at_ms,${now}),send_rejected=1 WHERE id=${id} AND message=${message} AND pairing_id IS NULL RETURNING id`;
+  return changed.length === 1 ? noAction() : conflict();
+});
 const confirmReview = Effect.fn(function* (event: typeof WhatsAppBootstrapText.Type, text: string) {
   const sql = yield* SqliteClient;
   const code = reviewPattern.exec(text)?.[1];
@@ -113,7 +124,7 @@ const confirmReview = Effect.fn(function* (event: typeof WhatsAppBootstrapText.T
   const current = yield* Clock.currentTimeMillis;
   const changed =
     yield* sql`UPDATE whatsapp_invitations SET decision=${choice},confirmed_ms=${event.receivedAt},decision_message=${event.message}
-      WHERE portfolio=${event.portfolio} AND bsuid=${event.bsuid} AND endpoint=${event.endpoint} AND review_code=${code} AND review_text=${expected} AND review_started_ms<${event.occurredAt} AND expires_at_ms>${current} AND decision IS NULL
+      WHERE portfolio=${event.portfolio} AND bsuid=${event.bsuid} AND endpoint=${event.endpoint} AND review_code=${code} AND review_text=${expected} AND review_started_ms<${event.occurredAt} AND review_started_ms<${event.receivedAt} AND expires_at_ms>${current} AND decision IS NULL
       AND EXISTS(SELECT 1 FROM provider_attempts a WHERE a.id=review_attempt AND a.pairing_id=whatsapp_invitations.pairing_id AND a.invitation=whatsapp_invitations.id AND a.state='verified' AND a.expires_at_ms>${current}) RETURNING id`;
   return changed.length === 1 ? noAction() : conflict();
 });

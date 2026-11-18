@@ -204,5 +204,12 @@ export const directoryHistory: StoreHistory = {
         "CREATE INDEX media_capacity_expiry ON media_capacity_slots(expires_at_ms) WHERE receipt IS NOT NULL",
       ],
     },
+    {
+      version: 13,
+      id: "rejected-invitation-send",
+      statements: [
+        "ALTER TABLE whatsapp_invitations ADD COLUMN send_rejected INTEGER NOT NULL DEFAULT 0 CHECK(send_rejected IN(0,1))",
+      ],
+    },
   ],
 };

@@ -142,6 +142,19 @@ const supportAndMailbox = Effect.fn(function* (request: Request) {
   }
   return Option.none<Response>();
 });
+const invitationReply = Effect.fn(function* (request: Request) {
+  const message = yield* Effect.tryPromise(() => request.text());
+  if (message.includes("573001234599")) {
+    return Response.json({ error: "invalid recipient" }, { status: 403 });
+  }
+  if (message.includes("573001234598")) {
+    return new Response(null, { status: 503 });
+  }
+  return Response.json({
+    messaging_product: "whatsapp",
+    messages: [{ id: "wamid.signup" }],
+  });
+});
 /** Local signed responses exercise production provider, nonce, lifetime and browser proof checks. */
 export class BrowserOidcFixture extends WorkerEntrypoint {
   override fetch(request: Request): Promise<Response> {
@@ -150,13 +163,7 @@ export class BrowserOidcFixture extends WorkerEntrypoint {
         const simulated = yield* supportAndMailbox(request);
         if (Option.isSome(simulated)) return simulated.value;
         if (new URL(request.url).hostname === "api.kapso.ai") {
-          if ((yield* Effect.tryPromise(() => request.text())).includes("573001234598")) {
-            return new Response(null, { status: 503 });
-          }
-          return Response.json({
-            messaging_product: "whatsapp",
-            messages: [{ id: "wamid.signup" }],
-          });
+          return yield* invitationReply(request);
         }
         if (tokens.has(request.url) && request.method === "POST") return yield* makeToken(request);
         if (!certs.has(request.url)) return new Response(null, { status: 404 });

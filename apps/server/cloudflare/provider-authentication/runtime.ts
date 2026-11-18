@@ -1,4 +1,8 @@
-import { directoryName, whatsappBootstrapUrl } from "../directory/contract";
+import {
+  directoryName,
+  rejectInvitationSendUrl,
+  whatsappBootstrapUrl,
+} from "../directory/contract";
 import { UserId } from "../../src/core/identity/contract";
 import { DateTime, Effect, Option, Redacted, Schema } from "effect";
 import { projections as erasureProjections } from "./internal/erasure";
@@ -61,6 +65,35 @@ export const makeProviderAuthenticationErasureStores = (
 ): ReadonlyArray<ErasureStore> =>
   erasureProjections.map((projection) => makeErasureStore({ db, projection }));
 
+const sendInvitation = Effect.fn(function* (
+  environment: WhatsAppIngressEnvironment,
+  event: WhatsAppAuthenticatedInbound["event"],
+  { owner, invitation }: { owner: Pick<Fetcher, "fetch">; invitation: string }
+) {
+  const send = makeProviderHandoffSender({
+    apiKey: Redacted.make(environment.KAPSO_API_KEY),
+    httpClient: yield* HttpClient.HttpClient,
+    sandboxPhoneNumberId: Option.fromNullishOr(environment.WHATSAPP_SANDBOX_PHONE_NUMBER_ID),
+  });
+  const sent = yield* Effect.result(
+    send({
+      event,
+      text: `¡Hola! Para usar Fidy, acepta la política e inicia sesión con Google o Microsoft:\n${environment.BROWSER_ORIGIN}/login?handoff=${invitation}\nAl terminar, volverás a este chat.`,
+    })
+  );
+  if (sent._tag === "Failure") {
+    if (sent.failure.deliveryCertainty !== "rejected") return new Response(null, { status: 503 });
+    const receipt = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+      id: invitation,
+      message: event.messageEvidence.providerMessageId,
+    });
+    const settled = yield* Effect.tryPromise((signal) =>
+      owner.fetch(rejectInvitationSendUrl, { method: "POST", body: receipt, signal })
+    );
+    if (!settled.ok) return new Response(null, { status: 503 });
+  }
+  return new Response(null, { status: 200 });
+});
 /** Send only after the Directory atomically admits the exact authenticated chat and claims its invitation. */
 export const routeNativeInvitation = Effect.fn(
   function* (environment: WhatsAppIngressEnvironment, inbound: WhatsAppAuthenticatedInbound) {
@@ -92,16 +125,7 @@ export const routeNativeInvitation = Effect.fn(
       ])
     )(yield* Effect.tryPromise(() => response.json()));
     if ("userId" in result) return result.userId;
-    const send = makeProviderHandoffSender({
-      apiKey: Redacted.make(environment.KAPSO_API_KEY),
-      httpClient: yield* HttpClient.HttpClient,
-      sandboxPhoneNumberId: Option.fromNullishOr(environment.WHATSAPP_SANDBOX_PHONE_NUMBER_ID),
-    });
-    yield* send({
-      event,
-      text: `¡Hola! Para usar Fidy, acepta la política e inicia sesión con Google o Microsoft:\n${environment.BROWSER_ORIGIN}/login?handoff=${result.invitation}\nAl terminar, volverás a este chat.`,
-    });
-    return new Response(null, { status: 200 });
+    return yield* sendInvitation(environment, event, { owner, invitation: result.invitation });
   },
   Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
 );

@@ -124,7 +124,14 @@ export const browser = (runtime: Miniflare): Browser => {
 };
 
 type ChatOptions = Partial<
-  Readonly<{ endpoint: string; occurredMs: number; secret: string; phone: string }>
+  Readonly<{
+    endpoint: string;
+    occurredMs: number;
+    secret: string;
+    phone: string;
+    message: string;
+    reply: string;
+  }>
 >;
 export const chatWith = Effect.fn(function* (
   runtime: Miniflare,
@@ -134,7 +141,8 @@ export const chatWith = Effect.fn(function* (
   const bytes = new TextEncoder().encode(
     yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
       message: {
-        id: newId(),
+        id: options.message ?? newId(),
+        ...(options.reply === undefined ? {} : { context: { id: options.reply } }),
         timestamp: String(Math.floor((options.occurredMs ?? now) / millisecondsPerSecond)),
         type: "text",
         from_user_id: caller,
@@ -151,8 +159,12 @@ export const chatWith = Effect.fn(function* (
 export const signedWebhook = Effect.fn(function* (
   runtime: Miniflare,
   bytes: Uint8Array<ArrayBuffer>,
-  secret: string
+  signature: string | Readonly<{ secret: string; event: string }>
 ) {
+  const { secret, event } =
+    typeof signature === "string"
+      ? { secret: signature, event: "whatsapp.message.received" }
+      : signature;
   const key = yield* native(() =>
     crypto.subtle.importKey(
       "raw",
@@ -171,7 +183,7 @@ export const signedWebhook = Effect.fn(function* (
         headers: {
           "content-type": "application/json",
           "x-webhook-signature": Hex.encode(new Uint8Array(digest)),
-          "x-webhook-event": "whatsapp.message.received",
+          "x-webhook-event": event,
           "x-idempotency-key": newId(),
           connection: "close",
         },

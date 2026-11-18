@@ -257,6 +257,9 @@ const mediaVariants = new Map([
 const voiceFixture = Effect.fn(function* (request: Request) {
   if (new URL(request.url).pathname.endsWith("/123456789012345/messages")) {
     const payload = yield* Effect.tryPromise(() => request.json());
+    if (Schema.is(Schema.Struct({ recipient: Schema.Literal("CO.FailedVoice") }))(payload)) {
+      return new Response(null, { status: 503 });
+    }
     if (
       Schema.is(
         Schema.Struct({

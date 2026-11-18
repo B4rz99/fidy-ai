@@ -7,12 +7,11 @@ import { native, nativeBillingPlatform } from "../user-store.test-fixture";
 import { currentDisclosureFor } from "../../src/shell/consent/operations";
 import { DisclosureSnapshot } from "../../src/shell/consent/contract";
 
-const setup = Effect.fn(function* () {
+const setup = Effect.fn(function* (bsuid = "CO.13491208655302741918") {
   const runtime = yield* (yield* nativeBillingPlatform)(),
     owner = yield* seed(runtime, alice, false),
     other = yield* seed(runtime, bob, false);
-  const bsuid = "CO.13491208655302741918",
-    portfolio = "123456789012345";
+  const portfolio = "123456789012345";
   yield* owner.exec(
     "UPDATE users SET whatsapp_portfolio_id=?,whatsapp_bsuid=?,whatsapp_verified_at_ms=? WHERE id=?",
     portfolio,
@@ -168,5 +167,20 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           )
         ).toEqual([{ outcome: "started" }]);
       })
+  );
+  test.effect("keeps a failed provider voice reply terminal under an exact signed replay", () =>
+    Effect.gen(function* () {
+      const { grant, deliver, owner, other } = yield* setup("CO.FailedVoice");
+      yield* grant;
+      const stored = "SELECT outcome FROM whatsapp_voice_refusals WHERE message='wamid.failed'";
+      expect((yield* deliver("wamid.failed")).status).toBe(503);
+      expect(yield* owner.exec(stored)).toEqual([{ outcome: "failed" }]);
+      yield* owner.exec(
+        "CREATE TRIGGER no_retry BEFORE UPDATE ON whatsapp_voice_refusals BEGIN SELECT RAISE(ABORT,'unexpected retry'); END"
+      );
+      expect((yield* deliver("wamid.failed")).status).toBe(503);
+      expect(yield* owner.exec(stored)).toEqual([{ outcome: "failed" }]);
+      expect(yield* other.exec(stored)).toEqual([]);
+    })
   );
 });

@@ -57,6 +57,7 @@ export const releaseSessionUrl = "https://directory.invalid/bootstrap/session/re
 export const registerSessionUrl = "https://directory.invalid/bootstrap/session";
 
 export const whatsappBootstrapUrl = "https://directory.invalid/bootstrap/whatsapp";
+export const rejectInvitationSendUrl = "https://directory.invalid/bootstrap/whatsapp/rejected";
 export const WhatsAppBootstrapText = Schema.Struct({
   portfolio: Schema.String,
   bsuid: Schema.String,

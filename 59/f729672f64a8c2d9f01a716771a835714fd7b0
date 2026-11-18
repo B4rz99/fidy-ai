@@ -1,0 +1,111 @@
+apps/server/cloudflare/oauth-agents/native-grant.test.ts
+  s_a1be23a656acf0::t_396fb6aa83127b 175-179,185-195
+  s_a1be23a656acf0::t_338cfd1406f086 12-49
+  s_a1be23a656acf0::t_29a9082a736fe8 5,8,11,50-84
+apps/server/cloudflare/tokens/internal/native-expiry.ts
+  s_a1be23a656acf0::t_1d06d96c0e1a5e 40-42
+  s_a1be23a656acf0::t_07d82841a12299 1-5,8-39,43-62
+  s_a1be23a656acf0::t_29a9082a736fe8 6-7
+apps/server/cloudflare/oauth-agents/oauth-ingress.test-fixture.ts
+  s_a1be23a656acf0::t_b6058ffeacecb6 1
+  s_a1be23a656acf0::t_ba7035f5c1be9c 314
+apps/server/cloudflare/oauth-agents/oauth-native-residency.test.ts
+  s_a1be23a656acf0::t_b6058ffeacecb6 1
+  s_a1be23a656acf0::t_ba7035f5c1be9c 340-343
+apps/server/cloudflare/oauth-agents/internal/native-token.ts
+  s_a1be23a656acf0::t_c4b810c2929977 1,44
+  s_a1be23a656acf0::t_ba7035f5c1be9c 46
+apps/server/cloudflare/oauth-confirmation/internal/local.ts
+  s_a1be23a656acf0::t_396fb6aa83127b 75,105,115,117-118,125,132-133
+apps/server/cloudflare/canonical-operations/internal/local-owners.ts
+  s_a1be23a656acf0::t_07d82841a12299 5,170,172-181
+apps/server/cloudflare/tokens/internal/native-grants.ts
+  s_a1be23a656acf0::t_07d82841a12299 1,17,343-350
+  s_a1be23a656acf0::t_1d06d96c0e1a5e 76-81,181-184,207,211-212,254-257
+apps/server/cloudflare/oauth-agents/native-grant.test-fixture.ts
+  s_a1be23a656acf0::t_6da711ff688abf 19,49,67-68,99,115,118-119,150
+apps/server/cloudflare/core-http/internal/http.ts
+  s_a1be23a656acf0::t_b6058ffeacecb6 1515
+  s_a1be23a656acf0::t_ba7035f5c1be9c 1680-1688,1750
+  s_a1be23a656acf0::t_c4b810c2929977 1745-1746,1748-1749
+apps/server/cloudflare/oauth-agents/internal/native-directory.ts
+  s_a1be23a656acf0::t_29a9082a736fe8 41
+  s_a1be23a656acf0::t_225ae3ffd255ac 112-114,133-136
+  s_a1be23a656acf0::t_1d06d96c0e1a5e 151-153
+apps/server/cloudflare/core-http/retained-credential-owners.test-fixture.ts
+  s_a1be23a656acf0::t_b6058ffeacecb6 1-5,7-10,12-30,32-39,41-60,67,69-74,76,78-80,82-87,89-92,100-103,105-110
+  s_a1be23a656acf0::t_b7b1db0c3919bb 11,31,40,62,66,68,75,77,81,104
+  s_a1be23a656acf0::t_ba7035f5c1be9c 6,61,63-65,88,93-99
+  s_a1be23a656acf0::t_0ecd1e1d4c921f 111-115
+apps/server/cloudflare/oauth-agents/internal/native-browser.ts
+  s_a1be23a656acf0::t_225ae3ffd255ac 225
+apps/server/cloudflare/canonical-admission/internal/local-mutation.ts
+  s_a1be23a656acf0::t_396fb6aa83127b 425-427,445
+  s_a1be23a656acf0::t_7dd6934dfb1c22 16
+  s_a1be23a656acf0::t_c4b810c2929977 23-24,300-302,548-554,557-559,562-593
+  s_a1be23a656acf0::t_07d82841a12299 193-199,202
+  s_a1be23a656acf0::t_1d06d96c0e1a5e 200-201,203-204,303-305,466-473,475-488,532,555-556,560-561
+  s_a1be23a656acf0::t_b7b1db0c3919bb 474
+  s_a1be23a656acf0::t_2fcfaa4d09760d 533,594
+apps/server/cloudflare/oauth-agents/native-allowance.test.ts
+  s_a1be23a656acf0::t_945abae7b54492 54-64,72,78,81,86-93,103-104,116-118,121-129
+apps/server/cloudflare/tokens/pats.test.ts
+  s_a1be23a656acf0::t_b6058ffeacecb6 1
+  s_a1be23a656acf0::t_1d06d96c0e1a5e 3020,3079
+  s_a1be23a656acf0::t_ba7035f5c1be9c 371-375
+apps/server/cloudflare/tokens/internal/native-pairing.ts
+  s_a1be23a656acf0::t_e02855d1349ca0 58-59,159
+  s_a1be23a656acf0::t_225ae3ffd255ac 1,57,60
+apps/server/cloudflare/oauth-agents/internal/native-access.ts
+  s_a1be23a656acf0::t_c4b810c2929977 1,38
+apps/server/cloudflare/tokens/internal/native-schema.ts
+  s_a1be23a656acf0::t_07d82841a12299 7-8
+scripts/cli-release/native-login.test.ts
+  s_a1be23a656acf0::t_e02855d1349ca0 7-11,14-16,40,84-85,87-96,98,101-103,107-124
+apps/server/cloudflare/tokens/internal/native-pat.ts
+  s_a1be23a656acf0::t_07d82841a12299 60-66
+apps/server/cloudflare/tokens/native-authority.test.ts
+  s_a1be23a656acf0::t_d6501173834db7 1-6,8-18,20-64,69-88,90-103,107-118
+  s_a1be23a656acf0::t_1d06d96c0e1a5e 65-67,104-106
+  s_a1be23a656acf0::t_29a9082a736fe8 7,19
+  s_a1be23a656acf0::t_945abae7b54492 68,89
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_07d82841a12299 166,301
+  s_a1be23a656acf0::t_c4b810c2929977 70,115-123,243-245
+  s_a1be23a656acf0::t_6da711ff688abf 162-163,172-175
+  s_a1be23a656acf0::t_29a9082a736fe8 22-23
+apps/server/cloudflare/canonical-admission/internal/local-batch.ts
+  s_a1be23a656acf0::t_396fb6aa83127b 319
+  s_a1be23a656acf0::t_fae81b8158fa93 295-299,314
+apps/server/cloudflare/directory/schema/operations.ts
+  s_a1be23a656acf0::t_e02855d1349ca0 56
+apps/server/cloudflare/canonical-admission/operations.ts
+  s_a1be23a656acf0::t_c4b810c2929977 1334-1335
+  s_a1be23a656acf0::t_29a9082a736fe8 16
+apps/server/cloudflare/tokens/native-pairing.test.ts
+  s_a1be23a656acf0::t_338cfd1406f086 47,83-93,97-108,111
+apps/server/cloudflare/oauth-agents/internal/native-operation.ts
+  s_a1be23a656acf0::t_29a9082a736fe8 12,25
+apps/server/cloudflare/oauth-agents/native-discovery.test.ts
+  s_a1be23a656acf0::t_6da711ff688abf 1-13,15-69
+  s_a1be23a656acf0::t_b7b1db0c3919bb 14
+  s_a1be23a656acf0::t_225ae3ffd255ac 70-164
+apps/server/cloudflare/tokens/operations.ts
+  s_a1be23a656acf0::t_07d82841a12299 1,105-107
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "59f729672f64a8c2d9f01a716771a835714fd7b0",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

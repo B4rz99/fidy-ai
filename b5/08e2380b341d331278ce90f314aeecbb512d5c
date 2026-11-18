@@ -1,0 +1,104 @@
+apps/server/cloudflare/ingestion/native-email.test.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 1,5,16,62-67,69-128
+apps/server/cloudflare/subscription/wompi-cancellation.test-fixture.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 57-79,115,143
+apps/server/cloudflare/ingestion/internal/drain-originals.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 1-31
+apps/server/cloudflare/user-store/internal/erasure-request.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 64-69
+apps/server/cloudflare/subscription/internal/pricing-object.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 1,287-290
+  s_a1be23a656acf0::t_3f63b40598e52a 291
+apps/server/cloudflare/erasure-store/runtime.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 1-8,87-89,91-92
+apps/server/cloudflare/ingestion/internal/local-document.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 20,175,203-204,219
+apps/server/cloudflare/erasure/native-purge.test.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 1-403
+apps/server/cloudflare/subscription/native-enrollment-erasure.test.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 1-118
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 17-18,230,288-297,392,499-531,533-536
+apps/server/cloudflare/subscription/native-callback.test.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 1,104-106,164-176
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 5,7-18
+apps/server/cloudflare/ingestion/internal/original-writers.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 1-93
+apps/server/cloudflare/user-store/operations.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 996-1015
+apps/server/cloudflare/erasure-store/operations.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 1,87-99,103-116
+  s_a1be23a656acf0::t_084f17a314277b 117
+apps/server/cloudflare/ingestion/internal/email-capacity.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 52
+apps/server/cloudflare/agent/internal/local-recovery.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 52-55
+apps/server/cloudflare/connections/native-connections.test.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 1,423,427-430,445-453
+apps/server/cloudflare/erasure-store/contract.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 56-77
+apps/server/cloudflare/erasure-store/internal/local-purge.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 1-143
+apps/server/cloudflare/ingestion/native-sample.test.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 279
+apps/server/cloudflare/private-objects/operations.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 37-43,45-46,62-72,81-85,91-98,136,143,154-158
+apps/server/cloudflare/ingestion/internal/sample-publication.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 181-227
+apps/server/cloudflare/user-store.test-fixture.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 83,231-239,312,325,536
+apps/server/cloudflare/erasure-purge.test-fixture.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 1-42
+apps/server/cloudflare/subscription/runtime.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 1-2,38-42,346-351
+  s_a1be23a656acf0::t_b97edc602439ae 352
+apps/server/cloudflare/directory/runtime.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 3-5,170-175
+  s_a1be23a656acf0::t_646522103f7815 176
+apps/server/cloudflare/erasure/operations.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 12-13,28,299-306,330-332,340-347,352-356
+apps/server/cloudflare/ingestion/internal/local-email.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 29,209,217-221,416
+apps/server/cloudflare/ingestion/internal/local-retention.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 1,96,119
+apps/server/cloudflare/subscription/internal/local-enrollment-submit.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 98-101,158,216,248-251,253-255
+apps/server/cloudflare/directory/internal/erasure.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 1,30-35
+  s_a1be23a656acf0::t_6d825c5cf6aa55 36
+docs/operations/ingest-sample-review.md
+  s_a1be23a656acf0::t_f2d80db0063b40 15
+apps/server/.dependency-cruiser.mjs
+  s_a1be23a656acf0::t_f2d80db0063b40 17
+apps/server/cloudflare/ingestion/runtime.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 1,230
+apps/server/cloudflare/user-store/internal/erasure-purge.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 1-164
+apps/server/cloudflare/erasure-worker.test-fixture.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 1-70
+.oxlintrc.json
+  s_a1be23a656acf0::t_f2d80db0063b40 322
+apps/server/ARCHITECTURE.md
+  s_a1be23a656acf0::t_f2d80db0063b40 213-239
+apps/server/cloudflare/erasure-store/internal/cases.ts
+  s_a1be23a656acf0::t_f2d80db0063b40 1,54,99,106,111-124
+tools/depcruise/boundaries.mjs
+  s_a1be23a656acf0::t_f2d80db0063b40 121
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b508e2380b341d331278ce90f314aeecbb512d5c",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

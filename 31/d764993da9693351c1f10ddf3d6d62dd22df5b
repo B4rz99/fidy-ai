@@ -1,0 +1,36 @@
+infra/cloudflare/native-deployed-graph.ts
+  s_a1be23a656acf0::t_b0410b28f23b14 1-5,7-9,12-61,64-86,88-91,94-152,155-161,163-191,194-208,211-232
+  s_a1be23a656acf0::t_6dbc23da4d99cb 6,10-11,62-63,87,92-93,153-154,162,192-193,209-210
+.github/workflows/native-storage-release.yml
+  s_a1be23a656acf0::t_c61778d7ed3707 76-79
+infra/cloudflare/native-acceptance.ts
+  s_a1be23a656acf0::t_25a7dc07290821 93-105,120,152
+infra/cloudflare/native-deployed-access.ts
+  s_a1be23a656acf0::t_8d57bd06dddb27 1-225
+infra/cloudflare/native-deployed-edge.ts
+  s_a1be23a656acf0::t_36c199266f3a4b 1-192
+infra/cloudflare/native-deployed-graph.test.ts
+  s_a1be23a656acf0::t_1615e7ffbe78ee 1-242
+infra/cloudflare/native-deployed-web.ts
+  s_a1be23a656acf0::t_638808e65c6787 1-83
+infra/cloudflare/native-provider-list.ts
+  s_a1be23a656acf0::t_4a2d83dd3ae104 1-45
+infra/cloudflare/native-storage-release.ts
+  s_a1be23a656acf0::t_4ad9a2f864e824 1-5,84-86,93-94,103-104,164-168,308,313-364,374-383,413-418,429-430
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "31d764993da9693351c1f10ddf3d6d62dd22df5b",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

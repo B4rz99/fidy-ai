@@ -1,0 +1,29 @@
+infra/cloudflare/native-storage-release.ts
+  s_a1be23a656acf0::t_4fcbd37adb9f42 1-2,173-189,273,631,644
+infra/cloudflare/native-edge.ts
+  s_a1be23a656acf0::t_4fcbd37adb9f42 76,113
+  s_a1be23a656acf0::t_12fa60d9c171c8 1-75,77-111,114-137
+  s_a1be23a656acf0::t_525d64219efe43 112
+infra/cloudflare/edge-security.ts
+  s_a1be23a656acf0::t_30e0aaec12bdc9 59,97
+infra/cloudflare/native-edge.test.ts
+  s_a1be23a656acf0::t_8a3ccf00507109 1-48
+infra/cloudflare/native-storage-resources.ts
+  s_a1be23a656acf0::t_411dbeeed9a776 54,56
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c4993353d5bc147f88028a86a637d2ea301c996b",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

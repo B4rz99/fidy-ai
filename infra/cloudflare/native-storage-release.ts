@@ -1,4 +1,5 @@
-import { Context, Effect, Layer, Option, Schema } from "effect";
+import { verifyNativeEdge } from "./native-edge";
+import { Context, Effect, Layer, Option, Config as ReleaseConfig, Schema } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 import { SmokeIdentity } from "../../apps/server/cloudflare/runtime/release-smoke/contract";
 import {
@@ -169,6 +170,23 @@ const verifyFreshTarget = Effect.fn(function* (
   });
 });
 
+const prepareClosedEdge = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  port: ReleasePort
+) {
+  if (
+    (yield* ReleaseConfig.String("GITHUB_ACTIONS")) !== "true" ||
+    (yield* ReleaseConfig.String("GITHUB_REF")) !== "refs/heads/trunk" ||
+    (yield* ReleaseConfig.String("GITHUB_EVENT_NAME")) !== "workflow_dispatch" ||
+    (yield* ReleaseConfig.String("NATIVE_STORAGE_ADMISSION")) !== "closed"
+  ) {
+    return yield* new ReleaseFailure({ message: "Requires the closed protected installation" });
+  }
+  yield* verifyFreshTarget(env, client, port);
+  yield* verifyNativeEdge(env, client, true);
+});
+
 const verifyInstalledNamespaces = Effect.fn(function* ({
   env,
   client,
@@ -252,6 +270,7 @@ const verifyFirstInstall = Effect.fn(function* (
   port: ReleasePort
 ) {
   yield* releaseController.requireTrunk(port, env.revision);
+  yield* verifyNativeEdge(env, client, false);
   const receipts = yield* workersFromState("capture", nativeStack);
   if (
     receipts.core.workerName !== installationNames.Core ||
@@ -609,6 +628,7 @@ const rollbackNative = Effect.fn(function* (
 
 const commands = {
   "verify-fresh-target": verifyFreshTarget,
+  "prepare-closed-edge": prepareClosedEdge,
   "verify-upload": verifyStorageUpload,
   verify: verifyFirstInstall,
   capture: captureNative,
@@ -621,6 +641,7 @@ if (import.meta.main) {
     const command = yield* Schema.decodeUnknownEffect(
       Schema.Literals([
         "verify-fresh-target",
+        "prepare-closed-edge",
         "verify-upload",
         "verify",
         "capture",

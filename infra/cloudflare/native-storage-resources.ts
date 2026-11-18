@@ -51,9 +51,9 @@ const resourceRelease = Effect.fn(function* (phase: typeof Phase.Type) {
     args: [
       "bun",
       "native-storage-release.ts",
-      phase === "upload" ? "verify-upload" : "verify-fresh-target",
+      phase === "upload" ? "verify-upload" : "prepare-closed-edge",
     ],
-    lifetime: "read-only",
+    lifetime: phase === "upload" ? "read-only" : "started-write",
   });
   return yield* Apply.apply(snapshot.native, { deletions: "defer" }).pipe(
     Effect.provide(snapshot.session.context),

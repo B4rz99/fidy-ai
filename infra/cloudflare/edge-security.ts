@@ -56,7 +56,7 @@ const reservedIngress = {
   },
 } as const;
 
-const customFirewallRules: ReadonlyArray<Cloudflare.Ruleset.Rule> = [
+const customFirewallRules = [
   {
     action: "skip",
     actionParameters: {
@@ -94,7 +94,7 @@ const customFirewallRules: ReadonlyArray<Cloudflare.Ruleset.Rule> = [
     enabled: true,
     expression: `(http.host eq "${productionTopology.docs.hostname}" and http.request.method in {"GET" "HEAD"})`,
   },
-];
+] satisfies ReadonlyArray<Cloudflare.Ruleset.Rule>;
 
 const managedFirewallRules: ReadonlyArray<Cloudflare.Ruleset.Rule> = [
   {

@@ -1,0 +1,27 @@
+apps/server/.dependency-cruiser.mjs
+  s_a1be23a656acf0::t_86886d2ef75e32 72
+apps/server/cloudflare/core-http/lost-read.test-fixture.ts
+  s_a1be23a656acf0::t_f8051b4bd152a0 1
+apps/server/cloudflare/user-clock.test-fixture.ts
+  s_a1be23a656acf0::t_117f6742e1295a 1
+tools/depcruise/boundaries.mjs
+  s_a1be23a656acf0::t_6056cbbffea2cb 9,47-48
+tools/depcruise/boundaries.test.mjs
+  s_a1be23a656acf0::t_d10f2a5a8e2f98 52-55,63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "33bc3e2b48d84b03abf8022024c808eb505ed3c7",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -27,9 +27,11 @@ const start = Effect.gen(function* () {
   const owner = yield* Effect.tryPromise(() =>
     runtime.unsafeGetDurableObjectStorage("core", "UserStore", { name: subject })
   );
-  const fixture = yield* seed(owner, Bun.env.FIDY_ASSESSMENT ?? "");
-  const serialized = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(fixture);
-  process.stdout.write(`ASSESSMENT_SEED ${serialized}\n`);
+  if (Bun.env.FIDY_ASSESSMENT !== "canonical-empty") {
+    const fixture = yield* seed(owner, Bun.env.FIDY_ASSESSMENT ?? "");
+    const serialized = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(fixture);
+    process.stdout.write(`ASSESSMENT_SEED ${serialized}\n`);
+  }
   const run = Effect.runPromiseWith(yield* Effect.context<never>());
   const api = Bun.serve({
     hostname: "127.0.0.1",

@@ -2,7 +2,12 @@ name: Rehearse the storage HTTP comparison
 
 on:
   push:
-    branches: [perf/hosted-storage-cells, perf/canonical-performance-fixture, perf/frozen-d1-schema-snapshot]
+    branches:
+      [
+        perf/hosted-storage-cells,
+        perf/canonical-performance-fixture,
+        perf/frozen-d1-schema-snapshot,
+      ]
   pull_request:
     paths:
       - ".github/workflows/storage-http.yml"

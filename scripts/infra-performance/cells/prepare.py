@@ -17,6 +17,7 @@ def main():
     parser.add_argument("--calibration", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--canonical-fixture", type=Path, help="Originals and actual private provenance from the disposable native rehearsal")
+    parser.add_argument("--snapshot", action="store_true", help="Reconstruct and check the final empty D1 schema against frozen migration replay")
     args = parser.parse_args()
     root, source, out = (p.resolve() for p in (args.d1, args.calibration, args.out))
     for path, revision in ((root, PIN), (source, CALIBRATION)):
@@ -59,6 +60,8 @@ def main():
         observed = materialize(out / "plan.json", args.canonical_fixture)
         inspection_ids = sorted(observed["inspections"])
         (out / "expected.json").write_text(json.dumps({"history": observed["history"], "inspections": observed["inspections"]}, ensure_ascii=False))
+    if args.snapshot:
+        subprocess.run(["bun", str(HERE / "snapshot.mjs"), str(out)], cwd=root, check=True)
     artifacts["plan"] = hashlib.sha256((out / "plan.json").read_bytes()).hexdigest()
     (out / "manifest.json").write_text(json.dumps(dict(baseline=PIN, calibration=CALIBRATION, sha256=artifacts), indent=2))
     disclosure = subprocess.check_output(["bun", "-e",

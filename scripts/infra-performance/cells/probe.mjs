@@ -22,7 +22,11 @@ const calibration = Schema.decodeUnknownSync(
     batches: Schema.Array(
       Schema.Struct({
         batch: Schema.Array(
-          Schema.Struct({ sql: Schema.String, params: Schema.Array(Schema.Unknown) })
+          Schema.Struct({
+            sql: Schema.String,
+            params: Schema.Array(Schema.Unknown),
+            check: Schema.optional(Schema.String),
+          })
         ),
       })
     ),
@@ -265,6 +269,22 @@ try {
     const statements = batch.batch.map(({ sql, params }) => db.prepare(sql).bind(...params));
     const replies = await db.batch(statements);
     assert.equal(replies.length, statements.length);
+    for (const [index, row] of replies.entries()) {
+      const expectedDigest = batch.batch[index]?.check;
+      if (expectedDigest) {
+        const records = Schema.decodeUnknownSync(
+          Schema.Array(Schema.Record(Schema.String, Schema.Json))
+        )(row.results);
+        const stable = records.map((record) =>
+          Object.entries(record).sort(([left], [right]) => left.localeCompare(right))
+        );
+        assert.equal(
+          createHash("sha256").update(JSON.stringify(stable)).digest("hex"),
+          expectedDigest,
+          "Schema or seed verification mismatch"
+        );
+      }
+    }
     const actual = account("calibration", replies);
     totals.rowsRead += actual.rowsRead;
     totals.rowsWritten += actual.rowsWritten;

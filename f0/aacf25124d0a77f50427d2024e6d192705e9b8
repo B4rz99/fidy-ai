@@ -1,0 +1,31 @@
+apps/server/package.json
+  s_a1be23a656acf0::t_6c4a524ad0bac1 333
+bun.lock
+  s_93ddc062392719::t_616f985700f010 67,153,382
+infra/cloudflare/package.json
+  s_a1be23a656acf0::t_1451c42645b0e4 20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f0aacf25124d0a77f50427d2024e6d192705e9b8",
+  "prompts": {},
+  "sessions": {
+    "s_93ddc062392719": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eed2-4ecb-7cd3-9481-146423bb60b2",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

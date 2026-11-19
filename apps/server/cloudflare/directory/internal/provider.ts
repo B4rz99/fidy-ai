@@ -255,14 +255,14 @@ const routeProvider = Effect.fn(function* (
       complete ? bootstrapCompleteUrl : "https://user.invalid/bootstrap/status",
       { method: "POST", headers: { "content-type": "application/json" }, body, signal }
     )
-  );
+  ).pipe(Effect.result);
   if (complete) {
     const fenced = yield* sql.withTransaction(
       Effect.gen(function* () {
         if ((yield* sql`SELECT 1 FROM erasure_barriers WHERE user_id=${result.user}`).length > 0) {
           return true;
         }
-        if (!response.ok) return false;
+        if (Result.isFailure(response) || !response.success.ok) return false;
         yield* sql`UPDATE provider_attempts SET acknowledged=1 WHERE id=${result.id} AND state='bound'`;
         yield* sql`UPDATE provider_routes SET established=1 WHERE creation_attempt=${result.id} AND user_id=${result.user}`;
         yield* sql`UPDATE whatsapp_routes SET established=1 WHERE attempt_id=${result.id} AND user_id=${result.user}`;
@@ -271,7 +271,7 @@ const routeProvider = Effect.fn(function* (
     );
     if (fenced) return invalidProvider();
   }
-  return response;
+  return yield* Effect.fromResult(response);
 });
 
 const getProvider = Effect.fn(function* (

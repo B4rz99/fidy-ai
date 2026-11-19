@@ -1199,25 +1199,31 @@ const settleFleetMeter = Effect.fn(function* (revision: string) {
     return yield* Effect.fail(Error("Post-cleanup Durable Object usage unavailable"));
   }
 });
-const fleetCheckpoints = Effect.fn(function* (env: Config, verifierRevision: string, installed: Effect.Success<ReturnType<typeof installedRelease>>) {
+const fleetCheckpoints = Effect.fn(function* (
+  env: Config,
+  verifierRevision: string,
+  installed: Effect.Success<ReturnType<typeof installedRelease>>
+) {
   const fs = yield* FileSystem.FileSystem;
   const events: Readonly<Record<string, string | number>>[] = [];
   const record = (event: Readonly<Record<string, string | number>>): Effect.Effect<void, Error> => {
     events.push(event);
     const path = env.smokeAttestationFile + ".fleet";
-    return fs.writeFileString(
-      path + ".next",
-      encodeJson({
-        revision: env.revision,
-        verifierRevision,
-        coreVersion: installed.coreVersionId,
-        publicVersion: installed.publicVersionId,
-        userNamespace: installed.userNamespace,
-        requestedPilotUsers: 1,
-        fullFleet: "missing",
-        events,
-      })
-    ).pipe(Effect.andThen(fs.rename(path + ".next", path)));
+    return fs
+      .writeFileString(
+        path + ".next",
+        encodeJson({
+          revision: env.revision,
+          verifierRevision,
+          coreVersion: installed.coreVersionId,
+          publicVersion: installed.publicVersionId,
+          userNamespace: installed.userNamespace,
+          requestedPilotUsers: 1,
+          fullFleet: "missing",
+          events,
+        })
+      )
+      .pipe(Effect.andThen(fs.rename(path + ".next", path)));
   };
   return record;
 });
@@ -1248,12 +1254,13 @@ const fleetPilot = Effect.fn(function* (
       inventory: () => readUserObjects(accountReader(env, client), installed.userNamespace),
       beforeSignup: () => meter(env.revision, "signup").pipe(Effect.asVoid),
       register: browser.register,
-      renewCleanup: () => meter(env.revision, "cleanup").pipe(
-        Effect.matchEffect({
-          onFailure: () => record({ stage: "cleanup-lease-refused" }),
-          onSuccess: browser.renew,
-        })
-      ),
+      renewCleanup: () =>
+        meter(env.revision, "cleanup").pipe(
+          Effect.matchEffect({
+            onFailure: () => record({ stage: "cleanup-lease-refused" }),
+            onSuccess: browser.renew,
+          })
+        ),
       login: browser.login,
       renew: browser.renew,
       record,

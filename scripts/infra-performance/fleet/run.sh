@@ -15,6 +15,6 @@ TMPDIR="$(mktemp -d)"
 sampler=$!
 trap 'kill "$sampler" 2>/dev/null || true; wait "$sampler" 2>/dev/null || true; rm -rf "$TMPDIR"' EXIT
 status=0
-/usr/bin/time -v -o "$report/runner-resources.txt" bun scripts/infra-performance/fleet/native.ts "$1" || status=$?
+/usr/bin/time -v -o "$report/runner-resources.txt" bun scripts/infra-performance/fleet/native.test-fixture.ts "$1" || status=$?
 python3 scripts/infra-performance/fleet/coverage_report.py "$report"
 exit "$status"

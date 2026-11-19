@@ -4,8 +4,8 @@ export * from "../core-worker";
 export { default } from "../core-worker";
 
 type Environment = ConstructorParameters<typeof NativeMaintenance>[1];
-type Peer = NonNullable<Environment["DIRECTORY"]>;
-type Probe = { name: string; at: number; elapsedMs: number | null; status: number | null };
+type Peer = Environment["DIRECTORY"];
+type Probe = { name: string; at: number; elapsedMs: number; status: number };
 const observationUrl = "https://fixture.invalid/fleet-observations";
 
 export class Maintenance extends NativeMaintenance {
@@ -13,21 +13,24 @@ export class Maintenance extends NativeMaintenance {
 
   constructor(state: DurableObjectState, env: Environment) {
     const sample = { active: 0, peak: 0, probes: new Array<Probe>() };
-    const observe = (peer: Peer | undefined): Peer | undefined =>
+    const observe = (peer: Peer): Peer =>
       peer && {
         getByName: (name) => ({
-          fetch: async (input, init) => {
-            const probe: Probe = { name, at: Date.now(), elapsedMs: null, status: null };
+          fetch: (input, init) => {
+            const probe: Probe = { name, at: Date.now(), elapsedMs: 0, status: 0 };
             sample.probes.push(probe);
             sample.peak = Math.max(sample.peak, ++sample.active);
-            try {
-              const response = await peer.getByName(name).fetch(input, init);
-              probe.status = response.status;
-              return response;
-            } finally {
-              probe.elapsedMs = Date.now() - probe.at;
-              sample.active--;
-            }
+            return peer
+              .getByName(name)
+              .fetch(input, init)
+              .then((response) => {
+                probe.status = response.status;
+                return response;
+              })
+              .finally(() => {
+                probe.elapsedMs = Date.now() - probe.at;
+                sample.active--;
+              });
           },
         }),
       };

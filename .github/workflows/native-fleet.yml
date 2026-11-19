@@ -44,5 +44,9 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: native-fleet-${{ github.run_id }}-${{ github.run_attempt }}
-          path: apps/server/test-results/2261-fleet/
+          path: |
+            apps/server/test-results/2261-fleet/*/events.jsonl
+            apps/server/test-results/2261-fleet/*/report.json
+            apps/server/test-results/2261-fleet/*/persistence-kib.tsv
+            apps/server/test-results/2261-fleet/*/runner-resources.txt
           if-no-files-found: warn

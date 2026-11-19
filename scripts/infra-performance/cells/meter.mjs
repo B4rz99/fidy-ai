@@ -22,8 +22,11 @@ const stop = () => {
 const count = (value) => Number.isSafeInteger(value) && value >= 0;
 const zero = () => ({ rowsRead: 0, rowsWritten: 0 });
 const digest = async (sql) => {
-  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(sql)));
-  return Array.from(new Uint8Array(bytes), b => b.toString(16).padStart(2, "0")).join("");
+  const bytes = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(JSON.stringify(sql))
+  );
+  return Array.from(new Uint8Array(bytes), (b) => b.toString(16).padStart(2, "0")).join("");
 };
 
 async function nativeCall(shape, execute) {
@@ -32,7 +35,14 @@ async function nativeCall(shape, execute) {
   const key = await digest(shape);
   context();
   const cap = training ? null : frame.plan?.statements[key];
-  if (!training && (!cap || fields.some(k => !count(cap[k]) || frame.used[k] + frame.pending[k] + cap[k] > frame.plan.maximum[k]))) stop();
+  if (
+    !training &&
+    (!cap ||
+      fields.some(
+        (k) => !count(cap[k]) || frame.used[k] + frame.pending[k] + cap[k] > frame.plan.maximum[k]
+      ))
+  )
+    stop();
   if (cap) for (const k of fields) frame.pending[k] += cap[k];
   frame.inflight++;
   try {
@@ -40,12 +50,17 @@ async function nativeCall(shape, execute) {
     if (!Array.isArray(replies) || !replies.length || replies.length !== shape.length - 1) stop();
     const actual = zero();
     for (const reply of replies) {
-      if (reply?.success !== true || !count(reply.meta?.rows_read) || !count(reply.meta?.rows_written)) stop();
+      if (
+        reply?.success !== true ||
+        !count(reply.meta?.rows_read) ||
+        !count(reply.meta?.rows_written)
+      )
+        stop();
       actual.rowsRead += reply.meta.rows_read;
       actual.rowsWritten += reply.meta.rows_written;
     }
     for (const k of fields) frame.used[k] += actual[k];
-    if (cap && fields.some(k => actual[k] > cap[k])) stop();
+    if (cap && fields.some((k) => actual[k] > cap[k])) stop();
     frame.calls.push({ key, ...actual });
     return replies;
   } catch {
@@ -74,13 +89,15 @@ function prepared(statement, sql) {
 }
 function binding(database) {
   return {
-    prepare: sql => prepared(database.prepare(sql), sql),
+    prepare: (sql) => prepared(database.prepare(sql), sql),
     withSession: (...args) => binding(database.withSession(...args)),
     getBookmark: () => database.getBookmark(),
-    batch: statements => {
-      const batch = statements.map(s => nativeStatements.get(s));
-      if (batch.some(s => !s)) stop();
-      return nativeCall(["batch", ...batch.map(s => s.sql)], () => database.batch(batch.map(s => s.statement)));
+    batch: (statements) => {
+      const batch = statements.map((s) => nativeStatements.get(s));
+      if (batch.some((s) => !s)) stop();
+      return nativeCall(["batch", ...batch.map((s) => s.sql)], () =>
+        database.batch(batch.map((s) => s.statement))
+      );
     },
   };
 }
@@ -97,7 +114,11 @@ function guardedEnvironment(env) {
       getByName: (owner, options) => ({
         fetch: async (input, init) => {
           const request = new Request(input, init);
-          if (owner !== "erasure-registry-v1" || request.url !== "https://erasure-registry.invalid/metadata") stop();
+          if (
+            owner !== "erasure-registry-v1" ||
+            request.url !== "https://erasure-registry.invalid/metadata"
+          )
+            stop();
           const frame = context();
           frame.inflight++;
           try {
@@ -118,17 +139,34 @@ async function measured(request, run) {
   const url = new URL(request.url);
   const route = request.method + " " + url.pathname + url.search;
   const zeroOnly = request.url === "https://erasure-registry.invalid/metadata";
-  if (!zeroOnly && !training && !Object.hasOwn(limits, route)) return new Response(null, { status: 403 });
-  const frame = { zeroOnly, closed: false, inflight: 0, plan: limits?.[route], used: zero(), pending: zero(), calls: [], fault: false };
+  if (!zeroOnly && !training && !Object.hasOwn(limits, route))
+    return new Response(null, { status: 403 });
+  const frame = {
+    zeroOnly,
+    closed: false,
+    inflight: 0,
+    plan: limits?.[route],
+    used: zero(),
+    pending: zero(),
+    calls: [],
+    fault: false,
+  };
   return active.run(frame, async () => {
     try {
       const response = await run();
       const body = await response.arrayBuffer();
       frame.closed = true;
-      if (frame.fault || frame.inflight || fields.some(k => frame.pending[k] !== 0)) return new Response(null, { status: 503 });
+      if (frame.fault || frame.inflight || fields.some((k) => frame.pending[k] !== 0))
+        return new Response(null, { status: 503 });
       const headers = new Headers(response.headers);
-      headers.set(receipt, JSON.stringify(training ? { route, ...frame.used, calls: frame.calls } : frame.used));
-      return new Response(body.byteLength || response.body !== null ? body : null, { headers, status: response.status });
+      headers.set(
+        receipt,
+        JSON.stringify(training ? { route, ...frame.used, calls: frame.calls } : frame.used)
+      );
+      return new Response(body.byteLength || response.body !== null ? body : null, {
+        headers,
+        status: response.status,
+      });
     } catch {
       return new Response(null, { status: 503 });
     } finally {
@@ -140,8 +178,12 @@ export class UserTransactionCoordinator {
   constructor(state, env) {
     this.owner = new PinnedCoordinator(state, guardedEnvironment(env));
   }
-  fetch(request) { return measured(request, () => this.owner.fetch(request)); }
+  fetch(request) {
+    return measured(request, () => this.owner.fetch(request));
+  }
 }
 export default {
-  fetch(request, env, execution) { return measured(request, () => core.fetch(request, guardedEnvironment(env), execution)); },
+  fetch(request, env, execution) {
+    return measured(request, () => core.fetch(request, guardedEnvironment(env), execution));
+  },
 };

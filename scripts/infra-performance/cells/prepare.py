@@ -20,6 +20,11 @@ def main():
     for path, revision in ((root, PIN), (source, CALIBRATION)):
         if subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=path, text=True).strip() != revision:
             raise ValueError("Unexpected source revision")
+    reviewed = {"apps/server/cloudflare/" + name for name in ("browser-assessment.test-fixture.ts", "browser-acceptance-preview.ts",
+                                                            "browser-acceptance-seed.ts")}
+    changed = subprocess.check_output(["git", "diff", "HEAD", "--name-only"], cwd=root, text=True).splitlines()
+    if set(changed) - reviewed:
+        raise ValueError("Frozen application has tracked source changes")
     out.mkdir(parents=True, exist_ok=False)
     artifacts = {}
     for name in ("public-worker", "core-worker"):
@@ -56,6 +61,10 @@ def main():
         subprocess.run(["bun", "build", "meter.mjs", "--target=browser", "--external=cloudflare:workers", "--external=node:*",
                         "--outfile", "metered-core.mjs"], cwd=out, check=True)
         subprocess.run(["bun", str(HERE / "probe.mjs"), str(out), mode], cwd=root, check=True)
+    reference = json.loads((out.parent / "attempts.json").read_bytes()) if (out.parent / "attempts.json").exists() else []
+    probe = json.loads((out / "probe.json").read_bytes())
+    if any(not row["ok"] or row["digest"] != probe["responseSha256"] for row in reference):
+        raise ValueError("Frozen Worker graph and paired reference returned different response bytes")
     artifacts["metered-core"] = hashlib.sha256((out / "metered-core.mjs").read_bytes()).hexdigest()
     artifacts["bounded-ingress"] = hashlib.sha256((out / "bounded-ingress.mjs").read_bytes()).hexdigest()
     artifacts["limits"] = hashlib.sha256((out / "limits.json").read_bytes()).hexdigest()

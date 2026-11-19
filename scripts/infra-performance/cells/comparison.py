@@ -35,7 +35,7 @@ def checked_history(body):
     for row, ordinal in zip(history, ordinals, strict=True):
         if (row["id"] != f"81000000-0000-4000-8000-{ordinal:012d}"
                 or row["counterparty"] != f"Evaluación {ordinal}"
-                or row["revision"] != 0 or row["direction"] != "outflow"
+                or row["revision"] != 0 or row["direction"] != "outflow" or row["money"]["amount"] != "1000"
                 or row["money"]["currency"] != ("USD" if ordinal % 2 else "COP")):
             raise ValueError("wrong-transaction")
 

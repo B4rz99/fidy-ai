@@ -7,12 +7,21 @@ import { acceptanceLifetimeMs } from "../../../apps/server/cloudflare/release-is
 const origins = installedOrigins.acceptance;
 const { cookie, binding, revision } = await Bun.stdin.json();
 const path = "/transactions?limit=25";
-const request = new Request(origins.api + path, { headers: { cookie, origin: origins.browser, "fidy-session-binding": binding } });
-const proof = await Effect.runPromise(signAcceptanceRequest({
-  environment: {
-    BROWSER_ORIGIN: origins.browser, RELEASE_GIT_SHA: revision, SMOKE_PROOF: process.env.SMOKE_PROOF,
-    RECOVERY_ISOLATION: "isolated", NATIVE_STORAGE_ADMISSION: "closed",
-  },
-  request, boundary: "ingress", deadline: Date.now() + acceptanceLifetimeMs,
-}));
+const request = new Request(origins.api + path, {
+  headers: { cookie, origin: origins.browser, "fidy-session-binding": binding },
+});
+const proof = await Effect.runPromise(
+  signAcceptanceRequest({
+    environment: {
+      BROWSER_ORIGIN: origins.browser,
+      RELEASE_GIT_SHA: revision,
+      SMOKE_PROOF: process.env.SMOKE_PROOF,
+      RECOVERY_ISOLATION: "isolated",
+      NATIVE_STORAGE_ADMISSION: "closed",
+    },
+    request,
+    boundary: "ingress",
+    deadline: Date.now() + acceptanceLifetimeMs,
+  })
+);
 process.stdout.write(proof);

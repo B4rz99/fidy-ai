@@ -46,6 +46,26 @@ export class HostedProviderControl extends DurableObject<Environment> {
   private readonly browserClient = new AbortController();
   private readonly released = Deferred.makeUnsafe<void>();
   private waiting = false;
+  private compactionMode = "valid";
+  private compactionCalls = 0;
+  private readonly resumeCompaction = Deferred.makeUnsafe<void>();
+  private readonly structured = Effect.fn({ self: this }, function* () {
+    this.compactionCalls += 1;
+    if (this.compactionMode === "held") yield* Deferred.await(this.resumeCompaction);
+    return completion(
+      this.compactionMode === "invalid"
+        ? '{"other":"Resumen"}'
+        : '{"compactedConversation":"Resumen anterior."}'
+    );
+  });
+  private readonly configureCompaction = Effect.fn({ self: this }, function* (request: Request) {
+    if (request.method === "POST") {
+      const action = yield* Effect.tryPromise(() => request.text());
+      if (action === "release") yield* Deferred.succeed(this.resumeCompaction, undefined);
+      else this.compactionMode = action;
+    }
+    return Response.json({ calls: this.compactionCalls });
+  });
   private rounds = 0;
   private mode = "/recall";
   private requested: ReadonlyArray<{ name: string; arguments: string }> = [];
@@ -63,7 +83,7 @@ export class HostedProviderControl extends DurableObject<Environment> {
       })
     )(yield* Effect.tryPromise(() => request.json()));
     if (input.response_format !== undefined) {
-      return completion('{"compactedConversation":"Resumen anterior."}');
+      return yield* this.structured();
     }
     this.available = input.tools?.map((tool) => tool.function.name) ?? [];
     this.rounds += 1;
@@ -145,8 +165,12 @@ export class HostedProviderControl extends DurableObject<Environment> {
     return new Response(null, { status: 503 });
   });
   override fetch(request: Request): Promise<Response> {
-    if (request.url === "https://fixture.invalid/templates")
-      {return Promise.resolve(Response.json(this.templates));}
+    if (request.url === "https://fixture.invalid/templates") {
+      return Promise.resolve(Response.json(this.templates));
+    }
+    if (request.url === "https://fixture.invalid/compaction") {
+      return Effect.runPromise(this.configureCompaction(request));
+    }
     const browser = this.browserRequest(request);
     if (Option.isSome(browser)) return browser.value;
     if (new URL(request.url).pathname === "/tools") {

@@ -98,7 +98,9 @@ export const compact = Effect.fn(function* (turn: LocalTurn, inference: HostedIn
         WHERE e.session_id=${turn.session_id} AND e.sequence=json_extract(expected.value,'$[0]') AND json_extract(e.entry_json,'$.id')=json_extract(expected.value,'$[1]') AND t.state IN ('completed','interrupted','failed')
       )) RETURNING id`;
     if (written.length === 1) {
-      yield* sql`DELETE FROM hosted_transcript WHERE session_id=${turn.session_id} AND sequence<=${newest.sequence}`;
+      const removed =
+        yield* sql`DELETE FROM hosted_transcript WHERE session_id=${turn.session_id} AND sequence<=${newest.sequence} RETURNING 1`;
+      if (removed.length !== entries.length) return yield* new AgentUnavailable();
     }
   }).pipe(withStoreCapacity("required"));
 });

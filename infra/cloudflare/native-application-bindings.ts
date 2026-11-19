@@ -1,5 +1,6 @@
 import { Hex } from "effect/encoding";
 import * as Cloudflare from "alchemy/Cloudflare";
+import type { Output } from "alchemy/Output";
 import { Config, Effect, Option, Redacted, Schema } from "effect";
 import { ApprovedOpenAiModel } from "@fidy/server/hosted-inference-contract";
 import { EmailAddress } from "@fidy/server/email-authentication-contract";
@@ -237,6 +238,15 @@ const supportApplication = Effect.fn(function* (
     autoRedirectToIdentity: true,
     policies: [{ name, decision: "allow", precedence: 1, sessionDuration: "15m", include }],
   });
+});
+/** Keep the reviewed name and wire type inspectable while Alchemy resolves the upstream value at apply. */
+export const bindPlannedText = Effect.fn(function* (
+  worker: Cloudflare.Worker,
+  values: Readonly<Record<string, string | Output<string>>>
+) {
+  for (const [name, text] of Object.entries(values)) {
+    yield* worker.bind`${name}`({ bindings: [{ name, type: "plain_text", text }] });
+  }
 });
 export const privateAccessBindings = Effect.fn(function* (release: NativeRelease) {
   if (release.development) {

@@ -13,6 +13,7 @@ import {
 import { freeTierWorkerObservability } from "./worker-observability";
 import {
   type NativeRelease,
+  bindPlannedText,
   ingressBindings,
   nativeReleaseContext,
   operatingBindings,
@@ -64,6 +65,26 @@ const candidate = (release: NativeRelease): Cloudflare.WorkerProps["version"] =>
         message: release.closed ? "isolated" : "release",
       };
 
+const bindSandboxCertificate = Effect.fn(function* (core: Cloudflare.Worker) {
+  const certificate = yield* Config.String("BANCOLOMBIA_SANDBOX_CERTIFICATE_ID").pipe(
+    Config.withDefault("")
+  );
+  if (certificate !== "") {
+    yield* Schema.decodeEffect(Schema.String.check(Schema.isUUID()))(certificate).pipe(
+      Effect.orDie
+    );
+    yield* core.bind`bancolombia-sandbox-mtls`({
+      bindings: [
+        {
+          type: "mtls_certificate",
+          name: "BANCOLOMBIA_SANDBOX_MTLS",
+          certificateId: certificate,
+        },
+      ],
+    });
+  }
+});
+
 const coreWorker = Effect.fn(function* ({
   release,
   queues,
@@ -75,6 +96,13 @@ const coreWorker = Effect.fn(function* ({
   buckets: Effect.Success<typeof nativeBuckets>;
   executor: Effect.Success<ReturnType<typeof nativeSmokeExecutor>>;
 }) {
+  const {
+    BETA_PRO_AUDIENCE,
+    SAMPLE_REVIEW_AUDIENCE,
+    CLOUDFLARE_ACCESS_AUDIENCE,
+    ERASURE_SUPPORT_AUDIENCE,
+    ...access
+  } = yield* privateAccessBindings(release);
   const core = yield* Cloudflare.Worker("Core", {
     ...workerPolicy,
     compatibility: apiCompatibility,
@@ -90,38 +118,26 @@ const coreWorker = Effect.fn(function* ({
       ...(yield* nativeWorkflows),
       ...(yield* storageNamespaces),
       ...(yield* operatingBindings),
-      ...(yield* privateAccessBindings(release)),
+      ...access,
       ...(yield* providerBindings(release)),
       SMOKE_LIMITER: Cloudflare.RateLimit("ReleaseSmokeAdmission", {
         namespaceId: 2257,
         simple: { limit: 8, period: 60 },
       }),
       RELEASE_FIXTURE: executor.smoke,
-      SMOKE_QUEUE_NAME: queues.SMOKE_QUEUE.queueName,
       SMOKE_WORKFLOW: executor.reference,
-      CONNECTION_SYNCHRONIZATION_QUEUE_NAME: queues.CONNECTION_SYNCHRONIZATION_QUEUE.queueName,
-      OPERATIONAL_CANARY_QUEUE_NAME: queues.OPERATIONAL_CANARY_QUEUE.queueName,
     },
   });
-  if (!release.development && !release.closed) {
-    const certificate = yield* Config.String("BANCOLOMBIA_SANDBOX_CERTIFICATE_ID").pipe(
-      Config.withDefault("")
-    );
-    if (certificate !== "") {
-      yield* Schema.decodeEffect(Schema.String.check(Schema.isUUID()))(certificate).pipe(
-        Effect.orDie
-      );
-      yield* core.bind`bancolombia-sandbox-mtls`({
-        bindings: [
-          {
-            type: "mtls_certificate",
-            name: "BANCOLOMBIA_SANDBOX_MTLS",
-            certificateId: certificate,
-          },
-        ],
-      });
-    }
-  }
+  yield* bindPlannedText(core, {
+    BETA_PRO_AUDIENCE,
+    SAMPLE_REVIEW_AUDIENCE,
+    CLOUDFLARE_ACCESS_AUDIENCE,
+    ERASURE_SUPPORT_AUDIENCE,
+    SMOKE_QUEUE_NAME: queues.SMOKE_QUEUE.queueName,
+    CONNECTION_SYNCHRONIZATION_QUEUE_NAME: queues.CONNECTION_SYNCHRONIZATION_QUEUE.queueName,
+    OPERATIONAL_CANARY_QUEUE_NAME: queues.OPERATIONAL_CANARY_QUEUE.queueName,
+  });
+  if (!release.development && !release.closed) yield* bindSandboxCertificate(core);
   return core;
 });
 const webApplication = Effect.fn(function* (release: NativeRelease) {

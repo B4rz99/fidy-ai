@@ -3,11 +3,11 @@ import { requireHostPlan, stagedAccessApplications } from "./native-host-plan";
 import * as Alchemist from "alchemy/Alchemist";
 import * as Apply from "alchemy/Apply";
 import { requireNativeResourcePlan } from "./native-graph";
-import { describePlan, describeResource } from "alchemy/Plan";
-import { Cause, Config, Effect, Option, Schema } from "effect";
+import { type Plan, describePlan, describeResource } from "alchemy/Plan";
+import { Config, Effect, Schema } from "effect";
 import { releaseCommand } from "./production-release";
-import { resourceFailureMessage } from "./resource-failure";
-import { requireNativeBindings } from "./storage-installation";
+import { nativeResourceFailureMessage, nativeResourceStage } from "./resource-failure";
+import { type NativeHostMode, requireNativeBindings } from "./storage-installation";
 
 const Phase = Schema.Literals(["first-install", "upload", "stage-hosts"]);
 const requireProtectedDispatch = Effect.gen(function* () {
@@ -29,6 +29,43 @@ const releaseChecks = {
   upload: "verify-upload",
   "stage-hosts": "capture-hosts",
 } as const;
+const verifyResourcePlan = Effect.fn(function* ({
+  phase,
+  plan,
+  revision,
+  hosts,
+}: {
+  phase: typeof Phase.Type;
+  plan: Plan;
+  revision: string;
+  hosts: NativeHostMode;
+}) {
+  if (phase === "stage-hosts") {
+    yield* Effect.sync(() => requireHostPlan(plan)).pipe(nativeResourceStage("Access host plan"));
+  } else {
+    yield* Effect.sync(() => requireNativeBindings({ plan, revision, hosts })).pipe(
+      nativeResourceStage("Worker bindings")
+    );
+    yield* Effect.sync(() =>
+      requireNativeResourcePlan({
+        plan: describePlan(plan),
+        revision,
+        first: phase === "first-install",
+      })
+    ).pipe(nativeResourceStage("resource inventory"));
+    if (
+      phase === "first-install" &&
+      Object.values(plan.resources).some(
+        (node) =>
+          node.action !== "create" || node.state !== undefined || node.deferredAdoption?.adopt
+      )
+    ) {
+      return yield* Effect.fail(Error("Previous state exists")).pipe(
+        nativeResourceStage("first-install ownership")
+      );
+    }
+  }
+});
 const resourceRelease = Effect.fn(function* (phase: typeof Phase.Type) {
   yield* requireProtectedDispatch;
   const revision = yield* Config.String("RELEASE_GIT_SHA");
@@ -51,32 +88,22 @@ const resourceRelease = Effect.fn(function* (phase: typeof Phase.Type) {
     phase === "stage-hosts"
       ? Alchemist.Stack.plan({ ...input, include: stagedAccessApplications })
       : Alchemist.Stack.plan(input)
-  ).pipe(Effect.mapError(() => Error("Native resource planning failed")));
-  const rows = describePlan(snapshot.native);
-  yield* Effect.try(() => {
-    if (phase === "stage-hosts") return requireHostPlan(snapshot.native);
-    requireNativeBindings({ plan: snapshot.native, revision, hosts });
-    requireNativeResourcePlan({ plan: rows, revision, first: phase === "first-install" });
-    if (phase === "first-install") {
-      if (
-        Object.values(snapshot.native.resources).some(
-          (node) =>
-            node.action !== "create" || node.state !== undefined || node.deferredAdoption?.adopt
-        )
-      ) {
-        throw Error("Previous state exists");
-      }
-    }
-  });
+  ).pipe(nativeResourceStage("planning"));
+  yield* verifyResourcePlan({ phase, plan: snapshot.native, revision, hosts });
+  const preflightStages = {
+    "first-install": "closed edge preparation",
+    upload: "upload verification",
+    "stage-hosts": "host capture",
+  } as const;
   yield* releaseCommand({
     args: ["bun", "native-storage-release.ts", releaseChecks[phase]],
     lifetime: phase === "upload" ? "read-only" : "started-write",
-  });
+  }).pipe(nativeResourceStage(preflightStages[phase]));
   return yield* Apply.apply(snapshot.native, { deletions: "defer" }).pipe(
     Effect.provide(snapshot.session.context),
     Effect.uninterruptible,
     Effect.asVoid,
-    Effect.catchCause((cause) => Effect.fail(Error(resourceFailureMessage(cause))))
+    nativeResourceStage("provider apply")
   );
 });
 const publishSite = Effect.gen(function* () {
@@ -89,7 +116,7 @@ const publishSite = Effect.gen(function* () {
     operation: "deploy",
     include: ["Site"],
     updateStateStore: false,
-  }).pipe(Effect.mapError(() => Error("Site planning unavailable")));
+  }).pipe(nativeResourceStage("planning"));
   const rows = describePlan(planned.native),
     site = Object.values(planned.native.resources).find(
       (node) => describeResource(node).logicalId === "Site"
@@ -107,16 +134,20 @@ const publishSite = Effect.gen(function* () {
     site === undefined ||
     !(site.action === "noop" || site.action === "update")
   ) {
-    return yield* Effect.fail(Error("Existing Site and Build must be the only changes"));
+    return yield* Effect.fail(Error("Existing Site and Build must be the only changes")).pipe(
+      nativeResourceStage("Site plan verification")
+    );
   }
   const expected = Schema.Struct({
     workerName: Schema.Literal(productionTopology.site.workerName),
   });
-  yield* Schema.decodeUnknownEffect(expected)(site.state.attr);
+  yield* Schema.decodeUnknownEffect(expected)(site.state.attr).pipe(
+    nativeResourceStage("Site plan verification")
+  );
   yield* Apply.apply(planned.native, { deletions: "defer" }).pipe(
     Effect.provide(planned.session.context),
     Effect.uninterruptible,
-    Effect.catchCause((cause) => Effect.fail(Error(resourceFailureMessage(cause))))
+    nativeResourceStage("provider apply")
   );
 });
 
@@ -130,12 +161,7 @@ if (import.meta.main) {
     program.pipe(
       Effect.catchCause((cause) =>
         Effect.sync(() => {
-          const reason = Cause.findErrorOption(cause);
-          process.stderr.write(
-            (Option.isSome(reason) && reason.value instanceof Error
-              ? "Native resource guard or provider refused the operation."
-              : resourceFailureMessage(cause)) + "\n"
-          );
+          process.stderr.write(nativeResourceFailureMessage(cause) + "\n");
           process.exitCode = 1;
         })
       )

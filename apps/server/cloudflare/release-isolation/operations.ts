@@ -122,9 +122,9 @@ export const releaseAdmission = Effect.fn(function* (
   return { denial: blocked, deadline: Option.none<number>() };
 });
 
-const cohortLimits = { smoke: 2, performance: 20, fleet: 1000 } as const;
+const cohortLimits = { smoke: 2, erasure: 1, performance: 20, fleet: 1000 } as const;
 const syntheticSubject =
-  /^fidy-acceptance-([a-f0-9]{40})-(smoke|performance|fleet)-([1-9][0-9]{0,3})$/u;
+  /^fidy-acceptance-([a-f0-9]{40})-(smoke|erasure|performance|fleet)-([1-9][0-9]{0,3})$/u;
 const fixtureConsumerIssuer =
   "https://login.microsoftonline.com/9188040d-6c67-4c5b-b112-36a304b66dad/v2.0";
 /** The verified provider registration carries the bounded synthetic identity through normal authorization. */
@@ -143,7 +143,10 @@ export const acceptanceSubject = ({
   const purpose = match[2],
     ordinal = Number(match[3]);
   return (
-    (purpose === "smoke" || purpose === "performance" || purpose === "fleet") &&
+    (purpose === "smoke" ||
+      purpose === "erasure" ||
+      purpose === "performance" ||
+      purpose === "fleet") &&
     ordinal <= cohortLimits[purpose]
   );
 };

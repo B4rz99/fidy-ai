@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "6072fa6839ca8243481cd0a44c60039a62a6f4fa35e68df05fee15fff5992fa4";
+const expectedEdgePolicyDigest = "764db7c65c6af88f2869c8a9e622b3e8affca4ad70f850299e0075c853b429b6";
 const securityArtifacts = [
   ...(await Promise.all(
     [
@@ -26,6 +26,8 @@ const securityArtifacts = [
       "../../apps/server/cloudflare/release-isolation/runtime.ts",
       "../../apps/server/cloudflare/runtime/release-smoke/internal/platform.ts",
       "./native-acceptance.ts",
+      "./native-erasure.ts",
+      "./native-erasure-evidence.ts",
       "./native-application-bindings.ts",
       "./native-application-resources.ts",
       "./native-application.ts",

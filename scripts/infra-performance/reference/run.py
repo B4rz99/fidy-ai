@@ -185,7 +185,7 @@ def observation(path, env, destination, variant="d1"):
         with (destination / "browser.log").open("w") as log:
             measure = subprocess.run(
                 ["bun", str(BROWSER)],
-                env=env,
+                env={**env, "FIDY_REFERENCE_EVENTS": str(destination / "workspace-events.jsonl")},
                 cwd=ROOT,
                 text=True,
                 stdout=subprocess.PIPE,

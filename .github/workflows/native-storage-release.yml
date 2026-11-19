@@ -71,10 +71,14 @@ jobs:
         run: bun verify-edge-policy.ts
       - name: Verify the fresh native plan against the existing state store
         if: inputs.operation == 'plan-first-install'
+        env:
+          CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
         working-directory: infra/cloudflare
         run: bun native-storage-resources.ts plan-first-install
       - name: Install the verified fresh native application
         if: inputs.operation == 'first-install'
+        env:
+          CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
         working-directory: infra/cloudflare
         run: bun native-storage-resources.ts first-install
       - name: Capture the native stable pair and stage zero-traffic candidates
@@ -99,6 +103,8 @@ jobs:
         run: bun run build:production
       - name: Stage only canonical Access paths and vacant hostnames on the verified closed release
         if: inputs.operation == 'stage-hosts'
+        env:
+          CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
         working-directory: infra/cloudflare
         run: |
           bun native-storage-resources.ts stage-hosts
@@ -106,14 +112,20 @@ jobs:
       - name: Verify the installed application and retained schema markers
         id: verify
         if: inputs.operation != 'plan-first-install' && inputs.operation != 'first-install' && inputs.operation != 'verify-erasure' && inputs.operation != 'fleet-pilot'
+        env:
+          CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts verify
       - name: Verify the installed application and physical erasure of one disposable User
         if: inputs.operation == 'first-install' || inputs.operation == 'verify-erasure'
+        env:
+          CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts verify-erasure
       - name: Measure one disposable User on the exact closed release
         if: inputs.operation == 'fleet-pilot'
+        env:
+          CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts fleet-pilot
       - name: Restore only a compatible, tested target after failed promoted verification

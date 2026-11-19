@@ -1,0 +1,30 @@
+.github/workflows/daviplata-sandbox.yml
+  s_a1be23a656acf0::t_dc7679bb97a88c 1,22,41-42,50
+scripts/infra-performance/reference/run.py
+  s_a1be23a656acf0::t_3a91d1c91f9192 299-306,308
+  s_a1be23a656acf0::t_aa3858945ff916 1,213,254
+.github/workflows/nequi-sandbox.yml
+  s_a1be23a656acf0::t_dc7679bb97a88c 1,22,39-40,47
+apps/server/.dependency-cruiser.mjs
+  s_a1be23a656acf0::t_aa3858945ff916 22
+package.json
+  s_a1be23a656acf0::t_aa3858945ff916 43
+docs/operations/production-benchmark-budget.md
+  s_a1be23a656acf0::t_aa3858945ff916 41,106
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "804f1193325ea46d4a4ea2f93bbbf1ed1f4bc17c",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

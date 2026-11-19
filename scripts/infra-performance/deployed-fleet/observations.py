@@ -10,7 +10,7 @@ def observation(query, account, version, start, end):
         ("$workers.scriptVersion.id", "eq", version),
         ("$metadata.message", "includes", COVERAGE))]
     response = query(f"accounts/{account}/workers/observability/telemetry/query", {
-        "queryId": "native-fleet-pilot", "view": "events",
+        "queryId": "native-fleet-pilot", "view": "events", "dry": True,
         "timeframe": {"from": start, "to": end},
         "parameters": {"filters": filters, "limit": 100}})
     if response.get("success") is not True:

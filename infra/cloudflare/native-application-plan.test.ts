@@ -1,5 +1,6 @@
 import { approvedOpenAiModel } from "@fidy/server/hosted-inference-contract";
 import { it } from "@effect/vitest";
+import { createHash, generateKeyPairSync } from "node:crypto";
 import { expect } from "vitest";
 import * as Alchemy from "alchemy";
 import * as Alchemist from "alchemy/Alchemist";
@@ -31,11 +32,14 @@ const pinFetch: typeof fetch = Object.assign(
   },
   { preconnect: fetch.preconnect }
 );
-it.effect(
-  "declares every Core and smoke binding before a fresh Access application or queue exists",
-  () => {
+it.effect.each([false,true])(
+  "declares exactly the requested Core and smoke bindings before resources exist (fixture signer %s)",
+  (enabled) => {
     const revision = "1".repeat(40);
+    const pair=generateKeyPairSync("ec",{namedCurve:"prime256v1",publicKeyEncoding:{type:"spki",format:"der"},privateKeyEncoding:{type:"pkcs8",format:"der"}});
+    const fingerprint=enabled?createHash("sha256").update(pair.publicKey).digest("hex"):"";
     const configuration = ConfigProvider.fromUnknown({
+      ...(enabled?{NATIVE_FIXTURE_SIGNER_SHA256:fingerprint,NATIVE_FIXTURE_SIGNING_KEY:pair.privateKey.toString("hex")} : {}),
       NATIVE_STORAGE_ADMISSION: "closed",
       RELEASE_GIT_SHA: revision,
       CONTRACT_DIGEST: "2".repeat(64),
@@ -82,12 +86,13 @@ it.effect(
             );
             if (resource === undefined) throw Error("Missing declared Worker " + worker);
             const rows = compiled.bindings[resource.FQN] ?? [];
-            requireClosedBindings({
-              worker,
-              bindings: rows.flatMap(
-                (row) => Schema.decodeUnknownSync(bindings)(row.data).bindings ?? []
-              ),
-            });
+            const observed=rows.flatMap((row)=>Schema.decodeUnknownSync(bindings)(row.data).bindings??[]);
+            requireClosedBindings({worker,bindings:observed},fingerprint);
+            expect(observed.some((item)=>item.name==="NATIVE_FIXTURE_SIGNING_KEY")).toBe(enabled&&worker==="Core");
+            if (enabled&&worker==="Core") {
+              expect(()=>requireClosedBindings({worker,bindings:observed})).toThrow();
+              expect(()=>requireClosedBindings({worker,bindings:observed},"0".repeat(64))).toThrow();
+            }
           }
         }),
       { stage: "production" }

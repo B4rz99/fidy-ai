@@ -15,7 +15,10 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/bun-runtime
       - run: bash scripts/install-workspace.sh --ignore-scripts
+      - name: Verify closed release signer inventories on the real plan
+        run: bun node_modules/vitest/vitest.mjs run --config infra/cloudflare/vitest.config.ts infra/cloudflare/native-application-plan.test.ts infra/cloudflare/native-deployed-graph.test.ts
       - name: Require genuine signed capture and own-fixture proof
+        if: always()
         run: python3 scripts/infra-performance/canonical-fixture/hosted.py rehearse --out apps/server/test-results/closed-native-fixture
       - name: Check receipt policy code
         if: always()

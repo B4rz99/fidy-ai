@@ -208,7 +208,7 @@ const request = async (path, options) => {
   assert.equal(reply.headers.get("x-fidy-comparison-worker"), ingressVersion);
   const cost = rowReceipt(JSON.parse(reply.headers.get("x-fidy-comparison-cost") ?? "null"));
   assert.ok(
-    cost && Number.isSafeInteger(cost.rowsRead) && Number.isSafeInteger(cost.rowsWritten),
+    Number.isSafeInteger(cost.rowsRead) && Number.isSafeInteger(cost.rowsWritten),
     "Missing native receipt: " + reply.status
   );
   const route = (options?.method ?? "GET") + " " + path;

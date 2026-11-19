@@ -1,6 +1,6 @@
 // The pinned Ingress remains private. Only the experiment controller knows this expiring key.
 import { timingSafeEqual } from "node:crypto";
-import ingress from "./public-worker.mjs";
+import { ingress } from "./frozen-ingress.mjs";
 
 /** @import {IngressEnvironment} from "./contracts.d.mts" */
 const paths = new Set([

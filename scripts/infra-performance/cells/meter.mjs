@@ -1,6 +1,6 @@
 // Bundled only in the disposable comparator. The original frozen application owns all SQL.
 import { AsyncLocalStorage } from "node:async_hooks";
-import core, { UserTransactionCoordinator as PinnedCoordinator } from "./core-worker.mjs";
+import { core, UserTransactionCoordinator as PinnedCoordinator } from "./frozen-core.mjs";
 import { limits } from "./configured-limits.mjs";
 
 /** @import { Bounds, Cost, CoreEnvironment, Database, Frame, Statement, StatementReply } from "./contracts.d.mts" */
@@ -60,7 +60,7 @@ const reserve = (frame, key) => {
   for (const field of fields) frame.pending[field] += cap[field];
   return cap;
 };
-/** @param {StatementReply} reply Native result. */
+/** @param {Partial<StatementReply> | null | undefined} reply Native result. */
 const confirmedRows = (reply) =>
   reply?.success === true && count(reply.meta?.rows_read) && count(reply.meta?.rows_written);
 /**
@@ -71,7 +71,7 @@ const nativeRows = (replies, length) => {
   if (!Array.isArray(replies) || !length || replies.length !== length) stop();
   const actual = zero();
   for (const reply of replies) {
-    const meta = reply?.meta;
+    const meta = reply.meta;
     if (!confirmedRows(reply)) stop();
     actual.rowsRead += meta.rows_read;
     actual.rowsWritten += meta.rows_written;

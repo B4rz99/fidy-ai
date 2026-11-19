@@ -38,8 +38,8 @@ export type Namespace = {
 };
 export type CoreEnvironment = {
   DB: Database;
-  USER_TRANSACTION_COORDINATOR: Namespace;
-  ERASURE_REGISTRY_COORDINATOR: Namespace;
+  USER_TRANSACTION_COORDINATOR?: Namespace;
+  ERASURE_REGISTRY_COORDINATOR?: Namespace;
 };
 export type IngressEnvironment = {
   EXPERIMENT_DEADLINE: string;

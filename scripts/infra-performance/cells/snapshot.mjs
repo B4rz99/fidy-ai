@@ -251,7 +251,9 @@ try {
   );
   evidence.stage = "extract";
   evidence.oraclePhysical = await physical(oracle);
-  const platform = new Set(pristine.map((def) => def.name));
+  // D1 creates this opaque service-owned table on the first write to its database.
+  // Its definition participates in the full schema check after the restoration writes.
+  const platform = new Set([...pristine.map((def) => def.name), "_cf_METADATA"]);
   const definitions = originalOrder.filter(
     (def) => !platform.has(def.name) && !def.name.startsWith("sqlite_") && def.sql !== null
   );

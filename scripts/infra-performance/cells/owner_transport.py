@@ -1,4 +1,5 @@
 """Private HTTP transport, real account analytics and independent deployed-version verification."""
+
 import datetime as dt
 import json
 import os
@@ -40,9 +41,14 @@ def fetch(url, headers, body=None):
 
 
 def cloudflare(path, body=None):
-    status, _, raw = fetch("https://api.cloudflare.com/client/v4/" + path,
-                           {"Authorization": "Bearer " + os.environ["CLOUDFLARE_API_TOKEN"], "Content-Type": "application/json"},
-                           None if body is None else json.dumps(body).encode())
+    status, _, raw = fetch(
+        "https://api.cloudflare.com/client/v4/" + path,
+        {
+            "Authorization": "Bearer " + os.environ["CLOUDFLARE_API_TOKEN"],
+            "Content-Type": "application/json",
+        },
+        None if body is None else json.dumps(body).encode(),
+    )
     if status != 200:
         raise Refused("Cloudflare identity or usage unavailable")
     data = json.loads(raw)
@@ -61,11 +67,16 @@ def usage(account):
     query = """query($account:String!,$day:Date!){viewer{accounts(filter:{accountTag:$account}){accountTag
       d1AnalyticsAdaptiveGroups(limit:1,filter:{date:$day}){sum{rowsRead rowsWritten}}}}}"""
     data = cloudflare("graphql", dict(query=query, variables=dict(account=account, day=date)))
-    group, = data["viewer"]["accounts"]
+    (group,) = data["viewer"]["accounts"]
     if group.get("accountTag") != account:
         raise Refused("Unexpected D1 analytics account")
-    result, = group["d1AnalyticsAdaptiveGroups"]
-    return dict(accountId=account, utcDate=date, observedAtEpochMs=int(stamp.timestamp()*1000), **counts(result["sum"]))
+    (result,) = group["d1AnalyticsAdaptiveGroups"]
+    return dict(
+        accountId=account,
+        utcDate=date,
+        observedAtEpochMs=int(stamp.timestamp() * 1000),
+        **counts(result["sum"]),
+    )
 
 
 def confirmed(receipt, account):
@@ -80,10 +91,13 @@ def confirmed(receipt, account):
     for role in ("core", "ingress"):
         worker = base + "/workers/scripts/" + tag + "-" + role
         address = cloudflare(worker + "/subdomain")
-        if address.get("enabled") is not (role == "ingress") or address.get("previews_enabled") is not False:
+        if (
+            address.get("enabled") is not (role == "ingress")
+            or address.get("previews_enabled") is not False
+        ):
             raise Refused("Unexpected disposable Worker exposure")
         item = cloudflare(worker + "/deployments")["deployments"][0]
-        version, = item["versions"]
+        (version,) = item["versions"]
         if version["version_id"] != receipt["versions"][role] or version["percentage"] != 100:
             raise Refused("Disposable Worker version mismatch")
         deployed = cloudflare(worker + "/versions/" + str(UUID(version["version_id"])))
@@ -94,24 +108,57 @@ def confirmed(receipt, account):
     if database["name"] != tag or database["uuid"] != receipt["databaseId"]:
         raise Refused("Unexpected D1 database")
     core, ingress = settings["core"], settings["ingress"]
-    db, = [b for b in core.values() if b["type"] == "d1"]
-    if (db["name"] != "DB" or db.get("id", db.get("database_id")) != database["uuid"]
-            or any(b["type"] == "d1" for b in ingress.values())
-            or ingress["CORE"].get("service") != tag + "-core"
-            or core["ERASURE_BUCKET"].get("bucket_name") != tag):
+    (db,) = [b for b in core.values() if b["type"] == "d1"]
+    if (
+        db["name"] != "DB"
+        or db.get("id", db.get("database_id")) != database["uuid"]
+        or any(b["type"] == "d1" for b in ingress.values())
+        or ingress["CORE"].get("service") != tag + "-core"
+        or core["ERASURE_BUCKET"].get("bucket_name") != tag
+    ):
         raise Refused("Disposable resource binding mismatch")
-    namespaces = [core["USER_TRANSACTION_COORDINATOR"], core["ERASURE_REGISTRY_COORDINATOR"], ingress["ERASURE_REGISTRY_COORDINATOR"]]
+    namespaces = [
+        core["USER_TRANSACTION_COORDINATOR"],
+        core["ERASURE_REGISTRY_COORDINATOR"],
+        ingress["ERASURE_REGISTRY_COORDINATOR"],
+    ]
     common = {"BROWSER_ORIGIN", "RELEASE_GIT_SHA", "CONTRACT_DIGEST"}
-    if (set(core) != common | {"DB", "ERASURE_BUCKET", "ERASURE_REQUIRED", "OPENAI_API_KEY", "HOSTED_AI_MODEL",
-            "WHATSAPP_BUSINESS_PORTFOLIO_ID", "USER_TRANSACTION_COORDINATOR", "ERASURE_REGISTRY_COORDINATOR"}
-            or set(ingress) != common | {"CORE", "CF_VERSION_METADATA", "EXPERIMENT_KEY", "EXPERIMENT_DEADLINE",
-            "PAT_ADMISSION_KEY", "LOCAL_CANONICAL_READ_BEARER", "ERASURE_REGISTRY_COORDINATOR"}
-            or ingress["EXPERIMENT_KEY"]["type"] != "secret_text" or ingress["CORE"]["type"] != "service"):
+    if (
+        set(core)
+        != common
+        | {
+            "DB",
+            "ERASURE_BUCKET",
+            "ERASURE_REQUIRED",
+            "OPENAI_API_KEY",
+            "HOSTED_AI_MODEL",
+            "WHATSAPP_BUSINESS_PORTFOLIO_ID",
+            "USER_TRANSACTION_COORDINATOR",
+            "ERASURE_REGISTRY_COORDINATOR",
+        }
+        or set(ingress)
+        != common
+        | {
+            "CORE",
+            "CF_VERSION_METADATA",
+            "EXPERIMENT_KEY",
+            "EXPERIMENT_DEADLINE",
+            "PAT_ADMISSION_KEY",
+            "LOCAL_CANONICAL_READ_BEARER",
+            "ERASURE_REGISTRY_COORDINATOR",
+        }
+        or ingress["EXPERIMENT_KEY"]["type"] != "secret_text"
+        or ingress["CORE"]["type"] != "service"
+    ):
         raise Refused("Unexpected protected Worker capabilities")
     for binding, role in zip(namespaces, ("core", "core", "ingress"), strict=True):
-        if (binding["type"] != "durable_object_namespace" or binding["class_name"] != "UserTransactionCoordinator"
-                or binding.get("namespace_id", receipt["namespaceId"]) != receipt["namespaceId"]
-                or binding.get("script_name", tag + "-" + role) != tag + "-core" and not binding.get("namespace_id")):
+        if (
+            binding["type"] != "durable_object_namespace"
+            or binding["class_name"] != "UserTransactionCoordinator"
+            or binding.get("namespace_id", receipt["namespaceId"]) != receipt["namespaceId"]
+            or binding.get("script_name", tag + "-" + role) != tag + "-core"
+            and not binding.get("namespace_id")
+        ):
             raise Refused("Disposable coordinator identity mismatch")
     if receipt["fixture"] != FIXTURE or receipt["baseline"] != PIN or receipt["day"] != today():
         raise Refused("Missing same-day calibrated fixture receipt")

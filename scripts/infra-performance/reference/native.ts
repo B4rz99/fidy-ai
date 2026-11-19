@@ -1,16 +1,26 @@
 import { BunFileSystem } from "@effect/platform-bun";
 import { Effect, Schema } from "effect";
+import type { Miniflare } from "miniflare";
 import { approve, forward, makeBrowserRuntime, prepareBrowserUser } from "../../dev-browser-api";
 import { seed, subject } from "./native-seed";
 
 const apiPort = 4174;
 const operatorPort = 4175;
+const timedResponse = Effect.fn(function* (runtime: Miniflare, request: Request) {
+  const started = performance.now();
+  const response = yield* forward(runtime, request);
+  if (!new URL(request.url).pathname.startsWith("/transactions")) return response;
+  const body = yield* Effect.tryPromise(() => response.arrayBuffer());
+  const headers = new Headers(response.headers);
+  headers.set("x-reference-backend-ms", String(performance.now() - started));
+  return new Response(body, { status: response.status, headers });
+});
 const start = Effect.gen(function* () {
   process.stdout.write("REFERENCE_STAGE runtime\n");
   const runtime = yield* makeBrowserRuntime;
   process.stdout.write("REFERENCE_STAGE user\n");
   yield* prepareBrowserUser(runtime, subject);
-  const owner = yield* Effect.promise(() =>
+  const owner = yield* Effect.tryPromise(() =>
     runtime.unsafeGetDurableObjectStorage("core", "UserStore", { name: subject })
   );
   const fixture = yield* seed(owner, Bun.env.FIDY_ASSESSMENT ?? "");
@@ -24,18 +34,7 @@ const start = Effect.gen(function* () {
       cert: Bun.file(Bun.env.PLAYWRIGHT_TLS_CERT ?? ""),
       key: Bun.file(Bun.env.PLAYWRIGHT_TLS_KEY ?? ""),
     },
-    fetch: (request) =>
-      run(
-        Effect.gen(function* () {
-          const started = performance.now();
-          const response = yield* forward(runtime, request);
-          if (!new URL(request.url).pathname.startsWith("/transactions")) return response;
-          const body = yield* Effect.promise(() => response.arrayBuffer());
-          const headers = new Headers(response.headers);
-          headers.set("x-reference-backend-ms", String(performance.now() - started));
-          return new Response(body, { status: response.status, headers });
-        })
-      ),
+    fetch: (request) => run(timedResponse(runtime, request)),
   });
   const operator = Bun.serve({
     hostname: "127.0.0.1",
@@ -51,7 +50,7 @@ const start = Effect.gen(function* () {
             return Response.json({ status: "ready" });
           }
           if (url.pathname === "/assessment/accountability" && request.method === "GET") {
-            const [counts] = yield* Effect.promise(() =>
+            const [counts] = yield* Effect.tryPromise(() =>
               owner.exec(
                 `SELECT
           (SELECT count(*) FROM audit_entries WHERE user_id=?1 AND operation='transactions.listTransactions' AND outcome='success') AS reads,
@@ -68,7 +67,7 @@ const start = Effect.gen(function* () {
       ),
   });
   yield* Effect.addFinalizer(() =>
-    Effect.promise(() => Promise.all([operator.stop(true), api.stop(true)]))
+    Effect.tryPromise(() => Promise.all([operator.stop(true), api.stop(true)])).pipe(Effect.orDie)
   );
   return yield* Effect.never;
 });

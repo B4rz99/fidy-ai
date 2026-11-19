@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { type Cause, Effect, Schema } from "effect";
 import { listLaunchCategories } from "../../../apps/server/src/core/categories/operations";
 import type { Miniflare } from "miniflare";
 
@@ -21,7 +21,8 @@ const digestCharacters = 64;
 const execute = (
   db: Owner,
   ...args: Parameters<Owner["exec"]>
-): Effect.Effect<Awaited<ReturnType<Owner["exec"]>>> => Effect.promise(() => db.exec(...args));
+): Effect.Effect<Awaited<ReturnType<Owner["exec"]>>, Cause.UnknownError> =>
+  Effect.tryPromise(() => db.exec(...args));
 const everyHundred = 100;
 // Match the immutable D1 fixture's IDs, facts and dates. Bound each native SQLite statement.
 const transactions = Effect.fn(function* (db: Owner, size: Size) {

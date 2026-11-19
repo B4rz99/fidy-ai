@@ -242,7 +242,14 @@ const request = async (path, options) => {
   });
   return reply;
 };
-try {
+if (process.argv[3] === "owner-pipe") {
+  try {
+    const { serveOwnerPipe } = await import("./owner-pipe.mjs");
+    await serveOwnerPipe(runtime, experimentKey, ingressVersion);
+  } finally {
+    await runtime.dispose();
+  }
+} else try {
   const db = await runtime.getD1Database("DB", "core");
   const bucket = await runtime.getR2Bucket("ERASURE_BUCKET", "core");
   const totals = { rowsRead: 0, rowsWritten: 0 };

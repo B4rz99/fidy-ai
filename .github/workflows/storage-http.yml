@@ -75,6 +75,10 @@ jobs:
         run: |
           python3 scripts/infra-performance/cells/prepare.py --d1 baseline-d1 --calibration baseline-calibration \
             --canonical-fixture apps/server/test-results/canonical-fixture/fixture --materialized --out apps/server/test-results/materialized
+      - name: Interrupt the protected controller and verify disposal from recovered account state
+        run: |
+          python3 scripts/infra-performance/cells/rehearse-owner.py --bundle apps/server/test-results/materialized \
+            --out apps/server/test-results/storage-preparation-owner/recovery.json
       - name: Reconstruct the final empty schema and repeat the fully verified comparator
         run: |
           python3 scripts/infra-performance/cells/prepare.py --d1 baseline-d1 --calibration baseline-calibration \
@@ -99,6 +103,7 @@ jobs:
         with:
           name: storage-http-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
+            apps/server/test-results/storage-preparation-owner/recovery.json
             apps/server/test-results/storage-preparation/**/*.json
             apps/server/test-results/storage-preparation/*.json
             apps/server/test-results/storage-http/*.json*

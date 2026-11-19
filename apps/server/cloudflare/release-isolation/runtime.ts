@@ -20,6 +20,15 @@ const Configuration = Schema.Struct({
 });
 const denied = (): Promise<Response> =>
   Promise.resolve(new Response(null, { status: 503, headers: { "cache-control": "no-store" } }));
+const firstRedirectStatus = 300,
+  firstClientErrorStatus = 400;
+const rejectKeyRedirect = (response: Response): Response | Promise<Response> => {
+  if (response.status < firstRedirectStatus || response.status >= firstClientErrorStatus) {
+    return response;
+  }
+  response.body?.cancel().catch(() => undefined);
+  return denied();
+};
 const pinnedKeys = (request: Request, issuer: string): boolean =>
   /^https:\/\/[a-z0-9-]+\.cloudflareaccess\.com$/u.test(issuer) &&
   request.method === "GET" &&
@@ -41,10 +50,10 @@ export const fetchForInstalledRelease = ({
       if (pinnedKeys(request, config.CLOUDFLARE_ACCESS_ISSUER ?? "")) {
         return transport(request.url, {
           method: "GET",
-          redirect: "error",
+          redirect: "manual",
           signal: request.signal,
           headers: { accept: "application/json" },
-        });
+        }).then(rejectKeyRedirect);
       }
       if (config.RELEASE_FIXTURE === undefined) return denied();
       return config.RELEASE_FIXTURE.fetch(request);

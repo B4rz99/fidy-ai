@@ -18,6 +18,10 @@ const observedManifest = async (
   const wrapper = `import worker from "./production.mjs";
   export * from "./production.mjs";
   export default {...worker,async fetch(request,env,ctx){
+    const origin=new URL(request.url);
+    if ("${name}"==="ingress" && origin.hostname==="127.0.0.1") {
+      request=new Request("${installedOrigins.acceptance.api}"+origin.pathname+origin.search,request);
+    }
     const result=await worker.fetch(request,env,ctx);
     const headers=new Headers(result.headers);
     headers.set("x-rehearsal-${name}",JSON.stringify({tls:new URL(request.url).protocol==="https:",host:new URL(request.url).hostname,forwardedHost:request.headers.has("x-forwarded-host"),signed:request.headers.has("x-fidy-acceptance-proof"),isolation:result.headers.has("x-fidy-recovery-isolation")}));

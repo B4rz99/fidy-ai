@@ -98,10 +98,12 @@ const readEvidence = Effect.fn(function* (user: string, revision: string, bindin
     WHERE p.user_id=${user} AND p.issuer='https://accounts.google.com' AND p.subject=${subject}
     AND (SELECT count(*) FROM transactions WHERE user_id=${user})=8
     AND (SELECT count(*) FROM source_attestations WHERE user_id=${user})=8
-    AND EXISTS(SELECT 1 FROM audit_entries WHERE user_id=${user} AND session_id=${binding}
-      AND operation='transactions.linkTransactions' AND outcome='success')
-    AND EXISTS(SELECT 1 FROM audit_entries WHERE user_id=${user} AND session_id=${binding}
-      AND operation='transactions.getTransaction' AND outcome='success')`;
+    AND (SELECT count(*) FROM audit_entries WHERE user_id=${user} AND session_id=${binding}
+      AND operation='transactions.createTransaction' AND outcome='success')=8
+    AND (SELECT count(*) FROM audit_entries WHERE user_id=${user} AND session_id=${binding}
+      AND operation='transactions.linkTransactions' AND outcome='success')=1
+    AND (SELECT count(*) FROM audit_entries WHERE user_id=${user} AND session_id=${binding}
+      AND operation='transactions.getTransaction' AND outcome='success')>=8`;
   if (proof.length !== 1) return Option.none();
   const rows =
     yield* sql`SELECT s.id,s.transaction_id AS transactionId,s.kind,s.service_market AS serviceMarket,

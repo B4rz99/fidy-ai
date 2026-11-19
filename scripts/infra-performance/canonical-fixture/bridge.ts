@@ -42,8 +42,7 @@ const transport =
     if (Option.isNone(runtime)) {
       return fetch(request, { redirect: "manual", signal: AbortSignal.timeout(timeoutMs) });
     }
-    const ingress = await runtime.value.getWorker("ingress");
-    const reply = await ingress.fetch(request.url, {
+    const reply = await runtime.value.dispatchFetch(request.url, {
       method: request.method,
       headers: { ...Object.fromEntries(request.headers), "cf-connecting-ip": "192.0.2.1" },
       redirect: "manual",

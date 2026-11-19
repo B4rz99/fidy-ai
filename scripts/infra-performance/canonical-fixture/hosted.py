@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 import secrets
+import select
 import subprocess
 import time
 
@@ -68,6 +69,8 @@ def bridge(mode, revision, session):
         try:
             def receive():
                 for _ in range(1000):
+                    if not select.select([child.stdout], [], [], 90)[0]:
+                        raise ValueError("Closed native fixture transport deadline expired")
                     line=child.stdout.readline(1_000_001)
                     if not line: return ""
                     if len(line)>1_000_000: raise ValueError("Protected runner response too large")
@@ -116,6 +119,10 @@ def collect(mode, revision, prefix, out):
             raise ValueError("A prior protected offering is unresolved")
         state["signup"]="offered"; write(marker,state)
         with bridge(mode,revision,directory/"native-session.json") as send:
+            if mode=="rehearse":
+                absent=send("POST",RECEIPT_PATH,{"resourcePrefix":prefix,"nativeManifestDigest":"0"*64})
+                if absent["status"]//100==2:
+                    raise ValueError("An empty synthetic User obtained a provenance receipt")
             def canonical(method,path,data):
                 time.sleep(.7)
                 reply=send(method,path,data)

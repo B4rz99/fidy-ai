@@ -94,3 +94,54 @@ public representation and agent discovery suite. Health and deployment metadata 
 is present; they do not prove storage-backed service readiness. A release already serving its
 candidate versions cannot be staged again as a new candidate: use the documented recovery path
 or a fresh validated release rather than repeating the same deployment blindly.
+
+## Rehearse the protected HTTP pilot
+
+The **Rehearse the storage HTTP comparison** workflow requires no Cloudflare credentials. It checks
+the frozen D1 revision, builds its actual Ingress and Core modules, and uses the historical
+calibration plan on local workerd. The pilot sends a bound WebSession through the named erasure
+registry to read `GET /transactions?limit=25`. The comparison verifies ordered identities, exact
+Money and the full response digest. The rehearsal records the native cost and successful Session
+Audit of 30 reads at one request per second. It compares the response to the native User-store
+fixture. The protected Worker package is suitable only for these rehearsed routes and SQL batches.
+It includes a native batch ceiling for each SQL shape and a separate total ceiling per HTTP request.
+
+Use the artifact's `d1/manifest.json`, `d1/limits.json`, `d1/plan.json` and `d1/probe.json` to
+inspect the module and plan digests, verified counts, calibration costs, authority setup, Audit,
+and one-pair and 30-pair estimates. Limits from local workerd still require a fresh account-wide
+preflight. The private Ingress requires a fresh experiment key and deadline. The packaged Core
+serves no cron, alarm or queue. The D1 binding, erasure bucket, and SQLite coordinator belong to
+the isolated comparator. Only the finite private Ingress may have an experiment URL.
+
+### One hosted pair on prepared installations
+
+The protected provisioning process must provide both equivalent synthetic fixtures and their
+bound WebSessions. It must reserve every schema, seed, approval and Login batch in the same
+persistent account ledger using `cells/budget.py`. Direct SQL batches use the verified native
+counters from each D1 result. The scoped HTTP setup uses the compiled request ceilings and the
+metered Core receipt. The native installation must accept the exact synthetic User behind its
+closed host pair. Provisioning retains responsibility for deleting and verifying its bounded
+resource inventory, including on interruption.
+
+The protected deployment receipt includes the Cloudflare account ID, UTC day, the unique
+`fidy-2259-<12 lowercase hex>` resource prefix, database UUID, the active Ingress and Core version
+UUIDs, the pinned D1 and native source revisions, verified fixture counts, bundle digests and
+the reconciled ledger total through setup. The field names are `accountId`, `day`,
+`resourcePrefix`, `databaseId`, `versions.ingress`, `versions.core`, `baseline`, `nativeRevision`,
+`fixture`, `bundleSha256` and `spentThroughSetup`. Use the database name matching the prefix and
+Worker names ending in `-core` and `-ingress`. Load `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`,
+`SMOKE_PROOF`, `FIDY_COMPARISON_KEY` and `FIDY_COMPARISON_SESSIONS` into the protected runner.
+The last value is a JSON object with `d1` and `do` entries, each containing the complete `cookie`
+and the authenticated `binding`. Credentials remain in the runner.
+
+```sh
+python3 scripts/infra-performance/cells/pilot.py \
+  --prepared "$PROTECTED_COMPARISON_RECEIPT" --bundle "$VERIFIED_D1_BUNDLE" \
+  --ledger "$ACCOUNT_BENCHMARK_LEDGER" --out apps/server/test-results/hosted-http-pilot
+```
+
+The command verifies disposable resource identities, obtains fresh account-wide usage, reserves
+the D1 request before dispatch and stops if its native counter receipt is missing or exceeds the
+reservation. Its report preserves both complete-body observations and payload hashes. One pair
+with unobserved lifecycle supplies a pilot observation only. Never manufacture a provisioning
+receipt or reset a fenced ledger to launch this command.

@@ -1,3 +1,5 @@
+import { betaRegistryUrl } from "../beta-pro/contract";
+import { readBetaRegistry } from "./internal/beta-registry";
 import { runInstalledBackgroundRequest } from "../release-isolation/runtime";
 import type { AcceptanceWindowBindings } from "../release-isolation/contract";
 import { reportWatchdog, runWatchdog } from "./internal/watchdog";
@@ -76,6 +78,9 @@ export class Maintenance extends DurableObject<MaintenanceEnvironment> {
   override fetch(request: Request): Promise<Response> {
     if (this.ctx.id.name !== maintenanceName) {
       return Promise.resolve(new Response(null, { status: 404 }));
+    }
+    if (request.method === "POST" && request.url === betaRegistryUrl) {
+      return this.runtime.runPromise(readBetaRegistry(request));
     }
     if (watchdogRequest(request)) return this.watchdog(request);
     if (lifetimeRequest(request)) {

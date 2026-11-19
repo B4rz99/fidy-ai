@@ -7,6 +7,7 @@ import { Schema } from "effect";
 const paths = {
   SupportRecoveryAccess: "/internal/support-recovery",
   TitularErasureAccess: "/internal/titular-erasure",
+  BetaProAccess: "/internal/beta-pro",
   IngestSampleReviewAccess: "/internal/sample-review",
 } as const;
 export const stagedAccessApplications = Object.keys(paths);

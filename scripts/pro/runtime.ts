@@ -1,54 +1,126 @@
-import { OutboundHttpLive } from "../../apps/server/cloudflare/outbound-http/runtime";
-import { Context, Effect, Layer, type Redacted, Schema } from "effect";
-import { HttpClient } from "effect/http";
+import { SecureRandom } from "effect/crypto";
+import { Effect, Redacted, Schema } from "effect";
+import { HttpClient, HttpClientRequest } from "effect/http";
+import { authenticateAccess, makeProtectedClient } from "../../apps/cli/src/direct-client/runtime";
 import {
+  type ProCommand,
+  ProGrantEntry,
   ProGrantFailure,
-  type ProGrantQuery,
+  ProOperatorCommand,
+  ProPage,
+  ProTarget,
+  betaProPath,
+  maximumProGrants,
 } from "../../apps/server/src/shell/pro-grants/contract";
-import { makeOperatorD1Http } from "../../apps/server/src/shell/outbound-http/operations";
 
-const Reply = Schema.fromJsonString(
-  Schema.Struct({
-    success: Schema.Literal(true),
-    result: Schema.Tuple([
-      Schema.Struct({ success: Schema.Literal(true), results: Schema.Array(Schema.Unknown) }),
-    ]),
-  })
-);
-const unavailable = (): ProGrantFailure =>
-  new ProGrantFailure({ reason: "unavailable", candidates: [] });
-const httpOk = 200;
-
-/** The caller's scope owns one fixed database's native HTTP authority and response readers. */
-export const makeProQuery = Effect.fn(function* (
-  config: Readonly<{
-    accountId: string;
-    databaseId: string;
-    token: Redacted.Redacted<string>;
-  }>
-) {
-  const services = yield* Layer.build(OutboundHttpLive);
-  const http = makeOperatorD1Http({
-    ...config,
-    client: Context.get(services, HttpClient.HttpClient),
+const unauthorizedStatus = 401,
+  forbiddenStatus = 403,
+  conflictStatus = 409,
+  invalidStatus = 400;
+const okStatus = 200,
+  missingStatus = 404;
+const url = `https://api.fidyapp.com${betaProPath}` as const;
+const failed = (reason: ProGrantFailure["reason"]): ProGrantFailure =>
+  new ProGrantFailure({ reason });
+type Submit = (command: typeof ProOperatorCommand.Type) => Effect.Effect<unknown, ProGrantFailure>;
+export const makeProClient = Effect.fn(function* () {
+  const proof = yield* authenticateAccess(url).pipe(Effect.mapError(() => failed("unavailable")));
+  yield* Effect.addFinalizer(() => Effect.sync(() => Redacted.wipeUnsafe(proof)));
+  const client = makeProtectedClient({
+    client: yield* HttpClient.HttpClient,
+    allowQuery: false,
+    maximumRequestBytes: 1536,
+    maximumResponseBytes: 4096,
+    captureRetry: () => {},
+    captureAllowance: () => {},
+    captureTrace: () => {},
   });
-  const query: ProGrantQuery = (statement) =>
-    Effect.gen(function* () {
-      const params = yield* Schema.decodeUnknownEffect(
-        Schema.Array(Schema.Union([Schema.String, Schema.Finite]))
-      )(statement.params);
-      const body = yield* Schema.encodeEffect(
-        Schema.fromJsonString(
-          Schema.Struct({
-            sql: Schema.String,
-            params: Schema.Array(Schema.Union([Schema.String, Schema.Finite])),
-          })
+  const submit: Submit = Effect.fn(function* (command) {
+    const body = yield* Schema.encodeEffect(Schema.fromJsonString(ProOperatorCommand))(
+      command
+    ).pipe(Effect.mapError(() => failed("invalid-input")));
+    const response = yield* client
+      .execute(
+        HttpClientRequest.post(url).pipe(
+          HttpClientRequest.setHeader("cf-access-token", Redacted.value(proof)),
+          HttpClientRequest.bodyText(body, "application/json")
         )
-      )({ sql: statement.sql, params });
-      const response = yield* http.execute(body);
-      if (response.status !== httpOk) return yield* unavailable();
-      const reply = yield* Schema.decodeEffect(Reply)(new TextDecoder().decode(response.body));
-      return reply.result.flatMap((entry) => entry.results);
-    }).pipe(Effect.mapError(unavailable));
-  return query;
+      )
+      .pipe(Effect.mapError(() => failed("unavailable")));
+    if ([unauthorizedStatus, forbiddenStatus].includes(response.status)) {
+      return yield* failed("denied");
+    }
+    if (response.status === conflictStatus) return yield* failed("conflict");
+    if (response.status === invalidStatus) return yield* failed("invalid-input");
+    if (response.status === missingStatus) return yield* failed("user-not-found");
+    if (response.status !== okStatus) return yield* failed("unavailable");
+    return yield* response.text.pipe(
+      Effect.flatMap(Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))),
+      Effect.mapError(() => failed("unavailable"))
+    );
+  });
+  return submit;
+});
+type Cursor = (typeof ProPage.Type)["next"];
+const advances = (before: Cursor, next: Cursor): boolean =>
+  next === null ||
+  (next.after > (before?.after ?? 0) &&
+    next.after <= next.through &&
+    (before === null || before.through === next.through));
+const list = Effect.fn(function* (submit: Submit) {
+  const entries = new Map<string, typeof ProGrantEntry.Type>();
+  let cursor: (typeof ProPage.Type)["next"] = null;
+  do {
+    const previous: typeof cursor = cursor;
+    const page: typeof ProPage.Type = yield* Schema.decodeUnknownEffect(ProPage)(
+      yield* submit(cursor === null ? { action: "list" } : { action: "list", cursor })
+    ).pipe(Effect.mapError(() => failed("unavailable")));
+    for (const row of page.entries) {
+      if (row.action !== "grant" || entries.has(row.userId) || entries.size >= maximumProGrants) {
+        return yield* failed("unavailable");
+      }
+      entries.set(row.userId, row);
+    }
+    cursor = page.next;
+    if (!advances(previous, cursor)) return yield* failed("unavailable");
+  } while (cursor !== null);
+  return [...entries.values()].sort((first, second) => first.userId.localeCompare(second.userId));
+});
+const resolveTarget = Effect.fn(function* (
+  selector: Extract<ProCommand, { selector: unknown }>["selector"],
+  submit: Submit
+) {
+  if ("userId" in selector) return { userId: selector.userId };
+  const selected = yield* Schema.decodeUnknownEffect(ProTarget)(
+    yield* submit({ action: "resolve", email: selector.email })
+  ).pipe(Effect.mapError(() => failed("unavailable")));
+  return {
+    userId: selected.userId,
+    mailbox: { email: selector.email, revision: selected.revision },
+  };
+});
+/** A transport retry carries the identical timestamp-independent intent and resolved User, including its original verified-mailbox generation. */
+export const runProCommand = Effect.fn(function* (command: ProCommand, submit: Submit) {
+  if (command.action === "list") return yield* list(submit);
+  const target = yield* resolveTarget(command.selector, submit);
+  const change = {
+    action: command.action,
+    ...target,
+    requestId: yield* (yield* SecureRandom.SecureRandom)
+      .uuidV4()
+      .pipe(Effect.mapError(() => failed("unavailable"))),
+  };
+  const raw = yield* submit(change).pipe(
+    Effect.catchIf(
+      (err) => err.reason === "unavailable",
+      () => submit(change)
+    )
+  );
+  const entry = yield* Schema.decodeUnknownEffect(ProGrantEntry)(raw).pipe(
+    Effect.mapError(() => failed("unavailable"))
+  );
+  if (entry.action !== command.action || entry.userId !== target.userId) {
+    return yield* failed("unavailable");
+  }
+  return [entry];
 });

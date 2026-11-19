@@ -2,7 +2,8 @@ import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { Clock, Effect } from "effect";
 import { expect } from "vitest";
-import { prepareProGrant } from "../../src/shell/pro-grants/operations";
+import { newId } from "../secret-material/operations";
+import { betaUserUrl } from "../beta-pro/contract";
 import { activeProUserCondition } from "../../src/shell/access-tier/operations";
 import { alice, bob, nativeTransactionJourney } from "../financial-user-store.test-fixture";
 import { admitPurge } from "../erasure-purge.test-fixture";
@@ -14,15 +15,28 @@ const nativeStanding = Effect.gen(function* () {
   const exec = (
     ...args: Parameters<typeof owner.exec>
   ): Effect.Effect<Awaited<ReturnType<typeof owner.exec>>> => native(() => owner.exec(...args));
-  const record = (action: "grant" | "revoke", userId = alice.user): ReturnType<typeof exec> => {
-    const statement = prepareProGrant({
-      action,
-      selector: { userId },
-      operator: "synthetic-beta-operator",
-      now,
-    });
-    return exec(statement.sql, ...statement.params);
-  };
+  const users = yield* native(() => owner.runtime.getDurableObjectNamespace("USER_STORE", "core"));
+  const record = (
+    action: "grant" | "revoke",
+    userId = alice.user
+  ): Effect.Effect<ReadonlyArray<unknown>> =>
+    native(() =>
+      users
+        .getByName(alice.user)
+        .fetch(betaUserUrl, {
+          method: "POST",
+          body: JSON.stringify({
+            command: { action, userId, requestId: newId() },
+            authority: {
+              issuer: "https://fixture.cloudflareaccess.com",
+              subject: "synthetic-actor",
+              email: "synthetic-beta-operator",
+              deadline: now + 60000,
+            },
+          }),
+        })
+        .then((response) => (response.ok ? response.json().then((value) => [value]) : []))
+    );
   const standing = (index = 0): Effect.Effect<unknown> =>
     native(() => owner.browser(index, "/subscription/status").then((response) => response.json()));
   const paid = (): ReturnType<typeof exec> => {

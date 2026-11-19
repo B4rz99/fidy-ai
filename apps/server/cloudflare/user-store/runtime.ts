@@ -1,3 +1,5 @@
+import { betaUserUrl } from "../beta-pro/contract";
+import { runBetaUserCommand } from "../beta-pro/operations";
 import {
   logOperationalSignal,
   observeNativePending,
@@ -582,6 +584,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
   }
 
   private erasedResponse(request: Request): Promise<Response> {
+    if (request.url === betaUserUrl) return Promise.resolve(new Response(null, { status: 404 }));
     if (ownerCheckRequest(request)) return Promise.resolve(ownerCheckResponse());
     if (
       request.method === "POST" &&
@@ -651,6 +654,9 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     }
     return this.registration().then(
       (registration) => {
+        if (registration === "unavailable" && request.url === betaUserUrl) {
+          return canonicalAdmissionUnavailable();
+        }
         if (registration === "isolated") return canonicalAdmissionUnavailable();
         if (registration === "unavailable" && ownerCheckRequest(request)) {
           return new Response(null, { status: uncertainCheckStatus });
@@ -1135,6 +1141,9 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
   ): Option.Option<Promise<Response>> {
     const path = new URL(request.url).pathname;
     const command = request.method + " " + path;
+    if (command === "POST /beta-pro") {
+      return Option.some(this.runtime.runPromise(runBetaUserCommand(request, owns)));
+    }
     if (command === "POST /work/refund") {
       return Option.some(
         this.runtime.runPromise(

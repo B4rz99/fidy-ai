@@ -1279,6 +1279,17 @@ export const userStoreHistory: StoreHistory = {
         "CREATE TRIGGER pro_grant_events_immutable BEFORE UPDATE ON pro_grant_events BEGIN SELECT RAISE(ABORT,'Pro grant evidence is immutable'); END",
       ],
     },
+    {
+      version: 40,
+      id: "beta-operator-command-evidence",
+      statements: [
+        "ALTER TABLE pro_grant_events ADD COLUMN request_id TEXT",
+        "ALTER TABLE pro_grant_events ADD COLUMN operator_issuer TEXT",
+        "ALTER TABLE pro_grant_events ADD COLUMN operator_subject TEXT",
+        "ALTER TABLE pro_grant_events ADD COLUMN mailbox_revision INTEGER",
+        "CREATE UNIQUE INDEX pro_grant_request ON pro_grant_events(request_id) WHERE request_id IS NOT NULL",
+      ],
+    },
   ],
 };
 

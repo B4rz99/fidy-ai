@@ -147,6 +147,7 @@ export type ErasureOperatorEnvironment = Readonly<{
       USER_STORE: ErasureRegistryNamespace;
       ERASURE_SUPPORT_AUDIENCE: string;
       SAMPLE_REVIEW_AUDIENCE: string;
+      BETA_PRO_AUDIENCE: string;
       PRICING_PUBLISH_AUDIENCE: string;
       BILLING_SUPPORT_AUDIENCE: string;
       ERASURE_REQUIRED: string;

@@ -43,7 +43,7 @@ it("sends closed provider work only to the private fixture and fetches human Acc
       expect(publicCalls.map((item) => [item.url, item.redirect, [...item.headers]])).toEqual([
         [
           settings.CLOUDFLARE_ACCESS_ISSUER + "/cdn-cgi/access/certs",
-          "error",
+          "manual",
           [["accept", "application/json"]],
         ],
       ]);

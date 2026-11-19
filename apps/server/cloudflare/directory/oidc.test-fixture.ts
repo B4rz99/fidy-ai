@@ -9,7 +9,9 @@ const tokens = new Set([
   "https://oauth2.googleapis.com/token",
   "https://login.microsoftonline.com/common/oauth2/v2.0/token",
 ]);
+const redirectedKeyTarget = "https://fixture.cloudflareaccess.com/followed-keys";
 const certs = new Set([
+  redirectedKeyTarget,
   "https://fixture.cloudflareaccess.com/cdn-cgi/access/certs",
   "https://www.googleapis.com/oauth2/v3/certs",
   "https://login.microsoftonline.com/common/discovery/v2.0/keys",
@@ -17,6 +19,7 @@ const certs = new Set([
 const tenant = "9188040d-6c67-4c5b-b112-36a304b66dad";
 const enterpriseTenant = "aabbccdd-eeff-4567-8123-1234567890ab";
 let stalledLookup = false;
+let redirectedKeys = 0;
 let jwksTenant = "{tenantid}";
 const messages = new Map<string, Array<string>>();
 const keyCache = new Map<string, ReturnType<typeof generateKeyPair>>();
@@ -101,6 +104,7 @@ const acceptMail = Effect.fn(function* (request: Request) {
   return Option.some(Response.json({ id: "fixture-delivery" }));
 });
 const operatorApplications = new Map([
+  ["/beta-assertion", { email: "beta@example.test", audience: "fixture-beta" }],
   ["/support-assertion", { email: "operator@example.test", audience: "fixture-support" }],
   ["/reviewer-assertion", { email: "reviewer@example.test", audience: "fixture-review" }],
   ["/erasure-assertion", { email: "obarboza@fidyapp.com", audience: "fixture-erasure" }],
@@ -126,7 +130,11 @@ const supportAndMailbox = Effect.fn(function* (request: Request) {
             email: scenario === "unassigned" ? "operator@example.test" : application.email,
           })
             .setProtectedHeader({ alg: "RS256", kid: keyId })
-            .setIssuer("https://fixture.cloudflareaccess.com")
+            .setIssuer(
+              scenario === "redirected-issuer"
+                ? "https://redirected.cloudflareaccess.com"
+                : "https://fixture.cloudflareaccess.com"
+            )
             .setAudience(
               scenario === "multiple"
                 ? ["fixture-review", "fixture-support"]
@@ -155,11 +163,24 @@ const invitationReply = Effect.fn(function* (request: Request) {
     messages: [{ id: "wamid.signup" }],
   });
 });
+const redirectStatus = 302;
+const redirectedIssuerResponse = (url: string): Option.Option<Response> => {
+  if (url === "https://redirected.cloudflareaccess.com/cdn-cgi/access/certs") {
+    return Option.some(Response.redirect(redirectedKeyTarget, redirectStatus));
+  }
+  if (url === "https://fixture.invalid/followed-key-count") {
+    return Option.some(Response.json(redirectedKeys));
+  }
+  if (url === redirectedKeyTarget) redirectedKeys += 1;
+  return Option.none();
+};
 /** Local signed responses exercise production provider, nonce, lifetime and browser proof checks. */
 export class BrowserOidcFixture extends WorkerEntrypoint {
   override fetch(request: Request): Promise<Response> {
     return Effect.runPromise(
       Effect.gen(function* () {
+        const redirect = redirectedIssuerResponse(request.url);
+        if (Option.isSome(redirect)) return redirect.value;
         const simulated = yield* supportAndMailbox(request);
         if (Option.isSome(simulated)) return simulated.value;
         if (new URL(request.url).hostname === "api.kapso.ai") {

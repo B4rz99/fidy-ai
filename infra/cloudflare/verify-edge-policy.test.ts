@@ -11,6 +11,8 @@ const policyFixture = Effect.gen(function* () {
   yield* fs.makeDirectory(`${root}/infra`, { recursive: true });
   yield* fs.copy(`${workspaceRoot}infra/cloudflare`, `${root}/infra/cloudflare`);
   yield* fs.copy(`${workspaceRoot}patches`, `${root}/patches`);
+  yield* fs.makeDirectory(`${root}/scripts`);
+  yield* fs.copy(`${workspaceRoot}scripts/pro`, `${root}/scripts/pro`);
   for (const name of [".github", "apps", "node_modules", "tsconfig.base.json"]) {
     yield* fs.symlink(`${workspaceRoot}${name}`, `${root}/${name}`);
   }
@@ -40,13 +42,13 @@ layer(BunFileSystem.layer, { excludeTestServices: true })(
       20_000
     );
 
-    it.effect(
-      "refuses changed policy artifacts without disclosing their contents",
-      () =>
+    it.effect.each(["worker-observability.ts", "../../scripts/pro/runtime.ts"])(
+      "refuses changes in %s without disclosing their contents",
+      (source) =>
         Effect.gen(function* () {
           const directory = yield* policyFixture;
           const fs = yield* FileSystem.FileSystem;
-          const artifact = `${directory}/worker-observability.ts`;
+          const artifact = `${directory}/${source}`;
           const original = yield* fs.readFileString(artifact);
           yield* fs.writeFileString(artifact, `${original}\n// private-policy-change\n`);
           const result = yield* Effect.sync(() => runPolicyGate(directory));

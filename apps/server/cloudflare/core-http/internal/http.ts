@@ -1,3 +1,5 @@
+import { betaProPath } from "../../../src/shell/pro-grants/contract";
+import { handleBetaPro } from "../../beta-pro/runtime";
 import { webAuthenticationEndpoints } from "../../../src/shell/web-authentication/contract";
 
 import { supportRecoveryPath } from "../../recovery/contract";
@@ -179,6 +181,7 @@ const ownedCorePath = (path: string): boolean =>
     "/health",
     "/internal/titular-erasure",
     sampleReviewPath,
+    betaProPath,
     pricePublicationPath,
     smokePath,
     listCategoriesPath,
@@ -389,6 +392,7 @@ const supportCoreResponse = (
   environment: CoreHttpEnvironment,
   path: string
 ): Option.Option<Effect.Effect<Response, never, HttpClient.HttpClient>> => {
+  if (path === betaProPath) return Option.some(handleBetaPro(request, environment));
   if (path === sampleReviewPath) return Option.some(handleSampleReview(request, environment));
   if (path === "/internal/titular-erasure") {
     return Option.some(handleNativeErasureOperator(request, environment));

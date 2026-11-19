@@ -77,44 +77,42 @@ it("checks regular and catch-all email routing, including account-level rules, b
     })
   ));
 
-it("limits each pre-existing Access application to adding its canonical API path with the same policy", () => {
+it.each([
+  ["IngestSampleReviewAccess", "/internal/sample-review"],
+  ["BetaProAccess", "/internal/beta-pro"],
+])("limits %s to adding its canonical API path with the same policy", (logicalId, path) => {
   const initial = {
-    destinations: [
-      { type: "public", uri: "storage-acceptance.fidyapp.com/internal/sample-review" },
-    ],
+    destinations: [{ type: "public", uri: "storage-acceptance.fidyapp.com" + path }],
     policies: [{ decision: "allow", include: [{ email: "assigned@example.test" }] }],
   };
   const staged = {
     ...initial,
-    destinations: [
-      ...initial.destinations,
-      { type: "public", uri: "api.fidyapp.com/internal/sample-review" },
-    ],
+    destinations: [...initial.destinations, { type: "public", uri: "api.fidyapp.com" + path }],
   };
   expect(() =>
     requireStagedDestinations({
-      logicalId: "IngestSampleReviewAccess",
+      logicalId,
       before: initial,
       after: staged,
     })
   ).not.toThrow();
   expect(() =>
     requireStagedDestinations({
-      logicalId: "IngestSampleReviewAccess",
+      logicalId,
       before: staged,
       after: staged,
     })
   ).not.toThrow();
   expect(() =>
     requireStagedDestinations({
-      logicalId: "IngestSampleReviewAccess",
+      logicalId,
       before: initial,
       after: { ...staged, policies: [] },
     })
   ).toThrow();
   expect(() =>
     requireStagedDestinations({
-      logicalId: "IngestSampleReviewAccess",
+      logicalId,
       before: initial,
       after: {
         ...staged,

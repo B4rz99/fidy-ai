@@ -33,6 +33,7 @@ type NativeEnvironment = Pick<
   | "ERASURE_SUPPORT_AUDIENCE"
   | "BILLING_SUPPORT_AUDIENCE"
   | "PRICING_PUBLISH_AUDIENCE"
+  | "BETA_PRO_AUDIENCE"
   | "SAMPLE_REVIEW_AUDIENCE"
   | "ERASURE"
 >;
@@ -257,6 +258,7 @@ const operatorConfiguration = (environment: NativeEnvironment): OperatorAccessCo
   audience: environment.ERASURE_SUPPORT_AUDIENCE ?? "",
   requiredEmail: Option.some("obarboza@fidyapp.com"),
   otherAudiences: [
+    environment.BETA_PRO_AUDIENCE ?? "",
     environment.CLOUDFLARE_ACCESS_AUDIENCE,
     environment.BILLING_SUPPORT_AUDIENCE ?? "",
     environment.PRICING_PUBLISH_AUDIENCE ?? "",

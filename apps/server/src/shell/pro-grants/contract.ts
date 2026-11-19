@@ -1,6 +1,5 @@
 import { EmailAddress } from "~/core/email-authentication/contract";
-import { type OwnedStatement } from "~/shell/owner-write/contract";
-import { Data, type Effect, Schema } from "effect";
+import { Data, Schema } from "effect";
 import { UserId } from "~/core/identity/contract";
 
 export const maximumProGrants = 1000;
@@ -19,11 +18,30 @@ export const ProGrantEntry = Schema.Struct({
   action: Schema.Literals(["grant", "revoke"]),
 });
 export class ProGrantFailure extends Data.TaggedError("ProGrantFailure")<{
-  readonly reason: "invalid-input" | "unavailable" | "user-not-found" | "ambiguous-email";
-  readonly candidates: ReadonlyArray<UserId>;
+  readonly reason: "invalid-input" | "unavailable" | "user-not-found" | "denied" | "conflict";
 }> {}
-/** Database authority belongs to the trusted operator runtime, never a User credential. */
-export type ProStatement = OwnedStatement;
-export type ProGrantQuery = (
-  statement: ProStatement
-) => Effect.Effect<ReadonlyArray<unknown>, ProGrantFailure>;
+export const betaProPath = "/internal/beta-pro";
+export const ProCursor = Schema.Struct({
+  after: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  through: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+});
+export const ProPage = Schema.Struct({
+  entries: Schema.Array(ProGrantEntry),
+  next: Schema.NullOr(ProCursor),
+});
+export const ProEmailBinding = Schema.Struct({
+  email: EmailAddress,
+  revision: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+});
+export const ProMutation = Schema.Struct({
+  action: Schema.Literals(["grant", "revoke"]),
+  userId: UserId,
+  requestId: Schema.String.check(Schema.isUUID()),
+  mailbox: Schema.optional(ProEmailBinding),
+});
+export const ProTarget = Schema.Struct({ userId: UserId, revision: Schema.Int });
+export const ProOperatorCommand = Schema.Union([
+  ProMutation,
+  Schema.Struct({ action: Schema.Literal("resolve"), email: EmailAddress }),
+  Schema.Struct({ action: Schema.Literal("list"), cursor: Schema.optional(ProCursor) }),
+]);

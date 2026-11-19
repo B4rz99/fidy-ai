@@ -1,3 +1,4 @@
+import { betaProPath } from "../src/shell/pro-grants/contract";
 import { installedOrigins } from "../src/shell/browser-transport/contract";
 import { isStorageProbe } from "./storage-bootstrap/contract";
 import {
@@ -272,6 +273,7 @@ const postPaths = new Set<string>([
   supportRecoveryPath,
   erasureSupportPath,
   sampleReviewPath,
+  betaProPath,
   pricePublicationPath,
   "/web/privacy/erasure",
   microsoftProviderPaths.start,
@@ -432,9 +434,13 @@ const directHeaders = (request: Request, path: string): Option.Option<Headers> =
     return Option.some(providerHeaders(request, path));
   }
   if (
-    [supportRecoveryPath, erasureSupportPath, pricePublicationPath, sampleReviewPath].includes(
-      path
-    ) ||
+    [
+      supportRecoveryPath,
+      erasureSupportPath,
+      pricePublicationPath,
+      sampleReviewPath,
+      betaProPath,
+    ].includes(path) ||
     refundSupportPath(path)
   ) {
     return Option.some(supportHeaders(request));
@@ -647,9 +653,13 @@ const isPreflight = (request: Request, path: string, origin: Option.Option<strin
   request.method === "OPTIONS" && hasPreflight(path) && Option.isSome(origin);
 
 const disallowedSupportOrigin = (path: string, origin: Option.Option<string>): boolean =>
-  [supportRecoveryPath, erasureSupportPath, pricePublicationPath, sampleReviewPath].includes(
-    path
-  ) && Option.isSome(origin);
+  [
+    supportRecoveryPath,
+    erasureSupportPath,
+    pricePublicationPath,
+    sampleReviewPath,
+    betaProPath,
+  ].includes(path) && Option.isSome(origin);
 
 const isAllowedMethod = (request: Request, path: string): boolean =>
   allowedMethods(path).includes(request.method);

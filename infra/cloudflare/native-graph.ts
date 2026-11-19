@@ -10,6 +10,7 @@ export const nativeResourceInventory = (revision: string): ReadonlyMap<string, s
       "SupportRecoveryAccess",
       "TitularErasureAccess",
       "IngestSampleReviewAccess",
+      "BetaProAccess",
     ],
     "Cloudflare.R2.Bucket": [
       "StatementStagingBucket",
@@ -109,6 +110,8 @@ const kinds: Readonly<Record<NativeRole, Readonly<Record<string, ReadonlyArray<s
       "CLOUDFLARE_ACCESS_AUDIENCE",
       "SAMPLE_REVIEW_AUDIENCE",
       "SAMPLE_REVIEWER_EMAIL",
+      "BETA_PRO_OPERATOR_EMAIL",
+      "BETA_PRO_AUDIENCE",
       "WHATSAPP_BUSINESS_PORTFOLIO_ID",
       "WHATSAPP_SANDBOX_PHONE_NUMBER_ID",
       "RELEASE_GIT_SHA",

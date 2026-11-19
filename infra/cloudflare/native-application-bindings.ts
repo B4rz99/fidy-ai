@@ -1,6 +1,6 @@
 import { Hex } from "effect/encoding";
 import * as Cloudflare from "alchemy/Cloudflare";
-import { Config, Effect, Redacted, Schema } from "effect";
+import { Config, Effect, Option, Redacted, Schema } from "effect";
 import { ApprovedOpenAiModel } from "@fidy/server/hosted-inference-contract";
 import { EmailAddress } from "@fidy/server/email-authentication-contract";
 import { WhatsAppBusinessPhoneNumberId } from "@fidy/server/whatsapp-contract";
@@ -197,30 +197,36 @@ export const operatingBindings = Effect.gen(function* () {
   });
 });
 
-const supportApplication = Effect.fn(function* (
-  input: {
-    logicalId: string;
-    name: string;
-    path: string;
-    selected: "recovery" | "erasure" | "sample";
+const accessRoles = {
+  SupportRecoveryAccess: {
+    name: "Fidy native support recovery",
+    path: "/internal/support-recovery",
   },
+  TitularErasureAccess: { name: "Fidy native Titular erasure", path: "/internal/titular-erasure" },
+  IngestSampleReviewAccess: {
+    name: "Fidy native IngestSample review",
+    path: "/internal/sample-review",
+  },
+  BetaProAccess: { name: "Fidy native beta Pro operator", path: "/internal/beta-pro" },
+} as const;
+const supportApplication = Effect.fn(function* (
+  logicalId: keyof typeof accessRoles,
+  member: Option.Option<string>,
   context: {
     release: NativeRelease;
     group: Cloudflare.Access.Group;
     idp: Cloudflare.Access.IdentityProvider;
-    reviewer: string;
   }
 ) {
-  const { logicalId, name, path, selected } = input;
-  const { release, group, idp, reviewer } = context;
+  const { name, path } = accessRoles[logicalId];
+  const { release, group, idp } = context;
   const hosts =
     release.hosts === "staged"
       ? [nativeIngressHost, productionTopology.ingress.hostname]
       : [nativeIngressHost];
-  const include =
-    selected === "recovery"
-      ? [{ group: group.groupId }]
-      : [{ email: { email: selected === "erasure" ? "obarboza@fidyapp.com" : reviewer } }];
+  const include = Option.isNone(member)
+    ? [{ group: group.groupId }]
+    : [{ email: { email: member.value } }];
   return yield* Cloudflare.Access.Application(logicalId, {
     type: "self_hosted",
     name,
@@ -238,6 +244,8 @@ export const privateAccessBindings = Effect.fn(function* (release: NativeRelease
       CLOUDFLARE_ACCESS_ISSUER: "",
       CLOUDFLARE_ACCESS_AUDIENCE: "",
       ERASURE_SUPPORT_AUDIENCE: "",
+      BETA_PRO_AUDIENCE: "",
+      BETA_PRO_OPERATOR_EMAIL: "",
       SAMPLE_REVIEW_AUDIENCE: "",
       SAMPLE_REVIEWER_EMAIL: "",
     };
@@ -253,35 +261,23 @@ export const privateAccessBindings = Effect.fn(function* (release: NativeRelease
     name: "Fidy native recovery operators",
     include: [{ email: { email: operator } }],
   });
-  const context = { release, idp, group, reviewer };
-  const recovery = yield* supportApplication(
-    {
-      logicalId: "SupportRecoveryAccess",
-      name: "Fidy native support recovery",
-      path: "/internal/support-recovery",
-      selected: "recovery",
-    },
-    context
-  );
+  const betaOperator = yield* Config.Literal("obarboza@fidyapp.com", "BETA_PRO_OPERATOR_EMAIL");
+  const context = { release, idp, group };
+  const recovery = yield* supportApplication("SupportRecoveryAccess", Option.none(), context);
   const erasure = yield* supportApplication(
-    {
-      logicalId: "TitularErasureAccess",
-      name: "Fidy native Titular erasure",
-      path: "/internal/titular-erasure",
-      selected: "erasure",
-    },
+    "TitularErasureAccess",
+    Option.some("obarboza@fidyapp.com"),
     context
   );
   const sample = yield* supportApplication(
-    {
-      logicalId: "IngestSampleReviewAccess",
-      name: "Fidy native IngestSample review",
-      path: "/internal/sample-review",
-      selected: "sample",
-    },
+    "IngestSampleReviewAccess",
+    Option.some(reviewer),
     context
   );
+  const beta = yield* supportApplication("BetaProAccess", Option.some(betaOperator), context);
   return {
+    BETA_PRO_OPERATOR_EMAIL: betaOperator,
+    BETA_PRO_AUDIENCE: beta.aud,
     CLOUDFLARE_ACCESS_ISSUER: issuer,
     CLOUDFLARE_ACCESS_AUDIENCE: recovery.aud,
     ERASURE_SUPPORT_AUDIENCE: erasure.aud,

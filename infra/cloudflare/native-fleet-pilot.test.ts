@@ -27,6 +27,7 @@ it.effect("erases its one new physical User if metering stops during observation
               denied: () => Effect.void,
             };
           }),
+        login: () => Effect.die("Unexpected login after successful signup"),
         renew: () => Effect.void,
         watch: () => Effect.fail(Error("quota")),
         record: () => Effect.void,

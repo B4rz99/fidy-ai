@@ -133,7 +133,7 @@ type BrowserMember =
   | "performance-1"
   | "performance-2"
   | "fleet-1";
-const boot = Effect.fn(function* (input: Inputs, member: BrowserMember) {
+const boot = Effect.fn(function* (input: Inputs, member: BrowserMember, intent: "signup" | "login" = "signup") {
   const { post, call } = runner(input),
     proof = yield* result(
       yield* post("/web/pairings", {}),
@@ -141,7 +141,7 @@ const boot = Effect.fn(function* (input: Inputs, member: BrowserMember) {
     );
   const start = yield* post("/web/providers/google/start", {
     ...proof,
-    intent: "signup",
+    intent,
     consentRevision: webSignupDisclosure().revision,
   });
   const transient = yield* cookie(start, "__Host-fidy_google"),
@@ -362,7 +362,10 @@ const renewWork = Effect.fn(function* (input: Inputs) {
     Schema.Struct({ revision: Schema.Literal(input.revision), deadline: Schema.Int })
   );
 });
-const admitBrowserErasure = Effect.fn(function* (input: Inputs, user: { headers: Readonly<Record<string, string>> }) {
+const admitBrowserErasure = Effect.fn(function* (
+  input: Inputs,
+  user: { headers: Readonly<Record<string, string>> }
+) {
   const { post } = runner(input);
   const reply = yield* validStatus(
     yield* post("/web/privacy/erasure", { confirm: true }, user.headers),
@@ -377,10 +380,9 @@ const admitBrowserErasure = Effect.fn(function* (input: Inputs, user: { headers:
   return admitted.reference;
 });
 
-export const fleetBrowser = (input: Inputs) => ({
-  renew: () => renewWork(input),
-  register: Effect.fn(function* () {
-    const member = yield* boot(input, "fleet-1");
+export const fleetBrowser = (input: Inputs) => {
+  const session = Effect.fn(function* (intent: "signup" | "login") {
+    const member = yield* boot(input, "fleet-1", intent);
     return {
       outcome: member.outcome,
       erase: () => admitBrowserErasure(input, member),
@@ -389,8 +391,9 @@ export const fleetBrowser = (input: Inputs) => ({
           .call("/transactions", { headers: member.headers })
           .pipe(Effect.flatMap((reply) => consume(reply, unauthorized))),
     };
-  }),
-});
+  });
+  return {renew: () => renewWork(input), register: () => session("signup"), login: () => session("login")};
+};
 const erasureEvidence = Effect.fn(function* (
   input: Inputs,
   pair: readonly [User, User],

@@ -1098,6 +1098,7 @@ const fleetPilot = Effect.fn(function* (
     runFleetPilot({
       inventory: () => readUserObjects(accountReader(env, client), installed.userNamespace),
       register: () => meter("check").pipe(Effect.andThen(browser.register())),
+      login: browser.login,
       renew: browser.renew,
       record,
       watch: Effect.fn(function* () {
@@ -1113,9 +1114,14 @@ const fleetPilot = Effect.fn(function* (
   );
   const settled = yield* meter("finish", String(yield* Clock.currentTimeMillis)).pipe(
     Effect.map((status) => status.trim()),
-    Effect.repeat({ while: (status) => status === "pending", times: 20, schedule: Schedule.spaced("15 seconds") })
+    Effect.repeat({
+      while: (status) => status === "pending",
+      times: 20,
+      schedule: Schedule.spaced("15 seconds"),
+    })
   );
-  if (settled !== "observed") return yield* Effect.fail(Error("Post-cleanup Durable Object usage unavailable"));
+  if (settled !== "observed")
+    return yield* Effect.fail(Error("Post-cleanup Durable Object usage unavailable"));
   if (measured._tag === "Failure") return yield* Effect.failCause(measured.cause);
   yield* meter("logs");
 });

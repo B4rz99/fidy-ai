@@ -150,12 +150,48 @@ try {
   process.stderr.write("REFERENCE_STAGE accountability-before\n");
   const before = await evidence();
   process.stderr.write("REFERENCE_STAGE read\n");
+  // Both builds disable search while history or Categories are stale, and keep it disabled on failure.
+  // Arm the observer before the click so even a fast refresh must commit both DOM states.
+  const search = page.getByRole("searchbox", { name: "Buscar transacciones", exact: true });
+  assert.ok(await search.isEnabled());
+  const refreshCycle = await page.evaluateHandle((timeout) => {
+    const selector = 'input[aria-label="Buscar transacciones"]';
+    const completed = new Promise((resolve) => {
+      let pending = false;
+      const observer = new MutationObserver(() => {
+        const field = document.querySelector(selector);
+        if (field?.matches(":disabled")) pending = true;
+        if (pending && field?.matches(":enabled")) {
+          clearTimeout(timer);
+          observer.disconnect();
+          resolve(true);
+        }
+      });
+      const timer = setTimeout(() => {
+        observer.disconnect();
+        resolve(false);
+      }, timeout);
+      observer.observe(document.body, {
+        attributes: true,
+        attributeFilter: ["disabled"],
+        childList: true,
+        subtree: true,
+      });
+    });
+    return { completed };
+  }, timeoutMs);
   const list = responseFor("GET", "/transactions");
   const started = performance.now();
   await page.getByRole("button", { name: "Actualizar transacciones", exact: true }).click();
-  const initial = historyPage(await observe(await list));
+  const initialResponse = await list;
+  assert.ok(
+    await refreshCycle.evaluate((cycle) => cycle.completed),
+    "Refresh did not commit a fresh, editable history"
+  );
   await ready("Evaluación 2");
   const readMs = performance.now() - started;
+  await refreshCycle.dispose();
+  const initial = historyPage(await observe(initialResponse));
   const productionPage = 7;
   const ordinaryPage = 25;
   assert.equal(
@@ -184,11 +220,13 @@ try {
   const refresh = responseFor("GET", "/transactions");
   const saving = performance.now();
   await page.getByRole("button", { name: "Guardar", exact: true }).click();
-  const result = changedTransaction(await observe(await save));
+  const saveResponse = await save;
   process.stderr.write("REFERENCE_STAGE fresh-read\n");
-  const fresh = historyPage(await observe(await refresh));
+  const freshResponse = await refresh;
   await ready(afterName);
   const correctionMs = performance.now() - saving;
+  const result = changedTransaction(await observe(saveResponse));
+  const fresh = historyPage(await observe(freshResponse));
   const corrected = { ...target, counterparty: afterName, revision: 1 };
   assert.equal(result.data.id, fixedId);
   assert.equal(result.data.revision, 1);

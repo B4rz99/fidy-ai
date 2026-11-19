@@ -1,4 +1,4 @@
-import { Cause, Option, Schema } from "effect";
+import { Cause, Data, Effect, Option, Schema } from "effect";
 import { HttpClientError } from "effect/http";
 
 const maximumRefusalReasons = 16;
@@ -86,4 +86,40 @@ export const resourceFailureMessage = (cause: Cause.Cause<unknown>): string => {
   }
   const suffix = details.size === 0 ? "" : ` (${[...details].join(", ")})`;
   return `Alchemy resource operation failed${suffix}; inspect release state.`;
+};
+
+type NativeStage =
+  | "planning"
+  | "Worker bindings"
+  | "resource inventory"
+  | "first-install ownership"
+  | "Access host plan"
+  | "closed edge preparation"
+  | "upload verification"
+  | "host capture"
+  | "Site plan verification"
+  | "provider apply";
+
+class NativeStageFailure extends Data.TaggedError("NativeStageFailure")<{ message: string }> {}
+
+export const nativeResourceStage =
+  (stage: NativeStage) =>
+  <A, E, R>(operation: Effect.Effect<A, E, R>): Effect.Effect<A, E | NativeStageFailure, R> =>
+    operation.pipe(
+      Effect.catchCauseIf(
+        (cause) => !Cause.hasInterruptsOnly(cause),
+        (cause) =>
+          Effect.fail(
+            new NativeStageFailure({
+              message: `Native release failed during ${stage}. ${resourceFailureMessage(cause)}`,
+            })
+          )
+      )
+    );
+
+export const nativeResourceFailureMessage = (cause: Cause.Cause<unknown>): string => {
+  const failure = Cause.findErrorOption(cause);
+  return Option.isSome(failure) && failure.value instanceof NativeStageFailure
+    ? failure.value.message
+    : `Native release failed during configuration. ${resourceFailureMessage(cause)}`;
 };

@@ -1,7 +1,7 @@
 import * as Cloudflare from "alchemy/Cloudflare";
 import { Effect } from "effect";
 import { freeTierWorkerObservability } from "./worker-observability";
-import type { NativeRelease } from "./native-application-bindings";
+import { bindPlannedText, type NativeRelease } from "./native-application-bindings";
 
 export const nativeBuckets = Effect.all({
   STATEMENT_STAGING_BUCKET: Cloudflare.R2.Bucket("StatementStagingBucket", {
@@ -95,7 +95,6 @@ export const nativeSmokeExecutor = Effect.fn(function* (input: {
       ACCEPTANCE_CODE_KEY: input.release.fixtureSecret("oidc-code"),
       ACCEPTANCE_GOOGLE_SECRET: input.release.fixtureSecret("google"),
       ACCEPTANCE_MICROSOFT_SECRET: input.release.fixtureSecret("microsoft"),
-      SMOKE_QUEUE_NAME: input.queues.SMOKE_QUEUE.queueName,
       SMOKE_WORKFLOW: Cloudflare.Workflow("ReleaseSmokeWorkflowV2-" + revision, {
         workflowName,
         className: "ReleaseSmokeWorkflowV2",
@@ -105,6 +104,7 @@ export const nativeSmokeExecutor = Effect.fn(function* (input: {
       CONTRACT_DIGEST: input.release.release.contractDigest,
     },
   });
+  yield* bindPlannedText(smoke, { SMOKE_QUEUE_NAME: input.queues.SMOKE_QUEUE.queueName });
   return {
     smoke,
     reference: Cloudflare.Workflow("ReleaseSmokeReference", {

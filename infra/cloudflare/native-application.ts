@@ -13,6 +13,7 @@ import {
 import { freeTierWorkerObservability } from "./worker-observability";
 import {
   type NativeRelease,
+  bindPlannedText,
   ingressBindings,
   nativeReleaseContext,
   operatingBindings,
@@ -75,6 +76,13 @@ const coreWorker = Effect.fn(function* ({
   buckets: Effect.Success<typeof nativeBuckets>;
   executor: Effect.Success<ReturnType<typeof nativeSmokeExecutor>>;
 }) {
+  const {
+    BETA_PRO_AUDIENCE,
+    SAMPLE_REVIEW_AUDIENCE,
+    CLOUDFLARE_ACCESS_AUDIENCE,
+    ERASURE_SUPPORT_AUDIENCE,
+    ...access
+  } = yield* privateAccessBindings(release);
   const core = yield* Cloudflare.Worker("Core", {
     ...workerPolicy,
     compatibility: apiCompatibility,
@@ -90,18 +98,24 @@ const coreWorker = Effect.fn(function* ({
       ...(yield* nativeWorkflows),
       ...(yield* storageNamespaces),
       ...(yield* operatingBindings),
-      ...(yield* privateAccessBindings(release)),
+      ...access,
       ...(yield* providerBindings(release)),
       SMOKE_LIMITER: Cloudflare.RateLimit("ReleaseSmokeAdmission", {
         namespaceId: 2257,
         simple: { limit: 8, period: 60 },
       }),
       RELEASE_FIXTURE: executor.smoke,
-      SMOKE_QUEUE_NAME: queues.SMOKE_QUEUE.queueName,
       SMOKE_WORKFLOW: executor.reference,
-      CONNECTION_SYNCHRONIZATION_QUEUE_NAME: queues.CONNECTION_SYNCHRONIZATION_QUEUE.queueName,
-      OPERATIONAL_CANARY_QUEUE_NAME: queues.OPERATIONAL_CANARY_QUEUE.queueName,
     },
+  });
+  yield* bindPlannedText(core, {
+    BETA_PRO_AUDIENCE,
+    SAMPLE_REVIEW_AUDIENCE,
+    CLOUDFLARE_ACCESS_AUDIENCE,
+    ERASURE_SUPPORT_AUDIENCE,
+    SMOKE_QUEUE_NAME: queues.SMOKE_QUEUE.queueName,
+    CONNECTION_SYNCHRONIZATION_QUEUE_NAME: queues.CONNECTION_SYNCHRONIZATION_QUEUE.queueName,
+    OPERATIONAL_CANARY_QUEUE_NAME: queues.OPERATIONAL_CANARY_QUEUE.queueName,
   });
   if (!release.development && !release.closed) {
     const certificate = yield* Config.String("BANCOLOMBIA_SANDBOX_CERTIFICATE_ID").pipe(

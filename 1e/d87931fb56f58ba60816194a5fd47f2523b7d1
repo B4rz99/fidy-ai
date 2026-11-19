@@ -1,0 +1,23 @@
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_520b33ab551a2b 5
+scripts/pro/main.ts
+  s_a1be23a656acf0::t_97a624597a4d07 1,43-44,46-68
+tsconfig.base.json
+  s_a1be23a656acf0::t_377cec3c22b95d 153
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1ed87931fb56f58ba60816194a5fd47f2523b7d1",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

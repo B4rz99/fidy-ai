@@ -19,6 +19,21 @@ const observeProposal = Effect.fn(function* (
   const res = yield* post("/progress", { turnId });
   return yield* Schema.decodeUnknownEffect(HostedTurnProposal)(yield* native(() => res.json()));
 });
+type Database = Effect.Success<ReturnType<typeof makeNativeTransactionJourney>>;
+type Stub = ReturnType<
+  Awaited<ReturnType<Database["runtime"]["getDurableObjectNamespace"]>>["getByName"]
+>;
+type Journey = {
+  db: Database;
+  post: (path: string, body: unknown, subject?: typeof alice) => Effect.Effect<Response>;
+  provider: Stub;
+  user: Stub;
+  start: () => Effect.Effect<string, Schema.SchemaError>;
+  proposal: (id: string) => ReturnType<typeof observeProposal>;
+  state: () => Effect.Effect<Awaited<ReturnType<Database["exec"]>>>;
+  entries: () => Effect.Effect<Awaited<ReturnType<Database["exec"]>>>;
+  now: number;
+};
 export const journey = Effect.fn(function* () {
   const db = yield* makeNativeTransactionJourney(undefined, nativeHostedPlatform);
   const snapshot = yield* Schema.encodeEffect(Schema.fromJsonString(DisclosureSnapshot))(
@@ -71,5 +86,6 @@ export const journey = Effect.fn(function* () {
       )
     );
   });
-  return { db, post, provider, user, start, proposal, state, entries, now };
+  const result: Journey = { db, post, provider, user, start, proposal, state, entries, now };
+  return result;
 });

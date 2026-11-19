@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Effect, Fiber, Schema } from "effect";
+import { Effect, Fiber, Schedule, Schema } from "effect";
 import { expect } from "vitest";
 import { native } from "../user-store.test-fixture";
 import { journey } from "./turn-journey.test-fixture";
@@ -91,9 +91,14 @@ const compaction = Effect.gen(function* () {
   yield* providerCalls("held");
   const third = yield* start();
   const alarm = yield* owner("clocked-alarm?now=" + before).pipe(Effect.forkChild);
-  yield* native(() =>
-    expect.poll(() => Effect.runPromise(providerCalls()), { timeout: 5000 }).toEqual({ calls: 3 })
+  const observed = yield* providerCalls().pipe(
+    Effect.repeat({
+      while: (state) => state.calls !== 3,
+      times: 100,
+      schedule: Schedule.spaced("30 millis"),
+    })
   );
+  expect(observed.calls).toBe(3);
   yield* native(() =>
     db.exec(
       "UPDATE hosted_transcript SET entry_json=json_set(entry_json,'$.id','90000000-0000-4000-8000-000000000123') WHERE sequence=(SELECT min(sequence) FROM hosted_transcript WHERE turn_id=?)",

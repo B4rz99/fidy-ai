@@ -45,7 +45,7 @@ export class ConnectionProviderFixture extends DurableObject {
     const label = new URL(request.url).searchParams.get("held");
     if (
       label === "failed" &&
-      !(yield* Effect.tryPromise(() => store.get<boolean>("allow-cleanup")))
+      (yield* Effect.tryPromise(() => store.get<boolean>("allow-cleanup"))) !== true
     ) {
       return new Response(null, { status: 503 });
     }

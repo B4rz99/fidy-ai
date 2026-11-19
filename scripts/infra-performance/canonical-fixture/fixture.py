@@ -136,21 +136,22 @@ def prepare(call, directory, revision, member):
                 sorted([association["firstTransaction"], association["secondTransaction"]], key=lambda r:r["id"])
                 != sorted(pair, key=lambda r:r["id"])):
             raise ValueError("The suppressed member does not prove the original pair")
-        sources = []
+        inspections = {}
         for row in originals:
-            records = call("GET", "/transactions/" + row["id"] + "/source-attestations", None)["data"]
-            if len(records) != 1:
-                raise ValueError("Expected one manual SourceAttestation per original")
-            source = records[0]
-            if (source != dict(id=uuid(source["id"]), transactionId=row["id"], serviceMarket="CO", locale="es-CO",
-                               timeZone="America/Bogota", interpretationRevision="manual-v1", createdAt=row["createdAt"], kind="manual")):
-                raise ValueError("Manual capture provenance differs")
-            sources.append(source)
-        if len({source["id"] for source in sources}) != 8:
-            raise ValueError("Repeated SourceAttestation identity")
-        record = dict(revision=revision, member=member, originals=originals, sourceAttestations=sources,
-                      visible=visible["id"], suppressed=hidden["id"], history=page, inspection=proof,
-                      counts=dict(originals=8, effective=7, links=1, sourceAttestations=8))
+            identifier = row["id"]
+            result = proof if identifier == hidden["id"] else call("GET", "/transactions/" + identifier, None)
+            inspected = result["data"]
+            retained = inspected["sources"]
+            expected_members = pair if row in pair else [row]
+            if (len(retained) != len(expected_members) or
+                    {source["transactionId"]:source["kinds"] for source in retained}
+                    != {member["id"]:["manual"] for member in expected_members}):
+                raise ValueError("Inspected SourceAttestation kinds do not match manual capture")
+            inspections[identifier] = result
+        record = dict(revision=revision, member=member, originals=originals, inspections=inspections,
+                      visible=visible["id"], suppressed=hidden["id"], history=page,
+                      counts=dict(originals=8, effective=7, links=1, originalsWithManualSource=8),
+                      sourceAttestationIds="unobserved by the deployed canonical inspection")
         existing = directory / "manifest.json"
         if existing.exists() and json.loads(existing.read_text()) != record:
             raise ValueError("Existing fixture evidence changed")

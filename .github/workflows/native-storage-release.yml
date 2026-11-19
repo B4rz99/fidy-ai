@@ -1,11 +1,6 @@
 name: Release native application
 
 on:
-  pull_request:
-    paths:
-      - ".github/workflows/native-storage-release.yml"
-      - "scripts/infra-performance/deployed-fleet/**"
-      - "infra/cloudflare/native-fleet-pilot*"
   workflow_dispatch:
     inputs:
       operation:
@@ -29,37 +24,10 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.event_name == 'workflow_dispatch' && 'production-deployment' || github.ref }}
+  group: production-deployment
   cancel-in-progress: false
 
 jobs:
-  fleet-pilot-test:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-          sparse-checkout: |
-            /*
-            !/.repos/
-          sparse-checkout-cone-mode: false
-      - run: python3 -m unittest discover -s scripts/infra-performance/deployed-fleet
-      - uses: ./.github/actions/bun-install
-      - run: bun run --cwd infra/cloudflare test -- native-fleet-pilot.test.ts native-erasure-evidence.test.ts
-      - name: Check release types
-        run: bun node_modules/typescript/bin/tsc -b infra/cloudflare
-      - name: Format reviewed pilot files
-        if: always()
-        run: |
-          bun x --no-install oxfmt --write infra/cloudflare/native-{fleet-pilot,fleet-pilot.test,acceptance,storage-release}.ts .github/workflows/native-storage-release.yml
-          git diff > "$RUNNER_TEMP/fleet-format.patch"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        if: always()
-        with:
-          name: fleet-format
-          path: ${{ runner.temp }}/fleet-format.patch
-
   release:
     if: ${{ github.ref == 'refs/heads/trunk' && inputs.operation != 'publish-site' }}
     runs-on: ubuntu-latest

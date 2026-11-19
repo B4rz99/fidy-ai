@@ -28,7 +28,7 @@ const waitFor = <A>(read: Effect.Effect<Option.Option<A>, Error>, times: number)
 /** One synthetic lifetime, from independently observed population to confirmed physical disposal. */
 export const runFleetPilot = Effect.fn(function* (port: Port) {
   const before = yield* port.inventory();
-  if (before.size > maximumExistingObjects) {
+  if (before.size >= maximumExistingObjects) {
     return yield* Effect.fail(Error("Existing User inventory exceeds the pilot sizing envelope"));
   }
   yield* port.record({ stage: "census", existingObjects: before.size });

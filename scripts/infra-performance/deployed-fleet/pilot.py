@@ -123,10 +123,10 @@ def sample(phase):
         return
     if phase == "begin":
         current = usage()
-        admit(current, int(time.time()))
         with journal.open("x") as out:
             print(json.dumps({"stage": phase, "revision": os.environ["GITHUB_SHA"], "usage": asdict(current),
                               "pilotReads": PILOT_READS, "pilotWrites": PILOT_WRITES}), file=out)
+        admit(current, int(time.time()))
         return
     if phase not in ("check", "finish"):
         raise ValueError("Invalid metering phase")
@@ -160,4 +160,8 @@ if __name__ == "__main__":
     try:
         sample(sys.argv[1])
     except Exception as exc:
+        phase = sys.argv[1] if len(sys.argv) == 2 else "finish"
+        if "RUNNER_TEMP" in os.environ and phase in ("begin", "check", "logs", "finish", "probe-logs"):
+            with (Path(os.environ["RUNNER_TEMP"]) / "native-fleet-refusal.jsonl").open("a") as out:
+                print(json.dumps({"phase": phase, "error": type(exc).__name__}), file=out)
         sys.exit("Fleet pilot meter unavailable (" + type(exc).__name__ + ")")

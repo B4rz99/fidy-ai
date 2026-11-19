@@ -1,4 +1,5 @@
 import type { ErasureObservation } from "./native-erasure";
+import { verificationRevision } from "./installed-verification-revision";
 import { readUserObjects } from "./native-erasure-evidence";
 import { verifyNativeSmoke } from "./native-release-smoke";
 import { isDeepStrictEqual } from "node:util";
@@ -39,6 +40,7 @@ import {
   type ProductionReleaseConfig as Config,
   ReleaseFailure,
   configureReleaseObservability,
+  releaseCommand,
   releaseEvidence,
   releaseFailureMessage,
   releasePort,
@@ -439,9 +441,9 @@ const UserNamespace = Schema.Struct({
 const installedRelease = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
-  { port, staging }: { port: ReleasePort; staging: boolean }
+  { port, staging, verifierRevision = env.revision }: { port: ReleasePort; staging: boolean; verifierRevision?: string }
 ) {
-  yield* releaseController.requireTrunk(port, env.revision);
+  yield* releaseController.requireTrunk(port, verifierRevision);
   yield* verifyNativeEdge(env, client, "verify");
   const receipts = yield* firstInstallWorkers();
   const pair = yield* readStablePair(
@@ -455,7 +457,7 @@ const installedRelease = Effect.fn(function* (
   );
   if (pair.identity.stableRevision !== env.revision) {
     return yield* new ReleaseFailure({
-      message: "First-installed source differs from protected trunk",
+      message: "Installed source differs from expected release revision",
     });
   }
   yield* proveRecoveryCorePrivate(env, client, installationNames.Core);
@@ -496,11 +498,16 @@ const installedRelease = Effect.fn(function* (
   };
 });
 const verifyFirstInstall = Effect.fn(function* (
-  env: Config,
+  verifier: Config,
   client: HttpClient.HttpClient,
   { port, erase }: { port: ReleasePort; erase: boolean }
 ) {
-  const installed = yield* installedRelease(env, client, { port, staging: false });
+  const requested = yield* ReleaseConfig.String("EXPECTED_INSTALLED_REVISION").pipe(ReleaseConfig.withDefault(""));
+  const revision = yield* verificationRevision(verifier.revision, requested, (args) =>
+    releaseCommand({ args: ["git", "-C", "../..", ...args], lifetime: "read-only" })
+  ).pipe(Effect.mapError(() => new ReleaseFailure({ message: "Installed revision must be the same protected runtime source" })));
+  const env = { ...verifier, revision };
+  const installed = yield* installedRelease(env, client, { port, staging: false, verifierRevision: verifier.revision });
   const contractDigest = yield* ReleaseConfig.String("CONTRACT_DIGEST"),
     identity = { gitRevision: env.revision, contractDigest };
   const smoke = yield* verifyNativeSmoke({
@@ -521,7 +528,7 @@ const verifyFirstInstall = Effect.fn(function* (
   if (new Set(synthetic.map((result) => result.callback.workflow)).size !== 1) {
     return yield* Effect.fail(Error("Staged hosts reached different native payment attempts"));
   }
-  yield* writeFile(env.smokeAttestationFile, encodeJson({ ...installed, smoke, synthetic }));
+  yield* writeFile(env.smokeAttestationFile, encodeJson({ ...installed, verifierRevision: verifier.revision, smoke, synthetic }));
 });
 
 type VerifyCommand = (

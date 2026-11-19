@@ -25,6 +25,7 @@ const securityArtifacts = [
       "../../apps/server/cloudflare/release-isolation/internal/request-proof.ts",
       "../../apps/server/cloudflare/release-isolation/runtime.ts",
       "../../apps/server/cloudflare/runtime/release-smoke/internal/platform.ts",
+      "./installed-verification-revision.ts",
       "./native-acceptance.ts",
       "./native-erasure.ts",
       "./native-erasure-evidence.ts",

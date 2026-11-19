@@ -177,6 +177,7 @@ it("verifies the exact serving assets-only version independently of executable W
       versionId,
       revision,
       role,
+      account: "fixture-account",
     });
   expect(() => check(staticResources)).not.toThrow();
   expect(() => check(staticResources, "another-version")).toThrow();
@@ -193,6 +194,27 @@ it("verifies the exact serving assets-only version independently of executable W
   ]) {
     expect(() => check({ ...staticResources, ...extra })).toThrow();
   }
+});
+
+it("requires all five pinned Alchemy runtime bindings alongside only the declared executable bindings", () => {
+  const versionId = "9635b92e-fcc9-41b6-a7e2-4fd97c9eddd9";
+  const account = "a".repeat(32);
+  const entries = {
+    RELEASE_GIT_SHA: revision, ALCHEMY_PHASE: "runtime", ALCHEMY_STACK_NAME: "FidyNativeStorage",
+    ALCHEMY_STAGE: "production", ALCHEMY_WORKER_NAME: "fidy-native-email",
+    ALCHEMY_CLOUDFLARE_ACCOUNT_ID: account,
+  };
+  const check = (values: Record<string, string>): void => {
+    const bindings = Object.entries(values).map(([name, text]) => ({name, type: "plain_text", text}));
+    const raw = {success:true, result: {id:versionId, resources: {bindings,
+      script: {handlers:["email"],named_handlers:[]}, script_runtime:{compatibility_date:"2026-09-08"} }}};
+    verifyDeployedVersion({raw, versionId, revision, account, role:"ForwardedEmail"});
+  };
+  expect(() => check(entries)).not.toThrow();
+  for (const name of Object.keys(entries)) {
+    expect(() => check({...entries, [name]:"another-value"})).toThrow();
+  }
+  expect(() => check({...entries, ALCHEMY_UNREVIEWED:"runtime"})).toThrow();
 });
 
 const appRoles = [

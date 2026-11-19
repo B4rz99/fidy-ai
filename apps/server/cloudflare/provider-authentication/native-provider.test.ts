@@ -258,23 +258,44 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       const joined = yield* login(subject, { provider: "google", scenario: "valid" });
       const created = yield* post(complete, joined.proof);
       expect(yield* native(() => created.json())).toMatchObject({ status: "created" });
-      const directory = yield* native(() => runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" }));
-      const [row] = yield* Schema.decodeUnknownEffect(Schema.Array(Schema.Struct({user_id:UserId})))(
-        yield* native(() => directory.exec("SELECT user_id FROM browser_pairings WHERE id=?",joined.proof.pairingId)));
+      const directory = yield* native(() =>
+        runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
+      );
+      const [row] = yield* Schema.decodeUnknownEffect(
+        Schema.Array(Schema.Struct({ user_id: UserId }))
+      )(
+        yield* native(() =>
+          directory.exec("SELECT user_id FROM browser_pairings WHERE id=?", joined.proof.pairingId)
+        )
+      );
       if (row === undefined) return yield* Effect.die("Missing original User");
-      const store = yield* native(() => runtime.unsafeGetDurableObjectStorage("core","UserStore",{name:row.user_id}));
+      const store = yield* native(() =>
+        runtime.unsafeGetDurableObjectStorage("core", "UserStore", { name: row.user_id })
+      );
       const existing = loginOnlyBrowser(runtime);
-      for (const fenced of [false,true]) {
-        const attempt = yield* existing.login(subject,{provider:"google",scenario:"valid"});
-        expect(attempt.review).toEqual({status:"verified"});
-        yield* native(() => store.exec("CREATE TABLE lose_provider_completion_reply(marker INTEGER)"));
+      for (const fenced of [false, true]) {
+        const attempt = yield* existing.login(subject, { provider: "google", scenario: "valid" });
+        expect(attempt.review).toEqual({ status: "verified" });
+        yield* native(() =>
+          store.exec("CREATE TABLE lose_provider_completion_reply(marker INTEGER)")
+        );
         if (fenced) {
-          yield* native(() => directory.exec("CREATE TRIGGER concurrent_fence AFTER UPDATE OF state ON provider_attempts WHEN NEW.state='bound' BEGIN INSERT INTO erasure_barriers(user_id,reference,requested_at_ms) SELECT user_id,'20000000-0000-4000-8000-000000000004',1 FROM browser_pairings WHERE id=NEW.pairing_id; END"));
+          yield* native(() =>
+            directory.exec(
+              "CREATE TRIGGER concurrent_fence AFTER UPDATE OF state ON provider_attempts WHEN NEW.state='bound' BEGIN INSERT INTO erasure_barriers(user_id,reference,requested_at_ms) SELECT user_id,'20000000-0000-4000-8000-000000000004',1 FROM browser_pairings WHERE id=NEW.pairing_id; END"
+            )
+          );
         }
-        const lost = yield* post(complete,attempt.proof);
+        const lost = yield* post(complete, attempt.proof);
         expect(lost.status).toBe(fenced ? 400 : 503);
-        expect(yield* native(() => lost.json())).toEqual({status:fenced ? "invalid" : "unavailable"});
-        expect(yield* native(() => store.exec("SELECT name FROM sqlite_schema WHERE name='lose_provider_completion_reply'"))).toEqual([]);
+        expect(yield* native(() => lost.json())).toEqual({
+          status: fenced ? "invalid" : "unavailable",
+        });
+        expect(
+          yield* native(() =>
+            store.exec("SELECT name FROM sqlite_schema WHERE name='lose_provider_completion_reply'")
+          )
+        ).toEqual([]);
       }
     })
   );

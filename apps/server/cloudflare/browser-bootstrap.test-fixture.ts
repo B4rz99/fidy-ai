@@ -121,6 +121,7 @@ const browserWithIntent = (runtime: Miniflare, intent: "signup" | "login"): Brow
 };
 
 export const browser = (runtime: Miniflare): Browser => browserWithIntent(runtime, "signup");
-export const loginOnlyBrowser = (runtime: Miniflare): Browser => browserWithIntent(runtime, "login");
+export const loginOnlyBrowser = (runtime: Miniflare): Browser =>
+  browserWithIntent(runtime, "login");
 
 export { chatWith, signedWebhook, signedChat } from "./signed-whatsapp.test-fixture";

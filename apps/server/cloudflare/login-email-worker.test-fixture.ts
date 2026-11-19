@@ -8,11 +8,18 @@ export * from "./core-worker";
 const revokeUrl = "https://fixture.invalid/revoke-mailbox";
 export class UserStore extends ProductionUserStore {
   override fetch(request: Request): Promise<Response> {
-    if (request.url === bootstrapCompleteUrl &&
-        this.ctx.storage.sql.exec("SELECT 1 FROM sqlite_schema WHERE name='lose_provider_completion_reply'").toArray().length > 0) {
+    if (
+      request.url === bootstrapCompleteUrl &&
+      this.ctx.storage.sql
+        .exec("SELECT 1 FROM sqlite_schema WHERE name='lose_provider_completion_reply'")
+        .toArray().length > 0
+    ) {
       this.ctx.storage.sql.exec("DROP TABLE lose_provider_completion_reply");
       return Promise.reject(new Error("Fixture lost the provider completion reply"));
     }
+    return this.loginRequest(request);
+  }
+  private loginRequest(request: Request): Promise<Response> {
     if (request.url === "https://user.invalid/browser/redeem") {
       const storage = this.ctx.storage;
       const sql = storage.sql;

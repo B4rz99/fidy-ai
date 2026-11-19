@@ -9,7 +9,7 @@ import { Schema } from "effect";
 /** @typedef {{sql:string,params:ReadonlyArray<unknown>,check?:string}} Query */
 /** @typedef {{batch: Query[], reads:number,writes:number}} Batch */
 /** @typedef {{name:string,type:string,tbl_name:string,sql:string|null}} Definition */
-/** @typedef {{name:string, read:Query, inserts:string[], rowCount:number, dependencies:string[]}} Table */
+/** @typedef {{name:string, read:Query, inserts:string[], identities:string[], rowCount:number, dependencies:string[]}} Table */
 const emptyBatchSize = 15;
 const Rows = Schema.Array(Schema.Record(Schema.String, Schema.Json));
 const encodedRows = Schema.decodeUnknownSync(Rows);
@@ -117,10 +117,9 @@ const run = async (db, batch) => {
   const billed = { batch, reads: 0, writes: 0 };
   for (const [index, reply] of results.entries()) {
     assert.ok(
-      reply.success &&
-        Number.isSafeInteger(reply.meta.rows_read) &&
-        Number.isSafeInteger(reply.meta.rows_written)
+      Number.isSafeInteger(reply.meta.rows_read) && Number.isSafeInteger(reply.meta.rows_written)
     );
+    assert.equal(reply.success, true);
     billed.reads += reply.meta.rows_read;
     billed.writes += reply.meta.rows_written;
     const expected = batch[index]?.check;
@@ -168,6 +167,7 @@ const captureTable = async (db, def) => {
     name: def.name,
     read: { ...read, check: digest(rows) },
     inserts,
+    identities: rows.map((row) => digest([row])),
     rowCount: rows.length,
     dependencies,
   };
@@ -239,6 +239,8 @@ try {
     "Oracle already has a User"
   );
   evidence.stage = "extract";
+  evidence.oraclePages = await select(oracle, query("PRAGMA page_count"));
+  evidence.oracleFreelist = await select(oracle, query("PRAGMA freelist_count"));
   const platform = new Set(pristine.map((def) => def.name));
   const definitions = originalOrder.filter(
     (def) => !platform.has(def.name) && !def.name.startsWith("sqlite_") && def.sql !== null
@@ -268,22 +270,34 @@ try {
       applied.push(await run(restored, Array.from(group)));
     });
   await append([{ ...query(schemaSql), check: digest(pristine) }]);
-  for (const kind of ["table", "index", "view", "trigger"]) {
+  await serial(["table", "index", "view", "trigger"], async (kind) => {
     const group = definitions
       .filter((def) => def.type === kind)
       .map((def) => query(String(def.sql)));
     evidence.stage = "define-" + kind;
     // Each kind is a dependency barrier; the source row order retains relative trigger order.
     await append(group);
-  }
+  });
   await serial(seedOrder(tables), async (table) => {
     evidence.stage = "seed-" + table.name;
     const existing = readValues(await select(restored, table.read));
     if (digest(existing) === table.read.check) return;
     // Install the original constraints and triggers before the first seed row. Refuse side effects
     // that differ from the final snapshot and never overwrite, disable or drop a guard.
-    assert.equal(existing.length, 0, "Unexpected automatically materialized seed rows");
-    await append(table.inserts.map(query));
+    const remaining = new Map(table.identities.map((key, index) => [key, table.inserts[index]]));
+    assert.equal(remaining.size, table.rowCount, "Seed row identity collision");
+    for (const row of existing)
+      assert.equal(
+        remaining.delete(digest([row])),
+        true,
+        "Reconstruction produced a foreign seed row"
+      );
+    await append(
+      Array.from(remaining.values()).map((sql) => {
+        assert.ok(sql);
+        return query(sql);
+      })
+    );
   });
   evidence.stage = "verify";
   const fk = query("PRAGMA foreign_key_check");
@@ -310,6 +324,8 @@ try {
   };
   evidence.snapshot = schemaSnapshot;
   evidence.batches = applied.length;
+  evidence.restoredPages = await select(restored, query("PRAGMA page_count"));
+  evidence.restoredFreelist = await select(restored, query("PRAGMA freelist_count"));
   evidence.stage = "equivalent";
   await Bun.write(
     file,

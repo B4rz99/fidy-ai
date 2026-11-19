@@ -68,6 +68,10 @@ jobs:
           sparse-checkout: |
             apps/server/scripts
             apps/server/cloudflare
+      - name: Reconstruct the final empty schema and repeat the fully verified comparator
+        run: |
+          python3 scripts/infra-performance/cells/prepare.py --d1 baseline-d1 --calibration baseline-calibration \
+            --canonical-fixture apps/server/test-results/canonical-fixture/fixture --snapshot --out apps/server/test-results/canonical-snapshot
       - name: Build and exercise the frozen deployment modules on workerd
         run: |
           python3 scripts/infra-performance/cells/prepare.py --d1 baseline-d1 \
@@ -76,10 +80,6 @@ jobs:
         run: |
           python3 scripts/infra-performance/cells/prepare.py --d1 baseline-d1 --calibration baseline-calibration \
             --canonical-fixture apps/server/test-results/canonical-fixture/fixture --out apps/server/test-results/canonical-mirror
-      - name: Reconstruct the final empty schema and repeat the fully verified comparator
-        run: |
-          python3 scripts/infra-performance/cells/prepare.py --d1 baseline-d1 --calibration baseline-calibration \
-            --canonical-fixture apps/server/test-results/canonical-fixture/fixture --snapshot --out apps/server/test-results/canonical-snapshot
       - name: Preserve evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

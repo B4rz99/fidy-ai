@@ -6,7 +6,7 @@ import {
   createRootRoute,
   createRouter,
 } from "@tanstack/react-router";
-import { Effect, Layer, Option, Schema } from "effect";
+import { type Cause, Effect, Layer, Option, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { AtomRegistry } from "effect/reactivity";
 import { act, createElement } from "react";
@@ -96,120 +96,161 @@ const Workspace = (): ReturnType<typeof createElement> => {
   return createElement(RecurringFeature, props);
 };
 
+const withWorkspace = (
+  check: (container: HTMLElement) => Effect.Effect<void, Cause.UnknownError>
+): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+      vi.stubGlobal("matchMedia", () => ({
+        matches: false,
+        addEventListener: (): void => undefined,
+        removeEventListener: (): void => undefined,
+      }));
+      vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
+      const http = HttpClient.make((request) => {
+        const path = new URL(request.url).pathname;
+        const params = new Map(request.urlParams);
+        const search = Schema.decodeUnknownSync(Schema.String)(params.get("search") ?? "");
+        const earlier = params.get("previousMonth") === "2026-08";
+        const result =
+          path === "/user"
+            ? {
+                data: {
+                  id: "10000000-0000-4000-8000-000000000001",
+                  serviceMarket: "CO",
+                  locale: "es-CO",
+                  timeZone: "America/Bogota",
+                  createdAt: "2026-08-01T00:00:00Z",
+                  trialPeriod: {
+                    startedAt: "2026-08-01T00:00:00Z",
+                    endsAt: "2026-08-08T00:00:00Z",
+                  },
+                },
+                categories: [],
+                next: [],
+              }
+            : {
+                data: {
+                  ...workspace,
+                  previousMonth: earlier ? "2026-07" : "2026-08",
+                  previous: earlier
+                    ? workspace.occurrences.slice(0, 1).map((item) => ({
+                        ...item,
+                        date: "2026-08-31",
+                        expectedDate: "2026-08-31",
+                        status: "unconfirmed",
+                      }))
+                    : [],
+                  occurrences: workspace.occurrences.filter((item) =>
+                    item.plan.name.includes(search)
+                  ),
+                },
+                next: [],
+              };
+        if (request.method !== "GET" || !["/user", "/recurring-plans"].includes(path)) {
+          return Effect.die(new Error("Unexpected recurring test request"));
+        }
+        return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json(result)));
+      });
+      const apiClient = makeFidyClient({
+        apiOrigin: "https://api.test.fidyapp.com",
+        httpClient: Layer.succeed(HttpClient.HttpClient, http),
+      });
+      const registry = AtomRegistry.make();
+      const router = createRouter({
+        routeTree: createRootRoute({ component: Workspace }),
+        context: { apiClient, sessionBinding: "recurring-feature-test" },
+        history: createMemoryHistory({ initialEntries: ["/app/recurring"] }),
+      });
+      const container = document.createElement("div");
+      document.body.append(container);
+      const root = createRoot(container);
+      try {
+        yield* Effect.tryPromise(() => router.load());
+        yield* Effect.tryPromise(() =>
+          reactWork(() =>
+            root.render(
+              createElement(
+                RegistryContext.Provider,
+                { value: registry },
+                createElement(RouterProvider, { router })
+              )
+            )
+          )
+        );
+        yield* Effect.tryPromise(() =>
+          reactAssertion(() => expect(container.textContent).toContain("Ingreso de prueba"))
+        );
+        yield* check(container);
+      } finally {
+        yield* Effect.tryPromise(() => reactWork(() => root.unmount()));
+        registry.dispose();
+        container.remove();
+        vi.restoreAllMocks();
+        vi.unstubAllGlobals();
+      }
+    })
+  );
+
 it.each(["Calendario", "Lista", "Todos los recurrentes"])(
   "applying and clearing recurring filters preserves %s and updates its results",
   (presentation) =>
-    Effect.runPromise(
+    withWorkspace((container) =>
       Effect.gen(function* () {
-        vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-        vi.stubGlobal("matchMedia", () => ({
-          matches: false,
-          addEventListener: (): void => undefined,
-          removeEventListener: (): void => undefined,
-        }));
-        vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
-        const http = HttpClient.make((request) => {
-          const path = new URL(request.url).pathname;
-          const search = Schema.decodeUnknownSync(Schema.String)(
-            new Map(request.urlParams).get("search") ?? ""
-          );
-          const result =
-            path === "/user"
-              ? {
-                  data: {
-                    id: "10000000-0000-4000-8000-000000000001",
-                    serviceMarket: "CO",
-                    locale: "es-CO",
-                    timeZone: "America/Bogota",
-                    createdAt: "2026-08-01T00:00:00Z",
-                    trialPeriod: {
-                      startedAt: "2026-08-01T00:00:00Z",
-                      endsAt: "2026-08-08T00:00:00Z",
-                    },
-                  },
-                  categories: [],
-                  next: [],
-                }
-              : {
-                  data: {
-                    ...workspace,
-                    occurrences: workspace.occurrences.filter((item) =>
-                      item.plan.name.includes(search)
-                    ),
-                  },
-                  next: [],
-                };
-          if (request.method !== "GET" || !["/user", "/recurring-plans"].includes(path)) {
-            return Effect.die(new Error("Unexpected recurring test request"));
-          }
-          return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json(result)));
-        });
-        const apiClient = makeFidyClient({
-          apiOrigin: "https://api.test.fidyapp.com",
-          httpClient: Layer.succeed(HttpClient.HttpClient, http),
-        });
-        const registry = AtomRegistry.make();
-        const router = createRouter({
-          routeTree: createRootRoute({ component: Workspace }),
-          context: { apiClient, sessionBinding: "recurring-feature-test" },
-          history: createMemoryHistory({ initialEntries: ["/app/recurring"] }),
-        });
-        const container = document.createElement("div");
-        document.body.append(container);
-        const root = createRoot(container);
-        try {
-          yield* Effect.tryPromise(() => router.load());
-          yield* Effect.tryPromise(() =>
-            reactWork(() =>
-              root.render(
-                createElement(
-                  RegistryContext.Provider,
-                  { value: registry },
-                  createElement(RouterProvider, { router })
-                )
-              )
-            )
-          );
-          yield* Effect.tryPromise(() =>
-            reactAssertion(() => expect(container.textContent).toContain("Ingreso de prueba"))
-          );
-          yield* Effect.tryPromise(() => click(container, presentation));
-          yield* Effect.tryPromise(() => click(container, "Filtros"));
-          yield* Effect.tryPromise(() => searchFor(container, "Arriendo"));
-          yield* Effect.tryPromise(() => click(container, "Aplicar filtros"));
-          yield* Effect.tryPromise(() =>
-            reactAssertion(() => {
-              expect(container.textContent).toContain("Arriendo de prueba");
-              expect(container.textContent).not.toContain("Ingreso de prueba");
-              expect(button(container, presentation).getAttribute("aria-pressed")).toBe("true");
-            })
-          );
-          yield* Effect.tryPromise(() => searchFor(container, "Sin coincidencias"));
-          yield* Effect.tryPromise(() => click(container, "Aplicar filtros"));
-          yield* Effect.tryPromise(() =>
-            reactAssertion(() => {
-              expect(container.textContent).toContain("Sin resultados para estos filtros");
-              expect(button(container, presentation).getAttribute("aria-pressed")).toBe("true");
-              if (presentation === "Calendario") {
-                expect(container.querySelector('[aria-label="2026-10-31"]')).not.toBeNull();
-              }
-            })
-          );
-          yield* Effect.tryPromise(() => click(container, "Limpiar"));
-          yield* Effect.tryPromise(() =>
-            reactAssertion(() => {
-              expect(container.textContent).toContain("Arriendo de prueba");
-              expect(container.textContent).toContain("Ingreso de prueba");
-              expect(button(container, presentation).getAttribute("aria-pressed")).toBe("true");
-            })
-          );
-        } finally {
-          yield* Effect.tryPromise(() => reactWork(() => root.unmount()));
-          registry.dispose();
-          container.remove();
-          vi.restoreAllMocks();
-          vi.unstubAllGlobals();
-        }
+        yield* Effect.tryPromise(() => click(container, presentation));
+        yield* Effect.tryPromise(() => click(container, "Filtros"));
+        yield* Effect.tryPromise(() => searchFor(container, "Arriendo"));
+        yield* Effect.tryPromise(() => click(container, "Aplicar filtros"));
+        yield* Effect.tryPromise(() =>
+          reactAssertion(() => {
+            expect(container.textContent).toContain("Arriendo de prueba");
+            expect(container.textContent).not.toContain("Ingreso de prueba");
+            expect(button(container, presentation).getAttribute("aria-pressed")).toBe("true");
+          })
+        );
+        yield* Effect.tryPromise(() => searchFor(container, "Sin coincidencias"));
+        yield* Effect.tryPromise(() => click(container, "Aplicar filtros"));
+        yield* Effect.tryPromise(() =>
+          reactAssertion(() => {
+            expect(container.textContent).toContain("Sin resultados para estos filtros");
+            expect(button(container, presentation).getAttribute("aria-pressed")).toBe("true");
+            if (presentation === "Calendario") {
+              expect(container.querySelector('[aria-label="2026-10-31"]')).not.toBeNull();
+            }
+          })
+        );
+        yield* Effect.tryPromise(() => click(container, "Limpiar"));
+        yield* Effect.tryPromise(() =>
+          reactAssertion(() => {
+            expect(container.textContent).toContain("Arriendo de prueba");
+            expect(container.textContent).toContain("Ingreso de prueba");
+            expect(button(container, presentation).getAttribute("aria-pressed")).toBe("true");
+          })
+        );
       })
     )
 );
+
+it("keeps the requested earlier month open after its fresh occurrences arrive", () =>
+  withWorkspace((container) =>
+    Effect.gen(function* () {
+      const panel = (): HTMLDetailsElement => {
+        const element = container.querySelector('[data-recurring-slot="previous"]');
+        if (!(element instanceof HTMLDetailsElement)) throw Error("Missing earlier-month section");
+        return element;
+      };
+      expect(panel().open).toBe(false);
+      yield* Effect.tryPromise(() => reactWork(() => panel().querySelector("summary")?.click()));
+      expect(panel().open).toBe(true);
+      yield* Effect.tryPromise(() => click(container, "Consultar meses anteriores"));
+      yield* Effect.tryPromise(() =>
+        reactAssertion(() => {
+          expect(panel().querySelector('tr[aria-label*="2026-08-31"]')).not.toBeNull();
+          expect(panel().open).toBe(true);
+        })
+      );
+      yield* Effect.tryPromise(() => reactWork(() => panel().querySelector("summary")?.click()));
+      expect(panel().open).toBe(false);
+    })
+  ));

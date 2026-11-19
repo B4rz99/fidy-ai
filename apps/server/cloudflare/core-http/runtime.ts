@@ -83,15 +83,17 @@ const performanceProbe = Effect.fn(function* (request: Request, environment: Cor
       : new Response(null, { status: 404 })
   );
 });
+const readinessPath = (request: Request, url: URL): boolean =>
+  isStorageCompatibility(request) ||
+  isStorageBootstrap(request) ||
+  (request.method === "GET" && url.pathname === smokePath && url.search === "?readiness=1");
 const storageProbe = Effect.fn(function* (request: Request, environment: CoreHttpEnvironment) {
   if (isPerformanceReceipt(request)) return yield* performanceProbe(request, environment);
   const url = new URL(request.url);
   if (
     environment.RECOVERY_ISOLATION === "isolated" &&
     environment.MAINTENANCE !== undefined &&
-    (isStorageCompatibility(request) ||
-      isStorageBootstrap(request) ||
-      (request.method === "GET" && url.pathname === smokePath && url.search === "?readiness=1"))
+    readinessPath(request, url)
   ) {
     return Option.some(yield* sharedReadiness(request, environment));
   }

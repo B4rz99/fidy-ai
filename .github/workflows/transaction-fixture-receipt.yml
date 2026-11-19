@@ -24,6 +24,7 @@ jobs:
       - name: Check owned modules and application types
         if: always()
         run: |
+          bun install --cwd tools/mutation --frozen-lockfile
           bun install --cwd tools/depcruise --frozen-lockfile
           bun run --cwd apps/server typecheck
           bun run --cwd apps/server lint:deps

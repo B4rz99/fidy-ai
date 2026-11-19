@@ -8,6 +8,7 @@ const verifierFiles = new Set([
   "infra/cloudflare/native-deployed-edge.ts",
   "infra/cloudflare/native-deployed-graph.ts",
   "infra/cloudflare/native-deployed-web.ts",
+  "infra/cloudflare/native-erasure.ts",
   "infra/cloudflare/native-storage-release.ts",
   "infra/cloudflare/production-release.ts",
   "infra/cloudflare/verify-edge-policy.ts",

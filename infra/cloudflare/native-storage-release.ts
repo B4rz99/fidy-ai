@@ -1,3 +1,4 @@
+import { BunFileSystem } from "@effect/platform-bun";
 import type { ErasureObservation } from "./native-erasure";
 import { verificationRevision } from "./installed-verification-revision";
 import { readUserObjects } from "./native-erasure-evidence";
@@ -15,6 +16,7 @@ import { verifyNativeEdge } from "./native-edge";
 import {
   Context,
   Effect,
+  FileSystem,
   Layer,
   Option,
   Redacted,
@@ -297,18 +299,38 @@ const requireClosedAdmission = Effect.fn(function* (client: HttpClient.HttpClien
     return yield* new ReleaseFailure({ message: "Normal admission is not closed" });
   }
 });
-const erasureObservation = (
-  env: Config,
-  client: HttpClient.HttpClient,
-  userNamespace: string
-): ErasureObservation => ({
-  inventory: () => readUserObjects(accountReader(env, client), userNamespace),
-  record: (checkpoint) =>
-    writeFile(
-      env.smokeAttestationFile + ".erasure",
-      encodeJson({ revision: env.revision, userNamespace, ...checkpoint })
-    ),
-});
+const erasureObservation = ({
+  env,
+  client,
+  userNamespace,
+  fs,
+}: {
+  env: Config;
+  client: HttpClient.HttpClient;
+  userNamespace: string;
+  fs: FileSystem.FileSystem;
+}): ErasureObservation => {
+  // The final report retains each phase even when the last census fails or is interrupted.
+  const checkpoints: Array<Parameters<ErasureObservation["record"]>[0]> = [];
+  const path = env.smokeAttestationFile + ".erasure";
+  return {
+    inventory: () => readUserObjects(accountReader(env, client), userNamespace),
+    record: (checkpoint) =>
+      Effect.gen(function* () {
+        checkpoints.push(checkpoint);
+        yield* fs.writeFileString(
+          path + ".next",
+          encodeJson({ revision: env.revision, userNamespace, ...checkpoint, checkpoints })
+        );
+        yield* fs.rename(path + ".next", path);
+        const progress =
+          "listed" in checkpoint
+            ? ` (observation ${checkpoint.observations}, listed ${checkpoint.listed}, populated ${checkpoint.populated})`
+            : "";
+        yield* Effect.logInfo("Physical User census " + checkpoint.stage + progress);
+      }),
+  };
+};
 const verifySyntheticUsers = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
@@ -320,6 +342,7 @@ const verifySyntheticUsers = Effect.fn(function* (
     erasureNamespace: Option.Option<string>;
   }
 ) {
+  const fs = yield* FileSystem.FileSystem;
   const send = Effect.fn(function* (request: Request) {
     const reply = yield* client
       .execute(HttpClientRequest.fromWeb(request))
@@ -337,7 +360,9 @@ const verifySyntheticUsers = Effect.fn(function* (
     proof: Redacted.make(env.smokeProof),
     origins,
     send,
-    erasure: Option.map(erasureNamespace, (id) => erasureObservation(env, client, id)),
+    erasure: Option.map(erasureNamespace, (id) =>
+      erasureObservation({ env, client, userNamespace: id, fs })
+    ),
   });
   const path = `https://api.cloudflare.com/client/v4/accounts/${env.account}/workflows/fidy-native-billing/instances/${proof.callback.workflow}`;
   const response = providerJson(
@@ -1167,9 +1192,11 @@ if (import.meta.main) {
       ])
     )(process.argv[2]);
     const env = releaseEvidence.config();
-    const services = yield* Layer.build(ReleaseHttpLive);
+    const services = yield* Layer.build(Layer.mergeAll(ReleaseHttpLive, BunFileSystem.layer));
     const client = Context.get(services, HttpClient.HttpClient);
-    yield* commands[command](env, client, releasePort({ env, client }));
+    yield* commands[command](env, client, releasePort({ env, client })).pipe(
+      Effect.provideService(FileSystem.FileSystem, Context.get(services, FileSystem.FileSystem))
+    );
   }).pipe(Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }), Effect.scoped);
   await Effect.runPromise(
     program.pipe(

@@ -205,11 +205,10 @@ const verifyFreshTarget = Effect.fn(function* (
   });
 });
 
-const prepareClosedEdge = Effect.fn(function* (
-  env: Config,
-  client: HttpClient.HttpClient,
-  port: ReleasePort
-) {
+export const firstInstallEdge = Effect.fn(function* (mode: "plan" | "install") {
+  const env = releaseEvidence.config();
+  const client = yield* HttpClient.HttpClient;
+  const port = releasePort({ env, client });
   if (
     (yield* ReleaseConfig.String("GITHUB_ACTIONS")) !== "true" ||
     (yield* ReleaseConfig.String("GITHUB_REF")) !== "refs/heads/trunk" ||
@@ -219,7 +218,7 @@ const prepareClosedEdge = Effect.fn(function* (
     return yield* new ReleaseFailure({ message: "Requires the closed protected installation" });
   }
   yield* verifyFreshTarget(env, client, port);
-  yield* verifyNativeEdge(env, client, true);
+  yield* verifyNativeEdge(env, client, mode);
 });
 
 const verifyInstalledNamespaces = Effect.fn(function* ({
@@ -450,7 +449,7 @@ const installedRelease = Effect.fn(function* (
   { port, staging }: { port: ReleasePort; staging: boolean }
 ) {
   yield* releaseController.requireTrunk(port, env.revision);
-  yield* verifyNativeEdge(env, client, false);
+  yield* verifyNativeEdge(env, client, "verify");
   const receipts = yield* firstInstallWorkers();
   const pair = yield* readStablePair(
     {
@@ -1140,7 +1139,6 @@ const commands = {
   "attach-hosts": attachCanonicalHosts,
   "prepare-diagnostics": prepareDiagnostics,
   "verify-fresh-target": verifyFreshTarget,
-  "prepare-closed-edge": prepareClosedEdge,
   "verify-upload": verifyStorageUpload,
   verify: verification(false),
   "verify-erasure": verification(true),
@@ -1158,7 +1156,6 @@ if (import.meta.main) {
         "attach-hosts",
         "prepare-diagnostics",
         "verify-fresh-target",
-        "prepare-closed-edge",
         "verify-upload",
         "verify",
         "verify-erasure",

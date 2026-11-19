@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "7421b3940ce058dd84357c345b853bb98240d2d71e89590b9f625e58065327f2";
+const expectedEdgePolicyDigest = "8db799a6b006f2b6e7ab1cd4507906d515c791c930cebd97dd2eb7c1fd5ecb82";
 const securityArtifacts = [
   ...(await Promise.all(
     [
@@ -36,6 +36,9 @@ const securityArtifacts = [
       "./native-deployed-graph.ts",
       "./native-deployed-web.ts",
       "./native-edge.ts",
+      "./native-fleet-pilot.ts",
+      "../../scripts/infra-performance/deployed-fleet/pilot.py",
+      "../../scripts/infra-performance/deployed-fleet/observations.py",
       "./native-graph.ts",
       "./native-host-plan.ts",
       "./native-incumbent-fence.ts",

@@ -44,10 +44,37 @@ it("changes exactly the three owned host expressions and keeps all unrelated con
     latest.slice(1),
     [{ ...latest[0], enabled: false }, ...latest.slice(1)],
     [{ ...latest[0], expression: "true" }, ...latest.slice(1)],
-    [{ ...latest[0], logging: { enabled: true } }, ...latest.slice(1)],
+    [{ ...latest[0], logging: { enabled: false } }, ...latest.slice(1)],
+    [{ ...latest[0], logging: { enabled: true, other: true } }, ...latest.slice(1)],
+    [latest[0], { ...latest[1], logging: { enabled: true } }, ...latest.slice(2)],
+    [
+      { ...latest[0], action_parameters: { ruleset: "current" }, logging: { enabled: true } },
+      ...latest.slice(1),
+    ],
   ]) {
     expect(() => nativeEdgeChanges(custom(rows))).toThrow();
   }
+});
+
+it("preserves explicit skip logging and omits read-only metadata from the PATCH", () => {
+  const logging = { enabled: true };
+  const skip = { ...previous[0], logging, version: "3", last_updated: "opaque" };
+  const [change] = nativeEdgeChanges(custom([skip, ...previous.slice(1)]));
+  expect(change?.body).toStrictEqual({
+    action: "skip",
+    ref: skip.ref,
+    description: skip.description,
+    enabled: true,
+    expression: latest[0]?.expression,
+    action_parameters: skip.action_parameters,
+    logging,
+  });
+  expect(nativeEdgeChanges(custom(previous))[0]?.body).not.toHaveProperty("logging");
+  expect(
+    nativeEdgeChanges(
+      custom(latest.map((rule) => (rule.action === "skip" ? { ...rule, logging } : rule)))
+    )
+  ).toEqual([]);
 });
 
 it.effect("planning validates the complete incumbent ruleset without writing to the zone", () =>

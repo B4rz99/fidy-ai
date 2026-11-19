@@ -18,6 +18,7 @@ const count = Schema.Number.check(
 );
 const maximumDateEpochMs = 8_640_000_000_000_000;
 const epochMs = count.check(Schema.isLessThanOrEqualTo(maximumDateEpochMs));
+const BudgetEstimate = Schema.Struct({ rowsRead: count, rowsWritten: count });
 const BudgetInput = Schema.Struct({
   accountId: Schema.String.check(Schema.isPattern(/^[a-f0-9]{32}$/u)),
   nowEpochMs: epochMs,
@@ -28,7 +29,7 @@ const BudgetInput = Schema.Struct({
     rowsRead: count,
     rowsWritten: count,
   }),
-  estimate: Schema.Struct({ rowsRead: count, rowsWritten: count }),
+  estimate: BudgetEstimate,
 });
 
 type BudgetRefusal =
@@ -71,16 +72,24 @@ const validateObservation = ({
     : Option.none();
 };
 
+const exceedsExperimentLimit = (estimate: typeof BudgetEstimate.Type) =>
+  estimate.rowsRead > freeD1BenchmarkLimits.experimentReads ||
+  estimate.rowsWritten > freeD1BenchmarkLimits.experimentWrites;
+
+/** A size check cannot admit a hosted experiment without fresh account-wide usage. */
+const estimateOnly = (raw: unknown) => {
+  const decoded = Schema.decodeUnknownOption(BudgetEstimate)(raw);
+  if (Option.isNone(decoded)) return { _tag: "Refused", reason: "invalid_estimate" } as const;
+  return exceedsExperimentLimit(decoded.value)
+    ? ({ _tag: "Refused", reason: "experiment_too_large" } as const)
+    : ({ _tag: "NeedsAccountObservation" } as const);
+};
+
 const assessEstimate = ({
   observation,
   estimate,
 }: typeof BudgetInput.Type): D1BenchmarkBudgetDecision => {
-  if (
-    estimate.rowsRead > freeD1BenchmarkLimits.experimentReads ||
-    estimate.rowsWritten > freeD1BenchmarkLimits.experimentWrites
-  ) {
-    return { _tag: "Refused", reason: "experiment_too_large" };
-  }
+  if (exceedsExperimentLimit(estimate)) return { _tag: "Refused", reason: "experiment_too_large" };
   if (
     observation.rowsRead + estimate.rowsRead >
       freeD1BenchmarkLimits.dailyReads - freeD1BenchmarkLimits.reservedReads ||
@@ -100,9 +109,10 @@ if (import.meta.main) {
   const raw: unknown = await Bun.stdin.json().catch(() => undefined);
   const frame = Schema.decodeUnknownOption(Schema.Record(Schema.String, Schema.Unknown))(raw);
   const nowEpochMs = await Effect.runPromise(Clock.currentTimeMillis);
-  const decision = assessFreeD1BenchmarkBudget(
-    Option.isSome(frame) ? { ...frame.value, nowEpochMs } : raw
-  );
+  const decision =
+    process.argv[2] === "--estimate-only"
+      ? estimateOnly(raw)
+      : assessFreeD1BenchmarkBudget(Option.isSome(frame) ? { ...frame.value, nowEpochMs } : raw);
   const wire = await Effect.runPromise(
     Schema.encodeEffect(Schema.fromJsonString(Schema.Json))(decision)
   );

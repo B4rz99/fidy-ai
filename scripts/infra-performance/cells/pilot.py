@@ -119,40 +119,68 @@ def pilot_estimate(verified, spent, request_maximum):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--prepared", type=Path, required=True, help="Protected deployment and prior-cost receipt")
+    parser.add_argument("--prepared", type=Path, help="Protected deployment and prior-cost receipt")
     parser.add_argument("--bundle", type=Path, required=True, help="Verified offline comparator artifact")
-    parser.add_argument("--ledger", type=Path, required=True, help="Persistent account ledger used by provisioning")
+    parser.add_argument("--ledger", type=Path, help="Persistent account ledger used by provisioning")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
-    receipt = json.loads(args.prepared.read_text())
     report = {"status": "missing", "scope": "one hosted Transactions pilot", "attempts": [], "lifecycle": "unobserved"}
-    if not re.fullmatch(r"[a-f0-9]{32}", account := os.environ["CLOUDFLARE_ACCOUNT_ID"]):
-        raise Refused("Invalid account")
     args.out.mkdir(parents=True, exist_ok=False)
     def save():
         (args.out / "report.json").write_text(json.dumps(report, indent=2))
     save()
     try:
-        api = confirmed(receipt, account)
+        if not (args.bundle / "manifest.json").is_file():
+            raise Refused("verified_bundle_missing")
         manifest = json.loads((args.bundle / "manifest.json").read_bytes())
-        if manifest["baseline"] != PIN or receipt["bundleSha256"] != manifest["sha256"]:
-            raise Refused("Pinned comparator mismatch")
-        raw = (args.bundle / "limits.json").read_bytes()
-        if hashlib.sha256(raw).hexdigest() != manifest["sha256"]["limits"]:
-            raise Refused("Native budget digest mismatch")
-        cap = counts(json.loads(raw)["GET " + PATH]["maximum"])
+        if manifest["baseline"] != PIN:
+            raise Refused("pinned_comparator_mismatch")
+        def checked_json(key):
+            raw = (args.bundle / (key + ".json")).read_bytes()
+            if hashlib.sha256(raw).hexdigest() != manifest["sha256"][key]:
+                raise Refused("bundle_digest_mismatch")
+            return json.loads(raw)
+        probe = checked_json("probe")
+        if probe["result"] != "passed" or probe["baseline"] != PIN or probe["fixture"] != FIXTURE:
+            raise Refused("verified_rehearsal_missing")
+        verified = counts(probe["fullEstimate"]["onePair"])
+        report["fullEstimate"] = verified
+        plan = checked_json("plan")
+        canonical = plan.get("canonicalTransactionFixture")
+        if canonical is not None:
+            if canonical["observedOriginals"] != 8 or probe["comparedInspections"] != 8:
+                raise Refused("canonical_fixture_mismatch")
+            report["fixtureEvidence"] = "disposable native workerd"
+        else:
+            report["fixtureEvidence"] = "historical fixed originals"
+        report["preparedReceipt"] = "supplied" if args.prepared else "missing"
+        preliminary = subprocess.run(
+            ["bun", "scripts/infra-performance/d1-budget.ts", "--estimate-only"], cwd=ROOT,
+            input=json.dumps(verified), capture_output=True, text=True, timeout=15)
+        verdict = json.loads(preliminary.stdout)
+        if verdict == {"_tag":"Refused", "reason":"experiment_too_large"}:
+            raise Refused("experiment_too_large")
+        if verdict != {"_tag":"NeedsAccountObservation"}:
+            raise Refused("invalid_estimate")
+        if args.prepared is None or not args.prepared.is_file():
+            raise Refused("protected_preparation_receipt_missing")
+        if args.ledger is None or not args.ledger.is_dir():
+            raise Refused("persistent_account_ledger_missing")
+        if canonical is not None:
+            raise Refused("hosted_source_attestations_unobserved")
+        receipt = json.loads(args.prepared.read_text())
+        if receipt["bundleSha256"] != manifest["sha256"]:
+            raise Refused("prepared_bundle_mismatch")
+        if not re.fullmatch(r"[a-f0-9]{32}", account := os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")):
+            raise Refused("Invalid account")
+        cap = counts(checked_json("limits")["GET " + PATH]["maximum"])
         state = json.loads((args.ledger / account / "ledger.json").read_text())
         spent = counts(state["spent"])
         if (state["day"] != today() or state["pending"] is not None or not all(spent.values())
                 or spent != counts(receipt["spentThroughSetup"])):
             raise Refused("Provisioning and this run must share the same reconciled ledger")
-        probe_bytes = (args.bundle / "probe.json").read_bytes()
-        if hashlib.sha256(probe_bytes).hexdigest() != manifest["sha256"]["probe"]:
-            raise Refused("Full comparator rehearsal digest mismatch")
-        probe = json.loads(probe_bytes)
-        if probe["result"] != "passed" or probe["baseline"] != PIN:
-            raise Refused("Missing verified full comparator rehearsal")
-        decision = admit(ROOT, account, usage(account), pilot_estimate(probe["fullEstimate"]["onePair"], spent, cap))
+        api = confirmed(receipt, account)
+        decision = admit(ROOT, account, usage(account), pilot_estimate(verified, spent, cap))
         sessions = json.loads(os.environ["FIDY_COMPARISON_SESSIONS"])
         headers = {}
         for v in ("d1", "do"):
@@ -189,6 +217,8 @@ def main():
         return int(report["status"] == "failed")
     except Exception as error:
         report.update(status="stopped", error=type(error).__name__)
+        if isinstance(error, Refused):
+            report["reason"] = str(error)
         save()
         return 1
 

@@ -1,0 +1,69 @@
+infra/cloudflare/workers.test.ts
+  s_a1be23a656acf0::t_54f5aef0770a05 21,23-24,59,61,65-67,240-242,986,992
+  s_a1be23a656acf0::t_832bff968309ce 22,68-70
+apps/server/cloudflare/public-worker-browser-entry.test.ts
+  s_a1be23a656acf0::t_54f5aef0770a05 8,10
+.patterns/concurrency-time.md
+  s_a1be23a656acf0::t_54f5aef0770a05 34,36-37
+apps/web/src/features/provider-authentication/FEATURE.md
+  s_a1be23a656acf0::t_a71681fbf2f36a 18
+infra/cloudflare/rollback-compatibility.ts
+  s_a1be23a656acf0::t_a71681fbf2f36a 114-120
+  s_a1be23a656acf0::t_7ddb310cee25a4 121-122
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_a71681fbf2f36a 8-29,31
+  s_a1be23a656acf0::t_30aa478959bca5 5,7,30
+apps/server/cloudflare/canonical-operations/internal/GUARD-INVENTORY.md
+  s_a1be23a656acf0::t_a71681fbf2f36a 9
+infra/cloudflare/rollback-compatibility.test.ts
+  s_a1be23a656acf0::t_a71681fbf2f36a 30-31,33
+  s_a1be23a656acf0::t_c700b7d58041d3 32
+apps/server/.dependency-cruiser.mjs
+  s_a1be23a656acf0::t_c9a9fa1521089d 13
+apps/server/cloudflare/core-worker.ts
+  s_a1be23a656acf0::t_aad4e3d4d8497c 4-5,35-37,39,42-44
+apps/server/cloudflare/financial-user-store.test-fixture.ts
+  s_a1be23a656acf0::t_10731a687e579e 36
+apps/server/cloudflare/ingestion/internal/local-media.ts
+  s_a1be23a656acf0::t_fb2651d60042c3 119-121
+apps/server/cloudflare/maintenance/contract.ts
+  s_a1be23a656acf0::t_bfbef74f193521 1
+apps/server/cloudflare/runtime/operational-health/contract.ts
+  s_a1be23a656acf0::t_1ff36a1e93442d 1,82
+apps/server/cloudflare/runtime/operational-health/operations.ts
+  s_a1be23a656acf0::t_58d1663ca9c592 12-13
+apps/server/cloudflare/subscription/operations.ts
+  s_a1be23a656acf0::t_ea8a01d212e9f4 185-187,228-230
+docs/runbooks/billing-corrections.md
+  s_a1be23a656acf0::t_8bf321a1149761 9
+infra/cloudflare/native-acceptance.ts
+  s_a1be23a656acf0::t_74fc4fc4591003 226
+tools/depcruise/boundaries.test.mjs
+  s_a1be23a656acf0::t_f4a55e7d2bbf17 81-83,90-92,159
+apps/server/cloudflare/runtime/operational-health/internal/health-inspection.ts
+  s_e85b14fd415424::t_a18da62f5e9fda 2,4-7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0f3f8aa8fd4d3a513e685ce951544abcec904463",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_e85b14fd415424": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eecc-3a6d-7202-88a4-6766ce0233e7",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

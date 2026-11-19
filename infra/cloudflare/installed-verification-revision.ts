@@ -9,6 +9,7 @@ const verifierFiles = new Set([
   "infra/cloudflare/native-deployed-graph.ts",
   "infra/cloudflare/native-deployed-web.ts",
   "infra/cloudflare/native-storage-release.ts",
+  "infra/cloudflare/production-release.ts",
   "infra/cloudflare/verify-edge-policy.ts",
 ]);
 const isVerificationFile = (path: string): boolean =>
@@ -21,7 +22,9 @@ export const verificationRevision = Effect.fn(function* (
   git: (args: ReadonlyArray<string>) => Effect.Effect<string, Error>
 ) {
   if (requested === "" || requested === trunk) return trunk;
-  if (!commit(trunk) || !commit(requested)) return yield* Effect.fail(Error("Expected a full Git commit"));
+  if (!commit(trunk) || !commit(requested)) {
+    return yield* Effect.fail(Error("Expected a full Git commit"));
+  }
   yield* git(["merge-base", "--is-ancestor", requested, trunk]);
   const paths = yield* git(["diff", "--name-only", "--no-renames", "-z", requested, trunk, "--"]);
   if (paths.split("\0").some((path) => path !== "" && !isVerificationFile(path))) {

@@ -438,13 +438,7 @@ const UserNamespace = Schema.Struct({
   class_name: Schema.Literal("UserStore"),
   namespace_id: Schema.NonEmptyString,
 });
-const installedRelease = Effect.fn(function* (
-  env: Config,
-  client: HttpClient.HttpClient,
-  { port, staging, verifierRevision = env.revision }: { port: ReleasePort; staging: boolean; verifierRevision?: string }
-) {
-  yield* releaseController.requireTrunk(port, verifierRevision);
-  yield* verifyNativeEdge(env, client, "verify");
+const readInstalledIdentity = Effect.fn(function* (env: Config, client: HttpClient.HttpClient, port: ReleasePort) {
   const receipts = yield* firstInstallWorkers();
   const pair = yield* readStablePair(
     {
@@ -460,6 +454,17 @@ const installedRelease = Effect.fn(function* (
       message: "Installed source differs from expected release revision",
     });
   }
+  return pair;
+});
+const installedRelease = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  { port, staging }: { port: ReleasePort; staging: boolean },
+  verifierRevision: string = env.revision
+) {
+  yield* releaseController.requireTrunk(port, verifierRevision);
+  yield* verifyNativeEdge(env, client, "verify");
+  const pair = yield* readInstalledIdentity(env, client, port);
   yield* proveRecoveryCorePrivate(env, client, installationNames.Core);
   const ingress = yield* versionResources(env, client, {
     name: installationNames.Ingress,
@@ -507,7 +512,7 @@ const verifyFirstInstall = Effect.fn(function* (
     releaseCommand({ args: ["git", "-C", "../..", ...args], lifetime: "read-only" })
   ).pipe(Effect.mapError(() => new ReleaseFailure({ message: "Installed revision must be the same protected runtime source" })));
   const env = { ...verifier, revision };
-  const installed = yield* installedRelease(env, client, { port, staging: false, verifierRevision: verifier.revision });
+  const installed = yield* installedRelease(env, client, { port, staging: false }, verifier.revision);
   const contractDigest = yield* ReleaseConfig.String("CONTRACT_DIGEST"),
     identity = { gitRevision: env.revision, contractDigest };
   const smoke = yield* verifyNativeSmoke({

@@ -149,7 +149,7 @@ const captureTable = async (db, def) => {
     counted
   );
   assert.ok(item);
-  if (item.entries === 0)
+  if (item.entries === 0) {
     return {
       name: def.name,
       read: { ...size, check: digest(counted) },
@@ -158,6 +158,7 @@ const captureTable = async (db, def) => {
       rowCount: 0,
       dependencies: [],
     };
+  }
   const columns = readColumns(await select(db, query("PRAGMA table_info(" + name + ")")));
   const first = await select(db, query("SELECT * FROM " + name + " LIMIT 1"));
   const original = encodedRows(first)[0];
@@ -173,7 +174,7 @@ const captureTable = async (db, def) => {
     "SELECT " + projected.join(",") + " FROM " + name + " ORDER BY " + keys.join(",")
   );
   const rows = readValues(await select(db, read));
-  // table_info excludes generated columns; the verification SELECT retains their values as well.
+  // Verification includes generated columns that SQLite omits from the writable projection.
   const insertable = fields.filter(
     (field) => field === "_rowid_" || columns.some((col) => col.name === field)
   );

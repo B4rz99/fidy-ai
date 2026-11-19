@@ -62,11 +62,13 @@ const verifyResourcePlan = Effect.fn(function* ({
   hosts: NativeHostMode;
   pin: string;
 }) {
-  yield* Effect.sync(() => {
+  yield* Effect.gen(function* () {
     const allowed = Schema.Struct({ allowedIdps: Schema.Tuple([Schema.Literal(pin)]) });
     for (const node of Object.values(plan.resources)) {
       if (describeResource(node).resourceType === "Cloudflare.Access.Application") {
-        Schema.decodeUnknownSync(allowed)(node.action === "noop" ? node.state.props : node.props);
+        yield* Schema.decodeUnknownEffect(allowed)(
+          node.action === "noop" ? node.state.props : node.props
+        );
       }
     }
   }).pipe(nativeResourceStage("account recovery PIN"));

@@ -212,13 +212,17 @@ def observation(path, env, destination, variant="d1"):
         return {**result, "seed": seed, "timings": timings}
 
 
+def view_fingerprints(row):
+    return {name: {key: (source["status"], source["bytes"], source.get("comparableDigest", source["digest"]))
+                for key, source in view.items() if key in ("http", "context")}
+         for name, view in row["views"].items()}
+
+
 def equivalence(row):
     return (
         {key: value for key, value in row["seed"].items() if key != "milliseconds"},
         [(attempt["status"], attempt["bytes"], attempt["payload"]) for attempt in row["attempts"]],
-        {name: {key: (source["status"], source["bytes"], source.get("comparableDigest", source["digest"]))
-                for key, source in view.items() if key in ("http", "context")}
-         for name, view in row["views"].items()},
+        view_fingerprints(row),
         row["accountability"],
         row["browser"],
     )
@@ -313,6 +317,8 @@ def main():
         "dataset": args.dataset,
         "stressOnly": args.dataset == "breaking",
         "seedEpochMs": 1794916800000,
+        "dashboardNormalization": ["data.context.calculatedAt"],
+        "recurringHistory": "The product requests compact revisions. Its earlier-month and selective results are visible; complete revision history is checked separately through the bound canonical HTTP API.",
         "backendBoundary": {
             "start": "after loopback request adaptation, immediately before invoking ingress",
             "end": "complete response body buffered in the loopback API process",
@@ -400,8 +406,10 @@ def main():
                 paired.append(row)
             if len(paired) == 2 and all(row["status"] == "ok" for row in paired):
                 if equivalence(paired[0]) != equivalence(paired[1]):
+                    left, right = (view_fingerprints(row) for row in paired)
+                    unequal = sorted(key for key in left.keys() | right.keys() if left.get(key) != right.get(key))
                     for row in paired:
-                        row.update(status="failed", failure="fixture, payload or accountability mismatch")
+                        row.update(status="failed", failure="fixture, payload or accountability mismatch", unequalViews=unequal)
             rows.extend(paired)
             with (run / "attempts.jsonl").open("a") as out:
                 for row in paired:

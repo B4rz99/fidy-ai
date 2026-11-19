@@ -30,12 +30,12 @@ const transactions = Effect.fn(function* (db: Owner, size: Size) {
     yield* execute(
       db,
       `WITH RECURSIVE series(i) AS (
-      VALUES(?1) UNION ALL SELECT i+1 FROM series WHERE i+1 < ?2
+      VALUES(CAST(?1 AS INTEGER)) UNION ALL SELECT i+1 FROM series WHERE i+1 < ?2
     ), facts AS (SELECT i,CASE WHEN i%100=1 THEN i-1 ELSE i END AS p FROM series),
     dated AS (SELECT *,?3-CASE WHEN p<500 THEN p*60000 ELSE ((p%3650)+1)*86400000 END AS occurred FROM facts)
     INSERT INTO transactions(id,user_id,amount,currency,direction,counterparty,category_id,occurred_at_ms,created_at_ms)
     SELECT printf('81000000-0000-4000-8000-%012d',i),?4,'1000',
-    json_extract(?5,'$[' || (p%?6) || ']'),'outflow','Evaluación ' || p,
+    json_extract(?5,printf('$[%d]', p%?6)),'outflow','Evaluación ' || p,
     printf('10000000-0000-4000-8000-%012d',CASE WHEN p%3=0 THEN 1 ELSE (p%15)+2 END),occurred,occurred FROM dated`,
       start,
       Math.min(start + chunk, size.transactions),
@@ -100,9 +100,9 @@ const planning = Effect.fn(function* (db: Owner, size: Size) {
       `WITH RECURSIVE revisions(n) AS (VALUES(0) UNION ALL SELECT n+1 FROM revisions WHERE n+1<?1),
       dates AS (SELECT n,date('2018-01-01','+' || n || ' months') AS start FROM revisions)
       INSERT INTO recurring_plan_revisions(user_id,plan_id,position,from_date,plan_json)
-      SELECT ?2,?3,n,start,json_object('name','Recurrente ' || ?4,'kind','expense','currency','COP','amountMode','fixed',
+      SELECT ?2,?3,n,start,json_object('name',printf('Recurrente %d',?4),'kind','expense','currency','COP','amountMode','fixed',
       'money',json_object('amount','100000','currency','COP'),'frequency','monthly','firstDate',start,'timeZone','America/Bogota',
-      'counterparty','Contraparte ' || ?4) FROM dates`,
+      'counterparty',printf('Contraparte %d',?4)) FROM dates`,
       size.revisions,
       subject,
       id,

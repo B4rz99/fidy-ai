@@ -18,7 +18,7 @@ type Verified = Readonly<{
   attempt: string;
   review: unknown;
 }>;
-type LoginOptions = Readonly<{ provider: AuthenticationProvider; scenario: string; intent?: "signup" | "login" }>;
+type LoginOptions = Readonly<{ provider: AuthenticationProvider; scenario: string }>;
 type Begun = Readonly<{
   proof: typeof ProviderBrowserProof.Type;
   authorization: URL;
@@ -35,8 +35,7 @@ type Browser = Readonly<{
   ) => Effect.Effect<Verified, Schema.SchemaError>;
   begin: (
     provider: AuthenticationProvider,
-    handoff?: string,
-    intent?: "signup" | "login"
+    handoff?: string
   ) => Effect.Effect<Begun, Schema.SchemaError>;
   login: (
     subject: string,
@@ -62,7 +61,7 @@ const transport = (runtime: Miniflare): Pick<Browser, "api" | "headers" | "post"
     );
   return { api, headers, post };
 };
-export const browser = (runtime: Miniflare): Browser => {
+export const browser = (runtime: Miniflare, intent: "signup" | "login" = "signup"): Browser => {
   const { api, headers, post } = transport(runtime);
   const pair = Effect.gen(function* () {
     const response = yield* post("/web/pairings", {});
@@ -71,7 +70,7 @@ export const browser = (runtime: Miniflare): Browser => {
       yield* native(() => response.json())
     );
   });
-  const begin = Effect.fn(function* (provider: AuthenticationProvider, handoffReference?: string, intent: "signup" | "login" = "signup") {
+  const begin = Effect.fn(function* (provider: AuthenticationProvider, handoffReference?: string) {
     const proof = yield* pair;
     const started = yield* post(`/web/providers/${provider}/start`, {
       ...proof,
@@ -88,10 +87,10 @@ export const browser = (runtime: Miniflare): Browser => {
   });
   const login = Effect.fn(function* (
     subject: string,
-    { provider, scenario, intent }: LoginOptions,
+    { provider, scenario }: LoginOptions,
     handoffReference?: string
   ) {
-    const { proof, authorization, cookie } = yield* begin(provider, handoffReference, intent);
+    const { proof, authorization, cookie } = yield* begin(provider, handoffReference);
     const state = authorization.searchParams.get("state") ?? "";
     const nonce = authorization.searchParams.get("nonce") ?? "";
     const callback = new URL(`/providers/${provider}/callback`, api);

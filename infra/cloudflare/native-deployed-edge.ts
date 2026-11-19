@@ -9,13 +9,36 @@ import { type ProviderRead as Read, readProviderList as readList } from "./nativ
 
 const api = "https://api.cloudflare.com/client/v4/";
 const worker = Schema.Struct({ id: Schema.NonEmptyString, tag: Schema.optional(Schema.String) });
-const inspectBuilds = Effect.fn(function* ({
-  read, account, installed, client,
-}: { read: Read; account: string; installed: boolean; client: HttpClient.HttpClient }) {
+const readBuildTriggers = Effect.fn(function* (client: HttpClient.HttpClient, account: string, tag: string) {
   const token = yield* Config.schema(
     Schema.Redacted(Schema.NonEmptyString.check(Schema.isTrimmed())),
     "CLOUDFLARE_BUILDS_READ_TOKEN"
   );
+  const request = HttpClientRequest.get(api + account + "builds/workers/" + tag + "/triggers").pipe(
+    HttpClientRequest.bearerToken(token)
+  );
+  return yield* releaseEvidence.providerJson(request).pipe(
+    Effect.provideService(HttpClient.HttpClient, client),
+    Effect.flatMap(Schema.decodeUnknownEffect(Schema.Struct({
+      success: Schema.Literal(true),
+      result: Schema.Array(Schema.Struct({
+        branch_includes: Schema.Array(Schema.String),
+        branch_excludes: Schema.Array(Schema.String)
+      }))
+    })))
+  );
+});
+const inspectBuilds = Effect.fn(function* ({
+  read,
+  account,
+  installed,
+  client,
+}: {
+  read: Read;
+  account: string;
+  installed: boolean;
+  client: HttpClient.HttpClient;
+}) {
   const body = yield* Schema.decodeUnknownEffect(
     Schema.Struct({ success: Schema.Literal(true), result: Schema.Array(worker) })
   )(yield* read(account + "workers/scripts"));
@@ -42,21 +65,7 @@ const inspectBuilds = Effect.fn(function* ({
       ) {
         return yield* Effect.fail(Error("Missing Worker script tag for " + item.id));
       }
-      const triggers = yield* Schema.decodeUnknownEffect(
-        Schema.Struct({
-          success: Schema.Literal(true),
-          result: Schema.Array(
-            Schema.Struct({
-              branch_includes: Schema.Array(Schema.String),
-              branch_excludes: Schema.Array(Schema.String),
-            })
-          ),
-        })
-      )(yield* releaseEvidence.providerJson(
-        HttpClientRequest.get(api + account + "builds/workers/" + item.tag + "/triggers").pipe(
-          HttpClientRequest.bearerToken(token)
-        )
-      ).pipe(Effect.provideService(HttpClient.HttpClient, client)));
+      const triggers = yield* readBuildTriggers(client, account, item.tag);
       for (const trigger of triggers.result) {
         const matches = (pattern: string): boolean => new Bun.Glob(pattern).match("trunk");
         if (

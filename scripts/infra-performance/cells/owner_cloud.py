@@ -16,6 +16,10 @@ ROLES = ('db', 'bucket', 'core', 'ingress')
 INERT = b'export default {fetch(){return new Response(null,{status:403})}}'
 
 
+class NameConflict(Refused):
+    """The control plane proved that creation did not acquire this name."""
+
+
 def multipart(metadata, module):
     boundary = secrets.token_hex(24)
     def part(name, content_type, value):
@@ -42,6 +46,8 @@ class Cloud:
         try:
             response = self.transport.open(request, timeout=45)
         except urllib.error.HTTPError as error:
+            if error.code in (409, 412):
+                raise NameConflict('cloud_resource_conflict') from None
             if error.code == 404 and tolerate_absent:
                 return None
             raise Refused('cloud_control_' + str(error.code)) from None
@@ -88,13 +94,13 @@ class Cloud:
             raise Refused('foreign_worker')
         return self.prefix + '-' + role
 
-    def namespaces(self):
+    def namespaces(self, recorded=()):
         found = []
         for page in range(1, 101):
             wire = self.request('GET', f'workers/durable_objects/namespaces?page={page}&per_page=100')
             for item in wire['result']:
-                if item.get('script') == self.prefix + '-core':
-                    if item['class'] != CLASS:
+                if item.get('script') == self.prefix + '-core' or item['id'] in recorded:
+                    if item['class'] != CLASS or item.get('script') != self.prefix + '-core':
                         raise Refused('foreign_coordinator')
                     found.append(item['id'])
             info = wire['result_info']
@@ -103,6 +109,13 @@ class Cloud:
             if page >= info['total_pages']:
                 return found
         raise Refused('unbounded_namespace_inventory')
+
+    def verify_absent(self, inventory, namespace_ids):
+        if self.namespaces(namespace_ids) or any(self.identity(role) is not None for role in inventory):
+            raise Refused('owned_inventory_survived')
+        db = inventory.get('db', {}).get('id')
+        if db and self.result('GET', 'd1/database/'+str(UUID(db)), tolerate_absent=True) is not None:
+            raise Refused('owned_database_survived')
 
     def upload(self, role, module, bindings=(), migrations=None, new=False):
         metadata = dict(main_module='index.mjs', bindings=list(bindings), tags=[self.prefix], compatibility_date='2026-09-08',
@@ -127,7 +140,6 @@ class Cloud:
             self.result('POST', 'r2/buckets', dict(name=self.prefix))
         else:
             self.upload(role, INERT, new=True)
-            self.expose(role, False)
 
     def deploy(self, bundle, db, key, deadline):
         common = [dict(type='plain_text', name=k, text=v) for k, v in {

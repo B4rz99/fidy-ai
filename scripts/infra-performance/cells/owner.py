@@ -12,7 +12,7 @@ from uuid import uuid4
 from budget import Refused, admit, counts, today
 from comparison import FIXTURE, boundaries, observe
 from owner_bundle import MaterializedBundle, verified_batch, LOGIN, HISTORY
-from owner_cloud import Cloud, ROLES
+from owner_cloud import Cloud, NameConflict, ROLES
 from owner_state import AccountExperiment, CustodyObject
 from owner_transport import HERE, ROOT, NATIVE_API, NATIVE_BROWSER, confirmed, fetch, usage
 from prepare import PIN
@@ -30,26 +30,34 @@ def prepare_inventory(owner, cloud):
         owner.available()
         run['inventory'][role] = {'id':None}
         owner.save()
-        cloud.create(role)
+        try:
+            cloud.create(role)
+        except NameConflict:
+            del run['inventory'][role]
+            owner.save()
+            raise
         identity = cloud.identity(role)
         if not identity:
             raise Refused('created_identity_unconfirmed')
         run['inventory'][role]['id'] = identity
         owner.save()
+        if role in ('core', 'ingress'):
+            cloud.expose(role, False)
 
 
 def teardown(owner, cloud, resumed=False):
     run = owner.active
     if run is None and owner.state['last'] and owner.state['last']['prefix'] == cloud.prefix:
         last = owner.state['last']
-        if any(cloud.identity(role) is not None for role in last['removed']) or cloud.namespaces():
-            raise Refused('retired_inventory_reappeared')
+        cloud.verify_absent(last['inventory'],last['namespaceIds'])
         return last
     if run is None or cloud.prefix != run['prefix']:
         raise Refused('cleanup_ownership_unavailable')
     if resumed and time.time() < run['deadline'] + 90:
         raise Refused('active_owner_may_still_be_running')
     run['cleaning'] = True
+    recorded = run.get('namespaceIds', [])
+    run['namespaceIds'] = sorted(set(recorded) | set(cloud.namespaces(recorded))) if 'core' in run['inventory'] else recorded
     owner.save()
     for role in reversed(ROLES):
         recorded = run['inventory'].get(role)
@@ -61,18 +69,17 @@ def teardown(owner, cloud, resumed=False):
         if identity is not None:
             if recorded['id'] is not None and recorded['id'] != identity:
                 raise Refused('owned_resource_replaced')
+            if recorded['id'] is None:
+                recorded['id'] = identity
+                owner.save()
             cloud.remove(role, identity)
         if cloud.identity(role) is not None:
             raise Refused('disposal_unconfirmed')
-    if cloud.namespaces():
-        raise Refused('coordinator_disposal_unconfirmed')
-    for role in run['inventory']:
-        if cloud.identity(role) is not None:
-            raise Refused('owned_inventory_survived')
+    cloud.verify_absent(run['inventory'],run['namespaceIds'])
     previous = owner.prior(run['day'])
     owner.state['charged'] = dict(day=run['day'], spent={k: previous[k] + run['spent'][k] for k in previous})
     owner.state['last'] = dict(prefix=run['prefix'], day=run['day'], spent=run['spent'], pending=run['pending'],
-                              removed=sorted(run['inventory']), namespacesAbsent=True)
+                              removed=sorted(run['inventory']), inventory=run['inventory'],namespaceIds=run['namespaceIds'],namespacesAbsent=True)
     owner.state['active'] = None
     owner.save()
     return owner.state['last']
@@ -235,6 +242,8 @@ def main():
                 namespaces = cloud.namespaces()
                 if len(namespaces) != 1:
                     raise Refused('missing_isolated_coordinator')
+                active['namespaceIds'] = namespaces
+                owner.save()
                 api = confirmed(dict(resourcePrefix=args.prefix,accountId=account,versions=versions,databaseId=db,
                                      fixture=FIXTURE,baseline=PIN,day=today(),namespaceId=namespaces[0]),account)
                 def send(method,path,headers,body):

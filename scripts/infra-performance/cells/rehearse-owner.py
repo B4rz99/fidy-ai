@@ -54,7 +54,13 @@ class Sandbox:
             assert self.process.wait(timeout=30) == 0
         (self.storage/role).unlink()
 
-    def namespaces(self):
+    def expose(self, role, enabled):
+        assert role in ("ingress", "core") and not enabled
+
+    def verify_absent(self,inventory,namespace_ids):
+        assert not self.namespaces(namespace_ids) and not any(self.identity(r) for r in inventory)
+
+    def namespaces(self, recorded=()):
         return ['local-coordinator'] if self.identity('core') else []
 
     def query(self, _, statements):

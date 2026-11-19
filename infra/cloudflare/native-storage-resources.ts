@@ -29,16 +29,21 @@ const releaseChecks = {
   upload: "verify-upload",
   "stage-hosts": "capture-hosts",
 } as const;
-const verifyResourcePlan = Effect.fn(function* (
-  phase: typeof Phase.Type,
-  plan: Plan,
-  revision: string,
-  hosts: NativeHostMode
-) {
+const verifyResourcePlan = Effect.fn(function* ({
+  phase,
+  plan,
+  revision,
+  hosts,
+}: {
+  phase: typeof Phase.Type;
+  plan: Plan;
+  revision: string;
+  hosts: NativeHostMode;
+}) {
   if (phase === "stage-hosts") {
     yield* Effect.sync(() => requireHostPlan(plan)).pipe(nativeResourceStage("Access host plan"));
   } else {
-    yield* Effect.sync(() => requireNativeBindings({ plan: plan, revision, hosts })).pipe(
+    yield* Effect.sync(() => requireNativeBindings({ plan, revision, hosts })).pipe(
       nativeResourceStage("Worker bindings")
     );
     yield* Effect.sync(() =>
@@ -84,7 +89,7 @@ const resourceRelease = Effect.fn(function* (phase: typeof Phase.Type) {
       ? Alchemist.Stack.plan({ ...input, include: stagedAccessApplications })
       : Alchemist.Stack.plan(input)
   ).pipe(nativeResourceStage("planning"));
-  yield* verifyResourcePlan(phase, snapshot.native, revision, hosts);
+  yield* verifyResourcePlan({ phase, plan: snapshot.native, revision, hosts });
   const preflightStages = {
     "first-install": "closed edge preparation",
     upload: "upload verification",

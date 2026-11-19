@@ -182,8 +182,9 @@ export const readLocalSubscriptionOffers = Effect.fnUntraced(function* (
   const response = yield* Effect.tryPromise(() =>
     pricing.getByName(pricingName).fetch("https://pricing.internal/offers")
   );
-  if (!response.ok)
-    {return yield* new CanonicalAdmissionUnavailable({ cause: "pricing_unavailable" });}
+  if (!response.ok) {
+    return yield* new CanonicalAdmissionUnavailable({ cause: "pricing_unavailable" });
+  }
   return yield* Effect.tryPromise(() => response.json()).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(SubscriptionOffers)),
     Effect.flatMap(Schema.encodeEffect(SubscriptionOffers))
@@ -224,8 +225,9 @@ export const observeLocalSubscription = Effect.fn(
       input: Effect.succeedSome(true),
       work: Effect.fn(function* (_, user) {
         if (Option.isSome(offers)) return subscriptionReadResult(offers.value);
-        if (selection === "subscription.getUpgradeUrl")
-          {return subscriptionReadResult(upgradeLocation(env.BROWSER_ORIGIN));}
+        if (selection === "subscription.getUpgradeUrl") {
+          return subscriptionReadResult(upgradeLocation(env.BROWSER_ORIGIN));
+        }
         return subscriptionReadResult(yield* readLocalSubscriptionStatus(user));
       }),
     });

@@ -116,8 +116,9 @@ const inspect = Effect.fn(function* ({ input, digest, current }: Publication) {
   const sql = yield* SqliteClient;
   const [published] =
     yield* sql`SELECT id,input_digest FROM media_submissions WHERE user_id=${input.userId} AND portfolio_id=${input.portfolio} AND message_id=${input.message}`;
-  if (published === undefined)
-    {return meter.pro === 0 && meter.used >= freeLimit ? checkLimit(current) : meter;}
+  if (published === undefined) {
+    return meter.pro === 0 && meter.used >= freeLimit ? checkLimit(current) : meter;
+  }
   return published.input_digest === digest
     ? yield* response(
         yield* Schema.decodeUnknownEffect(Schema.String)(published.id),

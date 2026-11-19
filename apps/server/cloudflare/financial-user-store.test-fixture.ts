@@ -33,6 +33,7 @@ export const history = Effect.fn(function* (
   return yield* native(() =>
     runtime.dispatchFetch(`https://${productionTopology.ingress.hostname}/transactions${query}`, {
       headers: {
+        connection: "close",
         origin: browserOrigins.production,
         "Fidy-Session-Binding": subject.session,
         cookie: `__Host-fidy_session=${subject.bearer}`,

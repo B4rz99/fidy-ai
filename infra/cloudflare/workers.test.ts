@@ -18,10 +18,10 @@ import {
 } from "@fidy/server/telemetry-contract";
 import { Clock, DateTime, Effect, Result, Schema } from "effect";
 import { describe, expect } from "vitest";
-import {
-  fixtureWorker as coreWorker,
-  makeFixtureWorker as makeCoreWorker,
-} from "../../apps/server/cloudflare/core-worker.test-fixture";
+import coreWorker, {
+  makeCoreWorker as composeWorker,
+} from "../../apps/server/cloudflare/core-worker";
+import { registeredConnectionInstitutionIds } from "../../apps/server/src/shell/connections/contract";
 import {
   type ReleaseMetadata,
   resolveDeploymentConfiguration,
@@ -56,20 +56,19 @@ const smokeBody = (coreVersion: string): string =>
   });
 
 const privateFailureDetail =
-  "D1_ERROR: no such table: categories; SELECT secret_value FROM internal_topology";
+  "SQLITE_ERROR: categories unavailable; private query and topology detail";
 
-const failDatabaseOperation = (): never => {
+const failPrivateOperation = (): never => {
   throw new Error(privateFailureDetail);
 };
 
-const failingDatabase: D1Database = {
-  batch: failDatabaseOperation,
-  dump: failDatabaseOperation,
-  exec: failDatabaseOperation,
-  prepare: failDatabaseOperation,
-  withSession: failDatabaseOperation,
+const makeCoreWorker = (telemetry: TelemetryService): typeof coreWorker =>
+  composeWorker({ telemetry, institutions: registeredConnectionInstitutionIds });
+const unavailableUserStore = {
+  getByName: (): Pick<Fetcher, "fetch"> => ({
+    fetch: (): Promise<Response> => Promise.reject(new Error("unused")),
+  }),
 };
-
 const unusedAiBinding = {
   run: (): Promise<never> => Promise.reject(new Error("Unused OpenAI binding")),
 };
@@ -77,18 +76,12 @@ const unusedAiBinding = {
 const coreEnvironment: Parameters<typeof coreWorker.fetch>[1] = {
   OPENAI_API_KEY: openAiTestKey(unusedAiBinding),
   CONTRACT_DIGEST: contractDigest,
-  DB: failingDatabase,
   HOSTED_AI_MODEL: approvedOpenAiModel,
   BROWSER_ORIGIN: "https://app.fidyapp.com",
   WOMPI_ENVIRONMENT: "",
   WOMPI_PUBLIC_KEY: "",
   WOMPI_PRIVATE_KEY: "",
   WOMPI_INTEGRITY_SECRET: "",
-  USER_TRANSACTION_COORDINATOR: {
-    getByName: (): Pick<Fetcher, "fetch"> => ({
-      fetch: (): Promise<Response> => Promise.reject(new Error("unused")),
-    }),
-  },
   KAPSO_API_KEY: "",
   WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
   KAPSO_WEBHOOK_SECRET: "",
@@ -244,9 +237,9 @@ describe("Core smoke adapter", () => {
         SMOKE_PROOF: proof,
         CF_VERSION_METADATA: { id: "dc8dcd28-271b-4367-9840-6c244f84cb40" },
         SMOKE_QUEUE_NAME: "SmokeQueue",
-        SMOKE_QUEUE: withMethods(unavailableQueue, { send: failDatabaseOperation }),
-        SMOKE_BUCKET: withMethods(unavailableBucket, { put: failDatabaseOperation }),
-        SMOKE_WORKFLOW: withMethods(unavailableWorkflow, { create: failDatabaseOperation }),
+        SMOKE_QUEUE: withMethods(unavailableQueue, { send: failPrivateOperation }),
+        SMOKE_BUCKET: withMethods(unavailableBucket, { put: failPrivateOperation }),
+        SMOKE_WORKFLOW: withMethods(unavailableWorkflow, { create: failPrivateOperation }),
       };
       const response = yield* Effect.tryPromise(() =>
         coreWorker.fetch(
@@ -407,11 +400,9 @@ describe("Deployment configuration", () => {
 describe("Production topology contract", () => {
   it("assigns separate static site and product hostnames with private Core", () => {
     expect(productionTopology.web).toEqual({
-      adoptExistingWorker: true,
       hostname: "app.fidyapp.com",
       localPort: 5173,
       redirects: [],
-      workerName: "fidy-web",
       workersDev: false,
     });
     expect(productionTopology.site).toEqual({
@@ -422,7 +413,6 @@ describe("Production topology contract", () => {
     });
     expect(productionTopology.ingress.hostname).toBe("api.fidyapp.com");
     expect(productionTopology.core).toEqual({
-      d1Binding: "DB",
       localPort: 8788,
       workersDev: false,
     });
@@ -993,13 +983,13 @@ describe("Cloudflare Worker topology (continued)", () => {
       const directoryStub: Pick<Fetcher, "fetch"> = {
         fetch: (input): Promise<Response> => {
           directoryRequests.push(new Request(input).url);
-          return failDatabaseOperation();
+          return failPrivateOperation();
         },
       };
       const nativeEnvironment = {
         ...coreEnvironment,
         DIRECTORY: { getByName: (): typeof directoryStub => directoryStub },
-        USER_STORE: coreEnvironment.USER_TRANSACTION_COORDINATOR,
+        USER_STORE: unavailableUserStore,
       };
       const observedCore = makeCoreWorker(telemetry);
       const observedPublic = makePublicWorker(telemetry);

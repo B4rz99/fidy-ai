@@ -5,9 +5,9 @@ import { Effect } from "effect";
 import { expect, vi } from "vitest";
 import publicWorker from "./public-worker";
 
-it.effect.each([false, true])(
+it.effect(
   "preserves the initial-context query, browser Origin and cookie through the public gateway",
-  (independent) =>
+  () =>
     Effect.gen(function* () {
       const cookie = `__Host-fidy_session=${"d".repeat(43)}`;
       const origin = "https://app.fidyapp.com";
@@ -19,9 +19,6 @@ it.effect.each([false, true])(
         expect(request.headers.get(browserSessionBindingHeader)).toBe("current-binding");
         expect(request.headers.has("authorization")).toBe(false);
         return Promise.resolve(Response.json({ binding: null }));
-      });
-      const target = vi.fn(() => {
-        throw new Error("User reads must go to Core");
       });
       const response = yield* Effect.tryPromise(() =>
         publicWorker.fetch(
@@ -39,13 +36,11 @@ it.effect.each([false, true])(
             PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
             RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
             CORE: { fetch: forward },
-            ...(independent ? { ERASURE_REGISTRY_COORDINATOR: { getByName: target } } : {}),
           }
         )
       );
       expect(response.status).toBe(200);
       expect(forward).toHaveBeenCalledTimes(1);
-      expect(target).not.toHaveBeenCalled();
     })
 );
 

@@ -27,7 +27,10 @@ describe("rollback compatibility evidence", () => {
   });
   it("refuses schema and resource changes even when the old Worker version remains available", () => {
     expect(
-      rollbackCompatible({ ...base, changedPaths: ["apps/server/cloudflare/migrations/0002.sql"] })
+      rollbackCompatible({
+        ...base,
+        changedPaths: ["apps/server/cloudflare/user-store/internal/credential-schema.ts"],
+      })
     ).toBe(false);
     expect(rollbackCompatible({ ...base, changedPaths: ["infra/cloudflare/alchemy.run.ts"] })).toBe(
       false

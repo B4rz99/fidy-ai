@@ -2,8 +2,33 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "eee47e014797d0ca86bb4b79d2fa49991a723433dd6d685e283bb7d6badbdaeb";
+const expectedEdgePolicyDigest = "78db3c0cbd86ae22af2831ab946ad2bfb0a309ce454b11c343d8a6e5bc62788a";
 const securityArtifacts = [
+  ...(await Promise.all(
+    [
+      "../../apps/server/cloudflare/agent/internal/local-compaction.ts",
+      "../../apps/server/cloudflare/agent/internal/local-inference.ts",
+      "../../apps/server/cloudflare/release-isolation/contract.ts",
+      "../../apps/server/cloudflare/release-isolation/internal/deployment.ts",
+      "../../apps/server/cloudflare/release-isolation/internal/request-proof.ts",
+      "../../apps/server/cloudflare/release-isolation/runtime.ts",
+      "../../apps/server/cloudflare/runtime/release-smoke/internal/platform.ts",
+      "./native-acceptance.ts",
+      "./native-application-bindings.ts",
+      "./native-application-resources.ts",
+      "./native-application.ts",
+      "./native-deployed-access.ts",
+      "./native-deployed-edge.ts",
+      "./native-deployed-graph.ts",
+      "./native-deployed-web.ts",
+      "./native-edge.ts",
+      "./native-graph.ts",
+      "./native-host-plan.ts",
+      "./native-incumbent-fence.ts",
+      "./native-provider-list.ts",
+      "./native-release-smoke.ts",
+    ].map((path) => Bun.file(new URL(path, import.meta.url)).text())
+  )),
   await Bun.file(
     new URL("../../apps/server/cloudflare/transactions/internal/sqlite-privacy.ts", import.meta.url)
   ).text(),
@@ -829,15 +854,6 @@ const securityArtifacts = [
   await Bun.file(new URL("../../patches/alchemy@2.0.0-beta.80.patch", import.meta.url)).text(),
   await Bun.file(new URL("./smoke-exchange.ts", import.meta.url)).text(),
   await Bun.file(
-    new URL(
-      "../../apps/server/cloudflare/runtime/release-smoke/internal/database.ts",
-      import.meta.url
-    )
-  ).text(),
-  await Bun.file(
-    new URL("../../apps/server/cloudflare/migrations/0006_audit_media_index.sql", import.meta.url)
-  ).text(),
-  await Bun.file(
     new URL("../../apps/server/cloudflare/user-documents/operations.ts", import.meta.url)
   ).text(),
   await Bun.file(
@@ -879,9 +895,6 @@ const securityArtifacts = [
   await Bun.file(
     new URL("../../apps/server/cloudflare/connections/internal/cleanup.ts", import.meta.url)
   ).text(),
-  await Bun.file(
-    new URL("../../apps/server/cloudflare/migrations/0004_connection_cleanup.sql", import.meta.url)
-  ).text(),
 
   await Bun.file(
     new URL(
@@ -903,12 +916,6 @@ const securityArtifacts = [
   ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/connections/internal/accounts.ts", import.meta.url)
-  ).text(),
-  await Bun.file(
-    new URL(
-      "../../apps/server/cloudflare/migrations/0003_connection_activation.sql",
-      import.meta.url
-    )
   ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/core-http/internal/http.ts", import.meta.url)
@@ -1162,9 +1169,6 @@ const securityArtifacts = [
   ).text(),
   await Bun.file(new URL("../../apps/server/cloudflare/core-worker.ts", import.meta.url)).text(),
   await Bun.file(
-    new URL("../../apps/server/cloudflare/transactions/runtime.ts", import.meta.url)
-  ).text(),
-  await Bun.file(
     new URL("../../apps/server/cloudflare/transactions/internal/recovery-alarm.ts", import.meta.url)
   ).text(),
   await Bun.file(
@@ -1200,12 +1204,6 @@ const securityArtifacts = [
   ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/connections/internal/erasure.ts", import.meta.url)
-  ).text(),
-  await Bun.file(
-    new URL(
-      "../../apps/server/cloudflare/migrations/0002_connection_authorization.sql",
-      import.meta.url
-    )
   ).text(),
   await Bun.file(
     new URL("../../apps/server/src/shell/connections/runtime.ts", import.meta.url)

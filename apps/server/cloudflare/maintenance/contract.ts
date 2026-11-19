@@ -1,7 +1,4 @@
-import type { BancolombiaSandboxEnvironment } from "../bancolombia-authentication/contract";
-import type { ProactivityDeliveryWork, ProactivityEnvironment } from "../insights/contract";
-import { Data, type Effect, type Option } from "effect";
-import type { PlatformMaintenanceInput } from "../runtime/contract";
+import { Data, type Effect } from "effect";
 
 export type ScheduledOperation =
   | "provider.authenticationRetention"
@@ -51,29 +48,6 @@ export class ScheduledWorkFailed extends Data.TaggedError("ScheduledWorkFailed")
 
 /** A failed Email Worker tick retains its existing closed native failure classification. */
 export class EmailScheduleUnavailable extends Data.TaggedError("EmailScheduleUnavailable") {}
-
-/** Native Core bindings normalized once at the Worker boundary; no binding grants domain authority. */
-export type CoreMaintenanceInput = Omit<
-  PlatformMaintenanceInput,
-  | "BROWSER_PAIRING_EMAIL_QUEUE"
-  | "BILLING_COLLECTION_QUEUE"
-  | "STATEMENT_EXTRACTION_QUEUE"
-  | "HOSTED_WHATSAPP_QUEUE"
-> &
-  Readonly<{
-    BROWSER_PAIRING_EMAIL_QUEUE: Option.Option<Queue>;
-    BILLING_COLLECTION_QUEUE: Option.Option<Queue>;
-    STATEMENT_EXTRACTION_QUEUE: Option.Option<Queue>;
-    HOSTED_WHATSAPP_QUEUE: Option.Option<Queue>;
-  }> &
-  ProactivityEnvironment &
-  BancolombiaSandboxEnvironment &
-  Partial<
-    Readonly<{
-      WEEKLY_DELIVERY_QUEUE: Queue<ProactivityDeliveryWork>;
-      WEEKLY_DELIVERY_WORKFLOW: Workflow<ProactivityDeliveryWork>;
-    }>
-  >;
 
 /** Private singleton for lifetime discovery. One UserId always names one User store. */
 export const maintenanceName = "core-maintenance-v1";

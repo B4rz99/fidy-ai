@@ -1,10 +1,9 @@
 import { backgroundWorkAllowed } from "./release-isolation/operations";
 import type { AcceptanceWindowBindings } from "./release-isolation/contract";
 import type { SharedBindings } from "./storage-bootstrap/contract";
-import { type ErasureRegistry, type ErasureRegistryNamespace } from "./erasure/contract";
+import type { CoreHttpEnvironment } from "./core-http/contract";
+import type { CoreQueueEnvironment } from "./queue/contract";
 import { registeredConnectionInstitutionIds } from "../src/shell/connections/contract";
-import type { ProviderEnvironment } from "./provider-authentication/contract";
-import type { ProactivityDeliveryWork, ProactivityEnvironment } from "./insights/contract";
 import {
   ScheduledWorkFailed,
   completedCheckStatus,
@@ -14,13 +13,6 @@ import {
 import { inspectNativeQueues, sendCanary } from "./runtime/operational-health/operations";
 import { makeCoreHttp } from "./core-http/runtime";
 import { makeCoreQueue } from "./queue/runtime";
-import type { OpenAiEnvironment } from "./ai/contract";
-import type {
-  BrowserPairingEmailEnvironment,
-  EmailReplacementEnvironment,
-} from "./email-authentication/contract";
-import type { BillingCollectionEnvironment } from "./subscription/contract";
-import type { SmokeEnvironment } from "./runtime/release-smoke/contract";
 import { Effect, Result } from "effect";
 import { type WorkerTelemetryEnvironment } from "./runtime/telemetry/contract";
 import { cloudflareWorkerTelemetry, observeWorkerExecution } from "./runtime/telemetry/operations";
@@ -40,74 +32,17 @@ export {
 export { ProactivityDeliveryWorkflow } from "./insights/runtime";
 export { StatementExtractionWorkflowV1 } from "./ingestion/runtime";
 
-type CoreEnvironment = AcceptanceWindowBindings &
-  Pick<SharedBindings, "MAINTENANCE"> &
-  ProviderEnvironment &
+type CoreEnvironment = CoreHttpEnvironment &
+  CoreQueueEnvironment &
+  AcceptanceWindowBindings &
   WorkerTelemetryEnvironment &
-  ProactivityEnvironment &
-  Readonly<{ CONTRACT_DIGEST: string; RELEASE_GIT_SHA: string }> & {
-    readonly OPENAI_API_KEY: OpenAiEnvironment["OPENAI_API_KEY"];
-    readonly DB: D1Database;
-    readonly USER_TRANSACTION_COORDINATOR: ErasureRegistryNamespace;
-    readonly HOSTED_AI_MODEL: string;
-    readonly KAPSO_API_KEY: string;
-    readonly KAPSO_WEBHOOK_SECRET: string;
-    readonly WHATSAPP_BUSINESS_PORTFOLIO_ID: string;
-    readonly WHATSAPP_SANDBOX_PHONE_NUMBER_ID: string;
-    readonly CLOUDFLARE_ACCESS_ISSUER: string;
-    readonly CLOUDFLARE_ACCESS_AUDIENCE: string;
-    readonly BROWSER_ORIGIN: string;
-    readonly WOMPI_ENVIRONMENT: string;
-    readonly WOMPI_PUBLIC_KEY: string;
-    readonly WOMPI_PRIVATE_KEY: string;
-    readonly WOMPI_INTEGRITY_SECRET: string;
-  } & Partial<
+  Parameters<typeof inspectNativeQueues>[0] &
+  Partial<
     Readonly<{
-      RECOVERY_ISOLATION: string;
-      SAMPLE_REVIEW_AUDIENCE: string;
-      SAMPLE_REVIEWER_EMAIL: string;
-      SAMPLE_BUCKET: R2Bucket;
-      BILLING_SUPPORT_AUDIENCE: string;
-      PRICING_PUBLISH_AUDIENCE: string;
-      PRICING: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
-      ERASURE_SUPPORT_AUDIENCE: string;
-      ERASURE_REQUIRED: string;
-      ERASURE_BUCKET: R2Bucket;
-      ERASURE_REGISTRY: ErasureRegistry;
-      ERASURE_REGISTRY_COORDINATOR: ErasureRegistryNamespace;
-      BILLING_REFUND_WORKFLOW: Workflow;
-      WOMPI_DAVIPLATA_ACTIVATED: string;
-      WOMPI_DAVIPLATA_OTP_SEND_URL: string;
-      WOMPI_DAVIPLATA_OTP_CONFIRM_URL: string;
-      ASYNC_HEALTH_ENABLED: "enabled";
-      ASYNC_DEAD_LETTERS: Pick<Queue, "metrics">;
-      FORWARDED_EMAIL_QUEUE: Pick<Queue, "metrics">;
-      EMAIL_REPLACEMENT_HEALTH_QUEUE: Pick<Queue, "metrics">;
       OPERATIONAL_CANARY_QUEUE: Queue;
-      OPERATIONAL_CANARY_QUEUE_NAME: string;
-      OPERATIONAL_CANARY_WORKFLOW: Workflow;
+      OPENAI_API_KEY: string;
+      HOSTED_AI_MODEL: string;
     }>
-  > &
-  Partial<SmokeEnvironment> &
-  Partial<Omit<BrowserPairingEmailEnvironment, "DB">> &
-  Partial<Omit<EmailReplacementEnvironment, "DB" | "RESEND_API_KEY">> &
-  /** Private R2 binding for staged statement bytes; absent fails the transport closed. */
-  Partial<
-    Readonly<{
-      EMAIL_BUCKET: R2Bucket;
-      STATEMENT_STAGING_BUCKET: R2Bucket;
-      STATEMENT_EXTRACTION_QUEUE: Queue;
-      STATEMENT_EXTRACTION_WORKFLOW: Workflow;
-      HOSTED_WHATSAPP_QUEUE: Queue;
-      WEEKLY_DELIVERY_QUEUE: Queue<ProactivityDeliveryWork>;
-      WEEKLY_DELIVERY_WORKFLOW: Workflow<ProactivityDeliveryWork>;
-    }>
-  > &
-  Partial<
-    Pick<
-      BillingCollectionEnvironment,
-      "BILLING_COLLECTION_QUEUE" | "BILLING_COLLECTION_WORKFLOW" | "WOMPI_EVENT_SECRET"
-    >
   >;
 
 type CoreWorker = Readonly<{

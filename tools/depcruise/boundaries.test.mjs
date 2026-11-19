@@ -78,20 +78,18 @@ await test("a private runtime filename does not make its importer a composition 
 
 await test("an approved production root cannot import an approved integration test", () => {
   assert.equal(
-    inspect(
-      "cloudflare/core-worker.ts",
-      "cloudflare/onboarding/browser-authentication.test.ts"
-    ).some((violation) => violation.name === "production-imports-test-code"),
+    inspect("cloudflare/core-worker.ts", "cloudflare/onboarding/consent-ingress.test.ts").some(
+      (violation) => violation.name === "production-imports-test-code"
+    ),
     true
   );
 });
 
 await test("production roots cannot import the synthetic resource-admission Worker fixture", () => {
   assert.equal(
-    inspect(
-      "cloudflare/core-worker.ts",
-      "cloudflare/resource-admission/resource-admission-worker.fixture.ts"
-    ).some((violation) => violation.name === "production-imports-test-code"),
+    inspect("cloudflare/core-worker.ts", "cloudflare/connection-worker.test-fixture.ts").some(
+      (violation) => violation.name === "production-imports-test-code"
+    ),
     true
   );
 });
@@ -158,7 +156,7 @@ await test("future portable and native owners share one privacy and direction po
 await test("shared acceptance fixtures remain unavailable to production", () => {
   for (const { source, fixture } of [
     {
-      source: "cloudflare/agent/hosted-turn.test.ts",
+      source: "cloudflare/agent/native-turn-lifecycle.test.ts",
       fixture: "cloudflare/openai.test-fixture.ts",
     },
   ]) {

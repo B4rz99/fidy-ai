@@ -1,4 +1,4 @@
-import { type Option, Schema } from "effect";
+import { Schema } from "effect";
 
 export const CanaryPayload = Schema.Struct({
   version: Schema.Literal(1),
@@ -73,27 +73,13 @@ export type OperationalSignal =
       state: "unavailable";
     }>;
 
-type WorkflowStatusBinding = Readonly<{
-  get: (id: string) => Promise<{ status: () => Promise<unknown> }>;
-}>;
-/** Private bindings used only for bounded metadata inspection, never replay or provider calls. */
-export type OperationalHealthEnvironment = Readonly<{
-  DB: D1Database;
-  proactivity: Readonly<{ weeklyEnabled: boolean; proactivityEnabled: boolean }>;
-  workflows: Partial<Record<Exclude<WorkKind, "forwardedEmail">, WorkflowStatusBinding>>;
-  deadLetters: Option.Option<Pick<Queue, "metrics">>;
-  workQueues: Partial<Record<QueueKind, Pick<Queue, "metrics">>>;
-}>;
-
 export type AlertSignal = OperationalSignal | CapabilityProbe;
 
 export type OperationalSeverity = "none" | "warning" | "critical";
 
-export const coordinatorProbeName = "operational-health-probe";
-
 export type CapabilityProbe = Readonly<{
   component: "capability";
-  operation: "d1" | "requiredBindings" | "coordination" | "providerConfig";
+  operation: "requiredBindings" | "coordination" | "providerConfig";
   state: "healthy" | "unavailable";
 }>;
 

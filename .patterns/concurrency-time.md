@@ -31,10 +31,10 @@ an external mutation was rejected.
 
 Cancellation-safe publication needs an explicit commit point and stale-generation fence. Keep
 any local uninterruptible state transition short; it cannot make a remote commit atomic. Fidy's
-durable Agent owner retains its D1 fence and original work settlement even after request abort.
+User Store retains the accepted Turn and observes delivery only after an authenticated receipt.
 Native Promises without cancellation keep running when an Effect waiter loses a race. See
-[Agent ownership](../apps/server/cloudflare/agent/internal/service.ts) and its
-[blocked-commit race tests](../apps/server/cloudflare/agent/hosted-turn.test.ts).
+[Agent ownership](../apps/server/cloudflare/agent/internal/local-turn-store.ts) and its
+[in-flight interruption tests](../apps/server/cloudflare/agent/native-turn-lifecycle.test.ts).
 
 ## Volatile state and bounded buffers
 

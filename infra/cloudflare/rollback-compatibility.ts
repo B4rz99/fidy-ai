@@ -111,6 +111,14 @@ export const rollbackCompatible = (
       path === "infra/cloudflare/alchemy.run.ts" ||
       path === "infra/cloudflare/alchemy.storage.ts" ||
       path === "infra/cloudflare/storage-installation.ts" ||
-      path.startsWith("apps/server/cloudflare/migrations/") ||
+      /^(?:apps\/server\/cloudflare\/(?:directory\/schema|runtime\/sqlite|user-store\/internal\/[^/]*schema)|infra\/cloudflare\/native-(?:application|storage|graph))/.test(
+        path
+      ) ||
+      [
+        "user-store/operations.ts",
+        "subscription/pricing/operations.ts",
+        "maintenance/operations.ts",
+        "erasure-store/operations.ts",
+      ].some((owner) => path === "apps/server/cloudflare/" + owner) ||
       (path.startsWith("apps/server/cloudflare/") && /workflow|queue/i.test(path))
   );

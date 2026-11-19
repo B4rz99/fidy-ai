@@ -106,6 +106,6 @@ export const diagnoseNativePlan =
       return yield* plan.pipe(
         Effect.provideService(Alchemist.Progress, observe),
         Effect.updateService(FetchHttpClient.Fetch, (fetch) => observeReads(fetch, reads)),
-        nativeResourceStage("planning", diagnostics)
+        nativeResourceStage({ stage: "planning", details: diagnostics })
       );
     });

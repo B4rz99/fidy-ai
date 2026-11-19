@@ -1,4 +1,4 @@
-import { Config, Effect, Redacted } from "effect";
+import { Config, Data, Effect, Redacted } from "effect";
 
 import { Hex } from "effect/encoding";
 
@@ -12,28 +12,25 @@ type SignerBindings = Partial<
     NATIVE_FIXTURE_SIGNER_SHA256: string;
   }>
 >;
-const publicFingerprint = async (value: string): Promise<string> => {
+class InvalidFixtureSigner extends Data.TaggedError("InvalidFixtureSigner") {}
+const keyOperation = <A>(run: () => Promise<A>) =>
+  Effect.tryPromise({ try: run, catch: () => new InvalidFixtureSigner() });
+const publicFingerprint = Effect.fnUntraced(function* (value: string) {
   const decoded = Hex.decode(value);
-  if (decoded._tag === "Failure") throw Error("Invalid candidate signing key");
+  if (decoded._tag === "Failure") return yield* new InvalidFixtureSigner();
   const algorithm = { name: "ECDSA", namedCurve: "P-256" };
-  const key = await crypto.subtle.importKey(
-    "pkcs8",
-    Uint8Array.from(decoded.success),
-    algorithm,
-    true,
-    ["sign"]
+  const key = yield* keyOperation(() =>
+    crypto.subtle.importKey("pkcs8", Uint8Array.from(decoded.success), algorithm, true, ["sign"])
   );
-  const { x, y } = await crypto.subtle.exportKey("jwk", key);
-  const publicKey = await crypto.subtle.importKey(
-    "jwk",
-    { kty: "EC", crv: "P-256", x, y },
-    algorithm,
-    true,
-    ["verify"]
+  const { x, y } = yield* keyOperation(() => crypto.subtle.exportKey("jwk", key));
+  const publicKey = yield* keyOperation(() =>
+    crypto.subtle.importKey("jwk", { kty: "EC", crv: "P-256", x, y }, algorithm, true, ["verify"])
   );
-  const der = await crypto.subtle.exportKey("spki", publicKey);
-  return Hex.encode(new Uint8Array(await crypto.subtle.digest("SHA-256", der)));
-};
+  const der = yield* keyOperation(() => crypto.subtle.exportKey("spki", publicKey));
+  return Hex.encode(
+    new Uint8Array(yield* keyOperation(() => crypto.subtle.digest("SHA-256", der)))
+  );
+});
 export const fixtureSignerBindings = Effect.fn(function* (release: {
   closed: boolean;
   hosts: string;
@@ -44,16 +41,13 @@ export const fixtureSignerBindings = Effect.fn(function* (release: {
   );
   const value = Redacted.value(secret);
   const disabled: SignerBindings = {};
-  if (!value && !fingerprint) return disabled;
+  if (value === "" && fingerprint === "") return disabled;
   if (!release.closed || release.hosts !== "acceptance" || !/^[a-f0-9]{64}$/u.test(fingerprint)) {
     return yield* Effect.fail(
       Error("A receipt signer requires a pinned closed acceptance candidate")
     );
   }
-  const actual = yield* Effect.tryPromise({
-    try: () => publicFingerprint(value),
-    catch: () => Error("Invalid candidate signing key"),
-  });
+  const actual = yield* publicFingerprint(value);
   if (actual !== fingerprint) {
     return yield* Effect.fail(Error("Candidate signing key fingerprint mismatch"));
   }

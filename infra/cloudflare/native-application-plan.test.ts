@@ -1,6 +1,6 @@
 import { approvedOpenAiModel } from "@fidy/server/hosted-inference-contract";
 import { it } from "@effect/vitest";
-import { createHash, generateKeyPairSync } from "node:crypto";
+import { Hex } from "effect/encoding";
 import { expect } from "vitest";
 import * as Alchemy from "alchemy";
 import * as Alchemist from "alchemy/Alchemist";
@@ -32,21 +32,30 @@ const pinFetch: typeof fetch = Object.assign(
   },
   { preconnect: fetch.preconnect }
 );
+const expectedSigner = (worker: string, enabled: boolean): boolean => worker === "Core" && enabled;
+const rehearsalKey = Effect.gen(function* () {
+  const pair = yield* Effect.promise(() =>
+    crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"])
+  );
+  const spki = yield* Effect.promise(() => crypto.subtle.exportKey("spki", pair.publicKey));
+  const pkcs8 = yield* Effect.promise(() => crypto.subtle.exportKey("pkcs8", pair.privateKey));
+  const digest = yield* Effect.promise(() => crypto.subtle.digest("SHA-256", spki));
+  return {
+    fingerprint: Hex.encode(new Uint8Array(digest)),
+    secret: Hex.encode(new Uint8Array(pkcs8)),
+  };
+});
+const testSigner = await Effect.runPromise(rehearsalKey);
 it.effect.each([false, true])(
   "declares exactly the requested Core and smoke bindings before resources exist (fixture signer %s)",
   (enabled) => {
     const revision = "1".repeat(40);
-    const pair = generateKeyPairSync("ec", {
-      namedCurve: "prime256v1",
-      publicKeyEncoding: { type: "spki", format: "der" },
-      privateKeyEncoding: { type: "pkcs8", format: "der" },
-    });
-    const fingerprint = enabled ? createHash("sha256").update(pair.publicKey).digest("hex") : "";
+    const fingerprint = enabled ? testSigner.fingerprint : "";
     const configuration = ConfigProvider.fromUnknown({
       ...(enabled
         ? {
             NATIVE_FIXTURE_SIGNER_SHA256: fingerprint,
-            NATIVE_FIXTURE_SIGNING_KEY: pair.privateKey.toString("hex"),
+            NATIVE_FIXTURE_SIGNING_KEY: testSigner.secret,
           }
         : {}),
       NATIVE_STORAGE_ADMISSION: "closed",
@@ -98,14 +107,14 @@ it.effect.each([false, true])(
             const observed = rows.flatMap(
               (row) => Schema.decodeUnknownSync(bindings)(row.data).bindings ?? []
             );
-            requireClosedBindings({ worker, bindings: observed }, fingerprint);
+            requireClosedBindings({ worker, bindings: observed, fingerprint });
             expect(observed.some((item) => item.name === "NATIVE_FIXTURE_SIGNING_KEY")).toBe(
-              enabled && worker === "Core"
+              expectedSigner(worker, enabled)
             );
-            if (enabled && worker === "Core") {
+            if (expectedSigner(worker, enabled)) {
               expect(() => requireClosedBindings({ worker, bindings: observed })).toThrow();
               expect(() =>
-                requireClosedBindings({ worker, bindings: observed }, "0".repeat(64))
+                requireClosedBindings({ worker, bindings: observed, fingerprint: "0".repeat(64) })
               ).toThrow();
             }
           }

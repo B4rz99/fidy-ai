@@ -211,7 +211,7 @@ it("binds each planned Worker to the closed installation before any provider app
 it("rejects open admission and producer bindings before applying either Worker", () => {
   const closed = { name: "RECOVERY_ISOLATION", type: "plain_text", text: "isolated" };
   const core = { name: "CORE", type: "service" };
-  const complete = [...nativeBindingInventory("Ingress")].map(([name, type]) => ({
+  const complete = [...nativeBindingInventory({ role: "Ingress" })].map(([name, type]) => ({
     name,
     type,
     text:

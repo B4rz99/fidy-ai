@@ -136,7 +136,7 @@ it("requires all four buckets, eight exact Workflow owners and nine consumers wi
   ));
 it("refuses a correct binding label connected to an incumbent or a foreign Worker", () => {
   const bindings = Object.fromEntries(
-    [...nativeBindingInventory("Ingress")].map(([name, type]) => [
+    [...nativeBindingInventory({ role: "Ingress" })].map(([name, type]) => [
       name,
       {
         name,

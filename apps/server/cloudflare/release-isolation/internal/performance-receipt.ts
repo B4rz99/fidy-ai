@@ -2,7 +2,11 @@ import { Effect } from "effect";
 import { Hex } from "effect/encoding";
 import { installedOrigins } from "../../../src/shell/browser-transport/contract";
 import type { AcceptanceEnvironment, Coordinates, SealedTransactionReceipt } from "../contract";
-import { acceptanceApiHeader, performanceReceiptPath } from "../contract";
+import {
+  AcceptanceProofUnavailable,
+  acceptanceApiHeader,
+  performanceReceiptPath,
+} from "../contract";
 import { verifyRequest } from "./request-proof";
 
 export const isPerformanceReceipt = (request: Request): boolean => {
@@ -48,76 +52,94 @@ const context = (coordinates: Coordinates): string =>
     coordinates.nativeManifestDigest,
     coordinates.sessionBindingSha256,
   ]);
-const boxKey = async (secret: string, coordinates: Coordinates): Promise<CryptoKey> => {
-  const main = await crypto.subtle.importKey("raw", bytes.encode(secret), "HKDF", false, [
-    "deriveKey",
-  ]);
-  return crypto.subtle.deriveKey(
-    {
-      name: "HKDF",
-      hash: "SHA-256",
-      salt: bytes.encode(context(coordinates)),
-      info: bytes.encode("closed-receipt-encryption"),
-    },
-    main,
-    { name: "AES-GCM", length: 256 },
-    false,
-    ["encrypt", "decrypt"]
+const crypt = <A>(operation: () => Promise<A>): Effect.Effect<A, AcceptanceProofUnavailable> =>
+  Effect.tryPromise({ try: operation, catch: () => new AcceptanceProofUnavailable() });
+
+const boxKey = Effect.fnUntraced(function* (secret: string, coordinates: Coordinates) {
+  const main = yield* crypt(() =>
+    crypto.subtle.importKey("raw", bytes.encode(secret), "HKDF", false, ["deriveKey"])
   );
-};
+  return yield* crypt(() =>
+    crypto.subtle.deriveKey(
+      {
+        name: "HKDF",
+        hash: "SHA-256",
+        salt: bytes.encode(context(coordinates)),
+        info: bytes.encode("closed-receipt-encryption"),
+      },
+      main,
+      { name: "AES-GCM", length: 256 },
+      false,
+      ["encrypt", "decrypt"]
+    )
+  );
+});
 const ecdsa = { name: "ECDSA", namedCurve: "P-256" };
 const signed = (coordinates: Coordinates, iv: string, sealed: string): Uint8Array<ArrayBuffer> =>
   bytes.encode(JSON.stringify([context(coordinates), iv, sealed]));
-export const sealTransactionReceipt = async (
-  credentials: { secret: string; privateKey: string },
-  coordinates: Coordinates,
-  data: string
-): Promise<typeof SealedTransactionReceipt.Type> => {
-  const { secret, privateKey } = credentials;
-  const box = await boxKey(secret, coordinates);
-  const signer = await crypto.subtle.importKey("pkcs8", unhex(privateKey), ecdsa, false, ["sign"]);
+
+export const sealTransactionReceipt = Effect.fn(function* (input: {
+  secret: string;
+  privateKey: string;
+  coordinates: Coordinates;
+  data: string;
+}) {
+  const { secret, privateKey, coordinates, data } = input;
+  const box = yield* boxKey(secret, coordinates);
+  const signer = yield* crypt(() =>
+    crypto.subtle.importKey("pkcs8", unhex(privateKey), ecdsa, false, ["sign"])
+  );
   const ivBytes = 12;
   const iv = crypto.getRandomValues(new Uint8Array(ivBytes));
   const sealed = hex(
-    await crypto.subtle.encrypt(
-      { name: "AES-GCM", iv, additionalData: bytes.encode(context(coordinates)) },
-      box,
-      bytes.encode(data)
+    yield* crypt(() =>
+      crypto.subtle.encrypt(
+        { name: "AES-GCM", iv, additionalData: bytes.encode(context(coordinates)) },
+        box,
+        bytes.encode(data)
+      )
     )
   );
   const ivHex = Hex.encode(iv);
   const signature = hex(
-    await crypto.subtle.sign(
-      { name: "ECDSA", hash: "SHA-256" },
-      signer,
-      signed(coordinates, ivHex, sealed)
+    yield* crypt(() =>
+      crypto.subtle.sign(
+        { name: "ECDSA", hash: "SHA-256" },
+        signer,
+        signed(coordinates, ivHex, sealed)
+      )
     )
   );
   return { ...coordinates, iv: ivHex, sealed, signature };
-};
-export const openTransactionReceipt = async (
-  secret: string,
-  publicKey: string,
-  value: typeof SealedTransactionReceipt.Type
-): Promise<string> => {
-  const verifier = await crypto.subtle.importKey("spki", unhex(publicKey), ecdsa, false, [
-    "verify",
-  ]);
-  if (
-    !(await crypto.subtle.verify(
+});
+export const openTransactionReceipt = Effect.fn(function* ({
+  secret,
+  publicKey,
+  value,
+}: {
+  secret: string;
+  publicKey: string;
+  value: typeof SealedTransactionReceipt.Type;
+}) {
+  const verifier = yield* crypt(() =>
+    crypto.subtle.importKey("spki", unhex(publicKey), ecdsa, false, ["verify"])
+  );
+  const verified = yield* crypt(() =>
+    crypto.subtle.verify(
       { name: "ECDSA", hash: "SHA-256" },
       verifier,
       unhex(value.signature),
       signed(value, value.iv, value.sealed)
-    ))
-  ) {
-    throw new Error("Unauthenticated native fixture receipt");
-  }
-  const box = await boxKey(secret, value);
-  const raw = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: unhex(value.iv), additionalData: bytes.encode(context(value)) },
-    box,
-    unhex(value.sealed)
+    )
+  );
+  if (!verified) return yield* new AcceptanceProofUnavailable();
+  const box = yield* boxKey(secret, value);
+  const raw = yield* crypt(() =>
+    crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: unhex(value.iv), additionalData: bytes.encode(context(value)) },
+      box,
+      unhex(value.sealed)
+    )
   );
   return new TextDecoder().decode(raw);
-};
+});

@@ -17,9 +17,15 @@ VALUES(?,?,?,'linked',?,?)"""
 
 def materialize(plan_file, directory):
     report = json.loads((directory / "manifest.json").read_text())
-    private = json.loads((directory / "native-local-provenance.json").read_text())
-    if private.get("origin") != "disposable native workerd":
-        raise ValueError("Exact native provenance has not been observed")
+    coordinates = {}
+    if (directory / "native-receipt.json").is_file():
+        from hosted import verified_provenance
+        envelope = json.loads((directory / "native-receipt.json").read_bytes())
+        private, coordinates = verified_provenance(directory, revision=report["revision"], resource_prefix=envelope["resourcePrefix"])
+    else:
+        private = json.loads((directory / "native-local-provenance.json").read_text())
+        if private.get("origin") != "disposable native workerd":
+            raise ValueError("Exact native provenance has not been observed")
     originals = report["originals"]
     validate_originals(originals)
     sources = {s["transactionId"]:s for s in private["capture"]}
@@ -51,7 +57,7 @@ def materialize(plan_file, directory):
     capture["batch"] = [dict(sql=TRANSACTIONS, params=params), dict(sql=SOURCES, params=params)]
     pair["batch"][0] = dict(sql=LINK, params=[SUBJECT,link["first"],link["second"],link["visible"],link["decidedAtMs"]])
     plan["canonicalTransactionFixture"] = {"previousPlanDigest":original_plan, "observedOriginals":8,
-                                            "nativeManifestDigest":digest(report), "nativeProvenanceDigest":digest(private)}
+                                            "nativeManifestDigest":digest(report), "nativeProvenanceDigest":digest(private), **coordinates}
     # Rehearsal recalculates actual native costs and per-batch ceilings for this exact plan.
     for modified in [capture, pair]:
         modified.pop("reads", None)

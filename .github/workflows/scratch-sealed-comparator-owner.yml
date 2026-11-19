@@ -1,0 +1,91 @@
+name: Rehearse the sealed comparator owner
+on:
+  push:
+    branches: [perf/scratch-sealed-comparator-owner]
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify comparison evidence and budget refusal
+        run: |
+          python3 scripts/infra-performance/cells/rehearse-custody.py
+          python3 -m unittest discover -s scripts/infra-performance/cells
+          python3 -m unittest discover -s scripts/infra-performance/canonical-fixture
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: fb53d9e755c14393048dc945fc0b7f117730d872
+          path: baseline-d1
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: 972ecaa22bb58ab472de2e9458c76290c72aa09d
+          path: baseline-fixtures
+          persist-credentials: false
+          sparse-checkout: apps/server/cloudflare
+      - uses: ./.github/actions/bun-runtime
+      - name: Prepare the pinned comparator
+        run: |
+          export GIT_ALTERNATE_OBJECT_DIRECTORIES="$GITHUB_WORKSPACE/baseline-fixtures/.git/objects"
+          echo "GIT_ALTERNATE_OBJECT_DIRECTORIES=$GIT_ALTERNATE_OBJECT_DIRECTORIES" >> "$GITHUB_ENV"
+          git -C baseline-d1 restore --source=972ecaa22bb58ab472de2e9458c76290c72aa09d --worktree -- \
+            apps/server/cloudflare/browser-assessment.test-fixture.ts \
+            apps/server/cloudflare/browser-acceptance-preview.ts \
+            apps/server/cloudflare/browser-acceptance-seed.ts
+          bash scripts/install-workspace.sh --ignore-scripts
+          (cd baseline-d1 && bash scripts/install-workspace.sh --ignore-scripts)
+      - name: Check the comparator Worker code and shared budget policy
+        run: |
+          bun x oxlint --deny-warnings --config .oxlintrc.json --type-aware --threads=1 scripts/infra-performance/cells/*.mjs scripts/infra-performance/cells/*.d.mts scripts/infra-performance/d1-budget.ts
+          bun node_modules/vitest/vitest.mjs run --config scripts/vitest.config.ts scripts/infra-performance/d1-budget.test.ts --environment node
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: 15cfe773cd263b6a3d4e1b6e1b958f233cdde84f
+          path: baseline-calibration
+          persist-credentials: false
+          sparse-checkout: |
+            apps/server/scripts
+            apps/server/cloudflare
+      - name: Exercise the sealed native fixture, frozen materialization and protected cost proposal together
+        shell: bash
+        run: |
+          umask 077
+          cd "$GITHUB_WORKSPACE"
+          python3 - <<'PY'
+          import hashlib, json, os, secrets, subprocess
+          from pathlib import Path
+          env = dict(os.environ)
+          assert not set(env) & {'AWS_SECRET_ACCESS_KEY','CLOUDFLARE_API_TOKEN','SMOKE_PROOF'}
+          root = Path(env['RUNNER_TEMP'])/'owner-combined'
+          root.mkdir(mode=0o700)
+          fixture, bundle, evidence = root/'private-native',root/'materialized',root/'evidence'
+          prefix = 'fidy-2259-'+secrets.token_hex(6)
+          revision = subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+          def run(program, *args, ok=True):
+              reply = subprocess.run(['python3','scripts/infra-performance/'+program,*map(str,args)],env=env)
+              assert reply.returncode == (0 if ok else 1)
+          run('canonical-fixture/hosted.py','rehearse','--out',fixture,'--resource-prefix',prefix)
+          verifier = json.loads((fixture/'rehearsal-verifier.json').read_bytes())
+          env.update({k:verifier[k] for k in ('SMOKE_PROOF','FIDY_NATIVE_FIXTURE_PUBLIC_KEY')})
+          run('cells/prepare.py','--d1','baseline-d1','--calibration','baseline-calibration','--canonical-fixture',fixture/'fixture','--materialized','--out',bundle)
+          manifest = hashlib.sha256((bundle/'manifest.json').read_bytes()).hexdigest()
+          args = ['--fixture',fixture/'fixture','--bundle',bundle,'--revision',revision,'--prefix',prefix,'--manifest-sha256',manifest,'--pairs',30]
+          run('cells/owner.py','propose',*args,'--out',evidence/'proposal')
+          run('cells/owner.py','run',*args,'--maximum-reads',1,'--maximum-writes',1,'--out',evidence/'refused',ok=False)
+          assert json.loads((evidence/'refused/report.json').read_bytes())['reason'] == 'outside_approved_cost_proposal'
+          run('cells/rehearse-owner.py','--bundle',bundle,'--out',evidence/'interruption.json')
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: combined-owner-evidence
+          path: ${{ runner.temp }}/owner-combined/evidence/**/*.json
+          if-no-files-found: warn

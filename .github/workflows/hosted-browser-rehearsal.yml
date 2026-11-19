@@ -37,4 +37,6 @@ jobs:
           sparse-checkout-cone-mode: false
       - uses: ./.github/actions/bun-install
       - name: Run the repository type-aware lint
-        run: bun run lint:type-aware
+        run: |
+          bun install --cwd tools/depcruise --frozen-lockfile
+          bun run lint:type-aware

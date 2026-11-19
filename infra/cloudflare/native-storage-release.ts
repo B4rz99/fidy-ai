@@ -8,10 +8,12 @@ import { verifyInstalledWebsite } from "./native-deployed-web";
 import { inspectDeployedEdge } from "./native-deployed-edge";
 import { inspectNativeResources, requireDeployedRole } from "./native-deployed-graph";
 import type { NativeRole } from "./native-graph";
-import { exerciseClosedUsers } from "./native-acceptance";
+import { runFleetPilot } from "./native-fleet-pilot";
+import { exerciseClosedUsers, fleetBrowser } from "./native-acceptance";
 import { installedOrigins } from "@fidy/server/browser-transport";
 import { verifyNativeEdge } from "./native-edge";
 import {
+  Clock,
   Context,
   Effect,
   Layer,
@@ -39,6 +41,7 @@ import {
   type ProductionReleaseConfig as Config,
   ReleaseFailure,
   configureReleaseObservability,
+  releaseCommand,
   releaseEvidence,
   releaseFailureMessage,
   releasePort,
@@ -308,18 +311,10 @@ const erasureObservation = (
       encodeJson({ revision: env.revision, userNamespace, ...checkpoint })
     ),
 });
-const verifySyntheticUsers = Effect.fn(function* (
-  env: Config,
-  client: HttpClient.HttpClient,
-  {
-    origins,
-    erasureNamespace,
-  }: {
-    origins: (typeof installedOrigins)[keyof typeof installedOrigins];
-    erasureNamespace: Option.Option<string>;
-  }
-) {
-  const send = Effect.fn(function* (request: Request) {
+const sendNative = (
+  client: HttpClient.HttpClient
+): ((request: Request) => Effect.Effect<Response, Error>) =>
+  Effect.fn(function* (request: Request) {
     const reply = yield* client
       .execute(HttpClientRequest.fromWeb(request))
       .pipe(Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }));
@@ -331,6 +326,18 @@ const verifySyntheticUsers = Effect.fn(function* (
     }
     return native.value;
   });
+const verifySyntheticUsers = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  {
+    origins,
+    erasureNamespace,
+  }: {
+    origins: (typeof installedOrigins)[keyof typeof installedOrigins];
+    erasureNamespace: Option.Option<string>;
+  }
+) {
+  const send = sendNative(client);
   const proof = yield* exerciseClosedUsers({
     revision: env.revision,
     proof: Redacted.make(env.smokeProof),
@@ -1052,7 +1059,83 @@ const prepareDiagnostics = Effect.fn(function* (
     client
   );
 });
+const meter = (
+  phase: "begin" | "check" | "finish" | "probe-logs" | "logs",
+  ...args: string[]
+): Effect.Effect<string, ReleaseFailure> =>
+  releaseCommand({
+    args: ["python3", "../../scripts/infra-performance/deployed-fleet/pilot.py", phase, ...args],
+    lifetime: "read-only",
+  });
+const settleFleetMeter = Effect.gen(function* () {
+  const settled = yield* meter("finish", String(yield* Clock.currentTimeMillis)).pipe(
+    Effect.map((status) => status.trim()),
+    Effect.repeat({
+      while: (status) => status === "pending",
+      times: 20,
+      schedule: Schedule.spaced("15 seconds"),
+    })
+  );
+  if (settled !== "observed") {
+    return yield* Effect.fail(Error("Post-cleanup Durable Object usage unavailable"));
+  }
+});
+const fleetPilot = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  port: ReleasePort
+) {
+  yield* meter("begin");
+  const installed = yield* installedRelease(env, client, { port, staging: false });
+  const browser = fleetBrowser({
+    revision: env.revision,
+    proof: Redacted.make(env.smokeProof),
+    origins: installedOrigins.acceptance,
+    send: sendNative(client),
+    erasure: Option.none(),
+  });
+  const events: Readonly<Record<string, string | number>>[] = [];
+  const record = (event: Readonly<Record<string, string | number>>): Effect.Effect<void, Error> => {
+    events.push(event);
+    return writeFile(
+      env.smokeAttestationFile + ".fleet",
+      encodeJson({
+        revision: env.revision,
+        coreVersion: installed.coreVersionId,
+        publicVersion: installed.publicVersionId,
+        userNamespace: installed.userNamespace,
+        requestedPilotUsers: 1,
+        fullFleet: "missing",
+        events,
+      })
+    );
+  };
+  yield* record({ stage: "verified-release" });
+  yield* meter("probe-logs");
+  const measured = yield* Effect.exit(
+    runFleetPilot({
+      inventory: () => readUserObjects(accountReader(env, client), installed.userNamespace),
+      register: () => meter("check").pipe(Effect.andThen(browser.register())),
+      login: browser.login,
+      renew: browser.renew,
+      record,
+      watch: Effect.fn(function* () {
+        const start = yield* Clock.currentTimeMillis;
+        const observationMs = 600_000;
+        while ((yield* Clock.currentTimeMillis) - start < observationMs) {
+          yield* meter("check");
+          yield* browser.renew();
+          yield* Effect.sleep("25 seconds");
+        }
+      }),
+    })
+  );
+  yield* settleFleetMeter;
+  if (measured._tag === "Failure") return yield* Effect.failCause(measured.cause);
+  yield* meter("logs");
+});
 const commands = {
+  "fleet-pilot": fleetPilot,
   "capture-hosts": captureHostStage,
   "attach-hosts": attachCanonicalHosts,
   "prepare-diagnostics": prepareDiagnostics,
@@ -1070,6 +1153,7 @@ if (import.meta.main) {
   const program = Effect.gen(function* () {
     const command = yield* Schema.decodeUnknownEffect(
       Schema.Literals([
+        "fleet-pilot",
         "capture-hosts",
         "attach-hosts",
         "prepare-diagnostics",

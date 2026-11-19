@@ -112,24 +112,32 @@ export const requireInstallationWorker = ({
 };
 
 const ProviderBindings = Schema.Struct({ bindings: Schema.optional(NativeBindings) });
-export const requireClosedBindings = ({
-  worker,
-  bindings,
-}: {
-  worker: NativeRole;
-  bindings: ReadonlyArray<NativeBinding>;
-}): void => requireRoleBindings({ role: worker, bindings });
+export const requireClosedBindings = (
+  {
+    worker,
+    bindings,
+  }: {
+    worker: NativeRole;
+    bindings: ReadonlyArray<NativeBinding>;
+  },
+  fingerprint = ""
+): void => requireRoleBindings({ role: worker, bindings }, fingerprint);
 
 const roles = ["Core", "Ingress", "ForwardedEmail", "Web"] as const;
-export const requireNativeBindings = ({
-  plan,
-  revision,
-  hosts,
-}: {
-  plan: Plan;
-  revision: string;
-  hosts: NativeHostMode;
-}): void => {
+export const requireNativeBindings = (
+  {
+    plan,
+    revision,
+    hosts,
+  }: {
+    plan: Plan;
+    revision: string;
+    hosts: NativeHostMode;
+  },
+  fingerprint = ""
+): void => {
+  if (fingerprint && hosts !== "acceptance")
+    throw Error("Fixture signer cannot stage live host routes");
   const resources = Object.values(plan.resources);
   for (const role of [...roles, "Smoke"] as const) {
     const logicalId = role === "Smoke" ? "ReleaseSmoke-" + revision : role;
@@ -147,7 +155,7 @@ export const requireNativeBindings = ({
       )(props);
       bindings.push({ name: "ASSETS", type: "assets" });
     }
-    requireClosedBindings({ worker: role, bindings });
+    requireClosedBindings({ worker: role, bindings }, fingerprint);
     if (role === "Core") requireNativeClasses(bindings);
   }
 };

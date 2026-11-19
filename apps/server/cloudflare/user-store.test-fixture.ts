@@ -187,14 +187,14 @@ const browserBindings = {
     value: "https://api.fidyapp.com/providers/microsoft/callback",
   },
 } as const;
-const nativeOwnerBindings = {
+export const nativeOwnerBindings = {
   USER_STORE: { type: "durable-object", worker: "core", exportName: "UserStore" },
   PRICING: { type: "durable-object", worker: "core", exportName: "Pricing" },
   ERASURE: { type: "durable-object", worker: "core", exportName: "Erasure" },
   MAINTENANCE: { type: "durable-object", worker: "core", exportName: "Maintenance" },
   DIRECTORY: { type: "durable-object", worker: "core", exportName: "Directory" },
 } as const;
-const nativeOwners = {
+export const nativeOwners = {
   UserStore: { type: "durable-object", storage: "sqlite" },
   Pricing: { type: "durable-object", storage: "sqlite" },
   Erasure: { type: "durable-object", storage: "sqlite" },

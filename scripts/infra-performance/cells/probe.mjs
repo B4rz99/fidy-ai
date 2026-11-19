@@ -48,7 +48,8 @@ const request = async (path, options) => {
   const route = (options?.method ?? "GET") + " " + path;
   if (training) {
     assert.equal(cost.route, route);
-    const caps = {};
+    const previous = estimates[route];
+    const caps = { ...previous?.statements };
     const maximum = { rowsRead: 0, rowsWritten: 0 };
     for (const entry of cost.calls) {
       const cap = caps[entry.key] ?? { rowsRead: 0, rowsWritten: 0 };
@@ -60,7 +61,6 @@ const request = async (path, options) => {
       maximum.rowsRead += caps[entry.key].rowsRead;
       maximum.rowsWritten += caps[entry.key].rowsWritten;
     }
-    const previous = estimates[route];
     estimates[route] = {
       maximum: { rowsRead: Math.max(maximum.rowsRead, previous?.maximum.rowsRead ?? 0), rowsWritten: Math.max(maximum.rowsWritten, previous?.maximum.rowsWritten ?? 0) },
       statements: { ...previous?.statements, ...caps },
@@ -108,15 +108,21 @@ try {
   assert.equal(handshake.status, 200);
   const { binding } = await handshake.json();
   assert.ok(binding);
-  const reply = await request("/transactions?limit=25", { headers: { cookie, "Fidy-Session-Binding": binding } });
+  let responseSha256;
+  for (let index = 0; index < 30; index++) {
+    const reply = await request("/transactions?limit=25", { headers: { cookie, "Fidy-Session-Binding": binding } });
   assert.equal(reply.status, 200, "authenticated history on deployed graph");
   const body = await reply.text();
   const { data } = JSON.parse(body);
   assert.deepEqual(data.map(({ id }) => id), [0, 2, 3, 4, 5, 6, 7].map(i => "81000000-0000-4000-8000-" + String(i).padStart(12, "0")));
+    const hash = createHash("sha256").update(body).digest("hex");
+    if (responseSha256) assert.equal(hash, responseSha256);
+    responseSha256 = hash;
+  }
   const counts = await db.prepare("SELECT count(*) AS n FROM audit_entries WHERE user_id=? AND operation='transactions.listTransactions' AND outcome='success'").bind(subject).first();
-  assert.equal(counts.n, 1);
+  assert.equal(counts.n, 30);
   if (training) await Bun.write(resolve(output, "limits.json"), JSON.stringify(estimates, null, 2));
-  Object.assign(metadata, { result: "passed", responseSha256: createHash("sha256").update(body).digest("hex"), auditReads: counts.n });
+  Object.assign(metadata, { result: "passed", responseSha256, auditReads: counts.n });
 } finally {
   await Bun.write(report, JSON.stringify(metadata, null, 2));
   await runtime.dispose();

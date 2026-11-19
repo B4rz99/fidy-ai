@@ -49,9 +49,9 @@ class Ledger:
         try:
             fcntl.flock(self.lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             state = json.loads(self.path.read_text()) if self.path.exists() else None
+            if state and state["pending"] is not None:
+                raise Refused("Previous D1 cost is unresolved")
             if state and state["day"] == self.day:
-                if state["pending"] is not None:
-                    raise Refused("Previous D1 cost is unresolved for this UTC day")
                 self.spent = counts(state["spent"])
             else:
                 self.spent = dict(rowsRead=0, rowsWritten=0)

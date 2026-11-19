@@ -72,17 +72,21 @@ const validateObservation = ({
     : Option.none();
 };
 
-const exceedsExperimentLimit = (estimate: typeof BudgetEstimate.Type) =>
+const exceedsExperimentLimit = (estimate: typeof BudgetEstimate.Type): boolean =>
   estimate.rowsRead > freeD1BenchmarkLimits.experimentReads ||
   estimate.rowsWritten > freeD1BenchmarkLimits.experimentWrites;
 
 /** A size check cannot admit a hosted experiment without fresh account-wide usage. */
-const estimateOnly = (raw: unknown) => {
+const estimateOnly = (
+  raw: unknown
+):
+  | Readonly<{ _tag: "Refused"; reason: "invalid_estimate" | "experiment_too_large" }>
+  | Readonly<{ _tag: "NeedsAccountObservation" }> => {
   const decoded = Schema.decodeUnknownOption(BudgetEstimate)(raw);
-  if (Option.isNone(decoded)) return { _tag: "Refused", reason: "invalid_estimate" } as const;
+  if (Option.isNone(decoded)) return { _tag: "Refused", reason: "invalid_estimate" };
   return exceedsExperimentLimit(decoded.value)
-    ? ({ _tag: "Refused", reason: "experiment_too_large" } as const)
-    : ({ _tag: "NeedsAccountObservation" } as const);
+    ? { _tag: "Refused", reason: "experiment_too_large" }
+    : { _tag: "NeedsAccountObservation" };
 };
 
 const assessEstimate = ({

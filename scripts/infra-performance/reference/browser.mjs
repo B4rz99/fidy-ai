@@ -38,9 +38,10 @@ const changedTransaction = Schema.decodeUnknownSync(
   })
 );
 
-const app = "https://127.0.0.1:4183";
-const api = "https://127.0.0.1:4184";
-const operator = "http://127.0.0.1:4185";
+const port = Number(process.env.REFERENCE_WEB_PORT ?? "4183");
+const app = `https://127.0.0.1:${port}`;
+const api = `https://127.0.0.1:${port + 1}`;
+const operator = `http://127.0.0.1:${port + 2}`;
 const ledger = app + "/app/transactions?month=2026-11";
 const fixedId = "81000000-0000-4000-8000-000000000002";
 const afterName = "Referencia corregida";

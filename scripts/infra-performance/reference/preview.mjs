@@ -5,7 +5,7 @@ const server = await preview({
   root: process.cwd(),
   build: { outDir: "playwright-dist" },
   preview: {
-    port: 4183,
+    port: Number(process.env.REFERENCE_WEB_PORT ?? "4183"),
     host: "127.0.0.1",
     strictPort: true,
     https: {

@@ -1,4 +1,4 @@
-"""Capture the isolated D1 reference using its immutable browser journey."""
+"""Compare the pinned D1 and native User store through the same isolated browser journey."""
 
 import argparse
 from contextlib import ExitStack, contextmanager
@@ -22,7 +22,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 RESULTS = ROOT / "apps/web/test-results/reference"
 BROWSER = HERE / "browser.mjs"
-API = "http://127.0.0.1:4185/assessment/prepare"
+WEB_PORT = {"d1": 4183, "do": 4173}
 FIXTURES = [
     "browser-assessment.test-fixture.ts",
     "browser-acceptance-preview.ts",
@@ -86,19 +86,19 @@ def serve(args, cwd, env, log):
                 proc.wait()
 
 
-def prepare(api, front):
+def prepare(api, front, port):
     end = time.monotonic() + 300
     submitted = False
     while time.monotonic() < end:
         if api.poll() is not None or front.poll() is not None:
             raise RuntimeError("Local installation exited during startup")
         try:
-            req = urllib.request.Request(API, method="GET" if submitted else "POST")
+            req = urllib.request.Request(f"http://127.0.0.1:{port + 2}/assessment/prepare", method="GET" if submitted else "POST")
             with urllib.request.urlopen(req, timeout=3) as response:
                 status = json.load(response)["status"]
             submitted = True
             if status == "ready":
-                with socket.create_connection(("127.0.0.1", 4183), timeout=1):
+                with socket.create_connection(("127.0.0.1", port), timeout=1):
                     return
             if status == "failed":
                 raise RuntimeError("Financial fixture verification failed")
@@ -108,13 +108,14 @@ def prepare(api, front):
     raise TimeoutError("Local installation failed to prepare the comparison fixture")
 
 
-def observation(path, env, destination):
+def observation(path, env, destination, variant="d1"):
     with ExitStack() as stack:
         # The preview process is terminated after each observation. Own its native D1 images here.
         scratch = stack.enter_context(tempfile.TemporaryDirectory(prefix="fidy-reference-"))
         api = stack.enter_context(
             serve(
-                ["bun", "apps/server/cloudflare/browser-acceptance-preview.ts"],
+                ["bun", "apps/server/cloudflare/browser-acceptance-preview.ts" if variant == "d1"
+                 else "scripts/infra-performance/reference/native.ts"],
                 path,
                 {**env, "TMPDIR": scratch, "TEMP": scratch, "TMP": scratch},
                 destination / "api.log",
@@ -125,7 +126,7 @@ def observation(path, env, destination):
                 ["bun", str(HERE / "preview.mjs")], path / "apps/web", env, destination / "web.log"
             )
         )
-        prepare(api, front)
+        prepare(api, front, WEB_PORT[variant])
         seed = next(
             json.loads(line.removeprefix("ASSESSMENT_SEED "))
             for line in (destination / "api.log").read_text().splitlines()
@@ -156,6 +157,15 @@ def observation(path, env, destination):
             result["correctionMs"],
         ]
         return {**result, "seed": seed, "timings": dict(zip(BOUNDARIES, values, strict=True))}
+
+
+def equivalence(row):
+    return (
+        {key: value for key, value in row["seed"].items() if key != "milliseconds"},
+        [(attempt["status"], attempt["bytes"], attempt["payload"]) for attempt in row["attempts"]],
+        row["accountability"],
+        row["browser"],
+    )
 
 
 def compare(samples, rows, variants, *, stress=False):
@@ -198,6 +208,7 @@ def compare(samples, rows, variants, *, stress=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--d1", required=True, type=Path)
+    parser.add_argument("--do", dest="candidate", type=Path, help="clean native candidate checkout")
     parser.add_argument("--origin", default="local loopback; geographic origin unrecorded")
     parser.add_argument("--pairs", type=int, default=1)
     parser.add_argument(
@@ -210,8 +221,10 @@ def main():
     if args.pairs < 1:
         parser.error("--pairs must be positive")
     paths = {"d1": args.d1.resolve()}
-    revisions = {"d1":revision(paths["d1"],"d1")}
-    for port in range(4183, 4186):
+    if args.candidate:
+        paths["do"] = args.candidate.resolve()
+    revisions = {v: revision(path, v) for v, path in paths.items()}
+    for port in (port for v in paths for port in range(WEB_PORT[v], WEB_PORT[v] + 3)):
         with socket.socket() as sock:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             sock.bind(("127.0.0.1", port))
@@ -226,7 +239,7 @@ def main():
         "CLI_ACCEPTANCE_MODE": "cli",
         "FIDY_ASSESSMENT": args.dataset,
         "FIDY_ASSESSMENT_NETWORK": args.network,
-        "VITE_API_ORIGIN": "https://127.0.0.1:4184",
+
         "PLAYWRIGHT_TLS_KEY": str(key),
         "PLAYWRIGHT_TLS_CERT": str(cert),
     }
@@ -251,7 +264,12 @@ def main():
             for f in [Path(__file__), BROWSER, HERE / "preview.mjs"]
         },
         "pairs": args.pairs,
-        "order": "sequential pinned D1 reference",
+        "order": "alternate D1-first and DO-first pairs" if args.candidate else "pinned D1 reference",
+        "sampleFloor": 30,
+        "percentile": "nearest-rank",
+        "minimumRatio": 1.8,
+        "failurePolicy": "failed attempts or unequal paired evidence fail every boundary; incomplete samples stay missing",
+        "deployment": "local disposable processes and native SQLite images per variant per pair",
         "boundaries": BOUNDARIES,
     }
     (run / "plan.json").write_text(json.dumps(plan, indent=2))
@@ -290,22 +308,31 @@ def main():
                         "playwright-dist",
                     ],
                     cwd=path / "apps/web",
-                    env=env,
+                    env={**env, "VITE_API_ORIGIN": f"https://127.0.0.1:{WEB_PORT[variant] + 1}"},
                     stdout=log,
                     stderr=log,
                     check=True,
                 )
         for pair in range(args.pairs):
-            destination = run / f"{pair}-d1"
-            destination.mkdir()
-            row = {"variant":"d1", "pair":pair, "status":"ok"}
-            try:
-                row.update(observation(paths["d1"], env, destination))
-            except (OSError, ValueError, RuntimeError, StopIteration, subprocess.SubprocessError) as exc:
-                row.update(status="failed",failure=type(exc).__name__)
-            rows.append(row)
+            paired = []
+            for variant in (list(paths) if pair % 2 == 0 else list(reversed(paths))):
+                destination = run / f"{pair}-{variant}"
+                destination.mkdir()
+                row = {"variant": variant, "pair": pair, "status": "ok"}
+                try:
+                    env_for_variant = {**env, "REFERENCE_WEB_PORT": str(WEB_PORT[variant])}
+                    row.update(observation(paths[variant], env_for_variant, destination, variant))
+                except (OSError, ValueError, RuntimeError, StopIteration, subprocess.SubprocessError) as exc:
+                    row.update(status="failed", failure=type(exc).__name__, detail=str(exc))
+                paired.append(row)
+            if len(paired) == 2 and all(row["status"] == "ok" for row in paired):
+                if equivalence(paired[0]) != equivalence(paired[1]):
+                    for row in paired:
+                        row.update(status="failed", failure="fixture, payload or accountability mismatch")
+            rows.extend(paired)
             with (run / "attempts.jsonl").open("a") as out:
-                out.write(json.dumps(row)+"\n")
+                for row in paired:
+                    out.write(json.dumps(row) + "\n")
     finally:
         key.unlink(missing_ok=True)
         cert.unlink(missing_ok=True)

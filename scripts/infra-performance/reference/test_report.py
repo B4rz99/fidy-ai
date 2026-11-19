@@ -4,10 +4,23 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from run import BOUNDARIES, compare, observation
+from run import BOUNDARIES, compare, failure_metadata, observation
 
 
 class ReferenceReport(unittest.TestCase):
+    def test_diagnostics_select_only_fixed_labels_and_source_locations(self):
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory) / "api.log"
+            log.write_text(
+                "REFERENCE_STAGE transactions\nREFERENCE_STAGE private-verifier\n"
+                "Error: FOREIGN KEY constraint failed; Bearer sensitive\n"
+                "    at /runner/scripts/infra-performance/reference/native-seed.ts:39:12\n"
+            )
+            self.assertEqual(failure_metadata(log), {
+                "stage": "transactions", "reason": "foreign-key",
+                "source": "native-seed.ts:39:12",
+            })
+
     def test_failed_preview_releases_native_fixture_images(self):
         images = []
 

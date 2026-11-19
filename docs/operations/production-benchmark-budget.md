@@ -149,7 +149,8 @@ owner=scripts/infra-performance/cells/owner.py
 args=(--prefix "$RESOURCE_PREFIX" --revision "$NATIVE_REVISION" --fixture "$PRIVATE_FIXTURE"
       --bundle "$VERIFIED_D1_BUNDLE" --manifest-sha256 "$TRUSTED_MANIFEST_SHA256" --pairs 30)
 python3 "$owner" propose "${args[@]}" --out "$PRIVATE_OUTPUT/proposal"
-python3 "$owner" run "${args[@]}" --maximum-reads "$APPROVED_READS" --maximum-writes "$APPROVED_WRITES" \
+python3 "$owner" run "${args[@]}" --core-version "$APPROVED_NATIVE_CORE_VERSION" \
+  --ingress-version "$APPROVED_NATIVE_INGRESS_VERSION" --maximum-reads "$APPROVED_READS" --maximum-writes "$APPROVED_WRITES" \
   --out "$PRIVATE_OUTPUT/attempt"
 ```
 
@@ -157,6 +158,9 @@ python3 "$owner" run "${args[@]}" --maximum-reads "$APPROVED_READS" --maximum-wr
 for every SQL batch, Login, inspection, history read and final Audit check. Use the returned read
 and write maximums when approving the run. `run` obtains current account-wide D1 GraphQL analytics,
 adds previously accounted same-day experiment work and evaluates the repository's Free policy.
+Before taking custody, it independently reads the current native installation and authenticates
+the approved Core and Ingress version UUIDs, closed authority, source revision and exact signer
+fingerprint. It repeats that check after collection.
 The runner requires a protected `SMOKE_PROOF`, `CLOUDFLARE_ACCOUNT_ID` and an account-scoped
 Cloudflare API token with D1, Worker script, Durable Object, R2 and Analytics access. Pin the native
 Core fixture-signing public key through `FIDY_NATIVE_FIXTURE_PUBLIC_KEY`. On protected `trunk`, the owner verifies the deployment account token's own ID and derives a

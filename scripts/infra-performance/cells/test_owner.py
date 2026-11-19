@@ -273,3 +273,34 @@ class OwnerTests(unittest.TestCase):
         package = SimpleNamespace(modules=modules,contract='c'*64,digest='d'*64)
         versions = cloud.deploy(package,str(uuid4()),'fixture-private',123456789)
         self.assertEqual({prefix+'-'+role:id_ for role,id_ in versions.items()}, deployed)
+
+    def test_missing_native_versions_or_foreign_deployed_signer_refuse_before_custody(self):
+        import json
+        import sys
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from types import SimpleNamespace
+        from unittest.mock import Mock, patch
+        import owner
+
+        revision, prefix = 'a'*40,'fidy-2259-aabbccddeeff'
+        fixture = SimpleNamespace(verify_native_fixture=lambda *a,**kw:dict(member='performance-1',resourcePrefix=prefix,nativeRevision=revision),
+                                  read_native_session=lambda *_:dict(cookie='private',binding='private'))
+        installation = SimpleNamespace(validate_candidate=Mock(side_effect=ValueError('signer differs')))
+        approved = '1ede059a-5ea9-448b-9ccd-72c6ac706e66'
+        bundle = SimpleNamespace(estimate=dict(rowsRead=3,rowsWritten=2),direct=[],inspections={})
+        size = SimpleNamespace(returncode=1,stdout='{"_tag":"NeedsAccountObservation"}')
+        with TemporaryDirectory() as tmp:
+            for index, (extra,reason) in enumerate([([], 'approved_native_worker_versions_required'),
+                    (['--core-version',approved,'--ingress-version',approved],'native_installation_does_not_match_approved_candidate')]):
+                out = Path(tmp)/str(index)
+                args = ['owner.py','run','--prefix',prefix,'--revision',revision,'--maximum-reads','3','--maximum-writes','2','--out',str(out),*extra]
+                with patch.dict(sys.modules,hosted=fixture,installation=installation), patch.object(sys,'argv',args), \
+                     patch.object(owner,'MaterializedBundle',return_value=bundle), patch.object(owner.subprocess,'run',return_value=size), \
+                     patch.dict('os.environ',CLOUDFLARE_ACCOUNT_ID='a'*32,FIDY_NATIVE_FIXTURE_PUBLIC_KEY='a1'), \
+                     patch.object(owner,'CustodyObject') as custody, patch.object(owner,'Cloud') as cloud:
+                    self.assertEqual(owner.main(),1)
+                self.assertEqual(json.loads((out/'report.json').read_bytes())['reason'], reason)
+                custody.assert_not_called()
+                cloud.assert_not_called()
+        installation.validate_candidate.assert_called_once()

@@ -8,14 +8,14 @@ import secrets
 import subprocess
 import sys
 import time
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from budget import Refused, admit, counts, today
 from comparison import FIXTURE, boundaries, observe
 from owner_bundle import MaterializedBundle, verified_batch, LOGIN, HISTORY, sha
 from owner_cloud import Cloud, RejectedControlRequest, ROLES
 from owner_state import AccountExperiment, CustodyObject
-from owner_transport import HERE, ROOT, NATIVE_API, NATIVE_BROWSER, confirmed, fetch, usage
+from owner_transport import HERE, ROOT, NATIVE_API, NATIVE_BROWSER, cloudflare, confirmed, fetch, usage
 from prepare import PIN
 
 SUBJECT = "24000000-0000-4000-8000-000000000481"
@@ -320,9 +320,34 @@ def native_read(session, revision):
     return prepared
 
 
+def approved_versions(core, ingress):
+    versions = dict(core=core, ingress=ingress)
+    for value in versions.values():
+        try:
+            if not value or str(UUID(value)) != value:
+                raise ValueError()
+        except ValueError:
+            raise Refused("approved_native_worker_versions_required") from None
+    return versions
+
+
+def native_installation(account, revision, versions):
+    from installation import validate_candidate
+    public_key = os.environ.get("FIDY_NATIVE_FIXTURE_PUBLIC_KEY")
+    if not public_key:
+        raise Refused("protected_native_signer_pin_missing")
+    try:
+        return validate_candidate(cloudflare, account=account, revision=revision,
+                                  versions=versions, public_key=public_key)
+    except (ValueError, KeyError, TypeError):
+        raise Refused("native_installation_does_not_match_approved_candidate") from None
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("propose", "run", "cleanup"))
+    parser.add_argument("--core-version", help="Approved deployed native Core version UUID")
+    parser.add_argument("--ingress-version", help="Approved deployed native Ingress version UUID")
     for name in ("bundle", "fixture", "out"):
         parser.add_argument("--" + name, type=Path, required=(name == "out"))
     for name in ("prefix", "revision", "manifest-sha256"):
@@ -400,7 +425,10 @@ def main():
             approved = counts(dict(rowsRead=args.maximum_reads, rowsWritten=args.maximum_writes))
             if any(bundle.estimate[k] > approved[k] for k in approved):
                 raise Refused("outside_approved_cost_proposal")
+            approved_native = approved_versions(args.core_version, args.ingress_version)
         account = os.environ["CLOUDFLARE_ACCOUNT_ID"]
+        if args.action == "run":
+            report["nativeCandidate"] = native_installation(account, args.revision, approved_native)
         cloud = Cloud(account, args.prefix)
         owner = AccountExperiment(CustodyObject(account, cloud), account)
         if args.action == "cleanup":
@@ -437,6 +465,7 @@ def main():
                     )
 
                 exercise(owner, cloud, bundle, send, read, versions, key, args.pairs, report, save)
+                native_installation(account, args.revision, approved_native)
             except Exception as error:
                 report["runFailure"] = str(error) if isinstance(error, Refused) else type(error).__name__
                 raise

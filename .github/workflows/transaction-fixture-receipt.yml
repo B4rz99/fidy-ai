@@ -1,0 +1,25 @@
+name: Rehearse closed Transaction fixture provenance
+on:
+  push:
+    branches: [perf/closed-transaction-fixture-receipt]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  receipt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/bun-runtime
+      - run: bash scripts/install-workspace.sh --ignore-scripts
+      - name: Require genuine signed capture and own-fixture proof
+        run: python3 scripts/infra-performance/canonical-fixture/hosted.py rehearse --out apps/server/test-results/closed-native-fixture
+      - name: Keep only aggregate result
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: closed-native-fixture-${{ github.run_id }}
+          path: apps/server/test-results/closed-native-fixture/summary.json

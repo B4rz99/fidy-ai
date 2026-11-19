@@ -179,7 +179,12 @@ const consumer = Schema.Struct({
     max_retries: Schema.Int,
     max_wait_time_ms: Schema.Int,
   }),
-}).check(Schema.makeFilter(row => row.script === undefined || row.script_name === undefined || row.script === row.script_name));
+}).check(
+  Schema.makeFilter(
+    (row) =>
+      row.script === undefined || row.script_name === undefined || row.script === row.script_name
+  )
+);
 const inspectConsumers = Effect.fn(function* (
   read: Read,
   installed: typeof Queue.Type,
@@ -203,7 +208,8 @@ const inspectConsumers = Effect.fn(function* (
     : workBatchSize;
   yield* Effect.try(() =>
     requireTarget(
-      (row.script ?? row.script_name) === (installed.queue_name === smoke ? smoke : installationNames.Core) &&
+      (row.script ?? row.script_name) ===
+        (installed.queue_name === smoke ? smoke : installationNames.Core) &&
         row.dead_letter_queue === dlq &&
         row.settings.batch_size === expectedSize &&
         row.settings.max_retries === 3 &&

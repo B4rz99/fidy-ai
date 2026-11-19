@@ -21,6 +21,18 @@ class ReferenceReport(unittest.TestCase):
                 "source": "native-seed.ts:39:12",
             })
 
+    def test_failed_canonical_response_exports_only_the_observed_method_and_status(self):
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory) / "browser.log"
+            log.write_text(
+                "REFERENCE_STAGE fresh-read\nREFERENCE_HTTP PUT 429\n"
+                "REFERENCE_HTTP DELETE 403\nREFERENCE_HTTP GET 999\n"
+                "REFERENCE_HTTP GET 401 Bearer sensitive\n"
+            )
+            self.assertEqual(failure_metadata(log), {
+                "stage": "fresh-read", "httpMethod": "PUT", "httpStatus": 429,
+            })
+
     def test_failed_preview_releases_native_fixture_images(self):
         images = []
 

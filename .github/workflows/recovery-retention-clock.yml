@@ -1,0 +1,41 @@
+name: Verify the recovery retention clock
+on:
+  push:
+    branches: [ci/2226-retention-clock]
+permissions:
+  contents: read
+jobs:
+  retention:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+      - uses: ./.github/actions/bun-install
+      - name: Give the native alarm time to run before installing the failure trigger
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('apps/server/cloudflare/recovery/native-retention.test.ts')
+          original = path.read_text()
+          gate = '        yield* native(() =>\n          db.exec(\n            "CREATE TRIGGER fail_case_retention'
+          assert original.count(gate) == 1
+          path.write_text(original.replace(gate, '        yield* Effect.sleep("1 second");\n        console.log("Case rows before installing the trigger", yield* native(() => db.exec(cases)));\n' + gate))
+          PY
+          bun run --cwd apps/server test:cloudflare cloudflare/recovery/native-retention.test.ts
+      - name: Check the committed fixture
+        run: |
+          git restore apps/server/cloudflare/recovery/native-retention.test.ts
+          for iteration in 1 2 3; do
+            bun run --cwd apps/server test:cloudflare cloudflare/recovery/native-retention.test.ts
+          done
+      - name: Check server types and fixture conventions
+        run: |
+          bun node_modules/typescript/bin/tsc -b apps/server
+          bun x --no-install oxlint apps/server/cloudflare/recovery/native-retention.test.ts
+          bun x --no-install oxfmt --check apps/server/cloudflare/recovery/native-retention.test.ts

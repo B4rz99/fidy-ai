@@ -1,0 +1,121 @@
+name: Verify native fixture candidate
+on:
+  push:
+    branches: [ci/2259-receipt-verified-f43a1320c]
+permissions:
+  contents: read
+jobs:
+  static:
+    name: Workspace Gate
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      statuses: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: f43a1320c8f8d99852e65a4bafcbc3da5bbf8a04
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+      - name: Fetch base branch tip
+        env:
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref || github.event.repository.default_branch }}
+        run: git fetch --no-tags --depth=1 origin "+refs/heads/$BASE_BRANCH:refs/remotes/origin/$BASE_BRANCH"
+      - uses: ./.github/actions/bun-install
+      - name: Restore every declared upstream reference
+        run: |
+          bun -e '
+            const sources = await Bun.file(".patterns/sources.json").json();
+            for (const source of Object.values(sources)) {
+              for (const path of [source.snapshot.manifest, ...source.sourcePaths]) {
+                if (path.startsWith(".repos/")) console.log("/" + path);
+              }
+            }
+          ' | git sparse-checkout add --stdin
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24"
+      - name: Install isolated Inspector dependencies for static analysis
+        run: bun install --cwd tools/mcp-inspector --frozen-lockfile
+      - name: Restore compiler-managed project graph
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            .tsbuild
+            tsconfig.tsbuildinfo
+          key: ${{ runner.os }}-typegraph-v1-${{ hashFiles('bun.lock', 'tsconfig*.json', 'apps/*/tsconfig*.json', 'infra/*/tsconfig*.json', 'tools/astro/tsconfig.json', 'tools/astro/bun.lock') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-typegraph-v1-${{ hashFiles('bun.lock', 'tsconfig*.json', 'apps/*/tsconfig*.json', 'infra/*/tsconfig*.json', 'tools/astro/tsconfig.json', 'tools/astro/bun.lock') }}-
+            ${{ runner.os }}-typegraph-v1-
+      - name: Static repository validation
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BASE_REF: origin/${{ github.event.pull_request.base.ref || github.event.repository.default_branch }}
+          PR_HEAD_SHA: f43a1320c8f8d99852e65a4bafcbc3da5bbf8a04
+          GH_TOKEN: ${{ github.token }}
+          VERIFY_TIMING_REPORT: test-results/verify-static.json
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" != pull_request ]]; then unset PR_TITLE; fi
+          /usr/bin/time -p bun run verify -- --group static
+      - name: Select the reproduced Inspector Node runtime
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "26.5.0"
+      - name: Inspector transport regressions
+        run: |
+          bun run --cwd tools/mcp-inspector check
+          bun run --cwd tools/mcp-inspector test
+      - name: Preserve Workspace Gate phase timings
+        if: ${{ !cancelled() }}
+        timeout-minutes: 2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: workspace-gate-timings
+          path: test-results/verify-static.json
+          if-no-files-found: error
+          retention-days: 7
+
+
+  receipt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: f43a1320c8f8d99852e65a4bafcbc3da5bbf8a04
+          persist-credentials: false
+      - uses: ./.github/actions/bun-runtime
+      - run: bash scripts/install-workspace.sh
+      - name: Verify closed release signer inventories on the real plan
+        working-directory: infra/cloudflare
+        run: bun run test native-application-plan.test.ts native-deployed-graph.test.ts
+      - name: Require genuine signed capture and own-fixture proof
+        if: always()
+        run: |
+          python3 -m unittest discover -s scripts/infra-performance/canonical-fixture
+          python3 scripts/infra-performance/canonical-fixture/direct_bridge_check.py
+          python3 scripts/infra-performance/canonical-fixture/hosted.py rehearse --out apps/server/test-results/closed-native-fixture
+      - name: Check receipt policy code
+        if: always()
+        run: |
+          bun x oxlint --deny-warnings --config .oxlintrc.json --type-aware --threads=1 apps/server/cloudflare/release-isolation/{internal/performance-receipt,operations}.ts apps/server/cloudflare/transactions/{internal/performance-receipt,operations}.ts apps/server/cloudflare/{core-http/runtime,user-store/runtime,public-worker,user-store.test-fixture}.ts scripts/infra-performance/canonical-fixture/{bridge,closed-runtime.test-fixture}.ts infra/cloudflare/{native-fixture-signer,native-application,native-graph,native-deployed-graph,native-storage-release,native-storage-resources,storage-installation}.ts
+      - name: Check owned modules and application types
+        if: always()
+        run: |
+          bun install --cwd tools/mcp-inspector --frozen-lockfile
+          bun install --cwd tools/astro --frozen-lockfile
+          bun install --cwd tools/mutation --frozen-lockfile
+          bun install --cwd tools/depcruise --frozen-lockfile
+          bun x tsc --build
+          bun run --cwd apps/server typecheck
+          bun run --cwd apps/server lint:deps
+      - name: Keep only aggregate result
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: closed-native-fixture-${{ github.run_id }}
+          path: apps/server/test-results/closed-native-fixture/summary.json
+

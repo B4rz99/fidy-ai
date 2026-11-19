@@ -39,8 +39,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-          sparse-checkout: scripts/infra-performance/deployed-fleet
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
       - run: python3 -m unittest discover -s scripts/infra-performance/deployed-fleet
+      - uses: ./.github/actions/bun-install
+      - run: bun run --cwd infra/cloudflare test -- native-fleet-pilot.test.ts
 
   release:
     if: ${{ github.ref == 'refs/heads/trunk' && inputs.operation != 'publish-site' }}

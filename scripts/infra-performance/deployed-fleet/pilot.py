@@ -2,7 +2,6 @@
 import json
 import os
 import re
-import subprocess
 import sys
 import time
 import urllib.request
@@ -90,7 +89,7 @@ def usage():
     return Usage(now, int(stamp.timestamp()), totals["sum"]["rowsRead"], totals["sum"]["rowsWritten"])
 
 
-def run():
+def sample(phase):
     if (os.environ.get("GITHUB_REF") != "refs/heads/trunk"
             or os.environ.get("GITHUB_EVENT_NAME") != "workflow_dispatch"
             or os.environ.get("NATIVE_STORAGE_ADMISSION") != "closed"
@@ -99,51 +98,44 @@ def run():
         raise ValueError("Closed protected dispatch at the exact source revision required")
     directory = Path(os.environ["RUNNER_TEMP"])
     journal = directory / "native-fleet-meter.jsonl"
-    stop = directory / "native-fleet-stop"
     def record(stage, **values):
         with journal.open("a") as out:
             print(json.dumps({"stage": stage, "revision": os.environ["GITHUB_SHA"], **values}), file=out)
-    before = usage()
-    record("baseline", **asdict(before), pilotReads=PILOT_READS, pilotWrites=PILOT_WRITES)
-    admit(before, int(time.time()))
-    started = time.monotonic()
-    interrupted = False
-    with subprocess.Popen(["bun", "native-storage-release.ts", "fleet-pilot"],
-                          cwd=Path(__file__).resolve().parents[3] / "infra/cloudflare") as driver:
-        while driver.poll() is None:
-            try:
-                driver.wait(timeout=30)
-            except subprocess.TimeoutExpired:
-                if interrupted:
-                    continue
-                try:
-                    current = usage()
-                    record("running", **asdict(current))
-                    check_delta(before, current, int(time.time()))
-                    if time.monotonic() - started >= MAX_SECONDS - 15 * 60:
-                        raise ValueError("Reserve window for cleanup")
-                except Exception:
-                    # The User's authenticated erasure remains available when further trials stop.
-                    interrupted = True
-                    stop.touch()
-                    record("stop-admission")
+    if phase == "begin":
+        current = usage()
+        admit(current, int(time.time()))
+        with journal.open("x") as out:
+            print(json.dumps({"stage": phase, "revision": os.environ["GITHUB_SHA"], "usage": asdict(current),
+                              "pilotReads": PILOT_READS, "pilotWrites": PILOT_WRITES}), file=out)
+        return
+    if phase not in ("check", "finish"):
+        raise ValueError("Invalid metering phase")
+    with journal.open() as source:
+        origin = json.loads(source.readline())
+    if origin["stage"] != "begin" or origin["revision"] != os.environ["GITHUB_SHA"]:
+        raise ValueError("Missing revision-bound admission")
+    before = Usage(**origin["usage"])
     finished = int(time.time())
-    record("driver", status=driver.returncode)
-    for attempt in range(21):
-        after = usage()
-        delta = check_delta(before, after, int(time.time()))
-        record("after", **asdict(after), accountDelta=delta)
-        if after.latest >= finished and delta["reads"] > 0 and delta["writes"] > 0:
-            if driver.returncode or interrupted:
-                raise ValueError("Pilot incomplete")
+    for attempt in range(21 if phase == "finish" else 1):
+        current = usage()
+        record(phase, **asdict(current))
+        delta = check_delta(before, current, int(time.time()))
+        if phase == "check":
+            if (current.reads > DAILY_READS - RESERVE_READS
+                    or current.writes > DAILY_WRITES - RESERVE_WRITES
+                    or current.sampled - before.sampled > MAX_SECONDS - 15 * 60):
+                raise ValueError("Reserve remaining work for cleanup")
+            return
+        if current.latest >= finished and delta["reads"] > 0 and delta["writes"] > 0:
+            record("delta", **delta)
             return
         if attempt < 20:
             time.sleep(15)
     raise ValueError("Post-cleanup counters missing")
 
+
 if __name__ == "__main__":
     try:
-        run()
+        sample(sys.argv[1])
     except Exception as exc:
-        # Log no response body, account token or authentication material.
-        sys.exit("Fleet pilot failed (" + type(exc).__name__ + "); inspect protected checkpoints")
+        sys.exit("Fleet pilot meter unavailable (" + type(exc).__name__ + ")")

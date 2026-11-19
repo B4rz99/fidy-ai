@@ -145,10 +145,9 @@ export const ownPerformanceReceipt = Effect.fn(function* (
   owns: (id: string) => boolean
 ) {
   const now = yield* Clock.currentTimeMillis;
-  const binding = request.headers.get("fidy-session-binding");
+  const binding = request.headers.get("fidy-session-binding") ?? "";
   const signer = credentials(environment);
   if (
-    binding === null ||
     binding === "" ||
     Option.isNone(signer) ||
     !(yield* receiptAdmitted({ request, environment, boundary: "core", now }))

@@ -115,11 +115,11 @@ const ProviderBindings = Schema.Struct({ bindings: Schema.optional(NativeBinding
 export const requireClosedBindings = ({
   worker,
   bindings,
-  fingerprint = "",
+  fingerprint,
 }: {
   worker: NativeRole;
   bindings: ReadonlyArray<NativeBinding>;
-  fingerprint?: string;
+  fingerprint: string;
 }): void => requireRoleBindings({ role: worker, bindings, fingerprint });
 
 const requireSiteAsset = (role: NativeRole, props: unknown, bindings: NativeBinding[]): void => {
@@ -141,12 +141,12 @@ export const requireNativeBindings = ({
   plan,
   revision,
   hosts,
-  fingerprint = "",
+  fingerprint,
 }: {
   plan: Plan;
   revision: string;
   hosts: NativeHostMode;
-  fingerprint?: string;
+  fingerprint: string;
 }): void => {
   requireSignerHost(fingerprint, hosts);
   const resources = Object.values(plan.resources);

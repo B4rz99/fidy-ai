@@ -45,6 +45,8 @@ const worker = Effect.fnUntraced(function* (
   };
   return { config };
 });
+const deriveSecret = (secret: string, revision: string, purpose: string): string =>
+  new Bun.CryptoHasher("sha256", secret).update(revision + "/" + purpose).digest("hex");
 const closedRuntime = Effect.fnUntraced(function* ({
   revision,
   secret,
@@ -54,8 +56,6 @@ const closedRuntime = Effect.fnUntraced(function* ({
 }) {
   const privateKey = Redacted.value(yield* Config.Redacted("TEST_FIXTURE_PRIVATE_KEY"));
   const api = installedOrigins.acceptance;
-  const derive = (purpose: string): string =>
-    new Bun.CryptoHasher("sha256", secret).update(revision + "/" + purpose).digest("hex");
   const digestWidth = 64;
   const shared = {
     RELEASE_GIT_SHA: text(revision),
@@ -69,13 +69,13 @@ const closedRuntime = Effect.fnUntraced(function* ({
     SMOKE_BUCKET: { type: "r2" as const, name: "private-receipt-rehearsal" },
   };
   return new Miniflare({
-    handleStructuredLogs: () => undefined,
+    handleStructuredLogs: (): void => undefined,
     workers: yield* Effect.all([
       worker("ingress", "./public-worker.ts", {
         env: {
           ...shared,
           CORE: { type: "worker", worker: "core" },
-          PAT_ADMISSION_KEY: text(derive("pat-admission")),
+          PAT_ADMISSION_KEY: text(deriveSecret(secret, revision, "pat-admission")),
         },
       }),
       worker("core", "./core-worker.ts", {
@@ -85,21 +85,21 @@ const closedRuntime = Effect.fnUntraced(function* ({
           NATIVE_FIXTURE_SIGNING_KEY: text(privateKey),
           SQLITE_STORE_CAPACITY_BYTES: text("1000000000"),
           GOOGLE_CLIENT_ID: text("fidy-native-google"),
-          GOOGLE_CLIENT_SECRET: text(derive("google")),
+          GOOGLE_CLIENT_SECRET: text(deriveSecret(secret, revision, "google")),
           GOOGLE_REDIRECT_URI: text(api.api + "/providers/google/callback"),
           MICROSOFT_CLIENT_ID: text("fidy-native-microsoft"),
-          MICROSOFT_CLIENT_SECRET: text(derive("microsoft")),
+          MICROSOFT_CLIENT_SECRET: text(deriveSecret(secret, revision, "microsoft")),
           MICROSOFT_REDIRECT_URI: text(api.api + "/providers/microsoft/callback"),
-          RESEND_API_KEY: text(derive("resend")),
+          RESEND_API_KEY: text(deriveSecret(secret, revision, "resend")),
         },
         exports: nativeOwners,
       }),
       worker("closed-provider", "./release-smoke-worker.ts", {
         env: {
           ...shared,
-          ACCEPTANCE_CODE_KEY: text(derive("oidc-code")),
-          ACCEPTANCE_GOOGLE_SECRET: text(derive("google")),
-          ACCEPTANCE_MICROSOFT_SECRET: text(derive("microsoft")),
+          ACCEPTANCE_CODE_KEY: text(deriveSecret(secret, revision, "oidc-code")),
+          ACCEPTANCE_GOOGLE_SECRET: text(deriveSecret(secret, revision, "google")),
+          ACCEPTANCE_MICROSOFT_SECRET: text(deriveSecret(secret, revision, "microsoft")),
           ACCEPTANCE_API_ORIGIN: text(api.api),
         },
       }),
@@ -110,7 +110,7 @@ const run = Effect.gen(function* () {
   const revision = yield* Config.String("FIDY_NATIVE_REVISION");
   const secret = Redacted.value(yield* Config.Redacted("SMOKE_PROOF"));
   yield* Effect.acquireUseRelease(closedRuntime({ revision, secret }), serveFixture, (runtime) =>
-    Effect.promise(() => runtime.dispose())
+    Effect.tryPromise(() => runtime.dispose()).pipe(Effect.orDie)
   );
 });
 if (import.meta.main) {

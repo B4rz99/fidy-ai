@@ -8,7 +8,7 @@ import { takeChallenge, visibleChallenge } from "./local-challenge";
 import { guardModelConfirmationReply, isHostedConfirmationAttempt } from "./hosted-confirmation";
 import { compact, continuity } from "./local-compaction";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, DateTime, Effect, Option, Schema } from "effect";
+import { Clock, DateTime, Effect, Option, Result, Schema } from "effect";
 import {
   ProactiveInsightTranscriptEntry,
   TranscriptText,
@@ -19,8 +19,10 @@ import { MemoryText } from "../../../src/core/memory/contract";
 import {
   HostedInferenceError,
   type HostedInferenceService,
+  type HostedTextResult,
   type HostedTextToolCall,
   HostedToolCallMaximum,
+  type PreparedHostedText,
 } from "../../../src/shell/hosted-inference/contract";
 import type { OpenAiEnvironment } from "../../ai/contract";
 import { makeLocalHostedInference } from "../../ai/runtime";
@@ -255,6 +257,68 @@ const runTools = Effect.fn(function* (
   if (yield* finishActions(actions, round)) return Option.none();
   return Option.some(actions.map(({ event }) => event));
 });
+type RoundProgress = { repairUsed: boolean; mutationAttempted: boolean };
+const canRepair = (reason: string, round: ToolRound, previous: RoundProgress): boolean =>
+  !previous.repairUsed &&
+  reason === "InvalidOutput" &&
+  (Option.isNone(round.turn.browser_id) || round.iteration === 1);
+const providerRound = Effect.fn(function* (
+  prepared: PreparedHostedText,
+  round: ToolRound,
+  previous: RoundProgress
+) {
+  const { turn, iteration, storage } = round;
+  const result = yield* Effect.result(prepared.execute);
+  if (Result.isSuccess(result)) return { _tag: "Result" as const, output: result.success };
+  const reason = result.failure.reason._tag;
+  if (previous.mutationAttempted) return yield* result.failure;
+  if (canRepair(reason, round, previous)) {
+    previous.repairUsed = true;
+    const repair = yield* Effect.result(prepared.repairInvalidOutput);
+    if (Result.isSuccess(repair)) return { _tag: "Retry" as const, prepared: repair.success };
+  }
+  if (
+    Option.isNone(turn.browser_id) &&
+    ["ProviderQuotaExceeded", "ProviderUnavailable", "InvalidOutput"].includes(reason)
+  ) {
+    yield* present(
+      turn,
+      {
+        text: TranscriptText.make(
+          "No pude completar tu solicitud en este momento. Inténtalo más tarde."
+        ),
+        iteration,
+      },
+      storage
+    ).pipe(withStoreCapacity("required"));
+    return { _tag: "Proposed" as const };
+  }
+  return yield* result.failure;
+});
+const finishReply = Effect.fn(function* (
+  result: HostedTextResult,
+  { turn, storage, iteration }: ToolRound
+) {
+  if (result.finishReason !== "stop") return yield* new AgentUnavailable();
+  const answer = yield* Schema.decodeUnknownEffect(TranscriptText)(result.text);
+  return yield* present(
+    turn,
+    {
+      text: Option.getOrElse(captureWithoutCommit({ request: turn.request_text }), () =>
+        guardModelConfirmationReply(answer)
+      ),
+      iteration,
+    },
+    storage
+  ).pipe(withStoreCapacity("required"));
+});
+const validToolRound = (result: HostedTextResult, total: number): boolean =>
+  result.finishReason === "tool-calls" && total <= maximumToolCallsPerTurn;
+const includesMutation = (
+  calls: ReadonlyArray<HostedTextToolCall>,
+  catalog: ReturnType<typeof localHostedCatalog>
+): boolean =>
+  calls.some((tool) => catalog.find((op) => op.id === tool.operation)?.policy.kind === "mutation");
 const runRounds = Effect.fn(function* (
   inference: HostedInferenceService,
   turn: LocalTurn,
@@ -269,26 +333,23 @@ const runRounds = Effect.fn(function* (
     availableOperations: catalog.map((op) => op.id),
   });
   let total = 0;
+  const previous = { repairUsed: false, mutationAttempted: false };
   for (let iteration = 1; iteration <= maximumHostedTurnIterations; iteration++) {
-    const result = yield* prepared.execute;
+    const step = yield* providerRound(prepared, { turn, storage, iteration }, previous);
+    if (step._tag === "Proposed") return;
+    if (step._tag === "Retry") {
+      prepared = step.prepared;
+      continue;
+    }
+    const result = step.output;
     if (result.toolCalls.length === 0) {
-      if (result.finishReason !== "stop") return yield* new AgentUnavailable();
-      const answer = yield* Schema.decodeUnknownEffect(TranscriptText)(result.text);
-      return yield* present(
-        turn,
-        {
-          text: Option.getOrElse(captureWithoutCommit({ request: turn.request_text }), () =>
-            guardModelConfirmationReply(answer)
-          ),
-          iteration,
-        },
-        storage
-      ).pipe(withStoreCapacity("required"));
+      return yield* finishReply(result, { turn, storage, iteration });
     }
     total += result.toolCalls.length;
-    if (result.finishReason !== "tool-calls" || total > maximumToolCallsPerTurn) {
+    if (!validToolRound(result, total)) {
       return yield* new AgentUnavailable();
     }
+    previous.mutationAttempted ||= includesMutation(result.toolCalls, catalog);
     const events = yield* runTools(result.toolCalls, { turn, iteration, storage }, env);
     if (Option.isNone(events)) return;
     prepared = yield* result.continuation.prepare(events.value);

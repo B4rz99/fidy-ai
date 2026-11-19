@@ -42,6 +42,14 @@ const fixtureTool = (mode: string): { name: string; arguments: string } => {
   return { name: "memory__recall", arguments: "{}" };
 };
 
+const textModes = [
+  "/batch",
+  "/forget",
+  "/malformed",
+  "/repair-after-query",
+  "/invalid-after-query",
+  "/unavailable-after-query",
+];
 export class HostedProviderControl extends DurableObject<Environment> {
   private readonly browserClient = new AbortController();
   private readonly released = Deferred.makeUnsafe<void>();
@@ -87,7 +95,7 @@ export class HostedProviderControl extends DurableObject<Environment> {
     }
     this.available = input.tools?.map((tool) => tool.function.name) ?? [];
     this.rounds += 1;
-    if (this.rounds !== 1) return completion("Listo.");
+    if (this.rounds !== 1) return this.laterRound();
     this.waiting = true;
     yield* Deferred.await(this.released);
     this.waiting = false;
@@ -121,6 +129,26 @@ export class HostedProviderControl extends DurableObject<Environment> {
       usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
     });
   });
+  private laterRound(): Response {
+    if (this.mode === "/unavailable-after-query") {
+      return Response.json(
+        { error: { code: "insufficient_quota", message: "fixture" } },
+        { status: 429 }
+      );
+    }
+    if (
+      this.mode === "/malformed" ||
+      this.mode === "/invalid-after-query" ||
+      (this.mode === "/repair-after-query" && this.rounds === 2)
+    ) {
+      return Response.json({
+        choices: [
+          { message: { role: "assistant", content: { invalid: true } }, finish_reason: "stop" },
+        ],
+      });
+    }
+    return completion("Listo.");
+  }
   private browserRequest(request: Request): Option.Option<Promise<Response>> {
     if (request.url === "https://fixture.invalid/disconnect-browser") {
       this.browserClient.abort();
@@ -197,7 +225,7 @@ export class HostedProviderControl extends DurableObject<Environment> {
           ];
           return new Response(null, { status: 204 });
         }
-        if (["/batch", "/forget", "/malformed"].includes(path)) {
+        if (textModes.includes(path)) {
           this.mode = path;
           return new Response(null, { status: 204 });
         }

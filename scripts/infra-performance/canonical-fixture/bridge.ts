@@ -8,9 +8,9 @@ import {
 } from "../../../apps/server/cloudflare/release-isolation/operations";
 import {
   SealedTransactionReceipt,
-  performanceReceiptPath,
   acceptanceLifetimeMs,
   acceptanceProofHeader,
+  performanceReceiptPath,
 } from "../../../apps/server/cloudflare/release-isolation/contract";
 import { openPerformanceBrowser } from "../../../infra/cloudflare/native-acceptance";
 

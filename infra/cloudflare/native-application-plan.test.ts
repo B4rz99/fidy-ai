@@ -32,14 +32,23 @@ const pinFetch: typeof fetch = Object.assign(
   },
   { preconnect: fetch.preconnect }
 );
-it.effect.each([false,true])(
+it.effect.each([false, true])(
   "declares exactly the requested Core and smoke bindings before resources exist (fixture signer %s)",
   (enabled) => {
     const revision = "1".repeat(40);
-    const pair=generateKeyPairSync("ec",{namedCurve:"prime256v1",publicKeyEncoding:{type:"spki",format:"der"},privateKeyEncoding:{type:"pkcs8",format:"der"}});
-    const fingerprint=enabled?createHash("sha256").update(pair.publicKey).digest("hex"):"";
+    const pair = generateKeyPairSync("ec", {
+      namedCurve: "prime256v1",
+      publicKeyEncoding: { type: "spki", format: "der" },
+      privateKeyEncoding: { type: "pkcs8", format: "der" },
+    });
+    const fingerprint = enabled ? createHash("sha256").update(pair.publicKey).digest("hex") : "";
     const configuration = ConfigProvider.fromUnknown({
-      ...(enabled?{NATIVE_FIXTURE_SIGNER_SHA256:fingerprint,NATIVE_FIXTURE_SIGNING_KEY:pair.privateKey.toString("hex")} : {}),
+      ...(enabled
+        ? {
+            NATIVE_FIXTURE_SIGNER_SHA256: fingerprint,
+            NATIVE_FIXTURE_SIGNING_KEY: pair.privateKey.toString("hex"),
+          }
+        : {}),
       NATIVE_STORAGE_ADMISSION: "closed",
       RELEASE_GIT_SHA: revision,
       CONTRACT_DIGEST: "2".repeat(64),
@@ -86,12 +95,18 @@ it.effect.each([false,true])(
             );
             if (resource === undefined) throw Error("Missing declared Worker " + worker);
             const rows = compiled.bindings[resource.FQN] ?? [];
-            const observed=rows.flatMap((row)=>Schema.decodeUnknownSync(bindings)(row.data).bindings??[]);
-            requireClosedBindings({worker,bindings:observed},fingerprint);
-            expect(observed.some((item)=>item.name==="NATIVE_FIXTURE_SIGNING_KEY")).toBe(enabled&&worker==="Core");
-            if (enabled&&worker==="Core") {
-              expect(()=>requireClosedBindings({worker,bindings:observed})).toThrow();
-              expect(()=>requireClosedBindings({worker,bindings:observed},"0".repeat(64))).toThrow();
+            const observed = rows.flatMap(
+              (row) => Schema.decodeUnknownSync(bindings)(row.data).bindings ?? []
+            );
+            requireClosedBindings({ worker, bindings: observed }, fingerprint);
+            expect(observed.some((item) => item.name === "NATIVE_FIXTURE_SIGNING_KEY")).toBe(
+              enabled && worker === "Core"
+            );
+            if (enabled && worker === "Core") {
+              expect(() => requireClosedBindings({ worker, bindings: observed })).toThrow();
+              expect(() =>
+                requireClosedBindings({ worker, bindings: observed }, "0".repeat(64))
+              ).toThrow();
             }
           }
         }),

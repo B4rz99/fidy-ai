@@ -9,6 +9,7 @@ import re
 import secrets
 import select
 import subprocess
+import sys
 import time
 
 from fixture import digest, prepare, serialized, validate_originals, write
@@ -159,6 +160,8 @@ def main():
     parser.add_argument("--out",type=Path,required=True)
     parser.add_argument("--native-revision")
     parser.add_argument("--resource-prefix")
+    parser.add_argument("--core-version")
+    parser.add_argument("--ingress-version")
     args=parser.parse_args()
     os.umask(0o077)
     args.out.mkdir(mode=0o700,parents=True,exist_ok=True)
@@ -176,6 +179,14 @@ def main():
             raise ValueError("Closed native receipt authority is unavailable")
     if not re.fullmatch(r"[a-f0-9]{40}",revision) or not re.fullmatch(r"fidy-2259-[a-f0-9]{12}",prefix):
         raise ValueError("Missing exact native revision or allocated comparison prefix")
+    if args.mode=="hosted":
+        from installation import validate_candidate
+        sys.path.insert(0, str(HERE.parent/"cells"))
+        from pilot import cloudflare
+        inventory=validate_candidate(cloudflare, account=os.environ["CLOUDFLARE_ACCOUNT_ID"],revision=revision,
+                                     versions={"core":args.core_version or "", "ingress":args.ingress_version or ""},
+                                     public_key=os.environ["FIDY_NATIVE_FIXTURE_PUBLIC_KEY"])
+        write(args.out/"native-candidate.json", inventory)
     verified=collect(args.mode,revision,prefix,args.out)
     if args.mode=="rehearse":
         envelope=private_file(args.out/"fixture","native-receipt.json")

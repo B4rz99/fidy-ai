@@ -1,8 +1,8 @@
 import {
-  isPerformanceReceipt as matchesPerformanceReceipt,
   receiptAdmitted as admitsReceipt,
-  sealTransactionReceipt as sealReceipt,
+  isPerformanceReceipt as matchesPerformanceReceipt,
   openTransactionReceipt as openReceipt,
+  sealTransactionReceipt as sealReceipt,
 } from "./internal/performance-receipt";
 import { installedOrigins } from "../../src/shell/browser-transport/contract";
 import { browserOrigins } from "../runtime/contract";

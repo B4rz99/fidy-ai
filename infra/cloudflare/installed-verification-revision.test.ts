@@ -12,7 +12,9 @@ it.effect("uses the deployed ancestor only after confirming the unchanged runtim
     const result = yield* verificationRevision(trunk, installed, (args) => {
       calls.push(args);
       return Effect.succeed(
-        args.includes("diff") ? "infra/cloudflare/native-deployed-web.ts\0" : ""
+        args.includes("diff")
+          ? "infra/cloudflare/native-deployed-web.ts\0infra/cloudflare/native-erasure.ts\0"
+          : ""
       );
     });
     expect(result).toBe(installed);
@@ -31,6 +33,7 @@ it.effect("refuses changed build inputs, unrelated commits and non-commit argume
     for (const path of [
       "apps/web/src/app.ts",
       "infra/cloudflare/native-application.ts",
+      "infra/cloudflare/native-erasure-evidence.ts",
       "bun.lock",
     ]) {
       const result = yield* verificationRevision(trunk, installed, (args) =>

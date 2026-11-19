@@ -35,7 +35,7 @@ jobs:
   release:
     if: ${{ github.ref == 'refs/heads/trunk' && inputs.operation != 'publish-site' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: ${{ (inputs.operation == 'first-install' || inputs.operation == 'verify-erasure') && 90 || inputs.operation == 'fleet-pilot' && 45 || 30 }}
     environment: production
     env:
       NATIVE_STORAGE_HOSTS: ${{ vars.NATIVE_STORAGE_HOSTS || 'acceptance' }}

@@ -1,0 +1,27 @@
+apps/server/cloudflare/directory/oidc.test-fixture.ts
+  s_a1be23a656acf0::t_25c32c8a16e6c5 12,14,22,133-137,166-176,182-183
+apps/server/cloudflare/release-isolation/operator-keys.test.ts
+  s_a1be23a656acf0::t_f758c34b91db98 1-78
+apps/server/cloudflare/release-isolation/provider.test.ts
+  s_a1be23a656acf0::t_fac17c88d133d7 46
+apps/server/cloudflare/release-isolation/runtime.ts
+  s_a1be23a656acf0::t_05dda35edd159f 23-31,53,56
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_95a9b5f58a6f48 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4965a54f88315b7e0e26ff1dbbdc6b64bf301dec",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

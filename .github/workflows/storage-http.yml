@@ -7,6 +7,7 @@ on:
         perf/hosted-storage-cells,
         perf/canonical-performance-fixture,
         perf/frozen-d1-schema-snapshot,
+        perf/protected-comparator-preparation,
       ]
   pull_request:
     paths:
@@ -54,8 +55,10 @@ jobs:
             apps/server/cloudflare/browser-acceptance-seed.ts
           bash scripts/install-workspace.sh --ignore-scripts
           (cd baseline-d1 && bash scripts/install-workspace.sh --ignore-scripts)
-      - name: Check the comparator Worker code
-        run: bun x oxlint --deny-warnings --config .oxlintrc.json --type-aware --threads=1 scripts/infra-performance/cells/*.mjs scripts/infra-performance/cells/*.d.mts
+      - name: Check the comparator Worker code and shared budget policy
+        run: |
+          bun x oxlint --deny-warnings --config .oxlintrc.json --type-aware --threads=1 scripts/infra-performance/cells/*.mjs scripts/infra-performance/cells/*.d.mts scripts/infra-performance/d1-budget.ts
+          bun node_modules/vitest/vitest.mjs run --config scripts/vitest.config.ts scripts/infra-performance/d1-budget.test.ts --environment node
       - name: Create eight Transactions with canonical capture and verify a resumed fixture
         run: python3 scripts/infra-performance/canonical-fixture/rehearse.py --out apps/server/test-results/canonical-fixture
       - name: Measure the paired canonical HTTP read with real Sessions
@@ -80,12 +83,19 @@ jobs:
         run: |
           python3 scripts/infra-performance/cells/prepare.py --d1 baseline-d1 --calibration baseline-calibration \
             --canonical-fixture apps/server/test-results/canonical-fixture/fixture --out apps/server/test-results/canonical-mirror
+      - name: Exercise the normal unprepared pilot and verify interrupted workerd cleanup
+        run: |
+          python3 scripts/infra-performance/cells/rehearse-preparation.py \
+            --canonical apps/server/test-results/canonical-snapshot --historical apps/server/test-results/storage-http/d1 \
+            --out apps/server/test-results/storage-preparation
       - name: Preserve evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: storage-http-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
+            apps/server/test-results/storage-preparation/**/*.json
+            apps/server/test-results/storage-preparation/*.json
             apps/server/test-results/storage-http/*.json*
             apps/server/test-results/canonical-snapshot/probe.json
             apps/server/test-results/canonical-snapshot/snapshot-proof.json

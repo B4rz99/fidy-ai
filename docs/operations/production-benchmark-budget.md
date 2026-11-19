@@ -113,6 +113,27 @@ preflight. The private Ingress requires a fresh experiment key and deadline. The
 serves no cron, alarm or queue. The D1 binding, erasure bucket, and SQLite coordinator belong to
 the isolated comparator. Only the finite private Ingress may have an experiment URL.
 
+### Check a comparator before provisioning
+
+Use the ordinary pilot entry point with the verified bundle from `cells/prepare.py`:
+
+```sh
+python3 scripts/infra-performance/cells/pilot.py \
+  --bundle "$VERIFIED_D1_BUNDLE" --out apps/server/test-results/preparation-check
+```
+
+With no prepared receipt, this writes `report.json` and exits unsuccessfully before reading
+Cloudflare credentials or contacting the account. It verifies the pinned plan and full rehearsal
+digests. The budget owner checks the one-pair estimate against the experiment ceiling. An
+oversized plan reports `experiment_too_large`. A smaller plan still needs a protected preparation
+receipt and a persistent account ledger. The canonical fixture currently proves its individual
+SourceAttestations only on disposable workerd. The repository has no hosted provisioner for
+that fixture and cannot issue a protected receipt from this rehearsal.
+
+The workflow also stops a private workerd comparator after an authenticated, fixture-checked
+read, disposes the graph, and independently verifies the runner's socket and owned temporary
+directory have gone. Its `storage-preparation` artifacts record the refusals and this local cleanup.
+
 ### One hosted pair on prepared installations
 
 The protected provisioning process must provide both equivalent synthetic fixtures and their

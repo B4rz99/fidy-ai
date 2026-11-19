@@ -87,6 +87,8 @@ const eachInOrder = (items, visit) =>
 const output = process.argv[2];
 const training = process.argv[3] === "train";
 const refuse = process.argv[3] === "refuse";
+const interrupted = process.argv[3] === "interrupt-preparation";
+const interruption = new Error("Runner interruption after verified canonical setup");
 
 const disclosure = await Bun.file(resolve(output, "disclosure.json")).text();
 const origin = "https://app.fidyapp.com";
@@ -184,7 +186,8 @@ const metadata = {
   fixture: plan.verified,
   baseline: plan.baseline,
 };
-const report = resolve(output, refuse ? "refusal.json" : "probe.json");
+const reportName = interrupted ? "interruption.json" : "probe.json";
+const report = resolve(output, refuse ? "refusal.json" : reportName);
 /**
  * @param {string} path Scoped path.
  * @param {Options} options Request options.
@@ -336,6 +339,20 @@ try {
   assert.equal(handshake.status, success);
   const { binding } = session(await handshake.json());
   assert.ok(binding);
+  if (interrupted) {
+    assert.ok(expected && inspections.length === fixtureOriginalCount);
+    const reply = await request("/transactions?limit=25", {
+      headers: { cookie, "Fidy-Session-Binding": binding },
+    });
+    assert.equal(reply.status, success);
+    assert.deepEqual(await reply.json(), expected.history);
+    assert.ok(await bucket.head("recovery/generation"));
+    const endpoint = await runtime.ready;
+    assert.equal(endpoint.hostname, "127.0.0.1");
+    metadata.localPort = Number(endpoint.port);
+    metadata.result = "interrupted after verified canonical setup";
+    throw interruption;
+  }
   if (refuse) {
     const denied = await source("/transactions?limit=25", {
       headers: { cookie, "Fidy-Session-Binding": binding },
@@ -428,7 +445,13 @@ try {
     }
     Object.assign(metadata, { result: "passed", responseSha256, auditReads: counts.n });
   }
+} catch (error) {
+  if (!interrupted || error !== interruption) throw error;
 } finally {
-  await Bun.write(report, JSON.stringify(metadata, null, 2));
-  await runtime.dispose();
+  try {
+    await runtime.dispose();
+    if (interrupted) metadata.disposed = true;
+  } finally {
+    await Bun.write(report, JSON.stringify(metadata, null, 2));
+  }
 }

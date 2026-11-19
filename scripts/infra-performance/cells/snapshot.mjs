@@ -222,7 +222,7 @@ const seedOrder = (tables) => {
 /** @param {ReadonlyArray<Table>} tables Actual state of the migration and fixture oracle. */
 const materializedRows = (tables) => {
   const commands = [query("PRAGMA defer_foreign_keys=ON")];
-  const maximumStatementBytes = 96 * 1024;
+  const maximumStatementBytes = 98_304;
   const encoder = new TextEncoder();
   for (const table of tables) {
     // SQLite itself recreates sequence rows when copied autoincrement rows are inserted.

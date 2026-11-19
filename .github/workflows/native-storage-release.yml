@@ -1,6 +1,11 @@
 name: Release native application
 
 on:
+  pull_request:
+    paths:
+      - ".github/workflows/native-storage-release.yml"
+      - "scripts/infra-performance/deployed-fleet/**"
+      - "infra/cloudflare/native-fleet-pilot*"
   workflow_dispatch:
     inputs:
       operation:
@@ -23,10 +28,20 @@ permissions:
   contents: read
 
 concurrency:
-  group: production-deployment
+  group: ${{ github.event_name == 'workflow_dispatch' && 'production-deployment' || github.ref }}
   cancel-in-progress: false
 
 jobs:
+  fleet-pilot-test:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/infra-performance/deployed-fleet
+      - run: python3 -m unittest discover -s scripts/infra-performance/deployed-fleet
+
   release:
     if: ${{ github.ref == 'refs/heads/trunk' && inputs.operation != 'publish-site' }}
     runs-on: ubuntu-latest

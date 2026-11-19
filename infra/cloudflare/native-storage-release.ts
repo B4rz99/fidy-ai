@@ -1057,9 +1057,9 @@ const prepareDiagnostics = Effect.fn(function* (
     client
   );
 });
-const meter = (phase: "begin" | "check" | "finish" | "probe-logs" | "logs") =>
+const meter = (phase: "begin" | "check" | "finish" | "probe-logs" | "logs", ...args: string[]) =>
   releaseCommand({
-    args: ["python3", "../../scripts/infra-performance/deployed-fleet/pilot.py", phase],
+    args: ["python3", "../../scripts/infra-performance/deployed-fleet/pilot.py", phase, ...args],
     lifetime: "read-only",
   });
 const fleetPilot = Effect.fn(function* (
@@ -1111,7 +1111,11 @@ const fleetPilot = Effect.fn(function* (
       }),
     })
   );
-  yield* meter("finish");
+  const settled = yield* meter("finish", String(yield* Clock.currentTimeMillis)).pipe(
+    Effect.map((status) => status.trim()),
+    Effect.repeat({ while: (status) => status === "pending", times: 20, schedule: Schedule.spaced("15 seconds") })
+  );
+  if (settled !== "observed") return yield* Effect.fail(Error("Post-cleanup Durable Object usage unavailable"));
   if (measured._tag === "Failure") return yield* Effect.failCause(measured.cause);
   yield* meter("logs");
 });

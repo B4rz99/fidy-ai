@@ -135,25 +135,25 @@ def sample(phase):
     if origin["stage"] != "begin" or origin["revision"] != os.environ["GITHUB_SHA"]:
         raise ValueError("Missing revision-bound admission")
     before = Usage(**origin["usage"])
-    finished = int(time.time())
-    for attempt in range(21 if phase == "finish" else 1):
-        current = usage()
-        record(phase, **asdict(current))
-        delta = check_delta(before, current, int(time.time()))
-        if phase == "check":
-            if (current.reads > DAILY_READS - RESERVE_READS
-                    or current.writes > DAILY_WRITES - RESERVE_WRITES
-                    or delta["writes"] > PILOT_WRITES - 10_000
-                    or delta["reads"] > PILOT_READS - 250_000
-                    or current.sampled - before.sampled > MAX_SECONDS - 15 * 60):
-                raise ValueError("Reserve remaining work for cleanup")
-            return
-        if current.latest >= finished and delta["reads"] > 0 and delta["writes"] > 0:
-            record("delta", **delta)
-            return
-        if attempt < 20:
-            time.sleep(15)
-    raise ValueError("Post-cleanup counters missing")
+    current = usage()
+    record(phase, **asdict(current))
+    delta = check_delta(before, current, int(time.time()))
+    if phase == "check":
+        if (current.reads > DAILY_READS - RESERVE_READS
+                or current.writes > DAILY_WRITES - RESERVE_WRITES
+                or delta["writes"] > PILOT_WRITES - 10_000
+                or delta["reads"] > PILOT_READS - 250_000
+                or current.sampled - before.sampled > MAX_SECONDS - 15 * 60):
+            raise ValueError("Reserve remaining work for cleanup")
+        return
+    finished = int(sys.argv[2]) // 1000
+    if not before.sampled <= finished <= current.sampled:
+        raise ValueError("Invalid work interval")
+    if current.latest >= finished and delta["reads"] > 0 and delta["writes"] > 0:
+        record("delta", **delta)
+        print("observed")
+    else:
+        print("pending")
 
 
 if __name__ == "__main__":

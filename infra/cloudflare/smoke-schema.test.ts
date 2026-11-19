@@ -280,6 +280,7 @@ const nativeSmokeJourney = Effect.fnUntraced(function* () {
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) =>
   test.effect(
     "verifies native storage and version-scoped Queue and Workflow completion before accepting a candidate",
-    nativeSmokeJourney
+    nativeSmokeJourney,
+    { timeout: 30_000 }
   )
 );

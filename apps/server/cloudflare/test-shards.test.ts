@@ -6,19 +6,16 @@ const file = (name: string): string => `${root}/${name}.test.ts`;
 
 it("separates the two slowest suites and fills spare capacity with smaller suites", () => {
   const transactions = file("transactions/transactions");
-  const statements = file("ingestion/statement-ingestion");
-  const dashboard = file("dashboard/dashboard");
-  const pats = file("tokens/pats");
+  const statements = file("dashboard/user-store");
+  const dashboard = file("email-authentication/native-replacement");
+  const pats = file("categories/keyword-rules");
   expect(
     cloudflareTestShards({
       files: [pats, dashboard, statements, transactions],
       cloudflareRoot: root,
       count: 2,
     })
-  ).toEqual([
-    [transactions, pats],
-    [statements, dashboard],
-  ]);
+  ).toEqual([[transactions], [statements, dashboard, pats]]);
 });
 
 it("assigns new and measured files exactly once regardless of discovery order", () => {

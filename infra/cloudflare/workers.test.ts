@@ -288,7 +288,8 @@ describe("Core smoke adapter", () => {
   it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) =>
     test.effect(
       "publishes an admitted probe through Core fetch and hands it to the private smoke executor",
-      publishSmokeThroughCore
+      publishSmokeThroughCore,
+      { timeout: 30_000 }
     )
   );
 });

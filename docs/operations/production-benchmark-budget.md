@@ -40,30 +40,9 @@ safe to reuse. A replacement must demonstrate runtime budget enforcement before 
 
 The historical calibration lives at `15cfe773cd263b6a3d4e1b6e1b958f233cdde84f`. Its protected, disposable database and its SQL plan belong to the comparator. Run the documented local rehearsal from a separate checkout of that revision. Record the comparator revision, report, plan digest and measured headroom with the comparison. The release Worker graph has no D1 binding.
 
-## Local investigation while hosted work is unavailable
+## Local investigation
 
-Use native integration tests with the existing observer from the repository root:
-
-```sh
-bun node_modules/vitest/vitest.mjs run --root apps/server \
-  --config ../../scripts/infra-performance/vitest.config.ts \
-  cloudflare/public-worker-browser-entry.test.ts \
-  cloudflare/transactions/transactions.test.ts \
-  cloudflare/budgets/budgets.test.ts \
-  cloudflare/recurring-plans/recurring-plans.test.ts \
-  cloudflare/dashboard/dashboard.test.ts \
-  cloudflare/ingestion/statement-review-budget.test.ts \
-  cloudflare/tokens/pats.test.ts \
-  cloudflare/oauth-agents/oauth-management.test.ts \
-  cloudflare/subscription/subscription-queries.test.ts \
-  cloudflare/consent/browser.test.ts --silent=false
-```
-
-`INFRA_REQUEST` covers Core fetch, including bootstrap and other non-canonical transports.
-`INFRA_OWNER` covers the held owner only. The records include response stage timings when present.
-Direct Core D1 counts exclude coordinator work; host-process CPU excludes workerd. Missing stage
-timings are unavailable evidence, not zero cost. Do not combine owner and request records as though
-they were independent requests or sum nested stage durations.
+Use `bun run verify --group cloudflare-adapters` for the native owner and Queue contracts. `bun run dev:browser` exercises a synthetic User on the local native browser topology. Record host and Worker revisions, synthetic identities, measured boundaries and any missing observations when reporting timings.
 
 ### Pinned local reference
 

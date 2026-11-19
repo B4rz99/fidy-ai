@@ -110,6 +110,17 @@ const select = async (db, command) =>
       .bind(...command.params)
       .all()
   ).results;
+/** @param {D1Database} db Disposable database. */
+const physical = async (db) => {
+  try {
+    return {
+      pages: await select(db, query("PRAGMA page_count")),
+      freelist: await select(db, query("PRAGMA freelist_count")),
+    };
+  } catch {
+    return { scope: "Physical page metadata unavailable from native D1" };
+  }
+};
 /** @param {D1Database} db Restored database. @param {Query[]} batch One bounded batch. @returns {Promise<Batch>} */
 const run = async (db, batch) => {
   const results = await db.batch(batch.map((entry) => db.prepare(entry.sql).bind(...entry.params)));
@@ -239,14 +250,17 @@ try {
     "Oracle already has a User"
   );
   evidence.stage = "extract";
-  evidence.oraclePages = await select(oracle, query("PRAGMA page_count"));
-  evidence.oracleFreelist = await select(oracle, query("PRAGMA freelist_count"));
+  evidence.oraclePhysical = await physical(oracle);
   const platform = new Set(pristine.map((def) => def.name));
   const definitions = originalOrder.filter(
     (def) => !platform.has(def.name) && !def.name.startsWith("sqlite_") && def.sql !== null
   );
   const owned = schema.filter((def) => def.type === "table" && !platform.has(def.name));
-  const tables = await Promise.all(owned.map((def) => captureTable(oracle, def)));
+  /** @type {Table[]} */
+  const tables = [];
+  await serial(owned, async (def) => {
+    tables.push(await captureTable(oracle, def));
+  });
   evidence.platformObjects = Array.from(platform);
   evidence.schemaObjects = schema.map(({ type, name, tbl_name, sql }) => ({
     type,
@@ -286,12 +300,13 @@ try {
     // that differ from the final snapshot and never overwrite, disable or drop a guard.
     const remaining = new Map(table.identities.map((key, index) => [key, table.inserts[index]]));
     assert.equal(remaining.size, table.rowCount, "Seed row identity collision");
-    for (const row of existing)
+    for (const row of existing) {
       assert.equal(
         remaining.delete(digest([row])),
         true,
         "Reconstruction produced a foreign seed row"
       );
+    }
     await append(
       Array.from(remaining.values()).map((sql) => {
         assert.ok(sql);
@@ -324,8 +339,7 @@ try {
   };
   evidence.snapshot = schemaSnapshot;
   evidence.batches = applied.length;
-  evidence.restoredPages = await select(restored, query("PRAGMA page_count"));
-  evidence.restoredFreelist = await select(restored, query("PRAGMA freelist_count"));
+  evidence.restoredPhysical = await physical(restored);
   evidence.stage = "equivalent";
   await Bun.write(
     file,

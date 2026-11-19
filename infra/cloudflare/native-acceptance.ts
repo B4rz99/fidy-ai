@@ -126,7 +126,8 @@ const verifyOriginalDisclosure = Effect.fn(function* (
     return yield* Effect.fail(Error("Missing original provider signup disclosure"));
   }
 });
-const boot = Effect.fn(function* (input: Inputs, member: "smoke-1" | "smoke-2" | "erasure-1") {
+type BrowserMember = "smoke-1" | "smoke-2" | "erasure-1" | "performance-1" | "performance-2";
+const boot = Effect.fn(function* (input: Inputs, member: BrowserMember) {
   const { post, call } = runner(input),
     proof = yield* result(
       yield* post("/web/pairings", {}),
@@ -184,6 +185,17 @@ const boot = Effect.fn(function* (input: Inputs, member: "smoke-1" | "smoke-2" |
   yield* consume(yield* call("/transactions", { headers }), ok);
   yield* consume(yield* call("/transactions", { headers }, false), isolated);
   return { headers, subject, outcome: complete.status };
+});
+/** The browser receives only the WebSession of the exact closed synthetic User it just proved. */
+export const openPerformanceBrowser = Effect.fn(function* (
+  input: Pick<Inputs, "revision" | "proof" | "send">,
+  member: "performance-1" | "performance-2"
+) {
+  const user = yield* boot(
+    { ...input, origins: installedOrigins.acceptance, erasure: Option.none() },
+    member
+  );
+  return Redacted.make(user.headers.cookie.slice("__Host-fidy_session=".length));
 });
 const receipt = Effect.fn(function* (input: Inputs) {
   const { call } = runner(input);

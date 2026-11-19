@@ -1,0 +1,19 @@
+infra/cloudflare/verify-edge-policy.test.ts
+  s_e85b14fd415424::t_29dd732bd82643 14-15,45-47,51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b6f2df4e3782c110c3ad5f8a9c0c2ce21b4a12fe",
+  "prompts": {},
+  "sessions": {
+    "s_e85b14fd415424": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eecc-3a6d-7202-88a4-6766ce0233e7",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

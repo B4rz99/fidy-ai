@@ -18,7 +18,12 @@ MAX_AGE = 600
 PILOT_READS, PILOT_WRITES = 2_000_000, 75_000
 DAILY_READS, DAILY_WRITES = 5_000_000, 100_000
 RESERVE_READS, RESERVE_WRITES = 2_500_000, 10_000
-MAX_SECONDS = 40 * 60
+# Calibrated one-User admission includes the entire known 36-User physical rehearsal.
+SIGNUP_READS, SIGNUP_WRITES = 1_661_321, 70_639
+CLEANUP_READS, CLEANUP_WRITES = 250_000, 10_000
+MAX_SECONDS = 100 * 60
+SIGNUP_SECONDS = 75 * 60
+CLEANUP_SECONDS = 35 * 60
 
 
 @dataclass(frozen=True)
@@ -56,6 +61,27 @@ def check_delta(before, current, now):
     return {"reads": reads, "writes": writes}
 
 
+def remaining_seconds(now):
+    started = int(os.environ["FLEET_PILOT_STARTED_AT"])
+    if not 0 < started <= now or started // DAY != now // DAY:
+        raise ValueError("Missing same-day protected job start")
+    return min(started + MAX_SECONDS - now, DAY - now % DAY)
+
+
+def require_room(phase, current, delta, now):
+    seconds = remaining_seconds(now)
+    reads = min(PILOT_READS - delta["reads"], DAILY_READS - RESERVE_READS - current.reads)
+    writes = min(PILOT_WRITES - delta["writes"], DAILY_WRITES - RESERVE_WRITES - current.writes)
+    if phase == "signup":
+        if reads < SIGNUP_READS or writes < SIGNUP_WRITES or seconds < SIGNUP_SECONDS:
+            raise ValueError("Insufficient enrollment, two-window and cleanup reserve")
+    elif phase == "check":
+        if reads < CLEANUP_READS or writes < CLEANUP_WRITES or seconds < CLEANUP_SECONDS:
+            raise ValueError("Reserve remaining work for cleanup")
+    elif reads <= 0 or writes <= 0 or seconds < 7 * 60:
+        raise ValueError("No remaining allowance for cleanup lease")
+
+
 def iso(epoch):
     return datetime.fromtimestamp(epoch, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -91,21 +117,24 @@ def usage():
     return Usage(now, int(stamp.timestamp()), totals["sum"]["rowsRead"], totals["sum"]["rowsWritten"])
 
 
-def sample(phase):
+def sample(phase, installed, finished_ms=None):
     if (os.environ.get("GITHUB_REF") != "refs/heads/trunk"
             or os.environ.get("GITHUB_EVENT_NAME") != "workflow_dispatch"
             or os.environ.get("NATIVE_STORAGE_ADMISSION") != "closed"
             or not re.fullmatch("[a-f0-9]{40}", os.environ.get("RELEASE_GIT_SHA", ""))
-            or os.environ["RELEASE_GIT_SHA"] != os.environ.get("GITHUB_SHA")):
+            or os.environ["RELEASE_GIT_SHA"] != os.environ.get("GITHUB_SHA")
+            or not re.fullmatch("[a-f0-9]{40}", installed)
+            or installed != (os.environ.get("EXPECTED_INSTALLED_REVISION") or os.environ["GITHUB_SHA"])):
         raise ValueError("Closed protected dispatch at the exact source revision required")
+    revisions = {"revision": installed, "verifierRevision": os.environ["GITHUB_SHA"]}
     directory = Path(os.environ["RUNNER_TEMP"])
     journal = directory / "native-fleet-meter.jsonl"
     def record(stage, **values):
         with journal.open("a") as out:
-            print(json.dumps({"stage": stage, "revision": os.environ["GITHUB_SHA"], **values}), file=out)
+            print(json.dumps({"stage": stage, **revisions, **values}), file=out)
     if phase in ("probe-logs", "logs"):
         evidence = json.loads(Path(os.environ["SMOKE_ATTESTATION_FILE"] + ".fleet").read_text())
-        if evidence["revision"] != os.environ["GITHUB_SHA"]:
+        if any(evidence.get(key) != value for key, value in revisions.items()):
             raise ValueError("Foreign observation revision")
         if phase == "probe-logs":
             now = int(time.time() * 1000)
@@ -124,29 +153,26 @@ def sample(phase):
     if phase == "begin":
         current = usage()
         with journal.open("x") as out:
-            print(json.dumps({"stage": phase, "revision": os.environ["GITHUB_SHA"], "usage": asdict(current),
+            print(json.dumps({"stage": phase, **revisions, "usage": asdict(current),
                               "pilotReads": PILOT_READS, "pilotWrites": PILOT_WRITES}), file=out)
-        admit(current, int(time.time()))
+        now = int(time.time())
+        admit(current, now)
+        require_room("signup", current, {"reads": 0, "writes": 0}, now)
         return
-    if phase not in ("check", "finish"):
+    if phase not in ("signup", "check", "cleanup", "finish"):
         raise ValueError("Invalid metering phase")
     with journal.open() as source:
         origin = json.loads(source.readline())
-    if origin["stage"] != "begin" or origin["revision"] != os.environ["GITHUB_SHA"]:
+    if origin["stage"] != "begin" or any(origin.get(key) != value for key, value in revisions.items()):
         raise ValueError("Missing revision-bound admission")
     before = Usage(**origin["usage"])
     current = usage()
     record(phase, **asdict(current))
     delta = check_delta(before, current, int(time.time()))
-    if phase == "check":
-        if (current.reads > DAILY_READS - RESERVE_READS
-                or current.writes > DAILY_WRITES - RESERVE_WRITES
-                or delta["writes"] > PILOT_WRITES - 10_000
-                or delta["reads"] > PILOT_READS - 250_000
-                or current.sampled - before.sampled > MAX_SECONDS - 15 * 60):
-            raise ValueError("Reserve remaining work for cleanup")
+    if phase != "finish":
+        require_room(phase, current, delta, int(time.time()))
         return
-    finished = int(sys.argv[2]) // 1000
+    finished = int(finished_ms) // 1000
     if not before.sampled <= finished <= current.sampled:
         raise ValueError("Invalid work interval")
     if current.latest >= finished and delta["reads"] > 0 and delta["writes"] > 0:
@@ -158,10 +184,10 @@ def sample(phase):
 
 if __name__ == "__main__":
     try:
-        sample(sys.argv[1])
+        sample(*sys.argv[1:])
     except Exception as exc:
-        phase = sys.argv[1] if len(sys.argv) == 2 else "finish"
-        if "RUNNER_TEMP" in os.environ and phase in ("begin", "check", "logs", "finish", "probe-logs"):
+        phase = sys.argv[1] if len(sys.argv) > 1 else None
+        if "RUNNER_TEMP" in os.environ and phase in ("begin", "signup", "check", "cleanup", "logs", "finish", "probe-logs"):
             with (Path(os.environ["RUNNER_TEMP"]) / "native-fleet-refusal.jsonl").open("a") as out:
                 print(json.dumps({"phase": phase, "error": type(exc).__name__}), file=out)
         sys.exit("Fleet pilot meter unavailable (" + type(exc).__name__ + ")")

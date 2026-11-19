@@ -7,8 +7,10 @@ on:
       - ".github/workflows/native-fleet-pilot-check.yml"
       - "infra/cloudflare/native-acceptance.ts"
       - "infra/cloudflare/native-storage-release.ts"
+      - "infra/cloudflare/native-erasure.ts"
       - "scripts/infra-performance/deployed-fleet/**"
       - "infra/cloudflare/native-fleet-pilot*"
+      - "infra/cloudflare/installed-verification-revision*"
 
 permissions:
   contents: read
@@ -24,14 +26,17 @@ jobs:
             /*
             !/.repos/
           sparse-checkout-cone-mode: false
-      - run: python3 -m unittest discover -s scripts/infra-performance/deployed-fleet
       - uses: ./.github/actions/bun-install
-      - run: bun run --cwd infra/cloudflare test -- native-fleet-pilot.test.ts native-erasure-evidence.test.ts
+      - name: Verify the pinned combined release policy
+        run: bun infra/cloudflare/verify-edge-policy.ts
+      - run: bun run --cwd infra/cloudflare test -- installed-verification-revision.test.ts
+      - run: python3 -m unittest discover -s scripts/infra-performance/deployed-fleet
+      - run: bun run --cwd infra/cloudflare test -- native-fleet-pilot.test.ts native-erasure-evidence.test.ts native-erasure-continuation.test.ts
       - name: Check release types
         run: bun node_modules/typescript/bin/tsc -b infra/cloudflare
       - name: Check pilot conventions and release dispatch
         run: |
-          bun x --no-install oxlint infra/cloudflare/native-{fleet-pilot,fleet-pilot.test,acceptance,storage-release}.ts
+          bun x --no-install oxlint infra/cloudflare/native-{fleet-pilot,fleet-pilot.test,acceptance,erasure,storage-release}.ts
           bun run --cwd apps/web test -- scripts/production-workflow.test.ts
       - name: Check formatting
-        run: bun x --no-install oxfmt --check infra/cloudflare/native-{fleet-pilot,fleet-pilot.test,acceptance,storage-release}.ts .github/workflows/native-storage-release.yml
+        run: bun x --no-install oxfmt --check infra/cloudflare/native-{fleet-pilot,fleet-pilot.test,acceptance,erasure,storage-release}.ts .github/workflows/native-storage-release.yml

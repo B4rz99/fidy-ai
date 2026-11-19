@@ -11,8 +11,8 @@ import { verifyInstalledWebsite } from "./native-deployed-web";
 import { inspectDeployedEdge } from "./native-deployed-edge";
 import { inspectNativeResources, verifyDeployedVersion } from "./native-deployed-graph";
 import type { NativeRole } from "./native-graph";
-import { runFleetPilot } from "./native-fleet-pilot";
 import { continueAdmittedErasure } from "./native-erasure-continuation";
+import { runFleetPilot } from "./native-fleet-pilot";
 import { admittedErasureLogins, exerciseClosedUsers, fleetBrowser } from "./native-acceptance";
 import { installedOrigins } from "@fidy/server/browser-transport";
 import { verifyNativeEdge } from "./native-edge";
@@ -645,14 +645,7 @@ const verifyAdmittedErasure = Effect.fn(function* (
     })
   );
 });
-const verifyFirstInstall = Effect.fn(function* (
-  verifier: Config,
-  client: HttpClient.HttpClient,
-  {
-    port,
-    operation,
-  }: { port: ReleasePort; operation: "verify" | "verify-erasure" | "continue-erasure" }
-) {
+const installedConfig = Effect.fn(function* (verifier: Config) {
   const requested = yield* ReleaseConfig.String("EXPECTED_INSTALLED_REVISION").pipe(
     ReleaseConfig.withDefault("")
   );
@@ -666,7 +659,17 @@ const verifyFirstInstall = Effect.fn(function* (
         })
     )
   );
-  const env = { ...verifier, revision };
+  return { ...verifier, revision };
+});
+const verifyFirstInstall = Effect.fn(function* (
+  verifier: Config,
+  client: HttpClient.HttpClient,
+  {
+    port,
+    operation,
+  }: { port: ReleasePort; operation: "verify" | "verify-erasure" | "continue-erasure" }
+) {
+  const env = yield* installedConfig(verifier);
   const installed = yield* installedRelease(env, client, {
     port,
     staging: false,
@@ -1242,36 +1245,73 @@ const prepareDiagnostics = Effect.fn(function* (
   );
 });
 const meter = (
-  phase: "begin" | "check" | "finish" | "probe-logs" | "logs",
+  revision: string,
+  phase: "begin" | "signup" | "check" | "cleanup" | "finish" | "probe-logs" | "logs",
   ...args: string[]
 ): Effect.Effect<string, ReleaseFailure> =>
   releaseCommand({
-    args: ["python3", "../../scripts/infra-performance/deployed-fleet/pilot.py", phase, ...args],
+    args: [
+      "python3",
+      "../../scripts/infra-performance/deployed-fleet/pilot.py",
+      phase,
+      revision,
+      ...args,
+    ],
     lifetime: "read-only",
   });
-const settleFleetMeter = Effect.gen(function* () {
-  const settled = yield* meter("finish", String(yield* Clock.currentTimeMillis)).pipe(
+const settleFleetMeter = Effect.fn(function* (revision: string) {
+  const settled = yield* meter(revision, "finish", String(yield* Clock.currentTimeMillis)).pipe(
     Effect.map((status) => status.trim()),
     Effect.repeat({
       while: (status) => status === "pending",
       times: 20,
       schedule: Schedule.spaced("15 seconds"),
-    })
+    }),
+    Effect.timeout("6 minutes")
   );
   if (settled !== "observed") {
     return yield* Effect.fail(Error("Post-cleanup Durable Object usage unavailable"));
   }
 });
-const fleetPilot = Effect.fn(function* (
+const fleetCheckpoints = Effect.fn(function* (
   env: Config,
+  verifierRevision: string,
+  installed: Effect.Success<ReturnType<typeof installedRelease>>
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const events: Readonly<Record<string, string | number>>[] = [];
+  const record = (event: Readonly<Record<string, string | number>>): Effect.Effect<void, Error> => {
+    events.push(event);
+    const path = env.smokeAttestationFile + ".fleet";
+    return fs
+      .writeFileString(
+        path + ".next",
+        encodeJson({
+          revision: env.revision,
+          verifierRevision,
+          coreVersion: installed.coreVersionId,
+          publicVersion: installed.publicVersionId,
+          userNamespace: installed.userNamespace,
+          requestedPilotUsers: 1,
+          fullFleet: "missing",
+          events,
+        })
+      )
+      .pipe(Effect.andThen(fs.rename(path + ".next", path)));
+  };
+  return record;
+});
+const fleetPilot = Effect.fn(function* (
+  verifier: Config,
   client: HttpClient.HttpClient,
   port: ReleasePort
 ) {
-  yield* meter("begin");
+  const env = yield* installedConfig(verifier);
+  yield* meter(env.revision, "begin");
   const installed = yield* installedRelease(env, client, {
     port,
     staging: false,
-    verifierRevision: env.revision,
+    verifierRevision: verifier.revision,
   });
   const browser = fleetBrowser({
     revision: env.revision,
@@ -1280,28 +1320,21 @@ const fleetPilot = Effect.fn(function* (
     send: acceptanceSend(client),
     erasure: Option.none(),
   });
-  const events: Readonly<Record<string, string | number>>[] = [];
-  const record = (event: Readonly<Record<string, string | number>>): Effect.Effect<void, Error> => {
-    events.push(event);
-    return writeFile(
-      env.smokeAttestationFile + ".fleet",
-      encodeJson({
-        revision: env.revision,
-        coreVersion: installed.coreVersionId,
-        publicVersion: installed.publicVersionId,
-        userNamespace: installed.userNamespace,
-        requestedPilotUsers: 1,
-        fullFleet: "missing",
-        events,
-      })
-    );
-  };
+  const record = yield* fleetCheckpoints(env, verifier.revision, installed);
   yield* record({ stage: "verified-release" });
-  yield* meter("probe-logs");
+  yield* meter(env.revision, "probe-logs");
   const measured = yield* Effect.exit(
     runFleetPilot({
       inventory: () => readUserObjects(accountReader(env, client), installed.userNamespace),
-      register: () => meter("check").pipe(Effect.andThen(browser.register())),
+      beforeSignup: () => meter(env.revision, "signup").pipe(Effect.asVoid),
+      register: browser.register,
+      renewCleanup: () =>
+        meter(env.revision, "cleanup").pipe(
+          Effect.matchEffect({
+            onFailure: () => record({ stage: "cleanup-lease-refused" }),
+            onSuccess: browser.renew,
+          })
+        ),
       login: browser.login,
       renew: browser.renew,
       record,
@@ -1309,16 +1342,16 @@ const fleetPilot = Effect.fn(function* (
         const start = yield* Clock.currentTimeMillis;
         const observationMs = 600_000;
         while ((yield* Clock.currentTimeMillis) - start < observationMs) {
-          yield* meter("check");
+          yield* meter(env.revision, "check");
           yield* browser.renew();
           yield* Effect.sleep("25 seconds");
         }
       }),
     })
   );
-  yield* settleFleetMeter;
+  yield* settleFleetMeter(env.revision);
   if (measured._tag === "Failure") return yield* Effect.failCause(measured.cause);
-  yield* meter("logs");
+  yield* meter(env.revision, "logs");
 });
 const commands = {
   "fleet-pilot": fleetPilot,

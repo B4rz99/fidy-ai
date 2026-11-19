@@ -256,17 +256,20 @@ const routeProvider = Effect.fn(function* (
       { method: "POST", headers: { "content-type": "application/json" }, body, signal }
     )
   );
-  if (complete && response.ok) {
-    yield* sql.withTransaction(
+  if (complete) {
+    const fenced = yield* sql.withTransaction(
       Effect.gen(function* () {
         if ((yield* sql`SELECT 1 FROM erasure_barriers WHERE user_id=${result.user}`).length > 0) {
-          return;
+          return true;
         }
+        if (!response.ok) return false;
         yield* sql`UPDATE provider_attempts SET acknowledged=1 WHERE id=${result.id} AND state='bound'`;
         yield* sql`UPDATE provider_routes SET established=1 WHERE creation_attempt=${result.id} AND user_id=${result.user}`;
         yield* sql`UPDATE whatsapp_routes SET established=1 WHERE attempt_id=${result.id} AND user_id=${result.user}`;
+        return false;
       })
     );
+    if (fenced) return invalidProvider();
   }
   return response;
 });

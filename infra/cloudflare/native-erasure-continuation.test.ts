@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest";
-import { Effect, Fiber, Redacted } from "effect";
+import { Clock, Effect, Fiber, Redacted } from "effect";
 import { installedOrigins } from "@fidy/server/browser-transport";
 import { admittedErasureLogins } from "./native-acceptance";
 import { TestClock } from "effect/testing";
@@ -94,6 +94,7 @@ it.effect("proves refusal only for the verified erased provider subject at login
       providerStatus = "verified"
     ): { driver: ReturnType<typeof admittedErasureLogins>; paths: Array<string> } => {
       const paths: Array<string> = [];
+      const expiresAt = "1970-01-01T00:10:00.000Z";
       const driver = admittedErasureLogins({
         revision,
         origins,
@@ -103,7 +104,13 @@ it.effect("proves refusal only for the verified erased provider subject at login
           paths.push(url.pathname);
           switch (url.pathname) {
             case "/web/pairings":
-              return Response.json({ pairingId: "test-pairing", privateVerifier: "test-verifier" });
+              return Response.json({ pairingId: "test-pairing", privateVerifier: "test-verifier", expiresAt });
+            case "/web/pairings/redeem": {
+              expect(yield* Effect.tryPromise(() => request.json())).toEqual({ pairingId: "test-pairing", privateVerifier: "test-verifier" });
+              return (yield* Clock.currentTimeMillis) < Date.parse(expiresAt)
+                ? Response.json({status:"pending_approval", expiresAt, pollingIntervalSeconds:5}, {status:202})
+                : Response.json({error:{code:"pairing_invalid", message:"Esta vinculación ya no es válida. Inicia de nuevo."}}, {status:400});
+            }
             case "/web/providers/google/start": {
               expect(yield* Effect.tryPromise(() => request.json())).toMatchObject({
                 intent: "login",
@@ -137,14 +144,17 @@ it.effect("proves refusal only for the verified erased provider subject at login
       return { driver, paths };
     };
     const accepted = verify(400, "invalid");
-    yield* accepted.driver.refused();
-    expect(accepted.paths.at(-1)).toBe("/web/providers/google/complete");
+    const pending = verify(503, "unavailable");
+    const positive = yield* Effect.all([accepted.driver.refused(() => Effect.void), pending.driver.refused(() => Effect.void)], { concurrency:2 }).pipe(Effect.forkChild);
+    yield* TestClock.adjust("11 minutes");
+    expect(yield* Fiber.join(positive)).toEqual(["invalid","unavailable"]);
+    expect(accepted.paths.slice(-2)).toEqual(["/web/pairings/redeem", "/web/pairings/redeem"]);
     for (const result of [
       verify(401, "invalid"),
       verify(200, "approved"),
       verify(400, "invalid", "pending"),
     ]) {
-      expect(yield* Effect.isFailure(result.driver.refused())).toBe(true);
+      expect(yield* Effect.isFailure(result.driver.refused(() => Effect.void))).toBe(true);
     }
   })
 );

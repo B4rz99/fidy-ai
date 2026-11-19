@@ -6,7 +6,7 @@ export type Frame = {
   zeroOnly: boolean;
   closed: boolean;
   inflight: number;
-  plan: Bounds | undefined;
+  plan: Bounds;
   used: Cost;
   pending: Cost;
   calls: Call[];
@@ -27,7 +27,7 @@ export type Database = {
   prepare(sql: string): Statement;
   batch(statements: Statement[]): Promise<StatementReply[]>;
   withSession(...args: string[]): Database;
-  getBookmark(): string | null;
+  getBookmark(): ReturnType<D1DatabaseSession["getBookmark"]>;
 };
 export type Namespace = {
   idFromName(name: string): unknown;
@@ -38,8 +38,8 @@ export type Namespace = {
 };
 export type CoreEnvironment = {
   DB: Database;
-  USER_TRANSACTION_COORDINATOR?: Namespace;
-  ERASURE_REGISTRY_COORDINATOR?: Namespace;
+  USER_TRANSACTION_COORDINATOR: Namespace;
+  ERASURE_REGISTRY_COORDINATOR: Namespace;
 };
 export type IngressEnvironment = {
   EXPERIMENT_DEADLINE: string;

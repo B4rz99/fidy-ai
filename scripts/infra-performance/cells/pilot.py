@@ -85,11 +85,14 @@ def confirmed(receipt, account):
         address = cloudflare(worker + "/subdomain")
         if address.get("enabled") is not (role == "ingress") or address.get("previews_enabled") is not False:
             raise Refused("Unexpected disposable Worker exposure")
-        settings[role] = {b["name"]: b for b in cloudflare(worker + "/settings")["bindings"]}
         item = cloudflare(worker + "/deployments")["deployments"][0]
         version, = item["versions"]
         if version["version_id"] != receipt["versions"][role] or version["percentage"] != 100:
             raise Refused("Disposable Worker version mismatch")
+        deployed = cloudflare(worker + "/versions/" + str(UUID(version["version_id"])))
+        if deployed["id"] != version["version_id"]:
+            raise Refused("Cloudflare returned another Worker version")
+        settings[role] = {b["name"]: b for b in deployed["resources"]["bindings"]}
     database = cloudflare(base + "/d1/database/" + str(UUID(receipt["databaseId"])))
     if database["name"] != tag or database["uuid"] != receipt["databaseId"]:
         raise Refused("Unexpected D1 database")

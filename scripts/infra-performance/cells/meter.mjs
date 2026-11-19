@@ -1,7 +1,7 @@
 // Bundled only in the disposable comparator. The original frozen application owns all SQL.
 import { AsyncLocalStorage } from "node:async_hooks";
-import { core, UserTransactionCoordinator as PinnedCoordinator } from "./frozen-core.mjs";
-import { limits } from "./configured-limits.mjs";
+import { UserTransactionCoordinator as PinnedCoordinator, core } from "./frozen-core.mjs";
+import { limits, training } from "./configured-limits.mjs";
 
 /** @import { Bounds, Cost, CoreEnvironment, Database, Frame, Statement, StatementReply } from "./contracts.d.mts" */
 
@@ -12,7 +12,6 @@ const active = new AsyncLocalStorage();
 const nativeStatements = new WeakMap();
 /** @type {ReadonlyArray<keyof Cost>} */
 const fields = ["rowsRead", "rowsWritten"];
-const training = limits === null;
 const receipt = "x-fidy-comparison-cost";
 
 const context = () => {
@@ -46,7 +45,7 @@ const digest = async (sql) => {
  */
 const reserve = (frame, key) => {
   if (training) return null;
-  const cap = frame.plan?.statements[key];
+  const cap = frame.plan.statements[key];
   if (
     !cap ||
     fields.some(
@@ -164,7 +163,6 @@ const guardedEnvironment = (env) => {
   const namespaces = ["USER_TRANSACTION_COORDINATOR", "ERASURE_REGISTRY_COORDINATOR"];
   for (const name of namespaces) {
     const namespace = env[name];
-    if (!namespace) continue;
     isolated[name] = {
       idFromName: (...args) => namespace.idFromName(...args),
       getByName: (owner, options) => ({
@@ -209,7 +207,7 @@ const measured = async (request, run) => {
     zeroOnly,
     closed: false,
     inflight: 0,
-    plan: limits?.[route],
+    plan: limits[route] ?? { maximum: zero(), statements: {} },
     used: zero(),
     pending: zero(),
     calls: [],

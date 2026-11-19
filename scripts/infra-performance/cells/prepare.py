@@ -65,7 +65,9 @@ def main():
     (out / "meter.mjs").write_bytes((HERE / "meter.mjs").read_bytes())
     (out / "limits.json").write_text("null")
     for mode in ("train", "bounded"):
-        (out / "configured-limits.mjs").write_text("export const limits = " + (out / "limits.json").read_text() + ";")
+        limits = {} if mode == "train" else json.loads((out / "limits.json").read_text())
+        (out / "configured-limits.mjs").write_text("export const training = " + json.dumps(mode == "train")
+                                                 + "; export const limits = " + json.dumps(limits) + ";")
         subprocess.run(["bun", "build", "core-entry.mjs", "--target=browser", "--external=cloudflare:workers", "--external=node:*",
                         "--outfile", "metered-core.mjs"], cwd=out, check=True)
         subprocess.run(["bun", str(HERE / "probe.mjs"), str(out), mode], cwd=root, check=True)

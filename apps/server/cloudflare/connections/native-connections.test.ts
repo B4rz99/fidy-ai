@@ -37,8 +37,9 @@ const inspectActiveConnection = Effect.fn(function* (
   expect(result.next).toEqual([]);
   expect((yield* native(() => journey.browser(1, path))).status).toBe(404);
 });
-const runningSynchronization = Effect.fn(function* () {
-  const journey = yield* makeNativeTransactionJourney(undefined, nativeConnectionPlatform);
+const startBankAttempt = Effect.fn(function* (
+  journey: Effect.Success<typeof nativeTransactionJourney>
+) {
   const send = (path: string, body: unknown): Effect.Effect<Response> =>
     native(() =>
       journey.send(
@@ -72,18 +73,24 @@ const runningSynchronization = Effect.fn(function* () {
       .then(Schema.decodeUnknownSync(Schema.Struct({ state: Schema.String, calls: Schema.Int })));
   const state = (yield* native(stats)).state;
   const callback = (
-    subject: typeof alice
+    subject: typeof alice,
+    code = "fixture"
   ): Effect.Effect<Awaited<ReturnType<Miniflare["dispatchFetch"]>>> =>
     native(() =>
       journey.runtime.dispatchFetch(
-        "https://api.fidyapp.com/connections/bancolombia/sandbox/callback?code=fixture&state=" +
-          state,
+        "https://api.fidyapp.com/connections/bancolombia/sandbox/callback?" +
+          new URLSearchParams({ code, state }),
         {
           headers: { cookie: "__Host-fidy_session=" + subject.bearer },
           redirect: "manual",
         }
       )
     );
+  return { provider, stats, callback };
+});
+const runningSynchronization = Effect.fn(function* () {
+  const journey = yield* makeNativeTransactionJourney(undefined, nativeConnectionPlatform);
+  const { provider, stats, callback } = yield* startBankAttempt(journey);
   expect((yield* callback(bob)).status).toBe(303);
   expect(
     yield* native(() => journey.exec("SELECT count(*) AS count FROM connection_grants"))
@@ -121,7 +128,74 @@ const runningSynchronization = Effect.fn(function* () {
     );
   return { journey, stats, provider, resume, facts, packet };
 });
+const rejectedGrantJourney = Effect.gen(function* () {
+  const journey = yield* makeNativeTransactionJourney(undefined, nativeConnectionPlatform);
+  const first = yield* startBankAttempt(journey);
+  expect((yield* first.callback(alice, "reject-held")).status).toBe(303);
+  const grants =
+    "SELECT attempt_id,state,envelope IS NOT NULL AS held,cleaned_at_ms IS NOT NULL AS cleaned FROM connection_grants ORDER BY rowid";
+  const [failed] = yield* Schema.decodeUnknownEffect(
+    Schema.Tuple([
+      Schema.Struct({
+        attempt_id: Schema.String,
+        state: Schema.Literal("cleanup_required"),
+        held: Schema.Literal(1),
+        cleaned: Schema.Literal(0),
+      }),
+    ])
+  )(yield* native(() => journey.exec(grants)));
+  expect(yield* native(() => journey.exec("SELECT state FROM connections"))).toEqual([
+    { state: "Action required" },
+  ]);
+  const newer = yield* startBankAttempt(journey);
+  expect((yield* newer.callback(alice)).status).toBe(303);
+  expect((yield* first.callback(alice, "reject-held")).status).toBe(303);
+  expect(yield* native(() => journey.exec(grants))).toMatchObject([
+    { attempt_id: failed.attempt_id, state: "cleanup_required", held: 1 },
+    { state: "active", held: 1, cleaned: 0 },
+  ]);
+  yield* native(() => newer.provider.fetch("https://fixture.invalid/release"));
+  yield* native(() =>
+    expect
+      .poll(
+        () =>
+          journey.exec(
+            "SELECT cleanup_claim IS NULL AS released,cleanup_access_seen AS observed,cleanup_after_ms>0 AS deferred FROM connection_grants WHERE attempt_id=?",
+            failed.attempt_id
+          ),
+        { timeout: 5000 }
+      )
+      .toEqual([{ released: 1, observed: 1, deferred: 1 }])
+  );
+  yield* native(() => newer.provider.fetch("https://fixture.invalid/allow-cleanup"));
+  yield* native(() =>
+    journey.exec(
+      "UPDATE connection_grants SET cleanup_after_ms=0 WHERE attempt_id=?",
+      failed.attempt_id
+    )
+  );
+  const users = yield* native(() =>
+    journey.runtime.getDurableObjectNamespace("USER_STORE", "core")
+  );
+  const recovery = yield* native(() =>
+    users.getByName(alice.user).fetch("https://fixture.invalid/connection-recovery")
+  );
+  expect(recovery.status).toBe(204);
+  expect(yield* native(() => journey.exec(grants))).toMatchObject([
+    { attempt_id: failed.attempt_id, state: "cleanup_required", held: 0, cleaned: 1 },
+    { state: "active", held: 1, cleaned: 0 },
+  ]);
+  const reply = yield* native(() => newer.provider.fetch("https://fixture.invalid/status"));
+  expect(yield* native(() => reply.json())).toMatchObject({
+    lastRevoked: "failed",
+    revocations: 1,
+  });
+});
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
+  test.effect(
+    "quarantines a rejected bank exchange and revokes only its held generation after a later activation",
+    () => rejectedGrantJourney
+  );
   test.effect("discovers the gated institution through its User and audits the read locally", () =>
     Effect.gen(function* () {
       const journey = yield* nativeTransactionJourney;

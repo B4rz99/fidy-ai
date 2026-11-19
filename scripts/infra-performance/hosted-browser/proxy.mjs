@@ -31,11 +31,18 @@ const reads = new Set([
   "/web/consent/authorization",
   "/web/subscription",
 ]);
-/** @param {string | null} method @param {string} path */
+/**
+ * @param {string | null} method Expected HTTP method.
+ * @param {string} path Exact API pathname.
+ */
 const finiteJourney = (method, path) =>
   (method === "GET" && reads.has(path)) || (method === "PUT" && path === target);
 
-/** @param {Request} incoming @param {URL} url @param {Origins} origins */
+/**
+ * @param {Request} incoming Request received from the browser.
+ * @param {URL} url Original request URL.
+ * @param {Origins} origins Installed web and API host pair.
+ */
 const admitted = (incoming, url, origins) => {
   const method =
     incoming.method === "OPTIONS"
@@ -48,7 +55,11 @@ const admitted = (incoming, url, origins) => {
   );
 };
 
-/** @param {Request} incoming @param {URL} url @param {AcceptanceEnvironment | undefined} environment */
+/**
+ * @param {Request} incoming Request received from the browser.
+ * @param {URL} url Original request URL.
+ * @param {AcceptanceEnvironment | undefined} environment Closed native release settings.
+ */
 const outbound = async (incoming, url, environment) => {
   const headers = new Headers(incoming.headers);
   for (const name of [
@@ -82,7 +93,9 @@ const outbound = async (incoming, url, environment) => {
   return request;
 };
 
-/** @param {ProxySettings} settings */
+/**
+ * @param {ProxySettings} settings Bounded transport and release settings.
+ */
 export const protectedBrowserProxy = ({ origins, environment, tls, forward }) => {
   if (!environment && !forward) {
     throw Error("The D1 browser requires an admitted metered transport");

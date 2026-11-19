@@ -40,7 +40,9 @@ const changedTransaction = Schema.decodeUnknownSync(
   })
 );
 
-/** @param {boolean} calibration */
+/**
+ * @param {boolean} calibration Whether this is the eight-original calibration fixture.
+ */
 const expectedRows = (calibration) => {
   return Array.from({ length: calibration ? productionPage : ordinaryPage }, (_, index) => {
     const ordinal = index === 0 ? 0 : index + 1;
@@ -51,7 +53,10 @@ const expectedRows = (calibration) => {
   });
 };
 
-/** @param {ReturnType<typeof historyPage>} initial @param {boolean} calibration */
+/**
+ * @param {ReturnType<typeof historyPage>} initial First verified history response.
+ * @param {boolean} calibration Whether this is the eight-original calibration fixture.
+ */
 const verifySeededPage = (initial, calibration) => {
   assert.equal(initial.data.length, calibration ? productionPage : ordinaryPage);
   assert.deepEqual(
@@ -87,14 +92,21 @@ const bootstrap = Schema.decodeUnknownSync(
     initial: Schema.Struct({ transactions: Schema.Struct({ page: Schema.Unknown }) }),
   })
 );
-/** @param {Journey} input @param {string} method @param {string} path */
+/**
+ * @param {Journey} input Browser journey configuration.
+ * @param {string} method Expected HTTP method.
+ * @param {string} path Exact API pathname.
+ */
 const responseFor = ({ page, api }, method, path) =>
   page.waitForResponse((reply) => {
     const url = new URL(reply.url());
     return reply.request().method() === method && url.origin === api && url.pathname === path;
   });
 // ResponseEnd is measured from Chromium request start through body completion. It never subtracts RTT.
-/** @param {Journey} input @param {string} label Expected visible counterparty. */
+/**
+ * @param {Journey} input Browser journey configuration.
+ * @param {string} label Expected visible counterparty.
+ */
 const ready = async ({ page, calibration }, label) => {
   const expected = expectedRows(calibration).map((row) =>
     row.id === targetId ? { ...row, label } : row
@@ -120,24 +132,26 @@ const ready = async ({ page, calibration }, label) => {
     () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
   );
 };
-/** @param {Journey} input */
+/**
+ * @param {Journey} input Browser journey configuration.
+ */
 const startApplication = async (input) => {
   const { page, ledger, api, calibration, observeStartup, offered, completed } = input;
   process.stderr.write("REFERENCE_STAGE bootstrap\n");
   // The first page may arrive inside the real session bootstrap. An explicit historical
   // month can instead require a canonical read. Inspect only responses the app requested.
-  /** @type {BrowserResponse[]} */
-  const startupResponses = [];
-  /** @param {BrowserResponse} reply */
+  /** @type {{ history?: BrowserResponse, bootstrap?: BrowserResponse }} */
+  const responses = {};
+  /** @param {BrowserResponse} reply Observed startup response. */
   const captureStartup = (reply) => {
     const url = new URL(reply.url());
     if (reply.request().method() !== "GET" || url.origin !== api) return;
+    if (url.pathname === "/transactions") responses.history = reply;
     if (
-      url.pathname === "/transactions" ||
-      (url.pathname === "/web/session/binding" &&
-        url.searchParams.get("context") === "transactions")
+      url.pathname === "/web/session/binding" &&
+      url.searchParams.get("context") === "transactions"
     ) {
-      startupResponses.push(reply);
+      responses.bootstrap = reply;
     }
   };
   page.on("response", captureStartup);
@@ -147,10 +161,8 @@ const startApplication = async (input) => {
   await ready(input, "Evaluación 2");
   const startupMs = performance.now() - booting;
   page.off("response", captureStartup);
-  const direct = startupResponses.findLast(
-    (reply) => new URL(reply.url()).pathname === "/transactions"
-  );
-  const reply = direct ?? startupResponses.at(-1);
+  const direct = responses.history;
+  const reply = direct ?? responses.bootstrap;
   assert.ok(reply, "Application startup did not load Transaction history");
   const context = await observeStartup(reply);
   const startup = historyPage(direct ? context : bootstrap(context).initial.transactions.page);
@@ -159,7 +171,9 @@ const startApplication = async (input) => {
   return { startup, startupMs };
 };
 
-/** @param {Page} page */
+/**
+ * @param {Page} page Mounted Chromium page.
+ */
 const watchRefresh = async (page) => {
   // Both builds disable search while history or Categories are stale, and keep it disabled on failure.
   // Arm the observer before the click so even a fast refresh must commit both DOM states.
@@ -192,7 +206,10 @@ const watchRefresh = async (page) => {
     return { completed };
   }, timeoutMs);
 };
-/** @param {Journey} input @param {ReturnType<typeof historyPage>} startup */
+/**
+ * @param {Journey} input Browser journey configuration.
+ * @param {ReturnType<typeof historyPage>} startup History observed during startup.
+ */
 const refreshHistory = async (input, startup) => {
   const { page, calibration, observe, offered, completed } = input;
   process.stderr.write("REFERENCE_STAGE read\n");
@@ -215,7 +232,10 @@ const refreshHistory = async (input, startup) => {
   completed?.("refresh", readMs);
   return { initial, target, readMs };
 };
-/** @param {Journey} input @param {Awaited<ReturnType<typeof refreshHistory>>} history */
+/**
+ * @param {Journey} input Browser journey configuration.
+ * @param {Awaited<ReturnType<typeof refreshHistory>>} history Verified pre-Correction history and target.
+ */
 const correctHistory = async (input, { initial, target }) => {
   const { page, observe, offered, completed } = input;
   process.stderr.write("REFERENCE_STAGE open-correction\n");
@@ -250,7 +270,7 @@ const correctHistory = async (input, { initial, target }) => {
 };
 /**
  * @template Evidence
- * @param {Journey & {beforeRefresh: () => Promise<Evidence>}} input
+ * @param {Journey & {beforeRefresh: () => Promise<Evidence>}} input Journey and its pre-refresh accountability observation.
  */
 export const freshTransactions = async (input) => {
   const { startup, startupMs } = await startApplication(input);

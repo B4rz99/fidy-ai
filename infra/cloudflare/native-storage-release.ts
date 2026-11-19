@@ -319,7 +319,7 @@ const erasureObservation = ({ env, client, userNamespace, fs }: {
         );
         yield* fs.rename(path + ".next", path);
         const progress =
-          "observations" in checkpoint && checkpoint.listed !== undefined
+          "listed" in checkpoint
             ? ` (observation ${checkpoint.observations}, listed ${checkpoint.listed}, populated ${checkpoint.populated})`
             : "";
         yield* Effect.logInfo("Physical User census " + checkpoint.stage + progress);

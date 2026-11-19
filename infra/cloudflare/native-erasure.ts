@@ -4,7 +4,8 @@ import { type UserObjects, newStoredUser, physicalErasure } from "./native-erasu
 type Browser = Readonly<{ id: string; outcome: string; headers: Readonly<Record<string, string>> }>;
 type CensusStage = "waiting-baseline" | "waiting-fresh-object" | "waiting-physical-erasure";
 type Checkpoint =
-  | { stage: CensusStage; observations: number; listed?: number; populated?: number }
+  | { stage: CensusStage; observations: 0 }
+  | { stage: CensusStage; observations: number; listed: number; populated: number }
   | { stage: "signup-started" | "signup-created" }
   | { stage: "stable-users"; populated: number }
   | { stage: "fresh-object" | "admission-started"; physicalObject: string }

@@ -211,27 +211,45 @@ it("binds each planned Worker to the closed installation before any provider app
 it("rejects open admission and producer bindings before applying either Worker", () => {
   const closed = { name: "RECOVERY_ISOLATION", type: "plain_text", text: "isolated" };
   const core = { name: "CORE", type: "service" };
-  const complete = [...nativeBindingInventory({ role: "Ingress" })].map(([name, type]) => ({
-    name,
-    type,
-    text:
-      new Map([
-        ["RECOVERY_ISOLATION", "isolated"],
-        ["NATIVE_STORAGE_ADMISSION", "closed"],
-      ]).get(name) ?? "",
-  }));
-  expect(() => requireClosedBindings({ worker: "Ingress", bindings: complete })).not.toThrow();
-  expect(() => requireClosedBindings({ worker: "Ingress", bindings: [closed, core] })).toThrow();
+  const complete = [...nativeBindingInventory({ fingerprint: "", role: "Ingress" })].map(
+    ([name, type]) => ({
+      name,
+      type,
+      text:
+        new Map([
+          ["RECOVERY_ISOLATION", "isolated"],
+          ["NATIVE_STORAGE_ADMISSION", "closed"],
+        ]).get(name) ?? "",
+    })
+  );
   expect(() =>
-    requireClosedBindings({ worker: "Ingress", bindings: [...complete.slice(1), core] })
+    requireClosedBindings({ fingerprint: "", worker: "Ingress", bindings: complete })
+  ).not.toThrow();
+  expect(() =>
+    requireClosedBindings({ fingerprint: "", worker: "Ingress", bindings: [closed, core] })
   ).toThrow();
-  expect(() => requireClosedBindings({ worker: "Core", bindings: complete })).toThrow();
+  expect(() =>
+    requireClosedBindings({
+      fingerprint: "",
+      worker: "Ingress",
+      bindings: [...complete.slice(1), core],
+    })
+  ).toThrow();
+  expect(() =>
+    requireClosedBindings({ fingerprint: "", worker: "Core", bindings: complete })
+  ).toThrow();
   for (const worker of ["Ingress", "Core"] as const) {
-    expect(() => requireClosedBindings({ worker, bindings: [] })).toThrow();
-    expect(() => requireClosedBindings({ worker, bindings: [{ ...closed, text: "" }] })).toThrow();
+    expect(() => requireClosedBindings({ fingerprint: "", worker, bindings: [] })).toThrow();
+    expect(() =>
+      requireClosedBindings({ fingerprint: "", worker, bindings: [{ ...closed, text: "" }] })
+    ).toThrow();
     for (const type of ["queue", "workflow", "send_email", "d1"]) {
       expect(() =>
-        requireClosedBindings({ worker, bindings: [closed, { name: "EXTRA", type }] })
+        requireClosedBindings({
+          fingerprint: "",
+          worker,
+          bindings: [closed, { name: "EXTRA", type }],
+        })
       ).toThrow();
     }
   }

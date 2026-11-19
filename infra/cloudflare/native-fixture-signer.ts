@@ -13,7 +13,7 @@ type SignerBindings = Partial<
   }>
 >;
 class InvalidFixtureSigner extends Data.TaggedError("InvalidFixtureSigner") {}
-const keyOperation = <A>(run: () => Promise<A>) =>
+const keyOperation = <A>(run: () => Promise<A>): Effect.Effect<A, InvalidFixtureSigner> =>
   Effect.tryPromise({ try: run, catch: () => new InvalidFixtureSigner() });
 const publicFingerprint = Effect.fnUntraced(function* (value: string) {
   const decoded = Hex.decode(value);

@@ -183,10 +183,10 @@ const kinds: Readonly<Record<NativeRole, Readonly<Record<string, ReadonlyArray<s
 };
 export const nativeBindingInventory = ({
   role,
-  fingerprint = "",
+  fingerprint,
 }: {
   role: NativeRole;
-  fingerprint?: string;
+  fingerprint: string;
 }): ReadonlyMap<string, string> => {
   const expected = new Map(
     Object.entries(kinds[role]).flatMap(([type, names]) =>
@@ -229,11 +229,11 @@ const requireClosedRole = (
 export const requireRoleBindings = ({
   role,
   bindings,
-  fingerprint = "",
+  fingerprint,
 }: {
   role: NativeRole;
   bindings: ReadonlyArray<NativeBinding>;
-  fingerprint?: string;
+  fingerprint: string;
 }): void => {
   const expected = nativeBindingInventory({ role, fingerprint });
   if (

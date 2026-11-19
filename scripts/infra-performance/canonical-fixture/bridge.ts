@@ -69,14 +69,21 @@ const environmentOf = (
   RECOVERY_ISOLATION: "isolated",
   BROWSER_ORIGIN: api.browser,
 });
-const client = (auth: Auth, send: Transport) => {
+type Client = {
+  request: (input: Command, headers: Record<string, string>) => Effect.Effect<Response, Error>;
+  login: (member: "performance-1" | "performance-2") => Effect.Effect<string, Error>;
+  bind: (cookie: string) => Effect.Effect<Session, Error>;
+};
+const client = (auth: Auth, send: Transport): Client => {
   const environment = environmentOf(auth);
   const request = Effect.fnUntraced(function* (input: Command, headers: Record<string, string>) {
     const outgoing = new Request(api.api + input.path, {
       method: input.method,
       headers: { origin: api.browser, "content-type": "application/json", ...headers },
       redirect: "manual",
-      ...(input.body === null ? {} : { body: JSON.stringify(input.body) }),
+      ...(input.body === null
+        ? {}
+        : { body: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))(input.body) }),
     });
     if (input.control !== "unsigned") {
       outgoing.headers.set(
@@ -111,7 +118,7 @@ const client = (auth: Auth, send: Transport) => {
   });
   return { request, login, bind };
 };
-type Client = ReturnType<typeof client>;
+
 const start = Effect.fnUntraced(function* (service: Client) {
   const retained = yield* Config.String("FIDY_BOUND_SESSION_FILE").pipe(Config.withDefault(""));
   if (retained === "") return yield* service.bind(yield* service.login("performance-1"));
@@ -135,8 +142,9 @@ const execute = Effect.fnUntraced(function* (item: Command, active: Session, ser
       ? yield* service.bind(yield* service.login("performance-2"))
       : active;
   const headers = sessionHeaders(mounted);
-  if (item.control === "wrong-binding")
+  if (item.control === "wrong-binding") {
     headers["fidy-session-binding"] = "00000000-0000-4000-8000-000000000000";
+  }
   const reply = yield* service.request(item, headers);
   const raw = yield* io(() => reply.text());
   const data = reply.ok
@@ -147,8 +155,9 @@ const execute = Effect.fnUntraced(function* (item: Command, active: Session, ser
 const authority = Effect.gen(function* () {
   const secret = Redacted.value(yield* Config.Redacted("SMOKE_PROOF"));
   const revision = yield* Config.String("FIDY_NATIVE_REVISION");
-  if (secret.length < minimumSecret || !/^[a-f0-9]{40}$/u.test(revision))
+  if (secret.length < minimumSecret || !/^[a-f0-9]{40}$/u.test(revision)) {
     return yield* new FixtureTransportError();
+  }
   return { secret, revision };
 });
 export const serveFixture = Effect.fn(function* (runtime: Miniflare) {

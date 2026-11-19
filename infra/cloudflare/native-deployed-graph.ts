@@ -89,7 +89,7 @@ export const requireDeployedRole = (input: {
   role: Exclude<NativeRole, "Web">;
   revision: string;
   bindings: Readonly<Record<string, unknown>>;
-  fingerprint?: string;
+  fingerprint: string;
 }): void => {
   const { role, revision } = input,
     bindings = Schema.decodeUnknownSync(NativeBindings)(Object.values(input.bindings));
@@ -138,7 +138,7 @@ export const verifyDeployedVersion = (input: {
   account: string;
   versionId: string;
   revision: string;
-  fingerprint?: string;
+  fingerprint: string;
 }): void => {
   if (input.role === "Web") {
     const { result } = Schema.decodeUnknownSync(staticSiteVersion)(input.raw);

@@ -34,12 +34,12 @@ const pinFetch: typeof fetch = Object.assign(
 );
 const expectedSigner = (worker: string, enabled: boolean): boolean => worker === "Core" && enabled;
 const rehearsalKey = Effect.gen(function* () {
-  const pair = yield* Effect.promise(() =>
+  const pair = yield* Effect.tryPromise(() =>
     crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"])
   );
-  const spki = yield* Effect.promise(() => crypto.subtle.exportKey("spki", pair.publicKey));
-  const pkcs8 = yield* Effect.promise(() => crypto.subtle.exportKey("pkcs8", pair.privateKey));
-  const digest = yield* Effect.promise(() => crypto.subtle.digest("SHA-256", spki));
+  const spki = yield* Effect.tryPromise(() => crypto.subtle.exportKey("spki", pair.publicKey));
+  const pkcs8 = yield* Effect.tryPromise(() => crypto.subtle.exportKey("pkcs8", pair.privateKey));
+  const digest = yield* Effect.tryPromise(() => crypto.subtle.digest("SHA-256", spki));
   return {
     fingerprint: Hex.encode(new Uint8Array(digest)),
     secret: Hex.encode(new Uint8Array(pkcs8)),
@@ -112,7 +112,9 @@ it.effect.each([false, true])(
               expectedSigner(worker, enabled)
             );
             if (expectedSigner(worker, enabled)) {
-              expect(() => requireClosedBindings({ worker, bindings: observed })).toThrow();
+              expect(() =>
+                requireClosedBindings({ worker, bindings: observed, fingerprint: "" })
+              ).toThrow();
               expect(() =>
                 requireClosedBindings({ worker, bindings: observed, fingerprint: "0".repeat(64) })
               ).toThrow();

@@ -14,7 +14,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/bun-runtime
-      - run: bash scripts/install-workspace.sh --ignore-scripts
+      - run: bash scripts/install-workspace.sh
       - name: Verify closed release signer inventories on the real plan
         working-directory: infra/cloudflare
         run: bun run test native-application-plan.test.ts native-deployed-graph.test.ts
@@ -35,7 +35,7 @@ jobs:
           bun install --cwd tools/astro --frozen-lockfile
           bun install --cwd tools/mutation --frozen-lockfile
           bun install --cwd tools/depcruise --frozen-lockfile
-          bun x tsc --build infra/cloudflare
+          bun x tsc --build
           bun run --cwd apps/server typecheck
           bun run --cwd apps/server lint:deps
       - name: Keep only aggregate result

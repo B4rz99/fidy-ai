@@ -18,6 +18,14 @@ class PilotBudget(unittest.TestCase):
 
 
 class CoverageEvidence(unittest.TestCase):
+    def test_coverage_query_runs_without_persisting_the_results(self):
+        from observations import observation
+        def telemetry(path, body):
+            self.assertEqual(path, "accounts/account/workers/observability/telemetry/query")
+            self.assertIs(body.get("dry"), True)
+            return {"success": True, "result": {"events": {"events": []}}}
+        self.assertEqual(observation(telemetry, "account", "release", 0, 600000)["coverageEvents"], [])
+
     def test_preserves_aggregate_probe_outcomes_and_emits_only_allowlisted_fields(self):
         from observations import COVERAGE, observation
         event = {

@@ -77,10 +77,18 @@ type HostedProvider = ReturnType<
 >;
 const prepareQueries = Effect.fnUntraced(function* (
   mode: string,
-  runtime: HostedRuntime,
-  provider: HostedProvider
+  {
+    runtime,
+    owner,
+    provider,
+  }: {
+    runtime: HostedRuntime;
+    owner: Effect.Success<ReturnType<typeof seed>>;
+    provider: HostedProvider;
+  }
 ) {
   if (!["planning", "account"].includes(mode)) return;
+  if (mode === "planning") yield* preparePublishedSeries(owner);
   const initialized = yield* native(() =>
     runtime.dispatchFetch("https://api.fidyapp.com/dashboard/initialize", {
       method: "POST",
@@ -102,12 +110,81 @@ const prepareQueries = Effect.fnUntraced(function* (
     })
   );
 });
+const preparePublishedSeries = Effect.fnUntraced(function* (
+  owner: Effect.Success<ReturnType<typeof seed>>
+) {
+  const stamp = "2025-01-15T12:00:00.000Z";
+  const series = {
+    counterparty: "Recorded",
+    money: { amount: "10", currency: "COP" },
+    cadence: { kind: "monthly" },
+    firstOccurredAt: stamp,
+    lastOccurredAt: stamp,
+    confirmedAt: stamp,
+    announcement: { kind: "suppressed", reason: "backfill" },
+  };
+  yield* owner.exec(
+    `WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<33), rows AS(SELECT printf('40000000-0000-4000-8000-%012d',i) AS id,printf('Merchant %03d',i) AS label FROM n) INSERT INTO recurring_series(user_id,id,currency,counterparty_key,series_json,evidence_json,reference_json,valid) SELECT ?,id,'COP',label,json_set(?,'$.id',id,'$.counterparty',label),'{}','{}',1 FROM rows`,
+    alice.user,
+    yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))(series)
+  );
+  yield* owner.exec(
+    "INSERT OR REPLACE INTO transaction_projection_state(user_id,version,readiness,fact_revision,first_captured_at_ms,time_zone) VALUES(?,1,'ready',33,0,'America/Bogota')",
+    alice.user
+  );
+  yield* owner.exec(
+    "INSERT INTO recurring_evaluation_records(user_id,kind,id,group_key,revision,phase,cursor_id,evaluated_at_ms,evaluated_revision,first_captured_at_ms,time_zone) VALUES(?,'progress','progress','',33,'complete','',0,33,0,'America/Bogota')",
+    alice.user
+  );
+});
+const comparePublishedSeries = Effect.fnUntraced(function* (
+  owner: Effect.Success<ReturnType<typeof seed>>,
+  runtime: HostedRuntime
+) {
+  const page = yield* native(() =>
+    runtime.dispatchFetch("https://api.fidyapp.com/recurring-series", {
+      headers: {
+        origin: "https://app.fidyapp.com",
+        cookie: "__Host-fidy_session=" + alice.bearer,
+        "Fidy-Session-Binding": alice.session,
+      },
+    })
+  );
+  expect(page.status).toBe(200);
+  const publicData = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({
+      data: Schema.Struct({
+        series: Schema.Array(Schema.Unknown),
+        evaluation: Schema.Unknown,
+        cursor: Schema.String,
+      }),
+    })
+  )(yield* native(() => page.json()));
+  expect(publicData.data.series).toHaveLength(32);
+  const [record] = yield* Schema.decodeUnknownEffect(
+    Schema.Array(Schema.Struct({ page: Schema.fromJsonString(Schema.Unknown) }))
+  )(
+    yield* owner.exec(
+      "SELECT json_extract(entry_json,'$.outcome.output.data') AS page FROM hosted_transcript WHERE json_extract(entry_json,'$.operation')='recurring.listRecurringSeries' AND json_extract(entry_json,'$._tag')='CanonicalToolResultEntry'"
+    )
+  );
+  expect(record?.page).toEqual(publicData.data);
+});
 const verifyQueryTools = Effect.fnUntraced(function* (
   mode: string,
   proposal: typeof HostedTurnProposal.Type,
-  { owner, provider }: { owner: Effect.Success<ReturnType<typeof seed>>; provider: HostedProvider }
+  {
+    owner,
+    provider,
+    runtime,
+  }: {
+    owner: Effect.Success<ReturnType<typeof seed>>;
+    provider: HostedProvider;
+    runtime: HostedRuntime;
+  }
 ) {
   if (["planning", "account"].includes(mode)) {
+    if (mode === "planning") yield* comparePublishedSeries(owner, runtime);
     const listing = yield* native(() => provider.fetch("https://fixture.invalid/tools"));
     expect(yield* native(() => listing.json())).toEqual(
       expect.arrayContaining(queryCases(mode).map(([name]) => name))
@@ -228,7 +305,7 @@ const nativeTurnJourney = Effect.fnUntraced(function* (
     ordinary: "waiting",
   }[mode];
   yield* native(() => provider.fetch("https://fixture.invalid/" + providerPath));
-  yield* prepareQueries(mode, runtime, provider);
+  yield* prepareQueries(mode, { runtime, owner, provider });
   const id = "22460000-0000-4000-8000-000000000020";
 
   if (["confirm", "stale", "batch", "batch-stale"].includes(mode)) {
@@ -292,7 +369,7 @@ const nativeTurnJourney = Effect.fnUntraced(function* (
     receipt: proposal.receipt,
   });
   expect(delivered.status).toBe(200);
-  if (yield* verifyQueryTools(mode, proposal, { owner, provider })) return;
+  if (yield* verifyQueryTools(mode, proposal, { owner, provider, runtime })) return;
   if (mode === "withdraw") {
     expect(yield* owner.exec("SELECT outcome FROM hosted_tool_calls")).toEqual([
       { outcome: "CanonicalOperationFailed" },

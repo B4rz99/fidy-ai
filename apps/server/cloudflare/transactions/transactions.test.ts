@@ -1,4 +1,3 @@
-import { retainedPlanningWork } from "../retained-planning.test-fixture";
 import { NodeFileSystem } from "@effect/platform-node";
 import { nativeClockPlatform, nativeTransactionReadPlatform } from "../user-store.test-fixture";
 import {
@@ -9,42 +8,21 @@ import {
   seedNativePAT,
 } from "../financial-user-store.test-fixture";
 import { TransactionInspection } from "../../src/shell/transactions/contract";
-import { deriveCurrentBudgetMonth } from "../../src/core/budgets/operations";
-import { IanaTimeZone } from "../../src/core/_shared/context";
-import { UserId } from "../../src/core/identity/contract";
-import { readBudgetCrossings } from "../budgets/operations";
-import { Budget, BudgetStatusReport } from "../../src/core/budgets/contract";
-import { openAiTestKey } from "../openai.test-fixture";
 import {
   type AtomicBatchCall,
   AtomicBatchCallId,
   AtomicBatchRejected,
 } from "../../src/shell/operations/contract";
-import { Miniflare } from "miniflare";
-import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
 import {
-  coordinatorTestDatabase,
-  installTestSchema,
-  isolatedTestDatabases,
-  observeRetentionCost,
-} from "../d1-test-fixture";
-import { Clock, Config, Data, DateTime, Effect, Option, Schema } from "effect";
-import {
-  CreateTransactionInput,
   RestoredTransactionPair,
   Transaction,
   TransactionPresentation,
 } from "../../src/core/transactions/contract";
 import { encodeMoneyAmount } from "../../src/core/_shared/money";
-import { UserTransactionCoordinator } from "./runtime";
 import { ErrorCode, ScopeMissing } from "../../src/shell/public-http/contract";
-import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
-import { DisclosureSnapshot } from "../../src/shell/consent/contract";
-import { currentDisclosureFor } from "../../src/shell/consent/operations";
 import { transactionNow } from "../canonical-work/operations";
-import coreWorker from "../core-worker";
-import publicWorker from "../public-worker";
-import { browseTransactions, transactionInput, transactionSession } from "./operations";
 
 class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure") {}
 const fromTestPromise = <A>(promise: () => PromiseLike<A>): Effect.Effect<A> =>
@@ -53,30 +31,8 @@ const fromTestPromise = <A>(promise: () => PromiseLike<A>): Effect.Effect<A> =>
     catch: () => new TestPromiseFailure(),
   }).pipe(Effect.orDie);
 const users = ["10000000-0000-4000-8000-000000000051", "10000000-0000-4000-8000-000000000052"];
-const loadUserId = (index: number): string =>
-  users[index] ?? `10000000-0000-4000-8000-${String(51 + index).padStart(12, "0")}`;
 const sessions = ["10000000-0000-4000-8000-000000000061", "10000000-0000-4000-8000-000000000062"];
 const category = "10000000-0000-4000-8000-000000000016";
-let sequence = 0;
-const instances: Array<Miniflare> = [];
-const databases = isolatedTestDatabases();
-const digest = (text: string): Promise<Uint8Array> =>
-  crypto.subtle
-    .digest("SHA-256", new TextEncoder().encode(text))
-    .then((value) => new Uint8Array(value));
-const replayResponse = (
-  result: Readonly<{
-    text: () => Promise<string>;
-    status: number;
-    headers: Iterable<readonly [string, string]>;
-  }>
-): Promise<Response> =>
-  result
-    .text()
-    .then(
-      (text) =>
-        new Response(text, { status: result.status, headers: Object.fromEntries(result.headers) })
-    );
 const bearer = (index: number): string =>
   index < 2 ? String(index + 1).repeat(43) : String(index + 1).padStart(43, "0");
 const request = (index: number, path = "/transactions", body?: object): Request =>
@@ -105,139 +61,6 @@ const input = (changes: Partial<TestTransactionPayload> = {}): TestTransactionPa
   occurredAt: "2025-01-10T12:00:00.000Z",
   ...changes,
 });
-type CoordinatorTestEnvironment = ConstructorParameters<typeof UserTransactionCoordinator>[1];
-const coordinatorEnvironment = (db: D1Database): CoordinatorTestEnvironment => ({
-  DB: db,
-  OPENAI_API_KEY: openAiTestKey({ run: (): Promise<never> => Promise.reject(new Error("unused")) }),
-  HOSTED_AI_MODEL: approvedOpenAiModel,
-});
-
-let platformBundle = Option.none<Promise<string>>();
-const platformModule = (): Promise<string> =>
-  Option.getOrElse(platformBundle, () => {
-    const bundle = buildPlatformModule();
-    platformBundle = Option.some(bundle);
-    return bundle;
-  });
-const buildPlatformModule = (): Promise<string> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const built = yield* fromTestPromise(() =>
-        Bun.build({
-          entrypoints: [new URL("../coordinator-test-harness.ts", import.meta.url).pathname],
-          target: "browser",
-          external: ["cloudflare:workers"],
-        })
-      );
-      if (!built.success) throw new Error("Fixture bundle failed");
-      const output = built.outputs[0];
-      if (output === undefined) throw new Error("Fixture module missing");
-      return yield* fromTestPromise(() => output.text());
-    })
-  );
-
-const platformDatabase = (): Promise<D1Database> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const fixtureModule = yield* fromTestPromise(platformModule);
-      const name = `transactions-${++sequence}`;
-      const mf = new Miniflare({
-        workers: [
-          {
-            config: {
-              name,
-              type: "worker",
-              compatibilityDate: "2026-09-08",
-              exports: {
-                UserTransactionCoordinator: { type: "durable-object", storage: "sqlite" },
-              },
-              env: {
-                DB: { id: name, type: "d1" },
-                USER_TRANSACTION_COORDINATOR: {
-                  type: "durable-object",
-                  worker: name,
-                  exportName: "UserTransactionCoordinator",
-                },
-                OPENAI_API_KEY: { type: "text", value: "" },
-                HOSTED_AI_MODEL: { type: "text", value: approvedOpenAiModel },
-              },
-              manifest: {
-                mainModule: "index.mjs",
-                modules: { "index.mjs": { contents: fixtureModule, type: "esm" } },
-              },
-            },
-          },
-        ],
-      });
-      instances.push(mf);
-      yield* fromTestPromise(() => mf.ready);
-      return yield* fromTestPromise(() => coordinatorTestDatabase({ runtime: mf, binding: "DB" }));
-    })
-  );
-afterAll(() => databases.dispose());
-
-const setup = (platform = false, userCount = 2): Promise<D1Database> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = platform
-        ? yield* fromTestPromise(() => platformDatabase())
-        : yield* fromTestPromise(() => databases.acquire());
-      yield* fromTestPromise(() => installTestSchema({ db }));
-      const current = yield* Clock.currentTimeMillis;
-      yield* Effect.forEach(
-        Array.from({ length: userCount }, (_, index) => loadUserId(index)),
-        (user, index) =>
-          Effect.gen(function* () {
-            const verifierDigest = yield* fromTestPromise(() => digest(`verifier${index}`));
-            const sessionDigest = yield* fromTestPromise(() => digest(bearer(index)));
-            yield* fromTestPromise(() =>
-              db.batch([
-                db
-                  .prepare(
-                    "INSERT INTO users (id, service_market, locale, time_zone, created_at_ms) VALUES (?, 'CO', 'es-CO', 'America/Bogota', ?)"
-                  )
-                  .bind(user, current),
-                db
-                  .prepare(
-                    "INSERT INTO browser_login_pairings (id, public_code, verifier_digest, user_id, state, created_at_ms, expires_at_ms) VALUES (?, ?, ?, ?, 'consumed', ?, ?)"
-                  )
-                  .bind(
-                    `10000000-0000-4000-8000-${String(70 + index).padStart(12, "0")}`,
-                    `ABCD-${String(1230 + index)}`,
-                    verifierDigest,
-                    user,
-                    current,
-                    current + 600000
-                  ),
-                db
-                  .prepare(
-                    "INSERT INTO web_sessions (id, pairing_id, user_id, token_digest, created_at_ms, fresh_until_ms, idle_expires_at_ms, hard_expires_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-                  )
-                  .bind(
-                    sessions[index] ??
-                      `10000000-0000-4000-8000-${String(61 + index).padStart(12, "0")}`,
-                    `10000000-0000-4000-8000-${String(70 + index).padStart(12, "0")}`,
-                    user,
-                    sessionDigest,
-                    current,
-                    current + 600000,
-                    current + 3600000,
-                    current + 7776000000
-                  ),
-              ])
-            );
-          }),
-        { concurrency: "unbounded" }
-      );
-      return db;
-    })
-  );
-
-afterEach(() =>
-  Effect.runPromise(
-    fromTestPromise(() => Promise.all(instances.splice(0).map((mf) => mf.dispose())))
-  )
-);
 const Created = Schema.Struct({
   data: Schema.toCodecJson(Transaction),
   next: Schema.Array(Schema.Unknown),
@@ -372,51 +195,8 @@ const bearerRequest = (
     },
     body: JSON.stringify({ calls }),
   });
-const countRows = (
-  db: D1Database,
-  sql: string,
-  ...bindings: ReadonlyArray<string>
-): Promise<number> =>
-  db
-    .prepare(sql)
-    .bind(...bindings)
-    .first<{ count: number }>()
-    .then((row) => row?.count ?? -1);
-
-/** The metadata-only Transaction audit rows one User recorded, in occurrence order. */
-const auditedOperations = (
-  db: D1Database,
-  userId: string
-): Promise<ReadonlyArray<{ operation: string; outcome: string }>> =>
-  db
-    .prepare(
-      "SELECT operation, outcome FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call' OR (record_type='credential_call' AND operation='transactions.updateTransactions' AND session_id IS NOT NULL)) AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch') AND user_id = ? ORDER BY occurred_at_ms"
-    )
-    .bind(userId)
-    .all<{ operation: string; outcome: string }>()
-    .then((rows) => rows.results);
-
-/** The metadata-only PAT audit rows one User recorded, in insertion order. */
-
-const seedTransaction = ({
-  db,
-  userId,
-  id,
-  categoryId,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-  id: string;
-  categoryId: string;
-}>): Promise<unknown> =>
-  db
-    .prepare(`INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, notes, occurred_at_ms, created_at_ms)
-      VALUES (?, ?, '10.00', 'COP', 'outflow', ?, 'seed', 1736078400000, 1736078400000)`)
-    .bind(id, userId, categoryId)
-    .run();
 
 type RetainedTransactionFacts = Readonly<{
-  db: D1Database;
   userId: string;
   id: string;
   categoryId: string;
@@ -441,55 +221,6 @@ const retainedTransactionDefaults = {
   userDecisions: "{}",
 } as const;
 
-const seedRetainedTransaction = ({
-  db,
-  userId,
-  id,
-  categoryId,
-  counterparty,
-  notes,
-  ...overrides
-}: RetainedTransactionFacts): Promise<unknown> => {
-  const facts = { ...retainedTransactionDefaults, ...overrides };
-  return db
-    .prepare(`INSERT INTO transactions
-      (id, user_id, amount, currency, direction, counterparty, category_id, notes, occurred_at_ms, created_at_ms, user_decisions)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .bind(
-      id,
-      userId,
-      facts.amount,
-      facts.currency,
-      facts.direction,
-      counterparty ?? null,
-      categoryId,
-      notes ?? null,
-      DateTime.toEpochMillis(DateTime.makeUnsafe(facts.occurredAt)),
-      DateTime.toEpochMillis(DateTime.makeUnsafe(facts.createdAt)),
-      facts.userDecisions
-    )
-    .run();
-};
-
-/** Insert the immutable capture provenance one manual Transaction would have retained. */
-const seedManualAttestation = ({
-  db,
-  userId,
-  transactionId,
-  id,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-  transactionId: string;
-  id: string;
-}>): Promise<unknown> =>
-  db
-    .prepare(`INSERT INTO source_attestations
-      (id, user_id, transaction_id, kind, service_market, locale, time_zone, interpretation_revision, created_at_ms)
-      VALUES (?, ?, ?, 'manual', 'CO', 'es-CO', 'America/Bogota', 'manual-v1', 1736078400000)`)
-    .bind(id, userId, transactionId)
-    .run();
-
 const DecisionStateRow = Schema.Struct({
   first: Schema.String,
   second: Schema.String,
@@ -498,42 +229,15 @@ const DecisionStateRow = Schema.Struct({
 });
 const MemberRow = Schema.Struct({ id: Schema.String });
 
-const reconciliationState = (
-  db: D1Database,
-  userId: string
-): Promise<
-  Readonly<{
-    decisions: ReadonlyArray<{
-      first: string;
-      second: string;
-      state: string;
-      visible: Option.Option<string>;
-    }>;
-    members: ReadonlyArray<{ transaction: string }>;
-  }>
-> =>
-  Promise.all([
-    db
-      .prepare(
-        `SELECT first_transaction_id AS first, second_transaction_id AS second, state, visible_transaction_id AS visible
-          FROM transaction_reconciliation_decisions WHERE user_id = ? ORDER BY first_transaction_id`
-      )
-      .bind(userId)
-      .all(),
-    db
-      .prepare(
-        `SELECT transaction_id AS id FROM reconciled_transactions
-          WHERE user_id = ? ORDER BY transaction_id`
-      )
-      .bind(userId)
-      .all(),
-  ]).then(([decisions, members]) => ({
-    decisions: Schema.decodeUnknownSync(Schema.Array(DecisionStateRow))(decisions.results),
-    members: Schema.decodeUnknownSync(Schema.Array(MemberRow))(members.results).map((row) => ({
-      transaction: row.id,
-    })),
-  }));
-
+type ReconciliationState = Readonly<{
+  decisions: ReadonlyArray<{
+    first: string;
+    second: string;
+    state: string;
+    visible: Option.Option<string>;
+  }>;
+  members: ReadonlyArray<{ transaction: string }>;
+}>;
 type NativeJourney = Effect.Success<typeof nativeTransactionJourney>;
 const seedNativeTransaction = ({
   db,
@@ -543,9 +247,7 @@ const seedNativeTransaction = ({
   counterparty,
   notes,
   ...overrides
-}: Omit<RetainedTransactionFacts, "db"> & { db: NativeJourney }): ReturnType<
-  NativeJourney["exec"]
-> => {
+}: RetainedTransactionFacts & { db: NativeJourney }): ReturnType<NativeJourney["exec"]> => {
   const facts = { ...retainedTransactionDefaults, ...overrides };
   return db
     .owner(userId)
@@ -569,9 +271,12 @@ const seedNativeSource = ({
   userId,
   id,
   transactionId,
-}: Omit<Parameters<typeof seedManualAttestation>[0], "db"> & { db: NativeJourney }): ReturnType<
-  NativeJourney["exec"]
-> =>
+}: {
+  db: NativeJourney;
+  userId: string;
+  id: string;
+  transactionId: string;
+}): ReturnType<NativeJourney["exec"]> =>
   db
     .owner(userId)
     .exec(
@@ -613,10 +318,7 @@ const nativeRefusedChildren = (
       "SELECT operation,outcome FROM audit_entries WHERE user_id=? AND record_type='session_call' AND outcome='validation_failed' AND operation<>'operations.executeAtomicBatch' ORDER BY rowid",
       user
     );
-const nativeReconciliationState = (
-  db: NativeJourney,
-  user: string
-): ReturnType<typeof reconciliationState> =>
+const nativeReconciliationState = (db: NativeJourney, user: string): Promise<ReconciliationState> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const local = db.owner(user);
@@ -642,67 +344,8 @@ const nativeReconciliationState = (
       };
     })
   );
-
-let measuringLoad = false;
 beforeEach(() => vi.useFakeTimers({ toFake: ["Date"] }));
 afterEach(() => vi.useRealTimers());
-const sendPublicRequest = (
-  db: D1Database,
-  request: Request,
-  coordinator?: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>
-): Promise<Response> => {
-  if (!measuringLoad) {
-    vi.setSystemTime(Effect.runSync(Clock.currentTimeMillis) + 1000);
-  }
-  const headers = new Headers(request.headers);
-  headers.set("cf-connecting-ip", "192.0.2.35");
-  return publicWorker.fetch(new Request(request, { headers }), {
-    BROWSER_ORIGIN: "https://app.fidyapp.com",
-    LOCAL_CANONICAL_READ_BEARER: "",
-    PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
-    RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
-    CORE: {
-      fetch: (internal) =>
-        coreWorker.fetch(new Request(internal), {
-          DB: db,
-          OPENAI_API_KEY: openAiTestKey({
-            run: (): Promise<never> => Promise.reject(new Error("unused")),
-          }),
-          CONTRACT_DIGEST: "a".repeat(64),
-          RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
-          HOSTED_AI_MODEL: approvedOpenAiModel,
-          BROWSER_ORIGIN: "https://app.fidyapp.com",
-          WOMPI_ENVIRONMENT: "",
-          WOMPI_PUBLIC_KEY: "",
-          WOMPI_PRIVATE_KEY: "",
-          WOMPI_INTEGRITY_SECRET: "",
-          USER_TRANSACTION_COORDINATOR: coordinator ?? {
-            getByName: (name) => ({
-              fetch: (command) =>
-                new UserTransactionCoordinator(
-                  {
-                    id: { name },
-                    storage: {
-                      getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> =>
-                        Promise.resolve(null),
-                      deleteAlarm: (): Promise<void> => Promise.resolve(),
-                      setAlarm: (): Promise<void> => Promise.resolve(),
-                    },
-                  },
-                  coordinatorEnvironment(db)
-                ).fetch(new Request(command)),
-            }),
-          },
-          KAPSO_API_KEY: "",
-          WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
-          KAPSO_WEBHOOK_SECRET: "",
-          WHATSAPP_BUSINESS_PORTFOLIO_ID: "portfolio",
-          CLOUDFLARE_ACCESS_ISSUER: "",
-          CLOUDFLARE_ACCESS_AUDIENCE: "",
-        }),
-    },
-  });
-};
 
 const groupCorrectionRequest = (index: number, payload: object): Request => {
   const original = request(index, "/transactions/corrections", payload);
@@ -1028,27 +671,6 @@ it("rolls back the whole group when one selected row stops accepting its correct
       ).toBe(0);
     }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
-const grantHostedConsent = ({
-  db,
-  user,
-  grant,
-  time,
-}: Readonly<{
-  db: D1Database;
-  user: string;
-  grant: string;
-  time: number;
-}>): Promise<D1Response> => {
-  const disclosure = Schema.encodeSync(
-    Schema.fromJsonString(Schema.toCodecJson(DisclosureSnapshot))
-  )(currentDisclosureFor());
-  return db
-    .prepare(
-      `INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, occurred_at_ms) VALUES ('processing_grant',?, ?, ?, 'disclosed', 'accepted', ?, ?)`
-    )
-    .bind(grant, user, disclosure, time, time)
-    .run();
-};
 
 /** One manual capture submitted through the public ingress exactly as a client sends it. */
 const postTransaction = (index: number, body: object): Request =>
@@ -2290,220 +1912,6 @@ it("links and unlinks under the caller's live credential scope and records only 
     }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
-const sendBudgetCorrectionRequest = (
-  database: D1Database,
-  path: string,
-  ...args: [method?: string, body?: object]
-): Promise<Response> => {
-  const [method = "GET", body] = args;
-  vi.setSystemTime(DateTime.nowUnsafe().epochMilliseconds + 1000);
-  return Option.getOrThrow(
-    retainedPlanningWork({
-      db: database,
-      request: new Request(`https://api.fidyapp.com${path}`, {
-        method,
-        headers: {
-          origin: "https://app.fidyapp.com",
-          "Fidy-Session-Binding": sessions[0] ?? "invalid",
-          cookie: `__Host-fidy_session=${bearer(0)}`,
-          ...(body === undefined ? {} : { "content-type": "application/json" }),
-        },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      }),
-    })
-  );
-};
-
-it("keeps descriptive corrections bounded without reconciling unchanged Budget spending", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
-      expect(
-        (yield* fromTestPromise(() =>
-          sendBudgetCorrectionRequest(db, "/budgets", "POST", {
-            categoryId: category,
-            cap: { amount: "100", currency: "COP" },
-          })
-        )).status
-      ).toBe(201);
-      const capturedAt = yield* DateTime.now;
-      const createdResponse = yield* fromTestPromise(() =>
-        sendBudgetCorrectionRequest(
-          db,
-          "/transactions",
-          "POST",
-          input({
-            money: { amount: "9007199254740993.15", currency: "COP" },
-            occurredAt: DateTime.formatIso(capturedAt),
-          })
-        )
-      );
-      expect(createdResponse.status).toBe(201);
-      const created = (yield* Schema.decodeUnknownEffect(Created)(
-        yield* fromTestPromise(() => createdResponse.json())
-      )).data;
-      for (const [revision, changes] of [
-        [0, { notes: "a clearer note" }],
-        [1, { counterparty: "An identified Counterparty" }],
-      ] as const) {
-        const observed = observeRetentionCost(db);
-        const correctedResponse = yield* fromTestPromise(() =>
-          sendBudgetCorrectionRequest(observed.database, `/transactions/${created.id}`, "PUT", {
-            expectedRevision: revision,
-            changes,
-          })
-        );
-        expect(correctedResponse.status).toBe(200);
-        const corrected = (yield* Schema.decodeUnknownEffect(Created)(
-          yield* fromTestPromise(() => correctedResponse.json())
-        )).data;
-        expect(corrected.revision).toBe(revision + 1);
-        expect(corrected.money).toEqual(created.money);
-        expect(observed.roundTrips()).toBeLessThanOrEqual(16);
-        expect(observed.cost().rowsWritten).toBeLessThanOrEqual(50);
-        const readResponse = yield* fromTestPromise(() =>
-          sendBudgetCorrectionRequest(db, `/transactions/${created.id}`)
-        );
-        expect(readResponse.status).toBe(200);
-        const readBack = yield* Schema.decodeUnknownEffect(Created)(
-          yield* fromTestPromise(() => readResponse.json())
-        );
-        expect(readBack.data).toEqual(corrected);
-      }
-      const financialResponse = yield* fromTestPromise(() =>
-        sendBudgetCorrectionRequest(db, `/transactions/${created.id}`, "PUT", {
-          expectedRevision: 2,
-          changes: { money: { amount: "90", currency: "COP" } },
-        })
-      );
-      expect(financialResponse.status).toBe(200);
-      const statusResponse = yield* fromTestPromise(() =>
-        sendBudgetCorrectionRequest(db, "/budget-status?timeZone=America%2FBogota")
-      );
-      expect(statusResponse.status).toBe(200);
-      const report = yield* Schema.decodeUnknownEffect(
-        Schema.Struct({
-          data: Schema.toCodecJson(BudgetStatusReport),
-          next: Schema.Array(Schema.Unknown),
-        })
-      )(yield* fromTestPromise(() => statusResponse.json()));
-      expect(report.data.statuses).toHaveLength(1);
-      const status = report.data.statuses[0];
-      expect(status === undefined ? undefined : encodeMoneyAmount(status.spent.amount)).toBe("90");
-    }).pipe(Effect.orDie)
-  ));
-
-it("reconciles Budget spending when a linked descriptive correction changes selected movement facts", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
-      const owner = users[0] ?? "";
-      const visible = "30000000-0000-4000-8000-000000000901";
-      const suppressed = "30000000-0000-4000-8000-000000000902";
-      const capturedAt = yield* DateTime.now;
-      yield* fromTestPromise(() =>
-        grantHostedConsent({
-          db,
-          user: owner,
-          grant: "30000000-0000-4000-8000-000000000904",
-          time: DateTime.toEpochMillis(capturedAt),
-        })
-      );
-      yield* fromTestPromise(() =>
-        Promise.all(
-          [visible, suppressed].map((id) =>
-            seedRetainedTransaction({
-              db,
-              userId: owner,
-              id,
-              categoryId: category,
-              amount: "10",
-              currency: "USD",
-              occurredAt: DateTime.formatIso(capturedAt),
-              createdAt: DateTime.formatIso(capturedAt),
-            })
-          )
-        ).then(() =>
-          seedManualAttestation({
-            db,
-            userId: owner,
-            transactionId: visible,
-            id: "30000000-0000-4000-8000-000000000903",
-          })
-        )
-      );
-      expect(
-        (yield* fromTestPromise(() =>
-          sendBudgetCorrectionRequest(db, "/transactions/link", "POST", {
-            firstTransactionId: visible,
-            secondTransactionId: suppressed,
-          })
-        )).status
-      ).toBe(200);
-      expect(
-        (yield* fromTestPromise(() =>
-          sendBudgetCorrectionRequest(db, `/transactions/${visible}`, "PUT", {
-            expectedRevision: 0,
-            changes: { money: { amount: "90", currency: "USD" } },
-          })
-        )).status
-      ).toBe(200);
-      expect(
-        (yield* fromTestPromise(() =>
-          sendBudgetCorrectionRequest(db, `/transactions/${suppressed}`, "PUT", {
-            expectedRevision: 0,
-            changes: { money: { amount: "20", currency: "USD" } },
-          })
-        )).status
-      ).toBe(200);
-      const budgetResponse = yield* fromTestPromise(() =>
-        sendBudgetCorrectionRequest(db, "/budgets", "POST", {
-          categoryId: category,
-          cap: { amount: "100", currency: "USD" },
-        })
-      );
-      expect(budgetResponse.status).toBe(201);
-      const budget = yield* Schema.decodeUnknownEffect(
-        Schema.Struct({ data: Schema.toCodecJson(Budget) })
-      )(yield* fromTestPromise(() => budgetResponse.json()));
-      const status = (): Effect.Effect<string> =>
-        Effect.gen(function* () {
-          const response = yield* fromTestPromise(() =>
-            sendBudgetCorrectionRequest(db, "/budget-status?timeZone=America%2FBogota")
-          );
-          expect(response.status).toBe(200);
-          const report = yield* Schema.decodeUnknownEffect(
-            Schema.Struct({
-              data: Schema.toCodecJson(BudgetStatusReport),
-              next: Schema.Array(Schema.Unknown),
-            })
-          )(yield* fromTestPromise(() => response.json()));
-          const first = report.data.statuses[0];
-          return first === undefined ? "missing" : encodeMoneyAmount(first.spent.amount);
-        }).pipe(Effect.orDie);
-      expect(yield* status()).toBe("20");
-      expect(
-        (yield* fromTestPromise(() =>
-          sendBudgetCorrectionRequest(db, `/transactions/${visible}`, "PUT", {
-            expectedRevision: 1,
-            changes: { notes: "select this retained movement" },
-          })
-        )).status
-      ).toBe(200);
-      expect(yield* status()).toBe("90");
-      const crossings = yield* readBudgetCrossings({
-        db,
-        userId: UserId.make(owner),
-        budgetId: budget.data.id,
-        period: deriveCurrentBudgetMonth({
-          now: capturedAt,
-          timeZone: IanaTimeZone.make("America/Bogota"),
-        }),
-      });
-      expect(crossings.map((crossing) => crossing.threshold)).toEqual([80]);
-    }).pipe(Effect.orDie)
-  ));
-
 it("corrects selected facts once, retains decisions and evidence, and rejects stale or foreign corrections", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -3230,210 +2638,6 @@ it("neither a foreign opaque id nor another session can observe a Transaction", 
         ))?.count
       ).toBe(1);
     }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
-  ));
-
-it("serializes concurrent mutations for one User without mixing another User's records", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
-      const first = yield* fromTestPromise(() =>
-        transactionSession({ request: request(0), db, current: transactionNow() })
-      );
-      const second = yield* fromTestPromise(() =>
-        transactionSession({ request: request(1), db, current: transactionNow() })
-      );
-      const parsed = yield* transactionInput(request(0, "/transactions", input()));
-      if (Option.isNone(first) || Option.isNone(second) || Option.isNone(parsed)) {
-        throw new Error("fixture invalid");
-      }
-      const coordinatorA = new UserTransactionCoordinator(
-        {
-          id: { name: first.value.userId },
-          storage: {
-            getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
-            deleteAlarm: (): Promise<void> => Promise.resolve(),
-            setAlarm: (): Promise<void> => Promise.resolve(),
-          },
-        },
-        coordinatorEnvironment(db)
-      );
-      const coordinatorB = new UserTransactionCoordinator(
-        {
-          id: { name: second.value.userId },
-          storage: {
-            getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
-            deleteAlarm: (): Promise<void> => Promise.resolve(),
-            setAlarm: (): Promise<void> => Promise.resolve(),
-          },
-        },
-        coordinatorEnvironment(db)
-      );
-      const encoded = yield* Schema.encodeEffect(Schema.toCodecJson(CreateTransactionInput))(
-        parsed.value
-      ).pipe(Effect.orDie);
-      const command = (session: typeof first.value): Request =>
-        new Request("https://coordinator.internal/create", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            _tag: "WebSessionWork",
-            sessionId: session.id,
-            userId: session.userId,
-            digest: Array.from(session.digest),
-            work: {
-              _tag: "Call",
-              operation: "transactions.createTransaction",
-              input: { payload: encoded },
-            },
-          }),
-        });
-      const responses = yield* fromTestPromise(() =>
-        Promise.all([
-          coordinatorA.fetch(command(first.value)),
-          coordinatorA.fetch(command(first.value)),
-          coordinatorB.fetch(command(second.value)),
-        ])
-      );
-      expect(responses.map((response) => response.status)).toEqual([201, 201, 201]);
-      expect(
-        (yield* fromTestPromise(() => coordinatorB.fetch(command(first.value)))).status
-      ).not.toBe(201);
-      const firstList = yield* browseTransactions({
-        db,
-        selection: { request: request(0), subject: first.value, search: false, id: Option.none() },
-      });
-      const secondList = yield* browseTransactions({
-        db,
-        selection: { request: request(1), subject: second.value, search: false, id: Option.none() },
-      });
-      expect(
-        (yield* Schema.decodeUnknownEffect(Listed)(
-          yield* fromTestPromise(() => firstList.json())
-        ).pipe(Effect.orDie)).data
-      ).toHaveLength(2);
-      expect(
-        (yield* Schema.decodeUnknownEffect(Listed)(
-          yield* fromTestPromise(() => secondList.json())
-        ).pipe(Effect.orDie)).data
-      ).toHaveLength(1);
-    })
-  ));
-
-it("executes non-Memory work when hosted inference is unusable and refuses Memory work", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
-      const session = yield* fromTestPromise(() =>
-        transactionSession({ request: request(0), db, current: transactionNow() })
-      );
-      const parsed = yield* transactionInput(request(0, "/transactions", input()));
-      if (Option.isNone(session) || Option.isNone(parsed)) throw new Error("fixture invalid");
-      const coordinator = new UserTransactionCoordinator(
-        {
-          id: { name: session.value.userId },
-          storage: {
-            getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
-            deleteAlarm: (): Promise<void> => Promise.resolve(),
-            setAlarm: (): Promise<void> => Promise.resolve(),
-          },
-        },
-        {
-          DB: db,
-          OPENAI_API_KEY: openAiTestKey({
-            run: (): Promise<Response> =>
-              Promise.reject(new Error("the model check must fail first")),
-          }),
-          HOSTED_AI_MODEL: "unsupported-model",
-        }
-      );
-      const encoded = yield* Schema.encodeEffect(Schema.toCodecJson(CreateTransactionInput))(
-        parsed.value
-      ).pipe(Effect.orDie);
-      const command = (
-        work: Readonly<{ _tag: "Call"; operation: string; input: unknown }>
-      ): Request =>
-        new Request("https://coordinator.internal/call", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            _tag: "WebSessionWork",
-            sessionId: session.value.id,
-            userId: session.value.userId,
-            digest: Array.from(session.value.digest),
-            work,
-          }),
-        });
-      const captured = yield* fromTestPromise(() =>
-        coordinator.fetch(
-          command({
-            _tag: "Call",
-            operation: "transactions.createTransaction",
-            input: { payload: encoded },
-          })
-        )
-      );
-      expect(captured.status).toBe(201);
-      const remembered = yield* fromTestPromise(() =>
-        coordinator.fetch(
-          command({
-            _tag: "Call",
-            operation: "memory.remember",
-            input: { payload: { text: "Sin inferencia" } },
-          })
-        )
-      );
-      expect(remembered.status).toBe(503);
-      expect(
-        yield* fromTestPromise(() =>
-          countRows(
-            db,
-            "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
-            users[0] ?? ""
-          )
-        )
-      ).toBe(1);
-      expect(
-        yield* fromTestPromise(() =>
-          countRows(db, "SELECT COUNT(*) AS count FROM memories WHERE user_id = ?", users[0] ?? "")
-        )
-      ).toBe(0);
-    })
-  ));
-
-it("leaves an unindexed atomic resource abort unattributed", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
-      const owner = yield* fromTestPromise(() =>
-        transactionSession({ request: request(0), db, current: transactionNow() })
-      );
-      const parsed = yield* transactionInput(request(0, "/transactions", input()));
-      if (Option.isNone(owner) || Option.isNone(parsed)) throw new Error("fixture invalid");
-      const limitedDb: D1Database = {
-        prepare: (sql) => db.prepare(sql),
-        batch: () => Promise.reject(new Error("transaction_resource_limit")),
-        exec: (sql) => db.exec(sql),
-        withSession: (constraint) => db.withSession(constraint),
-        dump: () => db.dump(),
-      };
-      const response = yield* fromTestPromise(() =>
-        sendPublicRequest(limitedDb, postTransaction(0, input()))
-      );
-      expect(response.status).toBe(503);
-      const audit = yield* fromTestPromise(() =>
-        db
-          .prepare(
-            "SELECT outcome FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch') AND user_id = ?"
-          )
-          .bind(users[0])
-          .all()
-      );
-      expect(audit.results).toEqual([]);
-      const transactions = yield* fromTestPromise(() =>
-        db.prepare("SELECT COUNT(*) AS count FROM transactions").first<{ count: number }>()
-      );
-      expect(transactions?.count).toBe(0);
-    })
   ));
 
 it("rejects an unknown Category without retaining partial Transaction, attestation, or audit state", () =>
@@ -4971,106 +4175,6 @@ it("commits retained keyword-rule updates and deletes and Memory forgets in one 
     }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
-it("fails closed on a cross-owner dependency defect without partial state", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const keywordDb = yield* fromTestPromise(() => setup());
-      const current = DateTime.formatIso(DateTime.nowUnsafe());
-      yield* fromTestPromise(() =>
-        keywordDb
-          .prepare(`INSERT INTO keyword_rules (id, user_id, keyword,category_id,created_at_ms,updated_at_ms)
-            VALUES ('corrupt-rule', ?, 'corrupt', ?, ?, ?)`)
-          .bind(
-            users[0] ?? "",
-            category,
-            DateTime.toEpochMillis(DateTime.makeUnsafe(current)),
-            DateTime.toEpochMillis(DateTime.makeUnsafe(current))
-          )
-          .run()
-      );
-      const keywordResponse = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          keywordDb,
-          batchRequest(0, [transactionCall(1, input()), keywordRuleCall(2, "Panadería", category)])
-        )
-      );
-      expect(keywordResponse.status).toBe(503);
-      expect(
-        yield* fromTestPromise(() =>
-          countRows(
-            keywordDb,
-            "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
-            users[0] ?? ""
-          )
-        )
-      ).toBe(0);
-      expect(
-        yield* fromTestPromise(() =>
-          countRows(
-            keywordDb,
-            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch')"
-          )
-        )
-      ).toBe(0);
-      expect(
-        yield* fromTestPromise(() =>
-          countRows(
-            keywordDb,
-            "SELECT COUNT(*) AS count FROM keyword_rules WHERE user_id = ?",
-            users[0] ?? ""
-          )
-        )
-      ).toBe(1);
-
-      const memoryDb = yield* fromTestPromise(() => setup());
-      yield* fromTestPromise(() =>
-        memoryDb
-          .prepare(
-            "INSERT INTO memories (id, user_id, text, created_at_ms, updated_at_ms) VALUES ('corrupt-memory', ?, 'Corrupt', ?, ?)"
-          )
-          .bind(
-            users[0] ?? "",
-            DateTime.makeUnsafe(current).epochMilliseconds,
-            DateTime.makeUnsafe(current).epochMilliseconds
-          )
-          .run()
-      );
-      const memoryResponse = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          memoryDb,
-          batchRequest(0, [transactionCall(1, input()), memoryCall(2, "Nueva")])
-        )
-      );
-      expect(memoryResponse.status).toBe(503);
-      expect(
-        yield* fromTestPromise(() =>
-          countRows(
-            memoryDb,
-            "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
-            users[0] ?? ""
-          )
-        )
-      ).toBe(0);
-      expect(
-        yield* fromTestPromise(() =>
-          countRows(
-            memoryDb,
-            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch')"
-          )
-        )
-      ).toBe(0);
-      expect(
-        yield* fromTestPromise(() =>
-          countRows(
-            memoryDb,
-            "SELECT COUNT(*) AS count FROM memories WHERE user_id = ?",
-            users[0] ?? ""
-          )
-        )
-      ).toBe(1);
-    })
-  ));
-
 it("serializes concurrent batches and individual mutations through one User coordination turn", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -5353,38 +4457,6 @@ it("fails closed on a foreign Transaction or an unknown Category without partial
         { operation: "operations.executeAtomicBatch", outcome: "validation_failed" },
       ]);
     }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
-  ));
-
-it("maps a batch dependency defect to the closed unavailable failure without partial state", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
-      const brokenDb: D1Database = {
-        prepare: (sql) => db.prepare(sql),
-        batch: () => Promise.reject(new Error("database defect")),
-        exec: (sql) => db.exec(sql),
-        withSession: (constraint) => db.withSession(constraint),
-        dump: () => db.dump(),
-      };
-      const response = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          brokenDb,
-          batchRequest(0, [transactionCall(1, input()), transactionCall(2, input())])
-        )
-      );
-      expect(response.status).toBe(503);
-      expect(
-        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
-      ).toBe(0);
-      expect(
-        yield* fromTestPromise(() =>
-          countRows(
-            db,
-            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch')"
-          )
-        )
-      ).toBe(0);
-    })
   ));
 
 it("records a PAT refusal Audit for a refused batch child without partial writes", () =>
@@ -6015,52 +5087,63 @@ it("attributes a repeated observed revision to the later correction without part
 it("does not misattribute an unrelated earlier abort to a repeated-revision correction", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const seededId = "30000000-0000-4000-8000-000000000009";
       yield* fromTestPromise(() =>
-        seedTransaction({
+        seedNativeTransaction({
+          notes: "seed",
           db,
           userId: users[0] ?? "",
           id: seededId,
           categoryId: category,
         })
       );
+      const first = correctionCall(1, seededId, {
+        expectedRevision: 0,
+        changes: { notes: "first" },
+      });
+      const repeated = correctionCall(2, seededId, {
+        expectedRevision: 0,
+        changes: { notes: "second" },
+      });
       yield* fromTestPromise(() =>
-        db
-          .prepare(`CREATE TRIGGER unrelated_correction_abort
-        BEFORE UPDATE ON transactions WHEN NEW.notes = 'first'
-        BEGIN SELECT RAISE(ABORT, 'unrelated failure'); END`)
-          .run()
-      );
-      const response = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
-          batchRequest(0, [
-            correctionCall(1, seededId, { expectedRevision: 0, changes: { notes: "first" } }),
-            correctionCall(2, seededId, { expectedRevision: 0, changes: { notes: "second" } }),
-          ])
+        db.exec(
+          "CREATE TRIGGER fail_initial_admission BEFORE INSERT ON canonical_request_buckets BEGIN SELECT RAISE(ABORT,'fixture admission unavailable'); END"
         )
       );
-      expect(response.status).toBe(503);
+      expect(
+        (yield* fromTestPromise(() => db.send(batchRequest(0, [first, repeated])))).status
+      ).toBe(503);
+      yield* fromTestPromise(() => db.exec("DROP TRIGGER fail_initial_admission"));
+      yield* fromTestPromise(() =>
+        db.exec(
+          `CREATE TRIGGER unrelated_correction_abort BEFORE UPDATE ON transactions WHEN NEW.notes='first' BEGIN SELECT RAISE(ABORT,'unrelated failure'); END`
+        )
+      );
+      expect(
+        (yield* fromTestPromise(() =>
+          db.send(batchRequest(0, [first, transactionCall(2, input())]))
+        )).status
+      ).toBe(503);
       expect(
         yield* fromTestPromise(() =>
-          db
-            .prepare("SELECT notes,revision FROM transactions WHERE user_id = ? AND id = ?")
-            .bind(users[0], seededId)
-            .all()
+          db.exec(
+            "SELECT notes,revision FROM transactions WHERE user_id=? AND id=?",
+            users[0] ?? "",
+            seededId
+          )
         )
-      ).toMatchObject({ results: [{ notes: "seed", revision: 0 }] });
-      expect(yield* fromTestPromise(() => auditedOperations(db, users[0] ?? ""))).toEqual([]);
-    })
+      ).toEqual([{ notes: "seed", revision: 0 }]);
+      expect(yield* fromTestPromise(() => nativeAuditedOperations(db, users[0] ?? ""))).toEqual([]);
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("refuses a cookie-admitted batch without the browser origin and writes nothing", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const refused = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
+        db.send(
           new Request("https://api.fidyapp.com/operations/atomic-batch", {
             method: "POST",
             headers: {
@@ -6074,25 +5157,12 @@ it("refuses a cookie-admitted batch without the browser origin and writes nothin
       );
       expect(refused.status).toBe(403);
       expect(
-        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
-      ).toBe(0);
-      expect(
         yield* fromTestPromise(() =>
-          countRows(
-            db,
-            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch')"
-          )
+          nativeCountRows(db, "SELECT count(*) AS count FROM transactions")
         )
       ).toBe(0);
-      expect(
-        yield* fromTestPromise(() =>
-          countRows(
-            db,
-            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit"
-          )
-        )
-      ).toBe(0);
-    })
+      expect(yield* fromTestPromise(() => nativeAuditedOperations(db, users[0] ?? ""))).toEqual([]);
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("permanently deletes visible history with provenance retained and rejects another User", () =>
@@ -6271,53 +5341,6 @@ it.each(["linked", "audit-outage", "read-only", "revoked"] as const)(
     )
 );
 
-it("rolls back deletion and dashboard removal when a later batch child fails at commit", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
-      const owner = users[0] ?? "";
-      const id = "30000000-0000-4000-8000-000000000995";
-      yield* fromTestPromise(() =>
-        seedRetainedTransaction({ db, userId: owner, id, categoryId: category })
-      );
-      yield* fromTestPromise(() =>
-        db
-          .prepare(
-            "CREATE TRIGGER abort_next_capture BEFORE INSERT ON transactions BEGIN SELECT RAISE(ABORT, 'capture_unavailable'); END"
-          )
-          .run()
-      );
-      const response = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
-          batchRequest(0, [
-            {
-              callId: batchCallId(1),
-              operation: "transactions.deleteTransaction",
-              input: { params: { id } },
-            },
-            transactionCall(2, input()),
-          ])
-        )
-      );
-      expect(response.status).toBe(503);
-      expect(
-        yield* fromTestPromise(() =>
-          db
-            .prepare("SELECT deleted_at_ms FROM transactions WHERE user_id = ? AND id = ?")
-            .bind(owner, id)
-            .first()
-        )
-      ).toMatchObject({ deleted_at_ms: null });
-      expect(
-        yield* fromTestPromise(() =>
-          countRows(db, "SELECT COUNT(*) AS count FROM transaction_projection_leaf")
-        )
-      ).toBe(1);
-      expect(yield* fromTestPromise(() => auditedOperations(db, owner))).toEqual([]);
-    })
-  ));
-
 it("cannot link a hidden Transaction or restore its visibility", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -6379,227 +5402,6 @@ it("cannot link a hidden Transaction or restore its visibility", () =>
       ).toBe(1);
     }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
-const loadMeasurement =
-  Effect.runSync(Config.String("INFRA_PERFORMANCE_LOAD").pipe(Config.withDefault("0"))) === "1";
-const growthMeasurement =
-  Effect.runSync(Config.String("INFRA_PERFORMANCE_GROWTH").pipe(Config.withDefault("0"))) === "1";
-const loadMeasurementCodec = Schema.fromJsonString(
-  Schema.Struct({
-    operation: Schema.Literal("native.mixed-load"),
-    users: Schema.Int,
-    concurrency: Schema.Int,
-    requests: Schema.Int,
-    elapsedMilliseconds: Schema.Finite,
-    requestsPerSecond: Schema.Finite,
-    acceptedRequests: Schema.Int,
-    acceptedRequestsPerSecond: Schema.Finite,
-    acceptedP95Milliseconds: Schema.Finite,
-    p50Milliseconds: Schema.Finite,
-    p95Milliseconds: Schema.Finite,
-    p99Milliseconds: Schema.Finite,
-    capturedTransactions: Schema.Int,
-    rateLimitedRequests: Schema.Int,
-    paceMilliseconds: Schema.Int,
-  })
-);
-
-const sessionBinding = (index: number): string => sessions[index] ?? "invalid";
-
-const measureMixedRequest = Effect.fn(function* ({
-  db,
-  coordinator,
-  index,
-  userCount,
-  timings,
-  acceptedTimings,
-  capturesByUser,
-  started,
-  paceMilliseconds,
-}: Readonly<{
-  db: D1Database;
-  coordinator: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
-  index: number;
-  userCount: number;
-  timings: number[];
-  acceptedTimings: number[];
-  capturesByUser: number[];
-  started: number;
-  paceMilliseconds: number;
-}>) {
-  const user = Math.floor(index / 2) % userCount;
-  const mutation = index % 2 === 0;
-  const headers = {
-    origin: "https://app.fidyapp.com",
-    "Fidy-Session-Binding": sessionBinding(user),
-    cookie: `__Host-fidy_session=${bearer(user)}`,
-    ...(mutation ? { "content-type": "application/json" } : {}),
-  };
-  const body = mutation
-    ? yield* Schema.encodeEffect(Schema.fromJsonString(TestTransactionPayload))(
-        input({ counterparty: `Load ${index}` })
-      )
-    : undefined;
-  const remaining = started + (index * paceMilliseconds) / userCount - performance.now();
-  if (remaining > 0) yield* Effect.sleep(remaining);
-  const before = performance.now();
-  const response = yield* fromTestPromise(() =>
-    sendPublicRequest(
-      db,
-      new Request("https://api.fidyapp.com/transactions", {
-        method: mutation ? "POST" : "GET",
-        headers,
-        body,
-      }),
-      coordinator
-    )
-  );
-  yield* fromTestPromise(() => response.arrayBuffer());
-  const elapsed = performance.now() - before;
-  timings.push(elapsed);
-  if (response.status < 300) acceptedTimings.push(elapsed);
-  expect([mutation ? 201 : 200, 429]).toContain(response.status);
-  if (response.status === 201) capturesByUser[user] = (capturesByUser[user] ?? 0) + 1;
-  return response.status;
-});
-const mixedLoadScenarios = (
-  userCount: number
-): ReadonlyArray<
-  Readonly<{ concurrency: number; requestCount: number; paceMilliseconds: number }>
-> =>
-  growthMeasurement
-    ? [
-        {
-          concurrency: Math.max(2, userCount),
-          requestCount: userCount * 24,
-          paceMilliseconds: 1050,
-        },
-        { concurrency: 32, requestCount: userCount * 128, paceMilliseconds: 0 },
-      ]
-    : [
-        { concurrency: 2, requestCount: 32, paceMilliseconds: 1050 },
-        ...[2, 8, 32].map((concurrency) => ({
-          concurrency,
-          requestCount: 128,
-          paceMilliseconds: 0,
-        })),
-      ];
-
-it.runIf(loadMeasurement || growthMeasurement)(
-  "measures sustained mixed public requests and hot-User coordination",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        vi.useRealTimers();
-        measuringLoad = true;
-        const millisecondsPerSecond = 1000;
-        for (const userCount of growthMeasurement ? [1, 8, 32] : [1, 2]) {
-          for (const scenario of mixedLoadScenarios(userCount)) {
-            const { concurrency, requestCount, paceMilliseconds } = scenario;
-            const db = yield* fromTestPromise(() => setup(true, userCount));
-            const instance = instances.at(-1);
-            if (instance === undefined) throw new Error("Missing native runtime");
-            const namespace = yield* fromTestPromise(() =>
-              instance.getDurableObjectNamespace("USER_TRANSACTION_COORDINATOR")
-            );
-            const coordinator = {
-              getByName: (name: string): Pick<Fetcher, "fetch"> => ({
-                fetch: (command) => {
-                  const request = new Request(command);
-                  return request
-                    .text()
-                    .then((body) =>
-                      namespace.getByName(name).fetch(request.url, {
-                        method: request.method,
-                        headers: Object.fromEntries(request.headers),
-                        ...(request.body === null ? {} : { body }),
-                      })
-                    )
-                    .then(replayResponse);
-                },
-              }),
-            };
-            const timings: number[] = [];
-            const acceptedTimings: number[] = [];
-            const capturesByUser = Array.from({ length: userCount }, () => 0);
-            const started = performance.now();
-            const responses = yield* Effect.forEach(
-              Array.from({ length: requestCount }, (_, index) => index),
-              (index) =>
-                measureMixedRequest({
-                  db,
-                  coordinator,
-                  index,
-                  userCount,
-                  timings,
-                  acceptedTimings,
-                  capturesByUser,
-                  started,
-                  paceMilliseconds,
-                }),
-              { concurrency }
-            );
-            const elapsedMilliseconds = performance.now() - started;
-            expect(responses).toHaveLength(requestCount);
-            const capturedTransactions = yield* fromTestPromise(() =>
-              countRows(db, "SELECT COUNT(*) AS count FROM transactions")
-            );
-            expect(capturedTransactions).toBe(responses.filter((status) => status === 201).length);
-            expect(capturedTransactions).toBeGreaterThan(0);
-            expect(
-              yield* fromTestPromise(() =>
-                countRows(db, "SELECT COUNT(*) AS count FROM canonical_request_leases")
-              )
-            ).toBe(0);
-            if (paceMilliseconds > 0) {
-              expect(responses.filter((status) => status === 429)).toHaveLength(0);
-            }
-            for (let user = 0; user < userCount; user += 1) {
-              expect(
-                yield* fromTestPromise(() =>
-                  countRows(
-                    db,
-                    "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
-                    loadUserId(user)
-                  )
-                )
-              ).toBe(capturesByUser[user]);
-            }
-            timings.sort((left, right) => left - right);
-            acceptedTimings.sort((left, right) => left - right);
-            const percentile = (fraction: number): number =>
-              timings[Math.ceil(timings.length * fraction) - 1] ?? 0;
-            const encoded = yield* Schema.encodeEffect(loadMeasurementCodec)({
-              operation: "native.mixed-load",
-              users: userCount,
-              concurrency,
-              requests: requestCount,
-              elapsedMilliseconds,
-              requestsPerSecond: (requestCount * millisecondsPerSecond) / elapsedMilliseconds,
-              acceptedRequests: acceptedTimings.length,
-              acceptedRequestsPerSecond:
-                (acceptedTimings.length * millisecondsPerSecond) / elapsedMilliseconds,
-              acceptedP95Milliseconds:
-                acceptedTimings[Math.ceil(acceptedTimings.length * 0.95) - 1] ?? 0,
-              p50Milliseconds: percentile(0.5),
-              p95Milliseconds: percentile(0.95),
-              p99Milliseconds: percentile(0.99),
-              capturedTransactions,
-              rateLimitedRequests: responses.filter((status) => status === 429).length,
-              paceMilliseconds,
-            });
-            yield* Effect.sync(() => process.stdout.write(`INFRA_LOAD ${encoded}\n`));
-          }
-        }
-      }).pipe(
-        Effect.ensuring(
-          Effect.sync(() => {
-            measuringLoad = false;
-          })
-        )
-      )
-    ),
-  300_000
-);
 
 it("searches older effective Transactions with combined exact Money filters and bounded continuation", () =>
   Effect.runPromise(

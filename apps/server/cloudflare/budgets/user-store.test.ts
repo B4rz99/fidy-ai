@@ -207,7 +207,25 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             data: { statuses: [{ spent: { amount, currency: "USD" } }] },
           });
         });
+        const pending =
+          "SELECT kind,source,offer_id,next_ms FROM category_opportunities ORDER BY kind";
+        const threshold =
+          "SELECT budget_id,threshold,event_id FROM budget_threshold_crossings ORDER BY budget_id,threshold";
+        yield* native(() =>
+          db.exec(
+            "UPDATE category_opportunities SET next_ms=9000000000000 WHERE kind='budget-threshold'"
+          )
+        );
+        const snapshot = Effect.all([
+          native(() => db.exec(pending)),
+          native(() => db.exec(threshold)),
+        ]);
+        const before = yield* snapshot;
+        expect(before[0]).toMatchObject([
+          { kind: "budget-threshold", offer_id: null, next_ms: 9000000000000 },
+        ]);
         yield* observe("18014398509481986.22");
+        expect(yield* snapshot).toEqual(before);
         const foreign = "40000000-0000-4000-8000-000000000055";
         yield* native(() =>
           db

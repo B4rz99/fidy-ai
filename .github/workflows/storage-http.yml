@@ -46,6 +46,8 @@ jobs:
             apps/server/cloudflare/browser-acceptance-seed.ts
           bash scripts/install-workspace.sh --ignore-scripts
           (cd baseline-d1 && bash scripts/install-workspace.sh --ignore-scripts)
+      - name: Check the comparator Worker code
+        run: bun x oxlint --deny-warnings --config .oxlintrc.json scripts/infra-performance/cells/*.mjs
       - name: Measure the paired canonical HTTP read with real Sessions
         run: python3 scripts/infra-performance/cells/rehearse.py --d1 baseline-d1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

@@ -147,7 +147,7 @@ const workspaceCategoriesSource: (client: FidyClient) => CategoriesQuery = Atom.
         refresh(individual);
       }
     );
-    return forwardFreshQuery({ query: source, sources: [metadata, individual] });
+    return forwardFreshQuery({ query: source, sources: [metadata, individual], concurrency: 2 });
   }
 );
 const workspaceCategoriesView = Atom.family((client: FidyClient) =>

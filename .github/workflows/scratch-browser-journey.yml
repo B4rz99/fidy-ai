@@ -1,8 +1,8 @@
-name: Attribute browser request timing
+name: Attribute settled refresh and parallel Category recovery
 
 on:
   push:
-    branches: [test/2260-latency-attribution]
+    branches: [test/2260-latency-settled]
 
 permissions:
   contents: read
@@ -50,7 +50,7 @@ jobs:
       - name: Exercise the 400 ms / 1 Mbps profile on both builds
         run: |
           python3 scripts/infra-performance/reference/run.py --d1 baseline-d1 --do . \
-            --dataset production --network poor --pairs 1 --origin "GitHub-hosted Ubuntu loopback"
+            --dataset production --network poor --pairs 1 --origin "GitHub Ubuntu loopback, settled manual refresh, candidate parallel Category recovery"
       - name: Preserve reference evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

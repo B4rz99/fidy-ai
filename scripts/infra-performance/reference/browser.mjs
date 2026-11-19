@@ -167,7 +167,12 @@ try {
     observe,
     observeStartup: async (reply) =>
       Schema.decodeSync(Schema.fromJsonString(Schema.Unknown))(await reply.text()),
-    beforeRefresh: evidence,
+    beforeRefresh: async () => {
+      note({type:"settle-start"});
+      await page.waitForLoadState("networkidle");
+      note({type:"settle-finished"});
+      return evidence();
+    },
     offered: (journey) => marks("offered",journey),
     completed: (journey) => marks("completed",journey),
   });

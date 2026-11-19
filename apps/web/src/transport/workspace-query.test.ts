@@ -1,4 +1,4 @@
-import { Clock, Deferred, Effect, Layer, Option } from "effect";
+import { Clock, Deferred, Effect, Fiber, Layer, Option } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 import { it } from "@effect/vitest";
@@ -191,9 +191,11 @@ it.live("keeps mounted taxonomy atoms stable through collection and an equivalen
   })
 );
 
-it.live("strict Category recovery awaits newly decoded canonical taxonomy reads", () =>
+it.live("strict Category recovery starts both independent canonical reads and awaits them", () =>
   Effect.gen(function* () {
     const reads: string[] = [];
+    const bothRequested = yield* Deferred.make<void>();
+    const release = yield* Deferred.make<void>();
     const http = HttpClient.make((request) => {
       const path = new URL(request.url).pathname;
       reads.push(path);
@@ -204,7 +206,12 @@ it.live("strict Category recovery awaits newly decoded canonical taxonomy reads"
               data: [{ id: "10000000-0000-4000-8000-000000000002", label: "Mercado" }],
               next: [],
             });
-      return Effect.succeed(HttpClientResponse.fromWeb(request, response));
+      const initial = reads.length === 1;
+      return Effect.gen(function* () {
+        if (reads.length === 3) yield* Deferred.succeed(bothRequested, undefined);
+        if (!initial) yield* Deferred.await(release);
+        return HttpClientResponse.fromWeb(request, response);
+      });
     });
     const client = makeFidyClient({
       apiOrigin: "https://api.test.fidyapp.com",
@@ -215,8 +222,14 @@ it.live("strict Category recovery awaits newly decoded canonical taxonomy reads"
     try {
       yield* AtomRegistry.getResult(registry, categories.source);
       expect(reads).toEqual(["/user"]);
-      expect(yield* readFreshQuery({ registry, query: categories.source })).toBe(true);
-      expect(reads).toEqual(["/user", "/user", "/categories"]);
+      const recovery = yield* Effect.forkChild(
+        readFreshQuery({ registry, query: categories.source })
+      );
+      const overlap = yield* Deferred.await(bothRequested).pipe(Effect.timeoutOption("1 second"));
+      yield* Deferred.succeed(release, undefined);
+      expect(yield* Fiber.join(recovery)).toBe(true);
+      expect(Option.isSome(overlap)).toBe(true);
+      expect(reads.slice(1).toSorted()).toEqual(["/categories", "/user"]);
       expect(
         (yield* AtomRegistry.getResult(registry, categories.source, { suspendOnWaiting: true }))
           .data[0]?.label

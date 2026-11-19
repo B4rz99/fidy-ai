@@ -79,18 +79,31 @@ def confirmed(receipt, account):
     subdomain = cloudflare(base + "/workers/subdomain")["subdomain"]
     if not re.fullmatch(r"[a-z0-9-]+", subdomain):
         raise Refused("Missing account Workers subdomain")
+    settings = {}
     for role in ("core", "ingress"):
-        item = cloudflare(base + "/workers/scripts/" + tag + "-" + role + "/deployments")["deployments"][0]
+        worker = base + "/workers/scripts/" + tag + "-" + role
+        address = cloudflare(worker + "/subdomain")
+        if address.get("enabled") is not (role == "ingress") or address.get("previews_enabled") is not False:
+            raise Refused("Unexpected disposable Worker exposure")
+        settings[role] = {b["name"]: b for b in cloudflare(worker + "/settings")["bindings"]}
+        item = cloudflare(worker + "/deployments")["deployments"][0]
         version, = item["versions"]
         if version["version_id"] != receipt["versions"][role] or version["percentage"] != 100:
             raise Refused("Disposable Worker version mismatch")
     database = cloudflare(base + "/d1/database/" + str(UUID(receipt["databaseId"])))
     if database["name"] != tag or database["uuid"] != receipt["databaseId"]:
         raise Refused("Unexpected D1 database")
-    bindings = cloudflare(base + "/workers/scripts/" + tag + "-core/settings")["bindings"]
-    db, = [b for b in bindings if b["type"] == "d1"]
-    if db["name"] != "DB" or db["id"] != database["uuid"]:
-        raise Refused("Disposable Core is bound to another database")
+    core, ingress = settings["core"], settings["ingress"]
+    db, = [b for b in core.values() if b["type"] == "d1"]
+    if (db["name"] != "DB" or db["database_id"] != database["uuid"]
+            or any(b["type"] == "d1" for b in ingress.values())
+            or ingress["CORE"].get("service") != tag + "-core"
+            or core["ERASURE_BUCKET"].get("bucket_name") != tag):
+        raise Refused("Disposable resource binding mismatch")
+    namespaces = [core["USER_TRANSACTION_COORDINATOR"], core["ERASURE_REGISTRY_COORDINATOR"], ingress["ERASURE_REGISTRY_COORDINATOR"]]
+    if (not namespaces[0].get("namespace_id") or any(b.get("namespace_id") != namespaces[0]["namespace_id"]
+            or b.get("class_name") != "UserTransactionCoordinator" for b in namespaces)):
+        raise Refused("Disposable coordinator identity mismatch")
     if receipt["fixture"] != FIXTURE or receipt["baseline"] != PIN or receipt["day"] != today():
         raise Refused("Missing same-day calibrated fixture receipt")
     return "https://" + tag + "-ingress." + subdomain + ".workers.dev"

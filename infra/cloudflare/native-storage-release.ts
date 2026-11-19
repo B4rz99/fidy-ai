@@ -1057,7 +1057,7 @@ const prepareDiagnostics = Effect.fn(function* (
     client
   );
 });
-const meter = (phase: "begin" | "check" | "finish" | "logs") =>
+const meter = (phase: "begin" | "check" | "finish" | "probe-logs" | "logs") =>
   releaseCommand({
     args: ["python3", "../../scripts/infra-performance/deployed-fleet/pilot.py", phase],
     lifetime: "read-only",
@@ -1092,6 +1092,8 @@ const fleetPilot = Effect.fn(function* (
       })
     );
   };
+  yield* record({ stage: "verified-release" });
+  yield* meter("probe-logs");
   const measured = yield* Effect.exit(
     runFleetPilot({
       inventory: () => readUserObjects(accountReader(env, client), installed.userNamespace),

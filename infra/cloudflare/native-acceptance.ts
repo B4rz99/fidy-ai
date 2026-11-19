@@ -362,7 +362,7 @@ const renewWork = Effect.fn(function* (input: Inputs) {
     Schema.Struct({ revision: Schema.Literal(input.revision), deadline: Schema.Int })
   );
 });
-const admitBrowserErasure = Effect.fn(function* (input: Inputs, user: Pick<User, "headers">) {
+const admitBrowserErasure = Effect.fn(function* (input: Inputs, user: { headers: Readonly<Record<string, string>> }) {
   const { post } = runner(input);
   const reply = yield* validStatus(
     yield* post("/web/privacy/erasure", { confirm: true }, user.headers),

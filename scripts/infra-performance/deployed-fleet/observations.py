@@ -20,6 +20,7 @@ def observation(query, account, version, start, end):
     if len(events) >= 100 or results.get("count", len(events)) != len(events):
         raise ValueError("Coverage events truncated")
     rows = {}
+    counters = ("attempted", "observed", "failed", "unknown", "unsupported", "repaired")
     for event in events:
         worker, metadata = event["$workers"], event["$metadata"]
         at = event["timestamp"]
@@ -30,7 +31,12 @@ def observation(query, account, version, start, end):
         match = re.search(re.escape(COVERAGE) + r"(wrapped|capacity|deadline|cleanup)\b", metadata["message"])
         if not match:
             raise ValueError("Unrecognized watchdog outcome")
-        rows[metadata["id"]] = {"at": at, "halt": match.group(1)}
+        row = {"at": at, "halt": match.group(1)}
+        # Structured fields may be absent when the logger exports an unstructured line.
+        source = event.get("source")
+        if isinstance(source, dict) and all(type(source.get(key)) is int and source[key] >= 0 for key in counters):
+            row.update({key: source[key] for key in counters})
+        rows[metadata["id"]] = row
     ordered = sorted(rows.values(), key=lambda row: row["at"])
     midpoint = start + 300_000
     return {

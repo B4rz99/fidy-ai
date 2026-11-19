@@ -103,10 +103,15 @@ def sample(phase):
     def record(stage, **values):
         with journal.open("a") as out:
             print(json.dumps({"stage": stage, "revision": os.environ["GITHUB_SHA"], **values}), file=out)
-    if phase == "logs":
+    if phase in ("probe-logs", "logs"):
         evidence = json.loads(Path(os.environ["SMOKE_ATTESTATION_FILE"] + ".fleet").read_text())
         if evidence["revision"] != os.environ["GITHUB_SHA"]:
             raise ValueError("Foreign observation revision")
+        if phase == "probe-logs":
+            now = int(time.time() * 1000)
+            observation(query, os.environ["CLOUDFLARE_ACCOUNT_ID"], evidence["coreVersion"], now - 60_000, now)
+            record(phase, available=True)
+            return
         start, = [row["at"] for row in evidence["events"] if row["stage"] == "observation-start"]
         end, = [row["at"] for row in evidence["events"] if row["stage"] == "observation-end"]
         if end - start < 600_000:
@@ -138,6 +143,8 @@ def sample(phase):
         if phase == "check":
             if (current.reads > DAILY_READS - RESERVE_READS
                     or current.writes > DAILY_WRITES - RESERVE_WRITES
+                    or delta["writes"] > PILOT_WRITES - 10_000
+                    or delta["reads"] > PILOT_READS - 250_000
                     or current.sampled - before.sampled > MAX_SECONDS - 15 * 60):
                 raise ValueError("Reserve remaining work for cleanup")
             return

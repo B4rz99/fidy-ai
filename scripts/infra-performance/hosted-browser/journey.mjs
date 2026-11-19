@@ -18,7 +18,10 @@ const timeoutMs = 30000,
   bytesPerSecond = 125000,
   success = 200;
 const json = Schema.decodeSync(Schema.fromJsonString(Schema.Unknown));
-/** @param {Origins} origins @param {number} port */
+/**
+ * @param {Origins} origins Installed web and API host pair.
+ * @param {number} port Runner-local TLS listener port.
+ */
 const launch = (origins, port) =>
   chromium.launch({
     executablePath: process.env.ASSESSMENT_CHROMIUM,
@@ -30,7 +33,11 @@ const launch = (origins, port) =>
       "--host-resolver-rules=MAP " + new URL(origins.api).hostname + ":443 127.0.0.1:" + port,
     ],
   });
-/** @param {import("@playwright/test").Browser} browser @param {Origins} origins @param {string} session */
+/**
+ * @param {import("@playwright/test").Browser} browser Chromium instance.
+ * @param {Origins} origins Installed web and API host pair.
+ * @param {string} session Host-only synthetic WebSession credential.
+ */
 const openPage = async (browser, origins, session) => {
   const context = await browser.newContext({
     timezoneId: "America/Bogota",
@@ -50,7 +57,10 @@ const openPage = async (browser, origins, session) => {
   page.setDefaultTimeout(timeoutMs);
   return { page, context };
 };
-/** @param {Cdp} cdp @param {Network} network */
+/**
+ * @param {Cdp} cdp DevTools session for the measured page.
+ * @param {Network} network Predeclared network profile.
+ */
 const setNetwork = async (cdp, network) => {
   await cdp.send("Network.enable");
   if (network === "poor") {
@@ -62,12 +72,19 @@ const setNetwork = async (cdp, network) => {
     });
   }
 };
-/** @param {string} origin @param {Origins} origins */
+/**
+ * @param {string} origin Observed resource origin.
+ * @param {Origins} origins Installed web and API host pair.
+ */
 const resourceBoundary = (origin, origins) => {
   if (origin === origins.api) return "api";
   return origin === origins.browser ? "web" : "external";
 };
-/** @param {Cdp} cdp @param {Origins} origins @param {EventSink} event */
+/**
+ * @param {Cdp} cdp DevTools session for the measured page.
+ * @param {Origins} origins Installed web and API host pair.
+ * @param {EventSink} event Metadata-only evidence sink.
+ */
 const recordResources = (cdp, origins, event) => {
   // Retain counts and encoded bytes only. URLs can include provider proof and User content.
   /** @type {Map<string, {boundary: string, status: number}>} */
@@ -89,7 +106,10 @@ const recordResources = (cdp, origins, event) => {
     event({ type: "network-failure", canceled: canceled === true });
   });
 };
-/** @param {EventSink} event @param {BrowserResponse} response */
+/**
+ * @param {EventSink} event Metadata-only evidence sink.
+ * @param {BrowserResponse} response Observed browser response.
+ */
 const observeResponse = async (event, response) => {
   const body = await response.body();
   const request = response.request();
@@ -105,7 +125,11 @@ const observeResponse = async (event, response) => {
   assert.equal(response.status(), success);
   return json(body.toString("utf8"));
 };
-/** @param {EventSink} event @param {Network} network @param {string} version */
+/**
+ * @param {EventSink} event Metadata-only evidence sink.
+ * @param {Network} network Predeclared network profile.
+ * @param {string} version Chromium version reported by the executable.
+ */
 const recordBrowser = (event, network, version) => {
   event({
     type: "browser",
@@ -122,7 +146,9 @@ const recordBrowser = (event, network, version) => {
     load: "one active browser",
   });
 };
-/** @param {Inputs} inputs */
+/**
+ * @param {Inputs} inputs Installed origins, WebSession, network and evidence sink.
+ */
 export const measureBrowser = async ({
   origins,
   environment,
@@ -149,7 +175,9 @@ export const measureBrowser = async ({
     await setNetwork(cdp, network);
     recordBrowser(event, network, browser.version());
     recordResources(cdp, origins, event);
-    /** @param {BrowserResponse} response */
+    /**
+     * @param {BrowserResponse} response Observed browser response.
+     */
     const observe = (response) => observeResponse(event, response);
     await freshTransactions({
       page,

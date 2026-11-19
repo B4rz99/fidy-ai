@@ -87,8 +87,9 @@ export const runFleetPilot = Effect.fn(function* (port: Port) {
     // A single independently populated object permits one login-only recovery, never another signup.
     physical = Option.some(yield* targetFromCensus);
     member = yield* port.login();
-    if (member.outcome !== "approved")
+    if (member.outcome !== "approved") {
       return yield* Effect.fail(Error("Established session required"));
+    }
   }
   const observation = yield* Effect.exit(
     Effect.gen(function* () {

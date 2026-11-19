@@ -311,7 +311,9 @@ const erasureObservation = (
       encodeJson({ revision: env.revision, userNamespace, ...checkpoint })
     ),
 });
-const sendNative = (client: HttpClient.HttpClient): ((request: Request) => Effect.Effect<Response, Error>) =>
+const sendNative = (
+  client: HttpClient.HttpClient
+): ((request: Request) => Effect.Effect<Response, Error>) =>
   Effect.fn(function* (request: Request) {
     const reply = yield* client
       .execute(HttpClientRequest.fromWeb(request))
@@ -1057,7 +1059,10 @@ const prepareDiagnostics = Effect.fn(function* (
     client
   );
 });
-const meter = (phase: "begin" | "check" | "finish" | "probe-logs" | "logs", ...args: string[]): Effect.Effect<string, ReleaseFailure> =>
+const meter = (
+  phase: "begin" | "check" | "finish" | "probe-logs" | "logs",
+  ...args: string[]
+): Effect.Effect<string, ReleaseFailure> =>
   releaseCommand({
     args: ["python3", "../../scripts/infra-performance/deployed-fleet/pilot.py", phase, ...args],
     lifetime: "read-only",

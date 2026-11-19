@@ -118,8 +118,8 @@ def sample(phase):
             raise ValueError("Two elapsed windows required")
         observed = observation(query, os.environ["CLOUDFLARE_ACCOUNT_ID"], evidence["coreVersion"], start, end)
         record(phase, **observed)
-        if not observed["firstWindowTicks"] or not observed["secondWindowTicks"]:
-            raise ValueError("Missing coverage events in one or both windows")
+        if not observed["firstWindowWraps"] or not observed["secondWindowWraps"]:
+            raise ValueError("Missing completed traversal in one or both windows")
         return
     if phase == "begin":
         current = usage()

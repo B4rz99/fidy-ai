@@ -39,10 +39,13 @@ def observation(query, account, version, start, end):
         rows[metadata["id"]] = row
     ordered = sorted(rows.values(), key=lambda row: row["at"])
     midpoint = start + 300_000
+    wraps = [row["at"] for row in ordered if row["halt"] == "wrapped"]
     return {
         "coverageEvents": ordered,
         "firstWindowTicks": sum(row["at"] < midpoint for row in ordered),
         "secondWindowTicks": sum(midpoint <= row["at"] < midpoint + 300_000 for row in ordered),
+        "firstWindowWraps": sum(at < midpoint for at in wraps),
+        "secondWindowWraps": sum(midpoint <= at < midpoint + 300_000 for at in wraps),
         "individualAttempts": None, "individualSuccessfulChecks": None,
         "failedOrUnknownProbes": None, "completedWatchdogRecoveries": None,
     }

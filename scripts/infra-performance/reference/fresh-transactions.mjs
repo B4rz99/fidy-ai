@@ -22,16 +22,24 @@ const changedTransaction = Schema.decodeUnknownSync(
   })
 );
 
+function expectedRows(calibration) {
+  return Array.from({ length: calibration ? 7 : 25 }, (_, index) => {
+    const ordinal = index === 0 ? 0 : index + 1;
+    return {
+      id: "81000000-0000-4000-8000-" + String(ordinal).padStart(12, "0"),
+      label: "Evaluación " + ordinal,
+    };
+  });
+}
+
 function verifySeededPage(initial, calibration) {
   const productionPage = 7;
   const ordinaryPage = 25;
   assert.equal(initial.data.length, calibration ? productionPage : ordinaryPage);
-  const ids = initial.data.map((record) => record.id);
-  const expectedIds = initial.data.map((_, index) => {
-    const ordinal = index === 0 ? 0 : index + 1;
-    return "81000000-0000-4000-8000-" + String(ordinal).padStart("000000000000".length, "0");
-  });
-  assert.deepEqual(ids, expectedIds);
+  assert.deepEqual(
+    initial.data.map((record) => record.id),
+    expectedRows(calibration).map((row) => row.id)
+  );
   if (calibration) {
     for (const [index, row] of initial.data.entries()) {
       const ordinal = index === 0 ? 0 : index + 1;
@@ -69,8 +77,26 @@ export async function freshTransactions({
   // ResponseEnd is measured from Chromium request start through body completion. It never subtracts RTT.
   /** @param {string} label Expected visible counterparty. */
   const ready = async (label) => {
-    const control = page.locator('[id="transaction-' + targetId + '"]:enabled');
-    await control.filter({ hasText: label }).waitFor();
+    const expected = expectedRows(calibration).map((row) =>
+      row.id === targetId ? { ...row, label } : row
+    );
+    await page.waitForFunction((rows) => {
+      const controls = document.querySelectorAll(
+        'button[data-transaction-slot="transaction-identity-control"]'
+      );
+      return (
+        controls.length === rows.length &&
+        rows.every((row, index) => {
+          const control = controls[index];
+          return (
+            control.id === "transaction-" + row.id &&
+            control.matches(":enabled") &&
+            control.getClientRects().length > 0 &&
+            control.textContent.includes(row.label)
+          );
+        })
+      );
+    }, expected);
     await page.evaluate(
       () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
     );

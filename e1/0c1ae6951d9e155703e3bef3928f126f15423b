@@ -1,0 +1,22 @@
+apps/server/cloudflare/core-http/native-initial-consent.test.ts
+  s_a1be23a656acf0::t_7bd6a7ad8ba95e 23-25
+  s_a1be23a656acf0::t_b2df02e8003a55 1-4,6-8,10-21,26-29,31-36,38-50,52-60,62-81
+apps/server/cloudflare/directory/pairing-isolation.test.ts
+  s_a1be23a656acf0::t_c8ff731557f4dd 1,3-6,8-48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e10c1ae6951d9e155703e3bef3928f126f15423b",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -142,7 +142,7 @@ def prepare(call, directory, revision, member):
             result = proof if identifier == hidden["id"] else call("GET", "/transactions/" + identifier, None)
             inspected = result["data"]
             retained = inspected["sources"]
-            expected_members = pair if row in pair else [row]
+            expected_members = pair if row in pair else []
             if (len(retained) != len(expected_members) or
                     {source["transactionId"]:source["kinds"] for source in retained}
                     != {member["id"]:["manual"] for member in expected_members}):
@@ -150,7 +150,7 @@ def prepare(call, directory, revision, member):
             inspections[identifier] = result
         record = dict(revision=revision, member=member, originals=originals, inspections=inspections,
                       visible=visible["id"], suppressed=hidden["id"], history=page,
-                      counts=dict(originals=8, effective=7, links=1, originalsWithManualSource=8),
+                      counts=dict(originals=8, effective=7, links=1, manuallyCaptured=8, linkedOriginalsWithObservedManualKind=2),
                       sourceAttestationIds="unobserved by the deployed canonical inspection")
         existing = directory / "manifest.json"
         if existing.exists() and json.loads(existing.read_text()) != record:

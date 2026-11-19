@@ -66,6 +66,21 @@ const start = Effect.gen(function* () {
                 subject
               )
             );
+            if (Bun.env.FIDY_ASSESSMENT === "canonical-empty") {
+              const capture = yield* Effect.tryPromise(() =>
+                owner.exec(
+                  "SELECT s.id, s.transaction_id AS transactionId, s.kind, s.service_market AS serviceMarket, s.locale, s.time_zone AS timeZone, s.interpretation_revision AS interpretationRevision, s.created_at_ms AS createdAtMs, t.user_decisions AS decisions FROM source_attestations s JOIN transactions t ON t.user_id=s.user_id AND t.id=s.transaction_id WHERE s.user_id=? ORDER BY s.id LIMIT 9",
+                  subject
+                )
+              );
+              const links = yield* Effect.tryPromise(() =>
+                owner.exec(
+                  "SELECT first_transaction_id AS first, second_transaction_id AS second, visible_transaction_id AS visible, decided_at_ms AS decidedAtMs FROM transaction_reconciliation_decisions WHERE user_id=? AND state='linked' LIMIT 2",
+                  subject
+                )
+              );
+              return Response.json({ capture, links });
+            }
             return Response.json(counts);
           }
           return yield* approve(runtime, request);

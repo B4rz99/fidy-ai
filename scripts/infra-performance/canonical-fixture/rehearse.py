@@ -54,8 +54,18 @@ def main():
             previous = len(offered)
             if prepare(call, dest/"fixture", revision, "performance-1") != result or any(row["method"]=="POST" for row in offered[previous:]):
                 raise ValueError("Resuming the fixture attempted another mutation")
+            owner = subject.snapshot()
+            if len(owner["capture"]) != 8 or len(owner["links"]) != 1:
+                raise ValueError("Native fixture ownership counts differ")
+            write(dest/"fixture"/"native-local-provenance.json", dict(origin="disposable native workerd", **owner))
+            status, _, _ = subject.canonical("/transactions/" + result["visible"] + "/source-attestations")
+            if status != 404:
+                raise ValueError("Reevaluate the mounted provenance contract")
+            privacy = subject.json("/web/privacy/transactions", {"cursor":None}, "POST")
+            if privacy["data"] != result["history"]["data"] or set(privacy) != {"reference","scope","data","presentation","categories","next"}:
+                raise ValueError("Unexpected scope of the authenticated privacy response")
             write(dest/"report.json", dict(scope="native workerd synthetic WebSession", counts=result["counts"],
-                                           initial=previous, resumed=len(offered)-previous, duplicateMutations=0))
+                                           initial=previous, resumed=len(offered)-previous, duplicateMutations=0, attestationStatus=status, privacyScope=privacy["scope"]))
 
 
 if __name__ == "__main__":

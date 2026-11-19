@@ -132,7 +132,12 @@ const run = async (db, batch) => {
     billed.reads += reply.meta.rows_read;
     billed.writes += reply.meta.rows_written;
     const expected = batch[index]?.check;
-    if (expected) assert.equal(digest(reply.results), expected, "Final D1 verification differs");
+    if (expected)
+      assert.equal(
+        digest(reply.results),
+        expected,
+        "Final D1 verification differs for " + batch[index]?.sql
+      );
   }
   return billed;
 };
@@ -286,7 +291,14 @@ try {
     serial(chunks(entries), async (group) => {
       applied.push(await run(restored, Array.from(group)));
     });
-  await append([{ ...query(schemaSql), check: digest(pristine) }]);
+  evidence.stage = "verify-pristine";
+  // A D1 batch may itself initialize platform metadata, even when it only runs SELECT.
+  const applicationSchema = query(
+    "SELECT type,name,tbl_name,sql FROM sqlite_schema WHERE name <> '_cf_METADATA' ORDER BY type,name,tbl_name"
+  );
+  await append([
+    { ...applicationSchema, check: digest(pristine.filter((def) => def.name !== "_cf_METADATA")) },
+  ]);
   await serial(["table", "index", "view", "trigger"], async (kind) => {
     const group = definitions
       .filter((def) => def.type === kind)

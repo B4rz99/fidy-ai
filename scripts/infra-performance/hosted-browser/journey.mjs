@@ -61,7 +61,13 @@ export async function measureBrowser({ origins, environment, session, network, e
       type: "browser",
       version: browser.version(),
       profile: network,
-      offeredJourneys: 3,
+      plannedJourneys: 3,
+      network:
+        network === "poor"
+          ? { latencyMs: 400, bytesPerSecondEachDirection: 125000 }
+          : { emulation: "off" },
+      includes:
+        "navigation or interaction through populated enabled content, with Chromium and upstream network time; provider signup precedes measurement",
       lifecycle: "unknown",
       load: "one active browser",
     });
@@ -69,14 +75,14 @@ export async function measureBrowser({ origins, environment, session, network, e
     const resources = new Map();
     cdp.on("Network.responseReceived", ({ requestId, response }) => {
       const origin = new URL(response.url).origin;
-      resources.set(
-        requestId,
-        origin === origins.api ? "api" : origin === origins.browser ? "web" : "external"
-      );
+      resources.set(requestId, {
+        boundary: origin === origins.api ? "api" : origin === origins.browser ? "web" : "external",
+        status: response.status,
+      });
     });
     cdp.on("Network.loadingFinished", ({ requestId, encodedDataLength }) => {
-      const boundary = resources.get(requestId);
-      if (boundary) event({ type: "response", boundary, encodedBytes: encodedDataLength });
+      const metadata = resources.get(requestId);
+      if (metadata) event({ type: "response", ...metadata, encodedBytes: encodedDataLength });
       resources.delete(requestId);
     });
     cdp.on("Network.loadingFailed", ({ requestId, canceled }) => {
@@ -105,6 +111,7 @@ export async function measureBrowser({ origins, environment, session, network, e
       observe,
       observeStartup: observe,
       beforeRefresh: async () => undefined,
+      offered: (journey) => event({ type: "offered", journey }),
       completed: (journey, milliseconds) => event({ type: "completed", journey, milliseconds }),
     });
   } finally {

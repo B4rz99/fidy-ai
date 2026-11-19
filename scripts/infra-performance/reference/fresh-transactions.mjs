@@ -58,6 +58,7 @@ export async function freshTransactions({
   observe,
   observeStartup,
   beforeRefresh,
+  offered = () => {},
   completed = () => {},
 }) {
   const responseFor = (method, path) =>
@@ -76,6 +77,7 @@ export async function freshTransactions({
   };
   process.stderr.write("REFERENCE_STAGE bootstrap\n");
   const startupResponse = responseFor("GET", "/transactions");
+  offered("startup");
   const booting = performance.now();
   await page.goto(ledger, { waitUntil: "commit" });
   await ready("Evaluación 2");
@@ -116,6 +118,7 @@ export async function freshTransactions({
     return { completed };
   }, timeoutMs);
   const list = responseFor("GET", "/transactions");
+  offered("refresh");
   const started = performance.now();
   await page.getByRole("button", { name: "Actualizar transacciones", exact: true }).click();
   const initialResponse = await list;
@@ -140,6 +143,7 @@ export async function freshTransactions({
   process.stderr.write("REFERENCE_STAGE save\n");
   const save = responseFor("PUT", "/transactions/" + targetId);
   const refresh = responseFor("GET", "/transactions");
+  offered("correction");
   const saving = performance.now();
   await page.getByRole("button", { name: "Guardar", exact: true }).click();
   const saveResponse = await save;

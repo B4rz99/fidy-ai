@@ -61,8 +61,6 @@ export function protectedBrowserProxy({ origins, environment, tls, forward = fet
         acceptanceProofHeader,
       ])
         headers.delete(name);
-      // Bun decompresses fetch responses. Ask for identity encoding to preserve their original body.
-      headers.set("accept-encoding", "identity");
       const request = new Request(url, {
         method: incoming.method,
         headers,

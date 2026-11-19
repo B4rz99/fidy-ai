@@ -1,0 +1,137 @@
+name: Verify protected comparator integration
+on:
+  push:
+    branches: [ci/2259-combined-effect-check]
+permissions:
+  contents: read
+jobs:
+  static:
+    name: Workspace Gate
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      statuses: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: b51cff763b7cfe203b124d839606c35247318f9d
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+      - name: Fetch base branch tip
+        env:
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref || github.event.repository.default_branch }}
+        run: git fetch --no-tags --depth=1 origin "+refs/heads/$BASE_BRANCH:refs/remotes/origin/$BASE_BRANCH"
+      - uses: ./.github/actions/bun-install
+      - name: Restore every declared upstream reference
+        run: |
+          bun -e '
+            const sources = await Bun.file(".patterns/sources.json").json();
+            for (const source of Object.values(sources)) {
+              for (const path of [source.snapshot.manifest, ...source.sourcePaths]) {
+                if (path.startsWith(".repos/")) console.log("/" + path);
+              }
+            }
+          ' | git sparse-checkout add --stdin
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24"
+      - name: Install isolated Inspector dependencies for static analysis
+        run: bun install --cwd tools/mcp-inspector --frozen-lockfile
+      - name: Restore compiler-managed project graph
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            .tsbuild
+            tsconfig.tsbuildinfo
+          key: ${{ runner.os }}-typegraph-v1-${{ hashFiles('bun.lock', 'tsconfig*.json', 'apps/*/tsconfig*.json', 'infra/*/tsconfig*.json', 'tools/astro/tsconfig.json', 'tools/astro/bun.lock') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-typegraph-v1-${{ hashFiles('bun.lock', 'tsconfig*.json', 'apps/*/tsconfig*.json', 'infra/*/tsconfig*.json', 'tools/astro/tsconfig.json', 'tools/astro/bun.lock') }}-
+            ${{ runner.os }}-typegraph-v1-
+      - name: Static repository validation
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BASE_REF: origin/${{ github.event.pull_request.base.ref || github.event.repository.default_branch }}
+          PR_HEAD_SHA: b51cff763b7cfe203b124d839606c35247318f9d
+          GH_TOKEN: ${{ github.token }}
+          VERIFY_TIMING_REPORT: test-results/verify-static.json
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" != pull_request ]]; then unset PR_TITLE; fi
+          /usr/bin/time -p bun run verify -- --group static
+      - name: Select the reproduced Inspector Node runtime
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "26.5.0"
+      - name: Inspector transport regressions
+        run: |
+          bun run --cwd tools/mcp-inspector check
+          bun run --cwd tools/mcp-inspector test
+      - name: Preserve Workspace Gate phase timings
+        if: ${{ !cancelled() }}
+        timeout-minutes: 2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: workspace-gate-timings
+          path: test-results/verify-static.json
+          if-no-files-found: error
+          retention-days: 7
+
+
+  cloudflare-infra:
+    name: Cloudflare infrastructure tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: b51cff763b7cfe203b124d839606c35247318f9d
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+      - uses: ./.github/actions/bun-install
+      - name: Cloudflare infrastructure validation
+        env:
+          CLOUDFLARE_TEST_REPORT: "true"
+          VERIFY_TIMING_REPORT: infra/cloudflare/test-results/verify-infra.json
+        run: |
+          export TMPDIR="$(mktemp -d /dev/shm/fidy-infra.XXXXXX)"
+          export NATIVE_TEST_IMAGE_CACHE="$TMPDIR/pristine-native-images"
+          trap 'rm -rf "$TMPDIR"' EXIT
+          bun run verify -- --group cloudflare-infra
+      - name: Upload infrastructure timings
+        if: always()
+        timeout-minutes: 2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: cloudflare-infrastructure-timings
+          path: |
+            infra/cloudflare/test-results/cloudflare-infra.json
+            infra/cloudflare/test-results/verify-infra.json
+          if-no-files-found: error
+          retention-days: 7
+
+
+  security-sast:
+    name: SAST
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: b51cff763b7cfe203b124d839606c35247318f9d
+          fetch-depth: 0
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+      - name: Semgrep
+        env:
+          BASE_SHA: 1a2572a093a5670825e22802a60e0ac584c474e3
+        run: |
+          docker run --rm --pull=always -v "$PWD:/src" -w /src docker.io/semgrep/semgrep@sha256:81474464c1f07483ba0682a44787fd93c91397419762a04abe2bafaae396304b \
+            semgrep scan --error --strict --metrics=off --baseline-commit "$BASE_SHA" \
+            --config p/owasp-top-ten --config p/typescript --config p/secrets --exclude .repos .
+
+

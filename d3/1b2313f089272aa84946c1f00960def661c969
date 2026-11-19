@@ -1,0 +1,21 @@
+bun.lock
+  s_a1be23a656acf0::t_664cae0683fc52 12,464,466,468,470,472,474,476,478
+package.json
+  s_a1be23a656acf0::t_0ecb83f1a150e5 69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d31b2313f089272aa84946c1f00960def661c969",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

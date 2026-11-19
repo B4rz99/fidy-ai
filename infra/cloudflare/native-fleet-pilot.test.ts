@@ -1,5 +1,6 @@
 import { it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import { expect } from "vitest";
 import { runFleetPilot } from "./native-fleet-pilot";
 
@@ -72,5 +73,42 @@ it.effect("recovers an established pilot session for cleanup after a lost signup
     );
     expect(result._tag).toBe("Failure");
     expect(cleaned).toBe(true);
+  })
+);
+
+it.effect("waits through delayed baseline, enrollment and physical disposal for one signed member", () =>
+  Effect.gen(function* () {
+    let rows = new Map<string, boolean>();
+    let signups = 0, erasures = 0;
+    const stages: string[] = [];
+    const completed = yield* runFleetPilot({
+      inventory: () => Effect.sync(() => new Map(rows)),
+      register: () => Effect.sync(() => {
+        signups++;
+        return { outcome: "created",
+          erase: (): Effect.Effect<string> => Effect.sync(() => { erasures++; return "original"; }),
+          denied: (): Effect.Effect<void> => Effect.void };
+      }),
+      login: () => Effect.die("Unexpected pilot login"),
+      renew: () => Effect.void,
+      watch: (physical) => Effect.sync(() => expect(physical).toBe("pilot")).pipe(Effect.andThen(Effect.sleep("10 minutes"))),
+      record: (event) => Effect.sync(() => { stages.push(String(event["stage"])); }),
+    }).pipe(Effect.forkChild);
+    yield* TestClock.adjust("8 minutes");
+    expect(signups).toBe(0);
+    rows = new Map([["probe", true], ["one", true], ["two", true]]);
+    yield* TestClock.adjust("8 minutes");
+    expect(signups).toBe(1);
+    rows.set("pilot", true);
+    yield* TestClock.adjust("11 minutes");
+    expect(erasures).toBe(1);
+    yield* TestClock.adjust("8 minutes");
+    rows.set("pilot", false);
+    yield* TestClock.adjust("1 minute");
+    yield* Fiber.join(completed);
+    for(const stage of ["waiting-baseline", "waiting-fresh-object", "waiting-physical-erasure", "physically-erased"]) {
+      expect(stages).toContain(stage);
+    }
+    expect({signups, erasures}).toEqual({signups: 1, erasures: 1});
   })
 );

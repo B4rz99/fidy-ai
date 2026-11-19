@@ -28,11 +28,11 @@ jobs:
       - uses: ./.github/actions/bun-install
       - name: Read the reviewed merge source digest
         run: bun -e 'import { edgePolicyDigest } from "./infra/cloudflare/verify-edge-policy.ts"; console.log(edgePolicyDigest)'
-      - name: Verify the pinned combined release policy
-        run: bun infra/cloudflare/verify-edge-policy.ts
       - run: bun run --cwd infra/cloudflare test -- installed-verification-revision.test.ts
       - run: python3 -m unittest discover -s scripts/infra-performance/deployed-fleet
       - run: bun run --cwd infra/cloudflare test -- native-fleet-pilot.test.ts native-erasure-evidence.test.ts
+      - name: Verify the pinned combined release policy
+        run: bun infra/cloudflare/verify-edge-policy.ts
       - name: Check release types
         run: bun node_modules/typescript/bin/tsc -b infra/cloudflare
       - name: Check pilot conventions and release dispatch

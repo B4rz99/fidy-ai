@@ -1,14 +1,36 @@
 import { approvedOpenAiModel } from "@fidy/server/hosted-inference-contract";
 import { it } from "@effect/vitest";
+import { expect } from "vitest";
 import * as Alchemy from "alchemy";
 import * as Alchemist from "alchemy/Alchemist";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { evalStack } from "alchemy/Stack";
+import { evaluate } from "alchemy/Output";
+import { FetchHttpClient } from "effect/http";
 import { ConfigProvider, Effect, Schema } from "effect";
 import { nativeApplication } from "./native-application";
 import { NativeBindings } from "./native-graph";
 import { requireClosedBindings } from "./storage-installation";
 
+const pinId = "76a38a57-13ac-41e9-9004-0e1e1bf41d98";
+const pinFetch: typeof fetch = Object.assign(
+  (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const url = new URL(input instanceof Request ? input.url : input);
+    expect(url.pathname).toBe(
+      "/client/v4/accounts/" + "0".repeat(32) + "/access/identity_providers"
+    );
+    expect(init?.method).toBe("GET");
+    return Promise.resolve(
+      Response.json({
+        success: true,
+        errors: [],
+        messages: [],
+        result: [{ name: "Shared account PIN", type: "onetimepin", config: {}, id: pinId }],
+      })
+    );
+  },
+  { preconnect: fetch.preconnect }
+);
 it.effect(
   "declares every Core and smoke binding before a fresh Access application or queue exists",
   () => {
@@ -33,7 +55,25 @@ it.effect(
     return evalStack(
       stack,
       (compiled) =>
-        Effect.sync(() => {
+        Effect.gen(function* () {
+          const resources = Object.values(compiled.resources);
+          const applications = resources.filter(
+            (node) => node.Type === "Cloudflare.Access.Application"
+          );
+          expect(applications).toHaveLength(4);
+          expect(resources.some((node) => node.Type === "Cloudflare.Access.IdentityProvider")).toBe(
+            false
+          );
+          for (const application of applications) {
+            const { allowedIdps } = yield* Schema.decodeUnknownEffect(
+              Schema.Struct({ allowedIdps: Schema.Unknown })
+            )(application.Props);
+            expect(
+              yield* evaluate(allowedIdps, {}).pipe(
+                Effect.provideService(FetchHttpClient.Fetch, pinFetch)
+              )
+            ).toEqual([pinId]);
+          }
           const bindings = Schema.Struct({ bindings: Schema.optional(NativeBindings) });
           for (const worker of ["Core", "Smoke"] as const) {
             const id = worker === "Core" ? "Core" : "ReleaseSmoke-" + revision;

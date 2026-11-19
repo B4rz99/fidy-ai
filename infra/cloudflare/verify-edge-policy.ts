@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "464db35a0a4a8435602937dd9ad1bedf04e4e510e8198cec33ba639315fa1549";
+const expectedEdgePolicyDigest = "1acc5f6ca857fe96c4dd0a2305116d6088793e6c721c3b651975bd173e6b7dde";
 const securityArtifacts = [
   ...(await Promise.all(
     [
@@ -26,6 +26,8 @@ const securityArtifacts = [
       "../../apps/server/cloudflare/release-isolation/runtime.ts",
       "../../apps/server/cloudflare/runtime/release-smoke/internal/platform.ts",
       "./native-acceptance.ts",
+      "./native-erasure.ts",
+      "./native-erasure-evidence.ts",
       "./native-application-bindings.ts",
       "./native-application-resources.ts",
       "./native-application.ts",
@@ -39,6 +41,7 @@ const securityArtifacts = [
       "./native-incumbent-fence.ts",
       "./native-plan-diagnostics.ts",
       "./native-provider-list.ts",
+      "./native-recovery-identity.ts",
       "./resource-failure.ts",
       "./native-release-smoke.ts",
     ].map((path) => Bun.file(new URL(path, import.meta.url)).text())

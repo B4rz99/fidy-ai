@@ -10,6 +10,7 @@ on:
         options:
           [
             verify,
+            verify-erasure,
             plan-first-install,
             first-install,
             stage-hosts,
@@ -92,7 +93,7 @@ jobs:
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts promote
       - name: Build the expected browser artifact for independent verification
-        if: inputs.operation == 'verify' || inputs.operation == 'stage-hosts'
+        if: inputs.operation == 'verify' || inputs.operation == 'verify-erasure' || inputs.operation == 'stage-hosts'
         working-directory: apps/web
         run: bun run build:production
       - name: Stage only canonical Access paths and vacant hostnames on the verified closed release
@@ -103,9 +104,13 @@ jobs:
           bun native-storage-release.ts attach-hosts
       - name: Verify the installed application and retained schema markers
         id: verify
-        if: inputs.operation != 'plan-first-install'
+        if: inputs.operation != 'plan-first-install' && inputs.operation != 'first-install' && inputs.operation != 'verify-erasure'
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts verify
+      - name: Verify the installed application and physical erasure of one disposable User
+        if: inputs.operation == 'first-install' || inputs.operation == 'verify-erasure'
+        working-directory: infra/cloudflare
+        run: bun native-storage-release.ts verify-erasure
       - name: Restore only a compatible, tested target after failed promoted verification
         if: ${{ failure() && steps.promote.outcome == 'success' && steps.verify.outcome == 'failure' }}
         working-directory: infra/cloudflare
@@ -120,8 +125,9 @@ jobs:
         with:
           name: native-storage-release-${{ github.run_id }}
           path: |
-            ${{ env.RELEASE_SNAPSHOT_FILE }}*
-            ${{ env.SMOKE_ATTESTATION_FILE }}
+            ${{ runner.temp }}/native-release.json*
+            ${{ runner.temp }}/native-verification.json
+            ${{ runner.temp }}/native-verification.json.erasure
           if-no-files-found: ignore
 
   site:

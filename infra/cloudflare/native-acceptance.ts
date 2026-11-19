@@ -1,3 +1,6 @@
+import { type ErasureObservation, verifyIndependentErasure } from "./native-erasure";
+import { ErasureReceipt } from "../../apps/server/src/core/erasure/contract";
+import { UserId } from "../../apps/server/src/core/identity/contract";
 import {
   WompiBillingEvent,
   pricePublicationPath,
@@ -19,10 +22,13 @@ type Inputs = {
   revision: string;
   proof: Redacted.Redacted<string>;
   origins: (typeof installedOrigins)[keyof typeof installedOrigins];
+  erasure: Option.Option<ErasureObservation>;
   send: (request: Request) => Effect.Effect<Response, Error>;
 };
 const ok = 200,
   seeOther = 303,
+  accepted = 202,
+  unauthorized = 401,
   invalid = 400,
   absent = 404,
   isolated = 503,
@@ -120,7 +126,7 @@ const verifyOriginalDisclosure = Effect.fn(function* (
     return yield* Effect.fail(Error("Missing original provider signup disclosure"));
   }
 });
-const boot = Effect.fn(function* (input: Inputs, ordinal: number) {
+const boot = Effect.fn(function* (input: Inputs, member: "smoke-1" | "smoke-2" | "erasure-1") {
   const { post, call } = runner(input),
     proof = yield* result(
       yield* post("/web/pairings", {}),
@@ -135,7 +141,7 @@ const boot = Effect.fn(function* (input: Inputs, ordinal: number) {
     auth = new URL(
       (yield* result(start, Schema.Struct({ authorizationUrl: Schema.String }))).authorizationUrl
     );
-  const subject = `fidy-acceptance-${input.revision}-smoke-${ordinal}`;
+  const subject = `fidy-acceptance-${input.revision}-${member}`;
   const key = new Bun.CryptoHasher("sha256", Redacted.value(input.proof))
     .update(input.revision + "/oidc-code")
     .digest("hex");
@@ -326,6 +332,57 @@ const charge = Effect.fn(function* (input: Inputs, user: User, other: User) {
   );
   return { workflow, before, owner: "succeeded" as const, other: invalid, deliveries: 2 };
 });
+const renewWork = Effect.fn(function* (input: Inputs) {
+  const { call } = runner(input);
+  const lease = yield* call(
+    "/internal/release-smoke?acceptance=work",
+    { method: "POST", headers: { "x-fidy-smoke-proof": Redacted.value(input.proof) } },
+    false
+  );
+  yield* result(
+    lease,
+    Schema.Struct({ revision: Schema.Literal(input.revision), deadline: Schema.Int })
+  );
+});
+const erasureEvidence = Effect.fn(function* (
+  input: Inputs,
+  pair: readonly [User, User],
+  observation: ErasureObservation
+) {
+  const { call, post } = runner(input);
+  const identity = Effect.fn(function* (user: User) {
+    const current = yield* result(
+      yield* call("/user", { headers: user.headers }),
+      Schema.Struct({ data: Schema.Struct({ id: UserId }) })
+    );
+    return current.data.id;
+  });
+  return yield* verifyIndependentErasure({
+    ...observation,
+    survivors: () => Effect.forEach(pair, identity),
+    signup: () =>
+      boot(input, "erasure-1").pipe(
+        Effect.flatMap((user) => identity(user).pipe(Effect.map((id) => ({ ...user, id }))))
+      ),
+    renew: () => renewWork(input),
+    admit: Effect.fn(function* (user) {
+      const reply = yield* validStatus(
+        yield* post("/web/privacy/erasure", { confirm: true }, user.headers),
+        accepted
+      );
+      const admitted = yield* Schema.decodeUnknownEffect(ErasureReceipt)(
+        yield* Effect.tryPromise(() => reply.json())
+      );
+      if (admitted.state !== "Draining" || admitted.next !== "admitted-work") {
+        return yield* Effect.fail(Error("Missing fresh User erasure admission"));
+      }
+      return admitted.reference;
+    }),
+    denied: Effect.fn(function* (user) {
+      yield* consume(yield* call("/transactions", { headers: user.headers }), unauthorized);
+    }),
+  });
+});
 /** Exercise actual auth, private provider exchange and native financial callback through the installed protected release.
  * Callers verify the deterministic callback Workflow and the User-facing final projections before accepting its receipt.
  */
@@ -337,15 +394,7 @@ export const exerciseClosedUsers = Effect.fn(function* (input: Inputs) {
     false
   );
   yield* consume(ordinary, isolated);
-  const lease = yield* call(
-    "/internal/release-smoke?acceptance=work",
-    { method: "POST", headers: { "x-fidy-smoke-proof": Redacted.value(input.proof) } },
-    false
-  );
-  yield* result(
-    lease,
-    Schema.Struct({ revision: Schema.Literal(input.revision), deadline: Schema.Int })
-  );
+  yield* renewWork(input);
   const deniedStatuses = [];
   for (const operation of [pricePublicationPath, refundSupportBasePath]) {
     const reply = yield* call(operation, {
@@ -356,16 +405,18 @@ export const exerciseClosedUsers = Effect.fn(function* (input: Inputs) {
       },
       body: "{}",
     });
-    const unauthorized = 401;
     yield* consume(reply, unauthorized);
     deniedStatuses.push(reply.status);
   }
-  const first = yield* boot(input, 1),
-    second = yield* boot(input, 2);
+  const first = yield* boot(input, "smoke-1"),
+    second = yield* boot(input, "smoke-2");
   const callback = yield* charge(input, first, second);
   return {
     signup: [first.outcome, second.outcome],
     callback,
+    ...(Option.isNone(input.erasure)
+      ? {}
+      : { erasure: yield* erasureEvidence(input, [first, second], input.erasure.value) }),
     unassignedCommercialAuthorities: deniedStatuses,
   };
 });

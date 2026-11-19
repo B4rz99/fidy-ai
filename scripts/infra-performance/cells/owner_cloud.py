@@ -79,7 +79,7 @@ class Cloud:
             if bucket['name'] != self.prefix:
                 raise Refused('foreign_bucket')
             return bucket['creation_date']
-        settings = self.result('GET', self.worker(role) + '/settings', tolerate_absent=True)
+        settings = self.result('GET', self.worker(role) + '/script-settings', tolerate_absent=True)
         if settings is None:
             return None
         if self.prefix not in settings.get('tags', []):

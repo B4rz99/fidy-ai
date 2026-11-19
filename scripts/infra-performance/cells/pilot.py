@@ -98,7 +98,7 @@ def confirmed(receipt, account):
         raise Refused("Unexpected D1 database")
     core, ingress = settings["core"], settings["ingress"]
     db, = [b for b in core.values() if b["type"] == "d1"]
-    if (db["name"] != "DB" or db["database_id"] != database["uuid"]
+    if (db["name"] != "DB" or db.get("id", db.get("database_id")) != database["uuid"]
             or any(b["type"] == "d1" for b in ingress.values())
             or ingress["CORE"].get("service") != tag + "-core"
             or core["ERASURE_BUCKET"].get("bucket_name") != tag):

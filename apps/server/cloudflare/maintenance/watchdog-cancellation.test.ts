@@ -53,9 +53,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           expect(progress).toEqual([
             { attempted: 5, observed: 4, failed: 0, unknown: 1, wraps: delivery },
           ]);
-          const observed = yield* native(() =>
-            stalled.fetch("https://fixture.invalid/held-checks").then((response) => response.json())
+          const heldChecks = yield* native(() =>
+            stalled.fetch("https://fixture.invalid/held-checks")
           );
+          const observed = yield* native(() => heldChecks.json());
           expect(observed).toEqual({ admitted: delivery, aborted: delivery, active: 0 });
         }
       }),

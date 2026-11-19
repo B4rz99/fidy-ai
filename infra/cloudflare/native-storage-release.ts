@@ -326,7 +326,18 @@ const verifySyntheticUsers = Effect.fn(function* (
     ...(erasureNamespace === undefined
       ? {}
       : {
-          erasureInventory: () => readUserObjects(accountReader(env, client), erasureNamespace),
+          erasure: {
+            inventory: () => readUserObjects(accountReader(env, client), erasureNamespace),
+            record: (checkpoint) =>
+              writeFile(
+                env.smokeAttestationFile + ".erasure",
+                encodeJson({
+                  revision: env.revision,
+                  userNamespace: erasureNamespace,
+                  ...checkpoint,
+                })
+              ),
+          },
         }),
   });
   const path = `https://api.cloudflare.com/client/v4/accounts/${env.account}/workflows/fidy-native-billing/instances/${proof.callback.workflow}`;

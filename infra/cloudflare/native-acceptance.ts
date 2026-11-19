@@ -1,5 +1,4 @@
-import { verifyIndependentErasure } from "./native-erasure";
-import type { UserObjects } from "./native-erasure-evidence";
+import { type ErasureObservation, verifyIndependentErasure } from "./native-erasure";
 import { ErasureReceipt } from "../../apps/server/src/core/erasure/contract";
 import { UserId } from "../../apps/server/src/core/identity/contract";
 import {
@@ -23,7 +22,7 @@ type Inputs = {
   revision: string;
   proof: Redacted.Redacted<string>;
   origins: (typeof installedOrigins)[keyof typeof installedOrigins];
-  erasureInventory?: () => Effect.Effect<UserObjects, Error>;
+  erasure?: ErasureObservation;
   send: (request: Request) => Effect.Effect<Response, Error>;
 };
 const ok = 200,
@@ -350,7 +349,7 @@ const renewWork = Effect.fn(function* (input: Inputs) {
 const erasureEvidence = Effect.fn(function* (
   input: Inputs,
   pair: readonly [User, User],
-  inventory: () => Effect.Effect<UserObjects, Error>
+  observation: ErasureObservation
 ) {
   const { call, post } = runner(input);
   const identity = Effect.fn(function* (user: User) {
@@ -361,7 +360,7 @@ const erasureEvidence = Effect.fn(function* (
     return current.data.id;
   });
   return yield* verifyIndependentErasure({
-    inventory,
+    ...observation,
     survivors: () => Effect.forEach(pair, identity),
     signup: () =>
       boot(input, 1, "erasure").pipe(
@@ -418,9 +417,9 @@ export const exerciseClosedUsers = Effect.fn(function* (input: Inputs) {
   return {
     signup: [first.outcome, second.outcome],
     callback,
-    ...(input.erasureInventory === undefined
+    ...(input.erasure === undefined
       ? {}
-      : { erasure: yield* erasureEvidence(input, [first, second], input.erasureInventory) }),
+      : { erasure: yield* erasureEvidence(input, [first, second], input.erasure) }),
     unassignedCommercialAuthorities: deniedStatuses,
   };
 });

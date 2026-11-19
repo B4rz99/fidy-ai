@@ -68,6 +68,7 @@ it.effect(
       let admitted = 0;
       const check = yield* Effect.exit(
         verifyIndependentErasure({
+          record: () => Effect.void,
           inventory: () =>
             Effect.sync(() =>
               signedUp ? new Map([...retained, ["third", true], ["another", true]]) : retained
@@ -92,5 +93,56 @@ it.effect(
       expect(physicalErasure(retained, "third", new Map([...retained, ["third", true]]))).toEqual(
         Option.none()
       );
+    })
+);
+
+it.effect(
+  "retains the same two Users after the independent physical erasure of a newly admitted third",
+  () =>
+    Effect.gen(function* () {
+      const stored = new Map([
+        ["probe", true],
+        ["one", true],
+        ["two", true],
+      ]);
+      const checkpoints: string[] = [];
+      const subject = { id: "third", outcome: "created", headers: {} };
+      const result = yield* verifyIndependentErasure({
+        inventory: () => Effect.sync(() => new Map(stored)),
+        signup: () =>
+          Effect.sync(() => {
+            stored.set("physical-third", true);
+            return subject;
+          }),
+        admit: (user) =>
+          Effect.sync(() => {
+            expect(user.id).toBe("third");
+            return "original-reference";
+          }),
+        record: (checkpoint) =>
+          Effect.sync(() => {
+            checkpoints.push(checkpoint.stage);
+            if (checkpoint.stage === "admitted") stored.set("physical-third", false);
+          }),
+        survivors: () => Effect.succeed(["one", "two"]),
+        denied: (user) =>
+          Effect.sync(() => {
+            expect(user.id).toBe("third");
+          }),
+        renew: () => Effect.void,
+      });
+      expect(result).toMatchObject({
+        admissionReplay: "same-reference",
+        physicalObject: "physical-third",
+        physicalStateAfter: "empty",
+        survivingUsers: 2,
+        custodianCompletion: "unverified",
+      });
+      expect(checkpoints).toEqual([
+        "stable-users",
+        "fresh-object",
+        "admitted",
+        "physically-erased",
+      ]);
     })
 );

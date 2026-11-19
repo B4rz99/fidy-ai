@@ -117,8 +117,9 @@ jobs:
         with:
           name: native-storage-release-${{ github.run_id }}
           path: |
-            ${{ env.RELEASE_SNAPSHOT_FILE }}*
-            ${{ env.SMOKE_ATTESTATION_FILE }}
+            ${{ runner.temp }}/native-release.json*
+            ${{ runner.temp }}/native-verification.json
+            ${{ runner.temp }}/native-verification.json.erasure
           if-no-files-found: ignore
 
   site:

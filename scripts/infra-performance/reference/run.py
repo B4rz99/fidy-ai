@@ -42,13 +42,13 @@ BOUNDARIES = [
     "startup.browser",
 ]
 
-CALIBRATION_VIEWS = ["budgets.month.browser"]
+CALIBRATION_VIEWS = ["budgets.month.browser", "review.pending.browser"]
 
 # Export only controlled stage names, error classes and harness source coordinates.
 STAGES = {
     "runtime", "user", "transactions", "planning", "reviews", "counts", "launch",
     "pairing", "approval", "redeem", "bootstrap", "accountability-before", "read",
-    "open-correction", "save", "fresh-read", "accountability-after", "budgets-month",
+    "open-correction", "save", "fresh-read", "accountability-after", "budgets-month", "review-pending",
 }
 REASONS = {
     "foreign key constraint failed": "foreign-key",
@@ -216,7 +216,8 @@ def equivalence(row):
     return (
         {key: value for key, value in row["seed"].items() if key != "milliseconds"},
         [(attempt["status"], attempt["bytes"], attempt["payload"]) for attempt in row["attempts"]],
-        {name: (view["http"]["status"], view["http"]["bytes"], view["http"]["digest"])
+        {name: {key: (source["status"], source["bytes"], source["digest"])
+                for key, source in view.items() if key in ("http", "context")}
          for name, view in row["views"].items()},
         row["accountability"],
         row["browser"],
@@ -316,8 +317,8 @@ def main():
             "d1": "direct ingress and Core calls in Bun; D1 binding uses Miniflare",
             "do": "Miniflare dispatchFetch to workerd ingress, Core and User store",
         },
-        "browserStart": "driver clock immediately before fresh document navigation, or Refresh/Save on the loaded workspace",
-        "browserEnd": "refresh requires search to disable then re-enable; startup, refresh and save require all expected ordered rows to be visible and enabled through two animation frames; payload verification follows timing",
+        "browserStart": "before document navigation or the loaded Refresh, Save, next-month or pending-inbox interaction",
+        "browserEnd": "refresh requires search to disable then re-enable; startup, refresh and save require all expected ordered rows to be visible and enabled through two animation frames; Budget navigation also requires editable caps and the fresh group spending totals; pending review requires usable rows with their original excerpts; payload verification follows timing",
         "lifecycle": "User and shared reconstruction unobserved",
         "warmup": "pairing and fixture preparation excluded; no measured attempts excluded",
         "harnessRevision": output(["git", "rev-parse", "HEAD"], ROOT),

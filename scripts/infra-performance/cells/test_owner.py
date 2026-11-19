@@ -1,0 +1,306 @@
+import copy
+import unittest
+
+from budget import Refused, today
+from owner_state import AccountExperiment
+
+
+class ConditionalObject:
+    def __init__(self):
+        self.value = None
+        self.version = 0
+
+    def read(self):
+        return self.version, copy.deepcopy(self.value)
+
+    def replace(self, version, value):
+        if version != self.version:
+            raise Refused("stale account ledger")
+        self.value = copy.deepcopy(value)
+        self.version += 1
+        return self.version
+
+
+class OwnerTests(unittest.TestCase):
+    def test_interrupted_reservation_survives_runner_loss_and_refuses_replay(self):
+        obj = ConditionalObject()
+        account, prefix = "a" * 32, "fidy-2259-123456abcdef"
+        maximum = dict(rowsRead=18000, rowsWritten=4754)
+        decision = dict(_tag="Allowed", maximumRowsRead=18000, maximumRowsWritten=4754)
+        first = AccountExperiment(obj, account)
+        contender = AccountExperiment(obj, account)
+        first.begin(prefix, decision, today())
+        with self.assertRaises(Refused):
+            contender.begin("fidy-2259-abcdef123456", decision, today())
+
+        def lost():
+            raise TimeoutError()
+
+        with self.assertRaises(TimeoutError):
+            first.batch("materialize-0", maximum, lost)
+        restored = AccountExperiment(obj, account)
+        self.assertEqual(restored.active["pending"]["name"], "materialize-0")
+        with self.assertRaises(Refused):
+            restored.batch("materialize-0", maximum, lambda: self.fail("replayed"))
+        with self.assertRaises(Refused):
+            restored.begin("fidy-2259-abcdef123456", decision, today())
+
+    def test_cleaned_uncertain_read_cannot_be_retried_under_another_name(self):
+        from owner import teardown
+        from types import SimpleNamespace
+
+        account, prefix = "a" * 32, "fidy-2259-123456abcdef"
+        obj = ConditionalObject()
+        owner = AccountExperiment(obj, account)
+        decision = dict(_tag="Allowed", maximumRowsRead=200, maximumRowsWritten=20)
+        owner.begin(prefix, decision, today())
+        with self.assertRaises(Refused):
+            owner.batch("history", dict(rowsRead=90, rowsWritten=9), lambda: None)
+        teardown(owner, SimpleNamespace(prefix=prefix, verify_absent=lambda *_: None))
+        fresh = AccountExperiment(obj, account)
+        with self.assertRaises(Refused):
+            fresh.begin("fidy-2259-abcdef123456", decision, today())
+
+    def test_reconciled_work_and_another_run_share_the_full_account_estimate(self):
+        from owner import teardown
+        from types import SimpleNamespace
+
+        account, prefix = "a" * 32, "fidy-2259-123456abcdef"
+        obj = ConditionalObject()
+        first = AccountExperiment(obj, account)
+        first.begin(
+            prefix, dict(_tag="Allowed", maximumRowsRead=200, maximumRowsWritten=20), today()
+        )
+        first.batch(
+            "history", dict(rowsRead=100, rowsWritten=12), lambda: dict(rowsRead=44, rowsWritten=5)
+        )
+        teardown(first, SimpleNamespace(prefix=prefix, verify_absent=lambda *_: None))
+        next_run = AccountExperiment(obj, account)
+        self.assertEqual(
+            next_run.full_estimate(dict(rowsRead=100, rowsWritten=20), today()),
+            dict(rowsRead=144, rowsWritten=25),
+        )
+        next_run.begin(
+            "fidy-2259-abcdef123456",
+            dict(_tag="Allowed", maximumRowsRead=144, maximumRowsWritten=25),
+            today(),
+        )
+        with self.assertRaises(Refused):
+            next_run.batch(
+                "outside-ceiling",
+                dict(rowsRead=100, rowsWritten=21),
+                lambda: self.fail("dispatched"),
+            )
+
+    def test_rejected_create_cannot_dispose_the_colliding_database(self):
+        from owner import prepare_inventory, teardown
+        from owner_cloud import RejectedControlRequest
+
+        class Conflict:
+            prefix = "fidy-2259-123456abcdef"
+            db = None
+
+            def namespaces(self):
+                return []
+
+            def identity(self, role):
+                return self.db if role == "db" else None
+
+            def verify_absent(self, owned, ids):
+                assert not owned and not ids
+
+            def create(self, role):
+                self.db = "another-controller"
+                raise RejectedControlRequest("collision")
+
+            def remove(self, *_):
+                raise AssertionError("Removed the other controller’s database")
+
+        cloud = Conflict()
+        owner = AccountExperiment(ConditionalObject(), "a" * 32)
+        owner.begin(
+            cloud.prefix, dict(_tag="Allowed", maximumRowsRead=100, maximumRowsWritten=10), today()
+        )
+        with self.assertRaises(RejectedControlRequest):
+            prepare_inventory(owner, cloud)
+        self.assertEqual(teardown(owner, cloud)["removed"], [])
+        self.assertEqual(cloud.db, "another-controller")
+
+    def test_lost_create_reply_cannot_adopt_a_colliding_database_by_name(self):
+        import io
+        import json
+        from unittest.mock import patch
+        from urllib.error import HTTPError
+        from owner import prepare_inventory, teardown
+        from owner_cloud import Cloud
+
+        prefix, account = "fidy-2259-123456abcdef", "a" * 32
+        uuid = "01111111-1111-4111-8111-111111111111"
+
+        class Control:
+            stored = None
+            checked_uuid = False
+
+            def open(self, req, timeout):
+                path = req.selector.split("/" + account + "/")[1]
+
+                def missing():
+                    raise HTTPError(req.full_url, 404, "absent", {}, io.BytesIO(b""))
+
+                if path.startswith("workers/durable_objects/namespaces?"):
+                    wire = dict(result=[], result_info=dict(page=1, total_pages=1))
+                elif path == "d1/database?name=" + prefix:
+                    wire = dict(result=[self.stored] if self.stored else [],
+                                result_info=dict(total_count=int(self.stored is not None)))
+                elif path == "d1/database" and req.method == "POST":
+                    assert json.loads(req.data) == dict(name=prefix)
+                    self.stored = dict(name=prefix, uuid=uuid)
+                    raise TimeoutError("acknowledgement interrupted")
+                elif path == "d1/database/" + uuid:
+                    if req.method == "DELETE":
+                        self.stored = None
+                        wire = dict(result={})
+                    else:
+                        self.checked_uuid = True
+                        missing()
+                elif req.method == "GET" and (
+                    path.endswith("/script-settings") or path == "r2/buckets/" + prefix
+                ):
+                    missing()
+                else:
+                    raise AssertionError(path)
+                wire["success"] = True
+                result = io.BytesIO(json.dumps(wire).encode())
+                result.status = 200
+                return result
+
+        with patch.dict("os.environ", CLOUDFLARE_API_TOKEN="fixture"):
+            cloud = Cloud(account, prefix)
+        cloud.transport = Control()
+        store = ConditionalObject()
+        experiment = AccountExperiment(store, account)
+        experiment.begin(
+            prefix, dict(_tag="Allowed", maximumRowsRead=100, maximumRowsWritten=10), today()
+        )
+        with self.assertRaises(TimeoutError):
+            prepare_inventory(experiment, cloud)
+        restored = AccountExperiment(store, account)
+        with patch("owner.time.time", return_value=restored.active["deadline"] + 91):
+            with self.assertRaisesRegex(Refused, "provider_creation_receipt_unresolved_db"):
+                teardown(restored, cloud, resumed=True)
+        self.assertEqual(cloud.transport.stored, dict(name=prefix,uuid=uuid))
+        self.assertFalse(cloud.transport.checked_uuid)
+        self.assertIsNone(AccountExperiment(store,account).active["inventory"]["db"]["id"])
+
+    def test_stale_controller_cannot_publish_after_another_process_has_claimed_teardown(self):
+        from unittest.mock import patch
+        from owner import teardown
+        from types import SimpleNamespace
+
+        account, prefix = 'a'*32, 'fidy-2259-123456abcdef'
+        store = ConditionalObject()
+        stale = AccountExperiment(store,account)
+        stale.begin(prefix,dict(_tag='Allowed',maximumRowsRead=100,maximumRowsWritten=10),today())
+        stale.control('POST','workers/scripts/'+prefix+'-core/versions')
+        new = AccountExperiment(store,account)
+        now = stale.active['deadline']+91
+        cloud = SimpleNamespace(prefix=prefix,verify_absent=lambda *_: None)
+        with patch('owner.time.time',return_value=now):
+            teardown(new,cloud,resumed=True)
+        with self.assertRaises(Refused):
+            stale.control('POST','workers/scripts/'+prefix+'-ingress/subdomain')
+
+    def test_active_version_substitution_refuses_before_ingress_exposure(self):
+        from unittest.mock import patch
+        from owner_transport import confirmed
+        account,prefix = 'a'*32,'fidy-2259-123456abcdef'
+        def resolve(path):
+            if path.endswith('/workers/subdomain'):
+                return dict(subdomain='fixture')
+            if path.endswith('/subdomain'):
+                return dict(enabled=False,previews_enabled=False)
+            if path.endswith('/deployments'):
+                return dict(deployments=[dict(versions=[dict(version_id='other',percentage=100)])])
+            self.fail(path)
+        with patch('owner_transport.cloudflare',side_effect=resolve):
+            with self.assertRaisesRegex(Refused,'version mismatch'):
+                confirmed(dict(resourcePrefix=prefix,accountId=account,versions={'core':'authored'}),account,exposed=False)
+
+    def test_deploy_uses_only_provider_ids_for_the_exact_uploaded_bytes(self):
+        import io
+        import json
+        from email.parser import BytesParser
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from uuid import uuid4
+        from owner_cloud import Cloud
+
+        prefix = 'fidy-2259-123456abcdef'
+        modules = {'metered-core':b'export const marker="frozen core";',
+                   'bounded-ingress':b'export const marker="frozen ingress";'}
+        created, deployed = {}, {}
+        class Control:
+            def open(self, req, timeout):
+                route = req.selector.split('/workers/scripts/')[1]
+                name, _, suffix = route.partition('/')
+                expected = 'metered-core' if name.endswith('-core') else 'bounded-ingress'
+                if suffix == 'script-settings':
+                    result = dict(tags=['owned'])
+                elif suffix == 'deployments' and req.method == 'POST':
+                    body = json.loads(req.data)
+                    assert body['versions'] == [dict(version_id=created[name],percentage=100)]
+                    deployed[name] = body['versions'][0]['version_id']
+                    result = dict(id=str(uuid4()))
+                else:
+                    envelope = BytesParser().parsebytes(('Content-Type: '+req.headers['Content-type']+'\r\n\r\n').encode()+req.data)
+                    parts = {item.get_filename():item.get_payload(decode=True) for item in envelope.get_payload()}
+                    assert parts['index.mjs'] == modules[expected]
+                    metadata = json.loads(parts['metadata'])
+                    if suffix == 'versions' and req.method == 'POST':
+                        created[name] = str(uuid4())
+                        assert 'migrations' not in metadata
+                        result = dict(id=created[name])
+                    else:
+                        assert suffix == '' and req.method == 'PUT' and name == prefix+'-core' and metadata['migrations']['new_sqlite_classes']
+                        result = dict(id=name)
+                response = io.BytesIO(json.dumps(dict(success=True,result=result)).encode())
+                response.status = 200
+                return response
+        with patch.dict('os.environ',CLOUDFLARE_API_TOKEN='fixture'):
+            cloud = Cloud('a'*32,prefix)
+        cloud.transport, cloud.ownership = Control(), 'owned'
+        cloud.control = lambda *_: None
+        package = SimpleNamespace(modules=modules,contract='c'*64,digest='d'*64)
+        versions = cloud.deploy(package,str(uuid4()),'fixture-private',123456789)
+        self.assertEqual({prefix+'-'+role:id_ for role,id_ in versions.items()}, deployed)
+
+    def test_missing_native_versions_or_foreign_deployed_signer_refuse_before_custody(self):
+        import json
+        import sys
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from types import SimpleNamespace
+        from unittest.mock import Mock, patch
+        import owner
+
+        revision, prefix = 'a'*40,'fidy-2259-aabbccddeeff'
+        fixture = SimpleNamespace(verify_native_fixture=lambda *a,**kw:dict(member='performance-1',resourcePrefix=prefix,nativeRevision=revision),
+                                  read_native_session=lambda *_:dict(cookie='private',binding='private'))
+        installation = SimpleNamespace(validate_candidate=Mock(side_effect=ValueError('signer differs')))
+        approved = '1ede059a-5ea9-448b-9ccd-72c6ac706e66'
+        bundle = SimpleNamespace(estimate=dict(rowsRead=3,rowsWritten=2),direct=[],inspections={})
+        size = SimpleNamespace(returncode=1,stdout='{"_tag":"NeedsAccountObservation"}')
+        with TemporaryDirectory() as tmp:
+            for index, (extra,reason) in enumerate([([], 'approved_native_worker_versions_required'),
+                    (['--core-version',approved,'--ingress-version',approved],'native_installation_does_not_match_approved_candidate')]):
+                out = Path(tmp)/str(index)
+                args = ['owner.py','run','--prefix',prefix,'--revision',revision,'--maximum-reads','3','--maximum-writes','2','--out',str(out),*extra]
+                with patch.dict(sys.modules,hosted=fixture,installation=installation), patch.object(sys,'argv',args), \
+                     patch.object(owner,'MaterializedBundle',return_value=bundle), patch.object(owner.subprocess,'run',return_value=size), \
+                     patch.dict('os.environ',CLOUDFLARE_ACCOUNT_ID='a'*32,FIDY_NATIVE_FIXTURE_PUBLIC_KEY='a1'), \
+                     patch.object(owner,'CustodyObject') as custody, patch.object(owner,'Cloud') as cloud:
+                    self.assertEqual(owner.main(),1)
+                self.assertEqual(json.loads((out/'report.json').read_bytes())['reason'], reason)
+                custody.assert_not_called()
+                cloud.assert_not_called()
+        installation.validate_candidate.assert_called_once()

@@ -64,8 +64,7 @@ const exceptionCategory = (error: unknown, failure: boolean): string => {
   return failure ? "UnclassifiedFailure" : "UnclassifiedDefect";
 };
 
-const StateRefusal = Schema.Struct({
-  _tag: Schema.Literal("StateStoreError"),
+const StateRefusal = Schema.TaggedStruct("StateStoreError", {
   http: Schema.Struct({
     status: Schema.Int.check(Schema.isBetween({ minimum: 100, maximum: 599 })),
   }),
@@ -122,7 +121,7 @@ class NativeStageFailure extends Data.TaggedError("NativeStageFailure")<{ messag
 export type { NativeStageFailure };
 
 export const nativeResourceStage =
-  (stage: NativeStage, details?: () => string) =>
+  (stage: NativeStage | { stage: "planning"; details: () => string }) =>
   <A, E, R>(operation: Effect.Effect<A, E, R>): Effect.Effect<A, E | NativeStageFailure, R> =>
     operation.pipe(
       Effect.catchCauseIf(
@@ -130,7 +129,7 @@ export const nativeResourceStage =
         (cause) =>
           Effect.fail(
             new NativeStageFailure({
-              message: `Native release failed during ${stage}. ${resourceFailureMessage(cause)}${details?.() ?? ""}`,
+              message: `Native release failed during ${typeof stage === "string" ? stage : stage.stage}. ${resourceFailureMessage(cause)}${typeof stage === "string" ? "" : stage.details()}`,
             })
           )
       )

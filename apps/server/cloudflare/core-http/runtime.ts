@@ -27,9 +27,9 @@ import {
   closedHostEnvironment,
   fixtureChargeReceipt,
   isAcceptanceReceipt,
+  isAcceptanceWindow,
   isPerformanceReceipt,
   receiptAdmitted,
-  isAcceptanceWindow,
   releaseAdmission,
   renewAcceptanceWindow,
 } from "../release-isolation/operations";
@@ -70,20 +70,21 @@ const sharedReadiness = Effect.fn(function* (request: Request, environment: Core
     Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
   );
 });
+const performanceProbe = Effect.fn(function* (request: Request, environment: CoreHttpEnvironment) {
+  const valid = yield* receiptAdmitted({
+    request,
+    environment,
+    boundary: "core",
+    now: yield* Clock.currentTimeMillis,
+  });
+  return Option.some(
+    valid
+      ? yield* routeSessionRequest({ request, environment })
+      : new Response(null, { status: 404 })
+  );
+});
 const storageProbe = Effect.fn(function* (request: Request, environment: CoreHttpEnvironment) {
-  if (isPerformanceReceipt(request)) {
-    const valid = yield* receiptAdmitted({
-      request,
-      environment,
-      boundary: "core",
-      now: yield* Clock.currentTimeMillis,
-    });
-    return Option.some(
-      valid
-        ? yield* routeSessionRequest({ request, environment })
-        : new Response(null, { status: 404 })
-    );
-  }
+  if (isPerformanceReceipt(request)) return yield* performanceProbe(request, environment);
   const url = new URL(request.url);
   if (
     environment.RECOVERY_ISOLATION === "isolated" &&

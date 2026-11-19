@@ -62,10 +62,10 @@ import { connectionCallbackPath } from "./connections/contract";
 import {
   closedHostEnvironment,
   isAcceptanceReceipt,
+  isAcceptanceWindow,
   isPerformanceReceipt,
   performanceReceiptPath,
   receiptAdmitted,
-  isAcceptanceWindow,
   releaseAdmission,
   signAcceptanceRequest,
 } from "./release-isolation/operations";
@@ -1004,9 +1004,11 @@ const privateForward = (
   request: Request,
   environment: PublicEnvironment,
   deadline: Option.Option<number>
-) =>
+): Effect.Effect<Response> =>
   isPerformanceReceipt(request)
-    ? forwardPerformanceReceipt(request, environment, deadline)
+    ? forwardPerformanceReceipt(request, environment, deadline).pipe(
+        Effect.orElseSucceed(() => new Response(null, { status: 503 }))
+      )
     : forwardStorageProbe(request, environment);
 const privateReleaseRequest = (request: Request): boolean =>
   isStorageProbe(request) ||

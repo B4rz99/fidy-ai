@@ -142,6 +142,12 @@ const credentials = (
         bucket: env.SMOKE_BUCKET,
       })
     : Option.none();
+const boundUser = Effect.fn(function* (request: Request, owns: (user: string) => boolean) {
+  const operation = canonicalOperation({ method: "GET", path: "/transactions" });
+  return Option.isSome(operation)
+    ? yield* localPreparationSubject(request, owns, operation.value)
+    : Option.none();
+});
 export const ownPerformanceReceipt = Effect.fn(function* (
   request: Request,
   environment: AcceptanceEnvironment &
@@ -160,9 +166,8 @@ export const ownPerformanceReceipt = Effect.fn(function* (
     return denied();
   }
   const command = yield* boundedJsonBody({ request, policy, schema: ReceiptRequest });
-  const operation = canonicalOperation({ method: "GET", path: "/transactions" });
-  if (Option.isNone(command) || Option.isNone(operation)) return denied();
-  const user = yield* localPreparationSubject(request, owns, operation.value);
+  if (Option.isNone(command)) return denied();
+  const user = yield* boundUser(request, owns);
   if (Option.isNone(user)) return denied();
   const evidence = yield* readEvidence(user.value, environment.RELEASE_GIT_SHA, binding);
   if (Option.isNone(evidence)) return denied();

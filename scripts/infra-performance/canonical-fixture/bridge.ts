@@ -1,5 +1,5 @@
 import { createInterface } from "node:readline/promises";
-import { Effect, Redacted, Schema } from "effect";
+import { Effect, Option, Redacted, Schema } from "effect";
 import type { Miniflare } from "miniflare";
 import { installedOrigins } from "../../../apps/server/src/shell/browser-transport/contract";
 import {
@@ -37,11 +37,12 @@ const sessionHeaders = (value: Session): Record<string, string> => ({
   "fidy-session-binding": value.binding,
 });
 const transport =
-  (runtime: Miniflare | undefined): Transport =>
+  (runtime: Option.Option<Miniflare>): Transport =>
   async (request) => {
-    if (!runtime)
+    if (Option.isNone(runtime)) {
       return fetch(request, { redirect: "manual", signal: AbortSignal.timeout(timeoutMs) });
-    const reply = await runtime.dispatchFetch(request.url, {
+    }
+    const reply = await runtime.value.dispatchFetch(request.url, {
       method: request.method,
       headers: { ...Object.fromEntries(request.headers), "cf-connecting-ip": "192.0.2.1" },
       redirect: "manual",
@@ -55,20 +56,47 @@ const transport =
         reply.status +
         "\n"
     );
+    if (!reply.ok) {
+      process.stderr.write(
+        "Closed stage isolation=" +
+          String(reply.headers.has("x-fidy-recovery-isolation")) +
+          " ingress=" +
+          reply.headers.get("x-rehearsal-ingress") +
+          " core=" +
+          reply.headers.get("x-rehearsal-core") +
+          " status=" +
+          reply.status +
+          "\n"
+      );
+    }
     const bytes = await reply.arrayBuffer();
     return new Response(bytes.byteLength ? bytes : null, {
       status: reply.status,
       headers: Object.fromEntries(reply.headers),
     });
   };
-const client = (auth: Auth, send: Transport) => {
-  const environment = {
-    RELEASE_GIT_SHA: auth.revision,
-    SMOKE_PROOF: auth.secret,
-    NATIVE_STORAGE_ADMISSION: "closed",
-    RECOVERY_ISOLATION: "isolated",
-    BROWSER_ORIGIN: api.browser,
-  };
+type Client = {
+  request: (input: Command, headers: Record<string, string>) => Promise<Response>;
+  login: (member: "performance-1" | "performance-2") => Promise<string>;
+  bind: (token: string) => Promise<Session>;
+};
+const environmentOf = (
+  auth: Auth
+): {
+  RELEASE_GIT_SHA: string;
+  SMOKE_PROOF: string;
+  NATIVE_STORAGE_ADMISSION: string;
+  RECOVERY_ISOLATION: string;
+  BROWSER_ORIGIN: string;
+} => ({
+  RELEASE_GIT_SHA: auth.revision,
+  SMOKE_PROOF: auth.secret,
+  NATIVE_STORAGE_ADMISSION: "closed",
+  RECOVERY_ISOLATION: "isolated",
+  BROWSER_ORIGIN: api.browser,
+});
+const client = (auth: Auth, send: Transport): Client => {
+  const environment = environmentOf(auth);
   const request = async (input: Command, headers: Record<string, string>): Promise<Response> => {
     const outgoing = new Request(api.api + input.path, {
       method: input.method,
@@ -141,16 +169,18 @@ const execute = async (
   active: Session,
   driver: { service: ReturnType<typeof client>; local: boolean }
 ): Promise<void> => {
-  if (!allowed(item) || (!driver.local && item.control !== ""))
+  if (!allowed(item) || (!driver.local && item.control !== "")) {
     throw Error("Outside fixture transport");
+  }
   let headers = sessionHeaders(active);
   if (driver.local && item.control === "foreign-session") {
     headers = sessionHeaders(
       await driver.service.bind(await driver.service.login("performance-2"))
     );
   }
-  if (driver.local && item.control === "wrong-binding")
+  if (item.control === "wrong-binding") {
     headers["fidy-session-binding"] = "00000000-0000-4000-8000-000000000000";
+  }
   const reply = await driver.service.request(item, headers);
   const raw = await reply.text();
   offer({
@@ -158,13 +188,18 @@ const execute = async (
     data: reply.ok ? Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(raw) : null,
   });
 };
-const main = async (): Promise<void> => {
+const authority = (): Auth => {
   const auth = {
     secret: process.env.SMOKE_PROOF ?? "",
     revision: process.env.FIDY_NATIVE_REVISION ?? "",
   };
-  if (auth.secret.length < minimumSecret || !/^[a-f0-9]{40}$/u.test(auth.revision))
+  if (auth.secret.length < minimumSecret || !/^[a-f0-9]{40}$/u.test(auth.revision)) {
     throw Error("Missing receipt authority");
+  }
+  return auth;
+};
+const main = async (): Promise<void> => {
+  const auth = authority();
   if (process.argv[2] === "verify") {
     const envelope = Schema.decodeUnknownSync(SealedTransactionReceipt)(await Bun.stdin.json());
     process.stdout.write(
@@ -178,7 +213,9 @@ const main = async (): Promise<void> => {
   }
   const local = process.argv[2] === "rehearse";
   if (!local && process.argv[2] !== "hosted") throw Error("Unknown mode");
-  const runtime = local ? await closedRuntime(auth.revision, auth.secret) : undefined;
+  const runtime = local
+    ? Option.some(await closedRuntime(auth.revision, auth.secret))
+    : Option.none<Miniflare>();
   try {
     const service = client(auth, transport(runtime)),
       active = await start(service);
@@ -188,7 +225,7 @@ const main = async (): Promise<void> => {
       await execute(item, active, { local, service });
     }
   } finally {
-    if (runtime) await runtime.dispose();
+    if (Option.isSome(runtime)) await runtime.value.dispose();
   }
 };
 await main().catch(() => {

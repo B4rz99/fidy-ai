@@ -9,6 +9,28 @@ import {
 } from "../../../apps/server/cloudflare/user-store.test-fixture";
 
 const text = (value: string): { type: "text"; value: string } => ({ type: "text", value });
+const observedManifest = async (
+  module: string,
+  name: string
+): Promise<NonNullable<MiniflareWorkerConfig["manifest"]>> => {
+  const manifest = await Effect.runPromise(workerManifest(module));
+  if (name === "closed-provider") return manifest;
+  const wrapper = `import worker from "./production.mjs";
+  export * from "./production.mjs";
+  export default {...worker,async fetch(request,env,ctx){
+    const result=await worker.fetch(request,env,ctx);
+    const headers=new Headers(result.headers);
+    headers.set("x-rehearsal-${name}",JSON.stringify({tls:new URL(request.url).protocol==="https:",host:new URL(request.url).hostname,forwardedHost:request.headers.has("x-forwarded-host"),signed:request.headers.has("x-fidy-acceptance-proof"),isolation:result.headers.has("x-fidy-recovery-isolation")}));
+    return new Response(result.body,{status:result.status,headers});
+  }};`;
+  return {
+    mainModule: "index.mjs",
+    modules: {
+      "index.mjs": { type: "esm", contents: wrapper },
+      "production.mjs": manifest.modules["index.mjs"],
+    },
+  };
+};
 const worker = async (
   name: string,
   module: string,
@@ -21,7 +43,7 @@ const worker = async (
     compatibilityFlags: ["nodejs_compat", "enable_request_signal", "request_signal_passthrough"],
     exports,
     env,
-    manifest: await Effect.runPromise(workerManifest(module)),
+    manifest: await observedManifest(module, name),
   },
 });
 export const closedRuntime = async (revision: string, secret: string): Promise<Miniflare> => {

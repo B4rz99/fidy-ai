@@ -15,6 +15,11 @@ const readClasses: ReadonlyArray<readonly [RegExp, string]> = [
   [/^access\/identity_providers(?:\/|$)/u, "Access identity providers"],
   [/^access\/groups(?:\/|$)/u, "Access groups"],
   [/^access\/apps(?:\/|$)/u, "Access applications"],
+  [/^builds\/workers\/[^/]+\/triggers$/u, "Worker Build triggers"],
+  [/^workers\/durable_objects\/namespaces(?:\/|$)/u, "Durable Object namespaces"],
+  [/^workers\/routes(?:\/|$)/u, "Worker routes"],
+  [/^dns_records(?:\/|$)/u, "DNS records"],
+  [/^rulesets(?:\/|$)/u, "firewall rules"],
   [/^queues(?:\/|$)/u, "queues"],
   [/^r2\/buckets(?:\/|$)/u, "R2 buckets"],
   [/^workflows(?:\/|$)/u, "Workflows"],
@@ -33,8 +38,12 @@ const readClass = (url: URL): Option.Option<string> => {
   if (/^alchemy-state-store\.[^.]+\.workers\.dev$/u.test(url.hostname)) {
     return matchRead(stateReads, url.pathname);
   }
+  if (url.origin === "https://api.github.com" && /^\/repos\/[^/]+\/[^/]+\/git\/ref\/heads\/trunk$/u.test(url.pathname)) {
+    return Option.some("trunk revision");
+  }
   if (url.origin !== "https://api.cloudflare.com") return Option.none();
-  return matchRead(readClasses, url.pathname.replace(/^\/client\/v4\/accounts\/[^/]+\//u, ""));
+  if (url.pathname === "/client/v4/zones") return Option.some("zone authority");
+  return matchRead(readClasses, url.pathname.replace(/^\/client\/v4\/(?:accounts|zones)\/[^/]+\//u, ""));
 };
 
 const maximumReadOutcomes = 32;
@@ -64,6 +73,18 @@ const observeReads = (fetch: typeof globalThis.fetch, reads: Set<string>): typeo
     { preconnect: fetch.preconnect }
   );
 };
+
+export const diagnoseFreshTarget = <A, E, R>(operation: Effect.Effect<A, E, R>) =>
+  Effect.suspend(() => {
+    const reads = new Set<string>();
+    return operation.pipe(
+      Effect.updateService(FetchHttpClient.Fetch, (fetch) => observeReads(fetch, reads)),
+      nativeResourceStage({
+        stage: "closed edge preparation",
+        details: () => " Observed reads [" + [...reads].join(", ") + "].",
+      })
+    );
+  });
 
 export const diagnoseNativePlan =
   (revision: string) =>

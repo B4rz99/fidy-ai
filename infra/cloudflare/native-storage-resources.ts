@@ -2,7 +2,8 @@ import { productionTopology } from "../../apps/server/cloudflare/runtime/contrac
 import { requireHostPlan, stagedAccessApplications } from "./native-host-plan";
 import * as Alchemist from "alchemy/Alchemist";
 import * as Apply from "alchemy/Apply";
-import { diagnoseNativePlan } from "./native-plan-diagnostics";
+import { diagnoseFreshTarget, diagnoseNativePlan } from "./native-plan-diagnostics";
+import { firstInstallEdge } from "./native-storage-release";
 import { requireNativeResourcePlan } from "./native-graph";
 import { type Plan, describePlan, describeResource } from "alchemy/Plan";
 import { Config, Effect, Schema } from "effect";
@@ -30,7 +31,6 @@ const requireProtectedDispatch = Effect.gen(function* () {
   }
 });
 const releaseChecks = {
-  "first-install": "prepare-closed-edge",
   upload: "verify-upload",
   "stage-hosts": "capture-hosts",
 } as const;
@@ -124,16 +124,18 @@ const resourceRelease = Effect.fn(function* (phase: typeof Phase.Type, preview: 
       : Alchemist.Stack.plan(input)
   ).pipe(diagnoseNativePlan(revision));
   yield* verifyResourcePlan({ phase, plan: snapshot.native, revision, hosts, pin });
-  if (preview) return yield* Effect.logInfo("Verified the fresh native first-install plan.");
-  const preflightStages = {
-    "first-install": "closed edge preparation",
-    upload: "upload verification",
-    "stage-hosts": "host capture",
-  } as const;
-  yield* releaseCommand({
-    args: ["bun", "native-storage-release.ts", releaseChecks[phase]],
-    lifetime: phase === "upload" ? "read-only" : "started-write",
-  }).pipe(nativeResourceStage(preflightStages[phase]));
+  if (phase === "first-install") {
+    yield* firstInstallEdge(preview ? "plan" : "install").pipe(
+      Effect.provide(ReleaseHttpLive),
+      diagnoseFreshTarget
+    );
+    if (preview) return yield* Effect.logInfo("Verified the fresh native first-install plan and closed edge.");
+  } else {
+    yield* releaseCommand({
+      args: ["bun", "native-storage-release.ts", releaseChecks[phase]],
+      lifetime: phase === "upload" ? "read-only" : "started-write",
+    }).pipe(nativeResourceStage(phase === "upload" ? "upload verification" : "host capture"));
+  }
   return yield* Apply.apply(snapshot.native, { deletions: "defer" }).pipe(
     Effect.provide(snapshot.session.context),
     Effect.uninterruptible,

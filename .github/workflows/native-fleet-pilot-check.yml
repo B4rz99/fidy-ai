@@ -26,6 +26,8 @@ jobs:
             !/.repos/
           sparse-checkout-cone-mode: false
       - uses: ./.github/actions/bun-install
+      - name: Read the reviewed merge source digest
+        run: bun -e 'import { edgePolicyDigest } from "./infra/cloudflare/verify-edge-policy.ts"; console.log(edgePolicyDigest)'
       - name: Verify the pinned combined release policy
         run: bun infra/cloudflare/verify-edge-policy.ts
       - run: bun run --cwd infra/cloudflare test -- installed-verification-revision.test.ts

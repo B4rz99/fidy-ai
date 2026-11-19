@@ -43,6 +43,7 @@ const providerFailure = Effect.fn(function* (mode: string, rounds: number, answe
       text: "¿Qué recuerdas?",
       caller,
       secret: "callback-fixture-secret",
+      occurredMs: now,
       message,
     });
   yield* native(() => provider.fetch("https://fixture.invalid/" + mode));

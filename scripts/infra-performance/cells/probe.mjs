@@ -109,7 +109,9 @@ try {
   const { binding } = await handshake.json();
   assert.ok(binding);
   let responseSha256;
+  const firstOffer = performance.now();
   for (let index = 0; index < 30; index++) {
+    await Bun.sleep(Math.max(0, firstOffer + index * 1000 - performance.now()));
     const reply = await request("/transactions?limit=25", { headers: { cookie, "Fidy-Session-Binding": binding } });
   assert.equal(reply.status, 200, "authenticated history on deployed graph");
   const body = await reply.text();

@@ -1,0 +1,33 @@
+.github/workflows/native-storage-release.yml
+  s_a1be23a656acf0::t_d28b81940242c8 27
+apps/server/cloudflare/financial-user-store.test-fixture.ts
+  s_a1be23a656acf0::t_54f9d2b7ebedeb 29,32,34-47
+apps/server/cloudflare/release-fixture/contract.ts
+  s_a1be23a656acf0::t_01234ae989bf2d 14-26
+apps/server/cloudflare/release-fixture/internal/payments.ts
+  s_a1be23a656acf0::t_ceb5cb0c4ddea5 3-4
+apps/server/cloudflare/release-fixture/payment.test.ts
+  s_a1be23a656acf0::t_dcabcd79768545 6
+infra/cloudflare/native-acceptance.ts
+  s_a1be23a656acf0::t_7124e76293635f 15-16
+infra/cloudflare/scripts/check-production-runtime-config.test.ts
+  s_a1be23a656acf0::t_e8a48e6f8e433e 102-106
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_0d795df3f1bd56 5,12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "37bcabab82de32e89ffd13f93fbd7ec4b0b35678",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

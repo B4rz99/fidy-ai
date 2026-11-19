@@ -1,7 +1,5 @@
 name: Rehearse closed Transaction fixture provenance
 on:
-  push:
-    branches: [perf/closed-transaction-fixture-receipt]
   workflow_dispatch:
 permissions:
   contents: read

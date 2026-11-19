@@ -253,6 +253,10 @@ python3 scripts/infra-performance/canonical-fixture/hosted.py hosted \
   --out "$PRIVATE_NATIVE_RUN"
 ```
 
+The hosted command verifies installation and then refuses before signup while the native
+row-admission and independent cleanup owner are pending. The isolated Actions rehearsal exercises
+the entire receipt issuance path.
+
 Before opening the provider Session, the collector reads the acceptance hostname, actual
 deployments, version bindings and signer fingerprint from the account. It uses the fixed
 performance-1 provider identity, retains the original bound Session, captures eight originals

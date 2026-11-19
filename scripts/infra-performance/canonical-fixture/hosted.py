@@ -111,6 +111,8 @@ def bridge(mode, revision, session):
 
 
 def collect(mode, revision, prefix, out):
+    if mode != "rehearse":
+        raise ValueError("Hosted collection requires native row admission and an independent protected cleanup owner")
     directory=out/"fixture"
     directory.mkdir(mode=0o700, exist_ok=True)
     # Serialize Session creation and receipt issuance separately from the canonical mutation journal.

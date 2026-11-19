@@ -36,23 +36,15 @@ const documentReply = Schema.decodeUnknownSync(Schema.Struct({ data: DashboardDo
 const documentLayout = Schema.decodeUnknownSync(
   Schema.Struct({ data: Schema.Struct({ layout: Schema.Unknown }) })
 );
-const bindingReply = Schema.decodeUnknownSync(Schema.Struct({ binding: Schema.NonEmptyString }));
 
 /**
  * Assign matching WidgetIds through the normal synthetic WebSession on each disposable reference.
  * The protected hosted reader consumes a separately prepared fixture and never calls this helper.
  * @param {import("@playwright/test").APIRequestContext} request Authenticated disposable context.
- * @param {{api:string,browser:string}} origins Loopback reference installation.
+ * @param {{api:string,headers:Record<string,string>}} installation Bound disposable reference.
  */
-export const prepareReferenceDashboard = async (request, { api, browser }) => {
+export const prepareReferenceDashboard = async (request, { api, headers }) => {
   assert.equal(new URL(api).hostname, "127.0.0.1");
-  assert.equal(new URL(browser).hostname, "127.0.0.1");
-  const binding = await request.get(api + "/web/session/binding", { headers: { origin: browser } });
-  assert.equal(binding.status(), success);
-  const headers = {
-    origin: browser,
-    "fidy-session-binding": bindingReply(await binding.json()).binding,
-  };
   const initial = await request.post(api + "/dashboard/initialize", { headers });
   assert.equal(initial.status(), success);
   const initialValue = Schema.decodeUnknownSync(Schema.Unknown)(await initial.json());

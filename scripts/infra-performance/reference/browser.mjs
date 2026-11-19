@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { Schema } from "effect";
 import { freshBudgetMonth, freshPendingReview } from "./fresh-workspaces.mjs";
 import { freshDashboard, prepareReferenceDashboard } from "./fresh-dashboard.mjs";
-import { freshRecurring } from "./fresh-recurring.mjs";
+import { freshRecurring, prepareReferenceRecurring } from "./fresh-recurring.mjs";
 import { freshTransactions } from "./fresh-transactions.mjs";
 
 const { chromium } = await import("@playwright/test");
@@ -114,7 +114,15 @@ try {
   };
   if (process.env.FIDY_ASSESSMENT === "production") {
     process.stderr.write("REFERENCE_STAGE dashboard-fixture\n");
-    await prepareReferenceDashboard(request, { api, browser: app });
+    assert.equal(new URL(api).hostname, "127.0.0.1");
+    const binding = await request.get(api + "/web/session/binding", { headers: origin });
+    const observed = Schema.decodeUnknownSync(Schema.Struct({ binding: Schema.NonEmptyString }))(
+      await setup(binding).json()
+    );
+    const installation = { api, headers: { ...origin, "fidy-session-binding": observed.binding } };
+    await prepareReferenceDashboard(request, installation);
+    process.stderr.write("REFERENCE_STAGE recurring-fixture\n");
+    await prepareReferenceRecurring(request, installation);
   }
   const { before, startupMs, readMs, correctionMs } = await freshTransactions({
     page,

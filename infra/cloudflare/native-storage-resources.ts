@@ -3,11 +3,11 @@ import { requireHostPlan, stagedAccessApplications } from "./native-host-plan";
 import * as Alchemist from "alchemy/Alchemist";
 import * as Apply from "alchemy/Apply";
 import { requireNativeResourcePlan } from "./native-graph";
-import { describePlan, describeResource } from "alchemy/Plan";
+import { type Plan, describePlan, describeResource } from "alchemy/Plan";
 import { Config, Effect, Schema } from "effect";
 import { releaseCommand } from "./production-release";
 import { nativeResourceFailureMessage, nativeResourceStage } from "./resource-failure";
-import { requireNativeBindings } from "./storage-installation";
+import { type NativeHostMode, requireNativeBindings } from "./storage-installation";
 
 const Phase = Schema.Literals(["first-install", "upload", "stage-hosts"]);
 const requireProtectedDispatch = Effect.gen(function* () {
@@ -29,6 +29,38 @@ const releaseChecks = {
   upload: "verify-upload",
   "stage-hosts": "capture-hosts",
 } as const;
+const verifyResourcePlan = Effect.fn(function* (
+  phase: typeof Phase.Type,
+  plan: Plan,
+  revision: string,
+  hosts: NativeHostMode
+) {
+  if (phase === "stage-hosts") {
+    yield* Effect.sync(() => requireHostPlan(plan)).pipe(nativeResourceStage("Access host plan"));
+  } else {
+    yield* Effect.sync(() => requireNativeBindings({ plan: plan, revision, hosts })).pipe(
+      nativeResourceStage("Worker bindings")
+    );
+    yield* Effect.sync(() =>
+      requireNativeResourcePlan({
+        plan: describePlan(plan),
+        revision,
+        first: phase === "first-install",
+      })
+    ).pipe(nativeResourceStage("resource inventory"));
+    if (
+      phase === "first-install" &&
+      Object.values(plan.resources).some(
+        (node) =>
+          node.action !== "create" || node.state !== undefined || node.deferredAdoption?.adopt
+      )
+    ) {
+      return yield* Effect.fail(Error("Previous state exists")).pipe(
+        nativeResourceStage("first-install ownership")
+      );
+    }
+  }
+});
 const resourceRelease = Effect.fn(function* (phase: typeof Phase.Type) {
   yield* requireProtectedDispatch;
   const revision = yield* Config.String("RELEASE_GIT_SHA");
@@ -52,33 +84,7 @@ const resourceRelease = Effect.fn(function* (phase: typeof Phase.Type) {
       ? Alchemist.Stack.plan({ ...input, include: stagedAccessApplications })
       : Alchemist.Stack.plan(input)
   ).pipe(nativeResourceStage("planning"));
-  if (phase === "stage-hosts") {
-    yield* Effect.sync(() => requireHostPlan(snapshot.native)).pipe(
-      nativeResourceStage("Access host plan")
-    );
-  } else {
-    yield* Effect.sync(() =>
-      requireNativeBindings({ plan: snapshot.native, revision, hosts })
-    ).pipe(nativeResourceStage("Worker bindings"));
-    yield* Effect.sync(() =>
-      requireNativeResourcePlan({
-        plan: describePlan(snapshot.native),
-        revision,
-        first: phase === "first-install",
-      })
-    ).pipe(nativeResourceStage("resource inventory"));
-    if (
-      phase === "first-install" &&
-      Object.values(snapshot.native.resources).some(
-        (node) =>
-          node.action !== "create" || node.state !== undefined || node.deferredAdoption?.adopt
-      )
-    ) {
-      return yield* Effect.fail(Error("Previous state exists")).pipe(
-        nativeResourceStage("first-install ownership")
-      );
-    }
-  }
+  yield* verifyResourcePlan(phase, snapshot.native, revision, hosts);
   const preflightStages = {
     "first-install": "closed edge preparation",
     upload: "upload verification",

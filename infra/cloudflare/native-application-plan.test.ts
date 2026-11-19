@@ -1,6 +1,7 @@
 import { approvedOpenAiModel } from "@fidy/server/hosted-inference-contract";
 import { it } from "@effect/vitest";
 import * as Alchemy from "alchemy";
+import * as Alchemist from "alchemy/Alchemist";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { evalStack } from "alchemy/Stack";
 import { ConfigProvider, Effect, Schema } from "effect";
@@ -50,6 +51,6 @@ it.effect(
           }
         }),
       { stage: "production" }
-    );
+    ).pipe(Effect.provide([Alchemist.layer(), Alchemy.inMemoryState()]));
   }
 );

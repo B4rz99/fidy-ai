@@ -12,7 +12,6 @@ const paths = {
 } as const;
 export const stagedAccessApplications = Object.keys(paths);
 const existingDependencies: Readonly<Record<string, string>> = {
-  RecoveryIdentity: "Cloudflare.Access.IdentityProvider",
   RecoveryOperators: "Cloudflare.Access.Group",
 };
 const properties = Schema.Record(Schema.String, Schema.Unknown);

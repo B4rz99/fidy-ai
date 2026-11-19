@@ -8,6 +8,7 @@ import math
 import os
 from pathlib import Path
 import platform
+import re
 import signal
 import socket
 import statistics
@@ -39,6 +40,53 @@ BOUNDARIES = [
     "correction.through-fresh-http",
     "correction.browser",
 ]
+
+
+# Export only controlled stage names, error classes and harness source coordinates.
+STAGES = {
+    "runtime", "user", "transactions", "planning", "reviews", "counts", "launch",
+    "pairing", "approval", "redeem", "bootstrap", "accountability-before", "read",
+    "open-correction", "save", "fresh-read", "accountability-after",
+}
+REASONS = {
+    "foreign key constraint failed": "foreign-key",
+    "unique constraint failed": "unique",
+    "check constraint failed": "check",
+    "not null constraint failed": "not-null",
+    "no such table": "missing-table",
+    "no such column": "missing-column",
+    "not authorized": "sqlite-authorization",
+    "syntax error": "syntax",
+    "assertionerror": "assertion",
+    "timeouterror": "timeout",
+    "could not resolve local release identity": "release-identity",
+    "native directory is unavailable": "directory-readiness",
+    "native worker build failed": "worker-build",
+}
+SOURCE_LOCATION = re.compile(
+    r"/(native-seed\.ts|native\.ts|dev-browser-api\.ts|browser\.mjs|preview\.mjs):(\d{1,6}):(\d{1,6})\b"
+)
+
+
+def failure_metadata(log):
+    if not log.exists():
+        return {}
+    content = log.read_text(errors="replace")
+    details = {}
+    for line in content.splitlines():
+        if line.startswith("REFERENCE_STAGE ") and line[16:] in STAGES:
+            details["stage"] = line[16:]
+        match = re.fullmatch(r"REFERENCE_HTTP ([1-5]\d\d)", line)
+        if match:
+            details["httpStatus"] = int(match[1])
+    for message, reason in REASONS.items():
+        if message in content.lower():
+            details["reason"] = reason
+            break
+    location = SOURCE_LOCATION.search(content)
+    if location:
+        details["source"] = ":".join(location.groups())
+    return details
 
 
 def output(args, cwd):
@@ -91,7 +139,7 @@ def prepare(api, front, port):
     submitted = False
     while time.monotonic() < end:
         if api.poll() is not None or front.poll() is not None:
-            raise RuntimeError("Local installation exited during startup")
+            raise RuntimeError(f"Startup process exited (api={api.returncode}, web={front.returncode})")
         try:
             req = urllib.request.Request(f"http://127.0.0.1:{port + 2}/assessment/prepare", method="GET" if submitted else "POST")
             with urllib.request.urlopen(req, timeout=3) as response:
@@ -323,7 +371,15 @@ def main():
                     env_for_variant = {**env, "REFERENCE_WEB_PORT": str(WEB_PORT[variant])}
                     row.update(observation(paths[variant], env_for_variant, destination, variant))
                 except (OSError, ValueError, RuntimeError, StopIteration, subprocess.SubprocessError) as exc:
-                    row.update(status="failed", failure=type(exc).__name__, detail=str(exc))
+                    diagnostics = {
+                        component: metadata
+                        for component in ["api", "web", "browser"]
+                        if (metadata := failure_metadata(destination / f"{component}.log"))
+                    }
+                    row.update(status="failed", failure=type(exc).__name__, diagnostics=diagnostics)
+                    if isinstance(exc, RuntimeError):
+                        row["detail"] = str(exc)
+                    print(f"{variant} pair {pair} failed: {type(exc).__name__} {diagnostics}", flush=True)
                 paired.append(row)
             if len(paired) == 2 and all(row["status"] == "ok" for row in paired):
                 if equivalence(paired[0]) != equivalence(paired[1]):

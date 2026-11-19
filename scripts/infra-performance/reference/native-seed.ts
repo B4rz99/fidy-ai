@@ -1,7 +1,5 @@
-import { deepStrictEqual } from "node:assert";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import type { Miniflare } from "miniflare";
-import { native } from "../../../apps/server/cloudflare/user-store.test-fixture";
 
 type Owner = Awaited<ReturnType<Miniflare["unsafeGetDurableObjectStorage"]>>;
 export const subject = "24000000-0000-4000-8000-000000000481";
@@ -22,10 +20,13 @@ const digestCharacters = 64;
 const execute = (
   db: Owner,
   ...args: Parameters<Owner["exec"]>
-): Effect.Effect<Awaited<ReturnType<Owner["exec"]>>> => native(() => db.exec(...args));
+): Effect.Effect<Awaited<ReturnType<Owner["exec"]>>> => Effect.promise(() => db.exec(...args));
 const everyHundred = 100;
 // Match the immutable D1 fixture's IDs, facts and dates. Bound each native SQLite statement.
 const transactions = Effect.fn(function* (db: Owner, size: Size) {
+  const encodedCurrencies = yield* Schema.encodeEffect(
+    Schema.fromJsonString(Schema.Array(Schema.String))
+  )(currencies);
   for (let start = 0; start < size.transactions; start += chunk) {
     yield* execute(
       db,
@@ -41,7 +42,7 @@ const transactions = Effect.fn(function* (db: Owner, size: Size) {
       Math.min(start + chunk, size.transactions),
       epoch,
       subject,
-      JSON.stringify(currencies),
+      encodedCurrencies,
       size.currencies
     );
   }
@@ -160,9 +161,19 @@ export const seed = Effect.fn(function* (db: Owner, dataset: string) {
   }
   const size = sizes[dataset];
   const start = performance.now();
+  // The pinned D1 journey grants this User an active trial before browser approval.
+  yield* execute(
+    db,
+    "UPDATE users SET trial_started_at_ms=created_at_ms,trial_ends_at_ms=created_at_ms+604800000 WHERE id=?",
+    subject
+  );
+  process.stdout.write("REFERENCE_STAGE transactions\n");
   yield* transactions(db, size);
+  process.stdout.write("REFERENCE_STAGE planning\n");
   yield* planning(db, size);
+  process.stdout.write("REFERENCE_STAGE reviews\n");
   yield* reviews(db, size);
+  process.stdout.write("REFERENCE_STAGE counts\n");
   const [counts] = yield* execute(
     db,
     `SELECT (SELECT count(*) FROM transactions) AS transactions,
@@ -174,11 +185,16 @@ export const seed = Effect.fn(function* (db: Owner, dataset: string) {
     (SELECT count(*) FROM ingestion_review_items) AS review`
   );
   const links = Math.ceil(size.transactions / everyHundred);
-  deepStrictEqual(counts, {
-    ...size,
-    revisions: size.plans * size.revisions,
-    links,
-    effectiveTransactions: size.transactions - links,
-  });
-  return { dataset, seedEpochMs: epoch, ...counts, milliseconds: performance.now() - start };
+  const verified = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({
+      transactions: Schema.Literal(size.transactions),
+      currencies: Schema.Literal(size.currencies),
+      effectiveTransactions: Schema.Literal(size.transactions - links),
+      links: Schema.Literal(links),
+      plans: Schema.Literal(size.plans),
+      revisions: Schema.Literal(size.plans * size.revisions),
+      review: Schema.Literal(size.review),
+    })
+  )(counts);
+  return { dataset, seedEpochMs: epoch, ...verified, milliseconds: performance.now() - start };
 });

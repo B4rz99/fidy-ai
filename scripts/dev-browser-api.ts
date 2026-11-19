@@ -50,7 +50,7 @@ export const prepareBrowserUser = Effect.fn(function* (runtime: Miniflare, subje
     )
   );
 });
-export const approve = (runtime: Miniflare, request: Request): Promise<Response> => {
+export const approve = Effect.fn(function* (runtime: Miniflare, request: Request) {
   const url = new URL(request.url),
     code = url.searchParams.get("code") ?? "";
   if (
@@ -60,12 +60,15 @@ export const approve = (runtime: Miniflare, request: Request): Promise<Response>
     url.pathname !== "/approve" ||
     !/^[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$/u.test(code)
   ) {
-    return Promise.resolve(new Response(null, { status: 403 }));
+    return new Response(null, { status: 403 });
   }
-  return Effect.runPromise(
-    signedChat(runtime, "Aprueba el código de inicio de sesión " + code, caller)
-  ).then((response) => new Response(null, { status: response.ok ? noContent : response.status }));
-};
+  const response = yield* signedChat(
+    runtime,
+    "Aprueba el código de inicio de sesión " + code,
+    caller
+  );
+  return new Response(null, { status: response.ok ? noContent : response.status });
+});
 export const forward = Effect.fn(function* (runtime: Miniflare, request: Request) {
   const url = new URL(request.url);
   if (url.origin !== origin) return new Response(null, { status: 403 });
@@ -119,7 +122,7 @@ const loopback = Effect.gen(function* () {
   const approvals = Bun.serve({
     hostname: "127.0.0.1",
     port: 4175,
-    fetch: (req) => approve(runtime, req),
+    fetch: (req) => run(approve(runtime, req)),
   });
   yield* Effect.addFinalizer(() =>
     native(() => Promise.all([approvals.stop(true), api.stop(true)]))

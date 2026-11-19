@@ -7,6 +7,11 @@ on:
         description: Optional installed commit for installed verification after verifier-only changes
         required: false
         type: string
+      transaction_fixture_signer:
+        description: Require the protected performance-1 signer on this closed acceptance revision
+        required: false
+        default: false
+        type: boolean
       operation:
         description: Operate the isolated SQLite installation
         required: true
@@ -42,6 +47,7 @@ jobs:
       actions: read
       contents: read
     env:
+      NATIVE_FIXTURE_SIGNER_SHA256: ${{ inputs.transaction_fixture_signer && vars.NATIVE_FIXTURE_SIGNER_SHA256 || '' }}
       NATIVE_STORAGE_HOSTS: ${{ vars.NATIVE_STORAGE_HOSTS || 'acceptance' }}
       CLOUDFLARE_ACCESS_ISSUER: ${{ secrets.CLOUDFLARE_ACCESS_ISSUER }}
       RECOVERY_OPERATOR_EMAIL: ${{ vars.RECOVERY_OPERATOR_EMAIL }}
@@ -63,8 +69,13 @@ jobs:
         env:
           EXPECTED_INSTALLED_REVISION: ${{ inputs.installed_revision }}
           RELEASE_OPERATION: ${{ inputs.operation }}
+          FIXTURE_SIGNER_REQUESTED: ${{ inputs.transaction_fixture_signer }}
         run: |
           test "$NATIVE_STORAGE_ADMISSION" = closed
+          if [[ "$FIXTURE_SIGNER_REQUESTED" == true ]]; then
+            [[ "$NATIVE_STORAGE_HOSTS" == acceptance && "$NATIVE_FIXTURE_SIGNER_SHA256" =~ ^[a-f0-9]{64}$ ]]
+            [[ "$RELEASE_OPERATION" != stage-hosts && "$RELEASE_OPERATION" != publish-site && "$RELEASE_OPERATION" != rehearse-rollback ]]
+          fi
           if [[ "$RELEASE_OPERATION" == fleet-pilot ]]; then
             echo "FLEET_PILOT_STARTED_AT=$(date -u +%s)" >> "$GITHUB_ENV"
           fi
@@ -91,22 +102,31 @@ jobs:
       - name: Verify the fresh native plan against the existing state store
         if: inputs.operation == 'plan-first-install'
         env:
+          NATIVE_FIXTURE_SIGNING_KEY: ${{ inputs.transaction_fixture_signer && secrets.NATIVE_FIXTURE_SIGNING_KEY || '' }}
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
         working-directory: infra/cloudflare
         run: bun native-storage-resources.ts plan-first-install
       - name: Install the verified fresh native application
         if: inputs.operation == 'first-install'
         env:
+          NATIVE_FIXTURE_SIGNING_KEY: ${{ inputs.transaction_fixture_signer && secrets.NATIVE_FIXTURE_SIGNING_KEY || '' }}
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
         working-directory: infra/cloudflare
         run: bun native-storage-resources.ts first-install
-      - name: Capture the native stable pair and stage zero-traffic candidates
+      - name: Capture the native stable pair
         if: inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback'
         working-directory: infra/cloudflare
-        run: |
-          bun native-storage-release.ts capture
-          bun native-storage-resources.ts upload
-          bun native-storage-release.ts stage
+        run: bun native-storage-release.ts capture
+      - name: Upload the verified native candidates
+        if: inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback'
+        env:
+          NATIVE_FIXTURE_SIGNING_KEY: ${{ inputs.transaction_fixture_signer && secrets.NATIVE_FIXTURE_SIGNING_KEY || '' }}
+        working-directory: infra/cloudflare
+        run: bun native-storage-resources.ts upload
+      - name: Stage the zero-traffic native candidates
+        if: inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback'
+        working-directory: infra/cloudflare
+        run: bun native-storage-release.ts stage
       - name: Persist and read back private observability on the installed application Workers
         if: inputs.operation == 'first-install' || inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback'
         working-directory: infra/cloudflare

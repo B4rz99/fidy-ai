@@ -1,3 +1,4 @@
+import { expectedFixtureSigner } from "./native-fixture-signer";
 import { BunFileSystem } from "@effect/platform-bun";
 import type { ErasureProgress } from "./native-erasure-continuation";
 import type { ErasureObservation } from "./native-erasure";
@@ -393,6 +394,7 @@ const verifyDeployedWorkers = Effect.fn(function* (
   client: HttpClient.HttpClient,
   port: ReleasePort
 ) {
+  const fingerprint = yield* expectedFixtureSigner;
   const workers: ReadonlyArray<readonly [NativeRole, string]> = [
     ["Ingress", installationNames.Ingress],
     ["Core", installationNames.Core],
@@ -411,6 +413,7 @@ const verifyDeployedWorkers = Effect.fn(function* (
         revision: env.revision,
         versionId: id,
         raw,
+        fingerprint,
       })
     );
     yield* verifyReleaseObservability(env, name, client);
@@ -1169,6 +1172,12 @@ const promoteClosed = Effect.fn(function* (
     yield* readFile(env.file)
   );
   const eligible = yield* storageCompatibility({ env, client }, release, "promote");
+  if ((yield* expectedFixtureSigner) !== "" && !eligible.rollback) {
+    return yield* new ReleaseFailure({
+      message:
+        "Candidate receipt signer requires a tested compatible return to the captured stable pair",
+    });
+  }
   const promoted = yield* releaseController.promoteRelease(port, release, {
     exactPairPassed: true,
     middlePairPassed: true,

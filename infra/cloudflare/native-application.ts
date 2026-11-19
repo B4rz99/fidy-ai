@@ -1,3 +1,4 @@
+import { fixtureSignerBindings } from "./native-fixture-signer";
 import { marketingSite } from "./marketing-site";
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
@@ -120,6 +121,7 @@ const coreWorker = Effect.fn(function* ({
       ...(yield* operatingBindings),
       ...access,
       ...(yield* providerBindings(release)),
+      ...(yield* fixtureSignerBindings(release).pipe(Effect.orDie)),
       SMOKE_LIMITER: Cloudflare.RateLimit("ReleaseSmokeAdmission", {
         namespaceId: 2257,
         simple: { limit: 8, period: 60 },

@@ -1,3 +1,4 @@
+import { expectedFixtureSigner } from "./native-fixture-signer";
 import { productionTopology } from "../../apps/server/cloudflare/runtime/contract";
 import { requireHostPlan, stagedAccessApplications } from "./native-host-plan";
 import * as Alchemist from "alchemy/Alchemist";
@@ -76,7 +77,8 @@ const verifyResourcePlan = Effect.fn(function* ({
   if (phase === "stage-hosts") {
     yield* Effect.sync(() => requireHostPlan(plan)).pipe(nativeResourceStage("Access host plan"));
   } else {
-    yield* Effect.sync(() => requireNativeBindings({ plan, revision, hosts })).pipe(
+    const fingerprint = yield* expectedFixtureSigner;
+    yield* Effect.sync(() => requireNativeBindings({ plan, revision, hosts, fingerprint })).pipe(
       nativeResourceStage("Worker bindings")
     );
     yield* Effect.sync(() =>

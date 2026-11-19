@@ -1,4 +1,4 @@
-import { Data } from "effect";
+import { Data, Schema } from "effect";
 
 export const acceptanceApiHeader = "x-fidy-acceptance-api";
 export const acceptanceProofHeader = "x-fidy-acceptance-proof";
@@ -30,3 +30,24 @@ export type AcceptanceWindowBindings = NativeAcceptanceSettings &
 export const acceptanceWindowQuery = "?acceptance=work";
 
 export const acceptanceReceiptKind = "charge-receipt";
+
+export const performanceReceiptPath =
+  "/internal/release-smoke?acceptance=transaction-fixture&cohort=performance&ordinal=1";
+const sha = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u));
+export const ReceiptRequest = Schema.Struct({
+  resourcePrefix: Schema.String.check(Schema.isPattern(/^fidy-2259-[a-f0-9]{12}$/u)),
+  nativeManifestDigest: sha,
+});
+const coordinates = Schema.Struct({
+  ...ReceiptRequest.fields,
+  nativeRevision: Schema.String.check(Schema.isPattern(/^[a-f0-9]{40}$/u)),
+  member: Schema.Literal("performance-1"),
+  sessionBindingSha256: sha,
+});
+export type Coordinates = typeof coordinates.Type;
+export const SealedTransactionReceipt = Schema.Struct({
+  ...coordinates.fields,
+  iv: Schema.String.check(Schema.isPattern(/^[a-f0-9]{24}$/u)),
+  sealed: Schema.String.check(Schema.isPattern(/^(?:[a-f0-9]{2}){16,24000}$/u)),
+  signature: Schema.String.check(Schema.isPattern(/^[a-f0-9]{128}$/u)),
+});

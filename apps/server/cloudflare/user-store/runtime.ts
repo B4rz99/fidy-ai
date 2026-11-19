@@ -7,7 +7,11 @@ import {
 import { HostedPauseNotice } from "../insights/contract";
 import { localProactivityObservations, nativePauseNotice } from "../insights/operations";
 import { BudgetThresholdEvaluation } from "../budgets/contract";
-import { backgroundWorkAllowed, closedHostEnvironment } from "../release-isolation/operations";
+import {
+  backgroundWorkAllowed,
+  closedHostEnvironment,
+  isPerformanceReceipt,
+} from "../release-isolation/operations";
 import type { AcceptanceWindowBindings } from "../release-isolation/contract";
 import {
   cloudflareWorkerTelemetry,
@@ -223,6 +227,7 @@ import { canonicalOperation } from "../routing/operations";
 import {
   dispatchLocalTransaction,
   isLocalTransactionOperation,
+  ownPerformanceReceipt,
   readScopedPrivacyPage,
 } from "../transactions/operations";
 import {
@@ -245,7 +250,8 @@ import { ownerCheckRequest, ownerCheckResponse } from "../maintenance/contract";
 const uncertainCheckStatus = 503;
 type UserStoreEnvironment = AcceptanceWindowBindings & {
   WHATSAPP_SANDBOX_PHONE_NUMBER_ID: string;
-} & NativeReminderEnvironment &
+} & Partial<Readonly<{ SMOKE_PROOF: string; NATIVE_FIXTURE_SIGNING_KEY: string }>> &
+  NativeReminderEnvironment &
   WompiBindings &
   LocalIngestionEnvironment &
   BancolombiaSandboxEnvironment &
@@ -901,6 +907,18 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     command: string,
     owns: (id: string) => boolean
   ): Option.Option<Promise<Response>> {
+    if (isPerformanceReceipt(request)) {
+      const environment = this.browserEnvironment(request);
+      return Option.some(
+        this.runtime.runPromise(
+          ownPerformanceReceipt(
+            request,
+            { ...environment, RELEASE_GIT_SHA: environment.RELEASE_GIT_SHA ?? "" },
+            owns
+          )
+        )
+      );
+    }
     if (command === "POST /web/privacy/transactions") {
       return Option.some(
         this.runtime.runPromise(

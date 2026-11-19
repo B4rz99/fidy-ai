@@ -1,5 +1,6 @@
 import { approvedOpenAiModel } from "@fidy/server/hosted-inference-contract";
 import { it } from "@effect/vitest";
+import { Hex } from "effect/encoding";
 import { expect } from "vitest";
 import * as Alchemy from "alchemy";
 import * as Alchemist from "alchemy/Alchemist";
@@ -31,11 +32,32 @@ const pinFetch: typeof fetch = Object.assign(
   },
   { preconnect: fetch.preconnect }
 );
-it.effect(
-  "declares every Core and smoke binding before a fresh Access application or queue exists",
-  () => {
+const expectedSigner = (worker: string, enabled: boolean): boolean => worker === "Core" && enabled;
+const rehearsalKey = Effect.gen(function* () {
+  const pair = yield* Effect.promise(() =>
+    crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"])
+  );
+  const spki = yield* Effect.promise(() => crypto.subtle.exportKey("spki", pair.publicKey));
+  const pkcs8 = yield* Effect.promise(() => crypto.subtle.exportKey("pkcs8", pair.privateKey));
+  const digest = yield* Effect.promise(() => crypto.subtle.digest("SHA-256", spki));
+  return {
+    fingerprint: Hex.encode(new Uint8Array(digest)),
+    secret: Hex.encode(new Uint8Array(pkcs8)),
+  };
+});
+const testSigner = await Effect.runPromise(rehearsalKey);
+it.effect.each([false, true])(
+  "declares exactly the requested Core and smoke bindings before resources exist (fixture signer %s)",
+  (enabled) => {
     const revision = "1".repeat(40);
+    const fingerprint = enabled ? testSigner.fingerprint : "";
     const configuration = ConfigProvider.fromUnknown({
+      ...(enabled
+        ? {
+            NATIVE_FIXTURE_SIGNER_SHA256: fingerprint,
+            NATIVE_FIXTURE_SIGNING_KEY: testSigner.secret,
+          }
+        : {}),
       NATIVE_STORAGE_ADMISSION: "closed",
       RELEASE_GIT_SHA: revision,
       CONTRACT_DIGEST: "2".repeat(64),
@@ -82,12 +104,19 @@ it.effect(
             );
             if (resource === undefined) throw Error("Missing declared Worker " + worker);
             const rows = compiled.bindings[resource.FQN] ?? [];
-            requireClosedBindings({
-              worker,
-              bindings: rows.flatMap(
-                (row) => Schema.decodeUnknownSync(bindings)(row.data).bindings ?? []
-              ),
-            });
+            const observed = rows.flatMap(
+              (row) => Schema.decodeUnknownSync(bindings)(row.data).bindings ?? []
+            );
+            requireClosedBindings({ worker, bindings: observed, fingerprint });
+            expect(observed.some((item) => item.name === "NATIVE_FIXTURE_SIGNING_KEY")).toBe(
+              expectedSigner(worker, enabled)
+            );
+            if (expectedSigner(worker, enabled)) {
+              expect(() => requireClosedBindings({ worker, bindings: observed })).toThrow();
+              expect(() =>
+                requireClosedBindings({ worker, bindings: observed, fingerprint: "0".repeat(64) })
+              ).toThrow();
+            }
           }
         }),
       { stage: "production" }

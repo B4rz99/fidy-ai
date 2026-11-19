@@ -1,4 +1,4 @@
-"""Run the local D1 reference and optionally interleave a candidate using the same browser journey."""
+"""Capture the isolated D1 reference using its immutable browser journey."""
 
 import argparse
 from contextlib import ExitStack, contextmanager
@@ -198,7 +198,6 @@ def compare(samples, rows, variants, *, stress=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--d1", required=True, type=Path)
-    parser.add_argument("--candidate", type=Path)
     parser.add_argument("--origin", default="local loopback; geographic origin unrecorded")
     parser.add_argument("--pairs", type=int, default=1)
     parser.add_argument(
@@ -211,11 +210,7 @@ def main():
     if args.pairs < 1:
         parser.error("--pairs must be positive")
     paths = {"d1": args.d1.resolve()}
-    if args.candidate:
-        paths["do"] = args.candidate.resolve()
-    revisions = {name: revision(path, name) for name, path in paths.items()}
-    if len(revisions) == 2 and revisions["d1"] == revisions["do"]:
-        parser.error("The candidate must identify its own implementation revision")
+    revisions = {"d1":revision(paths["d1"],"d1")}
     for port in range(4183, 4186):
         with socket.socket() as sock:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -256,7 +251,7 @@ def main():
             for f in [Path(__file__), BROWSER, HERE / "preview.mjs"]
         },
         "pairs": args.pairs,
-        "order": "alternating D1-first / DO-first",
+        "order": "sequential pinned D1 reference",
         "boundaries": BOUNDARIES,
     }
     (run / "plan.json").write_text(json.dumps(plan, indent=2))
@@ -301,41 +296,16 @@ def main():
                     check=True,
                 )
         for pair in range(args.pairs):
-            pair_rows = []
-            for variant in (list(paths) if pair % 2 == 0 else list(reversed(paths))):
-                destination = run / f"{pair}-{variant}"
-                destination.mkdir()
-                row = {"variant": variant, "pair": pair, "status": "ok"}
-                try:
-                    row.update(observation(paths[variant], env, destination))
-                except (
-                    OSError,
-                    ValueError,
-                    RuntimeError,
-                    StopIteration,
-                    subprocess.SubprocessError,
-                ) as exc:
-                    row.update(status="failed", failure=type(exc).__name__)
-                pair_rows.append(row)
-            if len(pair_rows) == 2 and all(row["status"] == "ok" for row in pair_rows):
-                left, right = pair_rows
-
-                def identity(row):
-                    return (
-                        [r["payload"] for r in row["attempts"]],
-                        row["accountability"],
-                        {k: v for k, v in row["seed"].items() if k != "milliseconds"},
-                    )
-
-                if identity(left) != identity(right):
-                    for row in pair_rows:
-                        row.update(
-                            status="failed",
-                            failure="Different domain, accountability or fixture evidence",
-                        )
-            rows.extend(pair_rows)
+            destination = run / f"{pair}-d1"
+            destination.mkdir()
+            row = {"variant":"d1", "pair":pair, "status":"ok"}
+            try:
+                row.update(observation(paths["d1"], env, destination))
+            except (OSError, ValueError, RuntimeError, StopIteration, subprocess.SubprocessError) as exc:
+                row.update(status="failed",failure=type(exc).__name__)
+            rows.append(row)
             with (run / "attempts.jsonl").open("a") as out:
-                out.writelines(json.dumps(row) + "\n" for row in pair_rows)
+                out.write(json.dumps(row)+"\n")
     finally:
         key.unlink(missing_ok=True)
         cert.unlink(missing_ok=True)

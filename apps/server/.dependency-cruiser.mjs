@@ -19,7 +19,7 @@ export default {
           "^cloudflare/login-email-worker\\.test-fixture\\.ts$",
           "^cloudflare/storage-forward-repair\\.test-fixture\\.ts$",
           "^cloudflare/provider-authentication/journey\\.test-fixture\\.ts$",
-          "^cloudflare/(core-worker|public-worker|operational-canary-workflow|browser-acceptance-preview)\\.ts$",
+          "^cloudflare/(core-worker|public-worker|operational-canary-workflow)\\.ts$",
           "^cloudflare/ingestion/email-worker\\.ts$",
           "\\.d\\.mts$",
         ],

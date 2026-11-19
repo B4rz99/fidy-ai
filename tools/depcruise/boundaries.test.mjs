@@ -161,14 +161,6 @@ await test("shared acceptance fixtures remain unavailable to production", () => 
       source: "cloudflare/agent/hosted-turn.test.ts",
       fixture: "cloudflare/openai.test-fixture.ts",
     },
-    {
-      source: "cloudflare/browser-acceptance-preview.ts",
-      fixture: "cloudflare/browser-acceptance-connections.test-fixture.ts",
-    },
-    {
-      source: "cloudflare/browser-acceptance-seed.ts",
-      fixture: "cloudflare/browser-assessment.test-fixture.ts",
-    },
   ]) {
     assert.equal(
       inspect("cloudflare/core-worker.ts", fixture).some(

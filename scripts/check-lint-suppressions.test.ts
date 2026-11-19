@@ -120,8 +120,6 @@ it("keeps platform diagnostic opt-outs on their reviewed file boundaries", () =>
           "anyUnknownInErrorContext:./infra/cloudflare/native-storage-resources.ts",
           "strictEffectProvide:./apps/cli/src/main.ts",
           "strictEffectProvide:./apps/cli/test/recovery-entry.ts",
-          "strictEffectProvide:./apps/server/cloudflare/browser-acceptance-core-module.ts",
-          "strictEffectProvide:./scripts/browser-core-bundle.test.ts",
           "strictEffectProvide:./scripts/titular-requests/main.ts",
           "strictEffectProvide:./scripts/dev-browser.ts",
           "strictEffectProvide:./scripts/titular-requests/runtime.test.ts",

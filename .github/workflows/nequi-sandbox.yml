@@ -1,4 +1,4 @@
-name: Nequi Sandbox protocol proof
+name: Historical Nequi Sandbox comparison
 
 on:
   workflow_dispatch:
@@ -19,6 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          ref: fb53d9e755c14393048dc945fc0b7f117730d872
           persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
@@ -35,12 +36,12 @@ jobs:
       - name: Record minimized proof scope
         if: success()
         run: |
-          printf '%s\n' '## Nequi Sandbox protocol proof' \
-            'Revision: `${{ github.sha }}`' \
+          printf '%s\n' '## Historical Nequi Sandbox comparison' \
+            'Comparator revision: `fb53d9e755c14393048dc945fc0b7f117730d872`' \
             '- Reusable NEQUI source availability and approval were authenticated.' \
             '- Weekly, monthly and yearly first payments reached verified success.' \
             '- Declined weekly first payment reached the existing bounded failure decision.' \
             '- Successful periods were cancelled canonically; retry retained the receipt and paid history.' \
             '- The reusable source was detached; declined settlement had no paid Subscription to cancel.' \
             '- Evidence contains no numbers, tokens, provider identities or response bodies.' \
-            '- Local D1/activity harness plus real Sandbox provider, not Production or native-platform launch approval.' >> "$GITHUB_STEP_SUMMARY"
+            '- Historical D1 protocol observation only. Current native release evidence is recorded by the protected storage workflow.' >> "$GITHUB_STEP_SUMMARY"

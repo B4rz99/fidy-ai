@@ -1,0 +1,19 @@
+apps/server/cloudflare/agent/native-whatsapp-provider.test.ts
+  s_a1be23a656acf0::t_c1a314bb8d71a4 46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "12c6dbbfa29d8c2d4815ef125523e2cf6d304a08",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

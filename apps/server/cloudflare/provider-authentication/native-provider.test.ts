@@ -2,8 +2,8 @@ import { NodeFileSystem } from "@effect/platform-node";
 import { Effect, Schema } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
-import { browser } from "../browser-bootstrap.test-fixture";
-import { native, nativeBrowserPlatform } from "../user-store.test-fixture";
+import { browser, loginOnlyBrowser } from "../browser-bootstrap.test-fixture";
+import { native, nativeBrowserPlatform, nativeLoginPlatform } from "../user-store.test-fixture";
 import { webSignupDisclosure } from "../../src/shell/consent/operations";
 import { UserId } from "../../src/core/identity/contract";
 
@@ -180,4 +180,123 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       })
     );
   }
+});
+
+it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
+  test.effect("a verified login to a retained erased identity leaves its new pairing pending", () =>
+    Effect.gen(function* () {
+      const runtime = yield* (yield* nativeBrowserPlatform)();
+      const { login, post } = browser(runtime);
+      const existing = loginOnlyBrowser(runtime);
+      const subject = "protected-erased-subject";
+      const complete = "/web/providers/google/complete";
+      const joined = yield* login(subject, { provider: "google", scenario: "valid" });
+      const created = yield* post(complete, joined.proof);
+      expect(yield* native(() => created.json())).toMatchObject({ status: "created" });
+      const directory = yield* native(() =>
+        runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
+      );
+      const next = yield* existing.login(subject, {
+        provider: "google",
+        scenario: "valid",
+      });
+      expect(next.review).toEqual({ status: "verified" });
+      yield* native(() =>
+        directory.exec(
+          "INSERT INTO erasure_barriers(user_id,reference,requested_at_ms) SELECT user_id,'20000000-0000-4000-8000-000000000001',1 FROM provider_routes WHERE established=1"
+        )
+      );
+      const refused = yield* post(complete, next.proof);
+      const redemption = yield* post("/web/pairings/redeem", next.proof);
+      expect(redemption.status).toBe(202);
+      expect(redemption.headers.get("set-cookie")).toBeNull();
+      expect(yield* native(() => redemption.json())).toMatchObject({ status: "pending_approval" });
+      expect(refused.status).toBe(400);
+      expect(yield* native(() => refused.json())).toEqual({ status: "invalid" });
+      const held = yield* native(() =>
+        directory.exec(
+          "SELECT count(*) AS count FROM provider_routes JOIN erasure_barriers USING(user_id)"
+        )
+      );
+      expect(held).toEqual([{ count: 1 }]);
+      const returningSubject = "fenced-after-reservation";
+      const first = yield* login(returningSubject, { provider: "google", scenario: "valid" });
+      const ready = yield* post(complete, first.proof);
+      expect(yield* native(() => ready.json())).toMatchObject({ status: "created" });
+      const racing = yield* existing.login(returningSubject, {
+        provider: "google",
+        scenario: "valid",
+      });
+      yield* native(() =>
+        directory.exec(
+          "CREATE TRIGGER fence_after_bind AFTER UPDATE OF state ON provider_attempts WHEN NEW.state='bound' BEGIN INSERT INTO erasure_barriers(user_id,reference,requested_at_ms) SELECT user_id,'20000000-0000-4000-8000-000000000002',1 FROM browser_pairings WHERE id=NEW.pairing_id; END"
+        )
+      );
+      const raced = yield* post(complete, racing.proof);
+      expect(raced.status).toBe(400);
+      expect(yield* native(() => raced.json())).toEqual({ status: "invalid" });
+      yield* native(() => directory.exec("DROP TRIGGER fence_after_bind"));
+      yield* native(() =>
+        directory.exec(
+          "CREATE TRIGGER fail_pairing_bind BEFORE UPDATE OF user_id ON browser_pairings BEGIN SELECT RAISE(ABORT,'fixture_unavailable'); END"
+        )
+      );
+      const other = yield* login("unrelated", { provider: "google", scenario: "valid" });
+      const outage = yield* post(complete, other.proof);
+      expect(outage.status).toBe(503);
+    })
+  );
+});
+
+it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
+  test.effect("a lost UserStore completion uses the exact concurrent erasure barrier", () =>
+    Effect.gen(function* () {
+      const runtime = yield* (yield* nativeLoginPlatform)();
+      const { login, post } = browser(runtime);
+      const subject = "lost-provider-completion";
+      const complete = "/web/providers/google/complete";
+      const joined = yield* login(subject, { provider: "google", scenario: "valid" });
+      const created = yield* post(complete, joined.proof);
+      expect(yield* native(() => created.json())).toMatchObject({ status: "created" });
+      const directory = yield* native(() =>
+        runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
+      );
+      const [row] = yield* Schema.decodeUnknownEffect(
+        Schema.Array(Schema.Struct({ user_id: UserId }))
+      )(
+        yield* native(() =>
+          directory.exec("SELECT user_id FROM browser_pairings WHERE id=?", joined.proof.pairingId)
+        )
+      );
+      if (row === undefined) return yield* Effect.die("Missing original User");
+      const store = yield* native(() =>
+        runtime.unsafeGetDurableObjectStorage("core", "UserStore", { name: row.user_id })
+      );
+      const existing = loginOnlyBrowser(runtime);
+      for (const fenced of [false, true]) {
+        const attempt = yield* existing.login(subject, { provider: "google", scenario: "valid" });
+        expect(attempt.review).toEqual({ status: "verified" });
+        yield* native(() =>
+          store.exec("CREATE TABLE lose_provider_completion_reply(marker INTEGER)")
+        );
+        if (fenced) {
+          yield* native(() =>
+            directory.exec(
+              "CREATE TRIGGER concurrent_fence AFTER UPDATE OF state ON provider_attempts WHEN NEW.state='bound' BEGIN INSERT INTO erasure_barriers(user_id,reference,requested_at_ms) SELECT user_id,'20000000-0000-4000-8000-000000000004',1 FROM browser_pairings WHERE id=NEW.pairing_id; END"
+            )
+          );
+        }
+        const lost = yield* post(complete, attempt.proof);
+        expect(lost.status).toBe(fenced ? 400 : 503);
+        expect(yield* native(() => lost.json())).toEqual({
+          status: fenced ? "invalid" : "unavailable",
+        });
+        expect(
+          yield* native(() =>
+            store.exec("SELECT name FROM sqlite_schema WHERE name='lose_provider_completion_reply'")
+          )
+        ).toEqual([]);
+      }
+    })
+  );
 });

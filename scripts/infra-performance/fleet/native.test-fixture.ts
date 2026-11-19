@@ -25,8 +25,9 @@ const secondMs = 1000;
 const tickMs = 55_000;
 const pollLimitMs = 5_000;
 const erasureReference = "22610000-0000-4000-8000-000000002000";
-if (count !== rehearsalCount && count !== fullCount)
+if (count !== rehearsalCount && count !== fullCount) {
   throw new Error("Choose 36 or 1000 real User stores.");
+}
 const destination = `apps/server/test-results/2261-fleet/${count}`;
 const minuteMs = 60_000;
 const at = (number: number): string =>
@@ -54,8 +55,9 @@ const prepare = Effect.fnUntraced(function* (runtime: Miniflare, name: string) {
   // Startup runs the full occupied User schema. A normal owner request subsequently performs
   // the lifetime registration and requires Maintenance's acknowledgement.
   const start = yield* native(() => owner.fetch(ownerCheckUrl, { method: "POST" }));
-  if (start.status !== completedCheckStatus)
+  if (start.status !== completedCheckStatus) {
     return yield* Effect.die("Cannot initialize native User");
+  }
   const local = yield* storage(runtime, name);
   yield* native(() =>
     local.exec(
@@ -188,8 +190,9 @@ const firstWindow = Effect.fnUntraced(function* (runtime: Miniflare, names: stri
   const enrolled = yield* Clock.currentTimeMillis;
   yield* prepare(runtime, at(0));
   yield* write({ phase: "registered", name: at(0), at: enrolled });
-  for (let slot = 1; slot < windowSlots; slot++)
+  for (let slot = 1; slot < windowSlots; slot++) {
     yield* tick(runtime, slot, start + slot * minuteMs);
+  }
   return start;
 });
 
@@ -225,8 +228,9 @@ const fleet = Effect.gen(function* () {
   // Disposing the first workerd process clears all in-memory owner and observer state.
   const cold = yield* create();
   yield* write({ phase: "restart", at: yield* Clock.currentTimeMillis });
-  for (let slot = windowSlots; slot < slots; slot++)
+  for (let slot = windowSlots; slot < slots; slot++) {
     yield* tick(cold, slot, start + slot * minuteMs);
+  }
   const now = yield* Clock.currentTimeMillis;
   yield* Effect.sleep(Math.max(0, start + slots * minuteMs - now));
   const receipt = yield* retainedReceipt(cold);

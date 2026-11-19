@@ -1,3 +1,4 @@
+import { Clock, Effect } from "effect";
 import { Maintenance as NativeMaintenance } from "./runtime";
 
 export * from "../core-worker";
@@ -12,12 +13,18 @@ export class Maintenance extends NativeMaintenance {
   private readonly sample;
 
   constructor(state: DurableObjectState, env: Environment) {
+    const clock = Effect.runSync(Clock.Clock);
     const sample = { active: 0, peak: 0, probes: new Array<Probe>() };
     const observe = (peer: Peer): Peer =>
       peer && {
         getByName: (name) => ({
           fetch: (input, init) => {
-            const probe: Probe = { name, at: Date.now(), elapsedMs: 0, status: 0 };
+            const probe: Probe = {
+              name,
+              at: clock.currentTimeMillisUnsafe(),
+              elapsedMs: 0,
+              status: 0,
+            };
             sample.probes.push(probe);
             sample.peak = Math.max(sample.peak, ++sample.active);
             return peer
@@ -28,7 +35,7 @@ export class Maintenance extends NativeMaintenance {
                 return response;
               })
               .finally(() => {
-                probe.elapsedMs = Date.now() - probe.at;
+                probe.elapsedMs = clock.currentTimeMillisUnsafe() - probe.at;
                 sample.active--;
               });
           },

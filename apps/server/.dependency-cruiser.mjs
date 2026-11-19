@@ -10,7 +10,7 @@ export default {
         path: "^(src|cloudflare)/",
         pathNot: [
           "\\.test\\.ts$",
-          "^cloudflare/(agent/hosted-alarm|core-http/lost-read|maintenance/native-monitor|transactions/addressed-read|user-clock|ingestion/private-email)\\.test-fixture\\.ts$",
+          "^cloudflare/(agent/hosted-alarm|core-http/lost-read|maintenance/native-(monitor|fleet)|transactions/addressed-read|user-clock|ingestion/private-email)\\.test-fixture\\.ts$",
           "^cloudflare/capacity-worker\\.test-fixture\\.ts$",
           "^cloudflare/connection-worker\\.test-fixture\\.ts$",
           "^cloudflare/erasure-worker\\.test-fixture\\.ts$",
@@ -69,7 +69,10 @@ export default {
         "Maintenance composes published owner runtimes and declarations only; SQL, policies, admission and lifecycle implementations remain with their owners (#614).",
       from: {
         path: "^cloudflare/maintenance/",
-        pathNot: ["\\.test\\.ts$", "^cloudflare/maintenance/native-monitor\\.test-fixture\\.ts$"],
+        pathNot: [
+          "\\.test\\.ts$",
+          "^cloudflare/maintenance/native-(monitor|fleet)\\.test-fixture\\.ts$",
+        ],
       },
       to: {
         path: ["^cloudflare/", "^src/(core|shell)/"],

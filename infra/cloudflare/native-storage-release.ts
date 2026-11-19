@@ -302,7 +302,8 @@ const requireClosedAdmission = Effect.fn(function* (client: HttpClient.HttpClien
 const erasureObservation = (
   env: Config,
   client: HttpClient.HttpClient,
-  userNamespace: string
+  userNamespace: string,
+  fs: FileSystem.FileSystem
 ): ErasureObservation => {
   // The final report retains each phase even when the last census fails or is interrupted.
   const checkpoints: Array<Parameters<ErasureObservation["record"]>[0]> = [];
@@ -311,7 +312,6 @@ const erasureObservation = (
     inventory: () => readUserObjects(accountReader(env, client), userNamespace),
     record: (checkpoint) =>
       Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
         checkpoints.push(checkpoint);
         yield* fs.writeFileString(
           path + ".next",
@@ -323,7 +323,7 @@ const erasureObservation = (
             ? ` (observation ${checkpoint.observations}, listed ${checkpoint.listed}, populated ${checkpoint.populated})`
             : "";
         yield* Effect.logInfo("Physical User census " + checkpoint.stage + progress);
-      }).pipe(Effect.provide(BunFileSystem.layer)),
+      }),
   };
 };
 const verifySyntheticUsers = Effect.fn(function* (
@@ -337,6 +337,7 @@ const verifySyntheticUsers = Effect.fn(function* (
     erasureNamespace: Option.Option<string>;
   }
 ) {
+  const fs = yield* FileSystem.FileSystem;
   const send = Effect.fn(function* (request: Request) {
     const reply = yield* client
       .execute(HttpClientRequest.fromWeb(request))
@@ -354,7 +355,7 @@ const verifySyntheticUsers = Effect.fn(function* (
     proof: Redacted.make(env.smokeProof),
     origins,
     send,
-    erasure: Option.map(erasureNamespace, (id) => erasureObservation(env, client, id)),
+    erasure: Option.map(erasureNamespace, (id) => erasureObservation(env, client, id, fs)),
   });
   const path = `https://api.cloudflare.com/client/v4/accounts/${env.account}/workflows/fidy-native-billing/instances/${proof.callback.workflow}`;
   const response = providerJson(
@@ -1187,7 +1188,7 @@ if (import.meta.main) {
     const services = yield* Layer.build(ReleaseHttpLive);
     const client = Context.get(services, HttpClient.HttpClient);
     yield* commands[command](env, client, releasePort({ env, client }));
-  }).pipe(Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }), Effect.scoped);
+  }).pipe(Effect.provide(BunFileSystem.layer), Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }), Effect.scoped);
   await Effect.runPromise(
     program.pipe(
       Effect.catchCause((cause) =>

@@ -158,7 +158,8 @@ for every SQL batch, Login, inspection, history read and final Audit check. Use 
 and write maximums when approving the run. `run` obtains current account-wide D1 GraphQL analytics,
 adds previously accounted same-day experiment work and evaluates the repository's Free policy.
 The runner requires a protected `SMOKE_PROOF`, `CLOUDFLARE_ACCOUNT_ID` and an account-scoped
-Cloudflare API token with D1, Worker script, Durable Object, R2 and Analytics access. The operator's
+Cloudflare API token with D1, Worker script, Durable Object, R2 and Analytics access. Pin the native
+Core fixture-signing public key through `FIDY_NATIVE_FIXTURE_PUBLIC_KEY`. The operator's
 AWS CLI uses `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and optional `AWS_SESSION_TOKEN` for
 conditional GetObject/PutObject access to exactly
 `fidy-native-release-smoke/protected-storage/account/<account-id>/d1-ledger.json`. All comparator

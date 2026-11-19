@@ -26,12 +26,18 @@ class Sandbox:
         self.storage.mkdir()
         self.process = subprocess.Popen(['bun',str(HERE/'probe.mjs'),str(path),'owner-pipe'],stdin=subprocess.PIPE,
                     stdout=subprocess.PIPE,text=True,env={'HOME':str(scratch),'TMPDIR':str(scratch),'PATH':os.environ['PATH']},cwd=ROOT)
-        self.entry = json.loads(self.process.stdout.readline())
+        self.entry = self.receive()
+
+    def receive(self):
+        for line in self.process.stdout:
+            if line.startswith("FIDY_OWNER_PIPE "):
+                return json.loads(line.removeprefix("FIDY_OWNER_PIPE "))
+        raise RuntimeError("Workerd owner transport closed")
 
     def command(self, payload):
         self.process.stdin.write(json.dumps(payload)+'\n')
         self.process.stdin.flush()
-        return json.loads(self.process.stdout.readline())
+        return self.receive()
 
     def identity(self, role):
         path = self.storage/role

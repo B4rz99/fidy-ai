@@ -5,6 +5,7 @@ import {
   type NativeRole,
   requireRoleBindings,
 } from "./native-graph";
+import { verifiedVersionResources } from "./rollback-compatibility";
 import { installationNames } from "./storage-installation";
 
 import { type ProviderRead as Read, readProviderList as pages } from "./native-provider-list";
@@ -74,7 +75,7 @@ const requireService = (binding: NativeBinding, revision: string): void => {
 };
 /** Assert actual provider metadata for each consuming Worker, including its independently deployed private service targets. */
 export const requireDeployedRole = (input: {
-  role: NativeRole;
+  role: Exclude<NativeRole, "Web">;
   revision: string;
   bindings: Readonly<Record<string, unknown>>;
 }): void => {
@@ -98,6 +99,45 @@ export const requireDeployedRole = (input: {
       );
     }
   }
+};
+const noHandlers = Schema.Tuple([]);
+const staticSiteVersion = Schema.Struct({
+  success: Schema.Literal(true),
+  result: Schema.Struct({
+    id: Schema.NonEmptyString,
+    resources: Schema.Struct({
+      bindings: Schema.Tuple([]),
+      script: Schema.Struct({
+        handlers: Schema.NullOr(noHandlers),
+        named_handlers: Schema.optionalKey(noHandlers),
+      }),
+      script_runtime: Schema.Struct({
+        compatibility_date: Schema.NonEmptyString,
+        assets: Schema.Struct({
+          serve_directly: Schema.Literal(true),
+          raw_run_worker_first: Schema.Literal(false),
+          html_handling: Schema.Literal("none"),
+          not_found_handling: Schema.Literal("single-page-application"),
+          base_path: Schema.Literal("/"),
+        }),
+      }),
+    }),
+  }),
+});
+/** StaticSite gets revision and contract evidence from the independently rebuilt and served assets. */
+export const verifyDeployedVersion = (input: {
+  role: NativeRole;
+  raw: unknown;
+  versionId: string;
+  revision: string;
+}): void => {
+  if (input.role === "Web") {
+    const { result } = Schema.decodeUnknownSync(staticSiteVersion)(input.raw);
+    requireTarget(result.id === input.versionId, "Web");
+    return;
+  }
+  const { bindings } = verifiedVersionResources(input);
+  requireDeployedRole({ role: input.role, revision: input.revision, bindings });
 };
 const limit = 100;
 const buckets = Effect.fn(function* (read: Read) {
@@ -130,7 +170,8 @@ const Workflow = Schema.Struct({
 });
 const consumer = Schema.Struct({
   consumer_id: identifier,
-  script_name: identifier,
+  script: Schema.optionalKey(identifier),
+  script_name: Schema.optionalKey(identifier),
   dead_letter_queue: identifier,
   type: Schema.Literal("worker"),
   settings: Schema.Struct({
@@ -138,7 +179,12 @@ const consumer = Schema.Struct({
     max_retries: Schema.Int,
     max_wait_time_ms: Schema.Int,
   }),
-});
+}).check(
+  Schema.makeFilter(
+    (row) =>
+      row.script === undefined || row.script_name === undefined || row.script === row.script_name
+  )
+);
 const inspectConsumers = Effect.fn(function* (
   read: Read,
   installed: typeof Queue.Type,
@@ -162,7 +208,8 @@ const inspectConsumers = Effect.fn(function* (
     : workBatchSize;
   yield* Effect.try(() =>
     requireTarget(
-      row.script_name === (installed.queue_name === smoke ? smoke : installationNames.Core) &&
+      (row.script ?? row.script_name) ===
+        (installed.queue_name === smoke ? smoke : installationNames.Core) &&
         row.dead_letter_queue === dlq &&
         row.settings.batch_size === expectedSize &&
         row.settings.max_retries === 3 &&

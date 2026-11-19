@@ -7,7 +7,7 @@ import { verifyIncumbentFence, verifyIncumbentMail } from "./native-incumbent-fe
 import { readProviderList } from "./native-provider-list";
 import { verifyInstalledWebsite } from "./native-deployed-web";
 import { inspectDeployedEdge } from "./native-deployed-edge";
-import { inspectNativeResources, requireDeployedRole } from "./native-deployed-graph";
+import { inspectNativeResources, verifyDeployedVersion } from "./native-deployed-graph";
 import type { NativeRole } from "./native-graph";
 import { exerciseClosedUsers } from "./native-acceptance";
 import { installedOrigins } from "@fidy/server/browser-transport";
@@ -368,22 +368,31 @@ const verifyDeployedWorkers = Effect.fn(function* (
     ["Smoke", "fidy-native-smoke-" + env.revision],
     ["ForwardedEmail", installationNames.ForwardedEmail],
   ];
+  const verify = Effect.fn(function* ([role, name]: readonly [NativeRole, string]) {
+    const deployment = yield* port.current(name);
+    const id = yield* releaseController.servingVersion(deployment);
+    const raw = yield* releaseEvidence.readWorkerVersion(env, client, { name, id });
+    yield* Effect.try(() =>
+      verifyDeployedVersion({ role, revision: env.revision, versionId: id, raw })
+    );
+    yield* verifyReleaseObservability(env, name, client);
+    if (role === "Core") yield* verifyCoreDefaultPlacement(env, { name, version: id }, client);
+    if (role === "Core" || role === "Smoke" || role === "ForwardedEmail") {
+      yield* proveRecoveryCorePrivate(env, client, name);
+    }
+    return { role, name, versionId: id, deploymentId: deployment.id };
+  });
   return yield* Effect.forEach(
     workers,
-    Effect.fn(function* ([role, name]) {
-      const deployment = yield* port.current(name);
-      const id = yield* releaseController.servingVersion(deployment);
-      const version = yield* versionResources(env, client, { name, id, revision: env.revision });
-      yield* Effect.try(() =>
-        requireDeployedRole({ role, revision: env.revision, bindings: version.bindings })
-      );
-      yield* verifyReleaseObservability(env, name, client);
-      if (role === "Core") yield* verifyCoreDefaultPlacement(env, { name, version: id }, client);
-      if (role === "Core" || role === "Smoke" || role === "ForwardedEmail") {
-        yield* proveRecoveryCorePrivate(env, client, name);
-      }
-      return { role, name, versionId: id, deploymentId: deployment.id };
-    }),
+    (worker) =>
+      verify(worker).pipe(
+        Effect.mapError(
+          () =>
+            new ReleaseFailure({
+              message: "Native deployed Worker verification failed for " + worker[0],
+            })
+        )
+      ),
     { concurrency: 3 }
   );
 });
@@ -408,16 +417,36 @@ const verifyInstalledTopology = Effect.fn(function* (
       message: "Application versions changed during verification",
     });
   }
-  const resources = yield* inspectNativeResources(accountReader(env, client), env.revision, true);
+  const resources = yield* inspectNativeResources(
+    accountReader(env, client),
+    env.revision,
+    true
+  ).pipe(
+    Effect.mapError(
+      () => new ReleaseFailure({ message: "Native bucket, Queue or Workflow inventory differs" })
+    )
+  );
   const edge = yield* inspectDeployedEdge(env, client, {
     installed: true,
     bindings: input.bindings,
     hosts: input.hosts,
     staging: input.staging,
-  });
+  }).pipe(
+    Effect.mapError(
+      () => new ReleaseFailure({ message: "Native DNS, host or Access inventory differs" })
+    )
+  );
   const website = yield* Effect.forEach(
     nativeHostPairs(input.staging ? "acceptance" : input.hosts),
-    (pair) => verifyInstalledWebsite(client, env.revision, pair)
+    (pair) =>
+      verifyInstalledWebsite(client, env.revision, pair).pipe(
+        Effect.mapError(
+          () =>
+            new ReleaseFailure({
+              message: "Native browser asset, metadata or header verification failed",
+            })
+        )
+      )
   );
   return { workers, resources, edge, website };
 });

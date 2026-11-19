@@ -83,6 +83,7 @@ it("keeps ordinary admission on the canonical API and bounds each predeclared sy
       expect(yield* check(canonical, "misspelled")).toBe(false);
       for (const [purpose, limit] of [
         ["smoke", 2],
+        ["erasure", 1],
         ["performance", 20],
         ["fleet", 1000],
       ] as const) {

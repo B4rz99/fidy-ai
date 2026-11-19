@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
 import { appendFileSync, mkdirSync } from "node:fs";
-import { Effect, Redacted } from "effect";
-import { installedOrigins } from "../../../apps/server/src/shell/browser-transport/contract.ts";
-import { openPerformanceBrowser } from "../../../infra/cloudflare/native-acceptance.ts";
+import { Effect, Redacted, Schema } from "effect";
+import { installedOrigins } from "../../../apps/server/src/shell/browser-transport/contract";
+import { openPerformanceBrowser } from "../../../infra/cloudflare/native-acceptance";
 import { measureBrowser } from "./journey.mjs";
 
+const shortTimeoutMs = 10000,
+  sessionTimeoutMs = 30000,
+  success = 200,
+  minimumProofLength = 32;
+const metadataRevision = Schema.decodeUnknownSync(Schema.Struct({ gitRevision: Schema.String }));
 const origins = installedOrigins.acceptance;
 const directory = "apps/web/test-results/hosted-browser";
 mkdirSync(directory, { recursive: true });
@@ -16,7 +21,8 @@ try {
   assert.ok(/^[0-9a-f]{40}$/u.test(revision));
   assert.ok(network === "ordinary" || network === "poor");
   assert.ok(
-    process.env.NATIVE_STORAGE_ADMISSION === "closed" && process.env.SMOKE_PROOF?.length >= 32
+    process.env.NATIVE_STORAGE_ADMISSION === "closed" &&
+      process.env.SMOKE_PROOF?.length >= minimumProofLength
   );
   event({
     type: "plan",
@@ -35,9 +41,9 @@ try {
   stage = "origin";
   const trace = await fetch(origins.browser + "/cdn-cgi/trace", {
     redirect: "error",
-    signal: AbortSignal.timeout(10000),
+    signal: AbortSignal.timeout(shortTimeoutMs),
   });
-  assert.equal(trace.status, 200);
+  assert.equal(trace.status, success);
   const lines = await trace.text();
   const country = /^loc=([A-Z]{2})$/mu.exec(lines)?.[1];
   const colo = /^colo=([A-Z]{3})$/mu.exec(lines)?.[1];
@@ -52,9 +58,9 @@ try {
   stage = "release";
   const metadata = await fetch(origins.browser + "/deployment-metadata.json", {
     redirect: "error",
-    signal: AbortSignal.timeout(10000),
+    signal: AbortSignal.timeout(shortTimeoutMs),
   });
-  assert.equal((await metadata.json()).gitRevision, revision);
+  assert.equal(metadataRevision(await metadata.json()).gitRevision, revision);
   stage = "provider-websession";
   const secret = Redacted.make(process.env.SMOKE_PROOF);
   const session = await Effect.runPromise(
@@ -64,7 +70,8 @@ try {
         proof: secret,
         send: (request) =>
           Effect.tryPromise({
-            try: () => fetch(request, { redirect: "manual", signal: AbortSignal.timeout(30000) }),
+            try: () =>
+              fetch(request, { redirect: "manual", signal: AbortSignal.timeout(sessionTimeoutMs) }),
             catch: () => Error("Hosted browser signup transport unavailable"),
           }),
       },

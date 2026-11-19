@@ -1,18 +1,21 @@
 // Runner-only test of the actual HTTPS boundary, including browser-generated CORS preflight.
 import assert from "node:assert/strict";
-import { chromium } from "@playwright/test";
 import { Effect } from "effect";
-import { installedOrigins } from "../../../apps/server/src/shell/browser-transport/contract.ts";
-import { acceptanceRequestAdmitted } from "../../../apps/server/cloudflare/release-isolation/operations.ts";
+import { installedOrigins } from "../../../apps/server/src/shell/browser-transport/contract";
+import { acceptanceRequestAdmitted } from "../../../apps/server/cloudflare/release-isolation/operations";
 import { targetId } from "../reference/fresh-transactions.mjs";
 import { protectedBrowserProxy } from "./proxy.mjs";
 
+const { chromium } = await import("@playwright/test");
+const revisionLength = 40,
+  noContent = 204,
+  unavailable = 503;
 const origins = installedOrigins.acceptance;
 const environment = {
   BROWSER_ORIGIN: origins.browser,
   NATIVE_STORAGE_ADMISSION: "closed",
   RECOVERY_ISOLATION: "isolated",
-  RELEASE_GIT_SHA: "6".repeat(40),
+  RELEASE_GIT_SHA: "6".repeat(revisionLength),
   SMOKE_PROOF: crypto.randomUUID(),
 };
 const certificate = Bun.file(process.env.BROWSER_TLS_CERT);
@@ -50,7 +53,7 @@ const proxy = protectedBrowserProxy({
       "access-control-allow-methods": "GET, PUT, OPTIONS",
     };
     observed.push({ method: request.method, verified, cookie: request.headers.get("cookie") });
-    return new Response(null, { status: verified ? 204 : 503, headers });
+    return new Response(null, { status: verified ? noContent : unavailable, headers });
   },
 });
 let browser;
@@ -95,7 +98,7 @@ try {
       ).status,
     origins.api
   );
-  assert.equal(result, 204);
+  assert.equal(result, noContent);
   assert.deepEqual(observed, [
     { method: "OPTIONS", verified: true, cookie: null },
     { method: "GET", verified: true, cookie: "__Host-fidy_session=synthetic" },
@@ -115,7 +118,7 @@ try {
       ).status,
     { api: origins.api, id: targetId }
   );
-  assert.equal(mutation, 204);
+  assert.equal(mutation, noContent);
   assert.deepEqual(observed.slice(2), [
     { method: "OPTIONS", verified: true, cookie: null },
     { method: "PUT", verified: true, cookie: "__Host-fidy_session=synthetic" },

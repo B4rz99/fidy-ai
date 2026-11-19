@@ -1,5 +1,7 @@
 name: Rehearse closed Transaction fixture provenance
 on:
+  push:
+    branches: [perf/closed-fixture-candidate-ci]
   workflow_dispatch:
 permissions:
   contents: read

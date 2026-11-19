@@ -1,35 +1,15 @@
-import { Effect, Schema } from "effect";
+import { Effect } from "effect";
 import { Hex } from "effect/encoding";
 import { installedOrigins } from "../../../src/shell/browser-transport/contract";
-import type { AcceptanceEnvironment } from "../contract";
-import { acceptanceApiHeader } from "../contract";
+import type { AcceptanceEnvironment, Coordinates, SealedTransactionReceipt } from "../contract";
+import { acceptanceApiHeader, performanceReceiptPath } from "../contract";
 import { verifyRequest } from "./request-proof";
 
-export const performanceReceiptPath =
-  "/internal/release-smoke?acceptance=transaction-fixture&cohort=performance&ordinal=1";
 export const isPerformanceReceipt = (request: Request): boolean => {
   const url = new URL(request.url);
   return request.method === "POST" && url.pathname + url.search === performanceReceiptPath;
 };
 
-const sha = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u));
-export const ReceiptRequest = Schema.Struct({
-  resourcePrefix: Schema.String.check(Schema.isPattern(/^fidy-2259-[a-f0-9]{12}$/u)),
-  nativeManifestDigest: sha,
-});
-const coordinates = Schema.Struct({
-  ...ReceiptRequest.fields,
-  nativeRevision: Schema.String.check(Schema.isPattern(/^[a-f0-9]{40}$/u)),
-  member: Schema.Literal("performance-1"),
-  sessionBindingSha256: sha,
-});
-export type Coordinates = typeof coordinates.Type;
-export const SealedTransactionReceipt = Schema.Struct({
-  ...coordinates.fields,
-  iv: Schema.String.check(Schema.isPattern(/^[a-f0-9]{24}$/u)),
-  sealed: Schema.String.check(Schema.isPattern(/^(?:[a-f0-9]{2}){16,24000}$/u)),
-  signature: Schema.String.check(Schema.isPattern(/^[a-f0-9]{128}$/u)),
-});
 const boundHeader = (request: Request): boolean =>
   !request.headers.has("authorization") &&
   ["cookie", "fidy-session-binding"].every((name) => request.headers.has(name)) &&

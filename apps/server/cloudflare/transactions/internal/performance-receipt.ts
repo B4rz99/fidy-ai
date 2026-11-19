@@ -1,13 +1,10 @@
+import { ReceiptRequest } from "../../release-isolation/contract";
 import { Clock, Effect, Option, Schema } from "effect";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Hex } from "effect/encoding";
 import { localPreparationSubject } from "../../canonical-admission/operations";
 import { canonicalOperation } from "../../routing/operations";
-import {
-  ReceiptRequest,
-  receiptAdmitted,
-  sealTransactionReceipt,
-} from "../../release-isolation/operations";
+import { receiptAdmitted, sealTransactionReceipt } from "../../release-isolation/operations";
 import type {
   AcceptanceEnvironment,
   AcceptanceWindowBindings,

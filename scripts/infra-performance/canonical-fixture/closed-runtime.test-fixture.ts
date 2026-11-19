@@ -1,5 +1,6 @@
+import { serveFixture } from "./bridge";
 // Disposable production Workers and the pinned release's private Google provider, without an account transport.
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { Miniflare, type MiniflareWorkerConfig } from "miniflare";
 import { installedOrigins } from "../../../apps/server/src/shell/browser-transport/contract";
 import {
@@ -14,19 +15,15 @@ const observedManifest = async (
   name: string
 ): Promise<NonNullable<MiniflareWorkerConfig["manifest"]>> => {
   const manifest = await Effect.runPromise(workerManifest(module));
-  if (name === "closed-provider") return manifest;
+  if (name !== "ingress") return manifest;
+  // The local Miniflare entry listener supplies its loopback URL. Preserve the fixed original TLS
+  // URL when delivering to the production Ingress so the real signed request can be verified.
   const wrapper = `import worker from "./production.mjs";
-  export * from "./production.mjs";
-  export default {...worker,async fetch(request,env,ctx){
-    const origin=new URL(request.url);
-    if ("${name}"==="ingress" && origin.hostname==="127.0.0.1") {
-      request=new Request("${installedOrigins.acceptance.api}"+origin.pathname+origin.search,request);
-    }
-    const result=await worker.fetch(request,env,ctx);
-    const headers=new Headers(result.headers);
-    headers.set("x-rehearsal-${name}",JSON.stringify({tls:new URL(request.url).protocol==="https:",host:new URL(request.url).hostname,forwardedHost:request.headers.has("x-forwarded-host"),signed:request.headers.has("x-fidy-acceptance-proof"),isolation:result.headers.has("x-fidy-recovery-isolation")}));
-    return new Response(result.body,{status:result.status,headers});
-  }};`;
+    export default { ...worker,fetch(request,env,ctx) {
+      const url=new URL(request.url);
+      if(url.hostname!=="127.0.0.1") return new Response(null,{status:403});
+      return worker.fetch(new Request("${installedOrigins.acceptance.api}"+url.pathname+url.search,request),env,ctx);
+    }};`;
   return {
     mainModule: "index.mjs",
     modules: {
@@ -104,3 +101,15 @@ export const closedRuntime = async (revision: string, secret: string): Promise<M
     ]),
   });
 };
+if (import.meta.main) {
+  try {
+    const runtime = await closedRuntime(
+      process.env.FIDY_NATIVE_REVISION ?? "",
+      process.env.SMOKE_PROOF ?? ""
+    );
+    await serveFixture(Option.some(runtime));
+  } catch {
+    process.stderr.write("Closed workerd rehearsal stopped\n");
+    process.exitCode = 1;
+  }
+}

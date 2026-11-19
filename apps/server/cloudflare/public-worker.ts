@@ -64,12 +64,15 @@ import {
   isAcceptanceReceipt,
   isAcceptanceWindow,
   isPerformanceReceipt,
-  performanceReceiptPath,
   receiptAdmitted,
   releaseAdmission,
   signAcceptanceRequest,
 } from "./release-isolation/operations";
-import { acceptanceApiHeader, acceptanceProofHeader } from "./release-isolation/contract";
+import {
+  acceptanceApiHeader,
+  acceptanceProofHeader,
+  performanceReceiptPath,
+} from "./release-isolation/contract";
 
 type PublicEnvironment = WorkerTelemetryEnvironment & {
   readonly BROWSER_ORIGIN: string;

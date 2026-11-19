@@ -1,3 +1,4 @@
+import { ownPerformanceReceipt as nativePerformanceReceipt } from "./internal/performance-receipt";
 import { readPrivacyPage } from "./internal/sqlite-privacy";
 import { CurrentOAuthInvocation } from "../oauth-agents/contract";
 import { recurringDiscoveryIntervalMs } from "../recurring/contract";
@@ -511,4 +512,8 @@ export const readAddressedLocalTransaction: typeof inspectLocalTransaction = (..
 export const prepareConnectionMovement: typeof prepareBankCapture = (...args) =>
   prepareBankCapture(...args);
 
-export { ownPerformanceReceipt } from "./internal/performance-receipt";
+export const ownPerformanceReceipt: typeof nativePerformanceReceipt = (
+  request,
+  environment,
+  owns
+) => nativePerformanceReceipt(request, environment, owns);

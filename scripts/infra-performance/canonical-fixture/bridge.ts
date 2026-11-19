@@ -3,17 +3,16 @@ import { Effect, Option, Redacted, Schema } from "effect";
 import type { Miniflare } from "miniflare";
 import { installedOrigins } from "../../../apps/server/src/shell/browser-transport/contract";
 import {
-  SealedTransactionReceipt,
   openTransactionReceipt,
-  performanceReceiptPath,
   signAcceptanceRequest,
 } from "../../../apps/server/cloudflare/release-isolation/operations";
 import {
+  SealedTransactionReceipt,
+  performanceReceiptPath,
   acceptanceLifetimeMs,
   acceptanceProofHeader,
 } from "../../../apps/server/cloudflare/release-isolation/contract";
 import { openPerformanceBrowser } from "../../../infra/cloudflare/native-acceptance";
-import { closedRuntime } from "./closed-runtime";
 
 const api = installedOrigins.acceptance;
 const timeoutMs = 30000,
@@ -198,24 +197,9 @@ const authority = (): Auth => {
   }
   return auth;
 };
-const main = async (): Promise<void> => {
-  const auth = authority();
-  if (process.argv[2] === "verify") {
-    const envelope = Schema.decodeUnknownSync(SealedTransactionReceipt)(await Bun.stdin.json());
-    process.stdout.write(
-      await openTransactionReceipt(
-        auth.secret,
-        process.env.FIDY_NATIVE_FIXTURE_PUBLIC_KEY ?? "",
-        envelope
-      )
-    );
-    return;
-  }
-  const local = process.argv[2] === "rehearse";
-  if (!local && process.argv[2] !== "hosted") throw Error("Unknown mode");
-  const runtime = local
-    ? Option.some(await closedRuntime(auth.revision, auth.secret))
-    : Option.none<Miniflare>();
+export const serveFixture = async (runtime: Option.Option<Miniflare>): Promise<void> => {
+  const auth = authority(),
+    local = Option.isSome(runtime);
   try {
     const service = client(auth, transport(runtime)),
       active = await start(service);
@@ -228,7 +212,25 @@ const main = async (): Promise<void> => {
     if (Option.isSome(runtime)) await runtime.value.dispose();
   }
 };
-await main().catch(() => {
-  process.stderr.write("Closed native fixture transport stopped\n");
-  process.exitCode = 1;
-});
+const main = async (): Promise<void> => {
+  if (process.argv[2] === "verify") {
+    const auth = authority();
+    const envelope = Schema.decodeUnknownSync(SealedTransactionReceipt)(await Bun.stdin.json());
+    process.stdout.write(
+      await openTransactionReceipt(
+        auth.secret,
+        process.env.FIDY_NATIVE_FIXTURE_PUBLIC_KEY ?? "",
+        envelope
+      )
+    );
+    return;
+  }
+  if (process.argv[2] !== "hosted") throw Error("Unknown mode");
+  await serveFixture(Option.none());
+};
+if (import.meta.main) {
+  await main().catch(() => {
+    process.stderr.write("Closed native fixture transport stopped\n");
+    process.exitCode = 1;
+  });
+}

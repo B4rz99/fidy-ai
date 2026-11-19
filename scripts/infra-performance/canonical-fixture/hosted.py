@@ -29,6 +29,15 @@ def read_native_session(directory):
     return private_file(Path(directory), "native-session.json")
 
 
+def open_envelope(sealed, revision):
+    check = subprocess.run(["bun", str(HERE / "bridge.ts"), "verify"], cwd=ROOT,
+                           env={**os.environ, "FIDY_NATIVE_REVISION": revision},
+                           input=json.dumps(sealed), capture_output=True, text=True, timeout=20)
+    if check.returncode != 0:
+        raise ValueError("Native owner signature or encryption failed verification")
+    return json.loads(check.stdout)
+
+
 def verified_provenance(directory, *, revision, resource_prefix):
     directory = Path(directory)
     manifest = private_file(directory, "manifest.json")
@@ -41,12 +50,7 @@ def verified_provenance(directory, *, revision, resource_prefix):
             or sealed["sessionBindingSha256"] != hashlib.sha256(session["binding"].encode()).hexdigest()):
         raise ValueError("Native receipt coordinates differ from the approved experiment")
     validate_originals(manifest["originals"])
-    check = subprocess.run(["bun", str(HERE / "bridge.ts"), "verify"], cwd=ROOT,
-                           env={**os.environ, "FIDY_NATIVE_REVISION": revision},
-                           input=json.dumps(sealed), capture_output=True, text=True, timeout=20)
-    if check.returncode != 0:
-        raise ValueError("Native owner signature or encryption failed verification")
-    evidence = json.loads(check.stdout)
+    evidence = open_envelope(sealed,revision)
     if len(evidence["capture"])!=8 or len(evidence["links"])!=1:
         raise ValueError("Native owner receipt has the wrong fixture cardinality")
     return evidence, dict(nativeRevision=revision, member="performance-1", resourcePrefix=resource_prefix,
@@ -64,7 +68,8 @@ def bridge(mode, revision, session):
         env["FIDY_BOUND_SESSION_FILE"] = str(session.resolve())
     else:
         env.pop("FIDY_BOUND_SESSION_FILE",None)
-    with subprocess.Popen(["bun",str(HERE/"bridge.ts"),mode], cwd=ROOT, env=env, stdin=subprocess.PIPE,
+    entry = "closed-runtime.test-fixture.ts" if mode=="rehearse" else "bridge.ts"
+    with subprocess.Popen(["bun",str(HERE/entry),mode], cwd=ROOT, env=env, stdin=subprocess.PIPE,
                           stdout=subprocess.PIPE, text=True, bufsize=1) as child:
         try:
             def receive():
@@ -159,11 +164,12 @@ def main():
     args.out.mkdir(mode=0o700,parents=True,exist_ok=True)
     if args.mode=="rehearse":
         revision=subprocess.check_output(["git","rev-parse","HEAD"],cwd=ROOT,text=True).strip()
-        prefix="fidy-2259-"+secrets.token_hex(6)
+        prefix=args.resource_prefix or ("fidy-2259-"+secrets.token_hex(6))
         os.environ["SMOKE_PROOF"]=secrets.token_hex(32)
         create="const k=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify']);process.stdout.write(JSON.stringify([Buffer.from(await crypto.subtle.exportKey('pkcs8',k.privateKey)).toString('hex'),Buffer.from(await crypto.subtle.exportKey('spki',k.publicKey)).toString('hex')]))"
         pair=json.loads(subprocess.check_output(["bun","-e",create],text=True))
         os.environ["TEST_FIXTURE_PRIVATE_KEY"],os.environ["FIDY_NATIVE_FIXTURE_PUBLIC_KEY"]=pair
+        write(args.out/"rehearsal-verifier.json", {name:os.environ[name] for name in ("SMOKE_PROOF","FIDY_NATIVE_FIXTURE_PUBLIC_KEY")})
     else:
         revision,prefix=args.native_revision or "",args.resource_prefix or ""
         if not os.environ.get("FIDY_NATIVE_FIXTURE_PUBLIC_KEY") or not os.environ.get("SMOKE_PROOF"):
@@ -171,6 +177,17 @@ def main():
     if not re.fullmatch(r"[a-f0-9]{40}",revision) or not re.fullmatch(r"fidy-2259-[a-f0-9]{12}",prefix):
         raise ValueError("Missing exact native revision or allocated comparison prefix")
     verified=collect(args.mode,revision,prefix,args.out)
+    if args.mode=="rehearse":
+        envelope=private_file(args.out/"fixture","native-receipt.json")
+        damaged={**envelope, "signature":("0" if envelope["signature"][0]!="0" else "1")+envelope["signature"][1:]}
+        try:
+            open_envelope(damaged,revision)
+        except ValueError:
+            pass
+        else:
+            raise ValueError("Modified owner signature was accepted")
+        if collect(args.mode,revision,prefix,args.out)!=verified:
+            raise ValueError("Protected resume changed the signed fixture")
     write(args.out/"summary.json",{"scope":args.mode,"nativeRevision":revision,"member":"performance-1",
         "originals":8,"effective":7,"sourceAttestations":8,"linkedPairs":1,"verified":True,
         "nativeReceiptDigest":verified["nativeReceiptDigest"],"nativeManifestDigest":verified["nativeManifestDigest"]})

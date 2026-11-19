@@ -9,7 +9,11 @@ import { type ProviderRead as Read, readProviderList as readList } from "./nativ
 
 const api = "https://api.cloudflare.com/client/v4/";
 const worker = Schema.Struct({ id: Schema.NonEmptyString, tag: Schema.optional(Schema.String) });
-const readBuildTriggers = Effect.fn(function* (client: HttpClient.HttpClient, account: string, tag: string) {
+const readBuildTriggers = Effect.fn(function* (
+  client: HttpClient.HttpClient,
+  account: string,
+  tag: string
+) {
   const token = yield* Config.schema(
     Schema.Redacted(Schema.NonEmptyString.check(Schema.isTrimmed())),
     "CLOUDFLARE_BUILDS_READ_TOKEN"
@@ -19,13 +23,19 @@ const readBuildTriggers = Effect.fn(function* (client: HttpClient.HttpClient, ac
   );
   return yield* releaseEvidence.providerJson(request).pipe(
     Effect.provideService(HttpClient.HttpClient, client),
-    Effect.flatMap(Schema.decodeUnknownEffect(Schema.Struct({
-      success: Schema.Literal(true),
-      result: Schema.Array(Schema.Struct({
-        branch_includes: Schema.Array(Schema.String),
-        branch_excludes: Schema.Array(Schema.String)
-      }))
-    })))
+    Effect.flatMap(
+      Schema.decodeUnknownEffect(
+        Schema.Struct({
+          success: Schema.Literal(true),
+          result: Schema.Array(
+            Schema.Struct({
+              branch_includes: Schema.Array(Schema.String),
+              branch_excludes: Schema.Array(Schema.String),
+            })
+          ),
+        })
+      )
+    )
   );
 });
 const inspectBuilds = Effect.fn(function* ({

@@ -181,7 +181,9 @@ const reserveProvider = Effect.fn(function* (
     yield* sql`INSERT INTO provider_routes(issuer,subject,user_id,creation_attempt) VALUES(${attempt.issuer},${attempt.subject},${newId()},${attempt.id}) ON CONFLICT DO NOTHING`;
   }
   const [route] =
-    yield* sql`SELECT user_id,creation_attempt,established FROM provider_routes WHERE issuer=${attempt.issuer} AND subject=${attempt.subject}`;
+    yield* sql`SELECT r.user_id,r.creation_attempt,r.established FROM provider_routes r
+      WHERE r.issuer=${attempt.issuer} AND r.subject=${attempt.subject}
+      AND NOT EXISTS(SELECT 1 FROM erasure_barriers b WHERE b.user_id=r.user_id)`;
   if (route === undefined) return invalidProvider();
   if (route.creation_attempt !== attempt.id && route.established !== 1) return unavailable();
   const user = yield* Schema.decodeUnknownEffect(Schema.String)(route.user_id);

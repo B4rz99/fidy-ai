@@ -1,0 +1,97 @@
+.github/workflows/native-storage-release.yml
+  s_a1be23a656acf0::t_6c647c00022d17 29
+apps/cli/src/direct-client/internal/operator-access.ts
+  s_a1be23a656acf0::t_0d89714986e229 33
+apps/server/cloudflare/beta-pro/contract.ts
+  s_a1be23a656acf0::t_566329cab65ff2 1-39
+apps/server/cloudflare/beta-pro/internal/user.ts
+  s_a1be23a656acf0::t_28a45c5021fc9c 1-71
+apps/server/cloudflare/beta-pro/operations.ts
+  s_a1be23a656acf0::t_bfa09793eb2e74 1-5
+apps/server/cloudflare/beta-pro/runtime.ts
+  s_a1be23a656acf0::t_702fd5773f941d 1-161
+apps/server/cloudflare/core-http/contract.ts
+  s_a1be23a656acf0::t_98b5415dc215a5 31-32
+apps/server/cloudflare/core-http/internal/http.ts
+  s_a1be23a656acf0::t_d94e0571313d58 1-2,184,395
+apps/server/cloudflare/directory/oidc.test-fixture.ts
+  s_a1be23a656acf0::t_03c85043505517 104
+apps/server/cloudflare/erasure/contract.ts
+  s_a1be23a656acf0::t_cfaacc8f858846 150
+apps/server/cloudflare/erasure/internal/operator-request.ts
+  s_a1be23a656acf0::t_2f55ca3414f6f6 36,261
+apps/server/cloudflare/ingestion/internal/sample-operator.ts
+  s_a1be23a656acf0::t_ba4e1e59f01463 32
+apps/server/cloudflare/maintenance/internal/beta-registry.ts
+  s_a1be23a656acf0::t_0a3be426e0285f 1-35
+apps/server/cloudflare/maintenance/runtime.ts
+  s_a1be23a656acf0::t_0c8d996defb7f8 1-2,82-84
+apps/server/cloudflare/outbound-http/runtime.test.ts
+  s_a1be23a656acf0::t_3cc966bd173ece 5
+apps/server/cloudflare/public-worker.ts
+  s_a1be23a656acf0::t_ee4abafe8a9259 1,276,437-443,656-662
+apps/server/cloudflare/subscription/beta-operator.test.ts
+  s_a1be23a656acf0::t_9db6438fe9ef49 1-217
+apps/server/cloudflare/subscription/contract.ts
+  s_a1be23a656acf0::t_dc14bf37874598 70,247
+apps/server/cloudflare/subscription/internal/publish-price.ts
+  s_a1be23a656acf0::t_366966e6332f9e 38
+apps/server/cloudflare/subscription/internal/refund-support.ts
+  s_a1be23a656acf0::t_36fd5772f9b13a 58
+apps/server/cloudflare/subscription/native-pro-grants.test.ts
+  s_a1be23a656acf0::t_c534c490a75500 5-6,18-39
+apps/server/cloudflare/user-store.test-fixture.ts
+  s_a1be23a656acf0::t_4108af41e37188 158-159
+apps/server/cloudflare/user-store/operations.ts
+  s_a1be23a656acf0::t_1c07d3689dde58 1282-1292
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_6d6c42b3bccada 1-2,587,657-659,1144-1146
+apps/server/src/shell/pro-grants/contract.ts
+  s_a1be23a656acf0::t_3abfbb492d6b17 2,21,23-47
+apps/server/src/shell/pro-grants/operations.ts
+  s_a1be23a656acf0::t_0e939f1098db6f 1
+docs/operations/manual-pro-grants.md
+  s_a1be23a656acf0::t_01a0916abaef9d 3,9,12,14,16,18,20
+docs/operations/production-releases.md
+  s_a1be23a656acf0::t_1e37990eeec33b 20,28
+infra/cloudflare/edge-security.ts
+  s_a1be23a656acf0::t_3ce54ba4313fa1 151
+infra/cloudflare/native-application-bindings.ts
+  s_a1be23a656acf0::t_d4891569a3acfd 3,200-208,210-214,221-222,227-229,247-248,264-266,268-269,273-274,277,279-280
+infra/cloudflare/native-deployed-access.ts
+  s_a1be23a656acf0::t_cc477df50f48a4 32-36,134,148-154,164,212-215,233
+infra/cloudflare/native-deployed-graph.test.ts
+  s_a1be23a656acf0::t_53cee34d0f3c2c 136,151-154,205,209,213
+infra/cloudflare/native-graph.ts
+  s_a1be23a656acf0::t_c483c7406cd5eb 13,113-114
+infra/cloudflare/native-host-plan.ts
+  s_a1be23a656acf0::t_2af760bc46c0c0 10
+infra/cloudflare/native-incumbent-fence.test.ts
+  s_a1be23a656acf0::t_704123f25d8967 80-83,85,90,94,101,108,115
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_15455ecf2a2258 5,14-21
+package.json
+  s_a1be23a656acf0::t_77619675d656c6 43
+scripts/pro/main.ts
+  s_a1be23a656acf0::t_786c92244f260b 1-11,14-15,32-35,43-44,46-68
+scripts/pro/runtime.test.ts
+  s_a1be23a656acf0::t_dd0b23d6be8ca1 1-84
+scripts/pro/runtime.ts
+  s_a1be23a656acf0::t_9dc1ab68c5edbf 1-4,6-7,9-13,16-36,38-46,48-125
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "16933daccdbed88992cc322f52733aec4b6a9ab1",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -79,10 +79,12 @@ each request through body completion, and the journey clock ends when the matchi
 enabled and has had a paint opportunity. This harness uses local acceptance composition and
 cannot observe a deployed Worker or Durable Object reconstruction.
 
-To compare the completed native candidate, supply its clean checkout with the same loopback
-fixture protocol:
-
-The command above records historical reference observations only. The native acceptance run uses the closed release’s own matched Web and API Workers, deployed revision and namespace identities. Report both observations and their independent provenance when evaluating a paired result.
+The **Compare the storage reference** workflow runs the pinned D1 checkout and the native
+candidate on one GitHub-hosted runner. It checks one pair for equivalent results before measuring
+30 alternating pairs. Its artifact records the revisions, fixture counts, payload digests,
+accountability and timing at each boundary. To repeat the comparison on a prepared host, add
+`--do . --pairs 30` to the command above. Hosted release acceptance separately measures the
+deployed Workers from the recorded network origin.
 
 ## Recovery verification
 

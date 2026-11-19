@@ -47,6 +47,7 @@ const fixedId = "81000000-0000-4000-8000-000000000002";
 const afterName = "Referencia corregida";
 /** @param {Uint8Array} body Exact response bytes used for comparison. */
 const digest = (body) => createHash("sha256").update(body).digest("hex");
+process.stderr.write("REFERENCE_STAGE launch\n");
 const browser = await chromium.launch({
   ...(process.env.ASSESSMENT_CHROMIUM ? { executablePath: process.env.ASSESSMENT_CHROMIUM } : {}),
   args: ["--ignore-certificate-errors"],
@@ -69,19 +70,20 @@ try {
   const origin = { origin: app };
   /** @param {import("@playwright/test").APIResponse} reply Fixture or Login response. */
   const setup = (reply) => {
-    assert.ok(
-      reply.ok(),
-      `Setup returned HTTP ${reply.status()} for ${new URL(reply.url()).pathname}`
-    );
+    if (!reply.ok()) process.stderr.write(`REFERENCE_HTTP ${reply.status()}\n`);
+    assert.ok(reply.ok(), "Setup request failed");
     return reply;
   };
+  process.stderr.write("REFERENCE_STAGE pairing\n");
   const pairingResponse = setup(await request.post(api + "/web/pairings", { headers: origin }));
   const pairing = pairingProof(await pairingResponse.json());
+  process.stderr.write("REFERENCE_STAGE approval\n");
   setup(
     await request.post(operator + "/approve", {
       params: { code: pairing.publicCode, navigationDashboard: "true" },
     })
   );
+  process.stderr.write("REFERENCE_STAGE redeem\n");
   setup(
     await request.post(api + "/web/pairings/redeem", {
       headers: origin,
@@ -142,9 +144,12 @@ try {
       () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
     );
   };
+  process.stderr.write("REFERENCE_STAGE bootstrap\n");
   await page.goto(ledger);
   await ready("Evaluación 2");
+  process.stderr.write("REFERENCE_STAGE accountability-before\n");
   const before = await evidence();
+  process.stderr.write("REFERENCE_STAGE read\n");
   const list = responseFor("GET", "/transactions");
   const started = performance.now();
   await page.getByRole("button", { name: "Actualizar transacciones", exact: true }).click();
@@ -167,17 +172,20 @@ try {
   assert.ok(target, "Seeded Transaction missing from initial page");
   assert.equal(target.counterparty, "Evaluación 2");
   assert.equal(target.revision, 0);
+  process.stderr.write("REFERENCE_STAGE open-correction\n");
   await page.locator('[id="transaction-' + fixedId + '"]').click();
   const counterparty = page.getByRole("textbox", { name: "Contraparte", exact: true });
   const edit = page.getByRole("button", { name: "Editar transacción", exact: true });
   await counterparty.or(edit).first().waitFor({ state: "visible" });
   if (!(await counterparty.isVisible())) await edit.click();
   await counterparty.fill(afterName);
+  process.stderr.write("REFERENCE_STAGE save\n");
   const save = responseFor("PUT", "/transactions/" + fixedId);
   const refresh = responseFor("GET", "/transactions");
   const saving = performance.now();
   await page.getByRole("button", { name: "Guardar", exact: true }).click();
   const result = changedTransaction(await observe(await save));
+  process.stderr.write("REFERENCE_STAGE fresh-read\n");
   const fresh = historyPage(await observe(await refresh));
   await ready(afterName);
   const correctionMs = performance.now() - saving;
@@ -188,6 +196,7 @@ try {
     ...initial,
     data: initial.data.map((row) => (row.id === fixedId ? corrected : row)),
   });
+  process.stderr.write("REFERENCE_STAGE accountability-after\n");
   const after = await evidence();
   const accountability = {
     reads: after.reads - before.reads,

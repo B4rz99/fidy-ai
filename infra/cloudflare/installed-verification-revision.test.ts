@@ -61,3 +61,15 @@ it.effect("refuses changed build inputs, unrelated commits and non-commit argume
     ).toBe(true);
   })
 );
+
+it.effect("accepts only the reviewed fleet driver and refuses neighboring runtime or unreviewed metering inputs", () =>
+  Effect.gen(function* () {
+    const changed = (path: string) => verificationRevision(trunk, installed, (args) =>
+      Effect.succeed(args.includes("diff") ? path + "\0" : "")
+    );
+    expect(yield* changed("scripts/infra-performance/deployed-fleet/pilot.py")).toBe(installed);
+    for (const path of ["apps/server/cloudflare/maintenance/runtime.ts", "scripts/infra-performance/deployed-fleet/other.py"]) {
+      expect(Result.isFailure(yield* Effect.result(changed(path)))).toBe(true);
+    }
+  })
+);

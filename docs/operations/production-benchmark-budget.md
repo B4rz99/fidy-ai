@@ -141,8 +141,8 @@ python3 scripts/infra-performance/cells/pilot.py \
 ```
 
 The command verifies disposable resource identities, obtains fresh account-wide usage, reserves
-the D1 request before dispatch and stops if its native counter receipt is missing or exceeds the
-reservation. Its report preserves both complete-body observations and payload hashes. One pair
+the larger of the verified full-plan ceiling and actual setup plus the remaining request,
+then reserves that request before dispatch. A missing or excessive native receipt fences the ledger. Its report preserves both complete-body observations and payload hashes. One pair
 with unobserved lifecycle supplies a pilot observation only. Never manufacture a provisioning
 receipt or reset a fenced ledger to launch this command.
 

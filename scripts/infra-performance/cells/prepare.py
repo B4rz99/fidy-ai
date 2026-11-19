@@ -118,6 +118,7 @@ def main():
     artifacts["metered-core"] = hashlib.sha256((out / "metered-core.mjs").read_bytes()).hexdigest()
     artifacts["bounded-ingress"] = hashlib.sha256((out / "bounded-ingress.mjs").read_bytes()).hexdigest()
     artifacts["limits"] = hashlib.sha256((out / "limits.json").read_bytes()).hexdigest()
+    artifacts["probe"] = hashlib.sha256((out / "probe.json").read_bytes()).hexdigest()
     (out / "manifest.json").write_text(json.dumps(dict(baseline=PIN, calibration=CALIBRATION, sha256=artifacts), indent=2))
 
 

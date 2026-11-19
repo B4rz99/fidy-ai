@@ -31,6 +31,7 @@ it.effect("refuses changed build inputs, unrelated commits and non-commit argume
       expect(Result.isFailure(result)).toBe(true);
     }
     expect(Result.isFailure(yield* Effect.result(verificationRevision(trunk, installed, () => Effect.fail(Error("unrelated")))))).toBe(true);
+    expect(Result.isFailure(yield* Effect.result(verificationRevision("HEAD", "", () => Effect.die("Unexpected git read"))))).toBe(true);
     expect(Result.isFailure(yield* Effect.result(verificationRevision(trunk, "HEAD~1", () => Effect.die("Unexpected git read"))))).toBe(true);
   })
 );

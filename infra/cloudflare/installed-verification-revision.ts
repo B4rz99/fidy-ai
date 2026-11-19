@@ -21,10 +21,10 @@ export const verificationRevision = Effect.fn(function* (
   requested: string,
   git: (args: ReadonlyArray<string>) => Effect.Effect<string, Error>
 ) {
-  if (requested === "" || requested === trunk) return trunk;
-  if (!commit(trunk) || !commit(requested)) {
+  if (!commit(trunk) || (requested !== "" && !commit(requested))) {
     return yield* Effect.fail(Error("Expected a full Git commit"));
   }
+  if (requested === "" || requested === trunk) return trunk;
   yield* git(["merge-base", "--is-ancestor", requested, trunk]);
   const paths = yield* git(["diff", "--name-only", "--no-renames", "-z", requested, trunk, "--"]);
   if (paths.split("\0").some((path) => path !== "" && !isVerificationFile(path))) {

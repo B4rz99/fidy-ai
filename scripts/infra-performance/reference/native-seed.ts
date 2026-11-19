@@ -1,4 +1,5 @@
-import { Effect, Schema } from "effect";
+import { type Cause, Effect, Schema } from "effect";
+import { listLaunchCategories } from "../../../apps/server/src/core/categories/operations";
 import type { Miniflare } from "miniflare";
 
 type Owner = Awaited<ReturnType<Miniflare["unsafeGetDurableObjectStorage"]>>;
@@ -20,7 +21,8 @@ const digestCharacters = 64;
 const execute = (
   db: Owner,
   ...args: Parameters<Owner["exec"]>
-): Effect.Effect<Awaited<ReturnType<Owner["exec"]>>> => Effect.promise(() => db.exec(...args));
+): Effect.Effect<Awaited<ReturnType<Owner["exec"]>>, Cause.UnknownError> =>
+  Effect.tryPromise(() => db.exec(...args));
 const everyHundred = 100;
 // Match the immutable D1 fixture's IDs, facts and dates. Bound each native SQLite statement.
 const transactions = Effect.fn(function* (db: Owner, size: Size) {
@@ -167,6 +169,16 @@ export const seed = Effect.fn(function* (db: Owner, dataset: string) {
     "UPDATE users SET trial_started_at_ms=created_at_ms,trial_ends_at_ms=created_at_ms+604800000 WHERE id=?",
     subject
   );
+  // Native captures retain stable Category keys on demand. The direct fixture writes bypass capture.
+  for (const [position, category] of listLaunchCategories().entries()) {
+    yield* execute(
+      db,
+      "INSERT INTO categories(id,label,display_order) VALUES(?,?,?)",
+      category.id,
+      category.label,
+      position
+    );
+  }
   process.stdout.write("REFERENCE_STAGE transactions\n");
   yield* transactions(db, size);
   process.stdout.write("REFERENCE_STAGE planning\n");

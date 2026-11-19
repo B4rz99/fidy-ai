@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "f2571981709b806420f3dd54a7d0903dbb6c445e28e68b6b5423c8eec0bb3bf6";
+const expectedEdgePolicyDigest = "ccfbc853c999612e1c9d14a925745a9a3aa7f128cc5648c7f1a43427be9b3014";
 const securityArtifacts = [
   ...(await Promise.all(
     [
@@ -28,6 +28,7 @@ const securityArtifacts = [
       "./installed-verification-revision.ts",
       "./native-acceptance.ts",
       "./native-erasure.ts",
+      "./native-erasure-continuation.ts",
       "./native-erasure-evidence.ts",
       "./native-application-bindings.ts",
       "./native-application-resources.ts",

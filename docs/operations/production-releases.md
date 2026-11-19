@@ -17,6 +17,14 @@ Set the GitHub Production environment secret `CLOUDFLARE_BUILDS_READ_TOKEN` to a
 
 After a verifier-only correction on trunk, dispatch `verify` with the installed commit in `installed_revision`. The verifier checks Git ancestry, rejects changes to runtime or deployment inputs, rebuilds browser metadata for that commit, and verifies the live Worker versions. The attestation records both commit IDs. Use `verify-erasure` for the independent synthetic erasure when the original run did not admit its disposable User.
 
+### Continue an admitted erasure observation
+
+When the original protected run failed during physical observation after same-reference replay, preserve its checkpoint. Obtain the three populated physical UserStore object IDs and the two logical smoke User IDs from independent evidence collected before that run's disposable signup. Cross-check the fixture revision, UserStore namespace and fresh target against the checkpoint. For each set, sort the lowercase IDs lexicographically, join with LF and hash with SHA-256 without a trailing LF. Keep the operator's source evidence private.
+
+Set the Production environment variable `ERASURE_CONTINUATION_EVIDENCE` to a JSON object with string fields `runId`, `artifactId`, `sourceRevision` (the failed verifier commit), `archiveSha256`, `checkpointSha256`, `baselineSha256` (three physical IDs) and `survivorsSha256` (two logical IDs). Dispatch `continue-erasure` with the installed revision. The source must be the failed first attempt of the protected native release workflow. GitHub's archived ZIP and its original checkpoint bytes must match the reviewed commitments.
+
+While the admitted target still has stored data, the continuation renews the protected work window for the installed revision. It verifies the original physical objects, observes the admitted target's erasure, logs both named survivors in with their original provider subjects, compares their logical ID set, and checks the verified erased subject's login is refused. A final census checks for regression. The original browser credential was held only in the first runner, so the continuation records its post-erasure session denial as unavailable. Retain both runs as evidence and remove the Production variable after the operation.
+
 The protected API and browser initially serve at `storage-acceptance.fidyapp.com` and `storage-web-acceptance.fidyapp.com`. The runner's HMAC proof stays in the protected environment. It covers the method, URL, payload, credential headers, audience host and expiry. Ingress creates a separate proof for its private Core request. The release may open a short background-work window for previously declared synthetic subjects. Upload only aggregate receipts, role and routing identifiers and redacted outcomes.
 
 ## Canonical host staging

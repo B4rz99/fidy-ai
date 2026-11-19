@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { it, layer } from "@effect/vitest";
 import { expect } from "vitest";
-import { diagnoseNativePlan } from "./native-plan-diagnostics";
+import { diagnoseFreshTarget, diagnoseNativePlan } from "./native-plan-diagnostics";
 import { nativeResourceFailureMessage } from "./resource-failure";
 
 const revision = "1".repeat(40);
@@ -93,5 +93,30 @@ layer(FetchHttpClient.layer)("native planner HTTP reads", (suite) => {
       expect(failure).not.toContain("private");
       expect(failure).not.toContain(revision);
     })
+  );
+});
+
+layer(FetchHttpClient.layer)("closed installation target", (suite) => {
+  suite.effect(
+    "attributes a refused read to its endpoint family without disclosing identifiers",
+    () =>
+      Effect.gen(function* () {
+        const request = HttpClient.get(
+          "https://api.cloudflare.com/client/v4/accounts/private/builds/workers/private/triggers"
+        ).pipe(Effect.andThen(Effect.fail(Error("private-provider-message"))));
+        const failure = yield* request.pipe(
+          diagnoseFreshTarget,
+          Effect.provideService(
+            FetchHttpClient.Fetch,
+            Object.assign(
+              () => Promise.resolve(new Response("private-response", { status: 403 })),
+              { preconnect: fetch.preconnect }
+            )
+          ),
+          Effect.matchCause({ onFailure: nativeResourceFailureMessage, onSuccess: () => "" })
+        );
+        expect(failure).toContain("Worker Build triggers 403");
+        expect(failure).not.toContain("private");
+      })
   );
 });

@@ -148,6 +148,7 @@ def main():
                     prepare_inventory(owner, cloud)
                     def lost():
                         assert evidence["attempts"][0]["ok"]
+                        assert "scheduledMs" not in evidence["attempts"][0] and "delayMs" not in evidence["attempts"][0]
                         (scratch / "observed.json").write_text(json.dumps(evidence))
                         os.kill(os.getpid(), signal.SIGKILL)
                     exercise(owner, cloud, bundle, cloud.send, None, {"ingress": cloud.entry["version"]},

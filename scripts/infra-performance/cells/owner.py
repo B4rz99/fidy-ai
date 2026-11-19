@@ -246,7 +246,7 @@ def exercise(owner, cloud, bundle, send, native, versions, key, pairs, report, s
                         return status, reply, body
 
                     row = observe(
-                        read, variant, pair, 0, time.monotonic(), "transactions.page", verify
+                        read, variant, pair, 0, None, "transactions.page", verify
                     )
                     report["attempts"].append(row)
                     save()
@@ -256,7 +256,7 @@ def exercise(owner, cloud, bundle, send, native, versions, key, pairs, report, s
             else:
                 read = native()
                 report["attempts"].append(
-                    observe(read, variant, pair, 0, time.monotonic(), "transactions.page", verify)
+                    observe(read, variant, pair, 0, None, "transactions.page", verify)
                 )
                 save()
             if not report["attempts"][-1]["ok"]:
@@ -277,8 +277,10 @@ def exercise(owner, cloud, bundle, send, native, versions, key, pairs, report, s
         ],
         audit,
     )
+    measured = boundaries(report["attempts"], pairs, 1)
+    measured["scheduledMs"] = dict(status="missing", reason="no_independent_offered_schedule")
     report.update(
-        boundaries=boundaries(report["attempts"], pairs, 1),
+        boundaries=measured,
         verifiedHistoryAudits=pairs,
         verifiedInspections=8,
     )

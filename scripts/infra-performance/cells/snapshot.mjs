@@ -110,14 +110,9 @@ const select = async (db, command) =>
   ).results;
 /** @param {D1Database} db Disposable database. */
 const physical = async (db) => {
-  try {
-    return {
-      pages: await select(db, query("PRAGMA page_count")),
-      freelist: await select(db, query("PRAGMA freelist_count")),
-    };
-  } catch {
-    return { scope: "Physical page metadata unavailable from native D1" };
-  }
+  const reported = await db.prepare("SELECT 1").run();
+  assert.ok(reported.success && Number.isSafeInteger(reported.meta.size_after));
+  return { sizeBytes: reported.meta.size_after };
 };
 /** @param {D1Database} db Restored database. @param {Query[]} batch One bounded batch. @returns {Promise<Batch>} */
 const run = async (db, batch) => {

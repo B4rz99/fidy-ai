@@ -464,6 +464,7 @@ const installedRelease = Effect.fn(function* (
   yield* releaseController.requireTrunk(port, verifierRevision);
   yield* verifyNativeEdge(env, client, "verify");
   const pair = yield* readInstalledIdentity(env, client, port);
+  yield* Effect.logInfo("Verified the closed edge and installed Ingress and Core identities.");
   yield* proveRecoveryCorePrivate(env, client, installationNames.Core);
   const ingress = yield* versionResources(env, client, {
     name: installationNames.Ingress,
@@ -479,6 +480,7 @@ const installedRelease = Effect.fn(function* (
     verifiedStoragePair({ ingress: ingress.bindings, core: core.bindings })
   );
   yield* verifyInstalledNamespaces({ env, client, storage, workers: [ingress, core] });
+  yield* Effect.logInfo("Verified private Core and the five installed SQLite namespaces.");
   const topology = yield* verifyInstalledTopology(env, client, {
     port,
     bindings: core.bindings,
@@ -487,6 +489,7 @@ const installedRelease = Effect.fn(function* (
     publicStable: pair.publicStable,
     coreStable: pair.coreStable,
   });
+  yield* Effect.logInfo("Verified installed Workers, data resources, Access and browser artifacts.");
   const proof = yield* verifyInstalledMarkers({ env, client, pair, storage });
   return {
     revision: env.revision,
@@ -512,6 +515,7 @@ const verifyFirstInstall = Effect.fn(function* (
   ).pipe(Effect.mapError(() => new ReleaseFailure({ message: "Installed revision must be the same protected runtime source" })));
   const env = { ...verifier, revision };
   const installed = yield* installedRelease(env, client, { port, staging: false, verifierRevision: verifier.revision });
+  yield* Effect.logInfo("Verified schema markers and closed admission.");
   const contractDigest = yield* ReleaseConfig.String("CONTRACT_DIGEST"),
     identity = { gitRevision: env.revision, contractDigest };
   const smoke = yield* verifyNativeSmoke({
@@ -520,6 +524,7 @@ const verifyFirstInstall = Effect.fn(function* (
     public: { ...identity, workerVersionId: installed.publicVersionId },
     core: { ...identity, workerVersionId: installed.coreVersionId },
   }).pipe(Effect.provideService(HttpClient.HttpClient, client));
+  yield* Effect.logInfo("Verified release smoke against the installed Worker versions.");
   const synthetic = yield* Effect.forEach(nativeHostPairs(yield* hostMode), (pair) =>
     verifySyntheticUsers(env, client, {
       origins: pair,

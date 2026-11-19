@@ -576,18 +576,31 @@ const installedRelease = Effect.fn(function* (
     admission: "closed",
   };
 });
+const evidenceDigest = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u));
+const artifactNumber = Schema.String.check(Schema.isPattern(/^[1-9][0-9]{0,19}$/u));
+const ErasureSource = Schema.Struct({
+  runId: artifactNumber,
+  artifactId: artifactNumber,
+  sourceRevision: Schema.String.check(Schema.isPattern(/^[a-f0-9]{40}$/u)),
+  archiveSha256: evidenceDigest,
+  checkpointSha256: evidenceDigest,
+  baselineSha256: evidenceDigest,
+  survivorsSha256: evidenceDigest,
+});
 const verifyAdmittedErasure = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
   { installed, verifierRevision }: { installed: Effect.Success<ReturnType<typeof installedRelease>>; verifierRevision: string }
 ) {
-    const source = yield* ReleaseConfig.String("ERASURE_SOURCE_RUN");
+    const source = yield* Schema.decodeUnknownEffect(ErasureSource)(
+      yield* readFile(yield* ReleaseConfig.String("ERASURE_SOURCE_EVIDENCE"))
+    );
     const erasure = yield* continueAdmittedErasure({
       checkpoint: yield* readFile(env.smokeAttestationFile + ".prior"),
       revision: env.revision,
       userNamespace: installed.userNamespace,
-      baseline: yield* ReleaseConfig.String("ERASURE_BASELINE_SHA256"),
-      survivors: yield* ReleaseConfig.String("ERASURE_SURVIVORS_SHA256"),
+      baseline: source.baselineSha256,
+      survivors: source.survivorsSha256,
       inventory: () => readUserObjects(accountReader(env, client), installed.userNamespace),
       ...admittedErasureLogins({
         revision: env.revision,
@@ -601,7 +614,7 @@ const verifyAdmittedErasure = Effect.fn(function* (
       encodeJson({
         ...installed,
         verifierRevision,
-        continuation: { sourceRun: source, ...erasure },
+        continuation: { source, ...erasure },
       })
     );
 });

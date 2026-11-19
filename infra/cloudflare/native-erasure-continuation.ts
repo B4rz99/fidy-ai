@@ -36,18 +36,34 @@ const readAdmission = Effect.fn(function* (input: ErasureContinuation) {
   const checkpoint = yield* Schema.decodeUnknownEffect(Checkpoint)(input.checkpoint);
   const markers = checkpoint.checkpoints;
   const required = ["stable-users", "signup-created", "fresh-object", "admitted"];
-  const [,, fresh, admission] = yield* Schema.decodeUnknownEffect(Schema.Tuple([
-    Schema.Struct({ stage: Schema.Literal("stable-users"), populated: Schema.Literal(3) }),
-    Schema.Struct({ stage: Schema.Literal("signup-created") }),
-    Schema.Struct({ stage: Schema.Literal("fresh-object"), physicalObject: objectId }),
-    Schema.Struct({ stage: Schema.Literal("admitted"), physicalObject: objectId, reference: ErasureReference }),
-  ]))(markers.filter((row) => required.includes(row.stage)));
+  const [, , fresh, admission] = yield* Schema.decodeUnknownEffect(
+    Schema.Tuple([
+      Schema.Struct({ stage: Schema.Literal("stable-users"), populated: Schema.Literal(3) }),
+      Schema.Struct({ stage: Schema.Literal("signup-created") }),
+      Schema.Struct({ stage: Schema.Literal("fresh-object"), physicalObject: objectId }),
+      Schema.Struct({
+        stage: Schema.Literal("admitted"),
+        physicalObject: objectId,
+        reference: ErasureReference,
+      }),
+    ])
+  )(markers.filter((row) => required.includes(row.stage)));
   const admittedIndex = markers.findIndex((row) => row.stage === "admitted");
-  const replay = markers.slice(admittedIndex + 1).some((row) =>
-    row.stage === "waiting-physical-erasure" && (row.observations ?? 0) > 0 &&
-    row.listed === 4 && row.populated === 4);
-  if (checkpoint.revision !== input.revision || checkpoint.userNamespace !== input.userNamespace ||
-      fresh.physicalObject !== admission.physicalObject || !replay) {
+  const replay = markers
+    .slice(admittedIndex + 1)
+    .some(
+      (row) =>
+        row.stage === "waiting-physical-erasure" &&
+        (row.observations ?? 0) > 0 &&
+        row.listed === 4 &&
+        row.populated === 4
+    );
+  if (
+    checkpoint.revision !== input.revision ||
+    checkpoint.userNamespace !== input.userNamespace ||
+    fresh.physicalObject !== admission.physicalObject ||
+    !replay
+  ) {
     return yield* Effect.fail(Error("Unbound admitted checkpoint"));
   }
   return { target: admission.physicalObject, reference: admission.reference };
@@ -70,25 +86,33 @@ const repeatSafe = <A>(
 ): Effect.Effect<A, Error> =>
   step(
     stage,
-    Effect.suspend(read).pipe(Effect.timeout("15 seconds"), Effect.retry({ times: 2, schedule: Schedule.spaced("2 seconds") }))
+    Effect.suspend(read).pipe(
+      Effect.timeout("15 seconds"),
+      Effect.retry({ times: 2, schedule: Schedule.spaced("2 seconds") })
+    )
   );
 
-export const continueAdmittedErasure = Effect.fn(function* (input: ErasureContinuation) {
-  const { target, reference } = yield* step("admitted checkpoint", readAdmission(input));
-  const census = (): Effect.Effect<UserObjects, Error> => repeatSafe("namespace census", input.inventory);
-  const current = yield* census();
+const retainedObjects = Effect.fn(function* (current: UserObjects, target: string, baseline: string) {
   const retained = new Map(current);
   retained.delete(target);
   if (
     retained.size !== 3 ||
     [...retained.values()].some((value) => !value) ||
-    commitment([...retained.keys()]) !== input.baseline
+    commitment([...retained.keys()]) !== baseline
   ) {
     return yield* step(
       "retained physical identities",
       Effect.fail(Error("Retained physical identity mismatch"))
     );
   }
+  return retained;
+});
+
+export const continueAdmittedErasure = Effect.fn(function* (input: ErasureContinuation) {
+  const { target, reference } = yield* step("admitted checkpoint", readAdmission(input));
+  const census = (): Effect.Effect<UserObjects, Error> =>
+    repeatSafe("namespace census", input.inventory);
+  const retained = yield* retainedObjects(yield* census(), target, input.baseline);
   const state = (rows: UserObjects): Effect.Effect<ReturnType<typeof physicalErasure>, Error> =>
     Effect.try(() => physicalErasure({ before: retained, subject: target, current: rows }));
   const advance = Effect.gen(function* () {

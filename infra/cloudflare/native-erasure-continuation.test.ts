@@ -88,7 +88,11 @@ it.effect(
 it.effect("proves refusal only for the verified erased provider subject at login completion", () =>
   Effect.gen(function* () {
     const origins = installedOrigins.acceptance;
-    const verify = (status: number, body: string, providerStatus = "verified"): { driver: ReturnType<typeof admittedErasureLogins>; paths: Array<string> } => {
+    const verify = (
+      status: number,
+      body: string,
+      providerStatus = "verified"
+    ): { driver: ReturnType<typeof admittedErasureLogins>; paths: Array<string> } => {
       const paths: Array<string> = [];
       const driver = admittedErasureLogins({
         revision,
@@ -148,12 +152,25 @@ it.effect("proves refusal only for the verified erased provider subject at login
 it.effect("retries safe lease renewal and rechecks erasure after authenticating survivors", () =>
   Effect.gen(function* () {
     const stored = new Map<string, boolean>([...retained, [target, true]]);
-    let leases = 0, reads = 0, logins = 0;
+    let leases = 0,
+      reads = 0,
+      logins = 0;
     const runner = yield* continueAdmittedErasure({
-      checkpoint: admitted, revision, userNamespace, baseline, survivors,
-      inventory: () => Effect.sync(() => ++reads === 3 ? retained : stored),
-      renew: () => Effect.suspend(() => ++leases === 1 ? Effect.fail(Error("Transport failed")) : Effect.void),
-      logins: () => Effect.sync(() => { logins++; return ["two", "one"]; }),
+      checkpoint: admitted,
+      revision,
+      userNamespace,
+      baseline,
+      survivors,
+      inventory: () => Effect.sync(() => (++reads === 3 ? retained : stored)),
+      renew: () =>
+        Effect.suspend(() =>
+          ++leases === 1 ? Effect.fail(Error("Transport failed")) : Effect.void
+        ),
+      logins: () =>
+        Effect.sync(() => {
+          logins++;
+          return ["two", "one"];
+        }),
       refused: () => Effect.void,
     }).pipe(Effect.isFailure, Effect.forkChild);
     yield* TestClock.adjust("1 minute");

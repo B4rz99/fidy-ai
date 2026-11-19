@@ -177,8 +177,8 @@ jobs:
           echo "$archive  $RUNNER_TEMP/erasure-source.zip" | sha256sum --check --status
           unzip -p "$RUNNER_TEMP/erasure-source.zip" native-verification.json.erasure > "$SMOKE_ATTESTATION_FILE.prior"
           echo "$file  $SMOKE_ATTESTATION_FILE.prior" | sha256sum --check --status
-          echo "ERASURE_SOURCE_RUN=$run" >> "$GITHUB_ENV"
-          jq -r '"ERASURE_BASELINE_SHA256=" + .baselineSha256, "ERASURE_SURVIVORS_SHA256=" + .survivorsSha256' <<< "$EVIDENCE" >> "$GITHUB_ENV"
+          jq -c '{runId,artifactId,sourceRevision,archiveSha256,checkpointSha256,baselineSha256,survivorsSha256}' <<< "$EVIDENCE" > "$RUNNER_TEMP/erasure-provenance.json"
+          echo "ERASURE_SOURCE_EVIDENCE=$RUNNER_TEMP/erasure-provenance.json" >> "$GITHUB_ENV"
       - name: Continue physical verification of the previously admitted User
         if: inputs.operation == 'continue-erasure'
         env:

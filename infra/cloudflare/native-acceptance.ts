@@ -354,7 +354,9 @@ const renewWork = Effect.fn(function* (input: Inputs) {
     { method: "POST", headers: { "x-fidy-smoke-proof": Redacted.value(input.proof) } },
     false
   );
-  if (lease.status !== ok) yield* Effect.logError("Protected background work lease returned HTTP " + lease.status);
+  if (lease.status !== ok) {
+    yield* Effect.logError("Protected background work lease returned HTTP " + lease.status);
+  }
   yield* result(
     lease,
     Schema.Struct({ revision: Schema.Literal(input.revision), deadline: Schema.Int })
@@ -400,7 +402,9 @@ const erasureEvidence = Effect.fn(function* (
   });
 });
 /** The continuation authenticates the installed revision's existing subjects with login intent only. */
-export const admittedErasureLogins = (input: Omit<Inputs, "erasure">): Pick<ErasureContinuation, "renew" | "logins" | "refused"> => {
+export const admittedErasureLogins = (
+  input: Omit<Inputs, "erasure">
+): Pick<ErasureContinuation, "renew" | "logins" | "refused"> => {
   const transport = { ...input, erasure: Option.none<ErasureObservation>() };
   const { call } = runner(transport);
   return {

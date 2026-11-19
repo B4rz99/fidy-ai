@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { chromium } from "@playwright/test";
 import { Effect } from "effect";
-import { installedOrigins } from "../../../apps/server/src/browser-transport.ts";
+import { installedOrigins } from "../../../apps/server/src/shell/browser-transport/contract.ts";
 import { acceptanceRequestAdmitted } from "../../../apps/server/cloudflare/release-isolation/operations.ts";
 import { protectedBrowserProxy } from "./proxy.mjs";
 

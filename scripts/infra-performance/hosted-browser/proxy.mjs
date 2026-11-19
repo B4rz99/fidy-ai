@@ -55,10 +55,9 @@ const finiteJourney = (method, url, correction) => {
 /**
  * @param {Request} incoming Request received from the browser.
  * @param {URL} url Original request URL.
- * @param {Origins} origins Installed web and API host pair.
- * @param {boolean} correction Whether the measured journey permits the bounded Correction.
+ * @param {{origins: Origins, correction: boolean}} scope Installed hosts and measured mutation authority.
  */
-const admitted = (incoming, url, origins, correction) => {
+const admitted = (incoming, url, { origins, correction }) => {
   const method =
     incoming.method === "OPTIONS"
       ? incoming.headers.get("access-control-request-method")
@@ -137,8 +136,9 @@ export const protectedBrowserProxy = ({
     error: () => new Response(null, { status: badGateway }),
     async fetch(incoming) {
       const url = new URL(incoming.url);
-      if (!admitted(incoming, url, origins, transactionCorrection))
+      if (!admitted(incoming, url, { origins, correction: transactionCorrection })) {
         return new Response(null, { status: forbidden });
+      }
       const request = await outbound(incoming, url, environment);
       const response = await send(request, { redirect: "error", decompress: false });
       if (response.status >= redirectStart && response.status < redirectEnd) {

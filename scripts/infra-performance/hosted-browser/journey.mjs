@@ -129,11 +129,10 @@ const observeResponse = async (event, response) => {
 };
 /**
  * @param {EventSink} event Metadata-only evidence sink.
- * @param {Network} network Predeclared network profile.
+ * @param {Pick<Inputs, "network" | "view">} cell Predeclared browser view and network.
  * @param {string} version Chromium version reported by the executable.
- * @param {View} view Predeclared browser view.
  */
-const recordBrowser = (event, network, version, view) => {
+const recordBrowser = (event, { network, view }, version) => {
   event({
     type: "browser",
     version,
@@ -158,6 +157,7 @@ export const measureBrowser = async ({
   environment,
   session,
   network,
+  view,
   event,
   forward,
 }) => {
@@ -178,7 +178,7 @@ export const measureBrowser = async ({
     const { page, context } = await openPage(browser, origins, session);
     const cdp = await context.newCDPSession(page);
     await setNetwork(cdp, network);
-    recordBrowser(event, network, browser.version(), view);
+    recordBrowser(event, { network, view }, browser.version());
     recordResources(cdp, origins, event);
     if (view === "budgets" || view === "needs-review") {
       const measure = view === "budgets" ? freshBudgetMonth : freshPendingReview;

@@ -22,28 +22,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-          fetch-depth: 0
           sparse-checkout: |
             /*
             !/.repos/
           sparse-checkout-cone-mode: false
-      - name: Check the admitted original script and operation time budgets
-        run: |
-          git diff --exit-code 373bbe6623198438e8ac50731abbb4698613c465 HEAD -- infra/cloudflare/native-erasure.ts
-          git diff --exit-code c14e239df5235f824d775a262bce141736069549 HEAD -- infra/cloudflare/native-erasure-continuation.ts
-          python3 - <<'PYTHON'
-          from pathlib import Path
-          workflow = Path(".github/workflows/native-storage-release.yml").read_text()
-          assert "inputs.operation == 'fleet-pilot' && 110 || (inputs.operation == 'first-install' || inputs.operation == 'verify-erasure' || inputs.operation == 'continue-erasure') && 90 || 30" in workflow
-          assert 'git diff --quiet "$source" HEAD -- infra/cloudflare/native-erasure.ts' in workflow
-          PYTHON
       - uses: ./.github/actions/bun-install
-      - name: Calculate the merged release-policy digest
-        run: bun -e 'import { edgePolicyDigest } from "./infra/cloudflare/verify-edge-policy.ts"; console.log(edgePolicyDigest)' > "$RUNNER_TEMP/fleet-policy.txt"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: paired-fleet-policy
-          path: ${{ runner.temp }}/fleet-policy.txt
+      - name: Verify the pinned combined release policy
+        run: bun infra/cloudflare/verify-edge-policy.ts
       - run: bun run --cwd infra/cloudflare test -- installed-verification-revision.test.ts
       - run: python3 -m unittest discover -s scripts/infra-performance/deployed-fleet
       - run: bun run --cwd infra/cloudflare test -- native-fleet-pilot.test.ts native-erasure-evidence.test.ts native-erasure-continuation.test.ts

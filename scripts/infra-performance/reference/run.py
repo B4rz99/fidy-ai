@@ -42,13 +42,13 @@ BOUNDARIES = [
     "startup.browser",
 ]
 
-CALIBRATION_VIEWS = ["budgets.month.browser", "review.pending.browser", "dashboard.fresh.browser"]
+CALIBRATION_VIEWS = ["budgets.month.browser", "review.pending.browser", "dashboard.fresh.browser", "recurring.month.browser", "recurring.previous.browser", "recurring.selective.browser", "recurring.full.http"]
 
 # Export only controlled stage names, error classes and harness source coordinates.
 STAGES = {
     "runtime", "user", "transactions", "planning", "reviews", "counts", "launch",
     "pairing", "approval", "redeem", "bootstrap", "accountability-before", "read",
-    "open-correction", "save", "fresh-read", "accountability-after", "budgets-month", "review-pending", "dashboard-fixture", "dashboard-fresh",
+    "open-correction", "save", "fresh-read", "accountability-after", "budgets-month", "review-pending", "dashboard-fixture", "dashboard-fresh", "recurring-fresh",
 }
 REASONS = {
     "foreign key constraint failed": "foreign-key",
@@ -66,7 +66,7 @@ REASONS = {
     "native worker build failed": "worker-build",
 }
 SOURCE_LOCATION = re.compile(
-    r"/(native-seed\.ts|native\.ts|fresh-transactions\.mjs|fresh-workspaces\.mjs|fresh-dashboard\.mjs|dev-browser-api\.ts|browser\.mjs|preview\.mjs):(\d{1,6}):(\d{1,6})\b"
+    r"/(native-seed\.ts|native\.ts|fresh-transactions\.mjs|fresh-workspaces\.mjs|fresh-dashboard\.mjs|fresh-recurring\.mjs|dev-browser-api\.ts|browser\.mjs|preview\.mjs):(\d{1,6}):(\d{1,6})\b"
 )
 
 
@@ -258,6 +258,8 @@ def compare(samples, rows, variants, *, stress=False, calibration=False):
             cell["ratio"] = ratio
             status = "pass" if ratio >= 1.8 else "fail"
         result[key] = {"status": status, **cell}
+    if calibration:
+        result["recurring.full.browser"] = {"status": "not-exposed", "reason": "The product requests view=compact. Complete revisions are verified on recurring.full.http."}
     return result
 
 
@@ -324,7 +326,7 @@ def main():
         "harnessRevision": output(["git", "rev-parse", "HEAD"], ROOT),
         "comparisonSourceSha256": {
             f.name: hashlib.sha256(f.read_bytes()).hexdigest()
-            for f in [Path(__file__), BROWSER, HERE / "fresh-transactions.mjs", HERE / "fresh-workspaces.mjs", HERE / "fresh-dashboard.mjs", HERE / "preview.mjs"]
+            for f in [Path(__file__), BROWSER, HERE / "fresh-transactions.mjs", HERE / "fresh-workspaces.mjs", HERE / "fresh-dashboard.mjs", HERE / "fresh-recurring.mjs", HERE / "preview.mjs"]
         },
         "pairs": args.pairs,
         "order": "alternate D1-first and DO-first pairs" if args.candidate else "pinned D1 reference",

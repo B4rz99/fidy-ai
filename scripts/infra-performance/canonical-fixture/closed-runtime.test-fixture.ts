@@ -1,6 +1,6 @@
 import { serveFixture } from "./bridge";
 // Disposable production Workers and the pinned release's private Google provider, without an account transport.
-import { Effect } from "effect";
+import { Config, Effect, Redacted } from "effect";
 import { Miniflare, type MiniflareWorkerConfig } from "miniflare";
 import { installedOrigins } from "../../../apps/server/src/shell/browser-transport/contract";
 import {
@@ -10,11 +10,8 @@ import {
 } from "../../../apps/server/cloudflare/user-store.test-fixture";
 
 const text = (value: string): { type: "text"; value: string } => ({ type: "text", value });
-const observedManifest = async (
-  module: string,
-  name: string
-): Promise<NonNullable<MiniflareWorkerConfig["manifest"]>> => {
-  const manifest = await Effect.runPromise(workerManifest(module));
+const observedManifest = Effect.fnUntraced(function* (module: string, name: string) {
+  const manifest = yield* workerManifest(module);
   if (name !== "ingress") return manifest;
   // The local Miniflare entry listener supplies its loopback URL. Preserve the fixed original TLS
   // URL when delivering to the production Ingress so the real signed request can be verified.
@@ -27,27 +24,35 @@ const observedManifest = async (
   return {
     mainModule: "index.mjs",
     modules: {
-      "index.mjs": { type: "esm", contents: wrapper },
+      "index.mjs": { type: "esm" as const, contents: wrapper },
       "production.mjs": manifest.modules["index.mjs"],
     },
   };
-};
-const worker = async (
+});
+const worker = Effect.fnUntraced(function* (
   name: string,
   module: string,
   { env, exports = {} }: Pick<MiniflareWorkerConfig, "env" | "exports">
-): Promise<{ config: MiniflareWorkerConfig }> => ({
-  config: {
+) {
+  const config: MiniflareWorkerConfig = {
     name,
     type: "worker",
     compatibilityDate: "2026-09-08",
     compatibilityFlags: ["nodejs_compat", "enable_request_signal", "request_signal_passthrough"],
     exports,
     env,
-    manifest: await observedManifest(module, name),
-  },
+    manifest: yield* observedManifest(module, name),
+  };
+  return { config };
 });
-export const closedRuntime = async (revision: string, secret: string): Promise<Miniflare> => {
+const closedRuntime = Effect.fnUntraced(function* ({
+  revision,
+  secret,
+}: {
+  revision: string;
+  secret: string;
+}) {
+  const privateKey = Redacted.value(yield* Config.Redacted("TEST_FIXTURE_PRIVATE_KEY"));
   const api = installedOrigins.acceptance;
   const derive = (purpose: string): string =>
     new Bun.CryptoHasher("sha256", secret).update(revision + "/" + purpose).digest("hex");
@@ -65,7 +70,7 @@ export const closedRuntime = async (revision: string, secret: string): Promise<M
   };
   return new Miniflare({
     handleStructuredLogs: () => undefined,
-    workers: await Promise.all([
+    workers: yield* Effect.all([
       worker("ingress", "./public-worker.ts", {
         env: {
           ...shared,
@@ -77,7 +82,7 @@ export const closedRuntime = async (revision: string, secret: string): Promise<M
         env: {
           ...shared,
           ...nativeOwnerBindings,
-          NATIVE_FIXTURE_SIGNING_KEY: text(process.env.TEST_FIXTURE_PRIVATE_KEY ?? ""),
+          NATIVE_FIXTURE_SIGNING_KEY: text(privateKey),
           SQLITE_STORE_CAPACITY_BYTES: text("1000000000"),
           GOOGLE_CLIENT_ID: text("fidy-native-google"),
           GOOGLE_CLIENT_SECRET: text(derive("google")),
@@ -100,16 +105,17 @@ export const closedRuntime = async (revision: string, secret: string): Promise<M
       }),
     ]),
   });
-};
+});
+const run = Effect.gen(function* () {
+  const revision = yield* Config.String("FIDY_NATIVE_REVISION");
+  const secret = Redacted.value(yield* Config.Redacted("SMOKE_PROOF"));
+  yield* Effect.acquireUseRelease(closedRuntime({ revision, secret }), serveFixture, (runtime) =>
+    Effect.promise(() => runtime.dispose())
+  );
+});
 if (import.meta.main) {
-  try {
-    const runtime = await closedRuntime(
-      process.env.FIDY_NATIVE_REVISION ?? "",
-      process.env.SMOKE_PROOF ?? ""
-    );
-    await serveFixture(runtime);
-  } catch {
+  await Effect.runPromise(run).catch(() => {
     process.stderr.write("Closed workerd rehearsal stopped\n");
     process.exitCode = 1;
-  }
+  });
 }

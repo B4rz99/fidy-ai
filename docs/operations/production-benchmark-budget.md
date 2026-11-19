@@ -276,7 +276,6 @@ The credential-free command `hosted.py rehearse --out <private-directory>` runs 
 closed provider, Ingress, Core and SQLite owners on workerd. Its temporary verifier credentials
 are private to that rehearsal. Upload only `summary.json`, which contains counts and digests.
 
-
 The protected closed rollout records the stable Core and Ingress version IDs and revision before
 upload. A signer candidate can promote only if the established compatibility policy permits
 return to that exact tested pair. Adding the two signer bindings to a previously unsigned Core

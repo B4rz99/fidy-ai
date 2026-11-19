@@ -22,6 +22,7 @@ jobs:
         if: always()
         run: |
           python3 -m unittest discover -s scripts/infra-performance/canonical-fixture
+          python3 scripts/infra-performance/canonical-fixture/direct_bridge_check.py
           python3 scripts/infra-performance/canonical-fixture/hosted.py rehearse --out apps/server/test-results/closed-native-fixture
       - name: Check receipt policy code
         if: always()

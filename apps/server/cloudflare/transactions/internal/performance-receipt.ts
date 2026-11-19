@@ -120,7 +120,11 @@ type FixtureEnvironment = AcceptanceEnvironment &
 const credentials = (
   env: FixtureEnvironment
 ): Option.Option<{ secret: string; privateKey: string; bucket: Pick<R2Bucket, "get" | "put"> }> =>
-  env.SMOKE_PROOF && env.NATIVE_FIXTURE_SIGNING_KEY && env.SMOKE_BUCKET
+  env.SMOKE_PROOF !== undefined &&
+  env.SMOKE_PROOF !== "" &&
+  env.NATIVE_FIXTURE_SIGNING_KEY !== undefined &&
+  env.NATIVE_FIXTURE_SIGNING_KEY !== "" &&
+  env.SMOKE_BUCKET !== undefined
     ? Option.some({
         secret: env.SMOKE_PROOF,
         privateKey: env.NATIVE_FIXTURE_SIGNING_KEY,
@@ -144,7 +148,8 @@ export const ownPerformanceReceipt = Effect.fn(function* (
   const binding = request.headers.get("fidy-session-binding");
   const signer = credentials(environment);
   if (
-    !binding ||
+    binding === null ||
+    binding === "" ||
     Option.isNone(signer) ||
     !(yield* receiptAdmitted({ request, environment, boundary: "core", now }))
   ) {
@@ -167,13 +172,13 @@ export const ownPerformanceReceipt = Effect.fn(function* (
   };
   const data = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))(evidence.value);
   const { secret, privateKey, bucket } = signer.value;
-  const box = yield* Effect.tryPromise(() =>
-    sealTransactionReceipt({ secret, privateKey }, coordinates, data)
-  );
+  const box = yield* sealTransactionReceipt({ secret, privateKey, coordinates, data });
   const key =
     "_release-smoke/" + environment.RELEASE_GIT_SHA + "/acceptance/transactions/performance-1";
   const stored = yield* Effect.tryPromise(() =>
     bucket.put(key, command.value.resourcePrefix, { onlyIf: { etagDoesNotMatch: "*" } })
   );
-  return stored ? Response.json(box, { headers: { "cache-control": "no-store" } }) : denied();
+  return stored !== null
+    ? Response.json(box, { headers: { "cache-control": "no-store" } })
+    : denied();
 }, Effect.orElseSucceed(denied));

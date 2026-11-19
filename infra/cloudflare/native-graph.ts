@@ -181,19 +181,22 @@ const kinds: Readonly<Record<NativeRole, Readonly<Record<string, ReadonlyArray<s
     assets: ["ASSETS"],
   },
 };
-export const nativeBindingInventory = (
-  role: NativeRole,
-  fingerprint = ""
-): ReadonlyMap<string, string> => {
+export const nativeBindingInventory = ({
+  role,
+  fingerprint = "",
+}: {
+  role: NativeRole;
+  fingerprint?: string;
+}): ReadonlyMap<string, string> => {
   const expected = new Map(
     Object.entries(kinds[role]).flatMap(([type, names]) =>
       names.map((name) => [name, type] as const)
     )
   );
-  if (fingerprint && !/^[a-f0-9]{64}$/u.test(fingerprint)) {
+  if (fingerprint !== "" && !/^[a-f0-9]{64}$/u.test(fingerprint)) {
     throw Error("Invalid expected native fixture signer fingerprint");
   }
-  if (fingerprint && role === "Core") {
+  if (fingerprint !== "" && role === "Core") {
     expected.set("NATIVE_FIXTURE_SIGNING_KEY", "secret_text");
     expected.set("NATIVE_FIXTURE_SIGNER_SHA256", "plain_text");
   }
@@ -212,7 +215,7 @@ const requireClosedRole = (
 ): void => {
   const text = (name: string): unknown => bindings.find((binding) => binding.name === name)?.text;
   if (
-    fingerprint &&
+    fingerprint !== "" &&
     role === "Core" &&
     (text("NATIVE_FIXTURE_SIGNER_SHA256") !== fingerprint ||
       text("BROWSER_ORIGIN") !== installedOrigins.acceptance.browser)
@@ -223,17 +226,16 @@ const requireClosedRole = (
     throw Error("Closed admission is required");
   }
 };
-export const requireRoleBindings = (
-  {
-    role,
-    bindings,
-  }: {
-    role: NativeRole;
-    bindings: ReadonlyArray<NativeBinding>;
-  },
-  fingerprint = ""
-): void => {
-  const expected = nativeBindingInventory(role, fingerprint);
+export const requireRoleBindings = ({
+  role,
+  bindings,
+  fingerprint = "",
+}: {
+  role: NativeRole;
+  bindings: ReadonlyArray<NativeBinding>;
+  fingerprint?: string;
+}): void => {
+  const expected = nativeBindingInventory({ role, fingerprint });
   if (
     bindings.length !== expected.size ||
     new Set(bindings.map((binding) => binding.name)).size !== expected.size ||

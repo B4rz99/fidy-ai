@@ -69,21 +69,27 @@ export const approve = Effect.fn(function* (runtime: Miniflare, request: Request
   );
   return new Response(null, { status: response.ok ? noContent : response.status });
 });
-export const forward = Effect.fn(function* (runtime: Miniflare, request: Request) {
+export const forward = Effect.fn(function* (
+  runtime: Miniflare,
+  request: Request,
+  onIngress?: () => void
+) {
   const url = new URL(request.url);
   if (url.origin !== origin) return new Response(null, { status: 403 });
   const headers = new Headers(request.headers);
   headers.set("cf-connecting-ip", "127.0.0.1");
   const body = request.body === null ? undefined : yield* native(() => request.arrayBuffer());
-  const response = yield* native(() =>
-    runtime.dispatchFetch(url.href, {
-      method: request.method,
-      headers: Object.fromEntries(headers),
-      body,
-      redirect: "manual",
-      signal: request.signal,
-    })
-  );
+  const init = {
+    method: request.method,
+    headers: Object.fromEntries(headers),
+    body,
+    redirect: "manual" as const,
+    signal: request.signal,
+  };
+  const response = yield* native(() => {
+    onIngress?.();
+    return runtime.dispatchFetch(url.href, init);
+  });
   return new Response(response.body, { status: response.status, headers: response.headers });
 });
 export const makeBrowserRuntime = Effect.gen(function* () {

@@ -7,9 +7,13 @@ import { seed, subject } from "./native-seed";
 const apiPort = 4174;
 const operatorPort = 4175;
 const timedResponse = Effect.fn(function* (runtime: Miniflare, request: Request) {
-  const started = performance.now();
-  const response = yield* forward(runtime, request);
-  if (!new URL(request.url).pathname.startsWith("/transactions")) return response;
+  let started: number | undefined;
+  const response = yield* forward(runtime, request, () => {
+    started = performance.now();
+  });
+  if (started === undefined || !new URL(request.url).pathname.startsWith("/transactions")) {
+    return response;
+  }
   const body = yield* Effect.tryPromise(() => response.arrayBuffer());
   const headers = new Headers(response.headers);
   headers.set("x-reference-backend-ms", String(performance.now() - started));

@@ -53,7 +53,7 @@ class InstalledRelease(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             receipt = Path(root) / "verification"
             env = {"GITHUB_REF": "refs/heads/trunk", "GITHUB_EVENT_NAME": "workflow_dispatch",
-                   "NATIVE_STORAGE_ADMISSION": "closed", "RELEASE_GIT_SHA": verifier, "GITHUB_SHA": verifier,
+                   "NATIVE_STORAGE_ADMISSION": "closed", "RELEASE_GIT_SHA": verifier, "GITHUB_SHA": verifier, "FLEET_PILOT_STARTED_AT": str(now),
                    "EXPECTED_INSTALLED_REVISION": deployed, "RUNNER_TEMP": root,
                    "CLOUDFLARE_ACCOUNT_ID": "c" * 32, "SMOKE_ATTESTATION_FILE": str(receipt)}
             start = (now - 610) * 1000
@@ -68,6 +68,17 @@ class InstalledRelease(unittest.TestCase):
                 read.assert_not_called()
                 sample("begin", deployed)
                 sample("check", deployed)
+                # Fresh samples just before enrollment must leave room for all remaining phases.
+                sample("signup", deployed)
+                with patch("pilot.usage", return_value=Usage(now, now, 12_000, 7_000)):
+                    self.assertRaises(ValueError, sample, "signup", deployed)
+                with patch.dict(os.environ, {"FLEET_PILOT_STARTED_AT": str(now - 26 * 60)}):
+                    self.assertRaises(ValueError, sample, "signup", deployed)
+                with patch.dict(os.environ, {"FLEET_PILOT_STARTED_AT": str(now - 67 * 60)}):
+                    self.assertRaises(ValueError, sample, "check", deployed)
+                    sample("cleanup", deployed)
+                with patch("pilot.usage", return_value=Usage(now, now, 12_000, 80_000)):
+                    self.assertRaises(ValueError, sample, "cleanup", deployed)
                 with patch("pilot.observation", return_value={"firstWindowWraps": 1, "secondWindowWraps": 0}):
                     self.assertRaises(ValueError, sample, "logs", deployed)
                 with patch("pilot.observation", return_value={"firstWindowWraps": 1, "secondWindowWraps": 1}) as query:

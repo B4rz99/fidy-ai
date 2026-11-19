@@ -18,7 +18,12 @@ MAX_AGE = 600
 PILOT_READS, PILOT_WRITES = 2_000_000, 75_000
 DAILY_READS, DAILY_WRITES = 5_000_000, 100_000
 RESERVE_READS, RESERVE_WRITES = 2_500_000, 10_000
-MAX_SECONDS = 40 * 60
+# Calibrated one-User admission includes the entire known 36-User physical rehearsal.
+SIGNUP_READS, SIGNUP_WRITES = 1_661_321, 70_639
+CLEANUP_READS, CLEANUP_WRITES = 250_000, 10_000
+MAX_SECONDS = 100 * 60
+SIGNUP_SECONDS = 75 * 60
+CLEANUP_SECONDS = 35 * 60
 
 
 @dataclass(frozen=True)
@@ -54,6 +59,27 @@ def check_delta(before, current, now):
     if not (0 <= reads <= PILOT_READS and 0 <= writes <= PILOT_WRITES):
         raise ValueError("Account row delta exceeds the pilot budget or regressed")
     return {"reads": reads, "writes": writes}
+
+
+def remaining_seconds(now):
+    started = int(os.environ["FLEET_PILOT_STARTED_AT"])
+    if not 0 < started <= now or started // DAY != now // DAY:
+        raise ValueError("Missing same-day protected job start")
+    return min(started + MAX_SECONDS - now, DAY - now % DAY)
+
+
+def require_room(phase, current, delta, now):
+    seconds = remaining_seconds(now)
+    reads = min(PILOT_READS - delta["reads"], DAILY_READS - RESERVE_READS - current.reads)
+    writes = min(PILOT_WRITES - delta["writes"], DAILY_WRITES - RESERVE_WRITES - current.writes)
+    if phase == "signup":
+        if reads < SIGNUP_READS or writes < SIGNUP_WRITES or seconds < SIGNUP_SECONDS:
+            raise ValueError("Insufficient enrollment, two-window and cleanup reserve")
+    elif phase == "check":
+        if reads < CLEANUP_READS or writes < CLEANUP_WRITES or seconds < CLEANUP_SECONDS:
+            raise ValueError("Reserve remaining work for cleanup")
+    elif reads <= 0 or writes <= 0 or seconds < 7 * 60:
+        raise ValueError("No remaining allowance for cleanup lease")
 
 
 def iso(epoch):
@@ -129,9 +155,11 @@ def sample(phase, installed, finished_ms=None):
         with journal.open("x") as out:
             print(json.dumps({"stage": phase, **revisions, "usage": asdict(current),
                               "pilotReads": PILOT_READS, "pilotWrites": PILOT_WRITES}), file=out)
-        admit(current, int(time.time()))
+        now = int(time.time())
+        admit(current, now)
+        require_room("signup", current, {"reads": 0, "writes": 0}, now)
         return
-    if phase not in ("check", "finish"):
+    if phase not in ("signup", "check", "cleanup", "finish"):
         raise ValueError("Invalid metering phase")
     with journal.open() as source:
         origin = json.loads(source.readline())
@@ -141,13 +169,8 @@ def sample(phase, installed, finished_ms=None):
     current = usage()
     record(phase, **asdict(current))
     delta = check_delta(before, current, int(time.time()))
-    if phase == "check":
-        if (current.reads > DAILY_READS - RESERVE_READS
-                or current.writes > DAILY_WRITES - RESERVE_WRITES
-                or delta["writes"] > PILOT_WRITES - 10_000
-                or delta["reads"] > PILOT_READS - 250_000
-                or current.sampled - before.sampled > MAX_SECONDS - 15 * 60):
-            raise ValueError("Reserve remaining work for cleanup")
+    if phase != "finish":
+        require_room(phase, current, delta, int(time.time()))
         return
     finished = int(finished_ms) // 1000
     if not before.sampled <= finished <= current.sampled:
@@ -164,7 +187,7 @@ if __name__ == "__main__":
         sample(*sys.argv[1:])
     except Exception as exc:
         phase = sys.argv[1] if len(sys.argv) > 1 else None
-        if "RUNNER_TEMP" in os.environ and phase in ("begin", "check", "logs", "finish", "probe-logs"):
+        if "RUNNER_TEMP" in os.environ and phase in ("begin", "signup", "check", "cleanup", "logs", "finish", "probe-logs"):
             with (Path(os.environ["RUNNER_TEMP"]) / "native-fleet-refusal.jsonl").open("a") as out:
                 print(json.dumps({"phase": phase, "error": type(exc).__name__}), file=out)
         sys.exit("Fleet pilot meter unavailable (" + type(exc).__name__ + ")")

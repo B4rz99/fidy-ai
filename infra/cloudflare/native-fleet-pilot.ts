@@ -1,4 +1,5 @@
-import { Clock, Effect, Option, Schedule } from "effect";
+import { observePhysicalCensus } from "./native-erasure";
+import { Clock, Effect, Option } from "effect";
 import { type UserObjects, newStoredUser, physicalErasure } from "./native-erasure-evidence";
 
 type Member = {
@@ -13,25 +14,15 @@ export type FleetPilotBrowser = {
 };
 type Port = FleetPilotBrowser & {
   inventory: () => Effect.Effect<UserObjects, Error>;
+  beforeSignup: () => Effect.Effect<void, Error>;
+  renewCleanup: () => Effect.Effect<void, Error>;
   watch: (physicalObject: string) => Effect.Effect<void, Error>;
   record: (event: Readonly<Record<string, string | number>>) => Effect.Effect<void, Error>;
 };
 const maximumExistingObjects = 36;
-const censusPolls = 12;
-const cleanupPolls = 90;
-const waitFor = <A>(
-  read: Effect.Effect<Option.Option<A>, Error>,
-  times: number
-): Effect.Effect<A, Error> =>
-  read.pipe(
-    Effect.repeat({ while: Option.isNone, times, schedule: Schedule.spaced("5 seconds") }),
-    Effect.flatMap(
-      Option.match({
-        onNone: () => Effect.fail(Error("Physical User transition unavailable")),
-        onSome: Effect.succeed,
-      })
-    )
-  );
+const establishedOwners = 3;
+const baseline = (rows: UserObjects): Option.Option<UserObjects> =>
+  [...rows.values()].filter(Boolean).length >= establishedOwners ? Option.some(rows) : Option.none();
 
 const cleanupPilot = Effect.fn(function* ({
   port,
@@ -44,39 +35,42 @@ const cleanupPilot = Effect.fn(function* ({
   before: UserObjects;
   physical: Option.Option<string>;
 }) {
-  // Even an absent census or refused subsequent sample ends through this User's own erasure.
-  const reference = yield* member.erase();
-  yield* port.record({ stage: "erasure-admitted", reference });
-  yield* port.renew();
+  // Submit the same authenticated User's erasure even when foreground metering or logging failed.
+  const starting = yield* Effect.exit(port.record({ stage: "erasure-submission-started" }));
+  yield* Effect.exit(port.renewCleanup().pipe(Effect.timeout("1 minute")));
+  const admission = yield* Effect.exit(member.erase().pipe(Effect.timeout("2 minutes")));
+  const receipt: Readonly<Record<string, string>> = admission._tag === "Success"
+    ? { stage: "erasure-admitted", reference: admission.value }
+    : { stage: "erasure-reply-unconfirmed" };
+  const recorded = yield* Effect.exit(port.record(receipt));
   if (Option.isSome(physical)) {
     const subject = physical.value;
-    const state = yield* waitFor(
-      Effect.gen(function* () {
-        yield* port.renew();
-        const current = yield* port.inventory();
-        return yield* Effect.try(() => physicalErasure({ before, current, subject }));
-      }),
-      cleanupPolls
+    const state = yield* observePhysicalCensus(
+      { ...port, renew: port.renewCleanup }, "waiting-physical-erasure",
+      (current) => physicalErasure({ before, current, subject })
     );
     yield* port.record({ stage: "physically-erased", state, physicalObject: subject });
+  } else {
+    yield* port.renewCleanup();
   }
-  yield* member.denied();
+  yield* member.denied().pipe(Effect.timeout("1 minute"));
+  if (admission._tag === "Failure") return yield* Effect.failCause(admission.cause);
+  if (starting._tag === "Failure") return yield* Effect.failCause(starting.cause);
+  if (recorded._tag === "Failure") return yield* Effect.failCause(recorded.cause);
 });
 
 /** One synthetic lifetime, from independently observed population to confirmed physical disposal. */
 export const runFleetPilot = Effect.fn(function* (port: Port) {
-  const before = yield* port.inventory();
+  const before = yield* observePhysicalCensus(port, "waiting-baseline", baseline);
   if (before.size >= maximumExistingObjects) {
     return yield* Effect.fail(Error("Existing User inventory exceeds the pilot sizing envelope"));
   }
   yield* port.record({ stage: "census", existingObjects: before.size });
-  const targetFromCensus = waitFor(
-    Effect.suspend(port.inventory).pipe(
-      Effect.flatMap((current) => Effect.try(() => newStoredUser({ before, current })))
-    ),
-    censusPolls
-  );
-  const registration = yield* Effect.exit(port.register());
+  const targetFromCensus = observePhysicalCensus(port, "waiting-fresh-object",
+    (current) => newStoredUser({ before, current }));
+  yield* port.beforeSignup();
+  yield* port.record({ stage: "signup-started" });
+  const registration = yield* Effect.exit(port.register().pipe(Effect.timeout("2 minutes")));
   let physical: Option.Option<string> = Option.none();
   let member: Member;
   if (registration._tag === "Success") {
@@ -86,7 +80,7 @@ export const runFleetPilot = Effect.fn(function* (port: Port) {
     yield* port.record({ stage: "signup-reply-unconfirmed" });
     // A single independently populated object permits one login-only recovery, never another signup.
     physical = Option.some(yield* targetFromCensus);
-    member = yield* port.login();
+    member = yield* port.login().pipe(Effect.timeout("2 minutes"));
     if (member.outcome !== "approved") {
       return yield* Effect.fail(Error("Established session required"));
     }
@@ -94,6 +88,7 @@ export const runFleetPilot = Effect.fn(function* (port: Port) {
   const observation = yield* Effect.exit(
     Effect.gen(function* () {
       if (registration._tag === "Failure") return yield* Effect.failCause(registration.cause);
+      yield* port.record({ stage: "signup-created" });
       const target = yield* targetFromCensus;
       physical = Option.some(target);
       yield* port.record({
@@ -101,7 +96,7 @@ export const runFleetPilot = Effect.fn(function* (port: Port) {
         physicalObject: target,
         at: yield* Clock.currentTimeMillis,
       });
-      yield* port.watch(target);
+      yield* port.watch(target).pipe(Effect.timeout("12 minutes"));
       yield* port.record({ stage: "observation-end", at: yield* Clock.currentTimeMillis });
     })
   );

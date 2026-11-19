@@ -24,8 +24,8 @@ type Port = ErasureObservation & {
 };
 
 const populated = (rows: UserObjects): number => [...rows.values()].filter(Boolean).length;
-const observed = Effect.fn(function* <Value>(
-  port: Port,
+export const observePhysicalCensus = Effect.fn(function* <Value>(
+  port: Pick<Port, "inventory" | "record" | "renew">,
   stage: CensusStage,
   transition: (rows: UserObjects) => Option.Option<Value>
 ) {
@@ -57,7 +57,7 @@ const captureStableUsers = Effect.fn(function* (port: Port) {
     return yield* Effect.fail(Error("Expected two stable smoke Users"));
   }
   // Shared bootstrap initializes one fixed UserStore probe in addition to the two smoke Users.
-  const before = yield* observed(port, "waiting-baseline", (rows) =>
+  const before = yield* observePhysicalCensus(port, "waiting-baseline", (rows) =>
     populated(rows) >= 3 ? Option.some(rows) : Option.none()
   );
   yield* port.record({ stage: "stable-users", populated: populated(before) });
@@ -73,7 +73,7 @@ export const verifyIndependentErasure = Effect.fn(function* (port: Port) {
     return yield* Effect.fail(Error("A fresh, independent synthetic User is required"));
   }
   yield* port.record({ stage: "signup-created" });
-  const target = yield* observed(port, "waiting-fresh-object", (current) =>
+  const target = yield* observePhysicalCensus(port, "waiting-fresh-object", (current) =>
     newStoredUser({ before, current })
   );
   yield* port.record({ stage: "fresh-object", physicalObject: target });
@@ -86,7 +86,7 @@ export const verifyIndependentErasure = Effect.fn(function* (port: Port) {
   }
   const physicalState = (current: UserObjects): ReturnType<typeof physicalErasure> =>
     physicalErasure({ before, subject: target, current });
-  const state = yield* observed(port, "waiting-physical-erasure", physicalState);
+  const state = yield* observePhysicalCensus(port, "waiting-physical-erasure", physicalState);
   yield* port.record({ stage: "physically-erased", physicalObject: target, reference });
   yield* port.denied(disposable);
   const surviving = yield* port.survivors();

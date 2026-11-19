@@ -1172,7 +1172,7 @@ const prepareDiagnostics = Effect.fn(function* (
 });
 const meter = (
   revision: string,
-  phase: "begin" | "check" | "finish" | "probe-logs" | "logs",
+  phase: "begin" | "signup" | "check" | "cleanup" | "finish" | "probe-logs" | "logs",
   ...args: string[]
 ): Effect.Effect<string, ReleaseFailure> =>
   releaseCommand({
@@ -1192,11 +1192,34 @@ const settleFleetMeter = Effect.fn(function* (revision: string) {
       while: (status) => status === "pending",
       times: 20,
       schedule: Schedule.spaced("15 seconds"),
-    })
+    }),
+    Effect.timeout("6 minutes")
   );
   if (settled !== "observed") {
     return yield* Effect.fail(Error("Post-cleanup Durable Object usage unavailable"));
   }
+});
+const fleetCheckpoints = Effect.fn(function* (env: Config, verifierRevision: string, installed: Effect.Success<ReturnType<typeof installedRelease>>) {
+  const fs = yield* FileSystem.FileSystem;
+  const events: Readonly<Record<string, string | number>>[] = [];
+  const record = (event: Readonly<Record<string, string | number>>): Effect.Effect<void, Error> => {
+    events.push(event);
+    const path = env.smokeAttestationFile + ".fleet";
+    return fs.writeFileString(
+      path + ".next",
+      encodeJson({
+        revision: env.revision,
+        verifierRevision,
+        coreVersion: installed.coreVersionId,
+        publicVersion: installed.publicVersionId,
+        userNamespace: installed.userNamespace,
+        requestedPilotUsers: 1,
+        fullFleet: "missing",
+        events,
+      })
+    ).pipe(Effect.andThen(fs.rename(path + ".next", path)));
+  };
+  return record;
 });
 const fleetPilot = Effect.fn(function* (
   verifier: Config,
@@ -1217,29 +1240,20 @@ const fleetPilot = Effect.fn(function* (
     send: sendNative(client),
     erasure: Option.none(),
   });
-  const events: Readonly<Record<string, string | number>>[] = [];
-  const record = (event: Readonly<Record<string, string | number>>): Effect.Effect<void, Error> => {
-    events.push(event);
-    return writeFile(
-      env.smokeAttestationFile + ".fleet",
-      encodeJson({
-        revision: env.revision,
-        verifierRevision: verifier.revision,
-        coreVersion: installed.coreVersionId,
-        publicVersion: installed.publicVersionId,
-        userNamespace: installed.userNamespace,
-        requestedPilotUsers: 1,
-        fullFleet: "missing",
-        events,
-      })
-    );
-  };
+  const record = yield* fleetCheckpoints(env, verifier.revision, installed);
   yield* record({ stage: "verified-release" });
   yield* meter(env.revision, "probe-logs");
   const measured = yield* Effect.exit(
     runFleetPilot({
       inventory: () => readUserObjects(accountReader(env, client), installed.userNamespace),
-      register: () => meter(env.revision, "check").pipe(Effect.andThen(browser.register())),
+      beforeSignup: () => meter(env.revision, "signup").pipe(Effect.asVoid),
+      register: browser.register,
+      renewCleanup: () => meter(env.revision, "cleanup").pipe(
+        Effect.matchEffect({
+          onFailure: () => record({ stage: "cleanup-lease-refused" }),
+          onSuccess: browser.renew,
+        })
+      ),
       login: browser.login,
       renew: browser.renew,
       record,

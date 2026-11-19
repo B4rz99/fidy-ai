@@ -4,6 +4,12 @@ import { TestClock } from "effect/testing";
 import { expect } from "vitest";
 import { runFleetPilot } from "./native-fleet-pilot";
 
+const listed = (stored: boolean): Map<string, boolean> => {
+  const rows = new Map([["probe", true], ["one", true], ["two", true]]);
+  if (stored) rows.set("new", true);
+  return rows;
+};
+
 it.effect("erases its one new physical User if metering stops during observation", () =>
   Effect.gen(function* () {
     let stored = false;
@@ -12,7 +18,7 @@ it.effect("erases its one new physical User if metering stops during observation
     const result = yield* Effect.exit(
       runFleetPilot({
         inventory: () =>
-          Effect.succeed(stored ? new Map([["new", true]]) : new Map<string, boolean>()),
+          Effect.sync(() => listed(stored)),
         register: () =>
           Effect.sync(() => {
             stored = true;
@@ -29,6 +35,7 @@ it.effect("erases its one new physical User if metering stops during observation
             };
           }),
         login: () => Effect.die("Unexpected login after successful signup"),
+        beforeSignup: () => Effect.void, renewCleanup: () => Effect.void,
         renew: () => Effect.void,
         watch: () => Effect.fail(Error("quota")),
         record: () => Effect.void,
@@ -50,7 +57,7 @@ it.effect("recovers an established pilot session for cleanup after a lost signup
     const result = yield* Effect.exit(
       runFleetPilot({
         inventory: () =>
-          Effect.succeed(stored ? new Map([["new", true]]) : new Map<string, boolean>()),
+          Effect.sync(() => listed(stored)),
         register: () =>
           Effect.sync(() => {
             stored = true;
@@ -66,6 +73,7 @@ it.effect("recovers an established pilot session for cleanup after a lost signup
               }),
             denied: (): Effect.Effect<void> => Effect.void,
           }),
+        beforeSignup: () => Effect.void, renewCleanup: () => Effect.void,
         renew: () => Effect.void,
         watch: () => Effect.die("Unexpected trial after incomplete signup"),
         record: () => Effect.void,
@@ -90,6 +98,7 @@ it.effect("waits through delayed baseline, enrollment and physical disposal for 
           denied: (): Effect.Effect<void> => Effect.void };
       }),
       login: () => Effect.die("Unexpected pilot login"),
+      beforeSignup: () => Effect.void, renewCleanup: () => Effect.void,
       renew: () => Effect.void,
       watch: (physical) => Effect.sync(() => expect(physical).toBe("pilot")).pipe(Effect.andThen(Effect.sleep("10 minutes"))),
       record: (event) => Effect.sync(() => { stages.push(String(event["stage"])); }),
@@ -110,5 +119,23 @@ it.effect("waits through delayed baseline, enrollment and physical disposal for 
       expect(stages).toContain(stage);
     }
     expect({signups, erasures}).toEqual({signups: 1, erasures: 1});
+  })
+);
+
+it.effect("refuses before signup and before renewing a lease when the refreshed reserve is missing", () =>
+  Effect.gen(function* () {
+    const stages: string[] = [];
+    const result = yield* Effect.result(runFleetPilot({
+      inventory: () => Effect.succeed(listed(false)),
+      beforeSignup: () => Effect.fail(Error("insufficient headroom")),
+      register: () => Effect.die("Unexpected signup"),
+      login: () => Effect.die("Unexpected login"),
+      renew: () => Effect.die("Unexpected work lease"),
+      renewCleanup: () => Effect.die("Unexpected cleanup lease"),
+      watch: () => Effect.die("Unexpected observation window"),
+      record: (event) => Effect.sync(() => { stages.push(String(event["stage"])); }),
+    }));
+    expect(result._tag).toBe("Failure");
+    expect(stages).not.toContain("signup-started");
   })
 );

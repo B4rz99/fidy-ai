@@ -35,7 +35,7 @@ jobs:
   release:
     if: ${{ github.ref == 'refs/heads/trunk' && inputs.operation != 'publish-site' }}
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ inputs.operation == 'fleet-pilot' && 45 || (inputs.operation == 'first-install' || inputs.operation == 'verify-erasure') && 90 || 30 }}
+    timeout-minutes: ${{ inputs.operation == 'fleet-pilot' && 110 || (inputs.operation == 'first-install' || inputs.operation == 'verify-erasure') && 90 || 30 }}
     environment: production
     env:
       NATIVE_STORAGE_HOSTS: ${{ vars.NATIVE_STORAGE_HOSTS || 'acceptance' }}
@@ -61,6 +61,9 @@ jobs:
           RELEASE_OPERATION: ${{ inputs.operation }}
         run: |
           test "$NATIVE_STORAGE_ADMISSION" = closed
+          if [[ "$RELEASE_OPERATION" == fleet-pilot ]]; then
+            echo "FLEET_PILOT_STARTED_AT=$(date -u +%s)" >> "$GITHUB_ENV"
+          fi
           if [[ -n "$EXPECTED_INSTALLED_REVISION" ]]; then
             [[ "$RELEASE_OPERATION" == verify || "$RELEASE_OPERATION" == verify-erasure || "$RELEASE_OPERATION" == fleet-pilot ]]
             [[ "$EXPECTED_INSTALLED_REVISION" =~ ^[0-9a-f]{40}$ ]]

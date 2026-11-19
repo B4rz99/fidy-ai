@@ -226,7 +226,7 @@ const submitCard = Effect.fn(function* (input: Inputs, user: User) {
         method: "card",
         paymentSourceMode: "create",
         billingEmail: user.subject + "@example.test",
-        cardToken: acceptancePaymentToken("CARD", user.subject),
+        cardToken: acceptancePaymentToken({ kind: "CARD", subject: user.subject }),
         enrollmentId: form.enrollmentId,
         paymentRequestId: "22570000-0000-4000-8000-000000000001",
         decisions: {

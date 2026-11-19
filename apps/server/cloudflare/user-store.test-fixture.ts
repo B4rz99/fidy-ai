@@ -511,7 +511,18 @@ const privateEmailWorker = Effect.fnUntraced(function* (withBilling: boolean) {
 const fixtureFeatures = Effect.fnUntraced(function* (mode: NativeFixture) {
   return {
     capture: fixtureWorkers(mode).withOidc || mode === "health",
-    providers: yield* fixtureProviders(mode),
+    providers: [
+      {
+        config: {
+          type: "worker" as const,
+          name: "financial-client",
+          compatibilityDate: "2026-09-08",
+          manifest: yield* workerManifest("./financial-client.test-fixture.ts"),
+          env: { INGRESS: { type: "worker" as const, worker: "ingress" } },
+        },
+      },
+      ...(yield* fixtureProviders(mode)),
+    ],
     hostedPlatform: hostedOptions(mode),
     connection: yield* connectionPlatformOptions(mode === "connection"),
   };

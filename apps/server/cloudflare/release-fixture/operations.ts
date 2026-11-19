@@ -1,15 +1,7 @@
 import { Effect } from "effect";
 import { Base64Url } from "effect/encoding";
 
-/** The closed payment fixture binds each instrument to the ordinal of its predeclared synthetic subject. */
-export const acceptancePaymentToken = (kind: "CARD" | "NEQUI", subject: string): string =>
-  [
-    kind === "CARD" ? "tok" : "nequi",
-    "test",
-    "fidy",
-    "acceptance",
-    subject.slice(subject.lastIndexOf("-") + 1),
-  ].join("_");
+export { acceptancePaymentToken } from "./internal/payment-token";
 
 const fixtureMac = Effect.fn(function* (secret: string, content: string) {
   const key = yield* Effect.tryPromise(() =>

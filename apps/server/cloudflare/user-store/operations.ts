@@ -1271,6 +1271,14 @@ export const userStoreHistory: StoreHistory = {
         "CREATE TRIGGER immutable_support_case BEFORE UPDATE ON support_recovery_cases BEGIN SELECT RAISE(ABORT,'immutable support decision'); END",
       ],
     },
+    {
+      version: 39,
+      id: "immutable-manual-pro-grant-evidence",
+      statements: [
+        "CREATE INDEX pro_grant_user_sequence ON pro_grant_events(user_id,sequence DESC)",
+        "CREATE TRIGGER pro_grant_events_immutable BEFORE UPDATE ON pro_grant_events BEGIN SELECT RAISE(ABORT,'Pro grant evidence is immutable'); END",
+      ],
+    },
   ],
 };
 

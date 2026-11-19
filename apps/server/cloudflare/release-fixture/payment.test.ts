@@ -34,7 +34,7 @@ const source = Effect.gen(function* () {
       env
     );
   });
-  const token = acceptancePaymentToken("CARD", first);
+  const token = acceptancePaymentToken({ kind: "CARD", subject: first });
   expect((yield* register(second, token)).status).toBe(400);
   expect((yield* register(first, token, "NEQUI")).status).toBe(400);
   expect((yield* register("ordinary-user", token)).status).toBe(400);

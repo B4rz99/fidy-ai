@@ -1,7 +1,7 @@
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { Base64Url, Hex } from "effect/encoding";
 import type { AcceptanceProviderEnvironment } from "../contract";
-import { acceptancePaymentToken } from "../operations";
+import { acceptancePaymentToken } from "./payment-token";
 import { acceptanceSubject } from "../../release-isolation/operations";
 import { digestBytes } from "../../secret-material/operations";
 
@@ -95,7 +95,11 @@ const createSource = Effect.fn(function* (request: Request, env: AcceptanceProvi
   );
   if (
     !acceptedMailbox(env, input.customer_email) ||
-    input.token !== acceptancePaymentToken(input.type, input.customer_email.split("@")[0] ?? "")
+    input.token !==
+      acceptancePaymentToken({
+        kind: input.type,
+        subject: input.customer_email.split("@")[0] ?? "",
+      })
   ) {
     return answer({}, bad);
   }

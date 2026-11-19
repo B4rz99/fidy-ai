@@ -12,6 +12,7 @@ import {
   category,
   history,
   instant,
+  nativeIngress,
   receivedStatus,
   second,
   seed,
@@ -39,7 +40,7 @@ const patCapture = (
   call: string | Readonly<{ key: string; payload: typeof capturePayload }>
 ): ReturnType<typeof history> =>
   native(() =>
-    runtime.dispatchFetch(`https://${productionTopology.ingress.hostname}/transactions`, {
+    nativeIngress(runtime)(`https://${productionTopology.ingress.hostname}/transactions`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -141,7 +142,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const pair = { firstTransactionId: transaction, secondTransactionId: second };
         const send = (path: string, key: string, body: unknown): ReturnType<typeof history> =>
           native(() =>
-            runtime.dispatchFetch(
+            nativeIngress(runtime)(
               `https://${productionTopology.ingress.hostname}/transactions/${path}`,
               {
                 method: path === transaction ? "PUT" : "POST",
@@ -208,7 +209,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       yield* seed(runtime, bob);
       const call = (path: string, method: string, body?: unknown): ReturnType<typeof history> =>
         native(() =>
-          runtime.dispatchFetch(
+          nativeIngress(runtime)(
             `https://${productionTopology.ingress.hostname}/transactions/${path}`,
             {
               method,
@@ -247,7 +248,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       const pair = { firstTransactionId: second, secondTransactionId: transaction };
       expect(
         (yield* native(() =>
-          runtime.dispatchFetch(
+          nativeIngress(runtime)(
             `https://${productionTopology.ingress.hostname}/transactions/link`,
             {
               method: "POST",
@@ -382,12 +383,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         });
         const mixed = (binding: string): ReturnType<typeof history> =>
           native(() =>
-            runtime.dispatchFetch(`https://${productionTopology.ingress.hostname}/transactions`, {
+            nativeIngress(runtime)(`https://${productionTopology.ingress.hostname}/transactions`, {
               method: "POST",
               headers: {
                 "content-type": "application/json",
-                // An early refusal can close the socket before workerd reads the POST body.
-                connection: "close",
                 authorization: "Bearer " + bearer,
                 origin: browserOrigins.production,
                 "Fidy-Session-Binding": binding,
@@ -751,7 +750,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const runtime = yield* create();
         const { exec } = yield* seed(runtime, alice);
         const capture = yield* native(() =>
-          runtime.dispatchFetch(`https://${productionTopology.ingress.hostname}/transactions`, {
+          nativeIngress(runtime)(`https://${productionTopology.ingress.hostname}/transactions`, {
             method: "POST",
             headers: {
               origin: browserOrigins.production,

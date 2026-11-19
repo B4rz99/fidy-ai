@@ -76,13 +76,34 @@ export async function freshTransactions({
     );
   };
   process.stderr.write("REFERENCE_STAGE bootstrap\n");
-  const startupResponse = responseFor("GET", "/transactions");
+  // The first page may arrive inside the real session bootstrap. An explicit historical
+  // month can instead require a canonical read. Inspect only responses the app requested.
+  const startupResponses = [];
+  const captureStartup = (reply) => {
+    const url = new URL(reply.url());
+    if (reply.request().method() !== "GET" || url.origin !== api) return;
+    if (
+      url.pathname === "/transactions" ||
+      (url.pathname === "/web/session/binding" &&
+        url.searchParams.get("context") === "transactions")
+    ) {
+      startupResponses.push(reply);
+    }
+  };
+  page.on("response", captureStartup);
   offered("startup");
   const booting = performance.now();
   await page.goto(ledger, { waitUntil: "commit" });
   await ready("Evaluación 2");
   const startupMs = performance.now() - booting;
-  const startup = historyPage(await observeStartup(await startupResponse));
+  page.off("response", captureStartup);
+  const direct = startupResponses.findLast(
+    (reply) => new URL(reply.url()).pathname === "/transactions"
+  );
+  const reply = direct ?? startupResponses.at(-1);
+  assert.ok(reply, "Application startup did not load Transaction history");
+  const context = await observeStartup(reply);
+  const startup = historyPage(direct ? context : context.initial?.transactions?.page);
   verifySeededPage(startup, calibration);
   completed("startup", startupMs);
   const before = await beforeRefresh();

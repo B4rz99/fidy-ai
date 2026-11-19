@@ -1,6 +1,6 @@
 import { installedOrigins } from "@fidy/server/browser-transport";
 import { inspectNativeAccess } from "./native-deployed-access";
-import { Effect, Schema } from "effect";
+import { Config, Effect, Schema } from "effect";
 import { HttpClient, HttpClientRequest } from "effect/http";
 import { type ProductionReleaseConfig, releaseEvidence } from "./production-release";
 import { type NativeHostMode, installationNames, nativeHostPairs } from "./storage-installation";
@@ -9,7 +9,13 @@ import { type ProviderRead as Read, readProviderList as readList } from "./nativ
 
 const api = "https://api.cloudflare.com/client/v4/";
 const worker = Schema.Struct({ id: Schema.NonEmptyString, tag: Schema.optional(Schema.String) });
-const inspectBuilds = Effect.fn(function* (read: Read, account: string, installed: boolean) {
+const inspectBuilds = Effect.fn(function* ({
+  read, account, installed, client,
+}: { read: Read; account: string; installed: boolean; client: HttpClient.HttpClient }) {
+  const token = yield* Config.schema(
+    Schema.Redacted(Schema.NonEmptyString.check(Schema.isTrimmed())),
+    "CLOUDFLARE_BUILDS_READ_TOKEN"
+  );
   const body = yield* Schema.decodeUnknownEffect(
     Schema.Struct({ success: Schema.Literal(true), result: Schema.Array(worker) })
   )(yield* read(account + "workers/scripts"));
@@ -46,7 +52,11 @@ const inspectBuilds = Effect.fn(function* (read: Read, account: string, installe
             })
           ),
         })
-      )(yield* read(account + "builds/workers/" + item.tag + "/triggers"));
+      )(yield* releaseEvidence.providerJson(
+        HttpClientRequest.get(api + account + "builds/workers/" + item.tag + "/triggers").pipe(
+          HttpClientRequest.bearerToken(token)
+        )
+      ).pipe(Effect.provideService(HttpClient.HttpClient, client)));
       for (const trigger of triggers.result) {
         const matches = (pattern: string): boolean => new Bun.Glob(pattern).match("trunk");
         if (
@@ -172,7 +182,7 @@ const readZone = Effect.fn(function* (read: Read, accountId: string) {
 });
 /** Verify live account and zone authority using the protected release credential. An unavailable read fails the operation. */
 export const inspectDeployedEdge = Effect.fn(function* (
-  env: ProductionReleaseConfig,
+  env: Pick<ProductionReleaseConfig, "account" | "token">,
   client: HttpClient.HttpClient,
   stage: {
     installed: boolean;
@@ -200,7 +210,7 @@ export const inspectDeployedEdge = Effect.fn(function* (
     staging: stage.staging === true,
     installed,
   });
-  const builds = yield* inspectBuilds(read, account, installed);
+  const builds = yield* inspectBuilds({ read, account, installed, client });
   const access = yield* inspectNativeAccess({
     read,
     account,

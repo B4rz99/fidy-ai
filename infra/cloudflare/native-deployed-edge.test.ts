@@ -18,7 +18,10 @@ const resultFor = (path: string): unknown => {
   }
   return [];
 };
-const inspect = (secret: string, buildResult: readonly unknown[] = []) => {
+const inspect = (secret: string, buildResult: readonly unknown[] = []): {
+  seen: string[];
+  operation: ReturnType<typeof inspectDeployedEdge>;
+} => {
   const seen: string[] = [];
   const client = HttpClient.make((request) => {
     const url = new URL(request.url);
@@ -27,7 +30,7 @@ const inspect = (secret: string, buildResult: readonly unknown[] = []) => {
     const builds = triggers.includes(url.pathname);
     if (builds) seen.push(url.pathname);
     expect(request.headers.authorization).toBe(builds ? "Bearer fixture-builds" : "Bearer fixture-release");
-    const result = builds ? buildResult : resultFor(url.pathname);
+    const result = url.pathname === triggers[0] ? buildResult : resultFor(url.pathname);
     return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json({ success: true, result })));
   });
   const operation = inspectDeployedEdge(

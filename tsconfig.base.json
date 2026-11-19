@@ -210,7 +210,6 @@
           {
             "include": [
               "./infra/cloudflare/inspect-worker-drift.ts",
-              "./infra/cloudflare/production-resources.ts",
               "./infra/cloudflare/native-storage-resources.ts"
             ],
             "options": {

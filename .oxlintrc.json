@@ -310,6 +310,7 @@
       "files": [
         "infra/cloudflare/alchemy.run.ts",
         "infra/cloudflare/alchemy.storage.ts",
+        "infra/cloudflare/alchemy.site.ts",
         "infra/docs/alchemy.run.ts",
         "infra/cloudflare/alchemy-drift.run.ts",
         "apps/server/cloudflare/core-worker.ts",

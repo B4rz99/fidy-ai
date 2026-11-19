@@ -2,22 +2,7 @@ import { CategoryTaxonomyRelease } from "../../apps/server/src/core/categories/c
 import { compatibleCategoryReleases } from "../../apps/server/src/core/categories/operations";
 import { ReleaseSmokeFailed } from "./smoke-exchange";
 import { verifyStableWorkerIdentity } from "./stable-worker-identity";
-import { RecoveryRequest, recoverStaged } from "./staged-recovery";
-import { ReleaseHttpLive } from "./release-http";
-/// <reference types="bun-types" />
-
-import {
-  Cause,
-  Context,
-  Data,
-  Effect,
-  Config as EffectConfig,
-  Layer,
-  Option,
-  Schedule,
-  Schema,
-  Stream,
-} from "effect";
+import { Cause, Data, Effect, Option, Schema, Stream } from "effect";
 import {
   FetchHttpClient,
   HttpBody,
@@ -26,23 +11,14 @@ import {
   type HttpClientResponse,
 } from "effect/http";
 import { SmokeIdentity } from "../../apps/server/cloudflare/runtime/release-smoke/contract";
-import {
-  type RetentionCompatibilityPort,
-  decodeRetentionVersionRevision,
-  requireRetentionMigration,
-  requireRetentionRollback,
-  retentionCompatibilityRevision,
-} from "./retention-migration-compatibility";
-import { releaseCleanup } from "./release-cleanup";
 import { freeTierWorkerObservability } from "./worker-observability";
-import { type RollbackPort, RollbackReceipt, releaseRollback } from "./release-rollback";
-import { rollbackCompatible, verifiedVersionResources } from "./rollback-compatibility";
+import { type RollbackPort } from "./release-rollback";
+import { verifiedVersionResources } from "./rollback-compatibility";
 import {
   type Deployment,
   type ReleasePort,
-  type ReleaseSnapshot,
   releaseController,
-  releaseSchemas,
+  type releaseSchemas,
 } from "./release-controller";
 
 const VersionId = SmokeIdentity.fields.workerVersionId;
@@ -89,27 +65,6 @@ const UpdatingStateEntry = Schema.Struct({
   old: Schema.Struct({ attr: ResourceAttributes }),
 });
 const StateMap = Schema.Record(Schema.String, Schema.Unknown);
-const Commands = Schema.Literals([
-  "recover-staged",
-  "verify-retirement",
-  "verify-retention-migration",
-  "capture",
-  "stage",
-  "promote",
-  "rollback",
-  "cleanup",
-  "report",
-  "inspect",
-  "isolate",
-  "isolate-schema",
-]);
-const SmokeAttestation = Schema.Struct({
-  revision: SmokeIdentity.fields.gitRevision,
-  publicVersionId: VersionId,
-  coreVersionId: VersionId,
-  synthetic: Schema.Literals(["passed", "deferred-d1-quota"]),
-  oauthAvailability: Schema.Literals(["passed", "deferred-d1-quota"]),
-});
 const healthSchema = Schema.Struct({
   status: Schema.Literal("available"),
   gitRevision: SmokeIdentity.fields.gitRevision,
@@ -131,10 +86,7 @@ const DeploymentRejection = Schema.Struct({
     })
   ),
 });
-const inspectionHistoryLimit = 5;
-const recoveryUnavailableStatus = 503;
-const origin = "https://api.fidyapp.com";
-class ReleaseFailure extends Data.TaggedError("ReleaseFailure")<{ message: string }> {}
+export class ReleaseFailure extends Data.TaggedError("ReleaseFailure")<{ message: string }> {}
 
 /** CLI failures report only owned release messages, never foreign errors or provider values. */
 export const releaseFailureMessage = (cause: Cause.Cause<unknown>): string => {
@@ -150,7 +102,7 @@ const Json = Schema.fromJsonString(Schema.Unknown);
 const decodeJson = Schema.decodeUnknownEffect(Json);
 const encodeJson = Schema.encodeSync(Json);
 
-type Config = Readonly<{
+export type ProductionReleaseConfig = Readonly<{
   account: string;
   token: string;
   revision: string;
@@ -159,8 +111,8 @@ type Config = Readonly<{
   file: string;
   smokeProof: string;
   smokeAttestationFile: string;
-  recoveryDeployments: Option.Option<{ public: string; core: string }>;
 }>;
+type Config = ProductionReleaseConfig;
 const config = (): Config => {
   const environment = process.env;
   const decoded = Schema.decodeUnknownOption(
@@ -189,12 +141,6 @@ const config = (): Config => {
     file: decoded.value.RELEASE_SNAPSHOT_FILE,
     smokeProof: decoded.value.SMOKE_PROOF,
     smokeAttestationFile: decoded.value.SMOKE_ATTESTATION_FILE,
-    recoveryDeployments: Schema.decodeUnknownOption(
-      Schema.Struct({ public: VersionId, core: VersionId })
-    )({
-      public: environment.RECOVERY_PUBLIC_DEPLOYMENT_ID,
-      core: environment.RECOVERY_CORE_DEPLOYMENT_ID,
-    }),
   };
 };
 
@@ -261,166 +207,6 @@ const providerJson = Effect.fn(
   Effect.provideService(HttpClient.TracerDisabledWhen, () => true)
 );
 
-type RecoveryAccessConfig = Pick<Config, "account" | "token"> &
-  Readonly<{ issuer: string; operatorEmail: string }>;
-const AccessApplication = Schema.Struct({
-  id: Schema.NonEmptyString,
-  domain: Schema.String,
-  type: Schema.String,
-  aud: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),
-  session_duration: Schema.String,
-  allowed_idps: Schema.Array(Schema.String),
-});
-const emptyAccessRules = Schema.optional(Schema.NullOr(Schema.Tuple([])));
-const RecoveryPolicy = Schema.Struct({
-  decision: Schema.Literal("allow"),
-  name: Schema.Literal("recovery-operator"),
-  session_duration: Schema.Literal("15m"),
-  include: Schema.Tuple([Schema.Record(Schema.String, Schema.Unknown)]),
-  exclude: emptyAccessRules,
-  require: emptyAccessRules,
-});
-const readAccess = <A, E>(
-  env: RecoveryAccessConfig & Readonly<{ client: HttpClient.HttpClient }>,
-  path: string,
-  schema: Schema.Codec<A, E>
-): Effect.Effect<A, Error> =>
-  providerJson(
-    HttpClientRequest.get(
-      `https://api.cloudflare.com/client/v4/accounts/${env.account}/access/${path}`,
-      { headers: { authorization: `Bearer ${env.token}` } }
-    )
-  ).pipe(
-    Effect.provideService(HttpClient.HttpClient, env.client),
-    Effect.flatMap(
-      Schema.decodeUnknownEffect(Schema.Struct({ success: Schema.Literal(true), result: schema }))
-    ),
-    Effect.map((value) => value.result)
-  );
-const recoveryApplication = Effect.fn(function* (
-  env: RecoveryAccessConfig,
-  client: HttpClient.HttpClient
-) {
-  const raw = yield* providerJson(
-    HttpClientRequest.get(
-      `https://api.cloudflare.com/client/v4/accounts/${env.account}/access/apps?per_page=100`,
-      { headers: { authorization: `Bearer ${env.token}` } }
-    )
-  ).pipe(Effect.provideService(HttpClient.HttpClient, client));
-  const inventory = yield* Schema.decodeUnknownEffect(
-    Schema.Struct({
-      success: Schema.Literal(true),
-      result: Schema.Array(AccessApplication),
-      result_info: Schema.Struct({ total_count: Schema.Int }),
-    })
-  )(raw);
-  if (inventory.result_info.total_count !== inventory.result.length) {
-    return yield* Effect.fail(Error("Incomplete Access inventory"));
-  }
-  const matches = inventory.result.filter(
-    (app) => app.domain === "api.fidyapp.com/internal/support-recovery"
-  );
-  const app = matches[0];
-  if (
-    matches.length !== 1 ||
-    app?.type !== "self_hosted" ||
-    app.session_duration !== "15m" ||
-    app.allowed_idps.length !== 1
-  ) {
-    return yield* Effect.fail(Error("Recovery Access application missing"));
-  }
-  return app;
-});
-const verifyRecoveryOperator = Effect.fn(function* (
-  env: RecoveryAccessConfig,
-  app: typeof AccessApplication.Type,
-  client: HttpClient.HttpClient
-) {
-  const [policy] = yield* readAccess(
-    { ...env, client },
-    `apps/${encodeURIComponent(app.id)}/policies`,
-    Schema.Tuple([RecoveryPolicy])
-  );
-  const rule = yield* Schema.decodeUnknownEffect(
-    Schema.Struct({ group: Schema.Struct({ id: Schema.NonEmptyString }) })
-  )(policy.include[0]);
-  if (encodeJson(policy.include) !== encodeJson([{ group: { id: rule.group.id } }])) {
-    return yield* Effect.fail(Error("Recovery group rule mismatch"));
-  }
-  const group = yield* readAccess(
-    { ...env, client },
-    `groups/${encodeURIComponent(rule.group.id)}`,
-    Schema.Struct({
-      name: Schema.Literal("recovery-operator"),
-      include: Schema.Array(Schema.Unknown),
-      exclude: emptyAccessRules,
-      require: emptyAccessRules,
-    })
-  );
-  if (encodeJson(group.include) !== encodeJson([{ email: { email: env.operatorEmail } }])) {
-    return yield* Effect.fail(Error("Recovery group membership mismatch"));
-  }
-  const identityId = app.allowed_idps[0];
-  if (identityId === undefined) return yield* Effect.fail(Error("Recovery identity missing"));
-  yield* readAccess(
-    { ...env, client },
-    `identity_providers/${encodeURIComponent(identityId)}`,
-    Schema.Struct({ type: Schema.Literal("onetimepin") })
-  );
-  const organization = yield* readAccess(
-    { ...env, client },
-    "organizations",
-    Schema.Struct({ auth_domain: Schema.String })
-  );
-  if (env.issuer !== `https://${organization.auth_domain}`) {
-    return yield* Effect.fail(Error("Recovery issuer mismatch"));
-  }
-});
-const verifyRecoveryCandidate = Effect.fn(function* (
-  env: RecoveryAccessConfig & Readonly<{ client: HttpClient.HttpClient }>,
-  audience: string,
-  core: Readonly<{ name: string; version: string }>
-) {
-  const candidate = yield* providerJson(
-    HttpClientRequest.get(
-      `https://api.cloudflare.com/client/v4/accounts/${env.account}/workers/scripts/${encodeURIComponent(core.name)}/versions/${encodeURIComponent(core.version)}`,
-      { headers: { authorization: `Bearer ${env.token}` } }
-    )
-  ).pipe(
-    Effect.provideService(HttpClient.HttpClient, env.client),
-    Effect.flatMap(Schema.decodeUnknownEffect(IsolationVersion))
-  );
-  const bindingMatches = (name: string, text: string): boolean => {
-    const bindings = candidate.result.resources.bindings.filter((binding) => binding.name === name);
-    return bindings.length === 1 && bindings[0]?.type === "plain_text" && bindings[0].text === text;
-  };
-  if (
-    candidate.result.id !== core.version ||
-    !bindingMatches("CLOUDFLARE_ACCESS_ISSUER", env.issuer) ||
-    !bindingMatches("CLOUDFLARE_ACCESS_AUDIENCE", audience)
-  ) {
-    return yield* Effect.fail(Error("Recovery candidate bindings mismatch"));
-  }
-});
-/** Observe real Access resources; environment variable presence is not operator authority. */
-export const verifyRecoveryAccess = Effect.fn(
-  function* (
-    env: RecoveryAccessConfig,
-    client: HttpClient.HttpClient,
-    core: Readonly<{ name: string; version: string }>
-  ) {
-    const app = yield* recoveryApplication(env, client);
-    yield* verifyRecoveryOperator(env, app, client);
-    yield* verifyRecoveryCandidate({ ...env, client }, app.aud, core);
-  },
-  Effect.mapError(
-    () =>
-      new ReleaseFailure({
-        message: "Release staging refused: support recovery Access configuration is unverified",
-      })
-  )
-);
-
 /** Require default execution on the exact candidate; live settings may describe another version. */
 export const verifyCoreDefaultPlacement = Effect.fn(function* (
   env: Pick<Config, "account" | "token">,
@@ -457,26 +243,44 @@ export const verifyCoreDefaultPlacement = Effect.fn(function* (
 });
 
 /** Script settings are independent of gradual code uploads; verify privacy before staging. */
+const VerifiedObservability = Schema.Struct({
+  success: Schema.Literal(true),
+  result: Schema.Struct({
+    observability: Schema.Struct({
+      enabled: Schema.Literal(true),
+      redact_query_string: Schema.Literal(true),
+      issues: Schema.Struct({ enabled: Schema.Literal(true) }),
+      logs: Schema.Struct({
+        enabled: Schema.Literal(true),
+        invocation_logs: Schema.Literal(false),
+        persist: Schema.Literal(true),
+      }),
+    }),
+  }),
+});
+export const verifyReleaseObservability = Effect.fn(function* (
+  env: Pick<Config, "account" | "token">,
+  name: string,
+  client: HttpClient.HttpClient
+) {
+  const base = `https://api.cloudflare.com/client/v4/accounts/${env.account}/workers/scripts/${encodeURIComponent(name)}`,
+    headers = { authorization: `Bearer ${env.token}` };
+  yield* providerJson(HttpClientRequest.get(`${base}/settings`, { headers })).pipe(
+    Effect.provideService(HttpClient.HttpClient, client),
+    Effect.flatMap(Schema.decodeUnknownEffect(VerifiedObservability)),
+    Effect.mapError(
+      () =>
+        new ReleaseFailure({
+          message: "Release staging refused: private operational observability is unverified",
+        })
+    )
+  );
+});
 export const configureReleaseObservability = Effect.fn(function* (
   env: Pick<Config, "account" | "token">,
   names: ReadonlyArray<string>,
   client: HttpClient.HttpClient
 ) {
-  const response = Schema.Struct({
-    success: Schema.Literal(true),
-    result: Schema.Struct({
-      observability: Schema.Struct({
-        enabled: Schema.Literal(true),
-        redact_query_string: Schema.Literal(true),
-        issues: Schema.Struct({ enabled: Schema.Literal(true) }),
-        logs: Schema.Struct({
-          enabled: Schema.Literal(true),
-          invocation_logs: Schema.Literal(false),
-          persist: Schema.Literal(true),
-        }),
-      }),
-    }),
-  });
   for (const name of names) {
     const base = `https://api.cloudflare.com/client/v4/accounts/${env.account}/workers/scripts/${encodeURIComponent(name)}`;
     const headers = { authorization: `Bearer ${env.token}` };
@@ -503,16 +307,7 @@ export const configureReleaseObservability = Effect.fn(function* (
         ),
       })
     ).pipe(Effect.provideService(HttpClient.HttpClient, client));
-    yield* providerJson(HttpClientRequest.get(`${base}/settings`, { headers })).pipe(
-      Effect.provideService(HttpClient.HttpClient, client),
-      Effect.flatMap(Schema.decodeUnknownEffect(response)),
-      Effect.mapError(
-        () =>
-          new ReleaseFailure({
-            message: "Release staging refused: private operational observability is unverified",
-          })
-      )
-    );
+    yield* verifyReleaseObservability(env, name, client);
   }
 });
 const toolingRefusal = (stream: ReadableStream<Uint8Array>): Promise<Option.Option<string>> => {
@@ -818,10 +613,7 @@ export const decodeWorkerReceipts = (output: string): WorkerReceipts =>
 export const decodeCaptureWorkerReceipts = (output: string): WorkerReceipts =>
   decodeWorkerReceiptsWithMode(output, "capture");
 
-const workersFromState = Effect.fn(function* (
-  mode: "capture" | "completed" = "completed",
-  stack = "FidyCloudflare"
-) {
+const workersFromState = Effect.fn(function* (mode: "capture" | "completed", stack: string) {
   const rawState = yield* shell([
     "bun",
     "../../node_modules/alchemy/bin/alchemy.js",
@@ -854,7 +646,7 @@ const stableIdentity = Effect.fn(function* (
     coreVersionId: string;
     proof: string;
   },
-  releaseOrigin = origin
+  releaseOrigin: string
 ) {
   const health = yield* Schema.decodeUnknownEffect(healthSchema)(
     yield* providerJson(HttpClientRequest.get(`${releaseOrigin}/health`))
@@ -986,7 +778,7 @@ const readStablePair = Effect.fn(function* (
     proof: string;
     client: HttpClient.HttpClient;
   },
-  releaseOrigin = origin
+  releaseOrigin: string
 ) {
   const { publicDeployment, coreDeployment } = yield* Effect.all(
     {
@@ -1054,211 +846,6 @@ const verifyTaxonomyOverlap = Effect.fn(function* (
   }
 });
 
-const capture = Effect.fn(function* (
-  port: ReleasePort,
-  env: Config,
-  client: HttpClient.HttpClient
-) {
-  const workers = yield* workersFromState("capture");
-  // The pinned Alchemy provider falls back to a direct 100% PUT when its previous Worker
-  // output has no hash. Never let that branch masquerade as a candidate upload.
-  if (!workers.public.hasRolloutBaseline || !workers.core.hasRolloutBaseline) {
-    return yield* new ReleaseFailure({
-      message: "Release capture blocked: Alchemy Worker rollout baseline is unavailable",
-    });
-  }
-  const stablePair = yield* readStablePair({
-    port,
-    workers,
-    proof: env.smokeProof,
-    client,
-  });
-  const snapshot = yield* releaseController
-    .captureRelease(port, {
-      revision: env.revision,
-      ...stablePair.identity,
-      publicName: workers.public.workerName,
-      coreName: workers.core.workerName,
-    })
-    .pipe(
-      Effect.mapError(
-        () => new ReleaseFailure({ message: "Release capture could not create a stable snapshot" })
-      )
-    );
-  if (
-    snapshot.public.stableVersionId !== stablePair.publicStable ||
-    snapshot.core.stableVersionId !== stablePair.coreStable
-  ) {
-    return yield* new ReleaseFailure({
-      message: "Stable Worker deployments changed during capture",
-    });
-  }
-  yield* verifyTaxonomyOverlap(snapshot);
-  yield* writeFile(env.file, encodeJson(snapshot));
-});
-const stage = Effect.fn(function* (port: ReleasePort, env: Config, client: HttpClient.HttpClient) {
-  const snapshot = yield* Schema.decodeUnknownEffect(releaseSchemas.snapshot)(
-    yield* readFile(env.file)
-  );
-  const workers = yield* workersFromState();
-  if (
-    workers.public.workerName !== snapshot.public.name ||
-    workers.core.workerName !== snapshot.core.name ||
-    Option.isNone(workers.public.versionId) ||
-    Option.isNone(workers.core.versionId)
-  ) {
-    return yield* Effect.fail(Error("Alchemy candidate receipts are incomplete"));
-  }
-  yield* configureReleaseObservability(env, [snapshot.public.name, snapshot.core.name], client);
-  yield* verifyCoreDefaultPlacement(
-    env,
-    { name: snapshot.core.name, version: workers.core.versionId.value },
-    client
-  );
-  const recovery = yield* Schema.decodeUnknownEffect(
-    Schema.Struct({
-      CLOUDFLARE_ACCESS_ISSUER: Schema.String.check(
-        Schema.isPattern(/^https:\/\/[a-z0-9-]+\.cloudflareaccess\.com$/u)
-      ),
-      RECOVERY_OPERATOR_EMAIL: Schema.NonEmptyString,
-    })
-  )(process.env).pipe(
-    Effect.mapError(
-      () =>
-        new ReleaseFailure({
-          message: "Release staging refused: support recovery Access configuration is unverified",
-        })
-    )
-  );
-  yield* verifyRecoveryAccess(
-    {
-      ...env,
-      issuer: recovery.CLOUDFLARE_ACCESS_ISSUER,
-      operatorEmail: recovery.RECOVERY_OPERATOR_EMAIL,
-    },
-    client,
-    { name: snapshot.core.name, version: workers.core.versionId.value }
-  );
-  const result = yield* releaseController.stageRelease(port, snapshot, {
-    publicVersionId: workers.public.versionId.value,
-    coreVersionId: workers.core.versionId.value,
-  });
-  yield* writeFile(env.file, encodeJson(result));
-});
-
-const isolate = Effect.fn(function* ({
-  port,
-  env,
-  client,
-  expected,
-}: Readonly<{
-  port: ReleasePort;
-  env: Config;
-  client: HttpClient.HttpClient;
-  expected: Readonly<{ publicVersionId: string; coreVersionId: string }>;
-}>) {
-  const snapshot = yield* Schema.decodeUnknownEffect(releaseSchemas.snapshot)(
-    yield* readFile(env.file)
-  );
-  const workers = yield* workersFromState();
-  if (
-    workers.public.workerName !== snapshot.public.name ||
-    workers.core.workerName !== snapshot.core.name ||
-    Option.isNone(workers.public.versionId) ||
-    Option.isNone(workers.core.versionId)
-  ) {
-    return yield* new ReleaseFailure({ message: "Isolation candidate receipts are incomplete" });
-  }
-  const candidate = {
-    publicVersionId: workers.public.versionId.value,
-    coreVersionId: workers.core.versionId.value,
-  };
-  yield* Effect.all(
-    [
-      verifyIsolationCandidate(env, client, {
-        name: snapshot.public.name,
-        version: candidate.publicVersionId,
-      }),
-      verifyIsolationCandidate(env, client, {
-        name: snapshot.core.name,
-        version: candidate.coreVersionId,
-      }),
-    ],
-    { concurrency: 2 }
-  );
-  yield* proveRecoveryCorePrivate(env, client, snapshot.core.name);
-  const result = yield* releaseController.isolateRelease(port, snapshot, {
-    candidate,
-    expected,
-    proveIsolation: (version) =>
-      proveRecoveryIsolation(client, env.smokeProof, version).pipe(
-        Effect.andThen(proveRecoveryCorePrivate(env, client, snapshot.core.name))
-      ),
-  });
-  yield* writeFile(env.file, encodeJson({ snapshot, ...result }));
-});
-
-const IsolationVersion = Schema.Struct({
-  success: Schema.Literal(true),
-  result: Schema.Struct({
-    id: VersionId,
-    resources: Schema.Struct({
-      bindings: Schema.Array(
-        Schema.Struct({
-          name: Schema.String,
-          type: Schema.String,
-          text: Schema.optional(Schema.String),
-        })
-      ),
-    }),
-  }),
-});
-const verifyIsolationCandidate = Effect.fn(function* (
-  env: Config,
-  client: HttpClient.HttpClient,
-  worker: { name: string; version: string }
-) {
-  const { name, version } = worker;
-  const raw = yield* providerJson(
-    HttpClientRequest.get(
-      `https://api.cloudflare.com/client/v4/accounts/${env.account}/workers/scripts/${encodeURIComponent(name)}/versions/${version}`,
-      { headers: { authorization: `Bearer ${env.token}` } }
-    )
-  ).pipe(Effect.provideService(HttpClient.HttpClient, client));
-  const candidate = yield* Schema.decodeUnknownEffect(IsolationVersion)(raw);
-  if (
-    candidate.result.id !== version ||
-    !candidate.result.resources.bindings.some(
-      (binding) =>
-        binding.name === "RECOVERY_ISOLATION" &&
-        binding.type === "plain_text" &&
-        binding.text === "isolated"
-    )
-  ) {
-    return yield* new ReleaseFailure({ message: "Candidate does not enforce recovery isolation" });
-  }
-});
-
-const proveRecoveryIsolation = Effect.fn(
-  function* (client: HttpClient.HttpClient, proof: string, version: string) {
-    const response = yield* client.execute(
-      HttpClientRequest.get(`${origin}/web/providers/disclosure`, {
-        headers: { "x-fidy-smoke-proof": proof },
-      })
-    );
-    if (
-      response.status !== recoveryUnavailableStatus ||
-      response.headers["x-fidy-recovery-isolation"] !== "isolated" ||
-      response.headers["x-fidy-smoke-worker-version"] !== version
-    ) {
-      return yield* new ReleaseFailure({
-        message: "Public recovery isolation not confirmed; Core unchanged",
-      });
-    }
-  },
-  Effect.retry({ schedule: Schedule.spaced("500 millis"), times: 6 })
-);
-
 const proveRecoveryCorePrivate = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
@@ -1313,166 +900,6 @@ const proveRecoveryCorePrivate = Effect.fn(function* (
     return yield* new ReleaseFailure({ message: "Recovery refused: Core is publicly reachable" });
   }
 });
-const stablePairUnchanged = Effect.fn(function* (port: ReleasePort, snapshot: ReleaseSnapshot) {
-  const publicDeployment = yield* port.current(snapshot.public.name);
-  const coreDeployment = yield* port.current(snapshot.core.name);
-  const publicStable = yield* releaseController.servingVersion(publicDeployment);
-  const coreStable = yield* releaseController.servingVersion(coreDeployment);
-  return (
-    publicStable === snapshot.public.stableVersionId && coreStable === snapshot.core.stableVersionId
-  );
-});
-const cleanup = Effect.fn(function* (port: ReleasePort, env: Config) {
-  const exists = yield* Effect.tryPromise({
-    try: () => Bun.file(env.file).exists(),
-    catch: () => new ReleaseFailure({ message: "Release snapshot unavailable" }),
-  });
-  if (!exists) return;
-  const raw = yield* readFile(env.file);
-  const snapshot = Schema.decodeUnknownOption(Schema.Struct({ snapshot: Schema.Unknown }))(raw);
-  const original = Option.isSome(snapshot)
-    ? (yield* Schema.decodeUnknownEffect(releaseSchemas.staged)(raw)).snapshot
-    : yield* Schema.decodeUnknownEffect(releaseSchemas.snapshot)(raw);
-  const workers = yield* workersFromState();
-  if (
-    workers.public.workerName !== original.public.name ||
-    workers.core.workerName !== original.core.name
-  ) {
-    return yield* Effect.fail(Error("Worker identity changed during cleanup"));
-  }
-  if (Option.isNone(workers.public.versionId) || Option.isNone(workers.core.versionId)) {
-    if (yield* stablePairUnchanged(port, original)) return;
-    return yield* Effect.fail(Error("Candidate identity unavailable for guarded cleanup"));
-  }
-  yield* releaseCleanup.cleanRelease(port, original, {
-    publicVersionId: workers.public.versionId.value,
-    coreVersionId: workers.core.versionId.value,
-  });
-});
-const recoverAbandoned = Effect.fn(function* (
-  port: ReleasePort,
-  env: Config,
-  client: HttpClient.HttpClient
-) {
-  const workers = yield* workersFromState();
-  if (Option.isNone(workers.public.versionId) || Option.isNone(workers.core.versionId)) {
-    return yield* new ReleaseFailure({
-      message: "Recovery refused: Alchemy candidate identities unavailable",
-    });
-  }
-  const inspected = env.recoveryDeployments;
-  if (Option.isNone(inspected)) {
-    return yield* new ReleaseFailure({
-      message: "Recovery requires both inspected deployment IDs",
-    });
-  }
-  const request = yield* Schema.decodeEffect(RecoveryRequest)({
-    revision: env.revision,
-    public: {
-      name: workers.public.workerName,
-      deploymentId: inspected.value.public,
-      candidateVersionId: workers.public.versionId.value,
-    },
-    core: {
-      name: workers.core.workerName,
-      deploymentId: inspected.value.core,
-      candidateVersionId: workers.core.versionId.value,
-    },
-  }).pipe(
-    Effect.mapError(
-      () => new ReleaseFailure({ message: "Recovery requires both inspected deployment IDs" })
-    )
-  );
-  yield* recoverStaged(
-    {
-      ...port,
-      verifyPair: (pair) =>
-        stableIdentity({ ...pair, proof: env.smokeProof }).pipe(
-          Effect.provideService(HttpClient.HttpClient, client),
-          Effect.mapError(
-            (failure) =>
-              new ReleaseFailure({
-                message:
-                  failure instanceof ReleaseSmokeFailed
-                    ? `Recovery serving-pair proof rejected: ${failure.reason}`
-                    : "Recovery serving-pair proof unavailable",
-              })
-          ),
-          Effect.asVoid
-        ),
-    },
-    request
-  );
-});
-const inspectTraffic = Effect.fn(function* (env: Config, client: HttpClient.HttpClient) {
-  const workers = yield* workersFromState("capture");
-  const deployments = Effect.fn(function* (name: string) {
-    const raw = yield* providerJson(
-      HttpClientRequest.get(
-        `https://api.cloudflare.com/client/v4/accounts/${env.account}/workers/scripts/${encodeURIComponent(name)}/deployments`,
-        { headers: { authorization: `Bearer ${env.token}` } }
-      )
-    ).pipe(Effect.provideService(HttpClient.HttpClient, client));
-    const response = yield* Schema.decodeUnknownEffect(ListResponse)(raw);
-    return response.result.deployments.slice(0, inspectionHistoryLimit).map(asDeployment);
-  });
-  const observed = {
-    public: yield* deployments(workers.public.workerName),
-    core: yield* deployments(workers.core.workerName),
-  };
-  yield* writeFile(Bun.stdout, `${encodeJson(observed)}\n`);
-});
-const reportTraffic = Effect.fn(function* (port: ReleasePort, env: Config) {
-  const exists = yield* Effect.tryPromise({
-    try: () => Bun.file(env.file).exists(),
-    catch: () => new ReleaseFailure({ message: "Release snapshot unavailable" }),
-  });
-  if (!exists) {
-    const promotedExists = yield* Effect.tryPromise({
-      try: () => Bun.file(`${env.file}.promoted`).exists(),
-      catch: () => new ReleaseFailure({ message: "Release receipt unavailable" }),
-    });
-    if (!promotedExists) {
-      yield* writeFile(Bun.stdout, "Worker traffic unavailable: no release snapshot\n");
-      return;
-    }
-  }
-  const raw = exists
-    ? yield* readFile(env.file)
-    : (yield* Schema.decodeUnknownEffect(RollbackReceipt)(yield* readFile(`${env.file}.promoted`)))
-        .release;
-  const isStaged = Schema.decodeUnknownOption(Schema.Struct({ snapshot: Schema.Unknown }))(raw);
-  const snapshot = Option.isSome(isStaged)
-    ? (yield* Schema.decodeUnknownEffect(releaseSchemas.staged)(raw)).snapshot
-    : yield* Schema.decodeUnknownEffect(releaseSchemas.snapshot)(raw);
-  const describe = (name: string): Effect.Effect<Deployment | { readonly status: "unavailable" }> =>
-    port.current(name).pipe(Effect.orElseSucceed(() => ({ status: "unavailable" }) as const));
-  const observed = {
-    public: yield* describe(snapshot.public.name),
-    core: yield* describe(snapshot.core.name),
-  };
-  yield* writeFile(Bun.stdout, `${encodeJson(observed)}\n`);
-});
-const promote = Effect.fn(function* (port: ReleasePort, env: Config) {
-  const staged = yield* Schema.decodeUnknownEffect(releaseSchemas.staged)(
-    yield* readFile(env.file)
-  );
-  const attestationRaw = yield* readFile(env.smokeAttestationFile);
-  const attestation = yield* Schema.decodeUnknownEffect(SmokeAttestation)(attestationRaw);
-  if (
-    attestation.revision !== staged.snapshot.revision ||
-    attestation.publicVersionId !== staged.publicVersionId ||
-    attestation.coreVersionId !== staged.coreVersionId
-  ) {
-    return yield* Effect.fail(Error("Smoke attestation does not match candidate uploads"));
-  }
-  const promoted = yield* releaseController.promoteRelease(port, staged, {
-    exactPairPassed: true,
-    middlePairPassed: true,
-    rollbackEligible: true,
-  });
-  yield* writeFile(`${env.file}.promoted`, encodeJson({ release: staged, promoted }));
-});
 
 const versionResources = Effect.fn(function* (
   env: Config,
@@ -1488,49 +915,6 @@ const versionResources = Effect.fn(function* (
   return yield* Effect.try(() =>
     verifiedVersionResources({ raw, versionId: worker.id, revision: worker.revision })
   );
-});
-const retentionCompatibilityPort = (
-  port: ReleasePort,
-  env: Config,
-  client: HttpClient.HttpClient
-): RetentionCompatibilityPort => ({
-  current: port.current,
-  revision: (name, id) =>
-    providerJson(
-      HttpClientRequest.get(
-        `https://api.cloudflare.com/client/v4/accounts/${env.account}/workers/scripts/${encodeURIComponent(name)}/versions/${encodeURIComponent(id)}`,
-        { headers: { authorization: `Bearer ${env.token}` } }
-      )
-    ).pipe(
-      Effect.provideService(HttpClient.HttpClient, client),
-      Effect.flatMap((raw) =>
-        Effect.try(() => decodeRetentionVersionRevision({ raw, expectedId: id }))
-      )
-    ),
-  requireCompatible: (revision) =>
-    shell([
-      "git",
-      "-C",
-      "../..",
-      "merge-base",
-      "--is-ancestor",
-      retentionCompatibilityRevision,
-      revision,
-    ]).pipe(Effect.asVoid),
-});
-
-const verifyRetentionMigration = Effect.fn(function* (
-  port: ReleasePort,
-  env: Config,
-  client: HttpClient.HttpClient
-) {
-  const snapshot = yield* Schema.decodeUnknownEffect(releaseSchemas.snapshot)(
-    yield* readFile(env.file)
-  );
-  if (snapshot.revision !== env.revision) {
-    return yield* Effect.fail(Error("Retention migration snapshot belongs to another release"));
-  }
-  yield* requireRetentionMigration(retentionCompatibilityPort(port, env, client), snapshot);
 });
 
 const rollbackSource = Effect.fn(function* (snapshot: typeof releaseSchemas.snapshot.Type) {
@@ -1579,45 +963,6 @@ const rollbackSource = Effect.fn(function* (snapshot: typeof releaseSchemas.snap
   }
   return { changedPaths, workflowPaths: [...workflowPaths] };
 });
-const rollbackCompatibility = Effect.fn(function* (
-  env: Config,
-  client: HttpClient.HttpClient,
-  release: typeof RollbackReceipt.Type.release
-) {
-  yield* verifyTaxonomyOverlap(release.snapshot);
-  const source = yield* rollbackSource(release.snapshot);
-  const pairs = [
-    {
-      name: release.snapshot.public.name,
-      stable: release.snapshot.public.stableVersionId,
-      candidate: release.publicVersionId,
-    },
-    {
-      name: release.snapshot.core.name,
-      stable: release.snapshot.core.stableVersionId,
-      candidate: release.coreVersionId,
-    },
-  ];
-  let compatible = true;
-  for (const pair of pairs) {
-    const stable = yield* versionResources(env, client, {
-      name: pair.name,
-      id: pair.stable,
-      revision: release.snapshot.stableRevision,
-    });
-    const candidate = yield* versionResources(env, client, {
-      name: pair.name,
-      id: pair.candidate,
-      revision: release.snapshot.revision,
-    });
-    compatible &&= rollbackCompatible({
-      stable,
-      candidate,
-      ...source,
-    });
-  }
-  return compatible;
-});
 const rollbackPort = (
   port: ReleasePort,
   env: Config,
@@ -1638,66 +983,6 @@ const rollbackPort = (
     }),
 });
 
-const rollback = Effect.fn(function* (
-  port: ReleasePort,
-  env: Config,
-  client: HttpClient.HttpClient
-) {
-  const { release, promoted } = yield* Schema.decodeUnknownEffect(RollbackReceipt)(
-    yield* readFile(`${env.file}.promoted`)
-  );
-  yield* requireRetentionRollback(retentionCompatibilityPort(port, env, client), release.snapshot);
-  const compatible = yield* rollbackCompatibility(env, client, release);
-  const guarded = rollbackPort(port, env, client);
-  yield* releaseRollback.restore(guarded, { release, promoted, compatible });
-});
-
-const verifyRetirement = Effect.fn(function* (port: ReleasePort, env: Config) {
-  const receipt = yield* Schema.decodeUnknownEffect(RollbackReceipt)(
-    yield* readFile(`${env.file}.promoted`)
-  );
-  if (receipt.release.snapshot.revision !== env.revision) {
-    return yield* Effect.fail(Error("Retirement receipt does not belong to this release"));
-  }
-  yield* releaseController.verifyRetirement(port, receipt);
-});
-
-const runRouting = Effect.fn(function* ({
-  command,
-  port,
-  env,
-  client,
-}: {
-  command: "capture" | "stage" | "promote" | "rollback" | "cleanup" | "report" | "inspect";
-  port: ReleasePort;
-  env: Config;
-  client: HttpClient.HttpClient;
-}) {
-  switch (command) {
-    case "capture":
-      yield* capture(port, env, client);
-      break;
-    case "stage":
-      yield* stage(port, env, client);
-      break;
-    case "promote":
-      yield* promote(port, env);
-      break;
-    case "rollback":
-      yield* rollback(port, env, client);
-      break;
-    case "cleanup":
-      yield* cleanup(port, env);
-      break;
-    case "report":
-      yield* reportTraffic(port, env);
-      break;
-    case "inspect":
-      yield* inspectTraffic(env, client);
-      break;
-  }
-});
-
 /** Shared provider observations and routing primitives for the independently named native installation. */
 export const releaseEvidence = {
   config,
@@ -1713,52 +998,3 @@ export const releaseEvidence = {
   providerJson,
   rollbackPort,
 };
-export { ReleaseFailure };
-export type { Config as ProductionReleaseConfig };
-if (import.meta.main) {
-  const program = Effect.gen(function* () {
-    const command = yield* Schema.decodeUnknownEffect(Commands)(process.argv[2]);
-    const environment = config();
-    const services = yield* Layer.build(ReleaseHttpLive);
-    const client = Context.get(services, HttpClient.HttpClient);
-    const port = releasePort({ env: environment, client });
-    if (command === "verify-retirement") {
-      yield* verifyRetirement(port, environment);
-    } else if (command === "verify-retention-migration") {
-      yield* verifyRetentionMigration(port, environment, client);
-    } else if (command === "recover-staged") {
-      yield* recoverAbandoned(port, environment, client);
-    } else if (command === "isolate" || command === "isolate-schema") {
-      const expected =
-        command === "isolate"
-          ? {
-              publicVersionId: "047a8004-15bd-4959-b064-0f020a529089",
-              coreVersionId: "fa578c5f-2e94-4507-ba70-1fe4fe4dd150",
-            }
-          : {
-              publicVersionId: yield* EffectConfig.schema(
-                VersionId,
-                "SCHEMA_CUTOVER_PUBLIC_VERSION_ID"
-              ),
-              coreVersionId: yield* EffectConfig.schema(
-                VersionId,
-                "SCHEMA_CUTOVER_CORE_VERSION_ID"
-              ),
-            };
-      yield* isolate({ port, env: environment, client, expected });
-    } else {
-      yield* runRouting({ command, port, env: environment, client });
-    }
-    yield* writeFile(Bun.stdout, "Production release routing step passed.\n");
-  }).pipe(Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }), Effect.scoped);
-  await Effect.runPromise(
-    program.pipe(
-      Effect.catchCause((cause) =>
-        Effect.sync(() => {
-          process.stderr.write(`${releaseFailureMessage(cause)}\n`);
-          process.exitCode = 1;
-        })
-      )
-    )
-  );
-}

@@ -1,3 +1,4 @@
+import { verifyNativeSmoke } from "./native-release-smoke";
 import { isDeepStrictEqual } from "node:util";
 import { verifyIncumbentFence, verifyIncumbentMail } from "./native-incumbent-fence";
 import { readProviderList } from "./native-provider-list";
@@ -35,9 +36,12 @@ import { ReleaseHttpLive } from "./release-http";
 import {
   type ProductionReleaseConfig as Config,
   ReleaseFailure,
+  configureReleaseObservability,
   releaseEvidence,
   releaseFailureMessage,
   releasePort,
+  verifyCoreDefaultPlacement,
+  verifyReleaseObservability,
 } from "./production-release";
 import { type ReleasePort, releaseController, releaseSchemas } from "./release-controller";
 import { RollbackReceipt, releaseRollback } from "./release-rollback";
@@ -351,6 +355,8 @@ const verifyDeployedWorkers = Effect.fn(function* (
       yield* Effect.try(() =>
         requireDeployedRole({ role, revision: env.revision, bindings: version.bindings })
       );
+      yield* verifyReleaseObservability(env, name, client);
+      if (role === "Core") yield* verifyCoreDefaultPlacement(env, { name, version: id }, client);
       if (role === "Core" || role === "Smoke" || role === "ForwardedEmail") {
         yield* proveRecoveryCorePrivate(env, client, name);
       }
@@ -468,6 +474,14 @@ const verifyFirstInstall = Effect.fn(function* (
   port: ReleasePort
 ) {
   const installed = yield* installedRelease(env, client, { port, staging: false });
+  const contractDigest = yield* ReleaseConfig.String("CONTRACT_DIGEST"),
+    identity = { gitRevision: env.revision, contractDigest };
+  const smoke = yield* verifyNativeSmoke({
+    api: origin,
+    headers: { "x-fidy-smoke-proof": env.smokeProof },
+    public: { ...identity, workerVersionId: installed.publicVersionId },
+    core: { ...identity, workerVersionId: installed.coreVersionId },
+  }).pipe(Effect.provideService(HttpClient.HttpClient, client));
   const synthetic = yield* Effect.forEach(nativeHostPairs(yield* hostMode), (pair) =>
     verifySyntheticUsers(env, client, pair).pipe(
       Effect.map((result) => ({ api: pair.api, ...result }))
@@ -476,7 +490,7 @@ const verifyFirstInstall = Effect.fn(function* (
   if (new Set(synthetic.map((result) => result.callback.workflow)).size !== 1) {
     return yield* Effect.fail(Error("Staged hosts reached different native payment attempts"));
   }
-  yield* writeFile(env.smokeAttestationFile, encodeJson({ ...installed, synthetic }));
+  yield* writeFile(env.smokeAttestationFile, encodeJson({ ...installed, smoke, synthetic }));
 });
 
 const coordinateIdentity = (
@@ -704,6 +718,108 @@ const requireClosedWorkers = Effect.fn(function* (
     });
   }
 });
+const probeReleaseTransport = Effect.fn(function* (
+  env: Config,
+  versions: {
+    public: string;
+    core: string;
+    publicRevision: string;
+    coreRevision: string;
+    publicDigest: string;
+    coreDigest: string;
+  },
+  stable: StorageTransition["snapshot"]
+) {
+  const headers = smokeHeaders({
+    config: {
+      SMOKE_PROOF: env.smokeProof,
+      PUBLIC_WORKER_NAME: stable.public.name,
+      CORE_WORKER_NAME: stable.core.name,
+      CORE_VERSION_ID: versions.core,
+    },
+    publicVersion: Option.some(versions.public),
+  });
+  return yield* verifyNativeSmoke({
+    api: origin,
+    headers,
+    public: {
+      workerVersionId: versions.public,
+      gitRevision: versions.publicRevision,
+      contractDigest: versions.publicDigest,
+    },
+    core: {
+      workerVersionId: versions.core,
+      gitRevision: versions.coreRevision,
+      contractDigest: versions.coreDigest,
+    },
+  });
+});
+type Descriptions = Effect.Success<ReturnType<typeof deployedStorage>>["descriptions"];
+type ProbePair = { descriptions: Descriptions; rollback: boolean };
+const storageProbeOwners = (
+  release: StorageTransition,
+  descriptions: Descriptions
+): Map<string, ReturnType<typeof verifiedStoragePair>["description"]> =>
+  new Map([
+    [release.snapshot.core.stableVersionId, descriptions.serving.description],
+    [release.coreVersionId, descriptions.candidate.description],
+  ]);
+const probePromotionPairs = Effect.fn(function* (
+  { env, client }: { env: Config; client: HttpClient.HttpClient },
+  release: StorageTransition,
+  { descriptions, rollback }: ProbePair
+) {
+  const owners = storageProbeOwners(release, descriptions);
+  const probe = (
+    publicId: string,
+    coreId: string,
+    revision: string
+  ): ReturnType<typeof requireTestedStorage> =>
+    requireTestedStorage(env, client, {
+      ingress: publicId,
+      core: coreId,
+      revision,
+      ingressName: release.snapshot.public.name,
+      coreName: release.snapshot.core.name,
+      owners,
+    });
+  const candidateDigest = yield* ReleaseConfig.String("CONTRACT_DIGEST");
+  const verifiedPair = Effect.fn(function* (
+    publicVersion: string,
+    coreVersion: string,
+    coreRevision: string
+  ) {
+    yield* probe(publicVersion, coreVersion, coreRevision);
+    const stable = release.snapshot;
+    const priorPublic = publicVersion === stable.public.stableVersionId,
+      priorCore = coreVersion === stable.core.stableVersionId;
+    yield* probeReleaseTransport(
+      env,
+      {
+        public: publicVersion,
+        core: coreVersion,
+        publicRevision: priorPublic ? stable.stableRevision : stable.revision,
+        coreRevision,
+        publicDigest: priorPublic ? stable.stableContractDigest : candidateDigest,
+        coreDigest: priorCore ? stable.stableContractDigest : candidateDigest,
+      },
+      stable
+    ).pipe(Effect.provideService(HttpClient.HttpClient, client));
+  });
+  yield* verifiedPair(release.publicVersionId, release.coreVersionId, release.snapshot.revision);
+  yield* verifiedPair(
+    release.snapshot.public.stableVersionId,
+    release.coreVersionId,
+    release.snapshot.revision
+  );
+  if (rollback) {
+    yield* verifiedPair(
+      release.snapshot.public.stableVersionId,
+      release.snapshot.core.stableVersionId,
+      release.snapshot.stableRevision
+    );
+  }
+});
 const storageCompatibility = Effect.fn(function* (
   { env, client }: { env: Config; client: HttpClient.HttpClient },
   release: Pick<
@@ -727,36 +843,7 @@ const storageCompatibility = Effect.fn(function* (
   const rollback =
     overlap.rollback && [ingress, core].every((pair) => rollbackCompatible({ ...pair, ...source }));
   if (phase === "promote") {
-    const owners = new Map([
-      [release.snapshot.core.stableVersionId, descriptions.serving.description],
-      [release.coreVersionId, descriptions.candidate.description],
-    ]);
-    const probe = (
-      publicId: string,
-      coreId: string,
-      revision: string
-    ): ReturnType<typeof requireTestedStorage> =>
-      requireTestedStorage(env, client, {
-        ingress: publicId,
-        core: coreId,
-        revision,
-        ingressName: release.snapshot.public.name,
-        coreName: release.snapshot.core.name,
-        owners,
-      });
-    yield* probe(release.publicVersionId, release.coreVersionId, release.snapshot.revision);
-    yield* probe(
-      release.snapshot.public.stableVersionId,
-      release.coreVersionId,
-      release.snapshot.revision
-    );
-    if (rollback) {
-      yield* probe(
-        release.snapshot.public.stableVersionId,
-        release.snapshot.core.stableVersionId,
-        release.snapshot.stableRevision
-      );
-    }
+    yield* probePromotionPairs({ env, client }, release, { descriptions, rollback });
   }
   return { rollback };
 });
@@ -904,9 +991,29 @@ const rollbackNative = Effect.fn(function* (
   );
 });
 
+const prepareDiagnostics = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  port: ReleasePort
+) {
+  yield* releaseController.requireTrunk(port, env.revision);
+  if (
+    (yield* ReleaseConfig.String("NATIVE_STORAGE_ADMISSION")) !== "closed" ||
+    (yield* ReleaseConfig.String("GITHUB_EVENT_NAME")) !== "workflow_dispatch"
+  ) {
+    return yield* Effect.fail(Error("Protected closed dispatch required"));
+  }
+  yield* nativeWorkerReceipts("completed");
+  yield* configureReleaseObservability(
+    env,
+    [...Object.values(installationNames), "fidy-native-smoke-" + env.revision],
+    client
+  );
+});
 const commands = {
   "capture-hosts": captureHostStage,
   "attach-hosts": attachCanonicalHosts,
+  "prepare-diagnostics": prepareDiagnostics,
   "verify-fresh-target": verifyFreshTarget,
   "prepare-closed-edge": prepareClosedEdge,
   "verify-upload": verifyStorageUpload,
@@ -922,6 +1029,7 @@ if (import.meta.main) {
       Schema.Literals([
         "capture-hosts",
         "attach-hosts",
+        "prepare-diagnostics",
         "verify-fresh-target",
         "prepare-closed-edge",
         "verify-upload",

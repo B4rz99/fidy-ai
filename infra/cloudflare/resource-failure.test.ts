@@ -5,7 +5,7 @@ import { it } from "@effect/vitest";
 import { Cause, Effect, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { describe, expect } from "vitest";
-import { resourceFailureMessage } from "./production-resources";
+import { resourceFailureMessage } from "./resource-failure";
 
 describe("resource release refusal diagnostics", () => {
   it("retains a migration refusal and its provider cause after serialization", () => {

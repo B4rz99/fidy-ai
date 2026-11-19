@@ -1,261 +1,78 @@
 import { describe, expect, it } from "vitest";
-import { layer } from "@effect/vitest";
-import { BunFileSystem } from "@effect/platform-bun";
-import { Effect, FileSystem } from "effect";
 
-const repositoryRoot = `${process.cwd()}/../..`;
-const workflow = await Bun.file(`${repositoryRoot}/.github/workflows/production.yml`).text();
-const checks = await Bun.file(`${repositoryRoot}/.github/workflows/ci.yml`).text();
-const cliRelease = await Bun.file(`${repositoryRoot}/.github/workflows/cli-release.yml`).text();
-const manualRollback = await Bun.file(
-  `${repositoryRoot}/.github/workflows/production-rollback.yml`
-).text();
-const inspection = await Bun.file(
-  `${repositoryRoot}/.github/workflows/production-inspect.yml`
-).text();
-const profileAction = await Bun.file(
-  `${repositoryRoot}/.github/actions/configure-alchemy-cloudflare-profile/action.yml`
-).text();
-const preflight = await Bun.file(
-  `${repositoryRoot}/infra/cloudflare/scripts/production-preflight.sh`
-).text();
+const repositoryRoot = new URL("../../../", import.meta.url);
+const source = (path: string): Promise<string> => Bun.file(new URL(path, repositoryRoot)).text();
+const workflow = await source(".github/workflows/native-storage-release.yml");
+const checks = await source(".github/workflows/ci.yml");
+const cliRelease = await source(".github/workflows/cli-release.yml");
+const profileAction = await source(
+  ".github/actions/configure-alchemy-cloudflare-profile/action.yml"
+);
+const ordered = (text: string, parts: readonly string[]): void => {
+  let previous = -1;
+  for (const part of parts) {
+    const next = text.indexOf(part);
+    expect(next, part).toBeGreaterThan(previous);
+    previous = next;
+  }
+};
 
-describe("Production release workflow policy", () => {
-  layer(BunFileSystem.layer)((it) => {
-    it.effect("accepts only successful verified normal-traffic smoke outcomes", () =>
-      Effect.gen(function* () {
-        const postSmoke = workflow
-          .split("      - name: Probe normal Worker traffic after promotion")[1]
-          ?.split("\n      - name:")[0];
-        const script = postSmoke?.split("        run: |\n")[1]?.replace(/^ {10}/gmu, "");
-        expect(script).toBeDefined();
-        const fs = yield* FileSystem.FileSystem;
-        const fixture = yield* fs.makeTempDirectoryScoped({ prefix: "fidy-smoke-output-" });
-        const verifier = `${fixture}/bun`,
-          sleeper = `${fixture}/sleep`;
-        const messageFile = `${fixture}/message`;
-        yield* fs.writeFileString(
-          verifier,
-          '#!/bin/sh\ncat "$SMOKE_FIXTURE_FILE"\nexit "$SMOKE_FIXTURE_EXIT"\n',
-          { mode: 0o700 }
-        );
-        yield* fs.writeFileString(sleeper, "#!/bin/sh\nexit 0\n", { mode: 0o700 });
-        for (const entry of [
-          { message: "Production smoke passed.", code: 0, expected: true },
-          {
-            message:
-              "Production identity, routing and independent edge verification passed; D1 synthetic work and OAuth availability deferred: daily quota exhausted.",
-            code: 0,
-            expected: false,
-          },
-          {
-            message:
-              "Production identity, routing and independent edge verification passed; D1 synthetic work and OAuth availability deferred: daily quota exhausted.",
-            code: 1,
-            expected: false,
-          },
-          { message: "unverified success", code: 0, expected: false },
-        ]) {
-          yield* fs.writeFileString(messageFile, `${entry.message}\n`);
-          const result = Bun.spawnSync(["/bin/bash", "-e", "-c", script ?? "exit 1"], {
-            env: {
-              PATH: `${fixture}:/usr/bin:/bin`,
-              RUNNER_TEMP: fixture,
-              SMOKE_FIXTURE_FILE: messageFile,
-              SMOKE_FIXTURE_EXIT: String(entry.code),
-            },
-          });
-          expect(result.exitCode === 0).toBe(entry.expected);
-        }
-      }).pipe(Effect.scoped)
-    );
-  });
-
-  it("verifies the live database only on protected opt-in inspection without changing traffic", () => {
-    expect(inspection).toContain("verify_database:");
-    expect(inspection).toContain("type: boolean\n        default: false");
-    expect(inspection).toContain("if: github.ref == 'refs/heads/trunk'");
-    expect(inspection).toContain("environment: production");
-    expect(inspection).toContain("group: production-deployment");
-    expect(inspection).toContain("cancel-in-progress: false");
-    const capture = inspection.indexOf("bun production-release.ts capture");
-    const identity = inspection.indexOf('echo "RELEASE_GIT_SHA=$(jq -r .stableRevision');
-    const proof = inspection.indexOf("bun verify-production-smoke.ts promoted");
-    const fullPass = inspection.indexOf("grep -Fxq 'Production smoke passed.'");
-    expect(capture).toBeGreaterThan(0);
-    expect(identity).toBeGreaterThan(capture);
-    expect(proof).toBeGreaterThan(identity);
-    expect(fullPass).toBeGreaterThan(proof);
-    expect(
-      inspection.match(
-        /if: \$\{\{ inputs.verify_database \|\| inputs.verify_bancolombia_sandbox \}\}/gu
-      )
-    ).toHaveLength(3);
-    expect(inspection).toContain("verify_bancolombia_sandbox:");
-    expect(inspection).toContain(
-      "VERIFY_BANCOLOMBIA_SANDBOX: ${{ inputs.verify_bancolombia_sandbox && 'enabled' || 'disabled' }}"
-    );
-    expect(
-      inspection.indexOf("Bancolombia sandbox application authentication passed.")
-    ).toBeGreaterThan(fullPass);
-    expect(inspection).not.toContain("secrets.BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM");
-    expect(inspection).toContain("set -euo pipefail");
-    expect(inspection).not.toMatch(
-      /production-resources\.ts|production-release\.ts (stage|promote|rollback)/u
-    );
-  });
-  it("defers resource retirement until normal traffic and edge checks pass in the same release", () => {
-    const upload = workflow.indexOf("bun production-resources.ts upload");
-    const promote = workflow.indexOf("bun production-release.ts promote");
-    const postSmoke = workflow.indexOf("id: post_smoke");
-    const edge = workflow.lastIndexOf("bun verify-production-smoke.ts promoted");
-    const retire = workflow.indexOf("bun production-resources.ts retire");
-    const drift = workflow.indexOf("- name: Reject post-deployment Cloudflare drift");
-    expect(upload).toBeGreaterThan(0);
-    expect(upload).toBeLessThan(promote);
-    expect(promote).toBeLessThan(postSmoke);
-    expect(postSmoke).toBeLessThan(edge);
-    expect(edge).toBeLessThan(retire);
-    expect(retire).toBeLessThan(drift);
-    const retirementStep = workflow.slice(workflow.lastIndexOf("- name:", retire), drift);
-    expect(retirementStep).toContain(
-      "if: ${{ !inputs.isolate_schema_cutover && (success() && steps.post_smoke.outcome == 'success') }}"
-    );
-    expect(workflow).not.toContain("alchemy deploy --stage production --yes --no-input");
-  });
-  it("keeps the sandbox signing binding identical across every topology planning phase", () => {
-    const planningSteps = workflow
-      .split("\n      - name:")
-      .filter((step) => /alchemy plan|bun production-resources\.ts (upload|retire)/u.test(step));
-    expect(planningSteps).toHaveLength(4);
-    for (const step of planningSteps) {
-      expect(step).toContain(
-        "BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM: ${{ secrets.BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM }}"
-      );
+describe("protected native releases", () => {
+  it("requires an explicit protected trunk dispatch, serialized with all production writers", () => {
+    for (const gate of [
+      "workflow_dispatch:",
+      "github.ref == 'refs/heads/trunk'",
+      "environment: production",
+      "group: production-deployment",
+      "cancel-in-progress: false",
+      "persist-credentials: false",
+    ]) {
+      expect(workflow).toContain(gate);
     }
-    const jobEnv = workflow.slice(workflow.indexOf("    env:\n"), workflow.indexOf("    steps:\n"));
-    expect(jobEnv).not.toContain("BANCOLOMBIA_SANDBOX_PRIVATE_KEY_PEM");
-  });
-  it("keeps ordinary admission behind isolated proof and the existing release gates", () => {
-    const steps = [
-      "bun production-release.ts isolate\n",
-      "run: bun verify-production-smoke.ts promoted",
-      "- name: Capture the proven isolated baseline for ordinary release gates",
-      "- name: Upload ordinary candidates after isolated recovery proof",
-      "run: bun production-release.ts stage",
-      "run: bun diagnose-smoke-routing.ts",
-      "run: bun verify-production-smoke.ts\n",
-      "run: bun production-release.ts promote",
-    ].map((step) => workflow.indexOf(step));
-    expect(steps.every((step) => step > 0)).toBe(true);
-    expect(steps).toEqual([...steps].sort((left, right) => left - right));
-    expect(workflow).toContain("recover_deleted_queue:");
-    expect(workflow).toContain('RECOVERY_ISOLATION: ""');
-    expect(workflow).toContain(
-      "(!inputs.recover_deleted_queue || steps.recovery_capture.outcome == 'success')"
-    );
-  });
-  it("does not offer an incident dispatch that bypasses candidate smoke or drift", () => {
-    expect(workflow).toContain("workflow_dispatch:");
-    expect(workflow).toContain("environment: production");
-    expect(workflow).not.toMatch(
-      /BOOTSTRAP_RELEASE|RESUME_RELEASE|bootstrap-capture|bootstrap-verify|resume-capture/u
-    );
-    const driftGate = workflow.indexOf("bash infra/cloudflare/scripts/production-preflight.sh");
-    const upload = workflow.indexOf("bun production-resources.ts upload");
-    expect(driftGate).toBeGreaterThan(0);
-    expect(driftGate).toBeLessThan(upload);
-    expect(workflow).not.toContain("check-topology-drift.sh resume");
-  });
-  it("holds incumbent deployment on trunk push while preserving serialized protected dispatch", () => {
     expect(workflow).not.toContain("  push:");
-    expect(workflow).toContain("  workflow_dispatch:");
-    expect(workflow).toContain("github.event_name == 'workflow_dispatch'");
-    expect(workflow).toContain("group: production-deployment");
-    expect(workflow).toContain("cancel-in-progress: false");
-    expect(workflow).toContain("environment: production");
-  });
-
-  it("initializes runner-local release files in a step before capture", () => {
-    const jobEnv = workflow.slice(workflow.indexOf("    env:\n"), workflow.indexOf("    steps:\n"));
-    const paths = workflow.indexOf("- name: Configure release file paths");
-    const capture = workflow.indexOf("- name: Capture stable Worker deployments");
-
-    expect(jobEnv).not.toContain("${{ runner.");
-    expect(paths).toBeGreaterThan(0);
-    expect(paths).toBeLessThan(capture);
-    expect(workflow).toContain(
-      'echo "RELEASE_SNAPSHOT_FILE=$RUNNER_TEMP/fidy-release.json" >> "$GITHUB_ENV"'
-    );
-    expect(workflow).toContain(
-      'echo "SMOKE_ATTESTATION_FILE=$RUNNER_TEMP/fidy-release-verification.json" >> "$GITHUB_ENV"'
+    expect(workflow).not.toMatch(
+      /production-resources.ts|verify-retirement|deferred-d1-quota|SCHEMA_CUTOVER/u
     );
   });
-
-  it("builds exact release metadata before planning the Alchemy topology", () => {
-    const metadata = workflow.indexOf("CONTRACT_DIGEST=");
-    const webBuild = workflow.indexOf("bash infra/cloudflare/scripts/production-preflight.sh");
-    const plan = workflow.indexOf("alchemy plan");
-
-    expect(workflow).toContain("RELEASE_GIT_SHA: ${{ github.sha }}");
-    expect(metadata).toBeGreaterThan(0);
-    expect(metadata).toBeLessThan(webBuild);
-    expect(webBuild).toBeLessThan(plan);
-    expect(preflight).toContain("bun run --cwd apps/web build:production");
-  });
-
-  it("keeps the CI Alchemy profile ephemeral and environment-backed", () => {
-    expect(profileAction).toContain('echo "ALCHEMY_HOME=$RUNNER_TEMP/alchemy" >> "$GITHUB_ENV"');
-    expect(workflow).toContain(
-      "ALCHEMY_PROFILE: ci\n      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}\n      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}"
-    );
-    expect(profileAction).toContain("bunx alchemy profile create");
-    expect(profileAction).toContain("bunx alchemy profile edit");
-    expect(profileAction).toContain("apiToken=env:CLOUDFLARE_API_TOKEN");
-    expect(profileAction).toContain("accountId=env:CLOUDFLARE_ACCOUNT_ID");
-    expect(workflow).toContain("PAT_ADMISSION_KEY: ${{ secrets.PAT_ADMISSION_KEY }}");
-  });
-
-  it("provides complete production runtime config to Alchemy plan and deploy", () => {
-    const planStart = workflow.indexOf("- name: Plan the complete Cloudflare topology");
-    const trunkRecheck = workflow.indexOf("- name: Recheck trunk immediately before deployment");
-    const deployStart = workflow.indexOf(
-      "- name: Upload zero-traffic Worker candidates with Alchemy"
-    );
-    const verification = workflow.indexOf("- name: Verify the migrated public topology");
-    const planStep = workflow.slice(planStart, trunkRecheck);
-    const deployStep = workflow.slice(deployStart, verification);
-    const runtimeConfiguration = [
-      "KAPSO_API_KEY: ${{ secrets.KAPSO_API_KEY }}",
-      "KAPSO_WEBHOOK_SECRET: ${{ secrets.KAPSO_WEBHOOK_SECRET }}",
-      "WHATSAPP_BUSINESS_PORTFOLIO_ID: ${{ secrets.WHATSAPP_BUSINESS_PORTFOLIO_ID }}",
-      "RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}",
-      "WOMPI_ENVIRONMENT: ${{ secrets.WOMPI_ENVIRONMENT }}",
-      "WOMPI_PUBLIC_KEY: ${{ secrets.WOMPI_PUBLIC_KEY }}",
-      "WOMPI_PRIVATE_KEY: ${{ secrets.WOMPI_PRIVATE_KEY }}",
-      "WOMPI_INTEGRITY_SECRET: ${{ secrets.WOMPI_INTEGRITY_SECRET }}",
-      "CLOUDFLARE_ACCESS_ISSUER: ${{ secrets.CLOUDFLARE_ACCESS_ISSUER }}",
-    ];
-
-    expect(planStart).toBeGreaterThan(0);
-    expect(deployStart).toBeGreaterThan(0);
-    const jobEnv = workflow.slice(workflow.indexOf("    env:\n"), workflow.indexOf("    steps:\n"));
-    expect(jobEnv).toContain("RECOVERY_OPERATOR_EMAIL: ${{ vars.RECOVERY_OPERATOR_EMAIL }}");
-    expect(workflow).not.toContain("CLOUDFLARE_ACCESS_AUDIENCE:");
-    for (const binding of runtimeConfiguration) {
-      expect(planStep).toContain(binding);
-      expect(deployStep).toContain(binding);
+  it("pins every external Action and builds release metadata before the first provider mutation", () => {
+    for (const action of workflow.matchAll(/uses: ([^\s]+)/gu)) {
+      const name = action[1] ?? "";
+      if (!name.startsWith("./")) expect(name).toMatch(/@[a-f0-9]{40}$/u);
     }
-    expect(planStep).toContain("bash scripts/check-production-runtime-config.sh");
-    expect(deployStep).toContain("bash scripts/check-production-runtime-config.sh");
-    expect(planStep.indexOf("bash scripts/check-production-runtime-config.sh")).toBeLessThan(
-      planStep.indexOf("alchemy plan")
-    );
-    expect(deployStep.indexOf("bash scripts/check-production-runtime-config.sh")).toBeLessThan(
-      deployStep.indexOf("bun production-resources.ts upload")
-    );
+    ordered(workflow, [
+      "Require closed admission",
+      "actions/checkout@",
+      "Bind evidence to the protected revision",
+      "RELEASE_SNAPSHOT_FILE=$RUNNER_TEMP",
+      "Check the reviewed release policy",
+      "native-storage-resources.ts first-install",
+    ]);
+    expect(workflow).toContain("RELEASE_GIT_SHA: ${{ github.sha }}");
+    expect(workflow).toContain("SMOKE_PROOF: ${{ secrets.NATIVE_STORAGE_SMOKE_PROOF }}");
+    expect(profileAction).toContain("ALCHEMY_HOME=$RUNNER_TEMP/alchemy");
+    expect(profileAction).toContain("apiToken=env:CLOUDFLARE_API_TOKEN");
   });
-
+  it("verifies candidate and mixed owner versions before promotion and permits only proven rollback", () => {
+    ordered(workflow, [
+      "native-storage-release.ts capture",
+      "native-storage-resources.ts upload",
+      "native-storage-release.ts stage",
+      "native-storage-release.ts promote",
+      "native-storage-release.ts verify",
+      "steps.promote.outcome == 'success' && steps.verify.outcome == 'failure'",
+      "native-storage-release.ts rollback",
+      "actions/upload-artifact@",
+    ]);
+  });
+  it("limits host staging to the verified native scope and rechecks the installed browser", () => {
+    ordered(workflow, [
+      "bun run build:production",
+      "bun native-storage-resources.ts stage-hosts",
+      "bun native-storage-release.ts attach-hosts",
+      "bun native-storage-release.ts verify",
+    ]);
+    expect(workflow).toContain('test "$NATIVE_STORAGE_ADMISSION" = closed');
+  });
   it("validates code only before merge and publishes CLI releases from protected trunk", () => {
     expect(checks).toContain("  pull_request:");
     expect(checks).not.toContain("  push:");
@@ -266,144 +83,9 @@ describe("Production release workflow policy", () => {
   });
 
   it("keeps ordinary tests in PR validation and builds the exact production artifacts", () => {
-    expect(preflight).not.toContain("workers.test.ts");
-    expect(preflight).not.toContain("test:hosted-inference");
-    expect(preflight).not.toContain("test:workers-ai-conformance");
-    expect(preflight).toContain("bun run --cwd apps/site build:production");
-    expect(preflight).toContain("bun run --cwd apps/web build:production");
-  });
-
-  it("rejects provider drift before planning and approves the non-interactive deploy", () => {
-    const profile = workflow.indexOf(
-      "uses: ./.github/actions/configure-alchemy-cloudflare-profile"
-    );
-    const preflightGate = workflow.indexOf("bash infra/cloudflare/scripts/production-preflight.sh");
-    const bootstrap = preflight.indexOf("provider cloudflare bootstrap");
-    const providerDriftGate = preflight.indexOf("bash scripts/check-topology-drift.sh");
-    const plan = workflow.indexOf("alchemy plan");
-
-    expect(profile).toBeGreaterThan(0);
-    expect(preflightGate).toBeGreaterThan(profile);
-    expect(preflightGate).toBeLessThan(plan);
-    expect(bootstrap).toBeGreaterThan(0);
-    expect(bootstrap).toBeLessThan(providerDriftGate);
-    expect(preflight).toContain(
-      "../../node_modules/alchemy/bin/alchemy.js provider cloudflare bootstrap"
-    );
-    expect(workflow).toContain("bun production-resources.ts upload");
-  });
-
-  it("requires the reviewed desired edge policy before planning", () => {
-    const policyGate = workflow.indexOf("bun ./verify-edge-policy.ts");
-    const plan = workflow.indexOf("alchemy plan --stage production --no-input");
-
-    expect(policyGate).toBeGreaterThan(0);
-    expect(policyGate).toBeLessThan(plan);
-  });
-
-  it("keeps Alchemy the topology authority and restricts the routing escape hatch", () => {
-    const capture = workflow.indexOf("bun production-release.ts capture");
-    const upload = workflow.indexOf("bun production-resources.ts upload");
-    const stage = workflow.indexOf("bun production-release.ts stage");
-    const smoke = workflow.indexOf("run: bun verify-production-smoke.ts\n");
-    const promotion = workflow.indexOf("bun production-release.ts promote");
-    expect(capture).toBeGreaterThan(0);
-    expect(capture).toBeLessThan(upload);
-    expect(upload).toBeLessThan(stage);
-    const earlyRouting = workflow.indexOf("bun diagnose-smoke-routing.ts");
-    const settledRouting = workflow.indexOf("SMOKE_ROUTING_WINDOW: settled");
-    expect(stage).toBeLessThan(earlyRouting);
-    expect(earlyRouting).toBeLessThan(settledRouting);
-    expect(settledRouting).toBeLessThan(smoke);
-    expect(smoke).toBeLessThan(promotion);
-    expect(workflow).toContain("bun production-release.ts cleanup");
-    expect(workflow).toContain("bun infra/cloudflare/production-release.ts report");
-    expect(workflow).toContain("Observed Worker traffic:");
-    expect(workflow).toContain("failure() && steps.capture.outcome == 'success'");
-    expect(workflow).toContain("alchemy plan --stage production --no-input");
-    expect(workflow).toContain("bun production-resources.ts upload");
-    expect(workflow).not.toContain("wrangler");
-    expect(workflow).not.toContain("cloudflare/wrangler.json");
-    expect(workflow).not.toContain("cloudflare/wrangler-action");
-  });
-
-  it("probes normal traffic before guarded rollback and alerts when release recovery fails", () => {
-    const promote = workflow.indexOf("bun production-release.ts promote");
-    const probe = workflow.indexOf(
-      "bun verify-production-smoke.ts promoted",
-      workflow.indexOf("id: post_smoke")
-    );
-    const rollback = workflow.indexOf("bun production-release.ts rollback");
-    const alert = workflow.indexOf("Email operator if deployment failed");
-    expect(promote).toBeGreaterThan(0);
-    expect(promote).toBeLessThan(probe);
-    expect(probe).toBeLessThan(rollback);
-    expect(rollback).toBeLessThan(alert);
-    expect(workflow).toContain("steps.post_smoke.outcome == 'failure'");
-    expect(workflow).toContain("steps.promote.outcome == 'success'");
-    expect(manualRollback).toContain("workflow_dispatch:");
-    expect(manualRollback).toContain("group: production-deployment");
-    const receiptCheck = manualRollback.indexOf("bun infra/cloudflare/verify-rollback-receipt.ts");
-    const manualWrite = manualRollback.indexOf("bun production-release.ts rollback");
-    expect(receiptCheck).toBeGreaterThan(0);
-    expect(receiptCheck).toBeLessThan(manualWrite);
-  });
-
-  it("verifies the public topology and provider state after deployment", () => {
-    const deploy = workflow.indexOf("bun production-resources.ts upload");
-    const verification = workflow.indexOf("Verify the migrated public topology");
-    const postDeploymentDrift = workflow.indexOf("Reject post-deployment Cloudflare drift");
-    const postDeploymentDriftCommand = workflow.indexOf(
-      "bash scripts/check-topology-drift.sh",
-      postDeploymentDrift
-    );
-    const releaseRecord = workflow.indexOf("Record the release");
-
-    expect(deploy).toBeLessThan(verification);
-    expect(verification).toBeLessThan(postDeploymentDrift);
-    expect(postDeploymentDriftCommand).toBeGreaterThan(postDeploymentDrift);
-    expect(postDeploymentDriftCommand).toBeLessThan(releaseRecord);
-    expect(workflow.match(/bash scripts\/check-topology-drift\.sh/gu)).toHaveLength(1);
-    expect(preflight.match(/bash scripts\/check-topology-drift\.sh/gu)).toHaveLength(1);
-    expect(workflow).not.toContain("alchemy drift --stage production --no-input");
-    expect(workflow).toContain("https://fidyapp.com/");
-    expect(workflow).toContain("https://fidyapp.com/deployment-metadata.json");
-    expect(preflight).toContain("bun run --cwd apps/site build:production");
-    expect(workflow).toContain("https://app.fidyapp.com/deployment-metadata.json");
-    expect(workflow).toContain("https://api.fidyapp.com/health");
-    expect(workflow).toContain("$RELEASE_GIT_SHA");
-    expect(workflow).toContain("$CONTRACT_DIGEST");
-  });
-
-  it("checks bounded, rejected machine requests only after the deployed topology is available", () => {
-    const deploy = workflow.indexOf("bun production-resources.ts upload");
-    const topology = workflow.indexOf("Verify the migrated public topology");
-    const smoke = workflow.lastIndexOf("bun verify-production-smoke.ts promoted");
-    const record = workflow.indexOf("Record the release");
-
-    expect(deploy).toBeLessThan(topology);
-    expect(topology).toBeLessThan(smoke);
-    expect(smoke).toBeLessThan(record);
-  });
-
-  it("rechecks trunk immediately before the Alchemy deployment", () => {
-    const plan = workflow.indexOf("alchemy plan");
-    const recheck = workflow.indexOf("Recheck trunk immediately before deployment");
-    const deploy = workflow.indexOf("bun production-resources.ts upload");
-
-    expect(plan).toBeLessThan(recheck);
-    expect(recheck).toBeLessThan(deploy);
-    expect(workflow).toContain("repos/$GITHUB_REPOSITORY/git/ref/heads/");
-    expect(workflow).toContain("--jq .object.sha");
-    expect(workflow).not.toContain("repos/$GITHUB_REPOSITORY/commits/");
-  });
-
-  it("pins every external Action to a complete commit SHA", () => {
-    const externalActions = Array.from(
-      workflow.matchAll(/^\s+(?:- )?uses: ([^./][^@\s]+)@([^\s#]+)/gmu)
-    );
-
-    expect(externalActions.length).toBeGreaterThan(0);
-    for (const action of externalActions) expect(action[2]).toMatch(/^[0-9a-f]{40}$/u);
+    for (const group of ["builds", "cloudflare-adapters", "cloudflare-infra"]) {
+      expect(checks).toContain("bun run verify -- --group " + group);
+    }
+    expect(workflow).toContain("run: bun run build:production");
   });
 });

@@ -1,3 +1,4 @@
+import { marketingSite } from "./marketing-site";
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { Config, Effect, Layer, Schema } from "effect";
@@ -144,27 +145,6 @@ const webApplication = Effect.fn(function* (release: NativeRelease) {
     workersDev: false,
   });
 });
-const localSite = Effect.fn(function* (release: NativeRelease) {
-  yield* Cloudflare.Website.StaticSite("Site", {
-    name: productionTopology.site.workerName,
-    main: "../../apps/site/cloudflare/worker.ts",
-    observability: freeTierWorkerObservability,
-    command: "bun run build:production",
-    cwd: "../../apps/site",
-    outdir: "dist",
-    env: { RELEASE_GIT_SHA: release.release.gitRevision },
-    dev: {
-      command: `bun run dev -- --host 127.0.0.1 --port ${productionTopology.site.localPort}`,
-      cwd: "../../apps/site",
-    },
-    assets: {
-      htmlHandling: "drop-trailing-slash",
-      notFoundHandling: "404-page",
-      runWorkerFirst: ["/*", "!/_astro/*", "!/*.png", "!/*.webp"],
-    },
-    workersDev: false,
-  });
-});
 export const nativeApplication = Effect.gen(function* () {
   const release = yield* nativeReleaseContext(yield* Alchemy.ALCHEMY_DEV, yield* Alchemy.Stage);
   const queues = yield* nativeQueues(release.release.gitRevision),
@@ -199,6 +179,6 @@ export const nativeApplication = Effect.gen(function* () {
     },
   });
   const web = yield* webApplication(release);
-  if (release.development) yield* localSite(release);
+  if (release.development) yield* marketingSite(release.release.gitRevision, false);
   return { apiUrl: ingress.url, webUrl: web.url };
 });

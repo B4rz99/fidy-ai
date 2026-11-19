@@ -1,11 +1,12 @@
+import { productionTopology } from "../../apps/server/cloudflare/runtime/contract";
 import { requireHostPlan, stagedAccessApplications } from "./native-host-plan";
 import * as Alchemist from "alchemy/Alchemist";
 import * as Apply from "alchemy/Apply";
 import { requireNativeResourcePlan } from "./native-graph";
-import { describePlan } from "alchemy/Plan";
+import { describePlan, describeResource } from "alchemy/Plan";
 import { Cause, Config, Effect, Option, Schema } from "effect";
 import { releaseCommand } from "./production-release";
-import { resourceFailureMessage } from "./production-resources";
+import { resourceFailureMessage } from "./resource-failure";
 import { requireNativeBindings } from "./storage-installation";
 
 const Phase = Schema.Literals(["first-install", "upload", "stage-hosts"]);
@@ -78,8 +79,50 @@ const resourceRelease = Effect.fn(function* (phase: typeof Phase.Type) {
     Effect.catchCause((cause) => Effect.fail(Error(resourceFailureMessage(cause))))
   );
 });
+const publishSite = Effect.gen(function* () {
+  yield* Config.Literal("true", "GITHUB_ACTIONS");
+  yield* Config.Literal("refs/heads/trunk", "GITHUB_REF");
+  yield* Config.Literal("workflow_dispatch", "GITHUB_EVENT_NAME");
+  const profile = yield* Config.String("ALCHEMY_PROFILE");
+  const planned = yield* Alchemist.Stack.plan({
+    target: { entrypoint: "alchemy.site.ts", stage: "production", profile },
+    operation: "deploy",
+    include: ["Site"],
+    updateStateStore: false,
+  }).pipe(Effect.mapError(() => Error("Site planning unavailable")));
+  const rows = describePlan(planned.native),
+    site = Object.values(planned.native.resources).find(
+      (node) => describeResource(node).logicalId === "Site"
+    );
+  if (
+    planned.native.selectedFqns === undefined ||
+    rows.actions.length !== 0 ||
+    rows.resources.length !== 2 ||
+    !rows.resources.every(
+      (row) =>
+        ((row.logicalId === "Site" && row.resourceType === "Cloudflare.Worker") ||
+          (row.logicalId === "Build" && row.resourceType === "Command.Build")) &&
+        ["noop", "update"].includes(row.action)
+    ) ||
+    site === undefined ||
+    !(site.action === "noop" || site.action === "update")
+  ) {
+    return yield* Effect.fail(Error("Existing Site and Build must be the only changes"));
+  }
+  const expected = Schema.Struct({
+    workerName: Schema.Literal(productionTopology.site.workerName),
+  });
+  yield* Schema.decodeUnknownEffect(expected)(site.state.attr);
+  yield* Apply.apply(planned.native, { deletions: "defer" }).pipe(
+    Effect.provide(planned.session.context),
+    Effect.uninterruptible,
+    Effect.catchCause((cause) => Effect.fail(Error(resourceFailureMessage(cause))))
+  );
+});
+
 if (import.meta.main) {
   const program = Effect.gen(function* () {
+    if (process.argv[2] === "publish-site") return yield* publishSite;
     const phase = yield* Schema.decodeUnknownEffect(Phase)(process.argv[2]);
     yield* resourceRelease(phase);
   }).pipe(Effect.provide(Alchemist.layer()), Effect.scoped);

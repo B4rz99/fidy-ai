@@ -7,7 +7,7 @@ on:
         description: Operate the isolated SQLite installation
         required: true
         type: choice
-        options: [verify, first-install, stage-hosts, rollout, rehearse-rollback]
+        options: [verify, first-install, stage-hosts, rollout, rehearse-rollback, publish-site]
 
 permissions:
   contents: read
@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   release:
-    if: ${{ github.ref == 'refs/heads/trunk' }}
+    if: ${{ github.ref == 'refs/heads/trunk' && inputs.operation != 'publish-site' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: production
@@ -68,6 +68,10 @@ jobs:
           bun native-storage-release.ts capture
           bun native-storage-resources.ts upload
           bun native-storage-release.ts stage
+      - name: Persist and read back private observability on the installed application Workers
+        if: inputs.operation == 'first-install' || inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback'
+        working-directory: infra/cloudflare
+        run: bun native-storage-release.ts prepare-diagnostics
       - name: Verify mixed and candidate versions before promoting closed admission
         id: promote
         if: inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback'
@@ -104,3 +108,29 @@ jobs:
             ${{ env.RELEASE_SNAPSHOT_FILE }}*
             ${{ env.SMOKE_ATTESTATION_FILE }}
           if-no-files-found: ignore
+
+  site:
+    if: ${{ github.ref == 'refs/heads/trunk' && inputs.operation == 'publish-site' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    env:
+      ALCHEMY_PROFILE: ci
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_GIT_SHA: ${{ github.sha }}
+      SITE_PUBLICATION: marketing-only
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/bun-runtime
+      - run: bash scripts/install-workspace.sh --ignore-scripts
+      - uses: ./.github/actions/configure-alchemy-cloudflare-profile
+      - name: Publish only the existing marketing and legal Site
+        working-directory: infra/cloudflare
+        run: |
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/trunk" --jq .object.sha)" = "$RELEASE_GIT_SHA"
+          bun native-storage-resources.ts publish-site
+          curl --fail --silent --show-error --max-time 30 --retry 3 https://fidyapp.com/deployment-metadata.json | jq -e --arg revision "$RELEASE_GIT_SHA" '.gitRevision == $revision'

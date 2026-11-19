@@ -38,7 +38,15 @@ def main():
     subprocess.run(["bun", "apps/server/scripts/prepare-d1-calibration.ts", str(out / "plan.json")], cwd=root, check=True)
     artifacts["plan"] = hashlib.sha256((out / "plan.json").read_bytes()).hexdigest()
     (out / "manifest.json").write_text(json.dumps(dict(baseline=PIN, calibration=CALIBRATION, sha256=artifacts), indent=2))
-    subprocess.run(["bun", str(HERE / "probe.mjs"), str(out)], cwd=root, check=True)
+    (out / "meter.mjs").write_bytes((HERE / "meter.mjs").read_bytes())
+    (out / "limits.json").write_text("null")
+    for mode in ("train", "bounded"):
+        subprocess.run(["bun", "build", "meter.mjs", "--target=browser", "--external=cloudflare:workers", "--external=node:*",
+                        "--outfile", "metered-core.mjs"], cwd=out, check=True)
+        subprocess.run(["bun", str(HERE / "probe.mjs"), str(out), mode], cwd=root, check=True)
+    artifacts["metered-core"] = hashlib.sha256((out / "metered-core.mjs").read_bytes()).hexdigest()
+    artifacts["limits"] = hashlib.sha256((out / "limits.json").read_bytes()).hexdigest()
+    (out / "manifest.json").write_text(json.dumps(dict(baseline=PIN, calibration=CALIBRATION, sha256=artifacts), indent=2))
 
 
 if __name__ == "__main__":

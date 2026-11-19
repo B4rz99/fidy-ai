@@ -71,7 +71,7 @@ Every crossing is untrusted regardless of its TypeScript type or vendor:
 - PAT, hosted-agent, CLI, MCP, and typed-client calls;
 - LLM prompts, tool requests, structured output, and generated presentation content;
 - emails, PDFs, CSV/XLSX files, images, voice transcripts, and screenshots;
-- D1 rows and JSON values, queue payloads, schedules, migrations, and environment configuration.
+- SQLite rows and JSON values, queue payloads, schedules, migrations, and environment configuration.
 
 ### Data handling classes
 
@@ -122,10 +122,7 @@ explicit stable `UserId` and an applicable access policy, except a deliberately 
 point that verifies its own proof. Phone numbers, provider ids, message ids, object ids, and model
 claims are evidence or input, never authority.
 
-The private Core data API replaces PostgreSQL RLS for canonical User data: public ingress has no
-D1 binding, every User-owned read or mutation carries an explicit `UserId`, and pre-subject lookups
-are narrowly scoped. The private Email Worker has a separate, narrow D1 admission and retention
-boundary; it cannot treat a sender or receipt as User authority. Possession of an opaque UUID does not confer access. Each canonical operation declares one access requirement: a PAT scope for domain operations or an
+Ingress forwards to private Core. Directory resolves only pre-subject proofs or addressable routes. The named User checks live credentials and domain authority inside its SQLite transaction, including User and subject identity on every applicable read and mutation. The private forwarded Email Worker rejects unverified inbound mail. Eligible private receipt processing and retention belong to the addressed User. Each private operation validates its own Access audience and role. Each canonical operation declares one access requirement: a PAT scope for domain operations or an
 eligible caller class for account-security operations. It governs HTTP
 authorization, MCP/tool visibility, CLI availability, hosted-agent calls, and suggested operations.
 The hosted agent uses the same authorization path as the User's own agents.
@@ -136,7 +133,7 @@ context must not mix Users.
 
 **Evidence:** trace the subject and policy from entry point through the private data API; inspect
 all object-id reads and writes; verify an under-scoped caller cannot invoke or discover the
-operation. At each applicable request, coordinator, Queue, Workflow, schedule, R2, and model-context
+operation. At each applicable request, User, Queue, Workflow, schedule, R2, and model-context
 seam, use two distinct Users to prove B cannot observe or alter A, including no partial effects on
 rejection.
 
@@ -206,7 +203,7 @@ refuses any established channel association, never replaces it. Chat sends claim
 ambiguous results never resend. Charge each send against the bounded native spend policy before egress.
 Required negative evidence covers first-claim forwarded invitations, caller/endpoint/text mismatch,
 pre-review messages, replaced attempts, denial, expiry, replay/concurrency, conflicts, rollback and
-ambiguous delivery, through authenticated ingress/Core/D1. Remove expired invitation metadata after
+ambiguous delivery, through authenticated Ingress, Core and the named User. Remove expired invitation metadata after
 one day and include associated invitations in credential erasure. Original accepted-chat handoffs
 retain their exact native reply and accepted exchange requirement until expiry; durable legal evidence remains.
 

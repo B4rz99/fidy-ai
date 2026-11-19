@@ -13,9 +13,7 @@
 | `contracts/`    | Generated public-contract artifacts                                    |
 | `src/client.ts` | Browser/CLI-safe declaration publication                               |
 
-Public ingress owns edge HTTP policy. Private Core composes server execution; per-User Durable
-Objects serialize coordinated work, while shared reads and maintenance have separate execution
-paths. Infrastructure supplies bindings and resources; domain policy stays with server owners.
+Public ingress owns edge HTTP policy. Private Core composes each transport and routes User data to its named SQLite Durable Object. Directory, Pricing, Maintenance and Erasure hold their own shared state. Infrastructure supplies bindings and resources. Domain policy stays with its server owner.
 
 ## 2. Ownership and publication
 
@@ -118,7 +116,7 @@ payment facts and commits settlement, standing, and billing Audit together. The 
 routes authenticated lifecycle evidence to the named User. The User checks its one-shot send,
 portfolio, endpoint, recipient, provider message, and event time before recording the result.
 Verified delivery can resume the Agent’s retained Turn or proactive occurrence through its private
-coordinator. In-flight and rejected effects keep their original identity.
+User store. In-flight and rejected effects keep their original identity.
 
 The User stages signed WhatsApp statement documents and eligible private Email in its R2 prefix.
 User SQLite retains each source identity, digest, original deadline, and processing intent. Queue
@@ -150,13 +148,11 @@ revision, market, parser revision, anonymization revision and expiry. Private hu
 approval. Candidate creation records no approval and the User expires the candidate alongside the
 original Email.
 
-Unmigrated paths still use D1. Canonical mutation units commit live authority, owner
-changes, accounting and Audit together. Database guards enforce ownership and revisions alongside
-per-User coordination. Shared reads preserve the same authorization and accountability boundaries.
+Core routes each User read to its named SQLite Durable Object. Credential rechecks, Consent, commercial accounting, applicable Audit, operation receipts and owner changes share the same transaction. A failed read or write aborts its partial accounting. Independent Users have separate SQLite databases. Core validates a truthful authorized result before returning public data.
 
 R2 writes and provider calls cannot join that transaction. Retained intent connects committed state
 to external execution; ambiguous outcomes require owner reconciliation. Erasure coordinates owner
-cleanup and uses an independent registry to prevent restored data from regaining authority.
+cleanup and retains independent custodian observations through the Erasure owner.
 See [atomic accountability](../../docs/adr/0029-atomic-batch-accountability-boundaries.md) and
 [statement staging](../../docs/adr/0028-statement-bytes-are-staged-outside-atomic-batches.md).
 

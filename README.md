@@ -59,10 +59,10 @@ a separate authorization authority.
 Cloudflare provides the production execution model:
 
 - **Workers** separate public ingress from the private application boundary.
-- **D1** retains authoritative application state; **Durable Objects** coordinate per-user work.
+- **SQLite Durable Objects** retain each User’s authoritative state and the separate Directory, Pricing, Maintenance and Erasure state.
 - **Queues and Workflows** handle redelivery and durable multi-step execution.
 - **R2** retains bounded private source material.
-- **Workers AI** supplies Fidy-controlled hosted inference.
+- **OpenAI** supplies the configured hosted inference through the private provider adapter.
 
 Alchemy declares the deployment topology. Specialist adapters connect WhatsApp through Kapso/Meta,
 payments through Wompi, and outbound email through Resend.

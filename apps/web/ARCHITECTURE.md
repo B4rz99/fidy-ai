@@ -47,9 +47,7 @@ Turns and supplies visible-delivery evidence; the browser does not execute the a
 
 ## Production artifact
 
-Vite produces a static application served by an assets-only Cloudflare Worker, separately from the
-API and public site. Infrastructure owns hosting and edge policy. The web build owns browser-safe
-output and artifact validation; private server implementation and credentials stay outside the bundle.
+Vite builds one assets-only application Worker for both protected and canonical installations. The actual browser hostname selects its exact API origin. Each host receives matching CSP and preconnect headers and uses its own host-only cookies. The static bundle contains public contract and release metadata. Synthetic transport signing and private provider credentials stay in the protected runner and Workers. Marketing and customer documentation have independent Workers.
 
 ## Further reading
 

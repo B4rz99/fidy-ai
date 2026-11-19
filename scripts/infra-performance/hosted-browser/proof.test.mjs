@@ -151,6 +151,20 @@ try {
     { method: "GET", verified: true, cookie: "__Host-fidy_session=synthetic" },
     { method: "GET", verified: true, cookie: "__Host-fidy_session=synthetic" },
   ]);
+  const otherViews = await page.evaluate(async (api) => {
+    const status = (path, method = "GET") =>
+      fetch(api + path, { method, credentials: "include" }).then(
+        (reply) => reply.status,
+        () => 0
+      );
+    return await Promise.all([
+      status("/dashboard/view"),
+      status("/recurring-plans?month=2026-11"),
+      status("/recurring-plans?search=unplanned&month=2026-11&view=compact"),
+      status("/dashboard/initialize", "POST"),
+    ]);
+  }, origins.api);
+  assert.deepEqual(otherViews, [noContent, noContent, 0, 0]);
 } finally {
   await browser?.close();
   await proxy.stop(true);

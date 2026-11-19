@@ -117,6 +117,58 @@ const recentRows = Schema.decodeUnknownSync(
     ),
   })
 );
+const money = Schema.Struct({ currency: Schema.String, amount: Schema.String });
+const groups = Schema.Array(
+  Schema.Struct({ currency: Schema.String, inflow: money, outflow: money })
+);
+const metric = Schema.decodeUnknownSync(Schema.Struct({ moneyGroups: groups }));
+const chart = Schema.decodeUnknownSync(
+  Schema.Struct({
+    buckets: Schema.Array(
+      Schema.Struct({
+        key: Schema.Struct({ category: Schema.Struct({ id: Schema.String }) }),
+        moneyGroups: groups,
+      })
+    ),
+  })
+);
+const budget = Schema.decodeUnknownSync(
+  Schema.Struct({ availability: Schema.Literal("available"), cap: money, spent: money })
+);
+/** @param {ReturnType<typeof projected>[]} widgets Projected leaves in calibrated layout order. */
+const verifySpending = (widgets) => {
+  const total = metric(widgets[3].result).moneyGroups;
+  assert.deepEqual(
+    total.map(({ currency, inflow, outflow }) => [currency, inflow.amount, outflow.amount]),
+    [
+      ["COP", "0", "4000"],
+      ["USD", "0", "3000"],
+    ]
+  );
+  assert.deepEqual(budget(widgets[1].result), {
+    availability: "available",
+    cap: { currency: "COP", amount: "100000" },
+    spent: { currency: "COP", amount: "2000" },
+  });
+  const buckets = chart(widgets[0].result).buckets;
+  const figures = buckets.flatMap(({ key, moneyGroups }) =>
+    moneyGroups.map(({ currency, inflow, outflow }) =>
+      [key.category.id, currency, inflow.amount, outflow.amount].join("/")
+    )
+  );
+  const prefix = "10000000-0000-4000-8000-00000000000";
+  assert.deepEqual(
+    figures.sort(),
+    [
+      "1/COP/0/2000",
+      "1/USD/0/1000",
+      "4/COP/0/1000",
+      "6/COP/0/1000",
+      "7/USD/0/1000",
+      "9/USD/0/1000",
+    ].map((entry) => prefix + entry)
+  );
+};
 /** @param {unknown} value Complete Dashboard projection. */
 const verifiedWidgets = (value) => {
   completeView(value);
@@ -132,6 +184,7 @@ const verifiedWidgets = (value) => {
     widgets.map((item) => item.widget.id),
     shape.map((_, index) => fixedWidget(index))
   );
+  verifySpending(widgets);
   const recent = widgets.find((item) => item.widget.type === "transaction-list");
   assert.ok(recent);
   const { transactions } = recentRows(recent.result);
@@ -169,6 +222,20 @@ export const freshDashboard = async (input) => {
       }),
     expectedRows
   );
+  const chartCard = page.locator('[data-widget-type="spending-chart"]');
+  await Promise.all([
+    chartCard.getByRole("region", { name: "Serie COP", exact: true }).waitFor(),
+    chartCard.getByRole("region", { name: "Serie USD", exact: true }).waitFor(),
+    page
+      .locator('[data-widget-type="budget-bar"] .dashboard-budget-values')
+      .filter({ hasText: /2[.]?000/u })
+      .waitFor(),
+    page
+      .locator('[data-widget-type="custom-metric"]')
+      .filter({ hasText: /4[.]?000/u })
+      .filter({ hasText: /3[.]?000/u })
+      .waitFor(),
+  ]);
   await painted(page);
   const milliseconds = performance.now() - start;
   const { value, http } = await consumed(reply);

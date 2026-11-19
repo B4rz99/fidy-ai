@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "78db3c0cbd86ae22af2831ab946ad2bfb0a309ce454b11c343d8a6e5bc62788a";
+const expectedEdgePolicyDigest = "7cc74afd5ad39ef71e227182731eac5385d704b399e37f690e5e04ed64e9b160";
 const securityArtifacts = [
   ...(await Promise.all(
     [
@@ -925,9 +925,6 @@ const securityArtifacts = [
       "../../apps/server/cloudflare/subscription/internal/payment-enrollment.ts",
       import.meta.url
     )
-  ).text(),
-  await Bun.file(
-    new URL("../../apps/server/cloudflare/oauth-agents/runtime.ts", import.meta.url)
   ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/oauth-agents/internal/management.ts", import.meta.url)

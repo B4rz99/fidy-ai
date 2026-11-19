@@ -510,3 +510,5 @@ export const readAddressedLocalTransaction: typeof inspectLocalTransaction = (..
   inspectLocalTransaction(...args);
 export const prepareConnectionMovement: typeof prepareBankCapture = (...args) =>
   prepareBankCapture(...args);
+
+export { ownPerformanceReceipt } from "./internal/performance-receipt";

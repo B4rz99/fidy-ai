@@ -1,3 +1,5 @@
+import { isPerformanceReceipt, receiptAdmitted } from "../release-isolation/performance-receipt";
+import { routeSessionRequest } from "../directory/operations";
 import { isStorageBootstrap, isStorageCompatibility } from "../storage-bootstrap/contract";
 import { initializeSharedStores } from "../storage-bootstrap/operations";
 import { smokeManifest, smokePath, smokeProofAccepted } from "../runtime/release-smoke/contract";
@@ -92,6 +94,16 @@ export const makeCoreHttp = ({ telemetry, institutions }: CoreComposition): Core
     return Effect.gen(function* () {
       const admission = yield* releaseAdmission(request, environment, "core");
       if (Option.isSome(admission.denial)) return admission.denial.value;
+      if (isPerformanceReceipt(request)) {
+        return (yield* receiptAdmitted(
+          request,
+          environment,
+          "core",
+          yield* Clock.currentTimeMillis
+        ))
+          ? yield* routeSessionRequest({ request, environment })
+          : new Response(null, { status: 404 });
+      }
       if (isAcceptanceReceipt(request)) return yield* fixtureChargeReceipt(request, environment);
       if (isAcceptanceWindow(request)) return yield* renewAcceptanceWindow(request, environment);
       const storage = yield* storageProbe(request, environment);

@@ -1,3 +1,8 @@
+import {
+  isPerformanceReceipt,
+  performanceReceiptPath,
+  receiptAdmitted,
+} from "./release-isolation/performance-receipt";
 import { betaProPath } from "../src/shell/pro-grants/contract";
 import { installedOrigins } from "../src/shell/browser-transport/contract";
 import { isStorageProbe } from "./storage-bootstrap/contract";
@@ -38,7 +43,7 @@ import {
   type WorkerTelemetryEnvironment,
   workerInternalTraceHeader,
 } from "./runtime/telemetry/contract";
-import { Cause, Effect, Option, Schema } from "effect";
+import { Cause, Clock, Effect, Option, Schema } from "effect";
 import { cloudflareWorkerTelemetry, observeWorkerRequest } from "./runtime/telemetry/operations";
 import { browserOrigins, productionTopology } from "./runtime/contract";
 import {
@@ -968,6 +973,29 @@ const forwardStorageProbe = Effect.fn(function* (request: Request, environment: 
   return new Response(result.body, { status: result.status, headers });
 });
 
+const forwardPerformanceReceipt = Effect.fn(function* (
+  request: Request,
+  environment: PublicEnvironment,
+  deadline: Option.Option<number>
+) {
+  if (
+    Option.isNone(deadline) ||
+    !(yield* receiptAdmitted(request, environment, "ingress", yield* Clock.currentTimeMillis))
+  ) {
+    return new Response(null, { status: 404 });
+  }
+  const headers = new Headers();
+  for (const name of ["origin", "cookie", "fidy-session-binding", "content-type"])
+    headers.set(name, request.headers.get(name) ?? "");
+  const forwarded = new Request("https://core.internal" + performanceReceiptPath, {
+    method: "POST",
+    headers,
+    body: request.body,
+    signal: request.signal,
+  });
+  yield* bindCoreAcceptance(forwarded, environment, deadline);
+  return yield* Effect.tryPromise(() => environment.CORE.fetch(forwarded));
+});
 const privateReleaseRequest = (request: Request): boolean =>
   isStorageProbe(request) || isAcceptanceWindow(request) || isAcceptanceReceipt(request);
 const fetchEffect = (
@@ -993,6 +1021,8 @@ const fetchEffect = (
     if (Option.isSome(admitted.denial)) {
       return applyApiPolicy(admitted.denial.value, browserOrigin.value, origin);
     }
+    if (isPerformanceReceipt(request))
+      return yield* forwardPerformanceReceipt(request, environment, admitted.deadline);
     if (privateReleaseRequest(request)) {
       return yield* forwardStorageProbe(request, environment);
     }

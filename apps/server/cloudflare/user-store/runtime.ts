@@ -1,3 +1,5 @@
+import { isPerformanceReceipt } from "../release-isolation/performance-receipt";
+import { ownPerformanceReceipt } from "../transactions/operations";
 import { betaUserUrl } from "../beta-pro/contract";
 import { runBetaUserCommand } from "../beta-pro/operations";
 import {
@@ -245,6 +247,8 @@ import { ownerCheckRequest, ownerCheckResponse } from "../maintenance/contract";
 const uncertainCheckStatus = 503;
 type UserStoreEnvironment = AcceptanceWindowBindings & {
   WHATSAPP_SANDBOX_PHONE_NUMBER_ID: string;
+  SMOKE_PROOF?: string;
+  NATIVE_FIXTURE_SIGNING_KEY?: string;
 } & NativeReminderEnvironment &
   WompiBindings &
   LocalIngestionEnvironment &
@@ -1027,6 +1031,21 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     return Option.none();
   }
   private registeredRequest(request: Request, registered: boolean): Promise<Response> {
+    if (isPerformanceReceipt(request)) {
+      const settings = this.browserEnvironment(request);
+      return registered && settings.RELEASE_GIT_SHA
+        ? this.runtime.runPromise(
+            ownPerformanceReceipt(
+              request,
+              {
+                ...settings,
+                RELEASE_GIT_SHA: settings.RELEASE_GIT_SHA,
+              },
+              this.owns
+            )
+          )
+        : Promise.resolve(new Response(null, { status: 404 }));
+    }
     const owns = (userId: string): boolean => registered && this.owns(userId);
     if (request.method === "POST") {
       if (request.url === confirmHandoffUrl) {

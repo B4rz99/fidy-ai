@@ -40,10 +40,15 @@ class D1BudgetTests(unittest.TestCase):
     def test_pilot_retains_full_fixture_estimate_and_larger_observed_spend(self):
         from pilot import pilot_estimate
 
-        full = {"rowsRead": 19972, "rowsWritten": 5490}
-        caps = {"rowsRead": 102, "rowsWritten": 25}
-        spent = {"rowsRead": 20500, "rowsWritten": 3000}
-        self.assertEqual(pilot_estimate(full, spent, caps), {"rowsRead": 20602, "rowsWritten": 5490})
+        for preparation, full in [
+            ("materialized", {"rowsRead": 15232, "rowsWritten": 4029}),
+            ("empty-schema", {"rowsRead": 19972, "rowsWritten": 5490}),
+        ]:
+            with self.subTest(preparation=preparation):
+                caps = {"rowsRead": 102, "rowsWritten": 25}
+                spent = {"rowsRead": 20500, "rowsWritten": 3000}
+                self.assertEqual(pilot_estimate(full, spent, caps),
+                                 {"rowsRead": 20602, "rowsWritten": full["rowsWritten"]})
 
     def test_unprepared_entry_reports_missing_evidence_without_credentials(self):
         import json

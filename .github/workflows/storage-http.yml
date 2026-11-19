@@ -71,6 +71,10 @@ jobs:
           sparse-checkout: |
             apps/server/scripts
             apps/server/cloudflare
+      - name: Restore the complete pre-Login fixture and measure 30 authenticated reads
+        run: |
+          python3 scripts/infra-performance/cells/prepare.py --d1 baseline-d1 --calibration baseline-calibration \
+            --canonical-fixture apps/server/test-results/canonical-fixture/fixture --materialized --out apps/server/test-results/materialized
       - name: Reconstruct the final empty schema and repeat the fully verified comparator
         run: |
           python3 scripts/infra-performance/cells/prepare.py --d1 baseline-d1 --calibration baseline-calibration \
@@ -86,7 +90,8 @@ jobs:
       - name: Exercise the normal unprepared pilot and verify interrupted workerd cleanup
         run: |
           python3 scripts/infra-performance/cells/rehearse-preparation.py \
-            --canonical apps/server/test-results/canonical-snapshot --historical apps/server/test-results/storage-http/d1 \
+            --materialized apps/server/test-results/materialized --empty-schema apps/server/test-results/canonical-snapshot \
+            --historical apps/server/test-results/storage-http/d1 \
             --out apps/server/test-results/storage-preparation
       - name: Preserve evidence
         if: always()
@@ -97,6 +102,11 @@ jobs:
             apps/server/test-results/storage-preparation/**/*.json
             apps/server/test-results/storage-preparation/*.json
             apps/server/test-results/storage-http/*.json*
+            apps/server/test-results/materialized/snapshot-proof.json
+            apps/server/test-results/materialized/probe.json
+            apps/server/test-results/materialized/refusal.json
+            apps/server/test-results/materialized/manifest.json
+            apps/server/test-results/materialized/limits.json
             apps/server/test-results/canonical-snapshot/probe.json
             apps/server/test-results/canonical-snapshot/snapshot-proof.json
             apps/server/test-results/canonical-snapshot/limits.json

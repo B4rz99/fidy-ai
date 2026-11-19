@@ -130,7 +130,12 @@ receipt and a persistent account ledger. The canonical fixture currently proves 
 SourceAttestations only on disposable workerd. The repository has no hosted provisioner for
 that fixture and cannot issue a protected receipt from this rehearsal.
 
-The workflow also stops a private workerd comparator after an authenticated, fixture-checked
+The workflow runs this pilot entry point separately with the materialized canonical fixture, the
+empty-schema canonical control and the historical fixed-ID control. The materialized run additionally
+passes its measured 30-pair estimate to the same size-only budget check. An in-budget estimate
+requires a fresh account observation before protected admission.
+
+The workflow also stops the materialized workerd comparator after an authenticated, fixture-checked
 read, disposes the graph, and independently verifies the runner's socket and owned temporary
 directory have gone. Its `storage-preparation` artifacts record the refusals and this local cleanup.
 
@@ -216,7 +221,9 @@ The unmounted destination copies the schema and all application rows, installs t
 in source order, and verifies schema, row identities, stored values and foreign keys before any
 Worker receives a request. Its Session and Audit tables must be empty before genuine Login.
 
-The generated `snapshot-proof.json` records the source and restored state. `probe.json` includes
+The workflow retains the materialized run's `snapshot-proof.json`, `probe.json`,
+`refusal.json`, `manifest.json` and `limits.json` in the `materialized/` evidence directory.
+`snapshot-proof.json` records the source and restored state. `probe.json` includes
 complete response checks, bounded per-batch usage and one-pair and 30-pair ceilings. Use the
 exact fixture and bundle from the protected experiment when obtaining account admission.
 Individual hosted SourceAttestation identity and independent resource cleanup still require

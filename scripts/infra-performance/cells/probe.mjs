@@ -379,8 +379,9 @@ try {
       };
       metadata.fullEstimate = { onePair: estimate(1), thirtyPairs: estimate(sampleCount) };
     }
-    if (training)
+    if (training) {
       await Bun.write(resolve(output, "limits.json"), JSON.stringify(estimates, null, 2));
+    }
     Object.assign(metadata, { result: "passed", responseSha256, auditReads: counts.n });
   }
 } finally {

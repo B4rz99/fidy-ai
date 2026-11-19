@@ -80,7 +80,7 @@ const observeReads = (fetch: typeof globalThis.fetch, reads: Set<string>): typeo
   );
 };
 
-export const diagnoseFreshTarget = <A, E, R>(operation: Effect.Effect<A, E, R>) =>
+export const diagnoseFreshTarget = <A, E, R>(operation: Effect.Effect<A, E, R>): Effect.Effect<A, E | NativeStageFailure, R> =>
   Effect.suspend(() => {
     const reads = new Set<string>();
     return operation.pipe(

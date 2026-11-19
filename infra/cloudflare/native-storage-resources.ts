@@ -99,6 +99,18 @@ const verifyResourcePlan = Effect.fn(function* ({
     }
   }
 });
+const preflight = Effect.fn(function* (phase: typeof Phase.Type, preview: boolean) {
+  if (phase === "first-install") {
+    return yield* firstInstallEdge(preview ? "plan" : "install").pipe(
+      Effect.provide(ReleaseHttpLive),
+      diagnoseFreshTarget
+    );
+  }
+  yield* releaseCommand({
+    args: ["bun", "native-storage-release.ts", releaseChecks[phase]],
+    lifetime: phase === "upload" ? "read-only" : "started-write",
+  }).pipe(nativeResourceStage(phase === "upload" ? "upload verification" : "host capture"));
+});
 const resourceRelease = Effect.fn(function* (phase: typeof Phase.Type, preview: boolean) {
   yield* requireProtectedDispatch;
   const revision = yield* Config.String("RELEASE_GIT_SHA");
@@ -124,18 +136,9 @@ const resourceRelease = Effect.fn(function* (phase: typeof Phase.Type, preview: 
       : Alchemist.Stack.plan(input)
   ).pipe(diagnoseNativePlan(revision));
   yield* verifyResourcePlan({ phase, plan: snapshot.native, revision, hosts, pin });
-  if (phase === "first-install") {
-    yield* firstInstallEdge(preview ? "plan" : "install").pipe(
-      Effect.provide(ReleaseHttpLive),
-      diagnoseFreshTarget
-    );
-    if (preview)
-      return yield* Effect.logInfo("Verified the fresh native first-install plan and closed edge.");
-  } else {
-    yield* releaseCommand({
-      args: ["bun", "native-storage-release.ts", releaseChecks[phase]],
-      lifetime: phase === "upload" ? "read-only" : "started-write",
-    }).pipe(nativeResourceStage(phase === "upload" ? "upload verification" : "host capture"));
+  yield* preflight(phase, preview);
+  if (preview) {
+    return yield* Effect.logInfo("Verified the fresh native first-install plan and closed edge.");
   }
   return yield* Apply.apply(snapshot.native, { deletions: "defer" }).pipe(
     Effect.provide(snapshot.session.context),

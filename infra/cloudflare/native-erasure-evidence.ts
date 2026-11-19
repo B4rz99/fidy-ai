@@ -20,6 +20,14 @@ const Page = Schema.Struct({
   ),
 });
 
+const pageCursor = (data: typeof Page.Type): string =>
+  data.result_info?.cursors?.after ?? data.result_info?.cursor ?? "";
+const appendRows = (objects: Map<string, boolean>, page: typeof Page.Type): void => {
+  for (const row of page.result) {
+    if (objects.has(row.id)) throw Error("Duplicate physical User object");
+    objects.set(row.id, row.hasStoredData);
+  }
+};
 export const readUserObjects = Effect.fn(function* (read: ProviderRead, namespace: string) {
   const objects = new Map<string, boolean>();
   const seen = new Set<string>();
@@ -31,14 +39,12 @@ export const readUserObjects = Effect.fn(function* (read: ProviderRead, namespac
       "workers/durable_objects/namespaces/" + encodeURIComponent(namespace) + "/objects?" + query
     );
     const data = yield* Schema.decodeUnknownEffect(Page)(response);
-    for (const row of data.result) {
-      if (objects.has(row.id)) return yield* Effect.fail(Error("Duplicate physical User object"));
-      objects.set(row.id, row.hasStoredData);
-    }
-    cursor = data.result_info?.cursors?.after ?? data.result_info?.cursor ?? "";
+    yield* Effect.try(() => appendRows(objects, data));
+    cursor = pageCursor(data);
     if (cursor === "" && data.result.length < limit) return objects;
-    if (cursor === "" || seen.has(cursor))
+    if (cursor === "" || seen.has(cursor)) {
       return yield* Effect.fail(Error("Incomplete physical User inventory"));
+    }
     seen.add(cursor);
   }
   return yield* Effect.fail(Error("Physical User inventory exceeds the release budget"));
@@ -49,22 +55,23 @@ const unchanged = (before: UserObjects, current: UserObjects): void => {
     if (current.get(id) !== stored) throw Error("A retained physical User object changed");
   }
 };
-export const newStoredUser = (before: UserObjects, current: UserObjects): Option.Option<string> => {
+type Census = { before: UserObjects; current: UserObjects };
+export const newStoredUser = ({ before, current }: Census): Option.Option<string> => {
   unchanged(before, current);
   const added = [...current.keys()].filter((id) => !before.has(id));
   if (added.length > 1) throw Error("Ambiguous physical User identity");
   const [id] = added;
   return id !== undefined && current.get(id) === true ? Option.some(id) : Option.none();
 };
-export const physicalErasure = (
-  before: UserObjects,
-  subject: string,
-  current: UserObjects
-): Option.Option<"absent" | "empty"> => {
+export const physicalErasure = ({
+  before,
+  subject,
+  current,
+}: Census & { subject: string }): Option.Option<"absent" | "empty"> => {
   unchanged(before, current);
   if (before.has(subject) || [...current.keys()].some((id) => id !== subject && !before.has(id))) {
     throw Error("Physical User identity changed during erasure");
   }
   if (!current.has(subject)) return Option.some("absent");
-  return current.get(subject) ? Option.none() : Option.some("empty");
+  return current.get(subject) === true ? Option.none() : Option.some("empty");
 };

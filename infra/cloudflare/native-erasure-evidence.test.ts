@@ -11,16 +11,24 @@ it.effect("pins the only new stored User and requires its own storage to disappe
       ["two", true],
     ]);
     const active = new Map([...before, ["third", true]] as const);
-    expect(newStoredUser(before, active)).toEqual(Option.some("third"));
-    expect(newStoredUser(before, before)).toEqual(Option.none());
-    expect(() => newStoredUser(before, new Map([...active, ["extra", true]]))).toThrow();
-    expect(() => newStoredUser(before, new Map([...active, ["two", false]]))).toThrow();
-    expect(physicalErasure(before, "third", active)).toEqual(Option.none());
-    expect(physicalErasure(before, "third", new Map([...active, ["third", false]]))).toEqual(
-      Option.some("empty")
+    expect(newStoredUser({ before, current: active })).toEqual(Option.some("third"));
+    expect(newStoredUser({ before, current: before })).toEqual(Option.none());
+    expect(() =>
+      newStoredUser({ before, current: new Map([...active, ["extra", true]]) })
+    ).toThrow();
+    expect(() =>
+      newStoredUser({ before, current: new Map([...active, ["two", false]]) })
+    ).toThrow();
+    expect(physicalErasure({ before, subject: "third", current: active })).toEqual(Option.none());
+    expect(
+      physicalErasure({ before, subject: "third", current: new Map([...active, ["third", false]]) })
+    ).toEqual(Option.some("empty"));
+    expect(physicalErasure({ before, subject: "third", current: before })).toEqual(
+      Option.some("absent")
     );
-    expect(physicalErasure(before, "third", before)).toEqual(Option.some("absent"));
-    expect(() => physicalErasure(before, "third", new Map([["one", true]]))).toThrow();
+    expect(() =>
+      physicalErasure({ before, subject: "third", current: new Map([["one", true]]) })
+    ).toThrow();
   })
 );
 
@@ -30,13 +38,13 @@ it.effect(
     Effect.gen(function* () {
       const id = "a".repeat(64);
       const next = "b".repeat(64);
-      const page = (cursor: string | null, id: string) => ({
+      const page = (cursor: string, id: string): unknown => ({
         success: true,
         result: [{ id, hasStoredData: true }],
         result_info: { cursors: { after: cursor } },
       });
-      const lookup = (path: string) =>
-        Effect.succeed(path.includes("cursor=next") ? page(null, next) : page("next", id));
+      const lookup = (path: string): Effect.Effect<unknown> =>
+        Effect.succeed(path.includes("cursor=next") ? page("", next) : page("next", id));
       expect(yield* readUserObjects(lookup, "c".repeat(32))).toEqual(
         new Map([
           [id, true],
@@ -90,9 +98,13 @@ it.effect(
       );
       expect(check._tag).toBe("Failure");
       expect(admitted).toBe(0);
-      expect(physicalErasure(retained, "third", new Map([...retained, ["third", true]]))).toEqual(
-        Option.none()
-      );
+      expect(
+        physicalErasure({
+          before: retained,
+          subject: "third",
+          current: new Map([...retained, ["third", true]]),
+        })
+      ).toEqual(Option.none());
     })
 );
 

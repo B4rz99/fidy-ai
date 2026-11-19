@@ -22,11 +22,13 @@ type Inputs = {
   revision: string;
   proof: Redacted.Redacted<string>;
   origins: (typeof installedOrigins)[keyof typeof installedOrigins];
-  erasure?: ErasureObservation;
+  erasure: Option.Option<ErasureObservation>;
   send: (request: Request) => Effect.Effect<Response, Error>;
 };
 const ok = 200,
   seeOther = 303,
+  accepted = 202,
+  unauthorized = 401,
   invalid = 400,
   absent = 404,
   isolated = 503,
@@ -124,11 +126,7 @@ const verifyOriginalDisclosure = Effect.fn(function* (
     return yield* Effect.fail(Error("Missing original provider signup disclosure"));
   }
 });
-const boot = Effect.fn(function* (
-  input: Inputs,
-  ordinal: number,
-  cohort: "smoke" | "erasure" = "smoke"
-) {
+const boot = Effect.fn(function* (input: Inputs, member: "smoke-1" | "smoke-2" | "erasure-1") {
   const { post, call } = runner(input),
     proof = yield* result(
       yield* post("/web/pairings", {}),
@@ -143,7 +141,7 @@ const boot = Effect.fn(function* (
     auth = new URL(
       (yield* result(start, Schema.Struct({ authorizationUrl: Schema.String }))).authorizationUrl
     );
-  const subject = `fidy-acceptance-${input.revision}-${cohort}-${ordinal}`;
+  const subject = `fidy-acceptance-${input.revision}-${member}`;
   const key = new Bun.CryptoHasher("sha256", Redacted.value(input.proof))
     .update(input.revision + "/oidc-code")
     .digest("hex");
@@ -363,14 +361,14 @@ const erasureEvidence = Effect.fn(function* (
     ...observation,
     survivors: () => Effect.forEach(pair, identity),
     signup: () =>
-      boot(input, 1, "erasure").pipe(
+      boot(input, "erasure-1").pipe(
         Effect.flatMap((user) => identity(user).pipe(Effect.map((id) => ({ ...user, id }))))
       ),
     renew: () => renewWork(input),
     admit: Effect.fn(function* (user) {
       const reply = yield* validStatus(
         yield* post("/web/privacy/erasure", { confirm: true }, user.headers),
-        202
+        accepted
       );
       const admitted = yield* Schema.decodeUnknownEffect(ErasureReceipt)(
         yield* Effect.tryPromise(() => reply.json())
@@ -381,7 +379,7 @@ const erasureEvidence = Effect.fn(function* (
       return admitted.reference;
     }),
     denied: Effect.fn(function* (user) {
-      yield* consume(yield* call("/transactions", { headers: user.headers }), 401);
+      yield* consume(yield* call("/transactions", { headers: user.headers }), unauthorized);
     }),
   });
 });
@@ -407,19 +405,18 @@ export const exerciseClosedUsers = Effect.fn(function* (input: Inputs) {
       },
       body: "{}",
     });
-    const unauthorized = 401;
     yield* consume(reply, unauthorized);
     deniedStatuses.push(reply.status);
   }
-  const first = yield* boot(input, 1),
-    second = yield* boot(input, 2);
+  const first = yield* boot(input, "smoke-1"),
+    second = yield* boot(input, "smoke-2");
   const callback = yield* charge(input, first, second);
   return {
     signup: [first.outcome, second.outcome],
     callback,
-    ...(input.erasure === undefined
+    ...(Option.isNone(input.erasure)
       ? {}
-      : { erasure: yield* erasureEvidence(input, [first, second], input.erasure) }),
+      : { erasure: yield* erasureEvidence(input, [first, second], input.erasure.value) }),
     unassignedCommercialAuthorities: deniedStatuses,
   };
 });

@@ -148,7 +148,11 @@ export const verifyDeployedVersion = (input: {
     ALCHEMY_CLOUDFLARE_ACCOUNT_ID: input.account,
   };
   for (const [name, text] of Object.entries(runtime)) {
-    const coordinate = Schema.Struct({ name: Schema.Literal(name), type: Schema.Literal("plain_text"), text: Schema.Literal(text) });
+    const coordinate = Schema.Struct({
+      name: Schema.Literal(name),
+      type: Schema.Literal("plain_text"),
+      text: Schema.Literal(text),
+    });
     requireTarget(Schema.is(coordinate)(bindings[name]), name);
     delete bindings[name];
   }

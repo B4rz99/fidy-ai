@@ -61,6 +61,11 @@ class ReferenceReport(unittest.TestCase):
         self.assertEqual(cells["review.pending.browser"]["status"], "fail")
         self.assertEqual(cells["review.pending.browser"]["d1"]["p95"], 29)
 
+    def test_dashboard_fresh_view_requires_its_own_observations(self):
+        report = compare(1, self.rows(1), ["d1", "do"], calibration=True)
+        self.assertEqual(report["dashboard.fresh.browser"]["status"], "missing")
+        self.assertEqual(report["dashboard.fresh.browser"]["d1"]["completed"], 1)
+
     def test_every_boundary_requires_the_minimum_paired_count(self):
         summary = compare(29, self.rows(29), ["d1", "do"])
         self.assertEqual(summary["read.http"]["status"], "missing")

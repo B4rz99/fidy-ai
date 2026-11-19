@@ -2,12 +2,12 @@
 import { timingSafeEqual } from "node:crypto";
 
 /** @import {IngressEnvironment, PinnedIngress} from "./contracts.d.mts" */
-const paths = new Set([
+const fixed = [
   "POST /web/pairings",
   "POST /web/pairings/redeem",
   "GET /web/session/binding",
   "GET /transactions?limit=25",
-]);
+];
 const enc = new TextEncoder();
 /** @param {string} value Experiment proof. */
 const hash = (value) => crypto.subtle.digest("SHA-256", enc.encode(value));
@@ -15,8 +15,9 @@ const keyBytes = 32;
 /**
  * @param {Request} request Scoped request.
  * @param {IngressEnvironment} env Experiment configuration.
+ * @param {ReadonlySet<string>} paths Exact paths for this bundle.
  */
-const admitted = async (request, env) => {
+const admitted = async (request, env, paths) => {
   const url = new URL(request.url);
   const deadline = Number(env.EXPERIMENT_DEADLINE);
   if (
@@ -33,8 +34,12 @@ const admitted = async (request, env) => {
     await hash(request.headers.get("x-fidy-comparison-key") ?? "")
   );
 };
-/** @param {PinnedIngress} ingress Frozen application Ingress. */
-export const privateIngress = (ingress) => {
+/**
+ * @param {PinnedIngress} ingress Frozen application Ingress.
+ * @param {ReadonlyArray<string>} inspectionIds Synthetic Transaction IDs verified at bundle time.
+ */
+export const privateIngress = (ingress, inspectionIds = []) => {
+  const paths = new Set([...fixed, ...inspectionIds.map((id) => "GET /transactions/" + id)]);
   /** @type {string | undefined} */
   let born;
   let requests = 0;
@@ -44,7 +49,7 @@ export const privateIngress = (ingress) => {
      * @param {IngressEnvironment} env Experiment configuration.
      */
     async fetch(request, env) {
-      if (!(await admitted(request, env))) {
+      if (!(await admitted(request, env, paths))) {
         return new Response(null, { status: 403 });
       }
       born ??= crypto.randomUUID();

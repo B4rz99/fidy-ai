@@ -1,0 +1,23 @@
+name: Verify the protected browser transport
+on:
+  push:
+    branches: [test/closed-browser-journeys]
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+      - uses: ./.github/actions/bun-install
+      - run: |
+          source scripts/infra-performance/hosted-browser/tls.sh
+          export ASSESSMENT_CHROMIUM=$(command -v google-chrome)
+          bun scripts/infra-performance/hosted-browser/proof.test.mjs

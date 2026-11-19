@@ -1,0 +1,30 @@
+apps/web/ARCHITECTURE.md
+  s_a1be23a656acf0::t_0cb3c03027a237 50
+README.md
+  s_a1be23a656acf0::t_0cb3c03027a237 62,65
+SECURITY_STANDARDS.md
+  s_a1be23a656acf0::t_0cb3c03027a237 74,125,136,206
+docs/operations/cloudflare-background-work.md
+  s_a1be23a656acf0::t_0cb3c03027a237 3,7,22,33,87,89,96-99,103,113-114
+ARCHITECTURE.md
+  s_a1be23a656acf0::t_0cb3c03027a237 25,29,31-39,42
+apps/server/ARCHITECTURE.md
+  s_a1be23a656acf0::t_0cb3c03027a237 119,151,155
+  s_a1be23a656acf0::t_193857982d87ed 16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c2271260bdff024af1a8d4f60cce642dd89d5076",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

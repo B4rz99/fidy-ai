@@ -23,8 +23,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: storage-reference-${{ github.ref }}
-  cancel-in-progress: true
+  group: storage-reference-${{ github.ref }}-${{ inputs.dataset || 'production' }}-${{ inputs.network || 'normal' }}
+  cancel-in-progress: false
 
 jobs:
   compare:

@@ -1,0 +1,44 @@
+name: Measure isolated native fixture costs
+on:
+  push:
+    branches: [ci/2259-independent-cost-f43a1320c]
+permissions:
+  contents: read
+jobs:
+  cost:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: f43a1320c8f8d99852e65a4bafcbc3da5bbf8a04
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: offline-observer
+          sparse-checkout: scripts/infra-performance/canonical-fixture
+          persist-credentials: false
+      - uses: ./.github/actions/bun-runtime
+      - run: bash scripts/install-workspace.sh
+      - name: Sample exact candidate Workers with the offline observer
+        env:
+          FIDY_NATIVE_SIZING_DIR: ${{ runner.temp }}/native-sizing
+        run: |
+          set -eu
+          git rev-parse HEAD
+          git -C offline-observer rev-parse HEAD
+          fixture=scripts/infra-performance/canonical-fixture
+          for entry in bridge.ts closed-runtime.test-fixture.ts meter.test-fixture.mjs native-usage.test-fixture.ts hosted.py; do
+            cp "offline-observer/$fixture/$entry" "$fixture/$entry"
+          done
+          git diff --exit-code -- apps/server infra/cloudflare
+          mkdir -m 700 "$FIDY_NATIVE_SIZING_DIR"
+          python3 "$fixture/hosted.py" rehearse --out apps/server/test-results/closed-native-fixture
+          jq -e '.verified and .verification.physicalSubjectEmptyOrAbsent and .verification.survivingUsers == 1 and .preErasureBtreeCells > 0 and (.bucketCensusAfterErasure | length) == 4 and (.confirmedDisposal.r2 | length) == 4' "$FIDY_NATIVE_SIZING_DIR/native-usage.json"
+      - name: Preserve aggregate physical census and counters
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-cost-census-${{ github.run_id }}
+          path: |
+            apps/server/test-results/closed-native-fixture/summary.json
+            ${{ runner.temp }}/native-sizing/native-usage.json

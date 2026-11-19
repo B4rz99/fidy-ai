@@ -158,9 +158,12 @@ def bridge(mode, revision, session):
         finally:
             child.stdin.close()
             try:
-                child.wait(timeout=20)
+                status=child.wait(timeout=1050 if mode=="rehearse" and os.environ.get("FIDY_NATIVE_SIZING_DIR") else 20)
+                if status!=0:
+                    raise ValueError("Closed native process failed during final verification")
             except subprocess.TimeoutExpired:
                 child.kill()
+                raise ValueError("Closed native owner exceeded its disposal deadline")
 
 
 def collect(mode, revision, prefix, out):

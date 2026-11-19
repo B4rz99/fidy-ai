@@ -1151,7 +1151,13 @@ const meter = (
   ...args: string[]
 ): Effect.Effect<string, ReleaseFailure> =>
   releaseCommand({
-    args: ["python3", "../../scripts/infra-performance/deployed-fleet/pilot.py", phase, revision, ...args],
+    args: [
+      "python3",
+      "../../scripts/infra-performance/deployed-fleet/pilot.py",
+      phase,
+      revision,
+      ...args,
+    ],
     lifetime: "read-only",
   });
 const settleFleetMeter = Effect.fn(function* (revision: string) {
@@ -1174,7 +1180,11 @@ const fleetPilot = Effect.fn(function* (
 ) {
   const env = yield* installedConfig(verifier);
   yield* meter(env.revision, "begin");
-  const installed = yield* installedRelease(env, client, { port, staging: false, verifierRevision: verifier.revision });
+  const installed = yield* installedRelease(env, client, {
+    port,
+    staging: false,
+    verifierRevision: verifier.revision,
+  });
   const browser = fleetBrowser({
     revision: env.revision,
     proof: Redacted.make(env.smokeProof),

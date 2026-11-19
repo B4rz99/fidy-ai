@@ -127,11 +127,7 @@ const verifyOriginalDisclosure = Effect.fn(function* (
     return yield* Effect.fail(Error("Missing original provider signup disclosure"));
   }
 });
-type BrowserMember =
-  | "smoke-1"
-  | "smoke-2"
-  | "erasure-1"
-  | "fleet-1";
+type BrowserMember = "smoke-1" | "smoke-2" | "erasure-1" | "fleet-1";
 const providerCode = Effect.fn(function* (input: Inputs, auth: URL, subject: string) {
   const key = new Bun.CryptoHasher("sha256", Redacted.value(input.proof))
     .update(input.revision + "/oidc-code")

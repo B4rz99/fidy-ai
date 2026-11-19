@@ -148,7 +148,7 @@ const execute = Effect.fnUntraced(function* (item: Command, active: Session, ser
   const reply = yield* service.request(item, headers);
   const raw = yield* io(() => reply.text());
   const data = reply.ok
-    ? yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(raw)
+    ? yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Json))(raw)
     : null;
   offer({ status: reply.status, data });
 });
@@ -167,7 +167,7 @@ export const serveFixture = Effect.fn(function* (runtime: Miniflare) {
   const lines = createInterface({ input: process.stdin, terminal: false });
   yield* Stream.fromAsyncIterable(lines, () => new FixtureTransportError()).pipe(
     Stream.runForEach((line) =>
-      Schema.decodeUnknownEffect(Schema.fromJsonString(command))(line).pipe(
+      Schema.decodeEffect(Schema.fromJsonString(command))(line).pipe(
         Effect.flatMap((item) => execute(item, active, service))
       )
     ),

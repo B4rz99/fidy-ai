@@ -225,7 +225,9 @@ const usableReviews = async (page) => {
           open?.getAttribute("aria-label") === "Abrir Extracto " + reference &&
           open.getClientRects().length > 0 &&
           card.querySelector('[data-review="context-excerpt"]')?.textContent === excerpt &&
-          card.querySelector('[role="checkbox"]:enabled') !== null
+          card.querySelector(
+            '[role="checkbox"][aria-checked="false"]:not([aria-disabled="true"]):not([data-disabled])'
+          ) !== null
         );
       })
     );

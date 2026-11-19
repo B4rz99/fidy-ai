@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, Struct } from "effect";
 import { HttpBody, HttpClient, HttpClientRequest } from "effect/http";
 import { edgeSecurityPolicy } from "./edge-security";
 import { type ProductionReleaseConfig, releaseEvidence } from "./production-release";
@@ -24,9 +24,10 @@ const WireRule = Schema.Struct({
       products: Schema.optional(Schema.Array(Schema.String)),
     })
   ),
+  logging: Schema.optionalKey(Schema.Struct({ enabled: Schema.Literal(true) })),
   last_updated: Schema.optional(Schema.String),
   version: Schema.optional(Schema.String),
-});
+}).check(Schema.makeFilter((rule) => rule.logging === undefined || rule.action === "skip"));
 const Ruleset = Schema.Struct({
   id,
   kind: Schema.Literal("zone"),
@@ -43,7 +44,10 @@ const expected = edgeSecurityPolicy.rulesets.customFirewall.rules;
 /** Compare the exact ordered incumbent entrypoint. Preserve the reference and every writable rule field. */
 type Change = {
   path: string;
-  body: Pick<typeof WireRule.Type, "ref" | "action" | "description" | "enabled" | "expression"> & {
+  body: Pick<
+    typeof WireRule.Type,
+    "ref" | "action" | "description" | "enabled" | "expression" | "logging"
+  > & {
     action_parameters: typeof WireRule.Type.action_parameters;
   };
 };
@@ -83,6 +87,7 @@ export const nativeEdgeChanges = (value: unknown): ReadonlyArray<Change> => {
           enabled: rule.enabled,
           expression: target.expression,
           action_parameters: rule.action_parameters,
+          ...Struct.pick(rule, ["logging"]),
         },
       },
     ];

@@ -4,6 +4,7 @@ import { chromium } from "@playwright/test";
 import { Effect } from "effect";
 import { installedOrigins } from "../../../apps/server/src/shell/browser-transport/contract.ts";
 import { acceptanceRequestAdmitted } from "../../../apps/server/cloudflare/release-isolation/operations.ts";
+import { targetId } from "../reference/fresh-transactions.mjs";
 import { protectedBrowserProxy } from "./proxy.mjs";
 
 const origins = installedOrigins.acceptance;
@@ -37,8 +38,8 @@ const proxy = protectedBrowserProxy({
     const headers = {
       "access-control-allow-origin": origins.browser,
       "access-control-allow-credentials": "true",
-      "access-control-allow-headers": "fidy-session-binding",
-      "access-control-allow-methods": "GET, OPTIONS",
+      "access-control-allow-headers": "fidy-session-binding, content-type",
+      "access-control-allow-methods": "GET, PUT, OPTIONS",
     };
     observed.push({ method: request.method, verified, cookie: request.headers.get("cookie") });
     return new Response(null, { status: verified ? 204 : 503, headers });
@@ -91,6 +92,36 @@ try {
     { method: "OPTIONS", verified: true, cookie: null },
     { method: "GET", verified: true, cookie: "__Host-fidy_session=synthetic" },
   ]);
+  const mutation = await page.evaluate(
+    async ({ api, id }) =>
+      (
+        await fetch(api + "/transactions/" + id, {
+          method: "PUT",
+          headers: {
+            "content-type": "application/json",
+            "fidy-session-binding": "test-bound-session",
+          },
+          body: JSON.stringify({ expectedRevision: 0, counterparty: "Referencia corregida" }),
+          credentials: "include",
+        })
+      ).status,
+    { api: origins.api, id: targetId }
+  );
+  assert.equal(mutation, 204);
+  assert.deepEqual(observed.slice(2), [
+    { method: "OPTIONS", verified: true, cookie: null },
+    { method: "PUT", verified: true, cookie: "__Host-fidy_session=synthetic" },
+  ]);
+  const blocked = await page.evaluate(
+    async (api) =>
+      fetch(api + "/internal/release-smoke", { credentials: "include" }).then(
+        () => false,
+        () => true
+      ),
+    origins.api
+  );
+  assert.ok(blocked);
+  assert.equal(observed.length, 4);
 } finally {
   await browser?.close();
   await proxy.stop(true);

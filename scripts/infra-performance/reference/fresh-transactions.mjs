@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { Schema } from "effect";
 
 export const targetId = "81000000-0000-4000-8000-000000000002";
-const fixedId = targetId;
 const afterName = "Referencia corregida";
 const timeoutMs = 30_000;
 const extraFields = Schema.Record(Schema.String, Schema.Unknown);
@@ -33,7 +32,17 @@ function verifySeededPage(initial, calibration) {
     return "81000000-0000-4000-8000-" + String(ordinal).padStart("000000000000".length, "0");
   });
   assert.deepEqual(ids, expectedIds);
-  const target = initial.data.find((row) => row.id === fixedId);
+  if (calibration) {
+    for (const [index, row] of initial.data.entries()) {
+      const ordinal = index === 0 ? 0 : index + 1;
+      assert.equal(row.counterparty, "Evaluación " + ordinal);
+      assert.equal(row.revision, 0);
+      assert.equal(row.direction, "outflow");
+      assert.deepEqual(row.money, { amount: "1000", currency: ordinal % 2 === 0 ? "COP" : "USD" });
+      assert.equal(row.presentation.kind, ordinal === 0 ? "visible-member" : "independent");
+    }
+  }
+  const target = initial.data.find((row) => row.id === targetId);
   assert.ok(target, "Seeded Transaction missing from initial page");
   assert.equal(target.counterparty, "Evaluación 2");
   assert.equal(target.revision, 0);
@@ -59,7 +68,7 @@ export async function freshTransactions({
   // ResponseEnd is measured from Chromium request start through body completion. It never subtracts RTT.
   /** @param {string} label Expected visible counterparty. */
   const ready = async (label) => {
-    const control = page.locator('[id="transaction-' + fixedId + '"]:enabled');
+    const control = page.locator('[id="transaction-' + targetId + '"]:enabled');
     await control.filter({ hasText: label }).waitFor();
     await page.evaluate(
       () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
@@ -122,14 +131,14 @@ export async function freshTransactions({
   const target = verifySeededPage(initial, calibration);
   completed("refresh", readMs);
   process.stderr.write("REFERENCE_STAGE open-correction\n");
-  await page.locator('[id="transaction-' + fixedId + '"]').click();
+  await page.locator('[id="transaction-' + targetId + '"]').click();
   const counterparty = page.getByRole("textbox", { name: "Contraparte", exact: true });
   const edit = page.getByRole("button", { name: "Editar transacción", exact: true });
   await counterparty.or(edit).first().waitFor({ state: "visible" });
   if (!(await counterparty.isVisible())) await edit.click();
   await counterparty.fill(afterName);
   process.stderr.write("REFERENCE_STAGE save\n");
-  const save = responseFor("PUT", "/transactions/" + fixedId);
+  const save = responseFor("PUT", "/transactions/" + targetId);
   const refresh = responseFor("GET", "/transactions");
   const saving = performance.now();
   await page.getByRole("button", { name: "Guardar", exact: true }).click();
@@ -141,11 +150,11 @@ export async function freshTransactions({
   const result = changedTransaction(await observe(saveResponse));
   const fresh = historyPage(await observe(freshResponse));
   const corrected = { ...target, counterparty: afterName, revision: 1 };
-  assert.equal(result.data.id, fixedId);
+  assert.equal(result.data.id, targetId);
   assert.equal(result.data.revision, 1);
   assert.deepEqual(fresh, {
     ...initial,
-    data: initial.data.map((row) => (row.id === fixedId ? corrected : row)),
+    data: initial.data.map((row) => (row.id === targetId ? corrected : row)),
   });
   completed("correction", correctionMs);
   return { before, startupMs, readMs, correctionMs };

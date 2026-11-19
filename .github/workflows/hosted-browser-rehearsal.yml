@@ -21,3 +21,6 @@ jobs:
           source scripts/infra-performance/hosted-browser/tls.sh
           export ASSESSMENT_CHROMIUM=$(command -v google-chrome)
           bun scripts/infra-performance/hosted-browser/proof.test.mjs
+          if bun scripts/infra-performance/hosted-browser/native.mjs; then exit 1; fi
+          jq -e '.stage == "settings"' apps/web/test-results/hosted-browser/attempts.jsonl
+          curl -fsS --max-time 15 https://www.cloudflare.com/cdn-cgi/trace | awk '/^(loc|colo)=[A-Z]+$/'

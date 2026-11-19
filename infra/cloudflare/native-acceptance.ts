@@ -1,3 +1,4 @@
+import type { FleetPilotBrowser } from "./native-fleet-pilot";
 import {
   PendingBrowserLoginPairing,
   browserLoginPairingInvalidBody,
@@ -133,7 +134,7 @@ const verifyOriginalDisclosure = Effect.fn(function* (
     return yield* Effect.fail(Error("Missing original provider signup disclosure"));
   }
 });
-type Member = "smoke-1" | "smoke-2" | "erasure-1";
+type Member = "smoke-1" | "smoke-2" | "erasure-1" | "fleet-1";
 const verifyProvider = Effect.fn(function* (
   input: Inputs,
   member: Member,
@@ -376,12 +377,48 @@ const renewWork = Effect.fn(function* (input: Inputs) {
     Schema.Struct({ revision: Schema.Literal(input.revision), deadline: Schema.Int })
   );
 });
+const admitBrowserErasure = Effect.fn(function* (
+  input: Inputs,
+  user: { headers: Readonly<Record<string, string>> }
+) {
+  const { post } = runner(input);
+  const reply = yield* validStatus(
+    yield* post("/web/privacy/erasure", { confirm: true }, user.headers),
+    accepted
+  );
+  const admitted = yield* Schema.decodeUnknownEffect(ErasureReceipt)(
+    yield* Effect.tryPromise(() => reply.json())
+  );
+  if (admitted.state !== "Draining" || admitted.next !== "admitted-work") {
+    return yield* Effect.fail(Error("Missing fresh User erasure admission"));
+  }
+  return admitted.reference;
+});
+
+export const fleetBrowser = (input: Inputs): FleetPilotBrowser => {
+  const session = Effect.fn(function* (intent: "signup" | "login") {
+    const member = yield* boot(input, "fleet-1", intent);
+    return {
+      outcome: member.outcome,
+      erase: (): Effect.Effect<string, Error> => admitBrowserErasure(input, member),
+      denied: (): Effect.Effect<void, Error> =>
+        runner(input)
+          .call("/transactions", { headers: member.headers })
+          .pipe(Effect.flatMap((reply) => consume(reply, unauthorized))),
+    };
+  });
+  return {
+    renew: () => renewWork(input),
+    register: () => session("signup"),
+    login: () => session("login"),
+  };
+};
 const erasureEvidence = Effect.fn(function* (
   input: Inputs,
   pair: readonly [User, User],
   observation: ErasureObservation
 ) {
-  const { call, post } = runner(input);
+  const { call } = runner(input);
   const identity = Effect.fn(function* (user: User) {
     const current = yield* result(
       yield* call("/user", { headers: user.headers }),
@@ -397,19 +434,7 @@ const erasureEvidence = Effect.fn(function* (
         Effect.flatMap((user) => identity(user).pipe(Effect.map((id) => ({ ...user, id }))))
       ),
     renew: () => renewWork(input),
-    admit: Effect.fn(function* (user) {
-      const reply = yield* validStatus(
-        yield* post("/web/privacy/erasure", { confirm: true }, user.headers),
-        accepted
-      );
-      const admitted = yield* Schema.decodeUnknownEffect(ErasureReceipt)(
-        yield* Effect.tryPromise(() => reply.json())
-      );
-      if (admitted.state !== "Draining" || admitted.next !== "admitted-work") {
-        return yield* Effect.fail(Error("Missing fresh User erasure admission"));
-      }
-      return admitted.reference;
-    }),
+    admit: (user) => admitBrowserErasure(input, user),
     denied: Effect.fn(function* (user) {
       yield* consume(yield* call("/transactions", { headers: user.headers }), unauthorized);
     }),

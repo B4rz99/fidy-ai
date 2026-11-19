@@ -16,6 +16,7 @@ on:
             verify,
             verify-erasure,
             continue-erasure,
+            fleet-pilot,
             plan-first-install,
             first-install,
             stage-hosts,
@@ -35,7 +36,7 @@ jobs:
   release:
     if: ${{ github.ref == 'refs/heads/trunk' && inputs.operation != 'publish-site' }}
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ (inputs.operation == 'first-install' || inputs.operation == 'verify-erasure' || inputs.operation == 'continue-erasure') && 90 || 30 }}
+    timeout-minutes: ${{ inputs.operation == 'fleet-pilot' && 110 || (inputs.operation == 'first-install' || inputs.operation == 'verify-erasure' || inputs.operation == 'continue-erasure') && 90 || 30 }}
     environment: production
     permissions:
       actions: read
@@ -64,8 +65,11 @@ jobs:
           RELEASE_OPERATION: ${{ inputs.operation }}
         run: |
           test "$NATIVE_STORAGE_ADMISSION" = closed
+          if [[ "$RELEASE_OPERATION" == fleet-pilot ]]; then
+            echo "FLEET_PILOT_STARTED_AT=$(date -u +%s)" >> "$GITHUB_ENV"
+          fi
           if [[ -n "$EXPECTED_INSTALLED_REVISION" ]]; then
-            [[ "$RELEASE_OPERATION" == verify || "$RELEASE_OPERATION" == verify-erasure || "$RELEASE_OPERATION" == continue-erasure ]]
+            [[ "$RELEASE_OPERATION" == verify || "$RELEASE_OPERATION" == verify-erasure || "$RELEASE_OPERATION" == continue-erasure || "$RELEASE_OPERATION" == fleet-pilot ]]
             [[ "$EXPECTED_INSTALLED_REVISION" =~ ^[0-9a-f]{40}$ ]]
           fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -113,7 +117,7 @@ jobs:
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts promote
       - name: Build the expected browser artifact for independent verification
-        if: inputs.operation == 'verify' || inputs.operation == 'verify-erasure' || inputs.operation == 'continue-erasure' || inputs.operation == 'stage-hosts'
+        if: inputs.operation == 'verify' || inputs.operation == 'verify-erasure' || inputs.operation == 'continue-erasure' || inputs.operation == 'fleet-pilot' || inputs.operation == 'stage-hosts'
         env:
           RELEASE_GIT_SHA: ${{ inputs.installed_revision || github.sha }}
         working-directory: apps/web
@@ -128,7 +132,7 @@ jobs:
           bun native-storage-release.ts attach-hosts
       - name: Verify the installed application and retained schema markers
         id: verify
-        if: inputs.operation != 'plan-first-install' && inputs.operation != 'first-install' && inputs.operation != 'verify-erasure' && inputs.operation != 'continue-erasure'
+        if: inputs.operation != 'plan-first-install' && inputs.operation != 'first-install' && inputs.operation != 'verify-erasure' && inputs.operation != 'continue-erasure' && inputs.operation != 'fleet-pilot'
         env:
           EXPECTED_INSTALLED_REVISION: ${{ inputs.installed_revision }}
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
@@ -186,6 +190,13 @@ jobs:
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts continue-erasure
+      - name: Measure one disposable User on the verified closed release
+        if: inputs.operation == 'fleet-pilot'
+        env:
+          EXPECTED_INSTALLED_REVISION: ${{ inputs.installed_revision }}
+          CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
+        working-directory: infra/cloudflare
+        run: bun native-storage-release.ts fleet-pilot
       - name: Restore only a compatible, tested target after failed promoted verification
         if: ${{ failure() && steps.promote.outcome == 'success' && steps.verify.outcome == 'failure' }}
         working-directory: infra/cloudflare
@@ -203,6 +214,8 @@ jobs:
             ${{ runner.temp }}/native-release.json*
             ${{ runner.temp }}/native-verification.json
             ${{ runner.temp }}/native-verification.json.erasure
+            ${{ runner.temp }}/native-verification.json.fleet
+            ${{ runner.temp }}/native-fleet-*.jsonl
           if-no-files-found: ignore
 
   site:

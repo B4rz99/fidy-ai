@@ -459,8 +459,7 @@ const readInstalledIdentity = Effect.fn(function* (env: Config, client: HttpClie
 const installedRelease = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
-  { port, staging }: { port: ReleasePort; staging: boolean },
-  verifierRevision: string = env.revision
+  { port, staging, verifierRevision }: { port: ReleasePort; staging: boolean; verifierRevision: string }
 ) {
   yield* releaseController.requireTrunk(port, verifierRevision);
   yield* verifyNativeEdge(env, client, "verify");
@@ -512,7 +511,7 @@ const verifyFirstInstall = Effect.fn(function* (
     releaseCommand({ args: ["git", "-C", "../..", ...args], lifetime: "read-only" })
   ).pipe(Effect.mapError(() => new ReleaseFailure({ message: "Installed revision must be the same protected runtime source" })));
   const env = { ...verifier, revision };
-  const installed = yield* installedRelease(env, client, { port, staging: false }, verifier.revision);
+  const installed = yield* installedRelease(env, client, { port, staging: false, verifierRevision: verifier.revision });
   const contractDigest = yield* ReleaseConfig.String("CONTRACT_DIGEST"),
     identity = { gitRevision: env.revision, contractDigest };
   const smoke = yield* verifyNativeSmoke({
@@ -574,7 +573,7 @@ const inspectHostStage = Effect.fn(function* (
   port: ReleasePort
 ) {
   yield* requiredStaging();
-  const installed = yield* installedRelease(env, client, { port, staging: true }),
+  const installed = yield* installedRelease(env, client, { port, staging: true, verifierRevision: env.revision }),
     account = accountReader(env, client);
   const writers = yield* verifyIncumbentFence(account);
   const zonePath = "https://api.cloudflare.com/client/v4/zones/" + installed.edge.zoneId + "/";
@@ -665,7 +664,7 @@ const attachCanonicalHosts = Effect.fn(function* (
       )
     );
   }
-  const verified = yield* installedRelease(env, client, { port, staging: false });
+  const verified = yield* installedRelease(env, client, { port, staging: false, verifierRevision: env.revision });
   yield* requireSameInstallation(env, verified);
 });
 const requireTestedStorage = Effect.fn(function* (

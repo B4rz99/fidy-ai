@@ -129,7 +129,8 @@ const resourceRelease = Effect.fn(function* (phase: typeof Phase.Type, preview: 
       Effect.provide(ReleaseHttpLive),
       diagnoseFreshTarget
     );
-    if (preview) return yield* Effect.logInfo("Verified the fresh native first-install plan and closed edge.");
+    if (preview)
+      return yield* Effect.logInfo("Verified the fresh native first-install plan and closed edge.");
   } else {
     yield* releaseCommand({
       args: ["bun", "native-storage-release.ts", releaseChecks[phase]],

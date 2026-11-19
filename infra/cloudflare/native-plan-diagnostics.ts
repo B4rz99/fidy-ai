@@ -38,12 +38,18 @@ const readClass = (url: URL): Option.Option<string> => {
   if (/^alchemy-state-store\.[^.]+\.workers\.dev$/u.test(url.hostname)) {
     return matchRead(stateReads, url.pathname);
   }
-  if (url.origin === "https://api.github.com" && /^\/repos\/[^/]+\/[^/]+\/git\/ref\/heads\/trunk$/u.test(url.pathname)) {
+  if (
+    url.origin === "https://api.github.com" &&
+    /^\/repos\/[^/]+\/[^/]+\/git\/ref\/heads\/trunk$/u.test(url.pathname)
+  ) {
     return Option.some("trunk revision");
   }
   if (url.origin !== "https://api.cloudflare.com") return Option.none();
   if (url.pathname === "/client/v4/zones") return Option.some("zone authority");
-  return matchRead(readClasses, url.pathname.replace(/^\/client\/v4\/(?:accounts|zones)\/[^/]+\//u, ""));
+  return matchRead(
+    readClasses,
+    url.pathname.replace(/^\/client\/v4\/(?:accounts|zones)\/[^/]+\//u, "")
+  );
 };
 
 const maximumReadOutcomes = 32;

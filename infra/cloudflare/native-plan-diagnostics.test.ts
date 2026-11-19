@@ -97,21 +97,26 @@ layer(FetchHttpClient.layer)("native planner HTTP reads", (suite) => {
 });
 
 layer(FetchHttpClient.layer)("closed installation target", (suite) => {
-  suite.effect("attributes a refused read to its endpoint family without disclosing identifiers", () =>
-    Effect.gen(function* () {
-      const request = HttpClient.get(
-        "https://api.cloudflare.com/client/v4/accounts/private/builds/workers/private/triggers"
-      ).pipe(Effect.andThen(Effect.fail(Error("private-provider-message"))));
-      const failure = yield* request.pipe(
-        diagnoseFreshTarget,
-        Effect.provideService(FetchHttpClient.Fetch, Object.assign(
-          () => Promise.resolve(new Response("private-response", { status: 403 })),
-          { preconnect: fetch.preconnect }
-        )),
-        Effect.matchCause({ onFailure: nativeResourceFailureMessage, onSuccess: () => "" })
-      );
-      expect(failure).toContain("Worker Build triggers 403");
-      expect(failure).not.toContain("private");
-    })
+  suite.effect(
+    "attributes a refused read to its endpoint family without disclosing identifiers",
+    () =>
+      Effect.gen(function* () {
+        const request = HttpClient.get(
+          "https://api.cloudflare.com/client/v4/accounts/private/builds/workers/private/triggers"
+        ).pipe(Effect.andThen(Effect.fail(Error("private-provider-message"))));
+        const failure = yield* request.pipe(
+          diagnoseFreshTarget,
+          Effect.provideService(
+            FetchHttpClient.Fetch,
+            Object.assign(
+              () => Promise.resolve(new Response("private-response", { status: 403 })),
+              { preconnect: fetch.preconnect }
+            )
+          ),
+          Effect.matchCause({ onFailure: nativeResourceFailureMessage, onSuccess: () => "" })
+        );
+        expect(failure).toContain("Worker Build triggers 403");
+        expect(failure).not.toContain("private");
+      })
   );
 });

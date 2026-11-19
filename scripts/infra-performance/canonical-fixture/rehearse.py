@@ -50,7 +50,22 @@ def main():
                 if not 200 <= status < 300:
                     raise ValueError(f"Canonical operation returned HTTP {status}")
                 return json.loads(data)
+            class LostCaptureReply(Exception):
+                pass
+            def interrupted(method, path, body):
+                result = call(method, path, body)
+                if method == "POST" and path == "/operations/atomic-batch":
+                    raise LostCaptureReply()
+                return result
+            try:
+                prepare(interrupted, dest/"fixture", revision, "performance-1")
+            except LostCaptureReply:
+                pass
+            else:
+                raise ValueError("The lost-reply control did not execute")
             result = prepare(call, dest/"fixture", revision, "performance-1")
+            if len([row for row in offered if row["method"]=="POST"]) != 2:
+                raise ValueError("Recovery repeated a capture or link mutation")
             previous = len(offered)
             if prepare(call, dest/"fixture", revision, "performance-1") != result or any(row["method"]=="POST" for row in offered[previous:]):
                 raise ValueError("Resuming the fixture attempted another mutation")
@@ -65,7 +80,7 @@ def main():
             if privacy["data"] != result["history"]["data"] or set(privacy) != {"reference","scope","data","presentation","categories","next"}:
                 raise ValueError("Unexpected scope of the authenticated privacy response")
             write(dest/"report.json", dict(scope="native workerd synthetic WebSession", counts=result["counts"],
-                                           initial=previous, resumed=len(offered)-previous, duplicateMutations=0, attestationStatus=status, privacyScope=privacy["scope"]))
+                                           initial=previous, resumed=len(offered)-previous, duplicateMutations=0, lostCaptureReplyReconciled=True, attestationStatus=status, privacyScope=privacy["scope"]))
 
 
 if __name__ == "__main__":

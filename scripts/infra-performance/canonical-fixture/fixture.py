@@ -112,25 +112,40 @@ def prepare(call, directory, revision, member):
             page = call("GET", HISTORY, None)
         if not page["data"]:
             raise ValueError("Prior capture has no confirmed outcome")
-        if "originals" not in journal:
-            validate_originals(page["data"])
-            journal["originals"] = page["data"]
-            write(path, journal)
-        originals = journal["originals"]
+        proof = None
+        if len(page["data"]) == 8:
+            originals = sorted(page["data"], key=lambda row: row["id"])
+        elif len(page["data"]) == 7 and "link" in journal and "pair" in journal:
+            visible_id, hidden_id = journal["pair"]
+            proof = call("GET", "/transactions/" + hidden_id, None)
+            detail = proof["data"]["reconciliation"]
+            if detail.get("kind") != "linked":
+                raise ValueError("Prior link has no confirmed outcome")
+            originals = sorted([row for row in page["data"] if row["id"] != visible_id]
+                               + [detail["firstTransaction"], detail["secondTransaction"]], key=lambda row:row["id"])
+        else:
+            raise ValueError("Partial or unexpected canonical capture")
         validate_originals(originals)
         pair = sorted((row for row in originals if row["counterparty"] == "Evaluación 0"),
                       key=lambda row: (instant(row["createdAt"]), row["id"]))
         visible, hidden = pair
+        handles = [visible["id"], hidden["id"]]
+        if "originalDigest" not in journal:
+            journal.update(originalDigest=digest(originals), pair=handles)
+            write(path, journal)
+        if journal["originalDigest"] != digest(originals) or journal["pair"] != handles:
+            raise ValueError("Actual originals changed after capture")
         expected = [visible, *sorted((row for row in originals if row not in pair),
                                      key=lambda row: instant(row["occurredAt"]), reverse=True)]
         if len(page["data"]) == 8:
-            if "link" in journal or sorted(page["data"], key=lambda r: r["id"]) != sorted(originals, key=lambda r: r["id"]):
-                raise ValueError("Prior link is unresolved or the captured originals changed")
+            if "link" in journal:
+                raise ValueError("Prior link submission has no confirmed outcome")
             submit("link", "/transactions/link", {"firstTransactionId": visible["id"], "secondTransactionId": hidden["id"]})
             page = call("GET", HISTORY, None)
         if "link" not in journal or page["data"] != expected:
             raise ValueError("Linked effective history differs from the captured originals")
-        proof = call("GET", "/transactions/" + hidden["id"], None)
+        if proof is None:
+            proof = call("GET", "/transactions/" + hidden["id"], None)
         association = proof["data"]["reconciliation"]
         if (association.get("kind") != "linked" or
                 sorted([association["firstTransaction"], association["secondTransaction"]], key=lambda r:r["id"])

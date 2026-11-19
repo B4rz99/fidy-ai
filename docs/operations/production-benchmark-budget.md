@@ -145,3 +145,29 @@ the D1 request before dispatch and stops if its native counter receipt is missin
 reservation. Its report preserves both complete-body observations and payload hashes. One pair
 with unobserved lifecycle supplies a pilot observation only. Never manufacture a provisioning
 receipt or reset a fenced ledger to launch this command.
+
+### Canonical Transaction fixture
+
+The **Rehearse the storage HTTP comparison** workflow also captures eight manual originals
+with one authenticated, all-or-nothing batch, links the matching pair, then inspects the seven
+effective Transactions and both retained originals. A resumed run first reads existing state.
+The private journal contains the release, synthetic cohort member, attempt stages, an originals
+digest, and the two link handles. An unresolved empty or conflicting result stops further
+mutation. The complete synthetic response evidence lives separately from the journal.
+
+Financial equivalence includes every field in the canonical history and inspection responses:
+Transaction identity, exact amount and Currency, direction, Counterparty, Category, absence of
+notes, occurrence and capture times, revision, ordering, continuation, visible and suppressed
+identities, both originals, and the source kinds returned by the owner. Manual capture creates
+a SourceAttestation and records which fields the User supplied. The disposable workerd fixture
+can verify those actual identities, capture context and decision flags. The mounted privacy scope
+returns effective Transactions. The complete SourceAttestation route and the observation of
+individual hosted SourceAttestation IDs are separate evidence requirements.
+
+The canonical D1 mirror requires the actual native fixture proof. It replaces the historic
+fixture's two Transaction preparation batches and retains the frozen application, installed
+schema, SQL triggers and unrelated calibration batches. Repeating the workerd rehearsal measures
+the altered setup, complete HTTP Login, eight inspections, history and Audit. Inspect both the
+one-pair and 30-pair estimates in `canonical-mirror/probe.json`. Refuse a plan exceeding the
+shared-account ceiling before provisioning. Budget, Recurring and Needs Review equivalence still
+require their own verified native preparations.

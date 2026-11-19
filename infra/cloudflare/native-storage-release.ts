@@ -299,12 +299,12 @@ const requireClosedAdmission = Effect.fn(function* (client: HttpClient.HttpClien
     return yield* new ReleaseFailure({ message: "Normal admission is not closed" });
   }
 });
-const erasureObservation = (
-  env: Config,
-  client: HttpClient.HttpClient,
-  userNamespace: string,
-  fs: FileSystem.FileSystem
-): ErasureObservation => {
+const erasureObservation = ({ env, client, userNamespace, fs }: {
+  env: Config;
+  client: HttpClient.HttpClient;
+  userNamespace: string;
+  fs: FileSystem.FileSystem;
+}): ErasureObservation => {
   // The final report retains each phase even when the last census fails or is interrupted.
   const checkpoints: Array<Parameters<ErasureObservation["record"]>[0]> = [];
   const path = env.smokeAttestationFile + ".erasure";
@@ -355,7 +355,7 @@ const verifySyntheticUsers = Effect.fn(function* (
     proof: Redacted.make(env.smokeProof),
     origins,
     send,
-    erasure: Option.map(erasureNamespace, (id) => erasureObservation(env, client, id, fs)),
+    erasure: Option.map(erasureNamespace, (id) => erasureObservation({ env, client, userNamespace: id, fs })),
   });
   const path = `https://api.cloudflare.com/client/v4/accounts/${env.account}/workflows/fidy-native-billing/instances/${proof.callback.workflow}`;
   const response = providerJson(
@@ -1185,10 +1185,15 @@ if (import.meta.main) {
       ])
     )(process.argv[2]);
     const env = releaseEvidence.config();
-    const services = yield* Layer.build(ReleaseHttpLive);
+    const services = yield* Layer.build(Layer.mergeAll(ReleaseHttpLive, BunFileSystem.layer));
     const client = Context.get(services, HttpClient.HttpClient);
-    yield* commands[command](env, client, releasePort({ env, client }));
-  }).pipe(Effect.provide(BunFileSystem.layer), Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }), Effect.scoped);
+    yield* commands[command](env, client, releasePort({ env, client })).pipe(
+      Effect.provideService(FileSystem.FileSystem, Context.get(services, FileSystem.FileSystem))
+    );
+  }).pipe(
+    Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }),
+    Effect.scoped
+  );
   await Effect.runPromise(
     program.pipe(
       Effect.catchCause((cause) =>

@@ -1,0 +1,29 @@
+apps/server/cloudflare/agent/native-whatsapp-provider.test.ts
+  s_a1be23a656acf0::t_b25302c7203cde 10-76
+  s_a1be23a656acf0::t_d43ee5cbbc2d71 1-9,77
+apps/server/cloudflare/agent/internal/local-inference.ts
+  s_a1be23a656acf0::t_37bebbe6f9fc52 22,260-264,267-268,270,274-275,281,297-313,315-321,336,344
+  s_a1be23a656acf0::t_b25302c7203cde 25,265-266,269,271-273,276-278,280,282-294,338-342,349
+  s_a1be23a656acf0::t_adf6167753d33a 11,279,295-296,314
+  s_a1be23a656acf0::t_c0803f4faaec2d 343,346,352
+apps/server/cloudflare/agent/provider.test-fixture.ts
+  s_a1be23a656acf0::t_37bebbe6f9fc52 45-52,133-134,137-138,149,228
+  s_a1be23a656acf0::t_b25302c7203cde 132,135-136,139-148
+  s_a1be23a656acf0::t_512f96c9c47e77 98,150-151
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bb1358e7d129a6e5b52392cabdb473fd2ee7d0fc",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

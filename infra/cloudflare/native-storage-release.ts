@@ -299,7 +299,12 @@ const requireClosedAdmission = Effect.fn(function* (client: HttpClient.HttpClien
     return yield* new ReleaseFailure({ message: "Normal admission is not closed" });
   }
 });
-const erasureObservation = ({ env, client, userNamespace, fs }: {
+const erasureObservation = ({
+  env,
+  client,
+  userNamespace,
+  fs,
+}: {
   env: Config;
   client: HttpClient.HttpClient;
   userNamespace: string;
@@ -355,7 +360,9 @@ const verifySyntheticUsers = Effect.fn(function* (
     proof: Redacted.make(env.smokeProof),
     origins,
     send,
-    erasure: Option.map(erasureNamespace, (id) => erasureObservation({ env, client, userNamespace: id, fs })),
+    erasure: Option.map(erasureNamespace, (id) =>
+      erasureObservation({ env, client, userNamespace: id, fs })
+    ),
   });
   const path = `https://api.cloudflare.com/client/v4/accounts/${env.account}/workflows/fidy-native-billing/instances/${proof.callback.workflow}`;
   const response = providerJson(
@@ -1190,10 +1197,7 @@ if (import.meta.main) {
     yield* commands[command](env, client, releasePort({ env, client })).pipe(
       Effect.provideService(FileSystem.FileSystem, Context.get(services, FileSystem.FileSystem))
     );
-  }).pipe(
-    Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }),
-    Effect.scoped
-  );
+  }).pipe(Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }), Effect.scoped);
   await Effect.runPromise(
     program.pipe(
       Effect.catchCause((cause) =>

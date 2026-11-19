@@ -12,8 +12,8 @@ from uuid import uuid4
 
 from budget import Refused, admit, counts, today
 from comparison import FIXTURE, boundaries, observe
-from owner_bundle import MaterializedBundle, verified_batch, LOGIN, HISTORY
-from owner_cloud import Cloud, NameConflict, ROLES
+from owner_bundle import MaterializedBundle, verified_batch, LOGIN, HISTORY, sha
+from owner_cloud import Cloud, RejectedControlRequest, ROLES
 from owner_state import AccountExperiment, CustodyObject
 from owner_transport import HERE, ROOT, NATIVE_API, NATIVE_BROWSER, confirmed, fetch, usage
 from prepare import PIN
@@ -34,7 +34,7 @@ def prepare_inventory(owner, cloud):
         owner.save()
         try:
             cloud.create(role)
-        except NameConflict:
+        except RejectedControlRequest:
             del run["inventory"][role]
             owner.save()
             raise
@@ -102,6 +102,16 @@ def teardown(owner, cloud, resumed=False):
     owner.state["active"] = None
     owner.save()
     return owner.state["last"]
+
+
+def cleanup_evidence(owner, cloud, resumed=False):
+    receipt = teardown(owner, cloud, resumed=resumed)
+    wire = json.dumps(receipt, sort_keys=True, separators=(",", ":")).encode()
+    return dict(
+        removed=receipt["removed"], namespaceCount=len(receipt["namespaceIds"]),
+        namespacesAbsent=receipt["namespacesAbsent"], spent=receipt["spent"],
+        pending=receipt["pending"], privateReceiptSha256=sha(wire),
+    )
 
 
 def statement(sql, *args):
@@ -377,7 +387,7 @@ def main():
         cloud = Cloud(account, args.prefix)
         owner = AccountExperiment(CustodyObject(account), account)
         if args.action == "cleanup":
-            report["cleanup"] = teardown(owner, cloud, resumed=True)
+            report["cleanup"] = cleanup_evidence(owner, cloud, resumed=True)
         else:
             read = native_read(session, args.revision)
             decision = admit(
@@ -421,7 +431,7 @@ def main():
                 report["runFailure"] = str(error) if isinstance(error, Refused) else type(error).__name__
                 raise
             finally:
-                report["cleanup"] = teardown(owner, cloud)
+                report["cleanup"] = cleanup_evidence(owner, cloud)
         failed = any(cell["status"] == "fail" for cell in report.get("boundaries", {}).values())
         report["status"] = "failed" if failed else "completed"
         return int(failed)

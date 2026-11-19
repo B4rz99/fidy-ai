@@ -17,8 +17,8 @@ ROLES = ("db", "bucket", "core", "ingress")
 INERT = b"export default {fetch(){return new Response(null,{status:403})}}"
 
 
-class NameConflict(Refused):
-    """The control plane proved that creation did not acquire this name."""
+class RejectedControlRequest(Refused):
+    """A definitive client refusal cannot establish ownership of a resource."""
 
 
 def multipart(metadata, module):
@@ -78,10 +78,10 @@ class Cloud:
         try:
             response = self.transport.open(request, timeout=45)
         except urllib.error.HTTPError as error:
-            if error.code in (409, 412):
-                raise NameConflict("cloud_resource_conflict") from None
             if error.code == 404 and tolerate_absent:
                 return None
+            if error.code in (400, 401, 403, 404, 409, 412, 422, 429):
+                raise RejectedControlRequest("cloud_control_" + str(error.code)) from None
             raise Refused("cloud_control_" + str(error.code)) from None
         with response:
             if response.status == 204 and method == "DELETE" and not raw:

@@ -11,7 +11,7 @@ import tempfile
 import urllib.request
 
 from budget import Refused, today
-from owner import AccountExperiment, MaterializedBundle, exercise, prepare_inventory, teardown
+from owner import AccountExperiment, MaterializedBundle, exercise, prepare_inventory, cleanup_evidence
 from owner_bundle import sha
 from owner_transport import ROOT, HERE, transport
 
@@ -169,9 +169,9 @@ def main():
             from unittest.mock import patch
 
             with patch("owner.time.time", return_value=restored.active["deadline"] + 91):
-                evidence["cleanup"] = teardown(restored, cloud, resumed=True)
+                evidence["cleanup"] = cleanup_evidence(restored, cloud, resumed=True)
                 assert (
-                    teardown(AccountExperiment(store, account), cloud, resumed=True)
+                    cleanup_evidence(AccountExperiment(store, account), cloud, resumed=True)
                     == evidence["cleanup"]
                 )
             assert not list(cloud.storage.iterdir())

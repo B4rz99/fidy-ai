@@ -94,7 +94,7 @@ class OwnerTests(unittest.TestCase):
 
     def test_rejected_create_cannot_dispose_the_colliding_database(self):
         from owner import prepare_inventory, teardown
-        from owner_cloud import NameConflict
+        from owner_cloud import RejectedControlRequest
 
         class Conflict:
             prefix = "fidy-2259-123456abcdef"
@@ -111,7 +111,7 @@ class OwnerTests(unittest.TestCase):
 
             def create(self, role):
                 self.db = "another-controller"
-                raise NameConflict("collision")
+                raise RejectedControlRequest("collision")
 
             def remove(self, *_):
                 raise AssertionError("Removed the other controller’s database")
@@ -121,7 +121,7 @@ class OwnerTests(unittest.TestCase):
         owner.begin(
             cloud.prefix, dict(_tag="Allowed", maximumRowsRead=100, maximumRowsWritten=10), today()
         )
-        with self.assertRaises(NameConflict):
+        with self.assertRaises(RejectedControlRequest):
             prepare_inventory(owner, cloud)
         self.assertEqual(teardown(owner, cloud)["removed"], [])
         self.assertEqual(cloud.db, "another-controller")

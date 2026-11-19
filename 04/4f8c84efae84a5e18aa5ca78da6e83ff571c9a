@@ -1,0 +1,20 @@
+apps/server/cloudflare/recovery/support-recovery.test.ts
+  s_a1be23a656acf0::t_946b0048b9f157 2-20,52-55,61-62,79,81-82,84-86,88-89,92,113-121,123-136,149,181-182,184,199-200,232-233,239,241,249-250,260-261,277,279,291-292,303-304,327
+  s_a1be23a656acf0::t_7902590ca158a3 329,338-339,352-353,377,379,390-391,396-414
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "044f8c84efae84a5e18aa5ca78da6e83ff571c9a",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

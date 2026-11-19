@@ -19,6 +19,36 @@ const timedResponse = Effect.fn(function* (runtime: Miniflare, request: Request)
   headers.set("x-reference-backend-ms", String(performance.now() - started.value));
   return new Response(body, { status: response.status, headers });
 });
+const accountability = Effect.fn(function* (
+  owner: Awaited<ReturnType<Miniflare["unsafeGetDurableObjectStorage"]>>
+) {
+  const [counts] = yield* Effect.tryPromise(() =>
+    owner.exec(
+      `SELECT
+          (SELECT count(*) FROM audit_entries WHERE user_id=?1 AND operation='transactions.listTransactions' AND outcome='success') AS reads,
+          (SELECT count(*) FROM audit_entries WHERE user_id=?1 AND operation='transactions.updateTransaction' AND outcome='success') AS corrections,
+          (SELECT COALESCE(sum(units),0) FROM commercial_allowance_consumptions WHERE user_id=?1 AND allowance='canonical_call') AS units,
+          (SELECT count(*) FROM canonical_request_receipts WHERE user_id=?1) AS receipts`,
+      subject
+    )
+  );
+  if (Bun.env.FIDY_ASSESSMENT === "canonical-empty") {
+    const capture = yield* Effect.tryPromise(() =>
+      owner.exec(
+        "SELECT s.id, s.transaction_id AS transactionId, s.kind, s.service_market AS serviceMarket, s.locale, s.time_zone AS timeZone, s.interpretation_revision AS interpretationRevision, s.created_at_ms AS createdAtMs, t.user_decisions AS decisions FROM source_attestations s JOIN transactions t ON t.user_id=s.user_id AND t.id=s.transaction_id WHERE s.user_id=? ORDER BY s.id LIMIT 9",
+        subject
+      )
+    );
+    const links = yield* Effect.tryPromise(() =>
+      owner.exec(
+        "SELECT first_transaction_id AS first, second_transaction_id AS second, visible_transaction_id AS visible, decided_at_ms AS decidedAtMs FROM transaction_reconciliation_decisions WHERE user_id=? AND state='linked' LIMIT 2",
+        subject
+      )
+    );
+    return Response.json({ capture, links });
+  }
+  return Response.json(counts);
+});
 const start = Effect.gen(function* () {
   process.stdout.write("REFERENCE_STAGE runtime\n");
   const runtime = yield* makeBrowserRuntime;
@@ -56,32 +86,7 @@ const start = Effect.gen(function* () {
             return Response.json({ status: "ready" });
           }
           if (url.pathname === "/assessment/accountability" && request.method === "GET") {
-            const [counts] = yield* Effect.tryPromise(() =>
-              owner.exec(
-                `SELECT
-          (SELECT count(*) FROM audit_entries WHERE user_id=?1 AND operation='transactions.listTransactions' AND outcome='success') AS reads,
-          (SELECT count(*) FROM audit_entries WHERE user_id=?1 AND operation='transactions.updateTransaction' AND outcome='success') AS corrections,
-          (SELECT COALESCE(sum(units),0) FROM commercial_allowance_consumptions WHERE user_id=?1 AND allowance='canonical_call') AS units,
-          (SELECT count(*) FROM canonical_request_receipts WHERE user_id=?1) AS receipts`,
-                subject
-              )
-            );
-            if (Bun.env.FIDY_ASSESSMENT === "canonical-empty") {
-              const capture = yield* Effect.tryPromise(() =>
-                owner.exec(
-                  "SELECT s.id, s.transaction_id AS transactionId, s.kind, s.service_market AS serviceMarket, s.locale, s.time_zone AS timeZone, s.interpretation_revision AS interpretationRevision, s.created_at_ms AS createdAtMs, t.user_decisions AS decisions FROM source_attestations s JOIN transactions t ON t.user_id=s.user_id AND t.id=s.transaction_id WHERE s.user_id=? ORDER BY s.id LIMIT 9",
-                  subject
-                )
-              );
-              const links = yield* Effect.tryPromise(() =>
-                owner.exec(
-                  "SELECT first_transaction_id AS first, second_transaction_id AS second, visible_transaction_id AS visible, decided_at_ms AS decidedAtMs FROM transaction_reconciliation_decisions WHERE user_id=? AND state='linked' LIMIT 2",
-                  subject
-                )
-              );
-              return Response.json({ capture, links });
-            }
-            return Response.json(counts);
+            return yield* accountability(owner);
           }
           return yield* approve(runtime, request);
         })

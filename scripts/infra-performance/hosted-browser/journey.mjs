@@ -2,17 +2,19 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { Schema } from "effect";
+import { freshBudgetMonth, freshPendingReview } from "../reference/fresh-workspaces.mjs";
 import { freshTransactions } from "../reference/fresh-transactions.mjs";
 import { protectedBrowserProxy } from "./proxy.mjs";
 
 const { chromium } = await import("@playwright/test");
 /** @typedef {import("./proxy.mjs").Origins} Origins */
 /** @typedef {"ordinary" | "poor"} Network */
+/** @typedef {"transactions" | "budgets" | "needs-review"} View */
 /** @typedef {(row: Readonly<Record<string, unknown>>) => void} EventSink */
 /** @typedef {import("@playwright/test").CDPSession} Cdp */
 /** @typedef {import("@playwright/test").Response} BrowserResponse */
 /** @typedef {Pick<import("./proxy.mjs").ProxySettings, "origins" | "environment" | "forward"> & {
- * session: string, network: Network, event: EventSink }} Inputs */
+ * session: string, network: Network, view: View, event: EventSink }} Inputs */
 const timeoutMs = 30000,
   latencyMs = 400,
   bytesPerSecond = 125000,
@@ -129,13 +131,15 @@ const observeResponse = async (event, response) => {
  * @param {EventSink} event Metadata-only evidence sink.
  * @param {Network} network Predeclared network profile.
  * @param {string} version Chromium version reported by the executable.
+ * @param {View} view Predeclared browser view.
  */
-const recordBrowser = (event, network, version) => {
+const recordBrowser = (event, network, version, view) => {
   event({
     type: "browser",
     version,
     profile: network,
-    plannedJourneys: 3,
+    view,
+    plannedJourneys: view === "transactions" ? 3 : 1,
     network:
       network === "poor"
         ? { latencyMs, bytesPerSecondEachDirection: bytesPerSecond }
@@ -162,6 +166,7 @@ export const measureBrowser = async ({
     origins,
     environment,
     forward,
+    transactionCorrection: view === "transactions",
     tls: {
       cert: Bun.file(process.env.BROWSER_TLS_CERT),
       key: Bun.file(process.env.BROWSER_TLS_KEY),
@@ -173,8 +178,13 @@ export const measureBrowser = async ({
     const { page, context } = await openPage(browser, origins, session);
     const cdp = await context.newCDPSession(page);
     await setNetwork(cdp, network);
-    recordBrowser(event, network, browser.version());
+    recordBrowser(event, network, browser.version(), view);
     recordResources(cdp, origins, event);
+    if (view === "budgets" || view === "needs-review") {
+      const measure = view === "budgets" ? freshBudgetMonth : freshPendingReview;
+      await measure({ page, ...origins, event });
+      return;
+    }
     /**
      * @param {BrowserResponse} response Observed browser response.
      */

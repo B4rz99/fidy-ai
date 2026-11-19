@@ -1,5 +1,6 @@
 import { it } from "@effect/vitest";
-import { Effect, Option } from "effect";
+import { Clock, Effect, Fiber, Option } from "effect";
+import { TestClock } from "effect/testing";
 import { expect } from "vitest";
 import { verifyIndependentErasure } from "./native-erasure";
 import { newStoredUser, physicalErasure, readUserObjects } from "./native-erasure-evidence";
@@ -157,4 +158,45 @@ it.effect(
         "physically-erased",
       ]);
     })
+);
+
+it.effect("waits through delayed baseline, signup and erasure census updates without repeating signup", () =>
+  Effect.gen(function* () {
+    const start = yield* Clock.currentTimeMillis;
+    const minute = 60_000;
+    const retained = new Map([["probe", true], ["one", true], ["two", true]]);
+    const fresh = new Map([...retained, ["physical-third", true]] as const);
+    const stages: string[] = [];
+    let signedUp = 0, admitted = 0;
+    const runner = yield* verifyIndependentErasure({
+      inventory: () => Clock.currentTimeMillis.pipe(Effect.map(now => {
+        const elapsed = now - start;
+        if (elapsed < 8 * minute) return new Map([["one", true], ["two", true]]);
+        if (elapsed < 16 * minute || elapsed >= 24 * minute) return retained;
+        return fresh;
+      })),
+      record: checkpoint => Effect.sync(() => { stages.push(checkpoint.stage); }),
+      signup: () => Effect.sync(() => {
+        expect(stages.at(-1)).toBe("signup-started");
+        signedUp++;
+        return {id:"third", outcome:"created", headers:{}};
+      }),
+      admit: () => Effect.sync(() => { admitted++; return "receipt"; }),
+      survivors: () => Effect.succeed(["one","two"]),
+      renew: () => Effect.void, denied: () => Effect.void,
+    }).pipe(Effect.forkChild);
+    yield* TestClock.adjust("7 minutes");
+    expect(signedUp).toBe(0);
+    expect(stages).toContain("waiting-baseline");
+    yield* TestClock.adjust("7 minutes");
+    expect(signedUp).toBe(1);
+    expect(admitted).toBe(0);
+    expect(stages).toContain("waiting-fresh-object");
+    yield* TestClock.adjust("6 minutes");
+    expect(admitted).toBe(2);
+    expect(stages).toContain("waiting-physical-erasure");
+    yield* TestClock.adjust("5 minutes");
+    expect((yield* Fiber.join(runner)).physicalStateAfter).toBe("absent");
+    expect(signedUp).toBe(1);
+  })
 );

@@ -12,21 +12,26 @@ const enc = new TextEncoder();
 const hash = (value) => crypto.subtle.digest("SHA-256", enc.encode(value));
 let born;
 let requests = 0;
-export default {
+const keyBytes = 32;
+const admitted = async (request, env) => {
+  const url = new URL(request.url);
+  const deadline = Number(env.EXPERIMENT_DEADLINE);
+  if (
+    !Number.isSafeInteger(deadline) ||
+    Date.now() >= deadline ||
+    !env.EXPERIMENT_KEY ||
+    env.EXPERIMENT_KEY.length < keyBytes
+  )
+    return false;
+  if (!paths.has(request.method + " " + url.pathname + url.search)) return false;
+  return timingSafeEqual(
+    await hash(env.EXPERIMENT_KEY),
+    await hash(request.headers.get("x-fidy-comparison-key") ?? "")
+  );
+};
+export const worker = {
   async fetch(request, env) {
-    const url = new URL(request.url);
-    const deadline = Number(env.EXPERIMENT_DEADLINE);
-    if (
-      !Number.isSafeInteger(deadline) ||
-      Date.now() >= deadline ||
-      !env.EXPERIMENT_KEY ||
-      env.EXPERIMENT_KEY.length < 32 ||
-      !paths.has(request.method + " " + url.pathname + url.search) ||
-      !timingSafeEqual(
-        await hash(env.EXPERIMENT_KEY),
-        await hash(request.headers.get("x-fidy-comparison-key") ?? "")
-      )
-    ) {
+    if (!(await admitted(request, env))) {
       return new Response(null, { status: 403 });
     }
     born ??= crypto.randomUUID();

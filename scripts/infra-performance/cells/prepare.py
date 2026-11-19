@@ -53,12 +53,14 @@ def main():
     artifacts["plan"] = hashlib.sha256((out / "plan.json").read_bytes()).hexdigest()
     (out / "manifest.json").write_text(json.dumps(dict(baseline=PIN, calibration=CALIBRATION, sha256=artifacts), indent=2))
     (out / "private-ingress.mjs").write_bytes((HERE / "private-ingress.mjs").read_bytes())
-    subprocess.run(["bun", "build", "private-ingress.mjs", "--target=browser", "--external=cloudflare:workers", "--external=node:*",
+    (out / "ingress-entry.mjs").write_text('export { worker as default } from "./private-ingress.mjs";')
+    (out / "core-entry.mjs").write_text('export { worker as default, UserTransactionCoordinator } from "./meter.mjs";')
+    subprocess.run(["bun", "build", "ingress-entry.mjs", "--target=browser", "--external=cloudflare:workers", "--external=node:*",
                     "--outfile", "bounded-ingress.mjs"], cwd=out, check=True)
     (out / "meter.mjs").write_bytes((HERE / "meter.mjs").read_bytes())
     (out / "limits.json").write_text("null")
     for mode in ("train", "bounded"):
-        subprocess.run(["bun", "build", "meter.mjs", "--target=browser", "--external=cloudflare:workers", "--external=node:*",
+        subprocess.run(["bun", "build", "core-entry.mjs", "--target=browser", "--external=cloudflare:workers", "--external=node:*",
                         "--outfile", "metered-core.mjs"], cwd=out, check=True)
         subprocess.run(["bun", str(HERE / "probe.mjs"), str(out), mode], cwd=root, check=True)
     reference = json.loads((out.parent / "attempts.json").read_bytes()) if (out.parent / "attempts.json").exists() else []

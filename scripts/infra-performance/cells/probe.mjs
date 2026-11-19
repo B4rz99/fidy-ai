@@ -3,6 +3,33 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 
+const shaWidth = 64;
+const setupLifetimeMs = 180000;
+const trialMs = 604800000;
+const secondMs = 1000;
+const sampleCount = 30;
+const success = 200;
+const forbidden = 403;
+const uuidDigits = 12;
+const fixtureOriginalCount = 8;
+const readFactor = 1.7;
+const writeFactor = 1.55;
+const extraReads = 20;
+const headroom = (entry) => ({
+  rowsRead: Math.ceil(entry.rowsRead * readFactor) + extraReads,
+  rowsWritten: Math.ceil(entry.rowsWritten * writeFactor) + 4,
+});
+const maximumOf = (left, right) => ({
+  rowsRead: Math.max(left.rowsRead, right.rowsRead),
+  rowsWritten: Math.max(left.rowsWritten, right.rowsWritten),
+});
+const add = (left, right) => ({
+  rowsRead: left.rowsRead + right.rowsRead,
+  rowsWritten: left.rowsWritten + right.rowsWritten,
+});
+const empty = () => ({ rowsRead: 0, rowsWritten: 0 });
+const eachInOrder = (items, visit) =>
+  items.reduce((previous, item) => previous.then(() => visit(item)), Promise.resolve());
 const output = process.argv[2];
 const training = process.argv[3] === "train";
 const baseline = resolve("apps/server");
@@ -22,9 +49,9 @@ const coordinator = {
 const environment = {
   BROWSER_ORIGIN: text(origin),
   RELEASE_GIT_SHA: text(plan.baseline),
-  CONTRACT_DIGEST: text("a".repeat(64)),
+  CONTRACT_DIGEST: text("a".repeat(shaWidth)),
 };
-const config = async (name, entry, env, exports = {}) => ({
+const config = async (name, entry, { env, exports = {} }) => ({
   config: {
     type: "worker",
     name,
@@ -46,19 +73,19 @@ const config = async (name, entry, env, exports = {}) => ({
 const runtime = new Miniflare({
   workers: [
     await config("ingress", "bounded-ingress", {
-      EXPERIMENT_KEY: text(experimentKey),
-      EXPERIMENT_DEADLINE: text(String(Date.now() + 180000)),
-      CF_VERSION_METADATA: { type: "json", value: { id: ingressVersion } },
-      ...environment,
-      CORE: { type: "worker", worker: "core" },
-      ERASURE_REGISTRY_COORDINATOR: coordinator,
-      LOCAL_CANONICAL_READ_BEARER: text(""),
-      PAT_ADMISSION_KEY: text("test-only-admission-key-with-32-bytes"),
+      env: {
+        EXPERIMENT_KEY: text(experimentKey),
+        EXPERIMENT_DEADLINE: text(String(Date.now() + setupLifetimeMs)),
+        CF_VERSION_METADATA: { type: "json", value: { id: ingressVersion } },
+        ...environment,
+        CORE: { type: "worker", worker: "core" },
+        ERASURE_REGISTRY_COORDINATOR: coordinator,
+        LOCAL_CANONICAL_READ_BEARER: text(""),
+        PAT_ADMISSION_KEY: text("test-only-admission-key-with-32-bytes"),
+      },
     }),
-    await config(
-      "core",
-      "metered-core",
-      {
+    await config("core", "metered-core", {
+      env: {
         ...environment,
         DB: { type: "d1", id: "isolated-d1-comparator" },
         ERASURE_REQUIRED: text("true"),
@@ -69,8 +96,8 @@ const runtime = new Miniflare({
         HOSTED_AI_MODEL: text("unused"),
         WHATSAPP_BUSINESS_PORTFOLIO_ID: text("acceptance-portfolio"),
       },
-      { UserTransactionCoordinator: { type: "durable-object", storage: "sqlite" } }
-    ),
+      exports: { UserTransactionCoordinator: { type: "durable-object", storage: "sqlite" } },
+    }),
   ],
 });
 const metadata = {
@@ -90,38 +117,26 @@ const source = (path, options = {}) =>
     },
   });
 const estimates = {};
+const learn = (route, cost) => {
+  assert.equal(cost.route, route);
+  const previous = estimates[route] ?? { maximum: empty(), statements: {} };
+  const statements = { ...previous.statements };
+  for (const entry of cost.calls) {
+    statements[entry.key] = maximumOf(statements[entry.key] ?? empty(), headroom(entry));
+  }
+  const maximum = cost.calls.reduce((total, entry) => add(total, statements[entry.key]), empty());
+  estimates[route] = { maximum: maximumOf(previous.maximum, maximum), statements };
+};
 const request = async (path, options) => {
   const reply = await source(path, options);
   assert.equal(reply.headers.get("x-fidy-comparison-worker"), ingressVersion);
   const cost = JSON.parse(reply.headers.get("x-fidy-comparison-cost") ?? "null");
   assert.ok(
     cost && Number.isSafeInteger(cost.rowsRead) && Number.isSafeInteger(cost.rowsWritten),
-    "Missing native " + path + " receipt: " + reply.status
+    "Missing native receipt: " + reply.status
   );
   const route = (options?.method ?? "GET") + " " + path;
-  if (training) {
-    assert.equal(cost.route, route);
-    const previous = estimates[route];
-    const caps = { ...previous?.statements };
-    const maximum = { rowsRead: 0, rowsWritten: 0 };
-    for (const entry of cost.calls) {
-      const cap = caps[entry.key] ?? { rowsRead: 0, rowsWritten: 0 };
-      cap.rowsRead = Math.max(cap.rowsRead, Math.ceil(entry.rowsRead * 1.7) + 20);
-      cap.rowsWritten = Math.max(cap.rowsWritten, Math.ceil(entry.rowsWritten * 1.55) + 4);
-      caps[entry.key] = cap;
-    }
-    for (const entry of cost.calls) {
-      maximum.rowsRead += caps[entry.key].rowsRead;
-      maximum.rowsWritten += caps[entry.key].rowsWritten;
-    }
-    estimates[route] = {
-      maximum: {
-        rowsRead: Math.max(maximum.rowsRead, previous?.maximum.rowsRead ?? 0),
-        rowsWritten: Math.max(maximum.rowsWritten, previous?.maximum.rowsWritten ?? 0),
-      },
-      statements: { ...previous?.statements, ...caps },
-    };
-  }
+  if (training) learn(route, cost);
   (metadata.requests ??= []).push({
     route,
     rowsRead: cost.rowsRead,
@@ -134,7 +149,7 @@ try {
   const bucket = await runtime.getR2Bucket("ERASURE_BUCKET", "core");
   const totals = { rowsRead: 0, rowsWritten: 0 };
   const sqlBatches = [];
-  function account(phase, replies) {
+  const account = (phase, replies) => {
     const actual = { rowsRead: 0, rowsWritten: 0 };
     for (const { success, meta } of replies) {
       assert.ok(
@@ -146,21 +161,18 @@ try {
     sqlBatches.push({
       phase,
       actual,
-      maximum: {
-        rowsRead: Math.ceil(actual.rowsRead * 1.7) + 20,
-        rowsWritten: Math.ceil(actual.rowsWritten * 1.55) + 4,
-      },
+      maximum: headroom(actual),
     });
     return actual;
-  }
-  for (const batch of plan.batches) {
+  };
+  await eachInOrder(plan.batches, async (batch) => {
     const statements = batch.batch.map(({ sql, params }) => db.prepare(sql).bind(...params));
     const replies = await db.batch(statements);
     assert.equal(replies.length, statements.length);
     const actual = account("calibration", replies);
     totals.rowsRead += actual.rowsRead;
     totals.rowsWritten += actual.rowsWritten;
-  }
+  });
   metadata.preparation = totals;
   await bucket.put("recovery/generation", "initial");
   const now = Date.now();
@@ -171,7 +183,7 @@ try {
         .prepare(
           "UPDATE users SET whatsapp_portfolio_id=?,whatsapp_bsuid=?,whatsapp_verified_at_ms=?,trial_started_at_ms=?,trial_ends_at_ms=? WHERE id=?"
         )
-        .bind("acceptance-portfolio", "CO.Reference", now, now, now + 604800000, subject),
+        .bind("acceptance-portfolio", "CO.Reference", now, now, now + trialMs, subject),
       db
         .prepare(
           "INSERT INTO consent_history(record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,?,?,?,?,?)"
@@ -190,11 +202,11 @@ try {
   assert.equal(
     (await source("/transactions?limit=25", { headers: { "x-fidy-comparison-key": "wrong" } }))
       .status,
-    403
+    forbidden
   );
-  assert.equal((await source("/transactions?limit=26")).status, 403);
+  assert.equal((await source("/transactions?limit=26")).status, forbidden);
   const start = await request("/web/pairings", { method: "POST" });
-  assert.equal(start.status, 200, "start Browser Login");
+  assert.equal(start.status, success, "start Browser Login");
   const pair = await start.json();
   account("approval", [
     await db
@@ -213,27 +225,32 @@ try {
   const cookie = redeem.headers.get("set-cookie")?.split(";")[0];
   assert.ok(cookie?.startsWith("__Host-fidy_session="));
   const handshake = await request("/web/session/binding", { headers: { cookie } });
-  assert.equal(handshake.status, 200);
+  assert.equal(handshake.status, success);
   const { binding } = await handshake.json();
   assert.ok(binding);
   let responseSha256;
   const firstOffer = performance.now();
-  for (let index = 0; index < 30; index++) {
-    await Bun.sleep(Math.max(0, firstOffer + index * 1000 - performance.now()));
-    const reply = await request("/transactions?limit=25", {
-      headers: { cookie, "Fidy-Session-Binding": binding },
-    });
-    assert.equal(reply.status, 200, "authenticated history on deployed graph");
-    const body = await reply.text();
-    const { data } = JSON.parse(body);
-    assert.deepEqual(
-      data.map(({ id }) => id),
-      [0, 2, 3, 4, 5, 6, 7].map((i) => "81000000-0000-4000-8000-" + String(i).padStart(12, "0"))
-    );
-    const hash = createHash("sha256").update(body).digest("hex");
-    if (responseSha256) assert.equal(hash, responseSha256);
-    responseSha256 = hash;
-  }
+  await eachInOrder(
+    Array.from({ length: sampleCount }, (_, index) => index),
+    async (index) => {
+      await Bun.sleep(Math.max(0, firstOffer + index * secondMs - performance.now()));
+      const reply = await request("/transactions?limit=25", {
+        headers: { cookie, "Fidy-Session-Binding": binding },
+      });
+      assert.equal(reply.status, success, "authenticated history on deployed graph");
+      const body = await reply.text();
+      const { data } = JSON.parse(body);
+      assert.deepEqual(
+        data.map(({ id }) => id),
+        Array.from({ length: fixtureOriginalCount }, (_, ordinal) => ordinal)
+          .filter((ordinal) => ordinal !== 1)
+          .map((ordinal) => "81000000-0000-4000-8000-" + String(ordinal).padStart(uuidDigits, "0"))
+      );
+      const hash = createHash("sha256").update(body).digest("hex");
+      if (responseSha256) assert.equal(hash, responseSha256);
+      responseSha256 = hash;
+    }
+  );
   const audit = await db
     .prepare(
       "SELECT count(*) AS n FROM audit_entries WHERE user_id=? AND operation='transactions.listTransactions' AND outcome='success'"
@@ -242,23 +259,25 @@ try {
     .all();
   account("audit", [audit]);
   const counts = audit.results[0];
-  assert.equal(counts.n, 30);
+  assert.equal(counts.n, sampleCount);
   metadata.sqlBatches = sqlBatches;
   if (!training) {
     const limits = await Bun.file(resolve(output, "limits.json")).json();
     const estimate = (pairs) => {
-      const caps = sqlBatches.map((b) => b.maximum);
+      const caps = sqlBatches.map((batch) => batch.maximum);
       for (const route of [
         "POST /web/pairings",
         "POST /web/pairings/redeem",
         "GET /web/session/binding",
-      ])
+      ]) {
         caps.push(limits[route].maximum);
-      for (let i = 0; i < pairs; i++) caps.push(limits["GET /transactions?limit=25"].maximum);
+      }
+      for (let index = 0; index < pairs; index++)
+        caps.push(limits["GET /transactions?limit=25"].maximum);
       const sum = (key) => caps.reduce((total, cap) => total + cap[key], 0);
       return { rowsRead: sum("rowsRead"), rowsWritten: sum("rowsWritten") };
     };
-    metadata.fullEstimate = { onePair: estimate(1), thirtyPairs: estimate(30) };
+    metadata.fullEstimate = { onePair: estimate(1), thirtyPairs: estimate(sampleCount) };
   }
   if (training) await Bun.write(resolve(output, "limits.json"), JSON.stringify(estimates, null, 2));
   Object.assign(metadata, { result: "passed", responseSha256, auditReads: counts.n });

@@ -3,6 +3,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import core, { UserTransactionCoordinator as PinnedCoordinator } from "./core-worker.mjs";
 import limits from "./limits.json";
 
+const hexBase = 16;
 const active = new AsyncLocalStorage();
 const nativeStatements = new WeakMap();
 const fields = ["rowsRead", "rowsWritten"];
@@ -26,51 +27,59 @@ const digest = async (sql) => {
     "SHA-256",
     new TextEncoder().encode(JSON.stringify(sql))
   );
-  return Array.from(new Uint8Array(bytes), (b) => b.toString(16).padStart(2, "0")).join("");
+  return Array.from(new Uint8Array(bytes), (byte) => byte.toString(hexBase).padStart(2, "0")).join(
+    ""
+  );
 };
 
-async function nativeCall(shape, execute) {
+const reserve = (frame, key) => {
+  if (training) return null;
+  const cap = frame.plan?.statements[key];
+  if (
+    !cap ||
+    fields.some(
+      (field) =>
+        !count(cap[field]) ||
+        frame.used[field] + frame.pending[field] + cap[field] > frame.plan.maximum[field]
+    )
+  ) {
+    stop();
+  }
+  for (const field of fields) frame.pending[field] += cap[field];
+  return cap;
+};
+const nativeRows = (replies, length) => {
+  if (!Array.isArray(replies) || !length || replies.length !== length) stop();
+  const actual = zero();
+  for (const reply of replies) {
+    const meta = reply?.meta;
+    if (!reply?.success || !count(meta?.rows_read) || !count(meta?.rows_written)) stop();
+    actual.rowsRead += meta.rows_read;
+    actual.rowsWritten += meta.rows_written;
+  }
+  return actual;
+};
+const nativeCall = async (shape, execute) => {
   const frame = context();
   if (frame.zeroOnly) stop();
   const key = await digest(shape);
-  context();
-  const cap = training ? null : frame.plan?.statements[key];
-  if (
-    !training &&
-    (!cap ||
-      fields.some(
-        (k) => !count(cap[k]) || frame.used[k] + frame.pending[k] + cap[k] > frame.plan.maximum[k]
-      ))
-  )
-    stop();
-  if (cap) for (const k of fields) frame.pending[k] += cap[k];
+  const cap = reserve(context(), key);
   frame.inflight++;
   try {
     const replies = await execute();
-    if (!Array.isArray(replies) || !replies.length || replies.length !== shape.length - 1) stop();
-    const actual = zero();
-    for (const reply of replies) {
-      if (
-        reply?.success !== true ||
-        !count(reply.meta?.rows_read) ||
-        !count(reply.meta?.rows_written)
-      )
-        stop();
-      actual.rowsRead += reply.meta.rows_read;
-      actual.rowsWritten += reply.meta.rows_written;
-    }
-    for (const k of fields) frame.used[k] += actual[k];
-    if (cap && fields.some((k) => actual[k] > cap[k])) stop();
+    const actual = nativeRows(replies, shape.length - 1);
+    for (const field of fields) frame.used[field] += actual[field];
+    if (cap && fields.some((field) => actual[field] > cap[field])) stop();
     frame.calls.push({ key, ...actual });
     return replies;
   } catch {
     return stop();
   } finally {
     frame.inflight--;
-    if (cap) for (const k of fields) frame.pending[k] -= cap[k];
+    if (cap) for (const field of fields) frame.pending[field] -= cap[field];
   }
-}
-function prepared(statement, sql) {
+};
+const prepared = (statement, sql) => {
   const one = async (op) => (await nativeCall([op, sql], async () => [await statement[op]()]))[0];
   const view = {
     bind: (...parameters) => prepared(statement.bind(...parameters), sql),
@@ -86,25 +95,25 @@ function prepared(statement, sql) {
   };
   nativeStatements.set(view, { sql, statement });
   return view;
-}
-function binding(database) {
+};
+const binding = (database) => {
   return {
     prepare: (sql) => prepared(database.prepare(sql), sql),
     withSession: (...args) => binding(database.withSession(...args)),
     getBookmark: () => database.getBookmark(),
     batch: (statements) => {
-      const batch = statements.map((s) => nativeStatements.get(s));
-      if (batch.some((s) => !s)) stop();
-      return nativeCall(["batch", ...batch.map((s) => s.sql)], () =>
-        database.batch(batch.map((s) => s.statement))
+      const batch = statements.map((view) => nativeStatements.get(view));
+      if (batch.some((view) => !view)) stop();
+      return nativeCall(["batch", ...batch.map((view) => view.sql)], () =>
+        database.batch(batch.map((view) => view.statement))
       );
     },
   };
-}
+};
 
 // The pinned Core consults the private registry for erasure metadata during Login.
 // Only that exact child request is permitted. Its mounted owner has a zero-D1 envelope.
-function guardedEnvironment(env) {
+const guardedEnvironment = (env) => {
   const isolated = { ...env, DB: binding(env.DB) };
   for (const name of ["USER_TRANSACTION_COORDINATOR", "ERASURE_REGISTRY_COORDINATOR"]) {
     const namespace = env[name];
@@ -117,8 +126,9 @@ function guardedEnvironment(env) {
           if (
             owner !== "erasure-registry-v1" ||
             request.url !== "https://erasure-registry.invalid/metadata"
-          )
+          ) {
             stop();
+          }
           const frame = context();
           frame.inflight++;
           try {
@@ -134,13 +144,14 @@ function guardedEnvironment(env) {
     };
   }
   return isolated;
-}
-async function measured(request, run) {
+};
+const measured = async (request, run) => {
   const url = new URL(request.url);
   const route = request.method + " " + url.pathname + url.search;
   const zeroOnly = request.url === "https://erasure-registry.invalid/metadata";
-  if (!zeroOnly && !training && !Object.hasOwn(limits, route))
+  if (!zeroOnly && !training && !Object.hasOwn(limits, route)) {
     return new Response(null, { status: 403 });
+  }
   const frame = {
     zeroOnly,
     closed: false,
@@ -156,8 +167,9 @@ async function measured(request, run) {
       const response = await run();
       const body = await response.arrayBuffer();
       frame.closed = true;
-      if (frame.fault || frame.inflight || fields.some((k) => frame.pending[k] !== 0))
+      if (frame.fault || frame.inflight || fields.some((field) => frame.pending[field] !== 0)) {
         return new Response(null, { status: 503 });
+      }
       const headers = new Headers(response.headers);
       headers.set(
         receipt,
@@ -173,7 +185,7 @@ async function measured(request, run) {
       frame.closed = true;
     }
   });
-}
+};
 export class UserTransactionCoordinator {
   constructor(state, env) {
     this.owner = new PinnedCoordinator(state, guardedEnvironment(env));
@@ -182,7 +194,7 @@ export class UserTransactionCoordinator {
     return measured(request, () => this.owner.fetch(request));
   }
 }
-export default {
+export const worker = {
   fetch(request, env, execution) {
     return measured(request, () => core.fetch(request, guardedEnvironment(env), execution));
   },

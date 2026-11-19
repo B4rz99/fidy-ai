@@ -1,8 +1,8 @@
 // The reusable native signer receives the bound Session on stdin. Only the parent reads its proof.
 import { Effect } from "effect";
-import { installedOrigins } from "../../../apps/server/src/shell/browser-transport/contract.ts";
-import { signAcceptanceRequest } from "../../../apps/server/cloudflare/release-isolation/operations.ts";
-import { acceptanceLifetimeMs } from "../../../apps/server/cloudflare/release-isolation/contract.ts";
+import { installedOrigins } from "../../../apps/server/src/shell/browser-transport/contract";
+import { signAcceptanceRequest } from "../../../apps/server/cloudflare/release-isolation/operations";
+import { acceptanceLifetimeMs } from "../../../apps/server/cloudflare/release-isolation/contract";
 
 const origins = installedOrigins.acceptance;
 const { cookie, binding, revision } = await Bun.stdin.json();

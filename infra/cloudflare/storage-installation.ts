@@ -112,24 +112,45 @@ export const requireInstallationWorker = ({
 };
 
 const ProviderBindings = Schema.Struct({ bindings: Schema.optional(NativeBindings) });
-export const requireClosedBindings = ({
-  worker,
-  bindings,
-}: {
-  worker: NativeRole;
-  bindings: ReadonlyArray<NativeBinding>;
-}): void => requireRoleBindings({ role: worker, bindings });
+export const requireClosedBindings = (
+  {
+    worker,
+    bindings,
+  }: {
+    worker: NativeRole;
+    bindings: ReadonlyArray<NativeBinding>;
+  },
+  fingerprint = ""
+): void => requireRoleBindings({ role: worker, bindings }, fingerprint);
 
+const requireSiteAsset = (role: NativeRole, props: unknown, bindings: NativeBinding[]): void => {
+  // The Worker provider appends the static ASSETS metadata from its build output outside its binding list.
+  if (role === "Web" && !bindings.some((binding) => binding.name === "ASSETS")) {
+    Schema.decodeUnknownSync(
+      Schema.Struct({ assets: Schema.Struct({ directory: Schema.Unknown }) })
+    )(props);
+    bindings.push({ name: "ASSETS", type: "assets" });
+  }
+};
+const requireSignerHost = (fingerprint: string, hosts: NativeHostMode): void => {
+  if (fingerprint && hosts !== "acceptance") {
+    throw Error("Fixture signer cannot stage live host routes");
+  }
+};
 const roles = ["Core", "Ingress", "ForwardedEmail", "Web"] as const;
-export const requireNativeBindings = ({
-  plan,
-  revision,
-  hosts,
-}: {
-  plan: Plan;
-  revision: string;
-  hosts: NativeHostMode;
-}): void => {
+export const requireNativeBindings = (
+  {
+    plan,
+    revision,
+    hosts,
+  }: {
+    plan: Plan;
+    revision: string;
+    hosts: NativeHostMode;
+  },
+  fingerprint = ""
+): void => {
+  requireSignerHost(fingerprint, hosts);
   const resources = Object.values(plan.resources);
   for (const role of [...roles, "Smoke"] as const) {
     const logicalId = role === "Smoke" ? "ReleaseSmoke-" + revision : role;
@@ -140,14 +161,8 @@ export const requireNativeBindings = ({
     const bindings = node.bindings.flatMap(
       (binding) => Schema.decodeUnknownSync(ProviderBindings)(binding.data).bindings ?? []
     );
-    // The Worker provider appends the static ASSETS metadata from its build output outside its binding list.
-    if (role === "Web" && !bindings.some((binding) => binding.name === "ASSETS")) {
-      Schema.decodeUnknownSync(
-        Schema.Struct({ assets: Schema.Struct({ directory: Schema.Unknown }) })
-      )(props);
-      bindings.push({ name: "ASSETS", type: "assets" });
-    }
-    requireClosedBindings({ worker: role, bindings });
+    requireSiteAsset(role, props, bindings);
+    requireClosedBindings({ worker: role, bindings }, fingerprint);
     if (role === "Core") requireNativeClasses(bindings);
   }
 };

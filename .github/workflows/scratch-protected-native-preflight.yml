@@ -1,0 +1,141 @@
+name: Rehearse the sealed comparator owner
+on:
+  push:
+    branches: [perf/scratch-protected-native-preflight]
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify comparison evidence and budget refusal
+        run: |
+          python3 scripts/infra-performance/cells/rehearse-custody.py
+          python3 -m unittest discover -s scripts/infra-performance/cells
+          python3 -m unittest discover -s scripts/infra-performance/canonical-fixture
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: fb53d9e755c14393048dc945fc0b7f117730d872
+          path: baseline-d1
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: 972ecaa22bb58ab472de2e9458c76290c72aa09d
+          path: baseline-fixtures
+          persist-credentials: false
+          sparse-checkout: apps/server/cloudflare
+      - uses: ./.github/actions/bun-runtime
+      - name: Prepare the pinned comparator
+        run: |
+          export GIT_ALTERNATE_OBJECT_DIRECTORIES="$GITHUB_WORKSPACE/baseline-fixtures/.git/objects"
+          echo "GIT_ALTERNATE_OBJECT_DIRECTORIES=$GIT_ALTERNATE_OBJECT_DIRECTORIES" >> "$GITHUB_ENV"
+          git -C baseline-d1 restore --source=972ecaa22bb58ab472de2e9458c76290c72aa09d --worktree -- \
+            apps/server/cloudflare/browser-assessment.test-fixture.ts \
+            apps/server/cloudflare/browser-acceptance-preview.ts \
+            apps/server/cloudflare/browser-acceptance-seed.ts
+          bash scripts/install-workspace.sh --ignore-scripts
+          (cd baseline-d1 && bash scripts/install-workspace.sh --ignore-scripts)
+      - name: Check the comparator Worker code and shared budget policy
+        run: |
+          bun x oxlint --deny-warnings --config .oxlintrc.json --type-aware --threads=1 scripts/infra-performance/cells/*.mjs scripts/infra-performance/cells/*.d.mts scripts/infra-performance/d1-budget.ts
+          bun node_modules/vitest/vitest.mjs run --config scripts/vitest.config.ts scripts/infra-performance/d1-budget.test.ts --environment node
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: 15cfe773cd263b6a3d4e1b6e1b958f233cdde84f
+          path: baseline-calibration
+          persist-credentials: false
+          sparse-checkout: |
+            apps/server/scripts
+            apps/server/cloudflare
+      - name: Exercise the sealed native fixture, frozen materialization and protected cost proposal together
+        shell: bash
+        run: |
+          umask 077
+          cd "$GITHUB_WORKSPACE"
+          python3 - <<'PY'
+          import hashlib, json, os, secrets, subprocess
+          from pathlib import Path
+          env = dict(os.environ)
+          assert not set(env) & {'AWS_SECRET_ACCESS_KEY','CLOUDFLARE_API_TOKEN','SMOKE_PROOF'}
+          root = Path(env['RUNNER_TEMP'])/'owner-combined'
+          root.mkdir(mode=0o700)
+          fixture, bundle, evidence = root/'private-native',root/'materialized',root/'evidence'
+          prefix = 'fidy-2259-'+secrets.token_hex(6)
+          revision = subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+          def run(program, *args, ok=True):
+              reply = subprocess.run(['python3','scripts/infra-performance/'+program,*map(str,args)],env=env)
+              assert reply.returncode == (0 if ok else 1)
+          run('canonical-fixture/hosted.py','rehearse','--out',fixture,'--resource-prefix',prefix)
+          verifier = json.loads((fixture/'rehearsal-verifier.json').read_bytes())
+          env.update({k:verifier[k] for k in ('SMOKE_PROOF','FIDY_NATIVE_FIXTURE_PUBLIC_KEY')})
+          run('cells/prepare.py','--d1','baseline-d1','--calibration','baseline-calibration','--canonical-fixture',fixture/'fixture','--materialized','--out',bundle)
+          manifest = hashlib.sha256((bundle/'manifest.json').read_bytes()).hexdigest()
+          args = ['--fixture',fixture/'fixture','--bundle',bundle,'--revision',revision,'--prefix',prefix,'--manifest-sha256',manifest,'--pairs',30]
+          run('cells/owner.py','propose',*args,'--out',evidence/'proposal')
+          run('cells/owner.py','run',*args,'--maximum-reads',1,'--maximum-writes',1,'--out',evidence/'refused',ok=False)
+          assert json.loads((evidence/'refused/report.json').read_bytes())['reason'] == 'outside_approved_cost_proposal'
+          # Exercise the ordinary positive-cap entry with actual sealed evidence. Only the read-only
+          # live-candidate lookup is replaced. An unrelated deployed signer must stop before custody.
+          from unittest.mock import patch
+          import sys
+          sys.path.insert(0,'scripts/infra-performance/cells')
+          import owner
+          version = '1ede059a-5ea9-448b-9ccd-72c6ac706e66'
+          def inspect(path):
+              if '/domains?' in path:
+                  return [dict(hostname='storage-acceptance.fidyapp.com',service='fidy-native-storage-ingress',enabled=True,previews_enabled=False)]
+              if path.endswith('/deployments'):
+                  return dict(deployments=[dict(versions=[dict(version_id=version,percentage=100)])])
+              fields = dict(NATIVE_STORAGE_ADMISSION='closed', RECOVERY_ISOLATION='isolated',RELEASE_GIT_SHA=revision,
+                            BROWSER_ORIGIN='https://storage-web-acceptance.fidyapp.com',NATIVE_FIXTURE_SIGNER_SHA256='0'*64)
+              return dict(id=version,resources=dict(bindings=[dict(type='plain_text',name=k,text=v) for k,v in fields.items()]
+                        + [dict(type='secret_text',name='NATIVE_FIXTURE_SIGNING_KEY')]))
+          for name, flags, reason in [('missing-versions', [],'approved_native_worker_versions_required'),
+                  ('foreign-signer',['--core-version',version,'--ingress-version',version],'native_installation_does_not_match_approved_candidate')]:
+              argv=['owner.py','run',*map(str,args),'--maximum-reads','100000','--maximum-writes','5000','--out',str(evidence/name),*flags]
+              with patch.dict(os.environ,{**verifier,'CLOUDFLARE_ACCOUNT_ID':'a'*32}), patch.object(sys,'argv',argv), \
+                   patch.object(owner,'cloudflare',side_effect=inspect) as reader, patch.object(owner,'CustodyObject') as custody:
+                  assert owner.main() == 1
+                  custody.assert_not_called()
+                  assert reader.called is bool(flags)
+              assert json.loads((evidence/name/'report.json').read_bytes())['reason'] == reason
+          run('cells/rehearse-owner.py','--bundle',bundle,'--out',evidence/'interruption.json')
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: combined-owner-evidence
+          path: ${{ runner.temp }}/owner-combined/evidence/**/*.json
+          if-no-files-found: warn
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 903b82282913fd0b041e55ca2f896d1dae62ca67
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/bun-runtime
+      - name: Check comparator commit messages
+        run: |
+          for commit in $(git rev-list 1a2572a093a5670825e22802a60e0ac584c474e3..HEAD); do
+            git show -s --format=%B "$commit" > "$RUNNER_TEMP/commit.txt"
+            bun scripts/check-commit-message.ts "$RUNNER_TEMP/commit.txt"
+          done
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LOG_OPTS: 1a2572a093a5670825e22802a60e0ac584c474e3..HEAD
+      - uses: trufflesecurity/trufflehog@20652fbbdefffcdaa493a5bf57ab2ac6b1db715b
+        with:
+          base: 1a2572a093a5670825e22802a60e0ac584c474e3
+          head: 903b82282913fd0b041e55ca2f896d1dae62ca67
+          version: 3.97.1@sha256:deb2af10659a488a14d262a323addcde099d99827a1cf1dc4e93c17915c39f08
+          extra_args: --only-verified --exclude-paths=.trufflehog-exclude-paths.txt

@@ -254,3 +254,59 @@ complete response checks, bounded per-batch usage and one-pair and 30-pair ceili
 exact fixture and bundle from the protected experiment when obtaining account admission.
 Individual hosted SourceAttestation identity and independent resource cleanup still require
 their own protected observations.
+
+### Obtain the closed native Transaction fixture receipt
+
+The protected Transaction comparison requires a tracked receipt-capable native revision on the
+closed acceptance hosts. The release builder adds one Core signing secret and its public-key
+fingerprint only when the protected release explicitly selects `transaction_fixture_signer`.
+The ordinary inventory keeps its original exact binding set. The candidate inventory requires
+`NATIVE_FIXTURE_SIGNING_KEY` as a Core secret and `NATIVE_FIXTURE_SIGNER_SHA256` as Core text
+with the expected SHA-256 of the public key's SPKI DER. The builder verifies this against the
+P-256 PKCS#8 private key. Configure the protected release secret as lowercase DER hex and pin
+the fingerprint independently. The comparator receives only the public SPKI DER hex as
+`FIDY_NATIVE_FIXTURE_PUBLIC_KEY` and the existing closed-request `SMOKE_PROOF`.
+
+For a protected collection, verify the whole closed installation through the normal release
+inventory. Record the candidate revision and its serving Ingress and Core version UUIDs. Keep the
+receipt, Session, fixture rows and module package in the run's private directory. The comparison
+owner allocates one resource prefix, records admission and owns cleanup. A collector can then use:
+
+```sh
+python3 scripts/infra-performance/canonical-fixture/hosted.py hosted \
+  --native-revision "$VERIFIED_NATIVE_REVISION" --resource-prefix "$OWNED_PREFIX" \
+  --core-version "$VERIFIED_CORE_VERSION" --ingress-version "$VERIFIED_INGRESS_VERSION" \
+  --out "$PRIVATE_NATIVE_RUN"
+```
+
+The hosted command refuses before installation reads or signup while the native
+row-admission and independent cleanup owner are pending. The isolated Actions rehearsal exercises
+the entire receipt issuance path.
+
+The candidate verifier checks the acceptance hostname, actual
+deployments, version bindings and signer fingerprint from the account. It uses the fixed
+performance-1 provider identity, retains the original bound Session, captures eight originals
+through the atomic API, links the known pair, and inspects all eight Transactions. An ambiguous
+offering fences the next mutation. The owner rechecks the original Session's live consent and
+erasure fence, Google credential, requested fixture and Session Audit. The response signs and
+encrypts the minimum required source and link evidence, binding it to the revision, resource
+prefix, Session digest and canonical manifest digest. A conditional create under
+`_release-smoke/<revision>/acceptance/transactions/performance-1` allows one issuance.
+
+Provide `$PRIVATE_NATIVE_RUN/fixture` to `cells/prepare.py --materialized --canonical-fixture`.
+Check the captured coordinates and digests independently before creating the disposable D1 graph.
+The already installed revision has its own qualification record. Any new candidate needs its own
+verified installation, resource observations and native usage bounds.
+
+The credential-free command `hosted.py rehearse --out <private-directory>` runs the same
+closed provider, Ingress, Core and SQLite owners on workerd. Its temporary verifier credentials
+are private to that rehearsal. Upload only `summary.json`, which contains counts and digests.
+
+
+The protected closed rollout records the stable Core and Ingress version IDs and revision before
+upload. A signer candidate can promote only if the established compatibility policy permits
+return to that exact tested pair. Adding the two signer bindings to a previously unsigned Core
+changes its binding inventory and fails that precondition. The ordinary first-install target
+also requires an empty, explicitly named installation. Its fixed hostnames, stack and Worker
+names prevent it from acting as a second independent installation on the same account. Keep
+the incumbent release and its erasure/fleet qualifications in place while this remains true.

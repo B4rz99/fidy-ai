@@ -38,5 +38,6 @@ jobs:
       - uses: ./.github/actions/bun-install
       - name: Run the repository type-aware lint
         run: |
+          bun install --cwd tools/mcp-inspector --frozen-lockfile
           bun install --cwd tools/depcruise --frozen-lockfile
           bun run lint:type-aware

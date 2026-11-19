@@ -373,7 +373,7 @@ const verifyDeployedWorkers = Effect.fn(function* (
     const id = yield* releaseController.servingVersion(deployment);
     const raw = yield* releaseEvidence.readWorkerVersion(env, client, { name, id });
     yield* Effect.try(() =>
-      verifyDeployedVersion({ role, revision: env.revision, versionId: id, raw })
+      verifyDeployedVersion({ role, account: env.account, revision: env.revision, versionId: id, raw })
     );
     yield* verifyReleaseObservability(env, name, client);
     if (role === "Core") yield* verifyCoreDefaultPlacement(env, { name, version: id }, client);

@@ -6,7 +6,7 @@ import {
   requireRoleBindings,
 } from "./native-graph";
 import { verifiedVersionResources } from "./rollback-compatibility";
-import { installationNames } from "./storage-installation";
+import { installationNames, nativeStack } from "./storage-installation";
 
 import { type ProviderRead as Read, readProviderList as pages } from "./native-provider-list";
 
@@ -128,6 +128,7 @@ const staticSiteVersion = Schema.Struct({
 export const verifyDeployedVersion = (input: {
   role: NativeRole;
   raw: unknown;
+  account: string;
   versionId: string;
   revision: string;
 }): void => {
@@ -136,8 +137,22 @@ export const verifyDeployedVersion = (input: {
     requireTarget(result.id === input.versionId, "Web");
     return;
   }
-  const { bindings } = verifiedVersionResources(input);
-  requireDeployedRole({ role: input.role, revision: input.revision, bindings });
+  const bindings = { ...verifiedVersionResources(input).bindings };
+  const { role, revision } = input;
+  // WorkerProvider adds these coordinates when uploading executable scripts, after the plan binding check.
+  const runtime = {
+    ALCHEMY_PHASE: "runtime",
+    ALCHEMY_WORKER_NAME: role === "Smoke" ? smokeName(revision) : installationNames[role],
+    ALCHEMY_STACK_NAME: nativeStack,
+    ALCHEMY_STAGE: "production",
+    ALCHEMY_CLOUDFLARE_ACCOUNT_ID: input.account,
+  };
+  for (const [name, text] of Object.entries(runtime)) {
+    const coordinate = Schema.Struct({ name: Schema.Literal(name), type: Schema.Literal("plain_text"), text: Schema.Literal(text) });
+    requireTarget(Schema.is(coordinate)(bindings[name]), name);
+    delete bindings[name];
+  }
+  requireDeployedRole({ role, revision, bindings });
 };
 const limit = 100;
 const buckets = Effect.fn(function* (read: Read) {

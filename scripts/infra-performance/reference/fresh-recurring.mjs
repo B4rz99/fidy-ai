@@ -10,7 +10,10 @@ const route = "/recurring-plans",
   compact = { month, view: "compact" };
 const ids = ["83000000-0000-4000-8000-000000000000", "83000000-0000-4000-8000-000000000001"];
 const names = ["Recurrente 0", "Recurrente 1"];
-const dateHistory = ["2018-01-01", "2018-02-01"];
+const dateHistory = ["2018-01-01", "2018-02-01", "2018-03-01"];
+const initialAmount = "100000",
+  editedAmount = "123000",
+  changed = 1;
 const money = Schema.Struct({ amount: Schema.String, currency: Schema.String });
 const plan = Schema.Struct({
   name: Schema.String,
@@ -54,16 +57,16 @@ const fixturePlan = (index, firstDate) => ({
   frequency: "monthly",
   firstDate,
   counterparty: "Contraparte " + index,
-  money: { amount: "100000", currency: "COP" },
+  money: { amount: firstDate === dateHistory[2] ? editedAmount : initialAmount, currency: "COP" },
 });
 /** @param {string} period Requested calendar month. @param {number[]} selected Expected plans after filtering. */
 const expected = (period, selected) =>
   selected.map((index) => ({
     planId: ids[index],
     expectedDate: period + "-01",
-    plan: fixturePlan(index, dateHistory[1]),
+    plan: fixturePlan(index, index === changed ? dateHistory[2] : dateHistory[1]),
     completed: { amount: "0", currency: "COP" },
-    remaining: { amount: "100000", currency: "COP" },
+    remaining: { amount: index === changed ? editedAmount : initialAmount, currency: "COP" },
   }));
 /**
  * @param {unknown} value Full wire response.
@@ -73,12 +76,15 @@ const verify = (value, { selected, prior, full }) => {
   complete(value);
   const data = encoded(value).data;
   assert.equal(data.month, month);
-  const dates = full ? dateHistory : [dateHistory[1]];
+  const revisions = [
+    dateHistory.slice(0, 2),
+    full ? dateHistory : [dateHistory[0], dateHistory[2]],
+  ];
   assert.deepEqual(
     data.document.plans,
     ids.map((id, index) => ({
       id,
-      revisions: dates.map((from) => ({ from, plan: fixturePlan(index, from) })),
+      revisions: revisions[index].map((from) => ({ from, plan: fixturePlan(index, from) })),
     }))
   );
   assert.deepEqual(data.occurrences, expected(month, selected));
@@ -105,7 +111,7 @@ const usable = async (page, period, selected) => {
       ].filter(
         (row) =>
           row.getClientRects().length > 0 &&
-          (row.getAttribute("aria-label")?.includes(date) || row.textContent.includes(shortDate))
+          (row.getAttribute("aria-label")?.includes(date) ?? row.textContent.includes(shortDate))
       );
       return (
         rows.length === names.length &&
@@ -170,6 +176,58 @@ const fullHistory = async ({ page, api, event }, authority) => {
   const result = { milliseconds: http.httpMs, http };
   event({ type: "completed", journey, ...result });
   return result;
+};
+const fixtureDocument = Schema.Struct({
+  revision: Schema.Int,
+  plans: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      revisions: Schema.Array(Schema.Struct({ from: Schema.String, plan })),
+    })
+  ),
+});
+const originalDocument = Schema.decodeUnknownSync(
+  Schema.Struct({ data: Schema.Struct({ document: fixtureDocument }) })
+);
+const editResult = Schema.decodeUnknownSync(Schema.Struct({ data: fixtureDocument }));
+/**
+ * @param {import("@playwright/test").APIRequestContext} request Disposable authenticated context.
+ * @param {{api:string,headers:Record<string,string>}} installation Bound loopback reference.
+ */
+export const prepareReferenceRecurring = async (request, { api, headers }) => {
+  assert.equal(new URL(api).hostname, "127.0.0.1");
+  const read = await request.get(api + route + "?month=" + month, { headers });
+  const original = originalDocument(await read.json()).data.document;
+  assert.deepEqual(
+    original.plans.map((entry) => entry.revisions.map(({ from }) => from)),
+    [dateHistory.slice(0, 2), dateHistory.slice(0, 2)]
+  );
+  const reply = await request.post(api + route + "/edits", {
+    headers,
+    data: {
+      expectedRevision: original.revision,
+      edit: {
+        kind: "edit",
+        scope: "forward",
+        planId: ids[changed],
+        date: dateHistory[2],
+        plan: {
+          ...fixturePlan(changed, dateHistory[2]),
+          amountMode: "fixed",
+          timeZone: "America/Bogota",
+        },
+      },
+    },
+  });
+  const ok = 200;
+  if (reply.status() !== ok) process.stderr.write("REFERENCE_HTTP " + reply.status() + "\n");
+  assert.equal(reply.status(), ok);
+  const committed = editResult(await reply.json()).data;
+  assert.equal(committed.revision, original.revision + 1);
+  assert.deepEqual(
+    committed.plans[changed].revisions.map(({ from }) => from),
+    dateHistory
+  );
 };
 /** @param {Workspace} input Installed origins and evidence sink. */
 export const freshRecurring = async (input) => {

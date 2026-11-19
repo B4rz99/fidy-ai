@@ -48,7 +48,7 @@ CALIBRATION_VIEWS = ["budgets.month.browser", "review.pending.browser", "dashboa
 STAGES = {
     "runtime", "user", "transactions", "planning", "reviews", "counts", "launch",
     "pairing", "approval", "redeem", "bootstrap", "accountability-before", "read",
-    "open-correction", "save", "fresh-read", "accountability-after", "budgets-month", "review-pending", "dashboard-fixture", "dashboard-fresh", "recurring-fresh",
+    "open-correction", "save", "fresh-read", "accountability-after", "budgets-month", "review-pending", "dashboard-fixture", "dashboard-fresh", "recurring-fresh", "recurring-fixture",
 }
 REASONS = {
     "foreign key constraint failed": "foreign-key",
@@ -317,6 +317,7 @@ def main():
         "dataset": args.dataset,
         "stressOnly": args.dataset == "breaking",
         "seedEpochMs": 1794916800000,
+        "additionalCalibrationSetup": "Four fixed Dashboard WidgetIds and one forward Recurring edit: the second plan has 3 revisions, including an intermediate revision omitted from compact responses.",
         "dashboardNormalization": ["data.context.calculatedAt"],
         "recurringHistory": "The product requests compact revisions. Its earlier-month and selective results are visible; complete revision history is checked separately through the bound canonical HTTP API.",
         "backendBoundary": {

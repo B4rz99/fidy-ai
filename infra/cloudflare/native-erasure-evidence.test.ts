@@ -151,9 +151,12 @@ it.effect(
         survivingUsers: 2,
         custodianCompletion: "unverified",
       });
-      expect(checkpoints).toEqual([
+      expect(checkpoints.filter(stage => !stage.startsWith("waiting-"))).toEqual([
         "stable-users",
+        "signup-started",
+        "signup-created",
         "fresh-object",
+        "admission-started",
         "admitted",
         "physically-erased",
       ]);

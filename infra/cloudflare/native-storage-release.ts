@@ -473,7 +473,11 @@ const UserNamespace = Schema.Struct({
   class_name: Schema.Literal("UserStore"),
   namespace_id: Schema.NonEmptyString,
 });
-const readInstalledIdentity = Effect.fn(function* (env: Config, client: HttpClient.HttpClient, port: ReleasePort) {
+const readInstalledIdentity = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  port: ReleasePort
+) {
   const receipts = yield* firstInstallWorkers();
   const pair = yield* readStablePair(
     {
@@ -494,7 +498,11 @@ const readInstalledIdentity = Effect.fn(function* (env: Config, client: HttpClie
 const installedRelease = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
-  { port, staging, verifierRevision }: { port: ReleasePort; staging: boolean; verifierRevision: string }
+  {
+    port,
+    staging,
+    verifierRevision,
+  }: { port: ReleasePort; staging: boolean; verifierRevision: string }
 ) {
   yield* releaseController.requireTrunk(port, verifierRevision);
   yield* verifyNativeEdge(env, client, "verify");
@@ -524,7 +532,9 @@ const installedRelease = Effect.fn(function* (
     publicStable: pair.publicStable,
     coreStable: pair.coreStable,
   });
-  yield* Effect.logInfo("Verified installed Workers, data resources, Access and browser artifacts.");
+  yield* Effect.logInfo(
+    "Verified installed Workers, data resources, Access and browser artifacts."
+  );
   const proof = yield* verifyInstalledMarkers({ env, client, pair, storage });
   return {
     revision: env.revision,
@@ -544,12 +554,25 @@ const verifyFirstInstall = Effect.fn(function* (
   client: HttpClient.HttpClient,
   { port, erase }: { port: ReleasePort; erase: boolean }
 ) {
-  const requested = yield* ReleaseConfig.String("EXPECTED_INSTALLED_REVISION").pipe(ReleaseConfig.withDefault(""));
+  const requested = yield* ReleaseConfig.String("EXPECTED_INSTALLED_REVISION").pipe(
+    ReleaseConfig.withDefault("")
+  );
   const revision = yield* verificationRevision(verifier.revision, requested, (args) =>
     releaseCommand({ args: ["git", "-C", "../..", ...args], lifetime: "read-only" })
-  ).pipe(Effect.mapError(() => new ReleaseFailure({ message: "Installed revision must be the same protected runtime source" })));
+  ).pipe(
+    Effect.mapError(
+      () =>
+        new ReleaseFailure({
+          message: "Installed revision must be the same protected runtime source",
+        })
+    )
+  );
   const env = { ...verifier, revision };
-  const installed = yield* installedRelease(env, client, { port, staging: false, verifierRevision: verifier.revision });
+  const installed = yield* installedRelease(env, client, {
+    port,
+    staging: false,
+    verifierRevision: verifier.revision,
+  });
   yield* Effect.logInfo("Verified schema markers and closed admission.");
   const contractDigest = yield* ReleaseConfig.String("CONTRACT_DIGEST"),
     identity = { gitRevision: env.revision, contractDigest };
@@ -572,7 +595,10 @@ const verifyFirstInstall = Effect.fn(function* (
   if (new Set(synthetic.map((result) => result.callback.workflow)).size !== 1) {
     return yield* Effect.fail(Error("Staged hosts reached different native payment attempts"));
   }
-  yield* writeFile(env.smokeAttestationFile, encodeJson({ ...installed, verifierRevision: verifier.revision, smoke, synthetic }));
+  yield* writeFile(
+    env.smokeAttestationFile,
+    encodeJson({ ...installed, verifierRevision: verifier.revision, smoke, synthetic })
+  );
 });
 
 type VerifyCommand = (
@@ -613,7 +639,11 @@ const inspectHostStage = Effect.fn(function* (
   port: ReleasePort
 ) {
   yield* requiredStaging();
-  const installed = yield* installedRelease(env, client, { port, staging: true, verifierRevision: env.revision }),
+  const installed = yield* installedRelease(env, client, {
+      port,
+      staging: true,
+      verifierRevision: env.revision,
+    }),
     account = accountReader(env, client);
   const writers = yield* verifyIncumbentFence(account);
   const zonePath = "https://api.cloudflare.com/client/v4/zones/" + installed.edge.zoneId + "/";
@@ -704,7 +734,11 @@ const attachCanonicalHosts = Effect.fn(function* (
       )
     );
   }
-  const verified = yield* installedRelease(env, client, { port, staging: false, verifierRevision: env.revision });
+  const verified = yield* installedRelease(env, client, {
+    port,
+    staging: false,
+    verifierRevision: env.revision,
+  });
   yield* requireSameInstallation(env, verified);
 });
 const requireTestedStorage = Effect.fn(function* (

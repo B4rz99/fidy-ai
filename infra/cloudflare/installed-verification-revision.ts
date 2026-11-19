@@ -28,7 +28,9 @@ export const verificationRevision = Effect.fn(function* (
   yield* git(["merge-base", "--is-ancestor", requested, trunk]);
   const paths = yield* git(["diff", "--name-only", "--no-renames", "-z", requested, trunk, "--"]);
   if (paths.split("\0").some((path) => path !== "" && !isVerificationFile(path))) {
-    return yield* Effect.fail(Error("Installed release inputs differ from the verification checkout"));
+    return yield* Effect.fail(
+      Error("Installed release inputs differ from the verification checkout")
+    );
   }
   return requested;
 });

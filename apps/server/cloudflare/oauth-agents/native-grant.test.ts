@@ -134,6 +134,32 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       }),
     { timeout: 15_000 }
   );
+  test.effect(
+    "rolls back local OAuth revocation when its immutable Consent evidence cannot be retained",
+    () =>
+      Effect.gen(function* () {
+        const { owner, credential, connectionId, runtime, session } = yield* nativeGrant;
+        const facts = (): ReturnType<typeof owner.exec> =>
+          owner.exec(
+            "SELECT revoked_at_ms IS NOT NULL AS revoked,(SELECT count(*) FROM consent_history WHERE record_type='oauth_user_revocation' AND connection_id=c.id) AS decisions FROM oauth_connections c WHERE id=?",
+            connectionId
+          );
+        yield* owner.exec(
+          "CREATE TRIGGER withhold_decision BEFORE INSERT ON consent_history WHEN NEW.record_type='oauth_user_revocation' BEGIN SELECT RAISE(IGNORE); END"
+        );
+        expect((yield* session(oauthPaths.revoke, alice, { connectionId })).status).toBe(503);
+        expect(yield* facts()).toEqual([{ revoked: 0, decisions: 0 }]);
+        expect((yield* protocolFor(runtime)(credential.access_token, "tools/list")).status).toBe(
+          200
+        );
+        yield* owner.exec("DROP TRIGGER withhold_decision");
+        expect((yield* session(oauthPaths.revoke, alice, { connectionId })).status).toBe(200);
+        expect(yield* facts()).toEqual([{ revoked: 1, decisions: 1 }]);
+        expect((yield* protocolFor(runtime)(credential.access_token, "tools/list")).status).toBe(
+          401
+        );
+      })
+  );
   for (const reason of ["browser revocation", "refresh replay"] as const) {
     test.effect("closes a mounted MCP subscription after " + reason, () =>
       Effect.gen(function* () {

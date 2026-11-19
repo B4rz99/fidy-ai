@@ -33,17 +33,19 @@ const observed = Effect.fn(function* <Value>(
   const census = Effect.gen(function* () {
     if (stage === "waiting-physical-erasure") yield* port.renew();
     const rows = yield* port.inventory();
-    yield* port.record({ stage, observations: ++observations, listed: rows.size, populated: populated(rows) });
+    yield* port.record({
+      stage,
+      observations: ++observations,
+      listed: rows.size,
+      populated: populated(rows),
+    });
     return yield* Effect.try(() => transition(rows));
   });
   const found = yield* census.pipe(
     Effect.repeat({ while: Option.isNone, schedule: Schedule.spaced("30 seconds") }),
     Effect.timeout("20 minutes")
   );
-  return yield* Option.match(found, {
-    onNone: () => Effect.fail(Error("Required physical User transition was not observed")),
-    onSome: Effect.succeed,
-  });
+  return yield* Effect.fromOption(found, () => Error("Required physical User transition was not observed"));
 });
 
 const captureStableUsers = Effect.fn(function* (port: Port) {
@@ -68,7 +70,9 @@ export const verifyIndependentErasure = Effect.fn(function* (port: Port) {
     return yield* Effect.fail(Error("A fresh, independent synthetic User is required"));
   }
   yield* port.record({ stage: "signup-created" });
-  const target = yield* observed(port, "waiting-fresh-object", (current) => newStoredUser({ before, current }));
+  const target = yield* observed(port, "waiting-fresh-object", (current) =>
+    newStoredUser({ before, current })
+  );
   yield* port.record({ stage: "fresh-object", physicalObject: target });
   yield* port.renew();
   yield* port.record({ stage: "admission-started", physicalObject: target });
@@ -83,7 +87,10 @@ export const verifyIndependentErasure = Effect.fn(function* (port: Port) {
   yield* port.record({ stage: "physically-erased", physicalObject: target, reference });
   yield* port.denied(disposable);
   const surviving = yield* port.survivors();
-  if (retained.some((id, index) => id !== surviving[index]) || Option.isNone(physicalState(yield* port.inventory()))) {
+  if (
+    retained.some((id, index) => id !== surviving[index]) ||
+    Option.isNone(physicalState(yield* port.inventory()))
+  ) {
     return yield* Effect.fail(
       Error("Physical erasure or stable User survival could not be confirmed")
     );

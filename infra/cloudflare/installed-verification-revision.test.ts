@@ -12,7 +12,9 @@ it.effect("uses the deployed ancestor only after confirming the unchanged runtim
     const result = yield* verificationRevision(trunk, installed, (args) => {
       calls.push(args);
       return Effect.succeed(
-        args.includes("diff") ? "infra/cloudflare/native-deployed-web.ts\0infra/cloudflare/native-erasure.ts\0" : ""
+        args.includes("diff")
+          ? "infra/cloudflare/native-deployed-web.ts\0infra/cloudflare/native-erasure.ts\0"
+          : ""
       );
     });
     expect(result).toBe(installed);

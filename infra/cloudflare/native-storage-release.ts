@@ -1,3 +1,4 @@
+import { rename } from "node:fs/promises";
 import type { ErasureObservation } from "./native-erasure";
 import { verificationRevision } from "./installed-verification-revision";
 import { readUserObjects } from "./native-erasure-evidence";
@@ -304,18 +305,23 @@ const erasureObservation = (
 ): ErasureObservation => {
   // The final report retains each phase even when the last census fails or is interrupted.
   const checkpoints: Array<Parameters<ErasureObservation["record"]>[0]> = [];
+  const path = env.smokeAttestationFile + ".erasure";
   return {
     inventory: () => readUserObjects(accountReader(env, client), userNamespace),
-    record: (checkpoint) => Effect.gen(function* () {
-      checkpoints.push(checkpoint);
-      yield* writeFile(
-        env.smokeAttestationFile + ".erasure",
-        encodeJson({ revision: env.revision, userNamespace, ...checkpoint, checkpoints })
-      );
-      const progress = "observations" in checkpoint && checkpoint.listed !== undefined
-        ? ` (observation ${checkpoint.observations}, listed ${checkpoint.listed}, populated ${checkpoint.populated})` : "";
-      yield* Effect.logInfo("Physical User census " + checkpoint.stage + progress);
-    })
+    record: (checkpoint) =>
+      Effect.gen(function* () {
+        checkpoints.push(checkpoint);
+        yield* writeFile(
+          path + ".next",
+          encodeJson({ revision: env.revision, userNamespace, ...checkpoint, checkpoints })
+        );
+        yield* Effect.tryPromise(() => rename(path + ".next", path));
+        const progress =
+          "observations" in checkpoint && checkpoint.listed !== undefined
+            ? ` (observation ${checkpoint.observations}, listed ${checkpoint.listed}, populated ${checkpoint.populated})`
+            : "";
+        yield* Effect.logInfo("Physical User census " + checkpoint.stage + progress);
+      }),
   };
 };
 const verifySyntheticUsers = Effect.fn(function* (

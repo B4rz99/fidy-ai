@@ -190,7 +190,7 @@ const authority = (): Auth => {
 export type FixtureSession = Session;
 export type FixtureClient = Client;
 export type RehearsalHooks = (service: Client) => Promise<(active: Session) => Promise<void>>;
-export const serveFixture = async (runtime: Miniflare, hooks?:RehearsalHooks): Promise<void> => {
+export const serveFixture = async (runtime: Miniflare, hooks?: RehearsalHooks): Promise<void> => {
   const auth = authority();
   try {
     const service = client(auth, transport(runtime));
@@ -211,10 +211,12 @@ const main = async (): Promise<void> => {
     const auth = authority();
     const envelope = Schema.decodeUnknownSync(SealedTransactionReceipt)(await Bun.stdin.json());
     process.stdout.write(
-      await openTransactionReceipt(
-        auth.secret,
-        process.env.FIDY_NATIVE_FIXTURE_PUBLIC_KEY ?? "",
-        envelope
+      await Effect.runPromise(
+        openTransactionReceipt({
+          secret: auth.secret,
+          publicKey: process.env.FIDY_NATIVE_FIXTURE_PUBLIC_KEY ?? "",
+          value: envelope,
+        })
       )
     );
     return;

@@ -407,16 +407,14 @@ const verifyDeployedWorkers = Effect.fn(function* (
     const id = yield* releaseController.servingVersion(deployment);
     const raw = yield* releaseEvidence.readWorkerVersion(env, client, { name, id });
     yield* Effect.try(() =>
-      verifyDeployedVersion(
-        {
-          role,
-          account: env.account,
-          revision: env.revision,
-          versionId: id,
-          raw,
-        },
-        fingerprint
-      )
+      verifyDeployedVersion({
+        role,
+        account: env.account,
+        revision: env.revision,
+        versionId: id,
+        raw,
+        fingerprint,
+      })
     );
     yield* verifyReleaseObservability(env, name, client);
     if (role === "Core") yield* verifyCoreDefaultPlacement(env, { name, version: id }, client);
@@ -1174,7 +1172,7 @@ const promoteClosed = Effect.fn(function* (
     yield* readFile(env.file)
   );
   const eligible = yield* storageCompatibility({ env, client }, release, "promote");
-  if ((yield* expectedFixtureSigner) && !eligible.rollback) {
+  if ((yield* expectedFixtureSigner) !== "" && !eligible.rollback) {
     return yield* new ReleaseFailure({
       message:
         "Candidate receipt signer requires a tested compatible return to the captured stable pair",

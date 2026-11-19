@@ -78,13 +78,40 @@ function observeStorage(storage, counts) {
   }
 }
 
+const bucketCalls = new Map();
+const names = ["SMOKE_BUCKET", "EMAIL_BUCKET", "STATEMENT_STAGING_BUCKET", "SAMPLE_BUCKET"];
+const methods = ["get", "head", "list", "put", "delete"];
+export function observedBindings(environment) {
+  const env = { ...environment };
+  for (const name of names) {
+    const bucket = env[name];
+    if (!bucket) continue;
+    const totals = bucketCalls.get(name) ?? Object.fromEntries(methods.map((key) => [key, 0]));
+    bucketCalls.set(name, totals);
+    env[name] = new Proxy(bucket, {
+      get(target, key) {
+        const value = Reflect.get(target, key, target);
+        if (typeof value !== "function") return value;
+        if (!methods.includes(key)) throw Error("Unmeasured R2 binding operation");
+        return (...args) => {
+          totals[key]++;
+          return Reflect.apply(value, target, args);
+        };
+      },
+    });
+  }
+  return env;
+}
+export function buckets() {
+  return Response.json(Object.fromEntries(bucketCalls));
+}
 export function observed(name, Owner) {
   const counts = empty();
   owners.set(name, counts);
   return class extends Owner {
     constructor(state, env) {
       observeStorage(state.storage, counts);
-      super(state, env);
+      super(state, observedBindings(env));
     }
     fetch(request) {
       counts.fetches++;

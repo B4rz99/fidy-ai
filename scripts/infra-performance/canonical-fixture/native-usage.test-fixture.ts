@@ -76,6 +76,37 @@ const physicalCensus = async (
   return result;
 };
 
+/** Count actual table and index B-tree cells before wholesale erasure, independently of app cursors. */
+const disposalInventory = async (directory: string, id: string): Promise<number> => {
+  const paths = await Array.fromAsync(
+    new Bun.Glob("**/" + id + ".sqlite").scan({ cwd: directory, absolute: true })
+  );
+  assert(paths.length === 1, "Missing target SQLite file");
+  const script =
+    "import sqlite3,sys;from pathlib import Path;db=sqlite3.connect(Path(sys.argv[1]).as_uri()+'?mode=ro',uri=True);print(db.execute('select sum(ncell) from dbstat').fetchone()[0]);db.close()";
+  const read = Bun.spawnSync(["python3", "-c", script, paths[0]]);
+  const count = Number(read.stdout.toString());
+  assert(
+    read.exitCode === 0 && Number.isSafeInteger(count) && count > 0,
+    "Cannot account for the target B-tree before disposal"
+  );
+  return count;
+};
+const r2 = async (runtime: Miniflare): Promise<Record<string, Record<string, number>>> => {
+  const totals: Record<string, Record<string, number>> = {};
+  for (const name of ["core", "ingress", "closed-provider"]) {
+    const worker = await runtime.getWorker(name);
+    const values = Schema.decodeUnknownSync(counters)(
+      await (await worker.fetch("https://offline.invalid/r2-counts")).json()
+    );
+    for (const [role, operations] of Object.entries(values)) {
+      const bucket = (totals[role] ??= {});
+      for (const [operation, n] of Object.entries(operations))
+        bucket[operation] = (bucket[operation] ?? 0) + n;
+    }
+  }
+  return totals;
+};
 const observe = async (runtime: Miniflare): Promise<Evidence> => {
   const worker = await runtime.getWorker("core");
   const result = Schema.decodeUnknownSync(counters)(
@@ -91,7 +122,7 @@ const observe = async (runtime: Miniflare): Promise<Evidence> => {
     rowFields.map((key) => [key, roles.reduce((n, role) => n + result[role][key], 0)])
   );
   assert(totals.rowsRead > 0 && totals.rowsWritten > 0, "Native workerd row meter is empty");
-  return { roles: result, totals };
+  return { roles: result, totals, r2: await r2(runtime) };
 };
 const renew = async (service: FixtureClient): Promise<void> => {
   const reply = await service.request(
@@ -163,6 +194,7 @@ export function calibrateNative(runtime: Miniflare, directory: string): Rehearsa
       await sample("signedFixture");
       await offerReads(service, active);
       await sample("offeredHistory");
+      phases.preErasureBtreeCells = await disposalInventory(directory, target);
       await renew(service);
       const reference = await admit(service, active);
       assert((await admit(service, active)) === reference, "Erasure replay mismatch");
@@ -182,7 +214,8 @@ export function calibrateNative(runtime: Miniflare, directory: string): Rehearsa
         // Deliver the same minute cron as the closed deployment. Real alarms keep their native deadlines.
         if (i % 2 === 0) {
           const core = await runtime.getWorker("core");
-          await core.scheduled({ cron: "* * * * *", scheduledTime: new Date() });
+          const delivery = await core.scheduled({ cron: "* * * * *", scheduledTime: new Date() });
+          assert(delivery.outcome === "ok", "Core scheduled work failed");
         }
         await Bun.sleep(halfMinute);
         await sample("erasurePoll" + String(i + 1));

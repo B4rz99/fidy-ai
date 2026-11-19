@@ -250,7 +250,5 @@ export const fixtureChargeReceipt = Effect.fn(function* (
 export const isPerformanceReceipt: typeof matchesPerformanceReceipt = (request) =>
   matchesPerformanceReceipt(request);
 export const receiptAdmitted: typeof admitsReceipt = (input) => admitsReceipt(input);
-export const sealTransactionReceipt: typeof sealReceipt = (credentials, coordinates, data) =>
-  sealReceipt(credentials, coordinates, data);
-export const openTransactionReceipt: typeof openReceipt = (secret, publicKey, value) =>
-  openReceipt(secret, publicKey, value);
+export const sealTransactionReceipt: typeof sealReceipt = (input) => sealReceipt(input);
+export const openTransactionReceipt: typeof openReceipt = (input) => openReceipt(input);

@@ -16,27 +16,42 @@ const observedManifest = async (
   name: string
 ): Promise<NonNullable<MiniflareWorkerConfig["manifest"]>> => {
   const manifest = await Effect.runPromise(workerManifest(module));
-  if (name === "core" && process.env.FIDY_NATIVE_SIZING_DIR) {
-    const wrapOwners = Object.keys(nativeOwners)
-      .map(
-        (owner) =>
-          "export const " +
-          owner +
-          "=observed(" +
-          JSON.stringify(owner) +
-          ",Production." +
-          owner +
-          ");"
-      )
-      .join("\n");
-    const wrapped =
-      'import * as Production from "./production.mjs"; import {observed,totals} from "./meter.mjs"; export * from "./production.mjs";' +
+  if (process.env.FIDY_NATIVE_SIZING_DIR) {
+    const wrapOwners =
+      name === "core"
+        ? Object.keys(nativeOwners)
+            .map(
+              (owner) =>
+                "export const " +
+                owner +
+                "=observed(" +
+                JSON.stringify(owner) +
+                ",Production." +
+                owner +
+                ");"
+            )
+            .join("\n")
+        : "";
+    const mapping =
+      name === "ingress"
+        ? 'const url=new URL(request.url);if(url.hostname!=="127.0.0.1")return new Response(null,{status:403});request=new Request("' +
+          installedOrigins.acceptance.api +
+          '"+url.pathname+url.search,request);'
+        : "";
+    const wrapper =
+      'import * as Production from "./production.mjs"; import {observed,observedBindings,totals,buckets} from "./meter.mjs"; export * from "./production.mjs";' +
       wrapOwners +
-      'export default {...Production.default,fetch(request,...args){if(request.url==="https://offline.invalid/native-row-counts")return totals();return Production.default.fetch(request,...args);}};';
+      'export default {...Production.default,fetch(request,env,ctx){if(request.url==="https://offline.invalid/native-row-counts")return totals();if(request.url==="https://offline.invalid/r2-counts")return buckets();' +
+      mapping +
+      "return Production.default.fetch(request,observedBindings(env),ctx);}," +
+      (name === "core"
+        ? "scheduled(controller,env){return Production.default.scheduled(controller,observedBindings(env));}"
+        : "") +
+      "};";
     return {
       mainModule: "index.mjs",
       modules: {
-        "index.mjs": { type: "esm", contents: wrapped },
+        "index.mjs": { type: "esm", contents: wrapper },
         "production.mjs": manifest.modules["index.mjs"],
         "meter.mjs": {
           type: "esm",
@@ -142,7 +157,7 @@ if (import.meta.main) {
       process.env.SMOKE_PROOF ?? ""
     );
     const output = process.env.FIDY_NATIVE_SIZING_DIR;
-    await serveFixture(runtime,output ? calibrateNative(runtime,output) : undefined);
+    await serveFixture(runtime, output ? calibrateNative(runtime, output) : undefined);
   } catch {
     process.stderr.write("Closed workerd rehearsal stopped\n");
     process.exitCode = 1;

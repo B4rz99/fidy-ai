@@ -112,16 +112,15 @@ export const requireInstallationWorker = ({
 };
 
 const ProviderBindings = Schema.Struct({ bindings: Schema.optional(NativeBindings) });
-export const requireClosedBindings = (
-  {
-    worker,
-    bindings,
-  }: {
-    worker: NativeRole;
-    bindings: ReadonlyArray<NativeBinding>;
-  },
-  fingerprint = ""
-): void => requireRoleBindings({ role: worker, bindings }, fingerprint);
+export const requireClosedBindings = ({
+  worker,
+  bindings,
+  fingerprint = "",
+}: {
+  worker: NativeRole;
+  bindings: ReadonlyArray<NativeBinding>;
+  fingerprint?: string;
+}): void => requireRoleBindings({ role: worker, bindings, fingerprint });
 
 const requireSiteAsset = (role: NativeRole, props: unknown, bindings: NativeBinding[]): void => {
   // The Worker provider appends the static ASSETS metadata from its build output outside its binding list.
@@ -133,23 +132,22 @@ const requireSiteAsset = (role: NativeRole, props: unknown, bindings: NativeBind
   }
 };
 const requireSignerHost = (fingerprint: string, hosts: NativeHostMode): void => {
-  if (fingerprint && hosts !== "acceptance") {
+  if (fingerprint !== "" && hosts !== "acceptance") {
     throw Error("Fixture signer cannot stage live host routes");
   }
 };
 const roles = ["Core", "Ingress", "ForwardedEmail", "Web"] as const;
-export const requireNativeBindings = (
-  {
-    plan,
-    revision,
-    hosts,
-  }: {
-    plan: Plan;
-    revision: string;
-    hosts: NativeHostMode;
-  },
-  fingerprint = ""
-): void => {
+export const requireNativeBindings = ({
+  plan,
+  revision,
+  hosts,
+  fingerprint = "",
+}: {
+  plan: Plan;
+  revision: string;
+  hosts: NativeHostMode;
+  fingerprint?: string;
+}): void => {
   requireSignerHost(fingerprint, hosts);
   const resources = Object.values(plan.resources);
   for (const role of [...roles, "Smoke"] as const) {
@@ -162,7 +160,7 @@ export const requireNativeBindings = (
       (binding) => Schema.decodeUnknownSync(ProviderBindings)(binding.data).bindings ?? []
     );
     requireSiteAsset(role, props, bindings);
-    requireClosedBindings({ worker: role, bindings }, fingerprint);
+    requireClosedBindings({ worker: role, bindings, fingerprint });
     if (role === "Core") requireNativeClasses(bindings);
   }
 };

@@ -78,7 +78,7 @@ const verifyResourcePlan = Effect.fn(function* ({
     yield* Effect.sync(() => requireHostPlan(plan)).pipe(nativeResourceStage("Access host plan"));
   } else {
     const fingerprint = yield* expectedFixtureSigner;
-    yield* Effect.sync(() => requireNativeBindings({ plan, revision, hosts }, fingerprint)).pipe(
+    yield* Effect.sync(() => requireNativeBindings({ plan, revision, hosts, fingerprint })).pipe(
       nativeResourceStage("Worker bindings")
     );
     yield* Effect.sync(() =>

@@ -61,7 +61,7 @@ const transport = (runtime: Miniflare): Pick<Browser, "api" | "headers" | "post"
     );
   return { api, headers, post };
 };
-export const browser = (runtime: Miniflare, intent: "signup" | "login" = "signup"): Browser => {
+const browserWithIntent = (runtime: Miniflare, intent: "signup" | "login"): Browser => {
   const { api, headers, post } = transport(runtime);
   const pair = Effect.gen(function* () {
     const response = yield* post("/web/pairings", {});
@@ -119,5 +119,8 @@ export const browser = (runtime: Miniflare, intent: "signup" | "login" = "signup
   });
   return { api, headers, post, pair, verified, login, begin };
 };
+
+export const browser = (runtime: Miniflare): Browser => browserWithIntent(runtime, "signup");
+export const loginOnlyBrowser = (runtime: Miniflare): Browser => browserWithIntent(runtime, "login");
 
 export { chatWith, signedWebhook, signedChat } from "./signed-whatsapp.test-fixture";

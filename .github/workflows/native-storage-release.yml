@@ -48,7 +48,7 @@ jobs:
       - uses: ./.github/actions/bun-install
       - run: bun run --cwd infra/cloudflare test -- native-fleet-pilot.test.ts native-erasure-evidence.test.ts
       - name: Check release types
-        run: bun run --cwd infra/cloudflare typecheck
+        run: bun node_modules/typescript/bin/tsc -b infra/cloudflare
       - name: Format reviewed pilot files
         if: always()
         run: |

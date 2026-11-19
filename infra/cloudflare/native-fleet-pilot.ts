@@ -17,10 +17,12 @@ const maximumExistingObjects = 36;
 const waitFor = <A>(read: Effect.Effect<Option.Option<A>, Error>, times: number) =>
   read.pipe(
     Effect.repeat({ while: Option.isNone, times, schedule: Schedule.spaced("5 seconds") }),
-    Effect.flatMap(Option.match({
-      onNone: () => Effect.fail(Error("Physical User transition unavailable")),
-      onSome: Effect.succeed,
-    }))
+    Effect.flatMap(
+      Option.match({
+        onNone: () => Effect.fail(Error("Physical User transition unavailable")),
+        onSome: Effect.succeed,
+      })
+    )
   );
 
 /** One synthetic lifetime, from independently observed population to confirmed physical disposal. */
@@ -35,15 +37,24 @@ export const runFleetPilot = Effect.fn(function* (port: Port) {
     return yield* Effect.fail(Error("Pilot requires one newly created synthetic User"));
   }
   let physical: Option.Option<string> = Option.none();
-  const observation = yield* Effect.exit(Effect.gen(function* () {
-    const target = yield* waitFor(port.inventory().pipe(
-      Effect.flatMap((current) => Effect.try(() => newStoredUser({before, current})))
-    ), 12);
-    physical = Option.some(target);
-    yield* port.record({stage: "observation-start", physicalObject: target, at: yield* Clock.currentTimeMillis});
-    yield* port.watch(target);
-    yield* port.record({stage: "observation-end", at: yield* Clock.currentTimeMillis});
-  }));
+  const observation = yield* Effect.exit(
+    Effect.gen(function* () {
+      const target = yield* waitFor(
+        port
+          .inventory()
+          .pipe(Effect.flatMap((current) => Effect.try(() => newStoredUser({ before, current })))),
+        12
+      );
+      physical = Option.some(target);
+      yield* port.record({
+        stage: "observation-start",
+        physicalObject: target,
+        at: yield* Clock.currentTimeMillis,
+      });
+      yield* port.watch(target);
+      yield* port.record({ stage: "observation-end", at: yield* Clock.currentTimeMillis });
+    })
+  );
 
   // Even an absent census or refused subsequent sample ends through this User's own erasure.
   const reference = yield* member.erase();
@@ -51,12 +62,15 @@ export const runFleetPilot = Effect.fn(function* (port: Port) {
   yield* port.renew();
   if (Option.isSome(physical)) {
     const subject = physical.value;
-    const state = yield* waitFor(Effect.gen(function* () {
-      yield* port.renew();
-      const current = yield* port.inventory();
-      return yield* Effect.try(() => physicalErasure({before, current, subject}));
-    }), 90);
-    yield* port.record({stage: "physically-erased", state, physicalObject:subject});
+    const state = yield* waitFor(
+      Effect.gen(function* () {
+        yield* port.renew();
+        const current = yield* port.inventory();
+        return yield* Effect.try(() => physicalErasure({ before, current, subject }));
+      }),
+      90
+    );
+    yield* port.record({ stage: "physically-erased", state, physicalObject: subject });
   }
   yield* member.denied();
   if (observation._tag === "Failure") return yield* Effect.failCause(observation.cause);

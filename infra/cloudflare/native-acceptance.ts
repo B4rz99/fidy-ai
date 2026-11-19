@@ -126,7 +126,13 @@ const verifyOriginalDisclosure = Effect.fn(function* (
     return yield* Effect.fail(Error("Missing original provider signup disclosure"));
   }
 });
-type BrowserMember = "smoke-1" | "smoke-2" | "erasure-1" | "performance-1" | "performance-2" | "fleet-1";
+type BrowserMember =
+  | "smoke-1"
+  | "smoke-2"
+  | "erasure-1"
+  | "performance-1"
+  | "performance-2"
+  | "fleet-1";
 const boot = Effect.fn(function* (input: Inputs, member: BrowserMember) {
   const { post, call } = runner(input),
     proof = yield* result(
@@ -358,17 +364,17 @@ const renewWork = Effect.fn(function* (input: Inputs) {
 });
 const admitBrowserErasure = Effect.fn(function* (input: Inputs, user: Pick<User, "headers">) {
   const { post } = runner(input);
-      const reply = yield* validStatus(
-        yield* post("/web/privacy/erasure", { confirm: true }, user.headers),
-        accepted
-      );
-      const admitted = yield* Schema.decodeUnknownEffect(ErasureReceipt)(
-        yield* Effect.tryPromise(() => reply.json())
-      );
-      if (admitted.state !== "Draining" || admitted.next !== "admitted-work") {
-        return yield* Effect.fail(Error("Missing fresh User erasure admission"));
-      }
-      return admitted.reference;
+  const reply = yield* validStatus(
+    yield* post("/web/privacy/erasure", { confirm: true }, user.headers),
+    accepted
+  );
+  const admitted = yield* Schema.decodeUnknownEffect(ErasureReceipt)(
+    yield* Effect.tryPromise(() => reply.json())
+  );
+  if (admitted.state !== "Draining" || admitted.next !== "admitted-work") {
+    return yield* Effect.fail(Error("Missing fresh User erasure admission"));
+  }
+  return admitted.reference;
 });
 
 export const fleetBrowser = (input: Inputs) => ({
@@ -378,9 +384,10 @@ export const fleetBrowser = (input: Inputs) => ({
     return {
       outcome: member.outcome,
       erase: () => admitBrowserErasure(input, member),
-      denied: () => runner(input).call("/transactions", { headers: member.headers }).pipe(
-        Effect.flatMap((reply) => consume(reply, unauthorized))
-      ),
+      denied: () =>
+        runner(input)
+          .call("/transactions", { headers: member.headers })
+          .pipe(Effect.flatMap((reply) => consume(reply, unauthorized))),
     };
   }),
 });

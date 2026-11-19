@@ -311,7 +311,8 @@ const erasureObservation = (
       encodeJson({ revision: env.revision, userNamespace, ...checkpoint })
     ),
 });
-const sendNative = (client: HttpClient.HttpClient) => Effect.fn(function* (request: Request) {
+const sendNative = (client: HttpClient.HttpClient) =>
+  Effect.fn(function* (request: Request) {
     const reply = yield* client
       .execute(HttpClientRequest.fromWeb(request))
       .pipe(Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }));
@@ -1061,35 +1062,53 @@ const meter = (phase: "begin" | "check" | "finish" | "logs") =>
     args: ["python3", "../../scripts/infra-performance/deployed-fleet/pilot.py", phase],
     lifetime: "read-only",
   });
-const fleetPilot = Effect.fn(function* (env: Config, client: HttpClient.HttpClient, port: ReleasePort) {
+const fleetPilot = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  port: ReleasePort
+) {
   yield* meter("begin");
   const installed = yield* installedRelease(env, client, { port, staging: false });
   const browser = fleetBrowser({
-    revision: env.revision, proof: Redacted.make(env.smokeProof), origins: installedOrigins.acceptance,
-    send: sendNative(client), erasure: Option.none(),
+    revision: env.revision,
+    proof: Redacted.make(env.smokeProof),
+    origins: installedOrigins.acceptance,
+    send: sendNative(client),
+    erasure: Option.none(),
   });
-  const events: Readonly<Record<string,string | number>>[] = [];
-  const record = (event: Readonly<Record<string,string | number>>) => {
+  const events: Readonly<Record<string, string | number>>[] = [];
+  const record = (event: Readonly<Record<string, string | number>>) => {
     events.push(event);
-    return writeFile(env.smokeAttestationFile + ".fleet", encodeJson({
-      revision: env.revision, coreVersion: installed.coreVersionId, publicVersion: installed.publicVersionId,
-      userNamespace: installed.userNamespace, requestedPilotUsers: 1, fullFleet: "missing", events,
-    }));
+    return writeFile(
+      env.smokeAttestationFile + ".fleet",
+      encodeJson({
+        revision: env.revision,
+        coreVersion: installed.coreVersionId,
+        publicVersion: installed.publicVersionId,
+        userNamespace: installed.userNamespace,
+        requestedPilotUsers: 1,
+        fullFleet: "missing",
+        events,
+      })
+    );
   };
-  const measured = yield* Effect.exit(runFleetPilot({
-    inventory: () => readUserObjects(accountReader(env, client), installed.userNamespace),
-    register: () => meter("check").pipe(Effect.andThen(browser.register())),
-    renew: browser.renew, record,
-    watch: Effect.fn(function* () {
-      const start = yield* Clock.currentTimeMillis;
-      const observationMs = 600_000;
-      while ((yield* Clock.currentTimeMillis) - start < observationMs) {
-        yield* meter("check");
-        yield* browser.renew();
-        yield* Effect.sleep("25 seconds");
-      }
-    }),
-  }));
+  const measured = yield* Effect.exit(
+    runFleetPilot({
+      inventory: () => readUserObjects(accountReader(env, client), installed.userNamespace),
+      register: () => meter("check").pipe(Effect.andThen(browser.register())),
+      renew: browser.renew,
+      record,
+      watch: Effect.fn(function* () {
+        const start = yield* Clock.currentTimeMillis;
+        const observationMs = 600_000;
+        while ((yield* Clock.currentTimeMillis) - start < observationMs) {
+          yield* meter("check");
+          yield* browser.renew();
+          yield* Effect.sleep("25 seconds");
+        }
+      }),
+    })
+  );
   yield* meter("finish");
   if (measured._tag === "Failure") return yield* Effect.failCause(measured.cause);
   yield* meter("logs");

@@ -1,0 +1,25 @@
+name: Verify the fresh earlier-month disclosure
+on:
+  push:
+    branches: [test/2260-read-failure]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+      - uses: ./.github/actions/bun-install
+      - run: bun run --cwd apps/web test -- src/features/recurring/feature.test.ts
+      - run: bun run --cwd apps/web typecheck
+      - run: |
+          bun install --cwd tools/mcp-inspector --frozen-lockfile
+          bun install --cwd tools/depcruise --frozen-lockfile
+          bun run lint:type-aware

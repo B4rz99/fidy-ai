@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from run import BOUNDARIES, compare, failure_metadata, observation
+from run import BOUNDARIES, CALIBRATION_VIEWS, compare, failure_metadata, observation
 
 
 class ReferenceReport(unittest.TestCase):
@@ -42,7 +42,7 @@ class ReferenceReport(unittest.TestCase):
 
     def rows(self, samples):
         return [
-            {"variant": variant, "status": "ok", "timings": {k: value for k in BOUNDARIES}}
+            {"variant": variant, "status": "ok", "timings": {k: value for k in BOUNDARIES + CALIBRATION_VIEWS}}
             for value in range(1, samples + 1)
             for variant in ["d1", "do"]
         ]
@@ -54,6 +54,12 @@ class ReferenceReport(unittest.TestCase):
         cells = compare(30, rows, ["d1", "do"], calibration=True)
         self.assertEqual(cells["budgets.month.browser"]["status"], "pass")
         self.assertEqual(cells["budgets.month.browser"]["do"]["completed"], 30)
+
+    def test_pending_review_rejects_a_slow_click_to_usable_source_context(self):
+        rows = self.rows(30)
+        cells = compare(30, rows, ["d1", "do"], calibration=True)
+        self.assertEqual(cells["review.pending.browser"]["status"], "fail")
+        self.assertEqual(cells["review.pending.browser"]["d1"]["p95"], 29)
 
     def test_every_boundary_requires_the_minimum_paired_count(self):
         summary = compare(29, self.rows(29), ["d1", "do"])

@@ -35,8 +35,9 @@ const wire = Schema.decodeSync(Schema.fromJsonString(Schema.Unknown));
 /**
  * @param {BrowserResponse} reply Actual measured response.
  */
-const consumed = async (reply) => {
+export const consumed = async (reply) => {
   const body = await reply.body();
+  if (reply.status() !== success) process.stderr.write("REFERENCE_HTTP " + reply.status() + "\n");
   assert.equal(reply.status(), success);
   return {
     value: wire(body.toString("utf8")),
@@ -53,7 +54,7 @@ const consumed = async (reply) => {
  * @param {string} path Expected canonical operation.
  * @param {Record<string, string>} query Required query parameters.
  */
-const responseFor = ({ page, api }, path, query) =>
+export const responseFor = ({ page, api }, path, query) =>
   page.waitForResponse((reply) => {
     const url = new URL(reply.url());
     return (
@@ -64,7 +65,7 @@ const responseFor = ({ page, api }, path, query) =>
     );
   });
 /** @param {Page} page Mounted browser page. */
-const painted = (page) =>
+export const painted = (page) =>
   page.evaluate(
     () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
   );

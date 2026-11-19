@@ -21,7 +21,9 @@ let stage = "settings";
 try {
   assert.ok(/^[0-9a-f]{40}$/u.test(revision));
   assert.ok(network === "ordinary" || network === "poor");
-  assert.ok(view === "transactions" || view === "budgets" || view === "needs-review");
+  const allowedView = Schema.decodeUnknownSync(
+    Schema.Literals(["transactions", "budgets", "needs-review", "dashboard", "recurring"])
+  )(view);
   assert.ok(
     process.env.NATIVE_STORAGE_ADMISSION === "closed" &&
       process.env.SMOKE_PROOF?.length >= minimumProofLength
@@ -31,7 +33,7 @@ try {
     variant: "do",
     revision,
     network,
-    view,
+    view: allowedView,
     fixture: "production-calibration",
     source: process.env.GITHUB_SHA,
     run: process.env.GITHUB_RUN_ID,
@@ -86,7 +88,7 @@ try {
     origins,
     session: Redacted.value(session),
     network,
-    view,
+    view: allowedView,
     event,
     environment: {
       BROWSER_ORIGIN: origins.browser,

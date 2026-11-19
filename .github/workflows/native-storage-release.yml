@@ -7,7 +7,16 @@ on:
         description: Operate the isolated SQLite installation
         required: true
         type: choice
-        options: [verify, first-install, stage-hosts, rollout, rehearse-rollback, publish-site]
+        options:
+          [
+            verify,
+            plan-first-install,
+            first-install,
+            stage-hosts,
+            rollout,
+            rehearse-rollback,
+            publish-site,
+          ]
 
 permissions:
   contents: read
@@ -58,6 +67,10 @@ jobs:
       - name: Check the reviewed release policy
         working-directory: infra/cloudflare
         run: bun verify-edge-policy.ts
+      - name: Verify the fresh native plan against the existing state store
+        if: inputs.operation == 'plan-first-install'
+        working-directory: infra/cloudflare
+        run: bun native-storage-resources.ts plan-first-install
       - name: Install the verified fresh native application
         if: inputs.operation == 'first-install'
         working-directory: infra/cloudflare
@@ -90,6 +103,7 @@ jobs:
           bun native-storage-release.ts attach-hosts
       - name: Verify the installed application and retained schema markers
         id: verify
+        if: inputs.operation != 'plan-first-install'
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts verify
       - name: Restore only a compatible, tested target after failed promoted verification

@@ -104,6 +104,20 @@ describe("Production runtime configuration gate", () => {
     expect(workflow).toContain("CLOUDFLARE_ACCESS_ISSUER: ${{ secrets.CLOUDFLARE_ACCESS_ISSUER }}");
   });
 
+  it("runs the protected plan without starting installation or installed verification", async () => {
+    const preview = await workflowStep(
+      "Verify the fresh native plan against the existing state store"
+    );
+    const install = await workflowStep("Install the verified fresh native application");
+    const verify = await workflowStep(
+      "Verify the installed application and retained schema markers"
+    );
+    expect(preview).toContain("if: inputs.operation == 'plan-first-install'");
+    expect(preview).toContain("run: bun native-storage-resources.ts plan-first-install");
+    expect(install).toContain("if: inputs.operation == 'first-install'");
+    expect(verify).toContain("if: inputs.operation != 'plan-first-install'");
+  });
+
   it("keeps real payment secrets out of closed first installation", async () => {
     const first = await workflowStep("Install the verified fresh native application");
     expect(first).toContain("bun native-storage-resources.ts first-install");

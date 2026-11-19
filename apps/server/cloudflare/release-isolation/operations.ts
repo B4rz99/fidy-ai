@@ -122,7 +122,12 @@ export const releaseAdmission = Effect.fn(function* (
   return { denial: blocked, deadline: Option.none<number>() };
 });
 
-const cohortLimits = { smoke: 2, erasure: 1, performance: 20, fleet: 1000 } as const;
+const cohortLimits: Readonly<Record<string, number>> = {
+  smoke: 2,
+  erasure: 1,
+  performance: 20,
+  fleet: 1000,
+};
 const syntheticSubject =
   /^fidy-acceptance-([a-f0-9]{40})-(smoke|erasure|performance|fleet)-([1-9][0-9]{0,3})$/u;
 const fixtureConsumerIssuer =
@@ -140,15 +145,9 @@ export const acceptanceSubject = ({
   if (issuer !== "https://accounts.google.com" && issuer !== fixtureConsumerIssuer) return false;
   const match = syntheticSubject.exec(subject);
   if (match === null || match[1] !== revision) return false;
-  const purpose = match[2],
+  const purpose = match[2] ?? "",
     ordinal = Number(match[3]);
-  return (
-    (purpose === "smoke" ||
-      purpose === "erasure" ||
-      purpose === "performance" ||
-      purpose === "fleet") &&
-    ordinal <= cohortLimits[purpose]
-  );
+  return ordinal <= (cohortLimits[purpose] ?? 0);
 };
 
 const windowKey = (revision: string): string => `_release-smoke/${revision}/acceptance/work`;

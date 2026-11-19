@@ -19,6 +19,8 @@ type Port = ErasureObservation & {
   renew: () => Effect.Effect<void, Error>;
 };
 
+const inventoryRetries = 12;
+const erasureRetries = 30;
 const observed = <A>(
   read: Effect.Effect<Option.Option<A>, Error>,
   times: number,
@@ -34,11 +36,11 @@ const observed = <A>(
     )
   );
 
-/** The protected release owns the closed installation's only signup during the physical census. */
-export const verifyIndependentErasure = Effect.fn(function* (port: Port) {
+const captureStableUsers = Effect.fn(function* (port: Port) {
   const retained = yield* port.survivors();
-  if (new Set(retained).size !== 2)
+  if (new Set(retained).size !== 2) {
     return yield* Effect.fail(Error("Expected two stable smoke Users"));
+  }
   // Shared bootstrap initializes one fixed UserStore probe in addition to the two smoke Users.
   const before = yield* observed(
     port
@@ -48,20 +50,25 @@ export const verifyIndependentErasure = Effect.fn(function* (port: Port) {
           [...rows.values()].filter(Boolean).length >= 3 ? Option.some(rows) : Option.none()
         )
       ),
-    12,
+    inventoryRetries,
     "5 seconds"
   );
   yield* port.record({
     stage: "stable-users",
     populated: [...before.values()].filter(Boolean).length,
   });
+  return { before, retained };
+});
+/** The protected release owns the closed installation's only signup during the physical census. */
+export const verifyIndependentErasure = Effect.fn(function* (port: Port) {
+  const { before, retained } = yield* captureStableUsers(port);
   const disposable = yield* port.signup();
   if (disposable.outcome !== "created" || retained.includes(disposable.id)) {
     return yield* Effect.fail(Error("A fresh, independent synthetic User is required"));
   }
   const target = yield* observed(
-    port.inventory().pipe(Effect.map((current) => newStoredUser(before, current))),
-    12,
+    port.inventory().pipe(Effect.map((current) => newStoredUser({ before, current }))),
+    inventoryRetries,
     "5 seconds"
   );
   yield* port.record({ stage: "fresh-object", physicalObject: target });
@@ -71,8 +78,14 @@ export const verifyIndependentErasure = Effect.fn(function* (port: Port) {
   if ((yield* port.admit(disposable)) !== reference) {
     return yield* Effect.fail(Error("Erasure admission returned a different reference"));
   }
-  const check = port.inventory().pipe(Effect.map((rows) => physicalErasure(before, target, rows)));
-  const state = yield* observed(port.renew().pipe(Effect.andThen(check)), 30, "20 seconds");
+  const check = port
+    .inventory()
+    .pipe(Effect.map((rows) => physicalErasure({ before, subject: target, current: rows })));
+  const state = yield* observed(
+    port.renew().pipe(Effect.andThen(check)),
+    erasureRetries,
+    "20 seconds"
+  );
   yield* port.record({ stage: "physically-erased", physicalObject: target, reference });
   yield* port.denied(disposable);
   const surviving = yield* port.survivors();

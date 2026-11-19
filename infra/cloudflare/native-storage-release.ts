@@ -1,3 +1,4 @@
+import type { ErasureObservation } from "./native-erasure";
 import { readUserObjects } from "./native-erasure-evidence";
 import { verifyNativeSmoke } from "./native-release-smoke";
 import { isDeepStrictEqual } from "node:util";
@@ -295,6 +296,18 @@ const requireClosedAdmission = Effect.fn(function* (client: HttpClient.HttpClien
     return yield* new ReleaseFailure({ message: "Normal admission is not closed" });
   }
 });
+const erasureObservation = (
+  env: Config,
+  client: HttpClient.HttpClient,
+  userNamespace: string
+): ErasureObservation => ({
+  inventory: () => readUserObjects(accountReader(env, client), userNamespace),
+  record: (checkpoint) =>
+    writeFile(
+      env.smokeAttestationFile + ".erasure",
+      encodeJson({ revision: env.revision, userNamespace, ...checkpoint })
+    ),
+});
 const verifySyntheticUsers = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
@@ -303,7 +316,7 @@ const verifySyntheticUsers = Effect.fn(function* (
     erasureNamespace,
   }: {
     origins: (typeof installedOrigins)[keyof typeof installedOrigins];
-    erasureNamespace?: string;
+    erasureNamespace: Option.Option<string>;
   }
 ) {
   const send = Effect.fn(function* (request: Request) {
@@ -323,22 +336,7 @@ const verifySyntheticUsers = Effect.fn(function* (
     proof: Redacted.make(env.smokeProof),
     origins,
     send,
-    ...(erasureNamespace === undefined
-      ? {}
-      : {
-          erasure: {
-            inventory: () => readUserObjects(accountReader(env, client), erasureNamespace),
-            record: (checkpoint) =>
-              writeFile(
-                env.smokeAttestationFile + ".erasure",
-                encodeJson({
-                  revision: env.revision,
-                  userNamespace: erasureNamespace,
-                  ...checkpoint,
-                })
-              ),
-          },
-        }),
+    erasure: Option.map(erasureNamespace, (id) => erasureObservation(env, client, id)),
   });
   const path = `https://api.cloudflare.com/client/v4/accounts/${env.account}/workflows/fidy-native-billing/instances/${proof.callback.workflow}`;
   const response = providerJson(
@@ -434,6 +432,11 @@ const firstInstallWorkers = Effect.fn(function* () {
   }
   return receipts;
 });
+const UserNamespace = Schema.Struct({
+  type: Schema.Literal("durable_object_namespace"),
+  class_name: Schema.Literal("UserStore"),
+  namespace_id: Schema.NonEmptyString,
+});
 const installedRelease = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
@@ -485,43 +488,52 @@ const installedRelease = Effect.fn(function* (
     publicVersionId: pair.publicStable,
     coreVersionId: pair.coreStable,
     namespaces: storage.namespaces,
-    userNamespace: Schema.decodeUnknownSync(
-      Schema.Struct({
-        type: Schema.Literal("durable_object_namespace"),
-        class_name: Schema.Literal("UserStore"),
-        namespace_id: Schema.NonEmptyString,
-      })
-    )(core.bindings.USER_STORE).namespace_id,
+    userNamespace: (yield* Schema.decodeUnknownEffect(UserNamespace)(core.bindings.USER_STORE))
+      .namespace_id,
     markers: proof.markers,
     ...topology,
     protectedRunUrl: yield* ReleaseConfig.String("RELEASE_RUN_URL"),
     admission: "closed",
   };
 });
-const verifyFirstInstall = (erase: boolean) =>
-  Effect.fn(function* (env: Config, client: HttpClient.HttpClient, port: ReleasePort) {
-    const installed = yield* installedRelease(env, client, { port, staging: false });
-    const contractDigest = yield* ReleaseConfig.String("CONTRACT_DIGEST"),
-      identity = { gitRevision: env.revision, contractDigest };
-    const smoke = yield* verifyNativeSmoke({
-      api: origin,
-      headers: { "x-fidy-smoke-proof": env.smokeProof },
-      public: { ...identity, workerVersionId: installed.publicVersionId },
-      core: { ...identity, workerVersionId: installed.coreVersionId },
-    }).pipe(Effect.provideService(HttpClient.HttpClient, client));
-    const synthetic = yield* Effect.forEach(nativeHostPairs(yield* hostMode), (pair) =>
-      verifySyntheticUsers(env, client, {
-        origins: pair,
-        ...(erase && pair.api === installedOrigins.acceptance.api
-          ? { erasureNamespace: installed.userNamespace }
-          : {}),
-      }).pipe(Effect.map((result) => ({ api: pair.api, ...result })))
-    );
-    if (new Set(synthetic.map((result) => result.callback.workflow)).size !== 1) {
-      return yield* Effect.fail(Error("Staged hosts reached different native payment attempts"));
-    }
-    yield* writeFile(env.smokeAttestationFile, encodeJson({ ...installed, smoke, synthetic }));
-  });
+const verifyFirstInstall = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  { port, erase }: { port: ReleasePort; erase: boolean }
+) {
+  const installed = yield* installedRelease(env, client, { port, staging: false });
+  const contractDigest = yield* ReleaseConfig.String("CONTRACT_DIGEST"),
+    identity = { gitRevision: env.revision, contractDigest };
+  const smoke = yield* verifyNativeSmoke({
+    api: origin,
+    headers: { "x-fidy-smoke-proof": env.smokeProof },
+    public: { ...identity, workerVersionId: installed.publicVersionId },
+    core: { ...identity, workerVersionId: installed.coreVersionId },
+  }).pipe(Effect.provideService(HttpClient.HttpClient, client));
+  const synthetic = yield* Effect.forEach(nativeHostPairs(yield* hostMode), (pair) =>
+    verifySyntheticUsers(env, client, {
+      origins: pair,
+      erasureNamespace:
+        erase && pair.api === installedOrigins.acceptance.api
+          ? Option.some(installed.userNamespace)
+          : Option.none(),
+    }).pipe(Effect.map((result) => ({ api: pair.api, ...result })))
+  );
+  if (new Set(synthetic.map((result) => result.callback.workflow)).size !== 1) {
+    return yield* Effect.fail(Error("Staged hosts reached different native payment attempts"));
+  }
+  yield* writeFile(env.smokeAttestationFile, encodeJson({ ...installed, smoke, synthetic }));
+});
+
+type VerifyCommand = (
+  env: Config,
+  client: HttpClient.HttpClient,
+  port: ReleasePort
+) => ReturnType<typeof verifyFirstInstall>;
+const verification =
+  (erase: boolean): VerifyCommand =>
+  (env, client, port) =>
+    verifyFirstInstall(env, client, { port, erase });
 
 const coordinateIdentity = (
   installed: Effect.Success<ReturnType<typeof installedRelease>>
@@ -1047,8 +1059,8 @@ const commands = {
   "verify-fresh-target": verifyFreshTarget,
   "prepare-closed-edge": prepareClosedEdge,
   "verify-upload": verifyStorageUpload,
-  verify: verifyFirstInstall(false),
-  "verify-erasure": verifyFirstInstall(true),
+  verify: verification(false),
+  "verify-erasure": verification(true),
   capture: captureNative,
   stage: stageNative,
   promote: promoteClosed,

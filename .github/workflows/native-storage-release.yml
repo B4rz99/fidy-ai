@@ -159,6 +159,8 @@ jobs:
           source=$(jq -r .sourceRevision <<< "$EVIDENCE")
           archive=$(jq -r .archiveSha256 <<< "$EVIDENCE")
           file=$(jq -r .checkpointSha256 <<< "$EVIDENCE")
+          git merge-base --is-ancestor "$source" HEAD
+          git diff --quiet "$source" HEAD -- infra/cloudflare/native-erasure.ts
           base="repos/$GITHUB_REPOSITORY/actions"
           gh api "$base/runs/$run/attempts/1" | jq -e --arg sha "$source" --arg repo "$GITHUB_REPOSITORY" '
             .path == ".github/workflows/native-storage-release.yml" and .repository.full_name == $repo and

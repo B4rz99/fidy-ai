@@ -333,7 +333,7 @@ const erasureObservation = ({
   };
 };
 const acceptanceSend = (client: HttpClient.HttpClient) =>
-Effect.fn(function* (request: Request) {
+  Effect.fn(function* (request: Request) {
     const reply = yield* client
       .execute(HttpClientRequest.fromWeb(request))
       .pipe(Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }));
@@ -579,7 +579,10 @@ const installedRelease = Effect.fn(function* (
 const verifyFirstInstall = Effect.fn(function* (
   verifier: Config,
   client: HttpClient.HttpClient,
-  { port, operation }: { port: ReleasePort; operation: "verify" | "verify-erasure" | "continue-erasure" }
+  {
+    port,
+    operation,
+  }: { port: ReleasePort; operation: "verify" | "verify-erasure" | "continue-erasure" }
 ) {
   const requested = yield* ReleaseConfig.String("EXPECTED_INSTALLED_REVISION").pipe(
     ReleaseConfig.withDefault("")
@@ -605,17 +608,26 @@ const verifyFirstInstall = Effect.fn(function* (
     const source = yield* ReleaseConfig.String("ERASURE_SOURCE_RUN");
     const erasure = yield* continueAdmittedErasure({
       checkpoint: yield* readFile(env.smokeAttestationFile + ".prior"),
-      revision, userNamespace: installed.userNamespace,
+      revision,
+      userNamespace: installed.userNamespace,
       baseline: yield* ReleaseConfig.String("ERASURE_BASELINE_SHA256"),
       survivors: yield* ReleaseConfig.String("ERASURE_SURVIVORS_SHA256"),
       inventory: () => readUserObjects(accountReader(env, client), installed.userNamespace),
-      ...admittedErasureLogins({ revision, proof: Redacted.make(env.smokeProof),
-        origins: installedOrigins.acceptance, send: acceptanceSend(client) }),
+      ...admittedErasureLogins({
+        revision,
+        proof: Redacted.make(env.smokeProof),
+        origins: installedOrigins.acceptance,
+        send: acceptanceSend(client),
+      }),
     });
-    yield* writeFile(env.smokeAttestationFile, encodeJson({
-      ...installed, verifierRevision: verifier.revision,
-      continuation: { sourceRun: source, ...erasure }
-    }));
+    yield* writeFile(
+      env.smokeAttestationFile,
+      encodeJson({
+        ...installed,
+        verifierRevision: verifier.revision,
+        continuation: { sourceRun: source, ...erasure },
+      })
+    );
     return;
   }
   const contractDigest = yield* ReleaseConfig.String("CONTRACT_DIGEST"),

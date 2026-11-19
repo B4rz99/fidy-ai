@@ -1,7 +1,9 @@
 // Each invocation owns an isolated browser context and one newly seeded local installation.
 import assert from "node:assert/strict";
+import { appendFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { Schema } from "effect";
+import { freshBudgetMonth, freshPendingReview } from "./fresh-workspaces.mjs";
 import { freshTransactions } from "./fresh-transactions.mjs";
 
 const { chromium } = await import("@playwright/test");
@@ -129,8 +131,21 @@ try {
   process.stderr.write(JSON.stringify(accountability) + "\n");
   // WebSession requests in the pinned baseline write session Audit and carry no external retry key.
   assert.deepEqual(accountability, { reads: 2, corrections: 1, units: 0, receipts: 0 });
+  const views = {};
+  if (process.env.FIDY_ASSESSMENT === "production") {
+    process.stderr.write("REFERENCE_STAGE budgets-month\n");
+    const events = process.env.FIDY_REFERENCE_EVENTS;
+    assert.ok(events, "Missing reference observation file");
+    /** @param {Readonly<Record<string, unknown>>} row Bounded workspace measurement metadata. */
+    const event = (row) => appendFileSync(events, JSON.stringify(row) + "\n");
+    const input = { page, api, browser: app, event };
+    views["budgets.month.browser"] = await freshBudgetMonth(input);
+    process.stderr.write("REFERENCE_STAGE review-pending\n");
+    views["review.pending.browser"] = await freshPendingReview(input);
+  }
   process.stdout.write(
     JSON.stringify({
+      views,
       browser: browser.version(),
       startupMs,
       readMs,

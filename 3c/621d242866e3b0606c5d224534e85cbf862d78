@@ -1,0 +1,25 @@
+apps/server/cloudflare/release-fixture/internal/payments.ts
+  s_a1be23a656acf0::t_0f1359efc10422 4,98
+apps/server/cloudflare/release-fixture/operations.ts
+  s_a1be23a656acf0::t_c8a7fbf91e1ea0 4-13
+infra/cloudflare/native-acceptance.ts
+  s_a1be23a656acf0::t_91d7cb59efd3da 15-18,229
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_0285f845648054 5,10-11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3c621d242866e3b0606c5d224534e85cbf862d78",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,81 @@
+name: Measure the closed native browser journey
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/hosted-browser.yml"
+      - "scripts/infra-performance/hosted-browser/**"
+      - "scripts/infra-performance/reference/fresh-transactions.mjs"
+      - "infra/cloudflare/native-acceptance.ts"
+      - "apps/server/cloudflare/release-isolation/**"
+  workflow_dispatch:
+    inputs:
+      revision:
+        description: Installed closed native release Git SHA
+        required: true
+        type: string
+      network:
+        description: Browser network profile
+        type: choice
+        options: [ordinary, poor]
+        default: ordinary
+
+permissions:
+  contents: read
+
+jobs:
+  transport:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+      - uses: ./.github/actions/bun-install
+      - name: Verify Chromium signs the actual preflight and WebSession request
+        run: |
+          source scripts/infra-performance/hosted-browser/tls.sh
+          export ASSESSMENT_CHROMIUM="$(command -v google-chrome)"
+          bun scripts/infra-performance/hosted-browser/proof.test.mjs
+
+  native:
+    needs: transport
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/trunk'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+    concurrency:
+      group: production-deployment
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+      - uses: ./.github/actions/bun-runtime
+      - run: bash scripts/install-workspace.sh --ignore-scripts
+      - name: Measure startup, fresh history and confirmed Correction on the native acceptance alias
+        env:
+          BROWSER_RELEASE_REVISION: ${{ inputs.revision }}
+          BROWSER_NETWORK: ${{ inputs.network }}
+          NATIVE_STORAGE_ADMISSION: ${{ vars.NATIVE_STORAGE_ADMISSION }}
+          SMOKE_PROOF: ${{ secrets.NATIVE_STORAGE_SMOKE_PROOF }}
+        run: |
+          source scripts/infra-performance/hosted-browser/tls.sh
+          export ASSESSMENT_CHROMIUM="$(command -v google-chrome)"
+          bun scripts/infra-performance/hosted-browser/native.mjs
+      - name: Retain observed and partial browser evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: closed-browser-${{ github.run_id }}-${{ github.run_attempt }}
+          path: apps/web/test-results/hosted-browser/attempts.jsonl
+          if-no-files-found: error
+          retention-days: 7

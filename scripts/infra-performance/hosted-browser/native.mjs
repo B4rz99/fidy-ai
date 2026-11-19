@@ -1,0 +1,99 @@
+import assert from "node:assert/strict";
+import { appendFileSync, mkdirSync } from "node:fs";
+import { Effect, Redacted } from "effect";
+import { installedOrigins } from "../../../apps/server/src/shell/browser-transport/contract.ts";
+import { openPerformanceBrowser } from "../../../infra/cloudflare/native-acceptance.ts";
+import { measureBrowser } from "./journey.mjs";
+
+const origins = installedOrigins.acceptance;
+const directory = "apps/web/test-results/hosted-browser";
+mkdirSync(directory, { recursive: true });
+const event = (row) => appendFileSync(directory + "/attempts.jsonl", JSON.stringify(row) + "\n");
+const network = process.env.BROWSER_NETWORK;
+const revision = process.env.BROWSER_RELEASE_REVISION;
+let stage = "settings";
+try {
+  assert.ok(/^[0-9a-f]{40}$/u.test(revision));
+  assert.ok(network === "ordinary" || network === "poor");
+  assert.ok(
+    process.env.NATIVE_STORAGE_ADMISSION === "closed" && process.env.SMOKE_PROOF?.length >= 32
+  );
+  event({
+    type: "plan",
+    variant: "do",
+    revision,
+    network,
+    fixture: "production-calibration",
+    source: process.env.GITHUB_SHA,
+    run: process.env.GITHUB_RUN_ID,
+    runner: process.env.RUNNER_ENVIRONMENT,
+    attempts: 1,
+    comparison: "missing",
+    d1: "missing budget-metered browser installation",
+    minimumPairs: 30,
+  });
+  stage = "origin";
+  const trace = await fetch(origins.browser + "/cdn-cgi/trace", {
+    redirect: "error",
+    signal: AbortSignal.timeout(10000),
+  });
+  assert.equal(trace.status, 200);
+  const lines = await trace.text();
+  const country = /^loc=([A-Z]{2})$/mu.exec(lines)?.[1];
+  const colo = /^colo=([A-Z]{3})$/mu.exec(lines)?.[1];
+  assert.ok(country && colo);
+  event({
+    type: "origin",
+    country,
+    colo,
+    source: "Cloudflare trace at browser hostname",
+    colombianEgress: country === "CO",
+  });
+  stage = "release";
+  const metadata = await fetch(origins.browser + "/deployment-metadata.json", {
+    redirect: "error",
+    signal: AbortSignal.timeout(10000),
+  });
+  assert.equal((await metadata.json()).gitRevision, revision);
+  stage = "provider-websession";
+  const secret = Redacted.make(process.env.SMOKE_PROOF);
+  const session = await Effect.runPromise(
+    openPerformanceBrowser(
+      {
+        revision,
+        proof: secret,
+        send: (request) =>
+          Effect.tryPromise({
+            try: () => fetch(request, { redirect: "manual", signal: AbortSignal.timeout(30000) }),
+            catch: () => Error("Hosted browser signup transport unavailable"),
+          }),
+      },
+      network === "ordinary" ? "performance-1" : "performance-2"
+    )
+  );
+  stage = "fresh-view";
+  await measureBrowser({
+    origins,
+    session: Redacted.value(session),
+    network,
+    event,
+    environment: {
+      BROWSER_ORIGIN: origins.browser,
+      RELEASE_GIT_SHA: revision,
+      SMOKE_PROOF: Redacted.value(secret),
+      RECOVERY_ISOLATION: "isolated",
+      NATIVE_STORAGE_ADMISSION: "closed",
+    },
+  });
+  event({
+    type: "result",
+    outcome: "completed pilot",
+    comparison: "missing",
+    audit: "missing independent hosted counts",
+  });
+} catch {
+  // Assertions and browser errors may contain headers, cookies or entire response bodies.
+  event({ type: "result", outcome: "failed", stage, comparison: "missing" });
+  process.stderr.write("Closed native browser observation failed during " + stage + "\n");
+  process.exitCode = 1;
+}

@@ -206,3 +206,18 @@ The workflow preserves logical equivalence evidence in `canonical-snapshot/snaps
 and the conservative one-pair and 30-pair estimates in `canonical-snapshot/probe.json`.
 Check both before considering the disposable comparator for a hosted experiment. The file sizes
 describe the two offline databases. Physical layout and hosted latency need separate observations.
+
+### Restore the fully populated Transaction fixture
+
+Select `--materialized` and supply the same private `--canonical-fixture` to `cells/prepare.py`
+to restore the complete pre-Login D1 fixture. The source replays the pinned Alchemy migrations
+and the established eight-original fixture with active production constraints and triggers.
+The unmounted destination copies the schema and all application rows, installs the exact triggers
+in source order, and verifies schema, row identities, stored values and foreign keys before any
+Worker receives a request. Its Session and Audit tables must be empty before genuine Login.
+
+The generated `snapshot-proof.json` records the source and restored state. `probe.json` includes
+complete response checks, bounded per-batch usage and one-pair and 30-pair ceilings. Use the
+exact fixture and bundle from the protected experiment when obtaining account admission.
+Individual hosted SourceAttestation identity and independent resource cleanup still require
+their own protected observations.

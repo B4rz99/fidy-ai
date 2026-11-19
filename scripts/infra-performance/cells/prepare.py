@@ -18,7 +18,10 @@ def main():
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--canonical-fixture", type=Path, help="Originals and actual private provenance from the disposable native rehearsal")
     parser.add_argument("--snapshot", action="store_true", help="Reconstruct and check the final empty D1 schema against frozen migration replay")
+    parser.add_argument("--materialized", action="store_true", help="Import the complete private pre-Login canonical fixture and verify its full state")
     args = parser.parse_args()
+    if args.materialized and (not args.canonical_fixture or args.snapshot):
+        parser.error("--materialized needs --canonical-fixture and selects its own snapshot mode")
     root, source, out = (p.resolve() for p in (args.d1, args.calibration, args.out))
     for path, revision in ((root, PIN), (source, CALIBRATION)):
         if subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=path, text=True).strip() != revision:
@@ -60,7 +63,7 @@ def main():
         observed = materialize(out / "plan.json", args.canonical_fixture)
         inspection_ids = sorted(observed["inspections"])
         (out / "expected.json").write_text(json.dumps({"history": observed["history"], "inspections": observed["inspections"]}, ensure_ascii=False))
-    if args.snapshot:
+    if args.snapshot or args.materialized:
         # Use the same package and migration registry as the frozen Alchemy D1 provider.
         # Only the executor is directed to the private local workerd binding.
         migration_module = root / "node_modules/alchemy/src/SQL/Migrations"
@@ -80,7 +83,7 @@ def main():
             + 'await Effect.runPromise(applyAlchemyFormat({executor,records,table:ALCHEMY_DEFAULT_TABLE}));\n'
             + 'await import(' + path_literal(HERE / "snapshot.mjs") + ');\n')
         (out / "snapshot-proof.json").write_text(json.dumps({"stage":"replay-frozen-alchemy","baseline":PIN}))
-        subprocess.run(["bun", str(entry), str(out)], cwd=root, check=True)
+        subprocess.run(["bun", str(entry), str(out), "materialized" if args.materialized else "empty"], cwd=root, check=True)
 
     artifacts["plan"] = hashlib.sha256((out / "plan.json").read_bytes()).hexdigest()
     (out / "manifest.json").write_text(json.dumps(dict(baseline=PIN, calibration=CALIBRATION, sha256=artifacts), indent=2))

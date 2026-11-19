@@ -1,4 +1,4 @@
-// Extract only the empty schema produced by the frozen migrations and reconstruct it in fresh D1.
+// Restore the frozen schema and selected synthetic facts into a fresh, unmounted workerd D1.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -47,6 +47,7 @@ const schemaSql = "SELECT type,name,tbl_name,sql FROM sqlite_schema ORDER BY typ
 const triggerSql =
   "SELECT tbl_name,name FROM sqlite_schema WHERE type='trigger' ORDER BY tbl_name,rowid";
 const output = resolve(process.argv[2]);
+const materialized = process.argv[3] === "materialized";
 const file = resolve(output, "plan.json");
 const report = resolve(output, "snapshot-proof.json");
 const plan = readPlan(await Bun.file(file).json());
@@ -218,6 +219,35 @@ const seedOrder = (tables) => {
   }
   return ordered;
 };
+/** @param {ReadonlyArray<Table>} tables Actual state of the migration and fixture oracle. */
+const materializedRows = (tables) => {
+  const commands = [query("PRAGMA defer_foreign_keys=ON")];
+  const maximumStatementBytes = 98_304;
+  const encoder = new TextEncoder();
+  for (const table of tables) {
+    // SQLite itself recreates sequence rows when copied autoincrement rows are inserted.
+    // The final table digest includes its high-water marks and rowids.
+    if (table.name === "sqlite_sequence" || !table.inserts.length) continue;
+    let packed = "";
+    for (const sql of table.inserts) {
+      const separator = sql.indexOf(" VALUES(");
+      assert.ok(separator > 0);
+      const candidate = packed ? packed + "," + sql.slice(separator + " VALUES".length) : sql;
+      if (encoder.encode(candidate).length > maximumStatementBytes && packed) {
+        commands.push(query(packed));
+        packed = sql;
+      } else {
+        packed = candidate;
+      }
+      assert.ok(
+        encoder.encode(packed).length <= maximumStatementBytes,
+        "Fixture row exceeds a D1 statement"
+      );
+    }
+    commands.push(query(packed));
+  }
+  return commands;
+};
 /** @type {Record<string,unknown>} */
 const evidence = {
   baseline: plan.baseline,
@@ -250,6 +280,21 @@ try {
     0,
     "Oracle already has a User"
   );
+  if (materialized) {
+    assert.ok(
+      plan.canonicalTransactionFixture,
+      "A populated import requires the actual native originals"
+    );
+    evidence.stage = "populate-oracle";
+    // Build the reference with its original triggers, constraints, and calibrated fixture operations.
+    await serial(plan.batches.slice(start), async ({ batch }) => {
+      const replies = await oracle.batch(
+        batch.map(({ sql, params }) => oracle.prepare(sql).bind(...params))
+      );
+      assert.equal(replies.length, batch.length);
+    });
+    evidence.sourceFixtureSha256 = hash(JSON.stringify(plan.batches.slice(start)));
+  }
   evidence.stage = "extract";
   evidence.oraclePhysical = await physical(oracle);
   // D1 creates this opaque service-owned table on the first write to its database.
@@ -295,36 +340,62 @@ try {
   await append([
     { ...applicationSchema, check: digest(pristine.filter((def) => def.name !== "_cf_METADATA")) },
   ]);
-  await serial(["table", "index", "view", "trigger"], async (kind) => {
+  /** @param {string} kind SQL object type from the frozen schema. */
+  const define = async (kind) => {
     const group = definitions
       .filter((def) => def.type === kind)
       .map((def) => query(String(def.sql)));
     evidence.stage = "define-" + kind;
     // Each kind is a dependency barrier; the source row order retains relative trigger order.
     await append(group);
-  });
-  await serial(seedOrder(tables), async (table) => {
-    evidence.stage = "seed-" + table.name;
-    const existing = readValues(await select(restored, table.read));
-    if (digest(existing) === table.read.check) return;
-    // Install the original constraints and triggers before the first seed row. Refuse side effects
-    // that differ from the final snapshot and never overwrite, disable or drop a guard.
-    const remaining = new Map(table.identities.map((key, index) => [key, table.inserts[index]]));
-    assert.equal(remaining.size, table.rowCount, "Seed row identity collision");
-    for (const row of existing) {
+  };
+  await serial(["table", "index", "view"], define);
+  if (materialized) {
+    evidence.stage = "restore-private-fixture";
+    for (const authority of [
+      "audit_entries",
+      "consent_history",
+      "web_sessions",
+      "browser_login_pairings",
+    ]) {
       assert.equal(
-        remaining.delete(digest([row])),
-        true,
-        "Reconstruction produced a foreign seed row"
+        tables.find((table) => table.name === authority)?.rowCount,
+        0,
+        "An import must precede authority and Audit"
       );
     }
-    await append(
-      Array.from(remaining.values()).map((sql) => {
-        assert.ok(sql);
-        return query(sql);
-      })
-    );
-  });
+    const commands = materializedRows(tables);
+    evidence.importStatements = commands.length;
+    // D1 checks the genuine cyclic Transaction/Reconciliation foreign keys when this batch commits.
+    // Source rows already include the effects of their original triggers. Installing the exact triggers after
+    // copying data avoids replaying those effects a second time on the unexposed destination.
+    applied.push(await run(restored, commands));
+    await define("trigger");
+  } else {
+    await define("trigger");
+    await serial(seedOrder(tables), async (table) => {
+      evidence.stage = "seed-" + table.name;
+      const existing = readValues(await select(restored, table.read));
+      if (digest(existing) === table.read.check) return;
+      // Install the original constraints and triggers before the first seed row. Refuse side effects
+      // that differ from the final snapshot and never overwrite, disable or drop a guard.
+      const remaining = new Map(table.identities.map((key, index) => [key, table.inserts[index]]));
+      assert.equal(remaining.size, table.rowCount, "Seed row identity collision");
+      for (const row of existing) {
+        assert.equal(
+          remaining.delete(digest([row])),
+          true,
+          "Reconstruction produced a foreign seed row"
+        );
+      }
+      await append(
+        Array.from(remaining.values()).map((sql) => {
+          assert.ok(sql);
+          return query(sql);
+        })
+      );
+    });
+  }
   evidence.stage = "verify";
   const fk = query("PRAGMA foreign_key_check");
   const violations = await select(oracle, fk);
@@ -349,12 +420,17 @@ try {
     cost,
   };
   evidence.snapshot = schemaSnapshot;
+  evidence.scope = materialized ? "complete pre-Login fixture" : "empty migrated schema";
   evidence.batches = applied.length;
   evidence.restoredPhysical = await physical(restored);
   evidence.stage = "equivalent";
   await Bun.write(
     file,
-    JSON.stringify({ ...plan, schemaSnapshot, batches: [...applied, ...plan.batches.slice(start)] })
+    JSON.stringify({
+      ...plan,
+      schemaSnapshot,
+      batches: materialized ? applied : [...applied, ...plan.batches.slice(start)],
+    })
   );
 } finally {
   await Bun.write(report, JSON.stringify(evidence, null, 2));

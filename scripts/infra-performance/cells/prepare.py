@@ -56,10 +56,16 @@ def main():
         'import {currentDisclosureFor} from "./apps/server/src/shell/consent/operations"; process.stdout.write(JSON.stringify(currentDisclosureFor()))'], cwd=root)
     (out / "disclosure.json").write_bytes(disclosure)
     (out / "private-ingress.mjs").write_bytes((HERE / "private-ingress.mjs").read_bytes())
-    (out / "frozen-ingress.mjs").write_text('export { default as ingress } from "./public-worker.mjs";')
-    (out / "frozen-core.mjs").write_text('export { default as core, UserTransactionCoordinator } from "./core-worker.mjs";')
-    (out / "ingress-entry.mjs").write_text('export { worker as default } from "./private-ingress.mjs";')
-    (out / "core-entry.mjs").write_text('export { worker as default, UserTransactionCoordinator } from "./meter.mjs";')
+    (out / "ingress-entry.mjs").write_text(
+        'import ingress from "./public-worker.mjs";\n'
+        'import { privateIngress } from "./private-ingress.mjs";\n'
+        'export default privateIngress(ingress);\n')
+    (out / "core-entry.mjs").write_text(
+        'import core, { UserTransactionCoordinator as Coordinator } from "./core-worker.mjs";\n'
+        'import { meteredCore } from "./meter.mjs";\n'
+        'import { training, limits } from "./configured-limits.mjs";\n'
+        'const { worker, UserTransactionCoordinator } = meteredCore(core, Coordinator, { training, limits });\n'
+        'export { worker as default, UserTransactionCoordinator };\n')
     subprocess.run(["bun", "build", "ingress-entry.mjs", "--target=browser", "--external=cloudflare:workers", "--external=node:*",
                     "--outfile", "bounded-ingress.mjs"], cwd=out, check=True)
     (out / "meter.mjs").write_bytes((HERE / "meter.mjs").read_bytes())

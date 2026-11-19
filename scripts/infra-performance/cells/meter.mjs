@@ -1,9 +1,7 @@
 // Bundled only in the disposable comparator. The original frozen application owns all SQL.
 import { AsyncLocalStorage } from "node:async_hooks";
-import { UserTransactionCoordinator as PinnedCoordinator, core } from "./frozen-core.mjs";
-import { limits, training } from "./configured-limits.mjs";
 
-/** @import { Bounds, Cost, CoreEnvironment, Database, Frame, Statement, StatementReply } from "./contracts.d.mts" */
+/** @import { Cost, CoreEnvironment, Database, Frame, MeterConfig, PinnedCore, PinnedCoordinator, Statement, StatementReply } from "./contracts.d.mts" */
 
 const hexBase = 16;
 /** @type {AsyncLocalStorage<Frame>} */
@@ -44,7 +42,7 @@ const digest = async (sql) => {
  * @param {string} key Statement digest.
  */
 const reserve = (frame, key) => {
-  if (training) return null;
+  if (frame.training) return null;
   const cap = frame.plan.statements[key];
   if (
     !cap ||
@@ -192,10 +190,11 @@ const guardedEnvironment = (env) => {
   return isolated;
 };
 /**
+ * @param {MeterConfig} config Calibration state and per-route bounds.
  * @param {Request} request Private request.
  * @param {() => Promise<Response>} run Original frozen handler.
  */
-const measured = async (request, run) => {
+const measured = async ({ limits, training }, request, run) => {
   const url = new URL(request.url);
   const route = request.method + " " + url.pathname + url.search;
   const zeroOnly = request.url === "https://erasure-registry.invalid/metadata";
@@ -205,6 +204,7 @@ const measured = async (request, run) => {
   /** @type {Frame} */
   const frame = {
     zeroOnly,
+    training,
     closed: false,
     inflight: 0,
     plan: limits[route] ?? { maximum: zero(), statements: {} },
@@ -237,26 +237,36 @@ const measured = async (request, run) => {
     }
   });
 };
-export class UserTransactionCoordinator {
-  /**
-   * @param {unknown} state Native object state.
-   * @param {CoreEnvironment} env Disposable bindings.
-   */
-  constructor(state, env) {
-    this.owner = new PinnedCoordinator(state, guardedEnvironment(env));
+/**
+ * @param {PinnedCore} core Frozen application Core.
+ * @param {PinnedCoordinator} Coordinator Frozen application coordinator.
+ * @param {MeterConfig} config Calibrated bounds for this bundle.
+ */
+export const meteredCore = (core, Coordinator, config) => {
+  class UserTransactionCoordinator {
+    /**
+     * @param {unknown} state Native object state.
+     * @param {CoreEnvironment} env Disposable bindings.
+     */
+    constructor(state, env) {
+      this.owner = new Coordinator(state, guardedEnvironment(env));
+    }
+    /** @param {Request} request Original request. */
+    fetch(request) {
+      return measured(config, request, () => this.owner.fetch(request));
+    }
   }
-  /** @param {Request} request Original request. */
-  fetch(request) {
-    return measured(request, () => this.owner.fetch(request));
-  }
-}
-export const worker = {
-  /**
-   * @param {Request} request Original request.
-   * @param {CoreEnvironment} env Disposable bindings.
-   * @param {unknown} execution Native execution context.
-   */
-  fetch(request, env, execution) {
-    return measured(request, () => core.fetch(request, guardedEnvironment(env), execution));
-  },
+  const worker = {
+    /**
+     * @param {Request} request Original request.
+     * @param {CoreEnvironment} env Disposable bindings.
+     * @param {unknown} execution Native execution context.
+     */
+    fetch(request, env, execution) {
+      return measured(config, request, () =>
+        core.fetch(request, guardedEnvironment(env), execution)
+      );
+    },
+  };
+  return { worker, UserTransactionCoordinator };
 };

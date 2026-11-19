@@ -47,6 +47,14 @@ class ReferenceReport(unittest.TestCase):
             for variant in ["d1", "do"]
         ]
 
+    def test_calibration_requires_fresh_month_navigation_on_both_installations(self):
+        rows = self.rows(30)
+        for row in rows:
+            row["timings"]["budgets.month.browser"] = 200 if row["variant"] == "d1" else 100
+        cells = compare(30, rows, ["d1", "do"], calibration=True)
+        self.assertEqual(cells["budgets.month.browser"]["status"], "pass")
+        self.assertEqual(cells["budgets.month.browser"]["do"]["completed"], 30)
+
     def test_every_boundary_requires_the_minimum_paired_count(self):
         summary = compare(29, self.rows(29), ["d1", "do"])
         self.assertEqual(summary["read.http"]["status"], "missing")

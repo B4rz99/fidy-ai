@@ -1,5 +1,5 @@
 import { BunFileSystem } from "@effect/platform-bun";
-import { Effect, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import type { Miniflare } from "miniflare";
 import { approve, forward, makeBrowserRuntime, prepareBrowserUser } from "../../dev-browser-api";
 import { seed, subject } from "./native-seed";
@@ -7,16 +7,16 @@ import { seed, subject } from "./native-seed";
 const apiPort = 4174;
 const operatorPort = 4175;
 const timedResponse = Effect.fn(function* (runtime: Miniflare, request: Request) {
-  let started: number | undefined;
+  let started = Option.none<number>();
   const response = yield* forward(runtime, request, () => {
-    started = performance.now();
+    started = Option.some(performance.now());
   });
-  if (started === undefined || !new URL(request.url).pathname.startsWith("/transactions")) {
+  if (Option.isNone(started) || !new URL(request.url).pathname.startsWith("/transactions")) {
     return response;
   }
   const body = yield* Effect.tryPromise(() => response.arrayBuffer());
   const headers = new Headers(response.headers);
-  headers.set("x-reference-backend-ms", String(performance.now() - started));
+  headers.set("x-reference-backend-ms", String(performance.now() - started.value));
   return new Response(body, { status: response.status, headers });
 });
 const start = Effect.gen(function* () {

@@ -133,6 +133,24 @@ try {
   );
   assert.ok(blocked);
   assert.equal(observed.length, 4);
+  const workspaceReads = await page.evaluate(async (api) => {
+    const get = (path) =>
+      fetch(api + path, { credentials: "include" }).then(
+        (response) => response.status,
+        () => 0
+      );
+    return await Promise.all([
+      get("/budget-status?timeZone=America%2FBogota&month=2026-11"),
+      get("/ingestion/review-workspace/context?status=pending"),
+      get("/budget-status?timeZone=America%2FBogota&month=2025-01"),
+      get("/ingestion/review-workspace/context?status=pending&offset=5000"),
+    ]);
+  }, origins.api);
+  assert.deepEqual(workspaceReads, [noContent, noContent, 0, 0]);
+  assert.deepEqual(observed.slice(4), [
+    { method: "GET", verified: true, cookie: "__Host-fidy_session=synthetic" },
+    { method: "GET", verified: true, cookie: "__Host-fidy_session=synthetic" },
+  ]);
 } finally {
   await browser?.close();
   await proxy.stop(true);

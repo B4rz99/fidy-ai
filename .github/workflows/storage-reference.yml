@@ -79,5 +79,6 @@ jobs:
           path: |
             apps/web/test-results/reference/*/plan.json
             apps/web/test-results/reference/*/attempts.jsonl
+            apps/web/test-results/reference/*/*/workspace-events.jsonl
             apps/web/test-results/reference/*/report.json
           if-no-files-found: warn

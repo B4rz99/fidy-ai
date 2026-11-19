@@ -126,7 +126,7 @@ class OwnerTests(unittest.TestCase):
         self.assertEqual(teardown(owner, cloud)["removed"], [])
         self.assertEqual(cloud.db, "another-controller")
 
-    def test_lost_create_reply_is_discovered_by_name_and_verified_by_uuid(self):
+    def test_lost_create_reply_cannot_adopt_a_colliding_database_by_name(self):
         import io
         import json
         from unittest.mock import patch
@@ -186,6 +186,42 @@ class OwnerTests(unittest.TestCase):
             prepare_inventory(experiment, cloud)
         restored = AccountExperiment(store, account)
         with patch("owner.time.time", return_value=restored.active["deadline"] + 91):
-            self.assertEqual(teardown(restored, cloud, resumed=True)["removed"], ["db"])
-        self.assertIsNone(cloud.transport.stored)
-        self.assertTrue(cloud.transport.checked_uuid)
+            with self.assertRaisesRegex(Refused, "provider_creation_receipt_unresolved_db"):
+                teardown(restored, cloud, resumed=True)
+        self.assertEqual(cloud.transport.stored, dict(name=prefix,uuid=uuid))
+        self.assertFalse(cloud.transport.checked_uuid)
+        self.assertIsNone(AccountExperiment(store,account).active["inventory"]["db"]["id"])
+
+    def test_stale_controller_cannot_publish_after_another_process_has_claimed_teardown(self):
+        from unittest.mock import patch
+        from owner import teardown
+        from types import SimpleNamespace
+
+        account, prefix = 'a'*32, 'fidy-2259-123456abcdef'
+        store = ConditionalObject()
+        stale = AccountExperiment(store,account)
+        stale.begin(prefix,dict(_tag='Allowed',maximumRowsRead=100,maximumRowsWritten=10),today())
+        stale.control('POST','workers/scripts/'+prefix+'-core/versions')
+        new = AccountExperiment(store,account)
+        now = stale.active['deadline']+91
+        cloud = SimpleNamespace(prefix=prefix,verify_absent=lambda *_: None)
+        with patch('owner.time.time',return_value=now):
+            teardown(new,cloud,resumed=True)
+        with self.assertRaises(Refused):
+            stale.control('POST','workers/scripts/'+prefix+'-ingress/subdomain')
+
+    def test_active_version_substitution_refuses_before_ingress_exposure(self):
+        from unittest.mock import patch
+        from owner_transport import confirmed
+        account,prefix = 'a'*32,'fidy-2259-123456abcdef'
+        def resolve(path):
+            if path.endswith('/workers/subdomain'):
+                return dict(subdomain='fixture')
+            if path.endswith('/subdomain'):
+                return dict(enabled=False,previews_enabled=False)
+            if path.endswith('/deployments'):
+                return dict(deployments=[dict(versions=[dict(version_id='other',percentage=100)])])
+            self.fail(path)
+        with patch('owner_transport.cloudflare',side_effect=resolve):
+            with self.assertRaisesRegex(Refused,'version mismatch'):
+                confirmed(dict(resourcePrefix=prefix,accountId=account,versions={'core':'authored'}),account,exposed=False)

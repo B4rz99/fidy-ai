@@ -51,6 +51,7 @@ class Cloud:
         self.root = "https://api.cloudflare.com/client/v4/accounts/" + account + "/"
         self.prefix = prefix
         self.ownership = None
+        self.control = None
         self.auth = os.environ["CLOUDFLARE_API_TOKEN"]
         self.transport = urllib.request.build_opener(NoRedirect(), urllib.request.ProxyHandler({}))
 
@@ -75,6 +76,10 @@ class Cloud:
                 **(headers or {}),
             },
         )
+        if method != "GET" and not path.endswith("/query"):
+            if self.control is None:
+                raise Refused("control_custody_missing")
+            self.control(method, path)
         try:
             response = self.transport.open(request, timeout=45)
         except urllib.error.HTTPError as error:
@@ -159,7 +164,7 @@ class Cloud:
         ):
             raise Refused("owned_database_survived")
 
-    def upload(self, role, module, bindings=(), migrations=None, new=False):
+    def upload(self, role, module, bindings=(), migrations=None, new=False, version=False):
         if not self.ownership or (not new and self.identity(role) is None):
             raise Refused("worker_ownership_missing")
         metadata = dict(
@@ -176,10 +181,14 @@ class Cloud:
         )
         if migrations:
             metadata["migrations"] = migrations
+        if version:
+            # These are script-level settings already applied while the Worker was unbound.
+            del metadata["tags"], metadata["observability"]
         body, kind = multipart(metadata, module)
-        self.result(
-            "PUT", self.worker(role), body, kind, headers={"If-None-Match": "*"} if new else None
-        )
+        if version:
+            receipt = self.result("POST", self.worker(role)+"/versions", body, kind)
+            return str(UUID(receipt["id"]))
+        return self.result("PUT", self.worker(role), body, kind, headers={"If-None-Match": "*"} if new else None)
 
     def expose(self, role, enabled):
         addr = self.worker(role) + "/subdomain"
@@ -190,11 +199,17 @@ class Cloud:
 
     def create(self, role):
         if role == "db":
-            self.result("POST", "d1/database", dict(name=self.prefix))
+            db = self.result("POST", "d1/database", dict(name=self.prefix))
+            if db["name"] == self.prefix:
+                return str(UUID(db["uuid"]))
         elif role == "bucket":
-            self.result("POST", "r2/buckets", dict(name=self.prefix))
+            bucket = self.result("POST", "r2/buckets", dict(name=self.prefix))
+            if bucket["name"] == self.prefix and bucket.get("creation_date"):
+                return bucket["creation_date"]
         else:
             self.upload(role, INERT, new=True)
+            return self.prefix + "-" + role
+        raise Refused("provider_creation_receipt_missing")
 
     def deploy(self, bundle, db, key, deadline):
         common = [
@@ -240,15 +255,12 @@ class Cloud:
             dict(type="plain_text", name="LOCAL_CANONICAL_READ_BEARER", text=""),
             dict(type="plain_text", name="EXPERIMENT_DEADLINE", text=str(deadline * 1000)),
         ]
-        self.upload("ingress", bundle.modules["bounded-ingress"], ingress)
-        self.expose("ingress", True)
         versions = {}
-        for role in ("core", "ingress"):
-            item = self.result("GET", self.worker(role) + "/deployments")["deployments"][0]
-            (entry,) = item["versions"]
-            if entry["percentage"] != 100:
-                raise Refused("split_worker_deployment")
-            versions[role] = str(UUID(entry["version_id"]))
+        for role, name, bindings in (("core", "metered-core", core), ("ingress", "bounded-ingress", ingress)):
+            version = self.upload(role, bundle.modules[name], bindings, version=True)
+            self.result("POST", self.worker(role)+"/deployments", dict(strategy="percentage",
+                        versions=[dict(version_id=version, percentage=100)]))
+            versions[role] = version
         return versions
 
     def query(self, db, statements):

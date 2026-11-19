@@ -79,7 +79,7 @@ def usage(account):
     )
 
 
-def confirmed(receipt, account):
+def confirmed(receipt, account, *, exposed):
     tag = receipt["resourcePrefix"]
     if not re.fullmatch(r"fidy-2259-[0-9a-f]{12}", tag) or receipt["accountId"] != account:
         raise Refused("Unexpected disposable comparison inventory")
@@ -92,7 +92,7 @@ def confirmed(receipt, account):
         worker = base + "/workers/scripts/" + tag + "-" + role
         address = cloudflare(worker + "/subdomain")
         if (
-            address.get("enabled") is not (role == "ingress")
+            address.get("enabled") is not (exposed and role == "ingress")
             or address.get("previews_enabled") is not False
         ):
             raise Refused("Unexpected disposable Worker exposure")
@@ -156,8 +156,8 @@ def confirmed(receipt, account):
             binding["type"] != "durable_object_namespace"
             or binding["class_name"] != "UserTransactionCoordinator"
             or binding.get("namespace_id", receipt["namespaceId"]) != receipt["namespaceId"]
-            or binding.get("script_name", tag + "-" + role) != tag + "-core"
-            and not binding.get("namespace_id")
+            or (binding.get("script_name") is not None and binding["script_name"] != tag + "-core")
+            or (role == "ingress" and not binding.get("namespace_id") and binding.get("script_name") != tag + "-core")
         ):
             raise Refused("Disposable coordinator identity mismatch")
     if receipt["fixture"] != FIXTURE or receipt["baseline"] != PIN or receipt["day"] != today():

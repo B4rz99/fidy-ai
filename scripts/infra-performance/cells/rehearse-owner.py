@@ -5,6 +5,7 @@ import fcntl
 import json
 import os
 from pathlib import Path
+import signal
 import socket
 import subprocess
 import tempfile
@@ -72,13 +73,14 @@ class Sandbox:
 
     def create(self, role):
         (self.storage / role).write_text("local-" + role)
+        return "local-" + role
 
     def remove(self, role, identity):
         assert identity == self.identity(role)
         if role == "core":
             self.process.stdin.write('{"action":"close"}\n')
             self.process.stdin.flush()
-            assert self.process.wait(timeout=30) == 0
+            # The surviving supervisor independently waits for and verifies this service exit.
         (self.storage / role).unlink()
 
     def expose(self, role, enabled):
@@ -147,7 +149,7 @@ def main():
                     def lost():
                         assert evidence["attempts"][0]["ok"]
                         (scratch / "observed.json").write_text(json.dumps(evidence))
-                        os._exit(75)
+                        os.kill(os.getpid(), signal.SIGKILL)
                     exercise(owner, cloud, bundle, cloud.send, None, {"ingress": cloud.entry["version"]},
                              cloud.entry["key"], 1, evidence, lost)
                 except BaseException:
@@ -155,25 +157,38 @@ def main():
                     traceback.print_exc()
                 os._exit(1)
             _, wait_status = os.waitpid(child, 0)
-            assert os.waitstatus_to_exitcode(wait_status) == 75
+            assert os.WIFSIGNALED(wait_status) and os.WTERMSIG(wait_status) == signal.SIGKILL
             evidence = json.loads((scratch / "observed.json").read_bytes())
-            evidence["lostControllerExit"] = 75
-            restored = AccountExperiment(store, account)
-            assert restored.active["pending"]["name"] == "observe-history"
-            try:
-                restored.batch("repeat", bundle.http["GET /transactions?limit=25"], lambda: None)
-                raise AssertionError("Unresolved native batch was replayed")
-            except Refused:
-                pass
-            # The original controller and pending request have stopped. Advance only the fault clock.
-            from unittest.mock import patch
+            evidence["lostControllerSignal"] = "SIGKILL"
+            recovery = os.fork()
+            if recovery == 0:
+                try:
+                    restored = AccountExperiment(store, account)
+                    assert restored.active["pending"]["name"] == "observe-history"
+                    try:
+                        restored.batch("repeat", bundle.http["GET /transactions?limit=25"], lambda: None)
+                        raise AssertionError("Unresolved native batch was replayed")
+                    except Refused:
+                        pass
+                    # The original controller and pending request have stopped. Advance only the fault clock.
+                    from unittest.mock import patch
 
-            with patch("owner.time.time", return_value=restored.active["deadline"] + 91):
-                evidence["cleanup"] = cleanup_evidence(restored, cloud, resumed=True)
-                assert (
-                    cleanup_evidence(AccountExperiment(store, account), cloud, resumed=True)
-                    == evidence["cleanup"]
-                )
+                    with patch("owner.time.time", return_value=restored.active["deadline"] + 91):
+                        evidence["cleanup"] = cleanup_evidence(restored, cloud, resumed=True)
+                        assert (
+                            cleanup_evidence(AccountExperiment(store, account), cloud, resumed=True)
+                            == evidence["cleanup"]
+                        )
+                    (scratch / "recovered.json").write_text(json.dumps(evidence))
+                    os._exit(0)
+                except BaseException:
+                    import traceback
+                    traceback.print_exc()
+                os._exit(1)
+            _, recovery_status = os.waitpid(recovery, 0)
+            assert os.waitstatus_to_exitcode(recovery_status) == 0
+            assert cloud.process.wait(timeout=30) == 0
+            evidence = json.loads((scratch / "recovered.json").read_bytes())
             assert not list(cloud.storage.iterdir())
             try:
                 with socket.create_connection(("127.0.0.1", int(cloud.entry["port"])), timeout=2):

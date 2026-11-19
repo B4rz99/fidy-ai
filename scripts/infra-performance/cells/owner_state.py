@@ -1,5 +1,8 @@
 """One conditional R2 object serializes all protected D1 experiments on this account."""
 
+import base64
+import hashlib
+import hmac
 import json
 import os
 import re
@@ -15,8 +18,26 @@ BUCKET = "fidy-native-release-smoke"
 LIFETIME = 20 * 60
 
 
+def custody_credentials(account, key, parent_id, token):
+    if not re.fullmatch("[a-f0-9]{32}", parent_id) or not token:
+        raise Refused("invalid_parent_credential")
+    def encoded(value):
+        raw = json.dumps(value, separators=(",", ":")).encode()
+        return base64.urlsafe_b64encode(raw).rstrip(b"=")
+    now = int(time.time())
+    claims = dict(sub=account, iss=parent_id, aud=f"{account}.r2.cloudflarestorage.com", iat=now,
+                  exp=now+2*LIFETIME, bucket=BUCKET, actions=["GetObject", "PutObject"],
+                  paths=dict(prefixPaths=[], objectPaths=[key]))
+    unsigned = encoded(dict(alg="HS256", typ="JWT")) + b"." + encoded(claims)
+    parent_secret = hashlib.sha256(token.encode()).hexdigest().encode()
+    signature = hmac.digest(parent_secret, unsigned, "sha256")
+    signed = unsigned + b"." + base64.urlsafe_b64encode(signature).rstrip(b"=")
+    return dict(AWS_ACCESS_KEY_ID=parent_id, AWS_SECRET_ACCESS_KEY=hashlib.sha256(signed).hexdigest(),
+                AWS_SESSION_TOKEN=base64.b64encode(b"jwt/"+signed).decode())
+
+
 class CustodyObject:
-    def __init__(self, account):
+    def __init__(self, account, cloud):
         if not re.fullmatch("[a-f0-9]{32}", account):
             raise Refused("missing_account_binding")
         self.key = f"protected-storage/account/{account}/d1-ledger.json"
@@ -29,12 +50,15 @@ class CustodyObject:
             "--no-cli-pager",
             "s3api",
         ]
-        self.env = {
-            key: os.environ[key] for key in ("PATH", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY")
-        }
-        if "AWS_SESSION_TOKEN" in os.environ:
-            self.env["AWS_SESSION_TOKEN"] = os.environ["AWS_SESSION_TOKEN"]
-        self.env.update(AWS_MAX_ATTEMPTS="1", AWS_EC2_METADATA_DISABLED="true")
+        if (os.environ.get("GITHUB_ACTIONS") != "true" or os.environ.get("GITHUB_REF") != "refs/heads/trunk"
+                or os.environ.get("GITHUB_REPOSITORY") != "B4rz99/fidy-ai"
+                or os.environ.get("GITHUB_REF_PROTECTED") != "true"):
+            raise Refused("protected_trunk_runner_required")
+        token = cloud.result("GET", "tokens/verify")
+        if token.get("status") != "active":
+            raise Refused("inactive_account_credential")
+        self.env = dict(PATH=os.environ["PATH"], AWS_MAX_ATTEMPTS="1", AWS_EC2_METADATA_DISABLED="true",
+                        **custody_credentials(account, self.key, token["id"], cloud.auth))
 
     def call(self, operation, *args):
         return subprocess.run(
@@ -141,12 +165,28 @@ class AccountExperiment:
             raise Refused("account_experiment_fenced")
         return run
 
+    def control(self, method, path, *, cleanup=False):
+        run = self.active if cleanup else self.available()
+        now = int(time.time())
+        deadline = run.get("cleanupUntil", 0) if cleanup else run["deadline"]
+        if now >= deadline or run["cleaning"] is not cleanup:
+            raise Refused("control_custody_expired")
+        if cleanup:
+            run["cleanupUntil"] = now + 90
+        run["controlDispatches"] = run.get("controlDispatches", 0) + 1
+        run["control"] = dict(method=method, resource=path.split("?",1)[0], offered=now)
+        self.save()
+        if time.time() >= deadline:
+            raise Refused("control_custody_expired")
+
     def batch(self, name, maximum, operation):
         run, maximum = self.available(), counts(maximum)
         if any(run["spent"][k] + maximum[k] > run["limit"][k] for k in KEYS):
             raise Refused("remaining_reservation_exhausted")
         run["pending"] = dict(name=name, maximum=maximum)
         self.save()
+        if time.time() >= run["deadline"] or today() != run["day"]:
+            raise Refused("reserved_batch_expired_before_dispatch")
         actual = counts(operation())
         run["spent"] = {k: run["spent"][k] + actual[k] for k in KEYS}
         if any(actual[k] > maximum[k] for k in KEYS) or today() != run["day"]:

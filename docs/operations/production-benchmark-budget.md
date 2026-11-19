@@ -159,10 +159,13 @@ and write maximums when approving the run. `run` obtains current account-wide D1
 adds previously accounted same-day experiment work and evaluates the repository's Free policy.
 The runner requires a protected `SMOKE_PROOF`, `CLOUDFLARE_ACCOUNT_ID` and an account-scoped
 Cloudflare API token with D1, Worker script, Durable Object, R2 and Analytics access. Pin the native
-Core fixture-signing public key through `FIDY_NATIVE_FIXTURE_PUBLIC_KEY`. The operator's
-AWS CLI uses `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and optional `AWS_SESSION_TOKEN` for
-conditional GetObject/PutObject access to exactly
-`fidy-native-release-smoke/protected-storage/account/<account-id>/d1-ledger.json`. All comparator
+Core fixture-signing public key through `FIDY_NATIVE_FIXTURE_PUBLIC_KEY`. On protected `trunk`, the owner verifies the deployment account token's own ID and derives a
+40-minute R2 session in memory using Cloudflare's documented local-signing flow. The AWS CLI
+receives only that session's GetObject and PutObject authority for the single key
+`fidy-native-release-smoke/protected-storage/account/<account-id>/d1-ledger.json`.
+[Temporary credentials and action scoping](https://developers.cloudflare.com/r2/api/s3/temporary-credentials/)
+
+All comparator
 runs use that existing custody bucket and object. Preserve its contents across runners and days.
 R2 evaluates conditional writes atomically. [R2 conditional operations](https://developers.cloudflare.com/r2/api/s3/api/)
 
@@ -178,7 +181,14 @@ python3 scripts/infra-performance/cells/owner.py cleanup --prefix "$RESOURCE_PRE
   --out "$PRIVATE_OUTPUT/recovery"
 ```
 
-An unknown D1 batch outcome stays fenced after resource deletion. Preserve the account ledger for
+Each resource mutation takes a fresh conditional account claim immediately before dispatch. A
+second cleanup runner waits for the prior cleanup claim to expire. Worker publication retains the
+version IDs returned for the two uploaded modules and verifies the active versions and bindings
+while Ingress is closed, then checks them again on opening. For D1 and bucket creation, recovery
+requires the exact provider-issued UUID or creation timestamp. If the creation reply was lost and
+an identically named resource exists, the ledger retains the unresolved intent. An operator must
+establish ownership independently from the provider before deleting it. Other owned resources can
+still be removed. Unknown D1 batch cost stays fenced after resource deletion. Preserve the account ledger for
 independent reconciliation. The only publishable runner output is `report.json`. Its attempt data
 contains status, response digests, byte counts and timings. Unobserved lifecycle remains missing
 acceptance evidence. The credential-free storage HTTP workflow drives this owner through a restored

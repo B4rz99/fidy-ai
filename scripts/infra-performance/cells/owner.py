@@ -26,6 +26,7 @@ TRIAL_MS = 7 * 24 * 60 * 60 * 1000
 def prepare_inventory(owner, cloud):
     run = owner.available()
     cloud.ownership = run["ownership"]
+    cloud.control = owner.control
     if cloud.namespaces() or any(cloud.identity(role) is not None for role in ROLES):
         raise Refused("disposable_namespace_collision")
     for role in ROLES:
@@ -33,16 +34,17 @@ def prepare_inventory(owner, cloud):
         run["inventory"][role] = {"id": None}
         owner.save()
         try:
-            cloud.create(role)
+            identity = cloud.create(role)
         except RejectedControlRequest:
             del run["inventory"][role]
             owner.save()
             raise
-        identity = cloud.identity(role)
         if not identity:
             raise Refused("created_identity_unconfirmed")
         run["inventory"][role]["id"] = identity
         owner.save()
+        if cloud.identity(role) != identity:
+            raise Refused("created_identity_mismatch")
         if role in ("core", "ingress"):
             cloud.expose(role, False)
 
@@ -59,7 +61,11 @@ def teardown(owner, cloud, resumed=False):
     if resumed and time.time() < run["deadline"] + 90:
         raise Refused("active_owner_may_still_be_running")
     cloud.ownership = run["ownership"]
+    if run["cleaning"] and time.time() < run["cleanupUntil"]:
+        raise Refused("cleanup_owner_in_flight")
     run["cleaning"] = True
+    run["cleanupUntil"] = int(time.time()) + 90
+    cloud.control = lambda method, path: owner.control(method, path, cleanup=True)
     recorded = run.get("namespaceIds", [])
     run["namespaceIds"] = (
         sorted(set(recorded) | set(cloud.namespaces(recorded)))
@@ -67,14 +73,19 @@ def teardown(owner, cloud, resumed=False):
         else recorded
     )
     owner.save()
+    uncertain = []
     for role in reversed(ROLES):
         recorded = run["inventory"].get(role)
         if recorded is None:
             continue
         identity = cloud.identity(role)
         if recorded["id"] is None and identity is None and not resumed:
-            raise Refused("uncertain_resource_creation_needs_recovery")
+            uncertain.append(role)
+            continue
         if identity is not None:
+            if recorded["id"] is None and role in ("bucket", "db"):
+                uncertain.append(role)
+                continue
             if recorded["id"] is not None and recorded["id"] != identity:
                 raise Refused("owned_resource_replaced")
             if recorded["id"] is None:
@@ -83,6 +94,8 @@ def teardown(owner, cloud, resumed=False):
             cloud.remove(role, identity)
         if cloud.identity(role) is not None:
             raise Refused("disposal_unconfirmed")
+    if uncertain:
+        raise Refused("provider_creation_receipt_unresolved_" + "_".join(uncertain))
     cloud.verify_absent(run["inventory"], run["namespaceIds"])
     previous = owner.prior(run["day"])
     owner.state["charged"] = dict(
@@ -98,6 +111,7 @@ def teardown(owner, cloud, resumed=False):
         inventory=run["inventory"],
         namespaceIds=run["namespaceIds"],
         namespacesAbsent=True,
+        controlDispatches=run.get("controlDispatches", 0),
     )
     owner.state["active"] = None
     owner.save()
@@ -110,7 +124,8 @@ def cleanup_evidence(owner, cloud, resumed=False):
     return dict(
         removed=receipt["removed"], namespaceCount=len(receipt["namespaceIds"]),
         namespacesAbsent=receipt["namespacesAbsent"], spent=receipt["spent"],
-        pending=receipt["pending"], privateReceiptSha256=sha(wire),
+        pending=receipt["pending"], controlDispatches=receipt["controlDispatches"],
+        privateReceiptSha256=sha(wire),
     )
 
 
@@ -361,7 +376,7 @@ def main():
                 packageSha256=args.manifest_sha256,
                 costedD1Batches=len(bundle.direct),
                 costedD1Requests=len(LOGIN) + len(bundle.inspections) + args.pairs,
-                normalLedgerPuts=12 + 2 * (len(bundle.direct) + len(LOGIN) + len(bundle.inspections) + args.pairs),
+                batchReservationAndReconciliationPuts=2 * (len(bundle.direct) + len(LOGIN) + len(bundle.inspections) + args.pairs),
                 nativeRevision=args.revision,
                 baseline=PIN,
             )
@@ -385,7 +400,7 @@ def main():
                 raise Refused("outside_approved_cost_proposal")
         account = os.environ["CLOUDFLARE_ACCOUNT_ID"]
         cloud = Cloud(account, args.prefix)
-        owner = AccountExperiment(CustodyObject(account), account)
+        owner = AccountExperiment(CustodyObject(account, cloud), account)
         if args.action == "cleanup":
             report["cleanup"] = cleanup_evidence(owner, cloud, resumed=True)
         else:
@@ -405,19 +420,11 @@ def main():
                     raise Refused("missing_isolated_coordinator")
                 active["namespaceIds"] = namespaces
                 owner.save()
-                api = confirmed(
-                    dict(
-                        resourcePrefix=args.prefix,
-                        accountId=account,
-                        versions=versions,
-                        databaseId=db,
-                        fixture=FIXTURE,
-                        baseline=PIN,
-                        day=today(),
-                        namespaceId=namespaces[0],
-                    ),
-                    account,
-                )
+                receipt = dict(resourcePrefix=args.prefix, accountId=account, versions=versions,
+                               databaseId=db, fixture=FIXTURE, baseline=PIN, day=today(), namespaceId=namespaces[0])
+                confirmed(receipt, account, exposed=False)
+                cloud.expose("ingress", True)
+                api = confirmed(receipt, account, exposed=True)
 
                 def send(method, path, headers, body):
                     return fetch(

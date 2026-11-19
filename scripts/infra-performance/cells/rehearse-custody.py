@@ -1,10 +1,13 @@
 """Exercise the actual S3 CLI transport and its conditional headers on a credential-free runner."""
+import base64
 import hashlib
+import hmac
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
 from threading import Thread
 from unittest.mock import patch
+from types import SimpleNamespace
 
 from budget import Refused
 from owner_state import BUCKET, CustodyObject
@@ -30,6 +33,16 @@ def main():
         def validate(self):
             assert self.path == prefix
             assert self.headers['Authorization'].startswith('AWS4-HMAC-SHA256 ')
+            jwt = base64.b64decode(self.headers['X-Amz-Security-Token'])
+            assert jwt.startswith(b'jwt/')
+            head, payload, sig = jwt[4:].split(b'.')
+            decode = lambda raw: base64.urlsafe_b64decode(raw+b'='*(-len(raw)%4))
+            claims = json.loads(decode(payload))
+            assert claims['actions'] == ['GetObject','PutObject'] and claims['bucket'] == BUCKET
+            assert claims['paths'] == {'prefixPaths':[], 'objectPaths':[prefix.split('/',2)[2]]}
+            assert claims['aud'] == account+'.r2.cloudflarestorage.com' and claims['iss'] == 'b'*32
+            key = hashlib.sha256(b'fixture').hexdigest().encode()
+            assert hmac.compare_digest(decode(sig), hmac.digest(key, head+b'.'+payload, 'sha256'))
 
         def do_GET(self):
             self.validate()
@@ -55,8 +68,13 @@ def main():
             self.send_header('Content-Length','0')
             self.end_headers()
 
-    with patch.dict(os.environ,AWS_ACCESS_KEY_ID='runner',AWS_SECRET_ACCESS_KEY='fixture'):
-        first, other = CustodyObject(account), CustodyObject(account)
+    def verify(method, path):
+        assert (method,path) == ('GET','tokens/verify')
+        return {'status':'active','id':'b'*32}
+    cloud = SimpleNamespace(auth='fixture',result=verify)
+    with patch.dict(os.environ, GITHUB_ACTIONS='true',GITHUB_REF='refs/heads/trunk',
+                    GITHUB_REPOSITORY='B4rz99/fidy-ai',GITHUB_REF_PROTECTED='true'):
+        first, other = CustodyObject(account,cloud), CustodyObject(account,cloud)
     with ThreadingHTTPServer(('127.0.0.1',0),Object) as server:
         thread = Thread(target=server.serve_forever,daemon=True)
         thread.start()

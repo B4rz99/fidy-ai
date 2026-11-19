@@ -15,11 +15,13 @@ const directory = "apps/web/test-results/hosted-browser";
 mkdirSync(directory, { recursive: true });
 const event = (row) => appendFileSync(directory + "/attempts.jsonl", JSON.stringify(row) + "\n");
 const network = process.env.BROWSER_NETWORK;
+const view = process.env.BROWSER_VIEW ?? "transactions";
 const revision = process.env.BROWSER_RELEASE_REVISION;
 let stage = "settings";
 try {
   assert.ok(/^[0-9a-f]{40}$/u.test(revision));
   assert.ok(network === "ordinary" || network === "poor");
+  assert.ok(view === "transactions" || view === "budgets" || view === "needs-review");
   assert.ok(
     process.env.NATIVE_STORAGE_ADMISSION === "closed" &&
       process.env.SMOKE_PROOF?.length >= minimumProofLength
@@ -29,6 +31,7 @@ try {
     variant: "do",
     revision,
     network,
+    view,
     fixture: "production-calibration",
     source: process.env.GITHUB_SHA,
     run: process.env.GITHUB_RUN_ID,
@@ -83,6 +86,7 @@ try {
     origins,
     session: Redacted.value(session),
     network,
+    view,
     event,
     environment: {
       BROWSER_ORIGIN: origins.browser,

@@ -13,7 +13,7 @@ import { targetId } from "../reference/fresh-transactions.mjs";
 /** @typedef {{browser: string, api: string}} Origins */
 /** @typedef {import("../../../apps/server/cloudflare/release-isolation/contract").AcceptanceEnvironment} AcceptanceEnvironment */
 /** @typedef {(request: Request, options: { redirect: "error", decompress: false }) => Promise<Response>} Forward */
-/** @typedef {{origins: Origins, environment?: AcceptanceEnvironment, tls: Bun.TLSOptions, forward?: Forward}} ProxySettings */
+/** @typedef {{origins: Origins, environment?: AcceptanceEnvironment, tls: Bun.TLSOptions, forward?: Forward, transactionCorrection?: boolean}} ProxySettings */
 const maxRequestBodySize = 65536,
   badGateway = 502,
   forbidden = 403,
@@ -31,19 +31,33 @@ const reads = new Set([
   "/web/consent/authorization",
   "/web/subscription",
 ]);
+// Fresh workspace projections are signed only for their declared fixture periods and filters.
+const workspaceQueries = new Set([
+  "/budget-status?month=2026-10&timeZone=America%2FBogota",
+  "/budget-status?month=2026-11&timeZone=America%2FBogota",
+  "/ingestion/review-workspace?limit=0",
+  "/ingestion/review-workspace?status=history",
+  "/ingestion/review-workspace?status=pending",
+  "/ingestion/review-workspace/context?status=pending",
+]);
 /**
- * @param {string | null} method Expected HTTP method.
- * @param {string} path Exact API pathname.
+ * @param {string | null} method Browser method or preflight method.
+ * @param {URL} url Requested API resource.
+ * @param {boolean} correction Whether the Transaction Correction is part of this run.
  */
-const finiteJourney = (method, path) =>
-  (method === "GET" && reads.has(path)) || (method === "PUT" && path === target);
-
+const finiteJourney = (method, url, correction) => {
+  if (method === "PUT") return correction && url.pathname === target;
+  if (method !== "GET") return false;
+  const query = new URLSearchParams(url.search);
+  query.sort();
+  return reads.has(url.pathname) || workspaceQueries.has(url.pathname + "?" + query);
+};
 /**
  * @param {Request} incoming Request received from the browser.
  * @param {URL} url Original request URL.
- * @param {Origins} origins Installed web and API host pair.
+ * @param {{origins: Origins, correction: boolean}} scope Installed hosts and measured mutation authority.
  */
-const admitted = (incoming, url, origins) => {
+const admitted = (incoming, url, { origins, correction }) => {
   const method =
     incoming.method === "OPTIONS"
       ? incoming.headers.get("access-control-request-method")
@@ -51,7 +65,7 @@ const admitted = (incoming, url, origins) => {
   return (
     url.origin === origins.api &&
     incoming.headers.get("origin") === origins.browser &&
-    finiteJourney(method, url.pathname)
+    finiteJourney(method, url, correction)
   );
 };
 
@@ -96,7 +110,13 @@ const outbound = async (incoming, url, environment) => {
 /**
  * @param {ProxySettings} settings Bounded transport and release settings.
  */
-export const protectedBrowserProxy = ({ origins, environment, tls, forward }) => {
+export const protectedBrowserProxy = ({
+  origins,
+  environment,
+  tls,
+  forward,
+  transactionCorrection = true,
+}) => {
   if (!environment && !forward) {
     throw Error("The D1 browser requires an admitted metered transport");
   }
@@ -116,7 +136,9 @@ export const protectedBrowserProxy = ({ origins, environment, tls, forward }) =>
     error: () => new Response(null, { status: badGateway }),
     async fetch(incoming) {
       const url = new URL(incoming.url);
-      if (!admitted(incoming, url, origins)) return new Response(null, { status: forbidden });
+      if (!admitted(incoming, url, { origins, correction: transactionCorrection })) {
+        return new Response(null, { status: forbidden });
+      }
       const request = await outbound(incoming, url, environment);
       const response = await send(request, { redirect: "error", decompress: false });
       if (response.status >= redirectStart && response.status < redirectEnd) {

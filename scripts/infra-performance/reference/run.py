@@ -42,12 +42,13 @@ BOUNDARIES = [
     "startup.browser",
 ]
 
+CALIBRATION_VIEWS = ["budgets.month.browser", "review.pending.browser"]
 
 # Export only controlled stage names, error classes and harness source coordinates.
 STAGES = {
     "runtime", "user", "transactions", "planning", "reviews", "counts", "launch",
     "pairing", "approval", "redeem", "bootstrap", "accountability-before", "read",
-    "open-correction", "save", "fresh-read", "accountability-after",
+    "open-correction", "save", "fresh-read", "accountability-after", "budgets-month", "review-pending",
 }
 REASONS = {
     "foreign key constraint failed": "foreign-key",
@@ -65,7 +66,7 @@ REASONS = {
     "native worker build failed": "worker-build",
 }
 SOURCE_LOCATION = re.compile(
-    r"/(native-seed\.ts|native\.ts|fresh-transactions\.mjs|dev-browser-api\.ts|browser\.mjs|preview\.mjs):(\d{1,6}):(\d{1,6})\b"
+    r"/(native-seed\.ts|native\.ts|fresh-transactions\.mjs|fresh-workspaces\.mjs|dev-browser-api\.ts|browser\.mjs|preview\.mjs):(\d{1,6}):(\d{1,6})\b"
 )
 
 
@@ -184,7 +185,7 @@ def observation(path, env, destination, variant="d1"):
         with (destination / "browser.log").open("w") as log:
             measure = subprocess.run(
                 ["bun", str(BROWSER)],
-                env=env,
+                env={**env, "FIDY_REFERENCE_EVENTS": str(destination / "workspace-events.jsonl")},
                 cwd=ROOT,
                 text=True,
                 stdout=subprocess.PIPE,
@@ -206,21 +207,26 @@ def observation(path, env, destination, variant="d1"):
             result["correctionMs"],
             result["startupMs"],
         ]
-        return {**result, "seed": seed, "timings": dict(zip(BOUNDARIES, values, strict=True))}
+        timings = dict(zip(BOUNDARIES, values, strict=True))
+        timings.update({name: evidence["milliseconds"] for name, evidence in result["views"].items()})
+        return {**result, "seed": seed, "timings": timings}
 
 
 def equivalence(row):
     return (
         {key: value for key, value in row["seed"].items() if key != "milliseconds"},
         [(attempt["status"], attempt["bytes"], attempt["payload"]) for attempt in row["attempts"]],
+        {name: {key: (source["status"], source["bytes"], source["digest"])
+                for key, source in view.items() if key in ("http", "context")}
+         for name, view in row["views"].items()},
         row["accountability"],
         row["browser"],
     )
 
 
-def compare(samples, rows, variants, *, stress=False):
+def compare(samples, rows, variants, *, stress=False, calibration=False):
     result = {}
-    for key in BOUNDARIES:
+    for key in BOUNDARIES + (CALIBRATION_VIEWS if calibration else []):
         cell = {}
         for variant in variants:
             offered = [row for row in rows if row["variant"] == variant]
@@ -311,14 +317,14 @@ def main():
             "d1": "direct ingress and Core calls in Bun; D1 binding uses Miniflare",
             "do": "Miniflare dispatchFetch to workerd ingress, Core and User store",
         },
-        "browserStart": "driver clock immediately before fresh document navigation, or Refresh/Save on the loaded workspace",
-        "browserEnd": "refresh requires search to disable then re-enable; startup, refresh and save require all expected ordered rows to be visible and enabled through two animation frames; payload verification follows timing",
+        "browserStart": "before document navigation or the loaded Refresh, Save, next-month or pending-inbox interaction",
+        "browserEnd": "refresh requires search to disable then re-enable; startup, refresh and save require all expected ordered rows to be visible and enabled through two animation frames; Budget navigation also requires editable caps and the fresh group spending totals; pending review requires usable rows with their original excerpts; payload verification follows timing",
         "lifecycle": "User and shared reconstruction unobserved",
         "warmup": "pairing and fixture preparation excluded; no measured attempts excluded",
         "harnessRevision": output(["git", "rev-parse", "HEAD"], ROOT),
         "comparisonSourceSha256": {
             f.name: hashlib.sha256(f.read_bytes()).hexdigest()
-            for f in [Path(__file__), BROWSER, HERE / "fresh-transactions.mjs", HERE / "preview.mjs"]
+            for f in [Path(__file__), BROWSER, HERE / "fresh-transactions.mjs", HERE / "fresh-workspaces.mjs", HERE / "preview.mjs"]
         },
         "pairs": args.pairs,
         "order": "alternate D1-first and DO-first pairs" if args.candidate else "pinned D1 reference",
@@ -327,7 +333,7 @@ def main():
         "minimumRatio": 1.8,
         "failurePolicy": "failed attempts or unequal paired evidence fail every boundary; incomplete samples stay missing",
         "deployment": "local disposable processes and native SQLite images per variant per pair",
-        "boundaries": BOUNDARIES,
+        "boundaries": BOUNDARIES + (CALIBRATION_VIEWS if args.dataset == "production" else []),
     }
     (run / "plan.json").write_text(json.dumps(plan, indent=2))
     subprocess.run(
@@ -401,7 +407,7 @@ def main():
     finally:
         key.unlink(missing_ok=True)
         cert.unlink(missing_ok=True)
-        report = compare(args.pairs, rows, paths, stress=args.dataset == "breaking")
+        report = compare(args.pairs, rows, paths, stress=args.dataset == "breaking", calibration=args.dataset == "production")
         (run / "report.json").write_text(json.dumps(report, indent=2))
     if any(row["status"] != "ok" for row in rows) or any(
         cell["status"] == "fail" for cell in report.values()

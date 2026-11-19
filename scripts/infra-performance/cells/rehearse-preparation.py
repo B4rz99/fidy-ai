@@ -5,7 +5,6 @@ import os
 from pathlib import Path
 import socket
 import subprocess
-import sys
 import tempfile
 
 HERE = Path(__file__).resolve().parent
@@ -23,7 +22,7 @@ def main():
         for bundle, reason, name in [(args.canonical, "experiment_too_large", "canonical"),
                                      (args.historical, "protected_preparation_receipt_missing", "historical")]:
             out = args.out / name
-            result = subprocess.run([sys.executable, str(HERE / "pilot.py"), "--bundle", str(bundle),
+            result = subprocess.run(["/usr/bin/python3", str(HERE / "pilot.py"), "--bundle", str(bundle),
                                      "--out", str(out)], env=environment, timeout=30, check=False)
             report = json.loads((out / "report.json").read_text())
             if (result.returncode != 1 or report.get("reason") != reason or report["attempts"]

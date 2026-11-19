@@ -2,11 +2,12 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "7cc74afd5ad39ef71e227182731eac5385d704b399e37f690e5e04ed64e9b160";
+const expectedEdgePolicyDigest = "ff2253dce7b1454c21c0f9a205eb42a2c521d4240515d9dea49ef1c102bfd65a";
 const securityArtifacts = [
   ...(await Promise.all(
     [
       "../../apps/server/cloudflare/agent/internal/local-compaction.ts",
+      "../../apps/server/src/shell/pro-grants/operations.ts",
       "../../apps/server/cloudflare/agent/internal/local-inference.ts",
       "../../apps/server/cloudflare/release-isolation/contract.ts",
       "../../apps/server/cloudflare/release-isolation/internal/deployment.ts",

@@ -27,6 +27,7 @@ export const prepareProGrant = (
     sql: `WITH candidates AS (${selected.sql})
       INSERT INTO pro_grant_events(user_id, action, operator, occurred_at_ms)
       SELECT userId, ?, ?, ? FROM candidates WHERE (SELECT COUNT(*) FROM candidates) = 1
+        AND NOT EXISTS (SELECT 1 FROM erasure_requests e WHERE e.user_id=candidates.userId)
       RETURNING user_id AS userId, action`,
     params: [...selected.params, input.action, input.operator, input.now],
   };

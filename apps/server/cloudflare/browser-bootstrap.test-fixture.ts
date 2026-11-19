@@ -18,7 +18,7 @@ type Verified = Readonly<{
   attempt: string;
   review: unknown;
 }>;
-type LoginOptions = Readonly<{ provider: AuthenticationProvider; scenario: string }>;
+type LoginOptions = Readonly<{ provider: AuthenticationProvider; scenario: string; intent?: "signup" | "login" }>;
 type Begun = Readonly<{
   proof: typeof ProviderBrowserProof.Type;
   authorization: URL;
@@ -35,7 +35,8 @@ type Browser = Readonly<{
   ) => Effect.Effect<Verified, Schema.SchemaError>;
   begin: (
     provider: AuthenticationProvider,
-    handoff?: string
+    handoff?: string,
+    intent?: "signup" | "login"
   ) => Effect.Effect<Begun, Schema.SchemaError>;
   login: (
     subject: string,
@@ -70,11 +71,11 @@ export const browser = (runtime: Miniflare): Browser => {
       yield* native(() => response.json())
     );
   });
-  const begin = Effect.fn(function* (provider: AuthenticationProvider, handoffReference?: string) {
+  const begin = Effect.fn(function* (provider: AuthenticationProvider, handoffReference?: string, intent: "signup" | "login" = "signup") {
     const proof = yield* pair;
     const started = yield* post(`/web/providers/${provider}/start`, {
       ...proof,
-      intent: "signup",
+      intent,
       ...(handoffReference === undefined ? {} : { handoffReference }),
       consentRevision: webSignupDisclosure().revision,
     });
@@ -87,10 +88,10 @@ export const browser = (runtime: Miniflare): Browser => {
   });
   const login = Effect.fn(function* (
     subject: string,
-    { provider, scenario }: LoginOptions,
+    { provider, scenario, intent }: LoginOptions,
     handoffReference?: string
   ) {
-    const { proof, authorization, cookie } = yield* begin(provider, handoffReference);
+    const { proof, authorization, cookie } = yield* begin(provider, handoffReference, intent);
     const state = authorization.searchParams.get("state") ?? "";
     const nonce = authorization.searchParams.get("nonce") ?? "";
     const callback = new URL(`/providers/${provider}/callback`, api);

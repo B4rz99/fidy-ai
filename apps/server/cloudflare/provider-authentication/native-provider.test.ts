@@ -181,3 +181,36 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     );
   }
 });
+
+it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
+  test.effect("a verified login to a retained erased identity leaves its new pairing pending", () =>
+    Effect.gen(function* () {
+      const runtime = yield* (yield* nativeBrowserPlatform)();
+      const { login, post } = browser(runtime);
+      const subject = "protected-erased-subject";
+      const complete = "/web/providers/google/complete";
+      const joined = yield* login(subject, { provider: "google", scenario: "valid" });
+      const created = yield* post(complete, joined.proof);
+      expect(yield* native(() => created.json())).toMatchObject({ status: "created" });
+      const directory = yield* native(() => runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" }));
+      const next = yield* login(subject, { provider: "google", scenario: "valid", intent: "login" });
+      expect(next.review).toEqual({ status: "verified" });
+      yield* native(() => directory.exec(
+        "INSERT INTO erasure_barriers SELECT user_id,'20000000-0000-4000-8000-000000000001',1 FROM provider_routes WHERE established=1"
+      ));
+      const refused = yield* post(complete, next.proof);
+      const redemption = yield* post("/web/pairings/redeem", next.proof);
+      expect(redemption.status).toBe(202);
+      expect(redemption.headers.get("set-cookie")).toBeNull();
+      expect(yield* native(() => redemption.json())).toMatchObject({ status: "pending_approval" });
+      expect(refused.status).toBe(400);
+      expect(yield* native(() => refused.json())).toEqual({ status: "invalid" });
+      const held = yield* native(() => directory.exec("SELECT count(*) AS count FROM provider_routes JOIN erasure_barriers USING(user_id)"));
+      expect(held).toEqual([{ count: 1 }]);
+      yield* native(() => directory.exec("CREATE TRIGGER fail_pairing_bind BEFORE UPDATE OF user_id ON browser_pairings BEGIN SELECT RAISE(ABORT,'fixture_unavailable'); END"));
+      const other = yield* login("unrelated", { provider: "google", scenario: "valid" });
+      const outage = yield* post(complete, other.proof);
+      expect(outage.status).toBe(503);
+    })
+  );
+});

@@ -20,7 +20,7 @@ const Checkpoint = Schema.Struct({
 
 const commitment = (ids: ReadonlyArray<string>): string =>
   new Bun.CryptoHasher("sha256").update([...ids].sort().join("\n")).digest("hex");
-type Continuation = {
+export type ErasureContinuation = {
   checkpoint: unknown;
   revision: string;
   userNamespace: string;
@@ -32,33 +32,22 @@ type Continuation = {
   refused: () => Effect.Effect<void, Error>;
 };
 
-const readAdmission = Effect.fn(function* (input: Continuation) {
+const readAdmission = Effect.fn(function* (input: ErasureContinuation) {
   const checkpoint = yield* Schema.decodeUnknownEffect(Checkpoint)(input.checkpoint);
   const markers = checkpoint.checkpoints;
   const required = ["stable-users", "signup-created", "fresh-object", "admitted"];
-  const ordered = markers.filter((row) => required.includes(row.stage));
-  const [stable, , fresh, admission] = ordered;
-  const replay =
-    admission !== undefined &&
-    markers
-      .slice(markers.indexOf(admission) + 1)
-      .some(
-        (row) =>
-          row.stage === "waiting-physical-erasure" &&
-          (row.observations ?? 0) > 0 &&
-          row.listed === 4 &&
-          row.populated === 4
-      );
-  if (
-    checkpoint.revision !== input.revision ||
-    checkpoint.userNamespace !== input.userNamespace ||
-    ordered.map((row) => row.stage).join(",") !== required.join(",") ||
-    stable?.populated !== 3 ||
-    admission?.physicalObject === undefined ||
-    admission.reference === undefined ||
-    fresh?.physicalObject !== admission.physicalObject ||
-    !replay
-  ) {
+  const [,, fresh, admission] = yield* Schema.decodeUnknownEffect(Schema.Tuple([
+    Schema.Struct({ stage: Schema.Literal("stable-users"), populated: Schema.Literal(3) }),
+    Schema.Struct({ stage: Schema.Literal("signup-created") }),
+    Schema.Struct({ stage: Schema.Literal("fresh-object"), physicalObject: objectId }),
+    Schema.Struct({ stage: Schema.Literal("admitted"), physicalObject: objectId, reference: ErasureReference }),
+  ]))(markers.filter((row) => required.includes(row.stage)));
+  const admittedIndex = markers.findIndex((row) => row.stage === "admitted");
+  const replay = markers.slice(admittedIndex + 1).some((row) =>
+    row.stage === "waiting-physical-erasure" && (row.observations ?? 0) > 0 &&
+    row.listed === 4 && row.populated === 4);
+  if (checkpoint.revision !== input.revision || checkpoint.userNamespace !== input.userNamespace ||
+      fresh.physicalObject !== admission.physicalObject || !replay) {
     return yield* Effect.fail(Error("Unbound admitted checkpoint"));
   }
   return { target: admission.physicalObject, reference: admission.reference };
@@ -81,12 +70,12 @@ const repeatSafe = <A>(
 ): Effect.Effect<A, Error> =>
   step(
     stage,
-    Effect.suspend(read).pipe(Effect.retry({ times: 2, schedule: Schedule.spaced("2 seconds") }))
+    Effect.suspend(read).pipe(Effect.timeout("15 seconds"), Effect.retry({ times: 2, schedule: Schedule.spaced("2 seconds") }))
   );
 
-export const continueAdmittedErasure = Effect.fn(function* (input: Continuation) {
+export const continueAdmittedErasure = Effect.fn(function* (input: ErasureContinuation) {
   const { target, reference } = yield* step("admitted checkpoint", readAdmission(input));
-  const census = () => repeatSafe("namespace census", input.inventory);
+  const census = (): Effect.Effect<UserObjects, Error> => repeatSafe("namespace census", input.inventory);
   const current = yield* census();
   const retained = new Map(current);
   retained.delete(target);
@@ -100,7 +89,7 @@ export const continueAdmittedErasure = Effect.fn(function* (input: Continuation)
       Effect.fail(Error("Retained physical identity mismatch"))
     );
   }
-  const state = (rows: UserObjects) =>
+  const state = (rows: UserObjects): Effect.Effect<ReturnType<typeof physicalErasure>, Error> =>
     Effect.try(() => physicalErasure({ before: retained, subject: target, current: rows }));
   const advance = Effect.gen(function* () {
     yield* repeatSafe("work lease", input.renew);

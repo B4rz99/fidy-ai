@@ -1,9 +1,10 @@
 import { it } from "@effect/vitest";
-import { Effect, Redacted } from "effect";
+import { Effect, Fiber, Redacted } from "effect";
 import { installedOrigins } from "@fidy/server/browser-transport";
 import { admittedErasureLogins } from "./native-acceptance";
+import { TestClock } from "effect/testing";
 import { expect } from "vitest";
-import { continueAdmittedErasure } from "./native-erasure-continuation";
+import { type ErasureContinuation, continueAdmittedErasure } from "./native-erasure-continuation";
 
 const original = ["a".repeat(64), "b".repeat(64), "c".repeat(64)];
 const target = "d".repeat(64);
@@ -55,7 +56,7 @@ it.effect(
   "rejects substituted baseline objects, unrelated admissions and missing replay evidence",
   () =>
     Effect.gen(function* () {
-      const options = {
+      const options: ErasureContinuation = {
         checkpoint: admitted,
         revision,
         userNamespace,
@@ -66,7 +67,7 @@ it.effect(
         logins: () => Effect.succeed(["one", "two"]),
         refused: () => Effect.void,
       };
-      for (const changed of [
+      const substitutions: Array<Partial<ErasureContinuation>> = [
         { revision: "9".repeat(40) },
         { userNamespace: "9".repeat(32) },
         { checkpoint: { ...admitted, checkpoints: admitted.checkpoints.slice(0, -1) } },
@@ -75,7 +76,8 @@ it.effect(
         { inventory: () => Effect.succeed(new Map([...retained, ["e".repeat(64), true]])) },
         { logins: () => Effect.succeed(["one", "one"]) },
         { refused: () => Effect.fail(Error("Login approved")) },
-      ]) {
+      ];
+      for (const changed of substitutions) {
         expect(yield* Effect.isFailure(continueAdmittedErasure({ ...options, ...changed }))).toBe(
           true
         );
@@ -86,10 +88,12 @@ it.effect(
 it.effect("proves refusal only for the verified erased provider subject at login completion", () =>
   Effect.gen(function* () {
     const origins = installedOrigins.acceptance;
-    const verify = (status: number, body: string, providerStatus = "verified") => {
+    const verify = (status: number, body: string, providerStatus = "verified"): { driver: ReturnType<typeof admittedErasureLogins>; paths: Array<string> } => {
       const paths: Array<string> = [];
       const driver = admittedErasureLogins({
-        revision, origins, proof: Redacted.make("synthetic-test-proof-".repeat(3)),
+        revision,
+        origins,
+        proof: Redacted.make("synthetic-test-proof-".repeat(3)),
         send: Effect.fn(function* (request) {
           const url = new URL(request.url);
           paths.push(url.pathname);
@@ -97,15 +101,25 @@ it.effect("proves refusal only for the verified erased provider subject at login
             case "/web/pairings":
               return Response.json({ pairingId: "test-pairing", privateVerifier: "test-verifier" });
             case "/web/providers/google/start": {
-              expect(yield* Effect.tryPromise(() => request.json())).toMatchObject({ intent: "login" });
+              expect(yield* Effect.tryPromise(() => request.json())).toMatchObject({
+                intent: "login",
+              });
               const auth = new URL("https://accounts.google.com/o/oauth2/v2/auth");
               auth.searchParams.set("redirect_uri", origins.api + "/providers/google/callback");
-              return Response.json({ authorizationUrl: auth.toString() }, { headers: {
-                "set-cookie": "__Host-fidy_google=fixture; Path=/; Secure; HttpOnly; SameSite=Lax",
-              } });
+              return Response.json(
+                { authorizationUrl: auth.toString() },
+                {
+                  headers: {
+                    "set-cookie":
+                      "__Host-fidy_google=fixture; Path=/; Secure; HttpOnly; SameSite=Lax",
+                  },
+                }
+              );
             }
             case "/providers/google/callback":
-              expect(url.searchParams.get("code")?.split(".")[2]).toBe("fidy-acceptance-" + revision + "-erasure-1");
+              expect(url.searchParams.get("code")?.split(".")[2]).toBe(
+                "fidy-acceptance-" + revision + "-erasure-1"
+              );
               return new Response(null, { status: 303 });
             case "/web/providers/google/status":
               return Response.json({ status: providerStatus });
@@ -121,8 +135,31 @@ it.effect("proves refusal only for the verified erased provider subject at login
     const accepted = verify(400, "invalid");
     yield* accepted.driver.refused();
     expect(accepted.paths.at(-1)).toBe("/web/providers/google/complete");
-    for (const result of [verify(401, "invalid"), verify(200, "approved"), verify(400, "invalid", "pending")]) {
+    for (const result of [
+      verify(401, "invalid"),
+      verify(200, "approved"),
+      verify(400, "invalid", "pending"),
+    ]) {
       expect(yield* Effect.isFailure(result.driver.refused())).toBe(true);
     }
+  })
+);
+
+it.effect("retries safe lease renewal and rechecks erasure after authenticating survivors", () =>
+  Effect.gen(function* () {
+    const stored = new Map<string, boolean>([...retained, [target, true]]);
+    let leases = 0, reads = 0, logins = 0;
+    const runner = yield* continueAdmittedErasure({
+      checkpoint: admitted, revision, userNamespace, baseline, survivors,
+      inventory: () => Effect.sync(() => ++reads === 3 ? retained : stored),
+      renew: () => Effect.suspend(() => ++leases === 1 ? Effect.fail(Error("Transport failed")) : Effect.void),
+      logins: () => Effect.sync(() => { logins++; return ["two", "one"]; }),
+      refused: () => Effect.void,
+    }).pipe(Effect.isFailure, Effect.forkChild);
+    yield* TestClock.adjust("1 minute");
+    expect(yield* Fiber.join(runner)).toBe(true);
+    expect(leases).toBe(3);
+    expect(logins).toBe(1);
+    expect(reads).toBe(4);
   })
 );

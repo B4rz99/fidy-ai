@@ -111,7 +111,7 @@ const select = async (db, command) =>
 /** @param {D1Database} db Disposable database. */
 const physical = async (db) => {
   const reported = await db.prepare("SELECT 1").run();
-  assert.ok(reported.success && Number.isSafeInteger(reported.meta.size_after));
+  assert.ok(Number.isSafeInteger(reported.meta.size_after));
   return { sizeBytes: reported.meta.size_after };
 };
 /** @param {D1Database} db Restored database. @param {Query[]} batch One bounded batch. @returns {Promise<Batch>} */

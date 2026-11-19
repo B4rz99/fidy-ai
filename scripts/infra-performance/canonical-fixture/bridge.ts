@@ -44,10 +44,13 @@ const driver = async (): Promise<void> => {
     if (!runtime) return fetch(request, { redirect: "manual", signal: AbortSignal.timeout(30000) });
     const result = await runtime.dispatchFetch(request.url, {
       method: request.method,
-      headers: Object.fromEntries(request.headers),
+      headers: {...Object.fromEntries(request.headers), "cf-connecting-ip":"192.0.2.1"},
       redirect: "manual",
       ...(request.body ? { body: await request.arrayBuffer() } : {}),
     });
+    const path=new URL(request.url).pathname;
+    const label=path.startsWith("/transactions/")?"transaction":path;
+    process.stderr.write("Closed rehearsal "+label+" "+result.status+"\n");
     const raw = await result.arrayBuffer();
     return new Response(raw.byteLength ? raw : null, {
       status: result.status,
@@ -112,7 +115,7 @@ const driver = async (): Promise<void> => {
     };
     const binding = await bindingOf(cookie);
     if (previous && previous.binding !== binding) throw Error("Previous mounted Session changed");
-    process.stdout.write(JSON.stringify({ cookie, binding }) + "\n");
+    process.stdout.write("FIDY_PRIVATE_RESPONSE " + JSON.stringify({ cookie, binding }) + "\n");
     const lines = createInterface({ input: process.stdin, terminal: false });
     for await (const line of lines) {
       const q = Schema.decodeUnknownSync(
@@ -143,7 +146,7 @@ const driver = async (): Promise<void> => {
       const reply = await request(q.path, q.method, q.body, headers, q.control !== "unsigned");
       const raw = await reply.text();
       process.stdout.write(
-        JSON.stringify({ status: reply.status, data: reply.ok ? JSON.parse(raw) : null }) + "\n"
+        "FIDY_PRIVATE_RESPONSE "+JSON.stringify({ status: reply.status, data: reply.ok ? JSON.parse(raw) : null }) + "\n"
       );
     }
   } finally {

@@ -41,6 +41,7 @@ export const closedRuntime = async (revision: string, secret: string): Promise<M
     },
   });
   return new Miniflare({
+    handleStructuredLogs: () => undefined,
     workers: await Promise.all([
       worker("ingress", "./public-worker.ts", {
         ...shared,

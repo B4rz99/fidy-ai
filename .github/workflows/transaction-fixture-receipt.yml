@@ -24,8 +24,9 @@ jobs:
       - name: Check owned modules and application types
         if: always()
         run: |
-          bun run --cwd apps/server lint:deps
+          bun install --cwd tools/depcruise --frozen-lockfile
           bun run --cwd apps/server typecheck
+          bun run --cwd apps/server lint:deps
       - name: Keep only aggregate result
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

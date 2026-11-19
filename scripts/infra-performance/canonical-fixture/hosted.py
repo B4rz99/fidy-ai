@@ -66,7 +66,14 @@ def bridge(mode, revision, session):
     with subprocess.Popen(["bun",str(HERE/"bridge.ts"),mode], cwd=ROOT, env=env, stdin=subprocess.PIPE,
                           stdout=subprocess.PIPE, text=True, bufsize=1) as child:
         try:
-            first = child.stdout.readline()
+            def receive():
+                for _ in range(1000):
+                    line=child.stdout.readline(1_000_001)
+                    if not line: return ""
+                    if len(line)>1_000_000: raise ValueError("Protected runner response too large")
+                    if line.startswith("FIDY_PRIVATE_RESPONSE "): return line[len("FIDY_PRIVATE_RESPONSE "):]
+                raise ValueError("Protected runner output exhausted")
+            first = receive()
             if not first:
                 raise ValueError("Closed native provider registration failed")
             auth=json.loads(first)
@@ -81,7 +88,7 @@ def bridge(mode, revision, session):
                     raise ValueError("Closed native request limit reached")
                 child.stdin.write(json.dumps(dict(method=method,path=path,body=body,control=control))+"\n")
                 child.stdin.flush()
-                response=child.stdout.readline()
+                response=receive()
                 if not response:
                     raise ValueError("Closed native transport interrupted")
                 return json.loads(response)

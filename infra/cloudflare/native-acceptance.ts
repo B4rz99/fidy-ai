@@ -126,7 +126,8 @@ const verifyOriginalDisclosure = Effect.fn(function* (
     return yield* Effect.fail(Error("Missing original provider signup disclosure"));
   }
 });
-const boot = Effect.fn(function* (input: Inputs, member: "smoke-1" | "smoke-2" | "erasure-1") {
+type Member = "smoke-1" | "smoke-2" | "erasure-1";
+const verifyProvider = Effect.fn(function* (input: Inputs, member: Member, intent: "login" | "signup") {
   const { post, call } = runner(input),
     proof = yield* result(
       yield* post("/web/pairings", {}),
@@ -134,7 +135,7 @@ const boot = Effect.fn(function* (input: Inputs, member: "smoke-1" | "smoke-2" |
     );
   const start = yield* post("/web/providers/google/start", {
     ...proof,
-    intent: "signup",
+    intent,
     consentRevision: webSignupDisclosure().revision,
   });
   const transient = yield* cookie(start, "__Host-fidy_google"),
@@ -168,8 +169,13 @@ const boot = Effect.fn(function* (input: Inputs, member: "smoke-1" | "smoke-2" |
   if (confirmed.status !== "verified") {
     return yield* Effect.fail(Error("Provider did not verify the synthetic pairing"));
   }
-  const complete = yield* result(yield* post("/web/providers/google/complete", proof), phase);
-  if (!["created", "approved"].includes(complete.status)) {
+  return { subject, proof, completion: yield* post("/web/providers/google/complete", proof) };
+});
+const boot = Effect.fn(function* (input: Inputs, member: Member, intent: "login" | "signup" = "signup") {
+  const { subject, proof, completion } = yield* verifyProvider(input, member, intent);
+  const { call, post } = runner(input);
+  const complete = yield* result(completion, phase);
+  if (!(intent === "signup" && complete.status === "created") && complete.status !== "approved") {
     return yield* Effect.fail(Error("Original User did not complete synthetic signup"));
   }
   const session = yield* validStatus(yield* post("/web/pairings/redeem", proof), ok);
@@ -383,6 +389,26 @@ const erasureEvidence = Effect.fn(function* (
     }),
   });
 });
+/** The continuation authenticates the installed revision's existing subjects with login intent only. */
+export const admittedErasureLogins = (input: Omit<Inputs, "erasure">) => {
+  const transport = { ...input, erasure: Option.none<ErasureObservation>() };
+  const { call } = runner(transport);
+  return {
+    renew: () => renewWork(transport),
+    logins: () => Effect.forEach(["smoke-1", "smoke-2"] as const, Effect.fn(function* (member) {
+      const user = yield* boot(transport, member, "login");
+      const current = yield* result(yield* call("/user", { headers: user.headers }),
+        Schema.Struct({ data: Schema.Struct({ id: UserId }) }));
+      return current.data.id;
+    })),
+    refused: Effect.fn(function* () {
+      const { completion } = yield* verifyProvider(transport, "erasure-1", "login");
+      yield* validStatus(completion, invalid);
+      yield* Schema.decodeUnknownEffect(Schema.Struct({ status: Schema.Literal("invalid") }))(
+        yield* Effect.tryPromise(() => completion.json()));
+    }),
+  };
+};
 /** Exercise actual auth, private provider exchange and native financial callback through the installed protected release.
  * Callers verify the deterministic callback Workflow and the User-facing final projections before accepting its receipt.
  */

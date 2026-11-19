@@ -19,12 +19,13 @@ const admitted = {
     { stage: "waiting-physical-erasure", observations: 1, listed: 4, populated: 4 },
   ],
 };
+const survivors = new Bun.CryptoHasher("sha256").update("one\ntwo").digest("hex");
 const retained = new Map(original.map((id) => [id, true] as const));
 
 it.effect("continues the original admitted evidence without a signup or erasure operation", () =>
   Effect.gen(function* () {
     const proof = yield* continueAdmittedErasure({
-      checkpoint: admitted, revision, userNamespace, baseline,
+      checkpoint: admitted, revision, userNamespace, baseline, survivors,
       inventory: () => Effect.succeed(retained),
       renew: () => Effect.void,
       logins: () => Effect.succeed(["one", "two"]),
@@ -42,7 +43,7 @@ it.effect("continues the original admitted evidence without a signup or erasure 
 it.effect("rejects substituted baseline objects, unrelated admissions and missing replay evidence", () =>
   Effect.gen(function* () {
     const options = {
-      checkpoint: admitted, revision, userNamespace, baseline,
+      checkpoint: admitted, revision, userNamespace, baseline, survivors,
       inventory: () => Effect.succeed(retained),
       renew: () => Effect.void,
       logins: () => Effect.succeed(["one", "two"]),
@@ -51,7 +52,7 @@ it.effect("rejects substituted baseline objects, unrelated admissions and missin
     for (const changed of [
       { revision: "9".repeat(40) }, { userNamespace: "9".repeat(32) },
       { checkpoint: { ...admitted, checkpoints: admitted.checkpoints.slice(0, -1) } },
-      { baseline: "9".repeat(64) },
+      { baseline: "9".repeat(64) }, { survivors: "9".repeat(64) },
       { inventory: () => Effect.succeed(new Map([...retained, ["e".repeat(64), true]])) },
       { logins: () => Effect.succeed(["one", "one"]) },
       { refused: () => Effect.fail(Error("Login approved")) },

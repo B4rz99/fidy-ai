@@ -108,7 +108,7 @@ try {
     assert.ok(backendMs > 0 && timing.responseEnd > 0, "Missing backend or transport timing");
     return Schema.decodeSync(Schema.fromJsonString(Schema.Unknown))(body.toString("utf8"));
   };
-  const { before, readMs, correctionMs } = await freshTransactions({
+  const { before, startupMs, readMs, correctionMs } = await freshTransactions({
     page,
     ledger,
     api,
@@ -129,8 +129,14 @@ try {
   // WebSession requests in the pinned baseline write session Audit and carry no external retry key.
   assert.deepEqual(accountability, { reads: 2, corrections: 1, units: 0, receipts: 0 });
   process.stdout.write(
-    JSON.stringify({ browser: browser.version(), readMs, correctionMs, attempts, accountability }) +
-      "\n"
+    JSON.stringify({
+      browser: browser.version(),
+      startupMs,
+      readMs,
+      correctionMs,
+      attempts,
+      accountability,
+    }) + "\n"
   );
 } finally {
   await browser.close();

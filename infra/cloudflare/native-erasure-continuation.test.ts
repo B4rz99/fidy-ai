@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest";
-import { Clock, Effect, Fiber, Redacted } from "effect";
+import { Clock, Deferred, Effect, Fiber, Redacted } from "effect";
 import { installedOrigins } from "@fidy/server/browser-transport";
 import { admittedErasureLogins } from "./native-acceptance";
 import { TestClock } from "effect/testing";
@@ -68,7 +68,7 @@ it.effect(
         renew: () => Effect.void,
         logins: () => Effect.succeed(["one", "two"]),
         record: () => Effect.void,
-      refused: () => Effect.succeed("invalid"),
+        refused: () => Effect.succeed("invalid"),
       };
       const substitutions: Array<Partial<ErasureContinuation>> = [
         { revision: "9".repeat(40) },
@@ -94,7 +94,7 @@ it.effect("proves refusal only for the verified erased provider subject at login
     const verify = (
       status: number,
       body: string,
-      providerStatus = "verified"
+      providerStatus = "verified", issueSession = false
     ): { driver: ReturnType<typeof admittedErasureLogins>; paths: Array<string> } => {
       const paths: Array<string> = [];
       const expiresAt = "1970-01-01T00:10:00.000Z";
@@ -107,12 +107,33 @@ it.effect("proves refusal only for the verified erased provider subject at login
           paths.push(url.pathname);
           switch (url.pathname) {
             case "/web/pairings":
-              return Response.json({ pairingId: "test-pairing", privateVerifier: "test-verifier", expiresAt });
+              return Response.json({
+                pairingId: "test-pairing",
+                privateVerifier: "test-verifier",
+                expiresAt,
+              });
             case "/web/pairings/redeem": {
-              expect(yield* Effect.tryPromise(() => request.json())).toEqual({ pairingId: "test-pairing", privateVerifier: "test-verifier" });
+              expect(yield* Effect.tryPromise(() => request.json())).toEqual({
+                pairingId: "test-pairing",
+                privateVerifier: "test-verifier",
+              });
+              if (issueSession) return Response.json({status:"authenticated"}, {
+                status:200,headers:{"set-cookie":"__Host-fidy_session=unexpected; Secure; HttpOnly"}
+              });
               return (yield* Clock.currentTimeMillis) < Date.parse(expiresAt)
-                ? Response.json({status:"pending_approval", expiresAt, pollingIntervalSeconds:5}, {status:202})
-                : Response.json({error:{code:"pairing_invalid", message:"Esta vinculación ya no es válida. Inicia de nuevo."}}, {status:400});
+                ? Response.json(
+                    { status: "pending_approval", expiresAt, pollingIntervalSeconds: 5 },
+                    { status: 202 }
+                  )
+                : Response.json(
+                    {
+                      error: {
+                        code: "pairing_invalid",
+                        message: "Esta vinculación ya no es válida. Inicia de nuevo.",
+                      },
+                    },
+                    { status: 400 }
+                  );
             }
             case "/web/providers/google/start": {
               expect(yield* Effect.tryPromise(() => request.json())).toMatchObject({
@@ -148,11 +169,22 @@ it.effect("proves refusal only for the verified erased provider subject at login
     };
     const accepted = verify(400, "invalid");
     const pending = verify(503, "unavailable");
-    const positive = yield* Effect.all([accepted.driver.refused(() => Effect.void), pending.driver.refused(() => Effect.void)], { concurrency:2 }).pipe(Effect.forkChild);
-    yield* TestClock.adjust("11 minutes");
-    expect(yield* Fiber.join(positive)).toEqual(["invalid","unavailable"]);
+    for (const [scenario, outcome] of [[accepted, "invalid"], [pending, "unavailable"]] as const) {
+      yield* TestClock.setTime(0);
+      const ready = yield* Deferred.make<void>();
+      const states: Array<string> = [];
+      const run = yield* scenario.driver.refused((stage) => {
+        states.push(stage);
+        return stage === "pairing-pending" ? Deferred.succeed(ready, undefined) : Effect.void;
+      }).pipe(Effect.forkChild);
+      yield* Deferred.await(ready);
+      yield* TestClock.adjust("11 minutes");
+      expect(yield* Fiber.join(run)).toBe(outcome);
+      expect(states).toEqual(["erased-provider-verified","completion-"+outcome, "pairing-pending", "pairing-expired"]);
+    }
     expect(accepted.paths.slice(-2)).toEqual(["/web/pairings/redeem", "/web/pairings/redeem"]);
     for (const result of [
+      verify(503, "unavailable", "verified", true),
       verify(401, "invalid"),
       verify(200, "approved"),
       verify(400, "invalid", "pending"),

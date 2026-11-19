@@ -606,9 +606,16 @@ const verifyAdmittedErasure = Effect.fn(function* (
   const stages: Array<Parameters<ErasureProgress>[0]> = [];
   const record: ErasureProgress = Effect.fn(function* (stage) {
     stages.push(stage);
-    yield* fs.writeFileString(path + ".next", encodeJson({
-      source, revision: env.revision, verifierRevision, userNamespace: installed.userNamespace, stages
-    }));
+    yield* fs.writeFileString(
+      path + ".next",
+      encodeJson({
+        source,
+        revision: env.revision,
+        verifierRevision,
+        userNamespace: installed.userNamespace,
+        stages,
+      })
+    );
     yield* fs.rename(path + ".next", path);
     yield* Effect.logInfo("Erasure continuation verified " + stage);
   });

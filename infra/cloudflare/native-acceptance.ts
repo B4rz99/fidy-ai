@@ -1,4 +1,7 @@
-import { PendingBrowserLoginPairing, browserLoginPairingInvalidBody } from "../../apps/server/src/shell/browser-login/contract";
+import {
+  PendingBrowserLoginPairing,
+  browserLoginPairingInvalidBody,
+} from "../../apps/server/src/shell/browser-login/contract";
 import { browserLoginPairingLifetime } from "../../apps/server/src/core/browser-login/contract";
 import { isDeepStrictEqual } from "node:util";
 import type { ErasureContinuation, ErasureProgress } from "./native-erasure-continuation";
@@ -139,7 +142,11 @@ const verifyProvider = Effect.fn(function* (
   const { post, call } = runner(input),
     { expiresAt, ...proof } = yield* result(
       yield* post("/web/pairings", {}),
-      Schema.Struct({ pairingId: Schema.String, privateVerifier: Schema.String, expiresAt: Schema.DateTimeUtcFromString })
+      Schema.Struct({
+        pairingId: Schema.String,
+        privateVerifier: Schema.String,
+        expiresAt: Schema.DateTimeUtcFromString,
+      })
     );
   const start = yield* post("/web/providers/google/start", {
     ...proof,
@@ -177,7 +184,12 @@ const verifyProvider = Effect.fn(function* (
   if (confirmed.status !== "verified") {
     return yield* Effect.fail(Error("Provider did not verify the synthetic pairing"));
   }
-  return { subject, proof, expiresAt, completion: yield* post("/web/providers/google/complete", proof) };
+  return {
+    subject,
+    proof,
+    expiresAt,
+    completion: yield* post("/web/providers/google/complete", proof),
+  };
 });
 const boot = Effect.fn(function* (
   input: Inputs,
@@ -405,37 +417,54 @@ const erasureEvidence = Effect.fn(function* (
   });
 });
 const ungrantedPairing = Effect.fn(function* (input: Inputs, record: ErasureProgress) {
-  const privateLogin = { ...input, send: Effect.fn(function* (request: Request) {
-    const reply = yield* input.send(request);
-    if (reply.headers.getSetCookie().some((value) => value.startsWith("__Host-fidy_session="))) {
-      return yield* Effect.fail(Error("Erased subject received a browser session"));
-    }
-    return reply;
-  }) };
-  const { proof, expiresAt, completion } = yield* verifyProvider(privateLogin, "erasure-1", "login");
+  const privateLogin = {
+    ...input,
+    send: Effect.fn(function* (request: Request) {
+      const reply = yield* input.send(request);
+      if (reply.headers.getSetCookie().some((value) => /(?:^|,\s*)__Host-fidy_session=/u.test(value))) {
+        return yield* Effect.fail(Error("Erased subject received a browser session"));
+      }
+      return reply;
+    }),
+  };
+  const { proof, expiresAt, completion } = yield* verifyProvider(
+    privateLogin,
+    "erasure-1",
+    "login"
+  );
   yield* record("erased-provider-verified");
   if (completion.status !== invalid && completion.status !== isolated) {
     return yield* Effect.fail(Error("Unexpected erased provider completion"));
   }
   const outcome = completion.status === invalid ? "invalid" : "unavailable";
   yield* Schema.decodeUnknownEffect(Schema.Struct({ status: Schema.Literal(outcome) }))(
-    yield* Effect.tryPromise(() => completion.json()));
+    yield* Effect.tryPromise(() => completion.json())
+  );
   yield* record(outcome === "invalid" ? "completion-invalid" : "completion-unavailable");
   const { post } = runner(privateLogin);
-  const redeem = () : ReturnType<typeof post> => post("/web/pairings/redeem", proof);
+  const redeem = (): ReturnType<typeof post> => post("/web/pairings/redeem", proof);
   const pending = yield* validStatus(yield* redeem(), accepted);
   const observed = yield* Schema.decodeUnknownEffect(PendingBrowserLoginPairing)(
-    yield* Effect.tryPromise(() => pending.json()));
+    yield* Effect.tryPromise(() => pending.json())
+  );
   const remaining = DateTime.toEpochMillis(expiresAt) - (yield* Clock.currentTimeMillis);
   const skewMs = 2000;
-  if (DateTime.toEpochMillis(observed.expiresAt) !== DateTime.toEpochMillis(expiresAt) ||
-      remaining <= 0 || remaining > Duration.toMillis(browserLoginPairingLifetime) + skewMs) {
+  if (
+    DateTime.toEpochMillis(observed.expiresAt) !== DateTime.toEpochMillis(expiresAt) ||
+    remaining <= 0 ||
+    remaining > Duration.toMillis(browserLoginPairingLifetime) + skewMs
+  ) {
     return yield* Effect.fail(Error("Erased subject pairing expiry differs"));
   }
   yield* record("pairing-pending");
   yield* Effect.sleep(remaining + skewMs);
   const terminal = yield* validStatus(yield* redeem(), invalid);
-  if (!isDeepStrictEqual(yield* Effect.tryPromise(() => terminal.json()), browserLoginPairingInvalidBody)) {
+  if (
+    !isDeepStrictEqual(
+      yield* Effect.tryPromise(() => terminal.json()),
+      browserLoginPairingInvalidBody
+    )
+  ) {
     return yield* Effect.fail(Error("Missing terminal pairing refusal"));
   }
   yield* record("pairing-expired");

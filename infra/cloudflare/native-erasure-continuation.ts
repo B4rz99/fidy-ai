@@ -20,10 +20,17 @@ const Checkpoint = Schema.Struct({
 
 const commitment = (ids: ReadonlyArray<string>): string =>
   new Bun.CryptoHasher("sha256").update([...ids].sort().join("\n")).digest("hex");
-export type ErasureProgress = (stage:
-  | "physical-empty" | "physical-absent" | "survivors-matched"
-  | "erased-provider-verified" | "completion-invalid" | "completion-unavailable"
-  | "pairing-pending" | "pairing-expired" | "physical-rechecked"
+export type ErasureProgress = (
+  stage:
+    | "physical-empty"
+    | "physical-absent"
+    | "survivors-matched"
+    | "erased-provider-verified"
+    | "completion-invalid"
+    | "completion-unavailable"
+    | "pairing-pending"
+    | "pairing-expired"
+    | "physical-rechecked"
 ) => Effect.Effect<void, Error>;
 export type ErasureContinuation = {
   checkpoint: unknown;

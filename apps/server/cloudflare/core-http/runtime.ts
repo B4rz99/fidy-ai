@@ -1,4 +1,3 @@
-import { isPerformanceReceipt, receiptAdmitted } from "../release-isolation/operations";
 import { routeSessionRequest } from "../directory/operations";
 import { isStorageBootstrap, isStorageCompatibility } from "../storage-bootstrap/contract";
 import { initializeSharedStores } from "../storage-bootstrap/operations";
@@ -28,6 +27,8 @@ import {
   closedHostEnvironment,
   fixtureChargeReceipt,
   isAcceptanceReceipt,
+  isPerformanceReceipt,
+  receiptAdmitted,
   isAcceptanceWindow,
   releaseAdmission,
   renewAcceptanceWindow,
@@ -70,6 +71,19 @@ const sharedReadiness = Effect.fn(function* (request: Request, environment: Core
   );
 });
 const storageProbe = Effect.fn(function* (request: Request, environment: CoreHttpEnvironment) {
+  if (isPerformanceReceipt(request)) {
+    const valid = yield* receiptAdmitted({
+      request,
+      environment,
+      boundary: "core",
+      now: yield* Clock.currentTimeMillis,
+    });
+    return Option.some(
+      valid
+        ? yield* routeSessionRequest({ request, environment })
+        : new Response(null, { status: 404 })
+    );
+  }
   const url = new URL(request.url);
   if (
     environment.RECOVERY_ISOLATION === "isolated" &&
@@ -94,16 +108,6 @@ export const makeCoreHttp = ({ telemetry, institutions }: CoreComposition): Core
     return Effect.gen(function* () {
       const admission = yield* releaseAdmission(request, environment, "core");
       if (Option.isSome(admission.denial)) return admission.denial.value;
-      if (isPerformanceReceipt(request)) {
-        return (yield* receiptAdmitted(
-          request,
-          environment,
-          "core",
-          yield* Clock.currentTimeMillis
-        ))
-          ? yield* routeSessionRequest({ request, environment })
-          : new Response(null, { status: 404 });
-      }
       if (isAcceptanceReceipt(request)) return yield* fixtureChargeReceipt(request, environment);
       if (isAcceptanceWindow(request)) return yield* renewAcceptanceWindow(request, environment);
       const storage = yield* storageProbe(request, environment);

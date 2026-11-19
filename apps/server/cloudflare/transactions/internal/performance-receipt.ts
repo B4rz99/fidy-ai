@@ -45,23 +45,52 @@ const Capture = Schema.Struct({
 const Link = Schema.Struct({ first: uuid, second: uuid, visible: uuid, decidedAtMs: Schema.Int });
 const denied = (): Response =>
   new Response(null, { status: 404, headers: { "cache-control": "no-store" } });
-const fixtureRow = (row: typeof Capture.Type, ordinal: number): boolean => {
-  const purchase = ordinal === 1 ? 0 : ordinal;
-  const category = purchase % 3 === 0 ? 1 : (purchase % 15) + 2;
-  const decisions = Schema.decodeUnknownOption(
+const decisionsMatch = (raw: string): boolean => {
+  const value = Schema.decodeUnknownOption(
     Schema.fromJsonString(Schema.Record(Schema.String, Schema.Boolean))
-  )(row.decisions);
+  )(raw);
+  return (
+    Option.isSome(value) &&
+    Object.keys(value.value).sort().join(",") ===
+      "categoryId,counterparty,direction,money,occurredAt" &&
+    Object.values(value.value).every((flag) => flag)
+  );
+};
+const fixtureRow = (row: typeof Capture.Type, ordinal: number): boolean => {
+  const purchase = ordinal === 1 ? 0 : ordinal,
+    category = purchase % 3 === 0 ? 1 : purchase + 2,
+    uuidDigits = 12;
   return (
     row.currency === (purchase % 2 === 0 ? "COP" : "USD") &&
     row.counterparty === "Evaluación " + purchase &&
-    row.categoryId === "10000000-0000-4000-8000-" + String(category).padStart(12, "0") &&
+    row.categoryId === "10000000-0000-4000-8000-" + String(category).padStart(uuidDigits, "0") &&
     row.occurred === epoch - purchase * minuteMs &&
-    Option.isSome(decisions) &&
-    Object.keys(decisions.value).sort().join(",") ===
-      "categoryId,counterparty,direction,money,occurredAt" &&
-    Object.values(decisions.value).every((value) => value)
+    decisionsMatch(row.decisions)
   );
 };
+const linkedOriginals = (
+  links: ReadonlyArray<typeof Link.Type>,
+  capture: ReadonlyArray<typeof Capture.Type>
+): boolean => {
+  const pair = capture.slice(0, 2).map((row) => row.transactionId),
+    link = links[0];
+  return (
+    links.length === 1 &&
+    link !== undefined &&
+    [link.first, link.second, link.visible].every((id) => pair.includes(id))
+  );
+};
+const captureFields = Schema.Struct({
+  id: uuid,
+  transactionId: uuid,
+  kind: Capture.fields.kind,
+  serviceMarket: Capture.fields.serviceMarket,
+  locale: Capture.fields.locale,
+  timeZone: Capture.fields.timeZone,
+  interpretationRevision: Capture.fields.interpretationRevision,
+  createdAtMs: Schema.Int,
+  decisions: Schema.String,
+});
 const readEvidence = Effect.fn(function* (user: string, revision: string, binding: string) {
   const sql = yield* SqliteClient;
   const subject = "fidy-acceptance-" + revision + "-performance-1";
@@ -85,67 +114,51 @@ const readEvidence = Effect.fn(function* (user: string, revision: string, bindin
   if (
     capture.length !== expectedCount ||
     !capture.every(fixtureRow) ||
-    new Set(capture.map((r) => r.transactionId)).size !== expectedCount
-  )
+    new Set(capture.map((row) => row.transactionId)).size !== expectedCount
+  ) {
     return Option.none();
+  }
   const links = yield* Schema.decodeUnknownEffect(Schema.Array(Link))(
     yield* sql`SELECT first_transaction_id AS first,
     second_transaction_id AS second,visible_transaction_id AS visible,decided_at_ms AS decidedAtMs
     FROM transaction_reconciliation_decisions WHERE user_id=${user} AND state='linked' LIMIT 2`
   );
-  const link = links[0],
-    pair = capture.slice(0, 2).map((r) => r.transactionId);
-  if (
-    links.length !== 1 ||
-    link === undefined ||
-    !pair.includes(link.first) ||
-    !pair.includes(link.second) ||
-    !pair.includes(link.visible)
-  )
-    return Option.none();
+  if (!linkedOriginals(links, capture)) return Option.none();
   return Option.some({
-    capture: capture.map(
-      ({
-        id,
-        transactionId,
-        kind,
-        serviceMarket,
-        locale,
-        timeZone,
-        interpretationRevision,
-        createdAtMs,
-        decisions,
-      }) => ({
-        id,
-        transactionId,
-        kind,
-        serviceMarket,
-        locale,
-        timeZone,
-        interpretationRevision,
-        createdAtMs,
-        decisions,
-      })
-    ),
+    capture: yield* Schema.decodeUnknownEffect(Schema.Array(captureFields))(capture),
     links,
   });
 });
+type FixtureEnvironment = AcceptanceEnvironment &
+  AcceptanceWindowBindings &
+  Partial<Readonly<{ NATIVE_FIXTURE_SIGNING_KEY: string }>>;
+const credentials = (
+  env: FixtureEnvironment
+): Option.Option<{ secret: string; privateKey: string; bucket: Pick<R2Bucket, "get" | "put"> }> =>
+  env.SMOKE_PROOF && env.NATIVE_FIXTURE_SIGNING_KEY && env.SMOKE_BUCKET
+    ? Option.some({
+        secret: env.SMOKE_PROOF,
+        privateKey: env.NATIVE_FIXTURE_SIGNING_KEY,
+        bucket: env.SMOKE_BUCKET,
+      })
+    : Option.none();
 export const ownPerformanceReceipt = Effect.fn(function* (
   request: Request,
   environment: AcceptanceEnvironment &
-    AcceptanceWindowBindings & { NATIVE_FIXTURE_SIGNING_KEY?: string },
+    AcceptanceWindowBindings &
+    Partial<Readonly<{ NATIVE_FIXTURE_SIGNING_KEY: string }>>,
   owns: (id: string) => boolean
 ) {
   const now = yield* Clock.currentTimeMillis;
   const binding = request.headers.get("fidy-session-binding");
+  const signer = credentials(environment);
   if (
     !binding ||
-    !environment.SMOKE_BUCKET ||
-    !environment.SMOKE_PROOF ||
-    !environment.NATIVE_FIXTURE_SIGNING_KEY ||
-    !(yield* receiptAdmitted(request, environment, "core", now))
-  )
+    Option.isNone(signer) ||
+    !(yield* receiptAdmitted({ request, environment, boundary: "core", now }))
+  ) {
     return denied();
+  }
   const command = yield* boundedJsonBody({ request, policy, schema: ReceiptRequest });
   const operation = canonicalOperation({ method: "GET", path: "/transactions" });
   if (Option.isNone(command) || Option.isNone(operation)) return denied();
@@ -163,11 +176,9 @@ export const ownPerformanceReceipt = Effect.fn(function* (
     sessionBindingSha256: Hex.encode(new Uint8Array(digest)),
   };
   const data = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))(evidence.value);
-  const secret = environment.SMOKE_PROOF,
-    signing = environment.NATIVE_FIXTURE_SIGNING_KEY,
-    bucket = environment.SMOKE_BUCKET;
+  const { secret, privateKey, bucket } = signer.value;
   const box = yield* Effect.tryPromise(() =>
-    sealTransactionReceipt(secret, signing, coordinates, data)
+    sealTransactionReceipt({ secret, privateKey }, coordinates, data)
   );
   const key =
     "_release-smoke/" + environment.RELEASE_GIT_SHA + "/acceptance/transactions/performance-1";

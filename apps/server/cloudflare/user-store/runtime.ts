@@ -1,5 +1,3 @@
-import { isPerformanceReceipt } from "../release-isolation/operations";
-import { ownPerformanceReceipt } from "../transactions/operations";
 import { betaUserUrl } from "../beta-pro/contract";
 import { runBetaUserCommand } from "../beta-pro/operations";
 import {
@@ -9,7 +7,11 @@ import {
 import { HostedPauseNotice } from "../insights/contract";
 import { localProactivityObservations, nativePauseNotice } from "../insights/operations";
 import { BudgetThresholdEvaluation } from "../budgets/contract";
-import { backgroundWorkAllowed, closedHostEnvironment } from "../release-isolation/operations";
+import {
+  backgroundWorkAllowed,
+  closedHostEnvironment,
+  isPerformanceReceipt,
+} from "../release-isolation/operations";
 import type { AcceptanceWindowBindings } from "../release-isolation/contract";
 import {
   cloudflareWorkerTelemetry,
@@ -225,6 +227,7 @@ import { canonicalOperation } from "../routing/operations";
 import {
   dispatchLocalTransaction,
   isLocalTransactionOperation,
+  ownPerformanceReceipt,
   readScopedPrivacyPage,
 } from "../transactions/operations";
 import {
@@ -247,9 +250,8 @@ import { ownerCheckRequest, ownerCheckResponse } from "../maintenance/contract";
 const uncertainCheckStatus = 503;
 type UserStoreEnvironment = AcceptanceWindowBindings & {
   WHATSAPP_SANDBOX_PHONE_NUMBER_ID: string;
-  SMOKE_PROOF?: string;
-  NATIVE_FIXTURE_SIGNING_KEY?: string;
-} & NativeReminderEnvironment &
+} & Partial<Readonly<{ SMOKE_PROOF: string; NATIVE_FIXTURE_SIGNING_KEY: string }>> &
+  NativeReminderEnvironment &
   WompiBindings &
   LocalIngestionEnvironment &
   BancolombiaSandboxEnvironment &
@@ -905,6 +907,18 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     command: string,
     owns: (id: string) => boolean
   ): Option.Option<Promise<Response>> {
+    if (isPerformanceReceipt(request)) {
+      const environment = this.browserEnvironment(request);
+      return Option.some(
+        this.runtime.runPromise(
+          ownPerformanceReceipt(
+            request,
+            { ...environment, RELEASE_GIT_SHA: environment.RELEASE_GIT_SHA ?? "" },
+            owns
+          )
+        )
+      );
+    }
     if (command === "POST /web/privacy/transactions") {
       return Option.some(
         this.runtime.runPromise(
@@ -1031,21 +1045,6 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     return Option.none();
   }
   private registeredRequest(request: Request, registered: boolean): Promise<Response> {
-    if (isPerformanceReceipt(request)) {
-      const settings = this.browserEnvironment(request);
-      return registered && settings.RELEASE_GIT_SHA
-        ? this.runtime.runPromise(
-            ownPerformanceReceipt(
-              request,
-              {
-                ...settings,
-                RELEASE_GIT_SHA: settings.RELEASE_GIT_SHA,
-              },
-              this.owns
-            )
-          )
-        : Promise.resolve(new Response(null, { status: 404 }));
-    }
     const owns = (userId: string): boolean => registered && this.owns(userId);
     if (request.method === "POST") {
       if (request.url === confirmHandoffUrl) {

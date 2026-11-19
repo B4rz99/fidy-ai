@@ -193,64 +193,66 @@ const withWorkspace = (
     })
   );
 
+type WorkspaceCheck = Effect.Effect<void, Cause.UnknownError>;
+const checkFilters = (presentation: string, container: HTMLElement): WorkspaceCheck =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() => click(container, presentation));
+    yield* Effect.tryPromise(() => click(container, "Filtros"));
+    yield* Effect.tryPromise(() => searchFor(container, "Arriendo"));
+    yield* Effect.tryPromise(() => click(container, "Aplicar filtros"));
+    yield* Effect.tryPromise(() =>
+      reactAssertion(() => {
+        expect(container.textContent).toContain("Arriendo de prueba");
+        expect(container.textContent).not.toContain("Ingreso de prueba");
+        expect(button(container, presentation).getAttribute("aria-pressed")).toBe("true");
+      })
+    );
+    yield* Effect.tryPromise(() => searchFor(container, "Sin coincidencias"));
+    yield* Effect.tryPromise(() => click(container, "Aplicar filtros"));
+    yield* Effect.tryPromise(() =>
+      reactAssertion(() => {
+        expect(container.textContent).toContain("Sin resultados para estos filtros");
+        expect(button(container, presentation).getAttribute("aria-pressed")).toBe("true");
+        if (presentation === "Calendario") {
+          expect(container.querySelector('[aria-label="2026-10-31"]')).not.toBeNull();
+        }
+      })
+    );
+    yield* Effect.tryPromise(() => click(container, "Limpiar"));
+    yield* Effect.tryPromise(() =>
+      reactAssertion(() => {
+        expect(container.textContent).toContain("Arriendo de prueba");
+        expect(container.textContent).toContain("Ingreso de prueba");
+        expect(button(container, presentation).getAttribute("aria-pressed")).toBe("true");
+      })
+    );
+  });
+
 it.each(["Calendario", "Lista", "Todos los recurrentes"])(
   "applying and clearing recurring filters preserves %s and updates its results",
-  (presentation) =>
-    withWorkspace((container) =>
-      Effect.gen(function* () {
-        yield* Effect.tryPromise(() => click(container, presentation));
-        yield* Effect.tryPromise(() => click(container, "Filtros"));
-        yield* Effect.tryPromise(() => searchFor(container, "Arriendo"));
-        yield* Effect.tryPromise(() => click(container, "Aplicar filtros"));
-        yield* Effect.tryPromise(() =>
-          reactAssertion(() => {
-            expect(container.textContent).toContain("Arriendo de prueba");
-            expect(container.textContent).not.toContain("Ingreso de prueba");
-            expect(button(container, presentation).getAttribute("aria-pressed")).toBe("true");
-          })
-        );
-        yield* Effect.tryPromise(() => searchFor(container, "Sin coincidencias"));
-        yield* Effect.tryPromise(() => click(container, "Aplicar filtros"));
-        yield* Effect.tryPromise(() =>
-          reactAssertion(() => {
-            expect(container.textContent).toContain("Sin resultados para estos filtros");
-            expect(button(container, presentation).getAttribute("aria-pressed")).toBe("true");
-            if (presentation === "Calendario") {
-              expect(container.querySelector('[aria-label="2026-10-31"]')).not.toBeNull();
-            }
-          })
-        );
-        yield* Effect.tryPromise(() => click(container, "Limpiar"));
-        yield* Effect.tryPromise(() =>
-          reactAssertion(() => {
-            expect(container.textContent).toContain("Arriendo de prueba");
-            expect(container.textContent).toContain("Ingreso de prueba");
-            expect(button(container, presentation).getAttribute("aria-pressed")).toBe("true");
-          })
-        );
-      })
-    )
+  (presentation) => withWorkspace((container) => checkFilters(presentation, container))
 );
 
+const checkEarlierDisclosure = (container: HTMLElement): WorkspaceCheck =>
+  Effect.gen(function* () {
+    const panel = (): HTMLDetailsElement => {
+      const element = container.querySelector('[data-recurring-slot="previous"]');
+      if (!(element instanceof HTMLDetailsElement)) throw Error("Missing earlier-month section");
+      return element;
+    };
+    expect(panel().open).toBe(false);
+    yield* Effect.tryPromise(() => reactWork(() => panel().querySelector("summary")?.click()));
+    expect(panel().open).toBe(true);
+    yield* Effect.tryPromise(() => click(container, "Consultar meses anteriores"));
+    yield* Effect.tryPromise(() =>
+      reactAssertion(() => {
+        expect(panel().querySelector('tr[aria-label*="2026-08-31"]')).not.toBeNull();
+        expect(panel().open).toBe(true);
+      })
+    );
+    yield* Effect.tryPromise(() => reactWork(() => panel().querySelector("summary")?.click()));
+    expect(panel().open).toBe(false);
+  });
+
 it("keeps the requested earlier month open after its fresh occurrences arrive", () =>
-  withWorkspace((container) =>
-    Effect.gen(function* () {
-      const panel = (): HTMLDetailsElement => {
-        const element = container.querySelector('[data-recurring-slot="previous"]');
-        if (!(element instanceof HTMLDetailsElement)) throw Error("Missing earlier-month section");
-        return element;
-      };
-      expect(panel().open).toBe(false);
-      yield* Effect.tryPromise(() => reactWork(() => panel().querySelector("summary")?.click()));
-      expect(panel().open).toBe(true);
-      yield* Effect.tryPromise(() => click(container, "Consultar meses anteriores"));
-      yield* Effect.tryPromise(() =>
-        reactAssertion(() => {
-          expect(panel().querySelector('tr[aria-label*="2026-08-31"]')).not.toBeNull();
-          expect(panel().open).toBe(true);
-        })
-      );
-      yield* Effect.tryPromise(() => reactWork(() => panel().querySelector("summary")?.click()));
-      expect(panel().open).toBe(false);
-    })
-  ));
+  withWorkspace(checkEarlierDisclosure));

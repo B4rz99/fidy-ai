@@ -1174,6 +1174,12 @@ const promoteClosed = Effect.fn(function* (
     yield* readFile(env.file)
   );
   const eligible = yield* storageCompatibility({ env, client }, release, "promote");
+  if ((yield* expectedFixtureSigner) && !eligible.rollback) {
+    return yield* new ReleaseFailure({
+      message:
+        "Candidate receipt signer requires a tested compatible return to the captured stable pair",
+    });
+  }
   const promoted = yield* releaseController.promoteRelease(port, release, {
     exactPairPassed: true,
     middlePairPassed: true,

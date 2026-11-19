@@ -1,7 +1,7 @@
 import { calibrateNative } from "./native-usage.test-fixture";
 import { serveFixture } from "./bridge";
 // Disposable production Workers and the pinned release's private Google provider, without an account transport.
-import { Effect, Option } from "effect";
+import { Effect } from "effect";
 import { Miniflare, type MiniflareWorkerConfig } from "miniflare";
 import { installedOrigins } from "../../../apps/server/src/shell/browser-transport/contract";
 import {
@@ -142,7 +142,7 @@ if (import.meta.main) {
       process.env.SMOKE_PROOF ?? ""
     );
     const output = process.env.FIDY_NATIVE_SIZING_DIR;
-    await serveFixture(Option.some(runtime), output ? calibrateNative(runtime, output) : undefined);
+    await serveFixture(runtime,output ? calibrateNative(runtime,output) : undefined);
   } catch {
     process.stderr.write("Closed workerd rehearsal stopped\n");
     process.exitCode = 1;

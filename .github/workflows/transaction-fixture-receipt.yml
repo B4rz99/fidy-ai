@@ -22,12 +22,13 @@ jobs:
         if: always()
         run: |
           python3 -m unittest discover -s scripts/infra-performance/canonical-fixture
+          python3 scripts/infra-performance/canonical-fixture/direct_bridge_check.py
           mkdir -m 700 "$RUNNER_TEMP/native-sizing"
           FIDY_NATIVE_SIZING_DIR="$RUNNER_TEMP/native-sizing" python3 scripts/infra-performance/canonical-fixture/hosted.py rehearse --out apps/server/test-results/closed-native-fixture
       - name: Check receipt policy code
         if: always()
         run: |
-          bun x oxlint --deny-warnings --config .oxlintrc.json --type-aware --threads=1 apps/server/cloudflare/release-isolation/{internal/performance-receipt,operations}.ts apps/server/cloudflare/transactions/{internal/performance-receipt,operations}.ts apps/server/cloudflare/{core-http/runtime,user-store/runtime,public-worker,user-store.test-fixture}.ts scripts/infra-performance/canonical-fixture/{bridge,closed-runtime.test-fixture}.ts infra/cloudflare/{native-fixture-signer,native-application,native-graph,native-deployed-graph,native-storage-release,native-storage-resources,storage-installation}.ts
+          bun x oxlint --deny-warnings --config .oxlintrc.json --type-aware --threads=1 apps/server/cloudflare/release-isolation/{internal/performance-receipt,operations}.ts apps/server/cloudflare/transactions/{internal/performance-receipt,operations}.ts apps/server/cloudflare/{core-http/runtime,user-store/runtime,public-worker,user-store.test-fixture}.ts scripts/infra-performance/canonical-fixture/{bridge,closed-runtime.test-fixture,native-usage.test-fixture}.ts infra/cloudflare/{native-fixture-signer,native-application,native-graph,native-deployed-graph,native-storage-release,native-storage-resources,storage-installation}.ts
       - name: Check owned modules and application types
         if: always()
         run: |

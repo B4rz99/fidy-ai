@@ -1,5 +1,5 @@
 import { createInterface } from "node:readline/promises";
-import { Effect, Option, Redacted, Schema } from "effect";
+import { Effect, Redacted, Schema } from "effect";
 import type { Miniflare } from "miniflare";
 import { installedOrigins } from "../../../apps/server/src/shell/browser-transport/contract";
 import {
@@ -15,8 +15,7 @@ import {
 import { openPerformanceBrowser } from "../../../infra/cloudflare/native-acceptance";
 
 const api = installedOrigins.acceptance;
-const timeoutMs = 30000,
-  minimumSecret = 32;
+const minimumSecret = 32;
 const session = Schema.Struct({ cookie: Schema.String, binding: Schema.String });
 const command = Schema.Struct({
   path: Schema.String,
@@ -36,12 +35,9 @@ const sessionHeaders = (value: Session): Record<string, string> => ({
   "fidy-session-binding": value.binding,
 });
 const transport =
-  (runtime: Option.Option<Miniflare>): Transport =>
+  (runtime: Miniflare): Transport =>
   async (request) => {
-    if (Option.isNone(runtime)) {
-      return fetch(request, { redirect: "manual", signal: AbortSignal.timeout(timeoutMs) });
-    }
-    const reply = await runtime.value.dispatchFetch(request.url, {
+    const reply = await runtime.dispatchFetch(request.url, {
       method: request.method,
       headers: { ...Object.fromEntries(request.headers), "cf-connecting-ip": "192.0.2.1" },
       redirect: "manual",
@@ -163,24 +159,18 @@ const allowed = (item: Command): boolean =>
     : ["/operations/atomic-batch", "/transactions/link", performanceReceiptPath].includes(
         item.path
       );
-const execute = async (
-  item: Command,
-  active: Session,
-  driver: { service: ReturnType<typeof client>; local: boolean }
-): Promise<void> => {
-  if (!allowed(item) || (!driver.local && item.control !== "")) {
+const execute = async (item: Command, active: Session, service: Client): Promise<void> => {
+  if (!allowed(item)) {
     throw Error("Outside fixture transport");
   }
   let headers = sessionHeaders(active);
-  if (driver.local && item.control === "foreign-session") {
-    headers = sessionHeaders(
-      await driver.service.bind(await driver.service.login("performance-2"))
-    );
+  if (item.control === "foreign-session") {
+    headers = sessionHeaders(await service.bind(await service.login("performance-2")));
   }
   if (item.control === "wrong-binding") {
     headers["fidy-session-binding"] = "00000000-0000-4000-8000-000000000000";
   }
-  const reply = await driver.service.request(item, headers);
+  const reply = await service.request(item, headers);
   const raw = await reply.text();
   offer({
     status: reply.status,
@@ -200,12 +190,8 @@ const authority = (): Auth => {
 export type FixtureSession = Session;
 export type FixtureClient = Client;
 export type RehearsalHooks = (service: Client) => Promise<(active: Session) => Promise<void>>;
-export const serveFixture = async (
-  runtime: Option.Option<Miniflare>,
-  hooks?: RehearsalHooks
-): Promise<void> => {
-  const auth = authority(),
-    local = Option.isSome(runtime);
+export const serveFixture = async (runtime: Miniflare, hooks?:RehearsalHooks): Promise<void> => {
+  const auth = authority();
   try {
     const service = client(auth, transport(runtime));
     const finish = await hooks?.(service);
@@ -213,11 +199,11 @@ export const serveFixture = async (
     offer(active);
     for await (const line of createInterface({ input: process.stdin, terminal: false })) {
       const item = Schema.decodeUnknownSync(Schema.fromJsonString(command))(line);
-      await execute(item, active, { local, service });
+      await execute(item, active, service);
     }
     await finish?.(active);
   } finally {
-    if (Option.isSome(runtime)) await runtime.value.dispose();
+    await runtime.dispose();
   }
 };
 const main = async (): Promise<void> => {
@@ -233,8 +219,8 @@ const main = async (): Promise<void> => {
     );
     return;
   }
-  if (process.argv[2] !== "hosted") throw Error("Unknown mode");
-  await serveFixture(Option.none());
+  process.stderr.write("Native fixture bridge admits offline verification only\n");
+  process.exitCode = 1;
 };
 if (import.meta.main) {
   await main().catch(() => {

@@ -4,6 +4,7 @@ import { appendFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { Schema } from "effect";
 import { freshBudgetMonth, freshPendingReview } from "./fresh-workspaces.mjs";
+import { freshDashboard, prepareReferenceDashboard } from "./fresh-dashboard.mjs";
 import { freshTransactions } from "./fresh-transactions.mjs";
 
 const { chromium } = await import("@playwright/test");
@@ -142,6 +143,10 @@ try {
     views["budgets.month.browser"] = await freshBudgetMonth(input);
     process.stderr.write("REFERENCE_STAGE review-pending\n");
     views["review.pending.browser"] = await freshPendingReview(input);
+    process.stderr.write("REFERENCE_STAGE dashboard-fixture\n");
+    await prepareReferenceDashboard(request, input);
+    process.stderr.write("REFERENCE_STAGE dashboard-fresh\n");
+    views["dashboard.fresh.browser"] = await freshDashboard(input);
   }
   process.stdout.write(
     JSON.stringify({

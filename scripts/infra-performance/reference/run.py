@@ -42,13 +42,13 @@ BOUNDARIES = [
     "startup.browser",
 ]
 
-CALIBRATION_VIEWS = ["budgets.month.browser", "review.pending.browser"]
+CALIBRATION_VIEWS = ["budgets.month.browser", "review.pending.browser", "dashboard.fresh.browser"]
 
 # Export only controlled stage names, error classes and harness source coordinates.
 STAGES = {
     "runtime", "user", "transactions", "planning", "reviews", "counts", "launch",
     "pairing", "approval", "redeem", "bootstrap", "accountability-before", "read",
-    "open-correction", "save", "fresh-read", "accountability-after", "budgets-month", "review-pending",
+    "open-correction", "save", "fresh-read", "accountability-after", "budgets-month", "review-pending", "dashboard-fixture", "dashboard-fresh",
 }
 REASONS = {
     "foreign key constraint failed": "foreign-key",
@@ -66,7 +66,7 @@ REASONS = {
     "native worker build failed": "worker-build",
 }
 SOURCE_LOCATION = re.compile(
-    r"/(native-seed\.ts|native\.ts|fresh-transactions\.mjs|fresh-workspaces\.mjs|dev-browser-api\.ts|browser\.mjs|preview\.mjs):(\d{1,6}):(\d{1,6})\b"
+    r"/(native-seed\.ts|native\.ts|fresh-transactions\.mjs|fresh-workspaces\.mjs|fresh-dashboard\.mjs|dev-browser-api\.ts|browser\.mjs|preview\.mjs):(\d{1,6}):(\d{1,6})\b"
 )
 
 
@@ -216,7 +216,7 @@ def equivalence(row):
     return (
         {key: value for key, value in row["seed"].items() if key != "milliseconds"},
         [(attempt["status"], attempt["bytes"], attempt["payload"]) for attempt in row["attempts"]],
-        {name: {key: (source["status"], source["bytes"], source["digest"])
+        {name: {key: (source["status"], source["bytes"], source.get("comparableDigest", source["digest"]))
                 for key, source in view.items() if key in ("http", "context")}
          for name, view in row["views"].items()},
         row["accountability"],
@@ -324,7 +324,7 @@ def main():
         "harnessRevision": output(["git", "rev-parse", "HEAD"], ROOT),
         "comparisonSourceSha256": {
             f.name: hashlib.sha256(f.read_bytes()).hexdigest()
-            for f in [Path(__file__), BROWSER, HERE / "fresh-transactions.mjs", HERE / "fresh-workspaces.mjs", HERE / "preview.mjs"]
+            for f in [Path(__file__), BROWSER, HERE / "fresh-transactions.mjs", HERE / "fresh-workspaces.mjs", HERE / "fresh-dashboard.mjs", HERE / "preview.mjs"]
         },
         "pairs": args.pairs,
         "order": "alternate D1-first and DO-first pairs" if args.candidate else "pinned D1 reference",

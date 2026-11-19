@@ -1,0 +1,27 @@
+.patterns/email-parsing.md
+  s_a1be23a656acf0::t_3a91d1c91f9192 49
+apps/server/cloudflare/agent/native-compaction.test.ts
+  s_a1be23a656acf0::t_3a91d1c91f9192 3,94-95
+  s_a1be23a656acf0::t_05f21327749a99 96-99,101
+apps/server/cloudflare/connection-worker.test-fixture.ts
+  s_a1be23a656acf0::t_3a91d1c91f9192 48
+apps/server/cloudflare/agent/turn-journey.test-fixture.ts
+  s_a1be23a656acf0::t_3a91d1c91f9192 22-30
+  s_a1be23a656acf0::t_b6c3da6c971538 31-36,89-90
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1cf2e9afb8e65a2600952da2713cc28f3c6bbd6a",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

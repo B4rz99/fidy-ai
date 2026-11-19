@@ -73,6 +73,17 @@ const requireService = (binding: NativeBinding, revision: string): void => {
   const worker = binding.name === "CORE" ? installationNames.Core : smokeName(revision);
   requireTarget(binding.service === worker && binding.entrypoint === undefined, binding.name);
 };
+const requireQueueName = (
+  binding: NativeBinding,
+  queues: ReturnType<typeof queueTargets>
+): void => {
+  if (binding.type === "plain_text" && binding.name.endsWith("_QUEUE_NAME")) {
+    requireTarget(
+      binding.text === prefix + queues[binding.name.slice(0, -"_NAME".length)],
+      binding.name
+    );
+  }
+};
 /** Assert actual provider metadata for each consuming Worker, including its independently deployed private service targets. */
 export const requireDeployedRole = (
   input: {
@@ -95,12 +106,7 @@ export const requireDeployedRole = (
     }
     if (binding.type === "workflow") requireWorkflowBinding(binding, role, revision);
     if (binding.type === "service") requireService(binding, revision);
-    if (binding.type === "plain_text" && binding.name.endsWith("_QUEUE_NAME")) {
-      requireTarget(
-        binding.text === prefix + queues[binding.name.slice(0, -"_NAME".length)],
-        binding.name
-      );
-    }
+    requireQueueName(binding, queues);
   }
 };
 const noHandlers = Schema.Tuple([]);

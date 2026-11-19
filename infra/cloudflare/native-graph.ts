@@ -190,8 +190,9 @@ export const nativeBindingInventory = (
       names.map((name) => [name, type] as const)
     )
   );
-  if (fingerprint && !/^[a-f0-9]{64}$/u.test(fingerprint))
+  if (fingerprint && !/^[a-f0-9]{64}$/u.test(fingerprint)) {
     throw Error("Invalid expected native fixture signer fingerprint");
+  }
   if (fingerprint && role === "Core") {
     expected.set("NATIVE_FIXTURE_SIGNING_KEY", "secret_text");
     expected.set("NATIVE_FIXTURE_SIGNER_SHA256", "plain_text");
@@ -204,6 +205,24 @@ const Binding = Schema.StructWithRest(Schema.Struct({ name: Schema.String, type:
 ]);
 export type NativeBinding = typeof Binding.Type;
 export const NativeBindings = Schema.Array(Binding);
+const requireClosedRole = (
+  role: NativeRole,
+  bindings: ReadonlyArray<NativeBinding>,
+  fingerprint: string
+): void => {
+  const text = (name: string): unknown => bindings.find((binding) => binding.name === name)?.text;
+  if (
+    fingerprint &&
+    role === "Core" &&
+    (text("NATIVE_FIXTURE_SIGNER_SHA256") !== fingerprint ||
+      text("BROWSER_ORIGIN") !== installedOrigins.acceptance.browser)
+  ) {
+    throw Error("Actual candidate receipt signer or closed acceptance origin differs");
+  }
+  if (text("RECOVERY_ISOLATION") !== "isolated" || text("NATIVE_STORAGE_ADMISSION") !== "closed") {
+    throw Error("Closed admission is required");
+  }
+};
 export const requireRoleBindings = (
   {
     role,
@@ -222,23 +241,7 @@ export const requireRoleBindings = (
   ) {
     throw Error("Missing, extra or unexpected native Worker binding for " + role);
   }
-  if (role === "Ingress" || role === "Core") {
-    const text = (name: string): unknown => bindings.find((binding) => binding.name === name)?.text;
-    if (
-      fingerprint &&
-      role === "Core" &&
-      (text("NATIVE_FIXTURE_SIGNER_SHA256") !== fingerprint ||
-        text("BROWSER_ORIGIN") !== installedOrigins.acceptance.browser)
-    ) {
-      throw Error("Actual candidate receipt signer or closed acceptance origin differs");
-    }
-    if (
-      text("RECOVERY_ISOLATION") !== "isolated" ||
-      text("NATIVE_STORAGE_ADMISSION") !== "closed"
-    ) {
-      throw Error("Closed admission is required");
-    }
-  }
+  if (role === "Ingress" || role === "Core") requireClosedRole(role, bindings, fingerprint);
 };
 
 export const smokeResource = (id: string): boolean =>

@@ -113,15 +113,20 @@ jobs:
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
         working-directory: infra/cloudflare
         run: bun native-storage-resources.ts first-install
-      - name: Capture the native stable pair and stage zero-traffic candidates
+      - name: Capture the native stable pair
+        if: inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback'
+        working-directory: infra/cloudflare
+        run: bun native-storage-release.ts capture
+      - name: Upload the verified native candidates
         if: inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback'
         env:
           NATIVE_FIXTURE_SIGNING_KEY: ${{ inputs.transaction_fixture_signer && secrets.NATIVE_FIXTURE_SIGNING_KEY || '' }}
         working-directory: infra/cloudflare
-        run: |
-          bun native-storage-release.ts capture
-          bun native-storage-resources.ts upload
-          bun native-storage-release.ts stage
+        run: bun native-storage-resources.ts upload
+      - name: Stage the zero-traffic native candidates
+        if: inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback'
+        working-directory: infra/cloudflare
+        run: bun native-storage-release.ts stage
       - name: Persist and read back private observability on the installed application Workers
         if: inputs.operation == 'first-install' || inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback'
         working-directory: infra/cloudflare

@@ -64,6 +64,16 @@ describe("protected native releases", () => {
       "actions/upload-artifact@",
     ]);
   });
+  it("reserves physical erasure for first installation and an explicit erasure dispatch", () => {
+    ordered(workflow, [
+      "id: verify",
+      "if: inputs.operation != 'first-install' && inputs.operation != 'verify-erasure'",
+      "run: bun native-storage-release.ts verify\n",
+      "if: inputs.operation == 'first-install' || inputs.operation == 'verify-erasure'",
+      "run: bun native-storage-release.ts verify-erasure\n",
+      "steps.promote.outcome == 'success' && steps.verify.outcome == 'failure'",
+    ]);
+  });
   it("limits host staging to the verified native scope and rechecks the installed browser", () => {
     ordered(workflow, [
       "bun run build:production",

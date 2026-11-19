@@ -99,10 +99,13 @@ jobs:
           bun native-storage-release.ts attach-hosts
       - name: Verify the installed application and retained schema markers
         id: verify
+        if: inputs.operation != 'first-install' && inputs.operation != 'verify-erasure'
         working-directory: infra/cloudflare
-        env:
-          VERIFY_COMMAND: ${{ (inputs.operation == 'first-install' || inputs.operation == 'verify-erasure') && 'verify-erasure' || 'verify' }}
-        run: bun native-storage-release.ts "$VERIFY_COMMAND"
+        run: bun native-storage-release.ts verify
+      - name: Verify the installed application and physical erasure of one disposable User
+        if: inputs.operation == 'first-install' || inputs.operation == 'verify-erasure'
+        working-directory: infra/cloudflare
+        run: bun native-storage-release.ts verify-erasure
       - name: Restore only a compatible, tested target after failed promoted verification
         if: ${{ failure() && steps.promote.outcome == 'success' && steps.verify.outcome == 'failure' }}
         working-directory: infra/cloudflare

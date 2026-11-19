@@ -2,6 +2,7 @@ import { productionTopology } from "../../apps/server/cloudflare/runtime/contrac
 import { requireHostPlan, stagedAccessApplications } from "./native-host-plan";
 import * as Alchemist from "alchemy/Alchemist";
 import * as Apply from "alchemy/Apply";
+import { diagnoseNativePlan } from "./native-plan-diagnostics";
 import { requireNativeResourcePlan } from "./native-graph";
 import { type Plan, describePlan, describeResource } from "alchemy/Plan";
 import { Config, Effect, Schema } from "effect";
@@ -10,6 +11,7 @@ import { nativeResourceFailureMessage, nativeResourceStage } from "./resource-fa
 import { type NativeHostMode, requireNativeBindings } from "./storage-installation";
 
 const Phase = Schema.Literals(["first-install", "upload", "stage-hosts"]);
+const Operation = Schema.Union([Phase, Schema.Literal("plan-first-install")]);
 const requireProtectedDispatch = Effect.gen(function* () {
   const actions = yield* Config.String("GITHUB_ACTIONS");
   const ref = yield* Config.String("GITHUB_REF");
@@ -66,7 +68,7 @@ const verifyResourcePlan = Effect.fn(function* ({
     }
   }
 });
-const resourceRelease = Effect.fn(function* (phase: typeof Phase.Type) {
+const resourceRelease = Effect.fn(function* (phase: typeof Phase.Type, preview: boolean) {
   yield* requireProtectedDispatch;
   const revision = yield* Config.String("RELEASE_GIT_SHA");
   const profile = yield* Config.String("ALCHEMY_PROFILE");
@@ -82,14 +84,15 @@ const resourceRelease = Effect.fn(function* (phase: typeof Phase.Type) {
   const input = {
     target: { entrypoint: "alchemy.storage.ts", stage: "production", profile },
     operation: "deploy",
-    updateStateStore: true,
+    updateStateStore: !preview,
   } as const;
   const snapshot = yield* (
     phase === "stage-hosts"
       ? Alchemist.Stack.plan({ ...input, include: stagedAccessApplications })
       : Alchemist.Stack.plan(input)
-  ).pipe(nativeResourceStage("planning"));
+  ).pipe(diagnoseNativePlan(revision));
   yield* verifyResourcePlan({ phase, plan: snapshot.native, revision, hosts });
+  if (preview) return yield* Effect.logInfo("Verified the fresh native first-install plan.");
   const preflightStages = {
     "first-install": "closed edge preparation",
     upload: "upload verification",
@@ -154,8 +157,9 @@ const publishSite = Effect.gen(function* () {
 if (import.meta.main) {
   const program = Effect.gen(function* () {
     if (process.argv[2] === "publish-site") return yield* publishSite;
-    const phase = yield* Schema.decodeUnknownEffect(Phase)(process.argv[2]);
-    yield* resourceRelease(phase);
+    const operation = yield* Schema.decodeUnknownEffect(Operation)(process.argv[2]);
+    if (operation === "plan-first-install") return yield* resourceRelease("first-install", true);
+    return yield* resourceRelease(operation, false);
   }).pipe(Effect.provide(Alchemist.layer()), Effect.scoped);
   await Effect.runPromise(
     program.pipe(

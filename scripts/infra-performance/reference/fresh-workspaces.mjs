@@ -37,6 +37,7 @@ const wire = Schema.decodeSync(Schema.fromJsonString(Schema.Unknown));
  */
 export const consumed = async (reply) => {
   const body = await reply.body();
+  if (reply.status() !== success) process.stderr.write("REFERENCE_HTTP " + reply.status() + "\n");
   assert.equal(reply.status(), success);
   return {
     value: wire(body.toString("utf8")),

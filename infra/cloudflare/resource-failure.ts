@@ -1,4 +1,4 @@
-import { Cause, Effect, Option, Schema } from "effect";
+import { Cause, Data, Effect, Option, Schema } from "effect";
 import { HttpClientError } from "effect/http";
 
 const maximumRefusalReasons = 16;
@@ -100,7 +100,7 @@ type NativeStage =
   | "Site plan verification"
   | "provider apply";
 
-class NativeStageFailure extends Error {}
+class NativeStageFailure extends Data.TaggedError("NativeStageFailure")<{ message: string }> {}
 
 export const nativeResourceStage =
   (stage: NativeStage) =>
@@ -110,9 +110,9 @@ export const nativeResourceStage =
         (cause) => !Cause.hasInterruptsOnly(cause),
         (cause) =>
           Effect.fail(
-            new NativeStageFailure(
-              `Native release failed during ${stage}. ${resourceFailureMessage(cause)}`
-            )
+            new NativeStageFailure({
+              message: `Native release failed during ${stage}. ${resourceFailureMessage(cause)}`,
+            })
           )
       )
     );

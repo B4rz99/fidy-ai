@@ -1,7 +1,7 @@
 import * as Cloudflare from "alchemy/Cloudflare";
 import { Effect } from "effect";
 import { freeTierWorkerObservability } from "./worker-observability";
-import { bindPlannedText, type NativeRelease } from "./native-application-bindings";
+import { type NativeRelease, bindPlannedText } from "./native-application-bindings";
 
 export const nativeBuckets = Effect.all({
   STATEMENT_STAGING_BUCKET: Cloudflare.R2.Bucket("StatementStagingBucket", {

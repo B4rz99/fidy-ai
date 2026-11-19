@@ -65,6 +65,26 @@ const candidate = (release: NativeRelease): Cloudflare.WorkerProps["version"] =>
         message: release.closed ? "isolated" : "release",
       };
 
+const bindSandboxCertificate = Effect.fn(function* (core: Cloudflare.Worker) {
+  const certificate = yield* Config.String("BANCOLOMBIA_SANDBOX_CERTIFICATE_ID").pipe(
+    Config.withDefault("")
+  );
+  if (certificate !== "") {
+    yield* Schema.decodeEffect(Schema.String.check(Schema.isUUID()))(certificate).pipe(
+      Effect.orDie
+    );
+    yield* core.bind`bancolombia-sandbox-mtls`({
+      bindings: [
+        {
+          type: "mtls_certificate",
+          name: "BANCOLOMBIA_SANDBOX_MTLS",
+          certificateId: certificate,
+        },
+      ],
+    });
+  }
+});
+
 const coreWorker = Effect.fn(function* ({
   release,
   queues,
@@ -117,25 +137,7 @@ const coreWorker = Effect.fn(function* ({
     CONNECTION_SYNCHRONIZATION_QUEUE_NAME: queues.CONNECTION_SYNCHRONIZATION_QUEUE.queueName,
     OPERATIONAL_CANARY_QUEUE_NAME: queues.OPERATIONAL_CANARY_QUEUE.queueName,
   });
-  if (!release.development && !release.closed) {
-    const certificate = yield* Config.String("BANCOLOMBIA_SANDBOX_CERTIFICATE_ID").pipe(
-      Config.withDefault("")
-    );
-    if (certificate !== "") {
-      yield* Schema.decodeEffect(Schema.String.check(Schema.isUUID()))(certificate).pipe(
-        Effect.orDie
-      );
-      yield* core.bind`bancolombia-sandbox-mtls`({
-        bindings: [
-          {
-            type: "mtls_certificate",
-            name: "BANCOLOMBIA_SANDBOX_MTLS",
-            certificateId: certificate,
-          },
-        ],
-      });
-    }
-  }
+  if (!release.development && !release.closed) yield* bindSandboxCertificate(core);
   return core;
 });
 const webApplication = Effect.fn(function* (release: NativeRelease) {

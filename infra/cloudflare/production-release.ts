@@ -901,17 +901,24 @@ const proveRecoveryCorePrivate = Effect.fn(function* (
   }
 });
 
+const readWorkerVersion = Effect.fn(function* (
+  env: Pick<Config, "account" | "token">,
+  client: HttpClient.HttpClient,
+  worker: { name: string; id: string }
+) {
+  const url = `https://api.cloudflare.com/client/v4/accounts/${env.account}/workers/scripts/${encodeURIComponent(worker.name)}/versions/${worker.id}`;
+  return yield* providerJson(
+    HttpClientRequest.get(url, {
+      headers: { authorization: `Bearer ${env.token}` },
+    })
+  ).pipe(Effect.provideService(HttpClient.HttpClient, client));
+});
 const versionResources = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
   worker: { name: string; id: string; revision: string }
 ) {
-  const url = `https://api.cloudflare.com/client/v4/accounts/${env.account}/workers/scripts/${encodeURIComponent(worker.name)}/versions/${worker.id}`;
-  const raw = yield* providerJson(
-    HttpClientRequest.get(url, {
-      headers: { authorization: `Bearer ${env.token}` },
-    })
-  ).pipe(Effect.provideService(HttpClient.HttpClient, client));
+  const raw = yield* readWorkerVersion(env, client, worker);
   return yield* Effect.try(() =>
     verifiedVersionResources({ raw, versionId: worker.id, revision: worker.revision })
   );
@@ -993,6 +1000,7 @@ export const releaseEvidence = {
   readStablePair,
   proveRecoveryCorePrivate,
   versionResources,
+  readWorkerVersion,
   rollbackSource,
   verifyTaxonomyOverlap,
   providerJson,

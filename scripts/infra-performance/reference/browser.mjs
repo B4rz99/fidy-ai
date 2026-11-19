@@ -112,6 +112,10 @@ try {
     assert.ok(backendMs > 0 && timing.responseEnd > 0, "Missing backend or transport timing");
     return Schema.decodeSync(Schema.fromJsonString(Schema.Unknown))(body.toString("utf8"));
   };
+  if (process.env.FIDY_ASSESSMENT === "production") {
+    process.stderr.write("REFERENCE_STAGE dashboard-fixture\n");
+    await prepareReferenceDashboard(request, { api, browser: app });
+  }
   const { before, startupMs, readMs, correctionMs } = await freshTransactions({
     page,
     ledger,
@@ -144,8 +148,6 @@ try {
     views["budgets.month.browser"] = await freshBudgetMonth(input);
     process.stderr.write("REFERENCE_STAGE review-pending\n");
     views["review.pending.browser"] = await freshPendingReview(input);
-    process.stderr.write("REFERENCE_STAGE dashboard-fixture\n");
-    await prepareReferenceDashboard(request, input);
     process.stderr.write("REFERENCE_STAGE dashboard-fresh\n");
     views["dashboard.fresh.browser"] = await freshDashboard(input);
     process.stderr.write("REFERENCE_STAGE recurring-fresh\n");

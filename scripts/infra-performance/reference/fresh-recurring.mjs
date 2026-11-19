@@ -92,20 +92,24 @@ const verify = (value, { selected, prior, full }) => {
 const usable = async (page, period, selected) => {
   await page.waitForFunction(
     ({ period, names }) => {
-      const rows = [...document.querySelectorAll('tr[tabindex="0"][aria-label]')].filter(
+      const date = period + "-01";
+      const shortDate = new Intl.DateTimeFormat("es-CO", {
+        day: "numeric",
+        month: "short",
+        timeZone: "UTC",
+      }).format(new Date(date + "T12:00:00Z"));
+      const rows = [
+        ...document.querySelectorAll(
+          '[data-recurring-slot="occurrence-group"] tr[tabindex="0"],[data-recurring-slot="occurrence-group"] button:not([aria-expanded])'
+        ),
+      ].filter(
         (row) =>
           row.getClientRects().length > 0 &&
-          row.getAttribute("aria-label")?.includes(period + "-01")
+          (row.getAttribute("aria-label")?.includes(date) || row.textContent.includes(shortDate))
       );
       return (
         rows.length === names.length &&
-        names.every((name) =>
-          rows.some(
-            (row) =>
-              row.getAttribute("aria-label")?.startsWith(name + " " + period + "-01") &&
-              row.textContent.includes(name)
-          )
-        )
+        names.every((name) => rows.some((row) => row.textContent.includes(name)))
       );
     },
     { period, names: selected.map((index) => names[index]) }
@@ -170,7 +174,10 @@ const fullHistory = async ({ page, api, event }, authority) => {
 /** @param {Workspace} input Installed origins and evidence sink. */
 export const freshRecurring = async (input) => {
   const { page, browser } = input;
+  const priming = responseFor(input, route, { month: "2026-10", view: "compact" });
   await page.goto(browser + "/app/recurring?month=2026-10", { waitUntil: "commit" });
+  const primed = encoded((await consumed(await priming)).value).data;
+  assert.deepEqual(primed.occurrences, expected("2026-10", [0, 1]));
   await usable(page, "2026-10", [0, 1]);
   const monthly = await measure(input, {
     journey: "recurring.month.browser",

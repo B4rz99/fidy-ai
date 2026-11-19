@@ -74,6 +74,7 @@ export const prepareReferenceDashboard = async (request, { api, browser }) => {
   await edits.reduce(async (applied, data) => {
     await applied;
     const reply = await request.post(api + "/dashboard/edits", { headers, data });
+    if (reply.status() !== success) process.stderr.write("REFERENCE_HTTP " + reply.status() + "\n");
     assert.equal(reply.status(), success, "Dashboard fixture edit failed");
     documentReply(await reply.json());
   }, Promise.resolve());

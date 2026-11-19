@@ -6,8 +6,7 @@ The guard stores only `child_index`, `accepted` and `capacity_ok` in reusable sl
 Operation identity comes from the prepared outcome; it is not copied into a guard slot.
 Completion observes the immediately preceding statement’s `changes()` result. Owner and OAuth
 guards retain their original ordering, named CHECK constraints and post-rollback classification.
-The pre-release clean-install schema remains in the sole `0001_schema.sql` baseline; existing
-disposable development databases must be recreated when that baseline changes.
+The released native schema is declared by each SQLite owner. The User Store commits domain effects, receipts and evidence in the same transaction.
 
 | Owner / child                      | In-unit write and abort source                                                                               | Trusted child proof                                                                                                             | Refusal and refusal Audit                                                                                                                                                                                         |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

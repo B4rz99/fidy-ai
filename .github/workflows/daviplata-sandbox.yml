@@ -1,4 +1,4 @@
-name: DaviPlata Sandbox protocol proof
+name: Historical DaviPlata Sandbox comparison
 
 on:
   workflow_dispatch:
@@ -19,6 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          ref: fb53d9e755c14393048dc945fc0b7f117730d872
           persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
@@ -37,8 +38,8 @@ jobs:
       - name: Record minimized proof scope
         if: success()
         run: |
-          printf '%s\n' '## DaviPlata Sandbox protocol proof' \
-            'Revision: `${{ github.sha }}`' \
+          printf '%s\n' '## Historical DaviPlata Sandbox comparison' \
+            'Comparator revision: `fb53d9e755c14393048dc945fc0b7f117730d872`' \
             '- Returned OTP service destinations exactly matched reviewed Sandbox configuration.' \
             '- Synthetic tokenization, OTP send/confirm and authenticated reusable DAVIPLATA source verification completed.' \
             '- Weekly, monthly and yearly first payments reached matching verified success.' \
@@ -46,4 +47,4 @@ jobs:
             '- Successful periods were cancelled canonically; retry retained the receipt and paid history.' \
             '- DaviPlata reusable sources reached independently verified VOIDED status.' \
             '- No tokens, provider identities, service URLs, document/product values or response bodies are retained.' \
-            '- Local D1/activity harness plus real Sandbox provider; not browser CORS, recovery, Production or native-platform launch approval.' >> "$GITHUB_STEP_SUMMARY"
+            '- Historical D1 protocol observation only. Current native release evidence is recorded by the protected storage workflow.' >> "$GITHUB_STEP_SUMMARY"

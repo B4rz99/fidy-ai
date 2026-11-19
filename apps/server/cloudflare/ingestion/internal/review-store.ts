@@ -64,17 +64,17 @@ export const projectReviewDetail = (
     categorize: (captures) => categorizeCaptures({ db: input.db, userId: input.userId, captures }),
   });
 
-export const projectReviewDetailFromSnapshot = ({
+export const projectReviewDetailFromSnapshot = <E, R = never>({
   row,
   current,
   categorize,
 }: Readonly<{
   categorize: (
     captures: Parameters<typeof categorizeCaptures>[0]["captures"]
-  ) => ReturnType<typeof categorizeCaptures>;
+  ) => Effect.Effect<Effect.Success<ReturnType<typeof categorizeCaptures>>, E, R>;
   row: typeof ReviewRow.Type;
   current: number;
-}>): Effect.Effect<ReviewDetail, ReviewUnavailable> =>
+}>): Effect.Effect<ReviewDetail, ReviewUnavailable, R> =>
   Effect.gen(function* () {
     const draft =
       DateTime.toEpochMillis(row.expiresAt) > current
@@ -137,15 +137,15 @@ export const projectReviewSummary = ({
   }).pipe(Effect.mapError(() => new ReviewUnavailable()));
 
 /** Resolve current Category instructions without altering retained extraction facts or User drafts. */
-const suggestReviewCategory = ({
+const suggestReviewCategory = <E, R = never>({
   categorize,
   draft,
 }: Readonly<{
   categorize: (
     captures: Parameters<typeof categorizeCaptures>[0]["captures"]
-  ) => ReturnType<typeof categorizeCaptures>;
+  ) => Effect.Effect<Effect.Success<ReturnType<typeof categorizeCaptures>>, E, R>;
   draft: Option.Option<ReviewDraft>;
-}>): Effect.Effect<Option.Option<ReviewDraft>, ReviewUnavailable> =>
+}>): Effect.Effect<Option.Option<ReviewDraft>, ReviewUnavailable, R> =>
   Effect.gen(function* () {
     if (Option.isNone(draft) || Option.isNone(draft.value.direction)) return draft;
     const suggestion = draft.value;

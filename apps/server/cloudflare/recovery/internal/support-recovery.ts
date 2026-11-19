@@ -275,14 +275,19 @@ const waitFor = <A>(run: () => Promise<A>): Effect.Effect<A, SupportBoundaryFail
 
 /** The one case-decision boundary: stable User resolution, credential consumption, pairing approval
  * and case events commit in one D1 batch. No public reference can resolve a User alone. */
-export const handleSupportRecovery = ({
+export const handleSupportProof = ({
   request,
-  db,
+  admit,
+  approve,
   config,
   http,
 }: {
   request: Request;
-  db: D1Database;
+  admit: (
+    operator: VerifiedOperator,
+    now: number
+  ) => Promise<"allowed" | "limited" | "unavailable">;
+  approve: (decision: CaseDecision & { operator: VerifiedOperator }) => Promise<Response>;
   http: OutboundHttpService;
   config: { CLOUDFLARE_ACCESS_ISSUER: string; CLOUDFLARE_ACCESS_AUDIENCE: string };
 }): Effect.Effect<Response> => {
@@ -303,7 +308,7 @@ export const handleSupportRecovery = ({
     });
     if (Option.isNone(operator)) return response(httpUnauthorized, { status: "unauthorized" });
     const now = yield* Clock.currentTimeMillis;
-    const admission = yield* waitFor(() => admitOperator({ db, operator: operator.value, now }));
+    const admission = yield* waitFor(() => admit(operator.value, now));
     if (admission !== "allowed") return admissionResponse(admission);
     const payload = yield* boundedJsonBody({ request, policy, schema: Payload });
     if (Option.isNone(payload)) return notApproved();
@@ -318,7 +323,21 @@ export const handleSupportRecovery = ({
       publicCode: payload.value.pairingCode,
       now: decisionAt,
     };
-    if (!(yield* waitFor(() => matchingRecoveryCandidate(db, decision)))) return notApproved();
-    return yield* waitFor(() => decideSupportCase(db, decision));
+    return yield* waitFor(() => approve(decision));
   }).pipe(Effect.catchTag("SupportBoundaryFailure", () => Effect.succeed(unavailable())));
 };
+
+export const handleSupportRecovery = (input: {
+  request: Request;
+  db: D1Database;
+  http: OutboundHttpService;
+  config: { CLOUDFLARE_ACCESS_ISSUER: string; CLOUDFLARE_ACCESS_AUDIENCE: string };
+}): Effect.Effect<Response> =>
+  handleSupportProof({
+    ...input,
+    admit: (operator, now) => admitOperator({ db: input.db, operator, now }),
+    approve: (decision) =>
+      matchingRecoveryCandidate(input.db, decision).then((matches) =>
+        matches ? decideSupportCase(input.db, decision) : notApproved()
+      ),
+  });

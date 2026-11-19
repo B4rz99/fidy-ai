@@ -16,7 +16,7 @@ import { McpProtocol, McpSchema, McpServer } from "effect/ai";
 import { HttpRouter } from "effect/http";
 import { operationCatalog } from "../../src/shell/api";
 import { checkpointResponseSuggestions } from "../../src/shell/canonical-operations/operations";
-import { installedCanonicalOperations } from "../canonical-operations/operations";
+import { nativeMcpCatalog } from "./operations";
 import type { CatalogOperation } from "../../src/shell/canonical-catalog/contract";
 import {
   OAuthCanonicalAdmission,
@@ -61,7 +61,7 @@ type CanonicalQueue = (
 ) => Effect.Effect<Response>;
 type ToolAdmission = Readonly<{
   observeRejections: ReturnType<typeof makeCoreRejectionObserver>;
-  db: D1Database;
+  storage: CallerStorage;
   subject: OAuthCaller;
   scopes: PATScopes;
   enqueueCanonicalWork: CanonicalQueue;
@@ -268,14 +268,18 @@ const executeTool = (
   McpSchema.CallToolResult | McpSchema.InputRequired,
   McpSchema.InternalError,
   McpSchema.McpRequestContext
-> =>
-  protectCanonicalPressure({
-    db: input.db,
+> => {
+  if (!("db" in input.storage)) {
+    return executeAdmittedTool(input, { operation, payload, confirmation: Option.none() });
+  }
+  const database = input.storage.db;
+  return protectCanonicalPressure({
+    db: input.storage.db,
     userId: input.subject.userId,
     work: executeAdmittedTool(input, { operation, payload, confirmation: Option.none() }),
     refused: (response) =>
       discloseCanonicalAllowance({
-        db: input.db,
+        db: database,
         caller: { _tag: "OAuth", value: input.subject },
         response,
       }).pipe(
@@ -283,6 +287,7 @@ const executeTool = (
         Effect.catchCause(() => toolFailure(operation))
       ),
   });
+};
 const schemaDocument = (schema: Schema.Top): Schema.Json => {
   const document = Schema.toJsonSchemaDocument(schema);
   return Schema.decodeUnknownSync(Schema.Json)({ ...document.schema, $defs: document.definitions });
@@ -302,7 +307,7 @@ const catalogTools = (scopes: PATScopes): Effect.Effect<CatalogProjection, Schem
     const cached = catalogProjections.get(projectionKey);
     if (cached !== undefined) return cached;
     const tools: Array<RegisteredTool> = [];
-    for (const operation of installedCanonicalOperations()
+    for (const operation of nativeMcpCatalog()
       .filter(available)
       .toSorted((left, right) => left.id.localeCompare(right.id))) {
       const projected = projectMcpSchemas({ operation, catalog: operationCatalog, allowedIds });
@@ -327,11 +332,11 @@ const catalogTools = (scopes: PATScopes): Effect.Effect<CatalogProjection, Schem
     catalogProjections.set(projectionKey, projection);
     return projection;
   });
-const forwardMcp = (
-  input: Readonly<{ request: Request; coordinator: Coordinator; lifetimeMilliseconds: number }>,
+const prepareMcp = (
+  input: Readonly<{ request: Request; lifetimeMilliseconds: number }>,
   subject: OAuthCaller,
   body: Uint8Array
-): Effect.Effect<Response, Cause.UnknownError | Schema.SchemaError> =>
+): Effect.Effect<OAuthMcpAdmission, Schema.SchemaError> =>
   Effect.gen(function* () {
     const headers = Object.fromEntries(
       Object.keys(OAuthMcpAdmission.fields.headers.fields).flatMap((name) => {
@@ -339,7 +344,7 @@ const forwardMcp = (
         return value === null ? [] : [[name, value]];
       })
     );
-    const admitted = yield* Schema.decodeUnknownEffect(OAuthMcpAdmission)({
+    return yield* Schema.decodeUnknownEffect(OAuthMcpAdmission)({
       userId: subject.userId,
       connectionId: subject.oauthConnectionId,
       credentialId: subject.credentialId,
@@ -351,19 +356,26 @@ const forwardMcp = (
       headers,
       body: Array.from(body),
     });
-    const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(OAuthMcpAdmission))(admitted);
-    const traceHeaders = yield* captureTraceHeaders;
-    return yield* Effect.tryPromise((signal) =>
-      input.coordinator.getByName(admitted.userId).fetch(
-        new Request("https://coordinator.internal/oauth-mcp", {
-          method: "POST",
-          headers: { "content-type": "application/json", ...traceHeaders },
-          body: encoded,
-          signal,
-        })
-      )
-    );
   });
+const forwardMcp = Effect.fn(function* (
+  input: Readonly<{ request: Request; coordinator: Coordinator; lifetimeMilliseconds: number }>,
+  subject: OAuthCaller,
+  body: Uint8Array
+) {
+  const admitted = yield* prepareMcp(input, subject, body);
+  const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(OAuthMcpAdmission))(admitted);
+  const traceHeaders = yield* captureTraceHeaders;
+  return yield* Effect.tryPromise((signal) =>
+    input.coordinator.getByName(admitted.userId).fetch(
+      new Request("https://coordinator.internal/oauth-mcp", {
+        method: "POST",
+        headers: { "content-type": "application/json", ...traceHeaders },
+        body: encoded,
+        signal,
+      })
+    )
+  );
+});
 const TimedToolCall = Schema.fromJsonString(
   Schema.Struct({
     method: Schema.Literal(McpSchema.CallTool._tag),
@@ -537,11 +549,26 @@ export type McpResidency = Readonly<{
   retireConnections: (connectionId: Option.Option<string>) => Effect.Effect<void>;
 }>;
 /** One volatile residency owner per existing User coordinator, never a global caller-tool cache. */
-type ResidencyConfig = Readonly<{
-  userId: string;
-  db: D1Database;
-  enqueueCanonicalWork: CanonicalQueue;
-}>;
+type CallerStorage =
+  | { db: D1Database }
+  | {
+      resolveCaller: (input: {
+        subject: OAuthCaller;
+        current: number;
+      }) => ReturnType<typeof resolveOAuthMcpCaller>;
+    };
+const currentCaller = (
+  storage: CallerStorage,
+  input: { subject: OAuthCaller; current: number }
+): ReturnType<typeof resolveOAuthMcpCaller> =>
+  "db" in storage
+    ? resolveOAuthMcpCaller({ ...input, db: storage.db })
+    : storage.resolveCaller(input);
+type ResidencyConfig = CallerStorage &
+  Readonly<{
+    userId: string;
+    enqueueCanonicalWork: CanonicalQueue;
+  }>;
 type ResidentRegistry = {
   readonly observeRejections: ReturnType<typeof makeCoreRejectionObserver>;
   readonly config: ResidencyConfig;
@@ -649,8 +676,7 @@ const executeResidentTool = (
   McpSchema.McpRequestContext
 > =>
   Effect.gen(function* () {
-    const live = yield* resolveOAuthMcpCaller({
-      db: target.registry.config.db,
+    const live = yield* currentCaller(target.registry.config, {
       subject: current.subject,
       current: yield* Clock.currentTimeMillis,
     });
@@ -881,7 +907,7 @@ const invokeResidentHandler = (
       Context.add(NativeToolAdmissionContext, {
         admission: {
           observeRejections: registry.observeRejections,
-          db: registry.config.db,
+          storage: registry.config,
           subject: catalog.subject,
           scopes: catalog.scopes,
           enqueueCanonicalWork: registry.config.enqueueCanonicalWork,
@@ -902,12 +928,10 @@ const invokeResidentHandler = (
       }
       return owner.handler.handler(request, context).then(Option.some);
     }).pipe(
-      Effect.onExit((exit) =>
-        exit._tag === "Success"
-          ? Effect.void
-          : Effect.sync(() => {
-              owner.retiring = true;
-            })
+      Effect.onError(() =>
+        Effect.sync(() => {
+          owner.retiring = true;
+        })
       )
     );
   });
@@ -966,7 +990,7 @@ const handleResidentRequest = (
     const current = yield* Clock.currentTimeMillis;
     if (current >= admission.deadlineMilliseconds) return unavailable();
     const subject = admissionSubject(admission);
-    const live = yield* resolveOAuthMcpCaller({ db: registry.config.db, subject, current });
+    const live = yield* currentCaller(registry.config, { subject, current });
     if (Option.isNone(live)) {
       retireBinding(registry, callerBinding(subject));
       return denied();
@@ -1025,3 +1049,9 @@ export const makeMcpResidency = (config: ResidencyConfig): McpResidency => {
     erasureSettled: () => Effect.sync(() => registry.owners.size === 0),
   };
 };
+
+/** Construct native SDK admission from the bounded original protocol bytes. The User rechecks the connection for every protocol request and tool. */
+export const localProtocolAdmission = Effect.fn(function* (request: Request, subject: OAuthCaller) {
+  const body = yield* readBoundedRequestBody(request, bodyPolicy);
+  return yield* prepareMcp({ request, lifetimeMilliseconds: requestLifetime(body) }, subject, body);
+});

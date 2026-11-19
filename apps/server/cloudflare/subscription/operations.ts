@@ -1,3 +1,18 @@
+import { CanonicalAdmissionUnavailable } from "../canonical-admission/contract";
+import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
+import { SqlClient } from "effect/sql";
+
+import { getSubscriptionStatus } from "../../src/shell/subscription/operations";
+import { canonicalAdmissionUnavailable, runLocalMutation } from "../canonical-admission/operations";
+
+import { withStoreCapacity } from "../runtime/sqlite/operations";
+import type { LocalMutationResult } from "../canonical-admission/contract";
+import {
+  cancellationReview,
+  dispatchCancellations as dispatchLocalCancellations,
+  repairCancellationAlarm as inspectCancellation,
+  retainCancellation,
+} from "./internal/local-cancellation";
 import { prepareBoundSubscriptionRead as prepareRead } from "./internal/bound-read";
 import { cancellationRefusal, prepareCancellation } from "./internal/cancellation";
 import type {
@@ -7,17 +22,19 @@ import type {
 } from "../canonical-operations/contract";
 import { claimSubscriptionRenewal } from "./internal/subscription-renewal";
 import {
-  Price,
   type RefundAttempt,
   type RefundStartFailure,
+  SubscriptionCancellation,
+  SubscriptionOffers,
+  SubscriptionStatus,
 } from "../../src/core/subscription/contract";
 import {
-  BillingCollectionFailure,
   type RefundReadCall,
   type RefundStartCall,
   RefundSupportAdmission,
   type SubscriptionQueryInput,
   SubscriptionRenewalAdmission,
+  pricingName,
   refundSupportBasePath,
   refundSupportReadPath,
 } from "./contract";
@@ -105,53 +122,6 @@ export const executeSubscriptionRenewalAdmission = (
   );
 };
 
-/** Trusted operator publication replaces the selected offer while preserving every historical Price. */
-export const publishWeeklyPrice = (
-  input: Readonly<{ db: D1Database; price: Price }>
-): Effect.Effect<void, BillingCollectionFailure> =>
-  Effect.gen(function* () {
-    const encoded = yield* Schema.encodeEffect(Price)(input.price).pipe(
-      Effect.mapError((cause) => new BillingCollectionFailure({ cause: Option.some(cause) }))
-    );
-    if (encoded.billingPeriod !== "weekly") {
-      return yield* new BillingCollectionFailure({ cause: Option.none() });
-    }
-    const terms = yield* Schema.encodeEffect(
-      Schema.fromJsonString(
-        Schema.Struct({
-          ...Price.fields.renewalTerms.fields,
-          paymentMethods: Price.fields.paymentMethods,
-        })
-      )
-    )({ ...input.price.renewalTerms, paymentMethods: input.price.paymentMethods }).pipe(
-      Effect.mapError((cause) => new BillingCollectionFailure({ cause: Option.some(cause) }))
-    );
-    yield* Effect.tryPromise({
-      try: () =>
-        input.db.batch([
-          input.db
-            .prepare(`INSERT INTO subscription_prices
-      (id, amount, currency, billing_period, service_market, tax_treatment, terms_json, published_order)
-      VALUES (?, ?, ?, 'weekly', ?, ?, ?, NULL)`)
-            .bind(
-              encoded.id,
-              encoded.money.amount,
-              encoded.money.currency,
-              encoded.serviceMarket,
-              encoded.taxTreatment,
-              terms
-            ),
-          input.db.prepare(
-            "UPDATE subscription_prices SET published_order = NULL WHERE published_order = 1"
-          ),
-          input.db
-            .prepare("UPDATE subscription_prices SET published_order = 1 WHERE id = ?")
-            .bind(encoded.id),
-        ]),
-      catch: (cause) => new BillingCollectionFailure({ cause: Option.some(cause) }),
-    });
-  });
-
 /** Prepare an idempotent same-User cancellation with its collection fence and accountability. */
 export const prepareSubscriptionCancellation = (
   work: CanonicalPreparationWork
@@ -163,3 +133,107 @@ export const subscriptionCancellationRefusal = (
 
 export const prepareBoundSubscriptionRead: typeof prepareRead = (operation) =>
   prepareRead(operation);
+
+export const retainSubscriptionCancellation: typeof retainCancellation = (input) =>
+  retainCancellation(input);
+
+export const offerDueSourceCancellations: typeof dispatchLocalCancellations = (input) =>
+  dispatchLocalCancellations(input);
+
+/** The canonical mutation kernel owns admission, live authority, accounting, Audit and the final receipt. */
+export const cancelLocalSubscription = Effect.fnUntraced(function* (
+  input: Parameters<typeof retainCancellation>[0]
+) {
+  const result = yield* retainCancellation(input);
+  if (Option.isNone(result)) {
+    const absent: LocalMutationResult = {
+      status: 404,
+      outcome: "not_found",
+      body: {
+        error: { code: "not_found", message: "No paid Subscription belongs to you." },
+        next: [],
+      },
+    };
+    return absent;
+  }
+  const data = yield* Schema.encodeEffect(SubscriptionCancellation)(result.value);
+  const completed: LocalMutationResult = {
+    status: 200,
+    outcome: "success",
+    body: { data, next: [] },
+  };
+  return completed;
+});
+
+export const repairCancellationAlarm = Effect.fnUntraced(function* (storage: DurableObjectStorage) {
+  return yield* withStoreCapacity("required")(inspectCancellation(storage));
+});
+
+export const isLocalSubscriptionRead = (id: string): boolean =>
+  [
+    "subscription.listSubscriptionOffers",
+    "subscription.getSubscriptionStatus",
+    "subscription.getUpgradeUrl",
+  ].includes(id);
+
+export const readLocalSubscriptionOffers = Effect.fnUntraced(function* (
+  pricing: Pick<DurableObjectNamespace, "getByName">
+) {
+  const response = yield* Effect.tryPromise(() =>
+    pricing.getByName(pricingName).fetch("https://pricing.internal/offers")
+  );
+  if (!response.ok) {
+    return yield* new CanonicalAdmissionUnavailable({ cause: "pricing_unavailable" });
+  }
+  return yield* Effect.tryPromise(() => response.json()).pipe(
+    Effect.flatMap(Schema.decodeUnknownEffect(SubscriptionOffers)),
+    Effect.flatMap(Schema.encodeEffect(SubscriptionOffers))
+  );
+});
+export const readLocalSubscriptionStatus = Effect.fn(function* (
+  user: Parameters<typeof getSubscriptionStatus>[0]
+) {
+  const { data } = yield* getSubscriptionStatus(user).pipe(
+    Effect.provideService(SqlClient.SqlClient, yield* SqliteClient)
+  );
+  return yield* Schema.encodeEffect(Schema.toCodecJson(SubscriptionStatus))(data);
+});
+export const subscriptionReadResult = (data: Schema.Json): LocalMutationResult => ({
+  status: 200,
+  outcome: "success",
+  body: { data, next: [] },
+});
+export const upgradeLocation = (origin: string): { url: string } => ({
+  url: new URL("/upgrade", origin).href,
+});
+
+export const observeLocalSubscription = Effect.fn(
+  function* (
+    unit: Pick<
+      Parameters<typeof runLocalMutation>[0],
+      "owns" | "storage" | "request" | "operation"
+    >,
+    env: { PRICING: DurableObjectNamespace; BROWSER_ORIGIN: string }
+  ) {
+    const selection = unit.operation.id;
+    const offers =
+      selection === "subscription.listSubscriptionOffers"
+        ? Option.some(yield* readLocalSubscriptionOffers(env.PRICING))
+        : Option.none();
+    return yield* runLocalMutation({
+      ...unit,
+      input: Effect.succeedSome(true),
+      work: Effect.fn(function* (_, user) {
+        if (Option.isSome(offers)) return subscriptionReadResult(offers.value);
+        if (selection === "subscription.getUpgradeUrl") {
+          return subscriptionReadResult(upgradeLocation(env.BROWSER_ORIGIN));
+        }
+        return subscriptionReadResult(yield* readLocalSubscriptionStatus(user));
+      }),
+    });
+  },
+  Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+);
+
+export const localCancellationReview: typeof cancellationReview = (user) =>
+  cancellationReview(user);

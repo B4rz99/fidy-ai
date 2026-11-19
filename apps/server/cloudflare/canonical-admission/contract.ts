@@ -1,4 +1,5 @@
-import { Data, type Effect, type Option } from "effect";
+import type { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
+import { Data, type Effect, type Option, type Schema } from "effect";
 import type { WebSessionAuthority } from "../../src/shell/web-session/contract";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import type { OAuthCaller } from "../../src/shell/oauth-agents/contract";
@@ -86,8 +87,29 @@ export type CanonicalBrowserSnapshotOperation =
   | "recurringPlans.getRecurringWorkspace"
   | "categories.listCategories"
   | "dashboard.listDashboardCatalog"
-  | "transactions.listTransactions"
   | "budgets.getBudgetStatus"
   | "ingestion.getReviewWorkspace"
   | "ingestion.getReviewPageContext"
   | "ingestion.getReviewItem";
+
+/** A finite canonical outcome produced by an owner within the same User transaction. */
+export type LocalMutationResult = Readonly<{
+  status: number;
+  outcome: "success" | "validation_failed" | "not_found" | "resource_limit";
+  body: Schema.Json;
+}>;
+
+/** Prepare against the original User snapshot. Only the guarded commit may alter domain state. */
+export type LocalReviewFacts = { effect: string; revision: string };
+export type LocalMutationPlan = Readonly<{
+  review: Option.Option<
+    Effect.Effect<LocalReviewFacts, CanonicalAdmissionUnavailable, SqliteClient>
+  >;
+  /** Multiple children may rely on a premise unless another child changes it. */
+  premises: ReadonlyArray<string>;
+  targets: ReadonlyArray<string>;
+  /** A later child addressing a removed record observes its absence. */
+  removedTarget: Option.Option<string>;
+  commit: Effect.Effect<LocalMutationResult, CanonicalAdmissionUnavailable, SqliteClient>;
+}>;
+export type LocalMutationPreparation = LocalMutationResult | LocalMutationPlan;

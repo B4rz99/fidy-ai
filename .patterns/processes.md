@@ -15,7 +15,7 @@ an overall timeout around the scope. Ignore failure only because printed approva
 an intentional fallback.
 
 For required helper output, follow
-[authenticateAccess/readToken](../apps/cli/src/support-recovery/internal/access.ts): check each exit
+[authenticateAccess/readToken](../apps/cli/src/direct-client/internal/operator-access.ts): check each exit
 code, consume stdout incrementally with `Stream.runForEach`, count bytes before retaining decoded
 text, validate the final output, and map spawn/stream/timeout failures into `RecoveryFailure`.
 Keep credentials `Redacted` after decoding and wipe the retained value on a subsequent failed exit.

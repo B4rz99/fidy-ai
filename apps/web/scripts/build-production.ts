@@ -5,7 +5,6 @@ import { releaseMetadata } from "./release-metadata";
 
 const webRoot = Bun.fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/u, "");
 const serverRoot = Bun.fileURLToPath(new URL("../../server", import.meta.url)).replace(/\/$/u, "");
-const productionApiOrigin = "https://api.fidyapp.com";
 
 if (import.meta.main) {
   const gitRevision = Bun.env.RELEASE_GIT_SHA;
@@ -25,7 +24,7 @@ if (import.meta.main) {
       typeof value === "string" ? [[name, value]] : []
     )
   );
-  environment.VITE_API_ORIGIN = productionApiOrigin;
+  environment.VITE_API_ORIGIN = "installed";
   const build = Bun.spawnSync(["bun", "--bun", "vite", "build", "--mode", "production"], {
     cwd: webRoot,
     env: environment,

@@ -1,3 +1,6 @@
+import { isStorageBootstrap, isStorageCompatibility } from "../storage-bootstrap/contract";
+import { initializeSharedStores } from "../storage-bootstrap/operations";
+import { smokeManifest, smokePath, smokeProofAccepted } from "../runtime/release-smoke/contract";
 import {
   bancolombiaSandboxAdmission,
   verifyBancolombiaSandboxAuthentication,
@@ -7,7 +10,7 @@ import {
   ConnectionInstitutions,
   type registeredConnectionInstitutionIds,
 } from "../../src/shell/connections/contract";
-import { measureErasureRecovery, withErasureRecovery } from "../erasure/runtime";
+
 import type { CoreRejectionBoundary } from "../runtime/operational-health/contract";
 import { makeCoreRejectionObserver } from "../runtime/operational-health/runtime";
 import { OutboundHttpLive } from "../outbound-http/runtime";
@@ -16,10 +19,17 @@ import { Clock, Context, Effect, Layer, Option } from "effect";
 import { decodeTraceParent } from "../../src/shell/observability/operations";
 import { workerInternalTraceHeader } from "../runtime/telemetry/contract";
 import type { TelemetryService } from "../../src/shell/observability/contract";
-import type { CoreHttpHandler } from "./contract";
-import { acceptedWorkPublisher, executeCoreHttp } from "./internal/http";
+import type { CoreHttpEnvironment, CoreHttpHandler } from "./contract";
+import { executeCoreHttp } from "./internal/http";
 import { observeWorkerRequest } from "../runtime/telemetry/operations";
-import { recoveryIsolationResponse } from "../release-isolation/operations";
+import {
+  closedHostEnvironment,
+  fixtureChargeReceipt,
+  isAcceptanceReceipt,
+  isAcceptanceWindow,
+  releaseAdmission,
+  renewAcceptanceWindow,
+} from "../release-isolation/operations";
 
 const rejectionBoundary = (request: Request): CoreRejectionBoundary => {
   const pathname = new URL(request.url).pathname;
@@ -34,34 +44,66 @@ type CoreComposition = Readonly<{
   institutions: typeof registeredConnectionInstitutionIds;
 }>;
 
+const sharedReadiness = Effect.fn(function* (request: Request, environment: CoreHttpEnvironment) {
+  if (
+    !smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" }) ||
+    environment.CF_VERSION_METADATA === undefined
+  ) {
+    return new Response(null, { status: 404 });
+  }
+  const core = {
+    workerVersionId: environment.CF_VERSION_METADATA.id,
+    gitRevision: environment.RELEASE_GIT_SHA,
+    contractDigest: environment.CONTRACT_DIGEST,
+  };
+  return yield* initializeSharedStores(environment).pipe(
+    Effect.map((markers) =>
+      Response.json(
+        isStorageBootstrap(request) || isStorageCompatibility(request)
+          ? { core, markers }
+          : { core, manifest: smokeManifest, status: "pending" }
+      )
+    ),
+    Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
+  );
+});
+const storageProbe = Effect.fn(function* (request: Request, environment: CoreHttpEnvironment) {
+  const url = new URL(request.url);
+  if (
+    environment.RECOVERY_ISOLATION === "isolated" &&
+    environment.MAINTENANCE !== undefined &&
+    (isStorageCompatibility(request) ||
+      isStorageBootstrap(request) ||
+      (request.method === "GET" && url.pathname === smokePath && url.search === "?readiness=1"))
+  ) {
+    return Option.some(yield* sharedReadiness(request, environment));
+  }
+  return Option.none<Response>();
+});
+
 export const makeCoreHttp = ({ telemetry, institutions }: CoreComposition): CoreHttpHandler => {
   const observeRejections = makeCoreRejectionObserver();
-  return (request, environment, context) =>
-    Effect.gen(function* () {
-      const isolated = recoveryIsolationResponse({
-        request,
-        environment: {
-          mode: Option.fromUndefinedOr(environment.RECOVERY_ISOLATION),
-          proof: Option.fromUndefinedOr(environment.SMOKE_PROOF),
-        },
-      });
-      if (Option.isSome(isolated)) return isolated.value;
-      const recovery = measureErasureRecovery(environment);
+  return (request, installed) => {
+    const environment = closedHostEnvironment({
+      request,
+      environment: installed,
+      boundary: "core",
+    });
+    return Effect.gen(function* () {
+      const admission = yield* releaseAdmission(request, environment, "core");
+      if (Option.isSome(admission.denial)) return admission.denial.value;
+      if (isAcceptanceReceipt(request)) return yield* fixtureChargeReceipt(request, environment);
+      if (isAcceptanceWindow(request)) return yield* renewAcceptanceWindow(request, environment);
+      const storage = yield* storageProbe(request, environment);
+      if (Option.isSome(storage)) return storage.value;
       const clients = yield* Layer.build(OutboundHttpLive).pipe(
         Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch)
       );
       const response = yield* executeCoreHttp({
         bankAuthentication: verifyBancolombiaSandboxAuthentication(environment),
         request,
-        environment:
-          new URL(request.url).pathname === "/internal/titular-erasure"
-            ? environment
-            : recovery.environment,
+        environment,
         telemetry,
-        publish: acceptedWorkPublisher({
-          environment: withErasureRecovery(environment),
-          context: Option.fromUndefinedOr(context),
-        }),
       }).pipe(
         Effect.provideService(HttpClient.HttpClient, Context.get(clients, HttpClient.HttpClient))
       );
@@ -70,7 +112,7 @@ export const makeCoreHttp = ({ telemetry, institutions }: CoreComposition): Core
         boundary: rejectionBoundary(request),
         now: yield* Clock.currentTimeMillis,
       });
-      return recovery.respond(response);
+      return response;
     }).pipe(
       Effect.provideService(ConnectionInstitutions, institutions),
       Effect.provideService(ConnectionSandboxAdmission, bancolombiaSandboxAdmission(environment)),
@@ -89,6 +131,7 @@ export const makeCoreHttp = ({ telemetry, institutions }: CoreComposition): Core
             ),
           })
         ),
-      Effect.runPromise
+      (program) => Effect.runPromise(program, { signal: request.signal })
     );
+  };
 };

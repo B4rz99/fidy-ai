@@ -13,10 +13,13 @@ it.effect("keeps fast checks running while dispatch and cleanup wait for their d
     const activities = [
       { operation: "async.health", work: Effect.sync(() => completed.push("health")) },
       {
-        operation: "browserPairing.email.dispatch",
+        operation: "emailReplacement.dispatch",
         work: Effect.sync(() => completed.push("email")),
       },
-      { operation: "billing.renewal.dispatch", work: Effect.sync(() => completed.push("renewal")) },
+      {
+        operation: "billing.cancellation.dispatch",
+        work: Effect.sync(() => completed.push("cancellation")),
+      },
       {
         operation: "dashboard.projectionRepair",
         work: Effect.sync(() => completed.push("dashboard")),
@@ -27,10 +30,10 @@ it.effect("keeps fast checks running while dispatch and cleanup wait for their d
     for (const [minute, expected] of [
       [1, ["health"]],
       [5, ["health", "email"]],
-      [15, ["health", "email", "renewal", "dashboard"]],
-      [60, ["health", "email", "renewal", "dashboard", "media"]],
+      [15, ["health", "email", "cancellation", "dashboard"]],
+      [60, ["health", "email", "cancellation", "dashboard", "media"]],
       [1_439, ["health"]],
-      [1_440, ["health", "email", "renewal", "dashboard", "media", "audit"]],
+      [1_440, ["health", "email", "cancellation", "dashboard", "media", "audit"]],
     ] as const) {
       completed.length = 0;
       yield* executeDueSchedule({ activities, nowEpochMs: minute * 60_000 + 5_000 });
@@ -43,7 +46,7 @@ it.effect("attempts independent retention after a failed activity before reporti
   Effect.gen(function* () {
     const completed: Array<string> = [];
     const result = yield* executeSchedule([
-      { operation: "browserPairing.email.dispatch", work: Effect.fail(undefined) },
+      { operation: "emailReplacement.dispatch", work: Effect.fail(undefined) },
       {
         operation: "audit.retention",
         work: Effect.sync(() => completed.push("audit")),
@@ -71,8 +74,8 @@ it.effect("contains typed failures and defects in bounded logs and one failed Wo
       logCauses.push(cause);
     });
     const result = yield* executeSchedule([
-      { operation: "browserPairing.email.dispatch", work: Effect.fail(privateDetail) },
-      { operation: "billing.collection.dispatch", work: Effect.die(new Error(privateDetail)) },
+      { operation: "emailReplacement.dispatch", work: Effect.fail(privateDetail) },
+      { operation: "billing.refund.dispatch", work: Effect.die(new Error(privateDetail)) },
       {
         operation: "audit.retention",
         work: Effect.sync(() => {
@@ -95,14 +98,14 @@ it.effect("contains typed failures and defects in bounded logs and one failed Wo
       [
         {
           component: "scheduled-work",
-          operation: "browserPairing.email.dispatch",
+          operation: "emailReplacement.dispatch",
           outcome: "failed",
         },
       ],
       [
         {
           component: "scheduled-work",
-          operation: "billing.collection.dispatch",
+          operation: "billing.refund.dispatch",
           outcome: "failed",
         },
       ],
@@ -139,7 +142,7 @@ it.effect("cancels active work and runs its cleanup without starting the next ac
     const records: Array<TelemetryWorkRecord> = [];
     const fiber = yield* executeSchedule([
       {
-        operation: "browserPairing.email.dispatch",
+        operation: "emailReplacement.dispatch",
         work: Deferred.succeed(started, undefined).pipe(
           Effect.andThen(Effect.never),
           Effect.ensuring(
@@ -199,7 +202,7 @@ it.effect("preserves an activity interruption and does not start later work", ()
     let laterStarted = false;
     const result = yield* executeSchedule([
       {
-        operation: "browserPairing.email.dispatch",
+        operation: "emailReplacement.dispatch",
         work: Effect.interrupt.pipe(
           Effect.ensuring(
             Effect.sync(() => {

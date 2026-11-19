@@ -2,12 +2,13 @@ import { Clock, Effect, Option, Schema } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { Miniflare, type WorkerOptions } from "miniflare";
-import { installTestSchema } from "../../apps/server/cloudflare/d1-test-fixture";
+import type { SharedBindings } from "../../apps/server/cloudflare/storage-bootstrap/contract";
+import { NodeFileSystem } from "@effect/platform-node";
+import { nativeUserPlatform } from "../../apps/server/cloudflare/user-store.test-fixture";
 import { handleSmoke } from "../../apps/server/cloudflare/runtime/release-smoke/operations";
 import {
   SyntheticBindings,
   smokeEnvironment,
-  unavailableBucket,
   unavailableQueue,
 } from "./incomplete-platform-fixture";
 
@@ -22,241 +23,264 @@ const awaitSmokeCompletion = Effect.fn(function* (poll: () => Promise<Response>)
   return yield* Effect.die("Native smoke completion exceeded the local poll budget");
 });
 
-it.live("refuses a candidate whose protected-read dependencies are absent from existing D1", () =>
-  Effect.gen(function* () {
-    const bundle = yield* Effect.tryPromise(() =>
-      Bun.build({
-        entrypoints: [
-          new URL("../../apps/server/cloudflare/release-smoke-worker.ts", import.meta.url).pathname,
-        ],
-        target: "browser",
-        external: ["cloudflare:workers"],
-      })
-    );
-    const output = bundle.outputs[0];
-    if (!bundle.success || output === undefined) {
-      return yield* Effect.die("Native smoke build failed");
-    }
-    const script = yield* Effect.tryPromise(() => output.text());
-    const release = smokeEnvironment();
-    const executorVersion = "11111111-1111-4111-8111-111111111111";
-    const priorRevision = "f".repeat(40);
-    const nativeWorker = (revision: string, version: string): WorkerOptions => ({
-      config: {
-        name: revision,
-        type: "worker",
-        compatibilityDate: "2026-09-08",
-        env: {
-          DB: { type: "d1", id: "smoke-schema" },
-          SMOKE_LIMITER: {
-            type: "rate-limit",
-            namespace: "1493",
-            simple: { limit: 8, period: 60 },
-          },
-          SMOKE_QUEUE: { type: "queue", name: revision },
-          SMOKE_QUEUE_NAME: { type: "text", value: revision },
-          SMOKE_WORKFLOW: {
-            type: "workflow",
-            name: revision,
-            worker: revision,
-            exportName: "ReleaseSmokeWorkflowV2",
-          },
-          CF_VERSION_METADATA: { type: "json", value: { id: version } },
-          RELEASE_GIT_SHA: { type: "text", value: revision },
-          CONTRACT_DIGEST: { type: "text", value: release.CONTRACT_DIGEST },
-        },
-        triggers: [
-          {
-            type: "queue",
-            name: revision,
-            maxBatchSize: 1,
-            maxBatchTimeout: 0,
-            maxConcurrency: 4,
-            maxRetries: 3,
-          },
-        ],
-        manifest: {
-          mainModule: "index.mjs",
-          modules: {
-            "runtime.mjs": { type: "esm", contents: script },
-            "index.mjs": {
-              contents: 'export { default, ReleaseSmokeWorkflowV2 } from "./runtime.mjs";',
-              type: "esm",
-            },
-          },
-        },
-      },
-    });
-    const mf = new Miniflare({
-      workers: [
-        nativeWorker(release.RELEASE_GIT_SHA, executorVersion),
-        nativeWorker(priorRevision, "22222222-2222-4222-8222-222222222222"),
+const nativeSmokeJourney = Effect.fnUntraced(function* () {
+  const bundle = yield* Effect.tryPromise(() =>
+    Bun.build({
+      entrypoints: [
+        new URL("../../apps/server/cloudflare/release-smoke-worker.ts", import.meta.url).pathname,
       ],
-    });
-    yield* Effect.addFinalizer(() => Effect.tryPromise(() => mf.dispose()).pipe(Effect.orDie));
-    yield* Effect.tryPromise(() => mf.ready);
-    const db = yield* Effect.tryPromise(() => mf.getD1Database("DB", release.RELEASE_GIT_SHA));
-    yield* Effect.tryPromise(() => installTestSchema({ db }));
-    const bindings = yield* Effect.tryPromise(() =>
-      mf.getBindings<{ SMOKE_WORKFLOW: Workflow; SMOKE_QUEUE: Queue; SMOKE_LIMITER: RateLimit }>(
-        release.RELEASE_GIT_SHA
-      )
-    );
-    let publications = 0;
-    let bankCalls = 0;
-    let offered: unknown;
-    const environment = smokeEnvironment({
-      DB: db,
-      SMOKE_LIMITER: bindings.SMOKE_LIMITER,
-      SMOKE_QUEUE_NAME: release.RELEASE_GIT_SHA,
-      SMOKE_WORKFLOW: bindings.SMOKE_WORKFLOW,
-      SMOKE_BUCKET: SyntheticBindings.withMethods(unavailableBucket, {
-        put: (): Promise<void> => Promise.resolve(),
-        get: (): Promise<object> => Promise.resolve({}),
-      }),
-      SMOKE_QUEUE: SyntheticBindings.withMethods(unavailableQueue, {
-        send: (work: unknown): Promise<void> => {
-          offered = work;
-          publications++;
-          return Promise.resolve();
+      target: "browser",
+      external: ["cloudflare:workers"],
+    })
+  );
+  const output = bundle.outputs[0];
+  if (!bundle.success || output === undefined) {
+    return yield* Effect.die("Native smoke build failed");
+  }
+  const script = yield* Effect.tryPromise(() => output.text());
+  const release = smokeEnvironment();
+  const executorVersion = "11111111-1111-4111-8111-111111111111";
+  const priorRevision = "f".repeat(40);
+  const nativeWorker = (revision: string, version: string): WorkerOptions => ({
+    config: {
+      name: revision,
+      type: "worker",
+      compatibilityDate: "2026-09-08",
+      env: {
+        SMOKE_BUCKET: { type: "r2", name: "native-smoke" },
+        SMOKE_LIMITER: {
+          type: "rate-limit",
+          namespace: "1493",
+          simple: { limit: 8, period: 60 },
         },
+        SMOKE_QUEUE: { type: "queue", name: revision },
+        SMOKE_QUEUE_NAME: { type: "text", value: revision },
+        SMOKE_WORKFLOW: {
+          type: "workflow",
+          name: revision,
+          worker: revision,
+          exportName: "ReleaseSmokeWorkflowV2",
+        },
+        CF_VERSION_METADATA: { type: "json", value: { id: version } },
+        RELEASE_GIT_SHA: { type: "text", value: revision },
+        CONTRACT_DIGEST: { type: "text", value: release.CONTRACT_DIGEST },
+      },
+      triggers: [
+        {
+          type: "queue",
+          name: revision,
+          maxBatchSize: 1,
+          maxBatchTimeout: 0,
+          maxConcurrency: 4,
+          maxRetries: 3,
+        },
+      ],
+      manifest: {
+        mainModule: "index.mjs",
+        modules: {
+          "runtime.mjs": { type: "esm", contents: script },
+          "index.mjs": {
+            contents: 'export { default, ReleaseSmokeWorkflowV2 } from "./runtime.mjs";',
+            type: "esm",
+          },
+        },
+      },
+    },
+  });
+  const mf = new Miniflare({
+    workers: [
+      nativeWorker(release.RELEASE_GIT_SHA, executorVersion),
+      nativeWorker(priorRevision, "22222222-2222-4222-8222-222222222222"),
+    ],
+  });
+  yield* Effect.addFinalizer(() => Effect.tryPromise(() => mf.dispose()).pipe(Effect.orDie));
+  yield* Effect.tryPromise(() => mf.ready);
+  const owners = yield* (yield* nativeUserPlatform)();
+  const ownersBindings = yield* Effect.tryPromise(() =>
+    owners.getBindings<Required<SharedBindings>>("core")
+  );
+  const bindings = yield* Effect.tryPromise(() =>
+    mf.getBindings<{
+      SMOKE_BUCKET: R2Bucket;
+      SMOKE_WORKFLOW: Workflow;
+      SMOKE_QUEUE: Queue;
+      SMOKE_LIMITER: RateLimit;
+    }>(release.RELEASE_GIT_SHA)
+  );
+  let publications = 0;
+  let bankCalls = 0;
+  let offered: unknown;
+  const environment = smokeEnvironment({
+    USER_STORE: ownersBindings.USER_STORE,
+    DIRECTORY: ownersBindings.DIRECTORY,
+    PRICING: ownersBindings.PRICING,
+    MAINTENANCE: ownersBindings.MAINTENANCE,
+    ERASURE: ownersBindings.ERASURE,
+    SMOKE_LIMITER: bindings.SMOKE_LIMITER,
+    SMOKE_QUEUE_NAME: release.RELEASE_GIT_SHA,
+    SMOKE_WORKFLOW: bindings.SMOKE_WORKFLOW,
+    SMOKE_BUCKET: bindings.SMOKE_BUCKET,
+    SMOKE_QUEUE: SyntheticBindings.withMethods(unavailableQueue, {
+      send: (work: unknown): Promise<void> => {
+        offered = work;
+        publications++;
+        return Promise.resolve();
+      },
+    }),
+  });
+  const probe = (id: string, bindings = environment): Promise<Response> =>
+    handleSmoke({
+      bankAuthentication: Option.some(
+        Effect.sync(() => {
+          bankCalls += 1;
+        })
+      ),
+      environment: bindings,
+      request: new Request("https://core.internal/internal/release-smoke", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-fidy-smoke-proof": environment.SMOKE_PROOF,
+        },
+        body: JSON.stringify({
+          protocolVersion: 1,
+          probeId: id.repeat(32),
+          expectedPublicVersionId: bindings.CF_VERSION_METADATA.id,
+          expectedCoreVersionId: bindings.CF_VERSION_METADATA.id,
+          expectedGitRevision: bindings.RELEASE_GIT_SHA,
+          expectedContractDigest: bindings.CONTRACT_DIGEST,
+        }),
       }),
-      USER_TRANSACTION_COORDINATOR: {
-        getByName: (): { fetch: () => Promise<Response> } => ({
-          fetch: (): Promise<Response> => Promise.resolve(new Response()),
+    });
+  expect((yield* Effect.tryPromise(() => probe("a"))).status).toBe(202);
+  expect(publications).toBe(1);
+  expect(bankCalls).toBe(0);
+  const poll = (overrides = environment): Promise<Response> =>
+    handleSmoke({
+      bankAuthentication: Option.none(),
+      environment: overrides,
+      request: new Request(
+        "https://core.internal/internal/release-smoke?probeId=" + "a".repeat(32),
+        {
+          headers: { "x-fidy-smoke-proof": environment.SMOKE_PROOF },
+        }
+      ),
+    });
+  expect(yield* Effect.tryPromise(() => poll().then((response) => response.json()))).toMatchObject({
+    status: "pending",
+  });
+  const markerKey = `_release-smoke/${environment.RELEASE_GIT_SHA}/smoke-v2-${environment.CF_VERSION_METADATA.id}-${"a".repeat(32)}`;
+  expect(
+    yield* Effect.tryPromise(() =>
+      bindings.SMOKE_BUCKET.get(markerKey).then((marker) => marker?.text())
+    )
+  ).toBe(environment.CONTRACT_DIGEST);
+  const now = yield* Clock.currentTimeMillis;
+  // Native Queue transport invokes the dedicated executor, not candidate Core by hand.
+  yield* Effect.tryPromise(() => bindings.SMOKE_QUEUE.send(offered));
+  yield* Effect.tryPromise(() => bindings.SMOKE_QUEUE.send(offered));
+  yield* awaitSmokeCompletion(() => poll());
+  const core = {
+    gitRevision: release.RELEASE_GIT_SHA,
+    contractDigest: release.CONTRACT_DIGEST,
+    workerVersionId: release.CF_VERSION_METADATA.id,
+  };
+  const completed = {
+    probeId: "a".repeat(32),
+    coreVersionId: core.workerVersionId,
+    executor: { ...core, workerVersionId: executorVersion },
+    expiresAtMs: now + 300000,
+  };
+  for (const output of [
+    { ...completed, probeId: "b".repeat(32) },
+    { ...completed, executor: { ...completed.executor, gitRevision: "f".repeat(40) } },
+    { ...completed, executor: { ...completed.executor, contractDigest: "f".repeat(64) } },
+    { ...completed, coreVersionId: executorVersion },
+    { ...completed, expiresAtMs: now - 1 },
+    { ...completed, expiresAtMs: now + 600000 },
+    {},
+  ]) {
+    const stale = yield* Effect.tryPromise(() =>
+      poll({
+        ...environment,
+        SMOKE_WORKFLOW: SyntheticBindings.withMethods(bindings.SMOKE_WORKFLOW, {
+          get: (): Promise<object> =>
+            Promise.resolve({
+              status: (): Promise<object> => Promise.resolve({ status: "complete", output }),
+            }),
+        }),
+      })
+    );
+    expect(stale.status).toBe(503);
+    expect(stale.headers.get("x-fidy-smoke-failure")).toBe("probe_state");
+  }
+  // A subsequent release does not move or overwrite the preceding native execution path.
+  const prior = yield* Effect.tryPromise(() =>
+    mf.getBindings<{ SMOKE_WORKFLOW: Workflow; SMOKE_QUEUE: Queue }>(priorRevision)
+  );
+  const priorEnvironment = {
+    ...environment,
+    RELEASE_GIT_SHA: priorRevision,
+    CF_VERSION_METADATA: { id: "33333333-3333-4333-8333-333333333333" },
+    SMOKE_QUEUE: prior.SMOKE_QUEUE,
+    SMOKE_QUEUE_NAME: priorRevision,
+    SMOKE_WORKFLOW: prior.SMOKE_WORKFLOW,
+  };
+  expect((yield* Effect.tryPromise(() => probe("a", priorEnvironment))).status).toBe(202);
+  yield* awaitSmokeCompletion(() => poll(priorEnvironment));
+  expect(yield* Effect.tryPromise(() => poll().then((response) => response.json()))).toMatchObject({
+    status: "passed",
+    core,
+  });
+  const readOnly = yield* Effect.tryPromise(() =>
+    probe("c", {
+      ...environment,
+      USER_STORE: {
+        getByName: (): Pick<Fetcher, "fetch"> => ({
+          fetch: (): Promise<Response> => Promise.resolve(new Response(null, { status: 503 })),
         }),
       },
-    });
-    const probe = (id: string, bindings = environment): Promise<Response> =>
-      handleSmoke({
-        bankAuthentication: Option.some(
-          Effect.sync(() => {
-            bankCalls += 1;
-          })
-        ),
-        environment: bindings,
-        request: new Request("https://core.internal/internal/release-smoke", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "x-fidy-smoke-proof": environment.SMOKE_PROOF,
-          },
-          body: JSON.stringify({
-            protocolVersion: 1,
-            probeId: id.repeat(32),
-            expectedPublicVersionId: bindings.CF_VERSION_METADATA.id,
-            expectedCoreVersionId: bindings.CF_VERSION_METADATA.id,
-            expectedGitRevision: bindings.RELEASE_GIT_SHA,
-            expectedContractDigest: bindings.CONTRACT_DIGEST,
-          }),
-        }),
-      });
-    expect((yield* Effect.tryPromise(() => probe("a"))).status).toBe(202);
-    expect(publications).toBe(1);
-    expect(bankCalls).toBe(0);
-    const poll = (overrides = environment): Promise<Response> =>
-      handleSmoke({
-        bankAuthentication: Option.none(),
-        environment: overrides,
-        request: new Request(
-          "https://core.internal/internal/release-smoke?probeId=" + "a".repeat(32),
-          {
-            headers: { "x-fidy-smoke-proof": environment.SMOKE_PROOF },
-          }
-        ),
-      });
-    expect(
-      yield* Effect.tryPromise(() => poll().then((response) => response.json()))
-    ).toMatchObject({ status: "pending" });
-    const now = yield* Clock.currentTimeMillis;
-    // Native Queue transport invokes the dedicated executor, not candidate Core by hand.
-    yield* Effect.tryPromise(() => bindings.SMOKE_QUEUE.send(offered));
-    yield* Effect.tryPromise(() => bindings.SMOKE_QUEUE.send(offered));
-    yield* awaitSmokeCompletion(() => poll());
-    const core = {
-      gitRevision: release.RELEASE_GIT_SHA,
-      contractDigest: release.CONTRACT_DIGEST,
-      workerVersionId: release.CF_VERSION_METADATA.id,
-    };
-    const completed = {
-      probeId: "a".repeat(32),
-      coreVersionId: core.workerVersionId,
-      executor: { ...core, workerVersionId: executorVersion },
-      expiresAtMs: now + 300000,
-    };
-    for (const output of [
-      { ...completed, probeId: "b".repeat(32) },
-      { ...completed, executor: { ...completed.executor, gitRevision: "f".repeat(40) } },
-      { ...completed, executor: { ...completed.executor, contractDigest: "f".repeat(64) } },
-      { ...completed, coreVersionId: executorVersion },
-      { ...completed, expiresAtMs: now - 1 },
-      { ...completed, expiresAtMs: now + 600000 },
-      {},
-    ]) {
-      const stale = yield* Effect.tryPromise(() =>
-        poll({
-          ...environment,
-          SMOKE_WORKFLOW: SyntheticBindings.withMethods(bindings.SMOKE_WORKFLOW, {
-            get: (): Promise<object> =>
-              Promise.resolve({
-                status: (): Promise<object> => Promise.resolve({ status: "complete", output }),
-              }),
-          }),
-        })
-      );
-      expect(stale.status).toBe(503);
-      expect(stale.headers.get("x-fidy-smoke-failure")).toBe("probe_state");
-    }
-    // A subsequent release does not move or overwrite the preceding native execution path.
-    const prior = yield* Effect.tryPromise(() =>
-      mf.getBindings<{ SMOKE_WORKFLOW: Workflow; SMOKE_QUEUE: Queue }>(priorRevision)
-    );
-    const priorEnvironment = {
+    })
+  );
+  expect(readOnly.status).toBe(503);
+  expect(readOnly.headers.get("x-fidy-smoke-failure")).toBe("schema");
+  expect(publications).toBe(1);
+  const refused = yield* Effect.tryPromise(() =>
+    probe("b", {
       ...environment,
-      RELEASE_GIT_SHA: priorRevision,
-      CF_VERSION_METADATA: { id: "33333333-3333-4333-8333-333333333333" },
-      SMOKE_QUEUE: prior.SMOKE_QUEUE,
-      SMOKE_QUEUE_NAME: priorRevision,
-      SMOKE_WORKFLOW: prior.SMOKE_WORKFLOW,
-    };
-    expect((yield* Effect.tryPromise(() => probe("a", priorEnvironment))).status).toBe(202);
-    yield* awaitSmokeCompletion(() => poll(priorEnvironment));
-    expect(
-      yield* Effect.tryPromise(() => poll().then((response) => response.json()))
-    ).toMatchObject({ status: "passed", core });
-    const readOnly = yield* Effect.tryPromise(() =>
-      probe("c", {
-        ...environment,
-        DB: SyntheticBindings.withMethods(db, {
-          batch: (): Promise<never> => Promise.reject(new Error("synthetic native write refusal")),
+      DIRECTORY: {
+        getByName: (): Pick<Fetcher, "fetch"> => ({
+          fetch: (): Promise<Response> => Promise.resolve(new Response(null, { status: 503 })),
         }),
-      })
-    );
-    expect(readOnly.status).toBe(503);
-    expect(readOnly.headers.get("x-fidy-smoke-failure")).toBe("schema");
-    expect(publications).toBe(1);
-    yield* Effect.tryPromise(() => db.prepare("DROP VIEW payment_source_context").run());
-    const refused = yield* Effect.tryPromise(() => probe("b"));
-    expect(refused.status).toBe(503);
-    expect(refused.headers.get("x-fidy-smoke-failure")).toBe("schema");
-    expect(publications).toBe(1);
-    for (let attempt = 0; attempt < 8; attempt++) {
-      yield* Effect.tryPromise(() => bindings.SMOKE_LIMITER.limit({ key: "release-smoke" }));
-    }
-    const limited = yield* Effect.tryPromise(() =>
-      probe("d", {
-        ...environment,
-        DB: SyntheticBindings.withMethods(db, {
-          prepare: (): never => {
-            throw new Error("Admission must precede D1 effects");
-          },
-        }),
-      })
-    );
-    expect(limited.status).toBe(503);
-    expect(limited.headers.get("x-fidy-smoke-failure")).toBe("admission");
-    expect(publications).toBe(1);
+      },
+    })
+  );
+  expect(refused.status).toBe(503);
+  expect(refused.headers.get("x-fidy-smoke-failure")).toBe("schema");
+  expect(publications).toBe(1);
+  for (let attempt = 0; attempt < 8; attempt++) {
+    yield* Effect.tryPromise(() => bindings.SMOKE_LIMITER.limit({ key: "release-smoke" }));
+  }
+  const limited = yield* Effect.tryPromise(() =>
+    probe("d", {
+      ...environment,
+      USER_STORE: {
+        getByName: () => {
+          throw new Error("Admission must precede native owner effects");
+        },
+      },
+    })
+  );
+  expect(limited.status).toBe(503);
+  expect(limited.headers.get("x-fidy-smoke-failure")).toBe("admission");
+  expect(publications).toBe(1);
 
-    expect(yield* Effect.tryPromise(() => refused.text())).not.toContain("payment_source_context");
-  })
+  expect(yield* Effect.tryPromise(() => refused.text())).not.toContain("payment_source_context");
+});
+it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) =>
+  test.effect(
+    "verifies native storage and version-scoped Queue and Workflow completion before accepting a candidate",
+    nativeSmokeJourney,
+    { timeout: 30_000 }
+  )
 );

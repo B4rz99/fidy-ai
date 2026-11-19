@@ -1,6 +1,8 @@
+import type { ExternalEventBindings } from "../../directory/contract";
 import { SecureRandom } from "effect/crypto";
 import { plainReply } from "./plain-reply";
-import { captureWithoutCommit, transactionReceipt } from "./capture-reply";
+import { captureWithoutCommit } from "./capture-reply";
+import { type HostedToolAction, committedAnswer, failedQueryReply } from "./tool-reply";
 import { browserConfirmationText, readBrowserConfirmation } from "./hosted-browser-confirmation";
 import type { HostedTurnConfirmation, HostedTurnProposal } from "../../../src/shell/agent/contract";
 import { observeApplicationOperation } from "../../runtime/application-observation/operations";
@@ -9,7 +11,11 @@ import { TelemetryAttempt, boundedTelemetryCount } from "../../../src/shell/obse
 import { type OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { readReminderPauseNotice, readWeeklyPauseNotice } from "../../insights/operations";
 import type { InsightUnavailable } from "../../insights/contract";
-import type { WhatsAppDocument } from "../../../src/shell/channels/whatsapp/contract";
+import {
+  type HostedDeliveryCorrelationToken,
+  type WhatsAppDocument,
+  type WhatsAppProviderMessageId,
+} from "../../../src/shell/channels/whatsapp/contract";
 import type { OutboundHttpService } from "../../../src/shell/outbound-http/operations";
 import {
   prepareStatementDocumentReply,
@@ -22,11 +28,7 @@ import {
 import { mintHostedStatementCaller } from "./statement-authority";
 import { confirmedOutcome, findConfirmedCall, findConfirmedOutcome } from "./confirmed-outcome";
 import { AgentUnavailable, type HostedCommitFence, pendingExecutionRecoveryMs } from "../contract";
-import {
-  executeCanonicalQuery,
-  installedCanonicalOperations,
-  installedHostedStatementOperations,
-} from "../../canonical-operations/operations";
+import { executeCanonicalQuery, localHostedCatalog } from "../../canonical-operations/operations";
 import {
   CanonicalToolCallEntry,
   CanonicalToolEvidence,
@@ -67,10 +69,6 @@ import {
 import { Cause, Clock, DateTime, Duration, Effect, Exit, Option, Schedule, Schema } from "effect";
 
 import { decideOperationAccess } from "../../../src/shell/canonical-policy/operations";
-import {
-  type HostedDeliveryCorrelationToken,
-  type WhatsAppProviderMessageId,
-} from "../../../src/shell/channels/whatsapp/contract";
 import { type TransactionSubject } from "../../canonical-work/operations";
 import { newId } from "../../secret-material/operations";
 import { makeSecureRandom } from "../../secret-material/runtime";
@@ -123,18 +121,10 @@ type HostedWorkFailure =
   | AgentUnavailable
   | InsightUnavailable;
 
-const hostedExecutableOperations = installedCanonicalOperations().filter(
-  ({ policy }) =>
-    decideOperationAccess(policy.access, {
-      _tag: "HostedAgentSession",
-      authorityRoot: "no-verified-whatsapp-authority",
-    })._tag === "Allowed"
-);
-
-const executableOperationsFor = (
-  subject: HostedSubject
-): Readonly<typeof hostedExecutableOperations> =>
-  isWhatsAppHosted(subject) ? installedHostedStatementOperations() : hostedExecutableOperations;
+const executableOperationsFor = (subject: HostedSubject): ReturnType<typeof localHostedCatalog> =>
+  localHostedCatalog(
+    isWhatsAppHosted(subject) ? "verified-whatsapp" : "no-verified-whatsapp-authority"
+  );
 
 const requiresHostedConfirmation = (
   subject: HostedSubject,
@@ -206,6 +196,7 @@ export const browserHostedDelivery: HostedDelivery = (proposal) =>
   Promise.resolve(Response.json(proposal, { status: 202, headers: noStore }));
 
 type WhatsAppHostedDelivery = Readonly<{
+  callbackOwner: Partial<ExternalEventBindings>;
   _tag: "WhatsApp";
   contextualReplyQuery: Option.Option<OwnedStatement>;
   send: (
@@ -1274,7 +1265,7 @@ const executeAdmittedTurn = ({
                 db,
                 userId,
                 turnId,
-                answer: committedAnswer(Option.none(), timeZone),
+                answer: committedAnswer({ actions: Option.none(), timeZone }),
                 deliver,
                 finish,
                 scheduleRecovery,
@@ -1295,7 +1286,7 @@ const executeAdmittedTurn = ({
               db,
               userId,
               turnId,
-              answer: committedAnswer(Option.some(actions), timeZone),
+              answer: committedAnswer({ actions: Option.some(actions), timeZone }),
               deliver,
               finish,
               scheduleRecovery,
@@ -1412,65 +1403,6 @@ const hostedResponseOutcome = (
     if (!response.ok) return { _tag: "CanonicalOperationFailed", failure: output.value };
     return { _tag: "Succeeded", output: output.value };
   });
-
-type HostedToolAction =
-  | Readonly<{ _tag: "Result"; event: HostedToolEvent; mutationSucceeded: boolean }>
-  | Readonly<{ _tag: "Challenge"; text: TranscriptText }>;
-const queryAbsence = Schema.Struct({ error: Schema.Struct({ code: Schema.Literal("not_found") }) });
-const confirmedQueryResult = (outcome: CanonicalToolOutcome): boolean =>
-  outcome._tag === "Succeeded" ||
-  (outcome._tag === "CanonicalOperationFailed" && Schema.is(queryAbsence)(outcome.failure));
-
-/** A rejected read supplies no data from which the model may infer an empty result. */
-const failedQueryReply = (
-  actions: ReadonlyArray<HostedToolAction>
-): Option.Option<TranscriptText> =>
-  actions.some(
-    (action) =>
-      action._tag === "Result" &&
-      operationCatalog.byId.get(action.event.operation)?.policy.kind === "query" &&
-      !confirmedQueryResult(action.event.outcome)
-  )
-    ? Option.some(
-        TranscriptText.make(
-          "No pude completar la consulta solicitada. No puedo confirmar sus resultados. Inténtalo de nuevo."
-        )
-      )
-    : Option.none();
-
-/** A completed canonical write never licenses an unqualified success for other failed calls. */
-const committedAnswer = (
-  actions: Option.Option<ReadonlyArray<HostedToolAction>>,
-  timeZone: string
-): TranscriptText => {
-  if (Option.isNone(actions)) {
-    return TranscriptText.make(
-      "Una operación se completó; el estado de las demás no está confirmado."
-    );
-  }
-  const partial = actions.value.some(
-    (action) =>
-      action._tag === "Result" &&
-      action.event.outcome._tag !== "Succeeded" &&
-      action.event.outcome._tag !== "CommittedOutputUnavailable"
-  );
-  if (!partial) {
-    for (const action of actions.value) {
-      if (action._tag !== "Result" || action.event.outcome._tag !== "Succeeded") continue;
-      const receipt = transactionReceipt({
-        operation: action.event.operation,
-        output: action.event.outcome.output,
-        timeZone,
-      });
-      if (Option.isSome(receipt)) return receipt.value;
-    }
-  }
-  return TranscriptText.make(
-    partial
-      ? "Completé una parte de lo que pediste. Quedaron cambios sin hacer."
-      : "Listo, apliqué los cambios."
-  );
-};
 
 type ToolIdentity = Readonly<{
   turnId: TranscriptTurnId;
@@ -2010,6 +1942,7 @@ const proposeWhatsAppDelivery = ({
 }>): Effect.Effect<Response, HostedWorkFailure> =>
   Effect.gen(function* () {
     const submitted = yield* submitHostedReply({
+      callbackOwner: deliver.callbackOwner,
       db,
       userId,
       turnId,

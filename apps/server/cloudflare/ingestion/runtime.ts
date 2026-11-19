@@ -1,4 +1,26 @@
-import { SecureRandom } from "effect/crypto";
+import { admitLocalMedia as publishMedia } from "./internal/local-media";
+import { drainIngestion } from "./internal/drain-originals";
+import { reviewRequest } from "./internal/sample-operator";
+import { reviewLocal } from "./internal/sample-review";
+import {
+  admitLocalEmail as acceptLocalEmail,
+  receivePrivateEmail as acceptPrivateEmail,
+  processLocalEmail as completeLocalEmail,
+} from "./internal/local-email";
+import {
+  type ForwardedEmailMessage,
+  type NativeEmailEnvironment,
+  type ReviewRetentionWork,
+  type ReviewUnavailable,
+  type StatementDeliveryUnavailable,
+  type StatementDispatchBindings,
+} from "./contract";
+import { admitLocalDocument as admitDocument } from "./internal/local-document";
+import {
+  localPendingStatement as pendingStatement,
+  localStatementActivity as statementActivity,
+} from "./internal/local-statement-work";
+import { recoverIngestion, repairIngestionAlarm } from "./internal/local-retention";
 import { sweepReviewDrafts as sweepDrafts } from "./internal/review-retention";
 import { projections as erasureProjections } from "./internal/erasure";
 import { makeErasureStore } from "../erasure-store/runtime";
@@ -7,14 +29,7 @@ import type { ErasureStore } from "../erasure-store/contract";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import { Cause, Effect, Exit, Option } from "effect";
 import type { UserId } from "../../src/core/identity/contract";
-import type {
-  ForwardedEmailEnvironment,
-  ForwardedEmailMessage,
-  ReviewRetentionWork,
-  ReviewUnavailable,
-  StatementDeliveryUnavailable,
-  StatementDispatchBindings,
-} from "./contract";
+
 import {
   cloudflareWorkerTelemetry,
   observeWorkerPromise,
@@ -22,13 +37,8 @@ import {
   workerRelease,
 } from "../runtime/telemetry/operations";
 import {
-  dispatchForwardedEmail as dispatchEmail,
-  emailSecureRandom,
-  receiveForwardedEmail as receiveEmail,
-  sweepForwardedEmail as retainEmail,
-} from "./internal/forwarded-email";
-import {
   dispatchStatementExtraction as dispatchStatements,
+  receiveNativeStatementExtraction as receiveOwnedStatements,
   receiveStatementExtraction as receiveStatements,
   isStatementExtractionWork as recognizesStatement,
   reconcileStatementExtraction as reconcileStatements,
@@ -94,6 +104,8 @@ export const withStatementPublicationWake: typeof withPublicationWake = (schedul
 /** Decode Queue work and check current owner state before handing the stable identity to its Workflow. */
 export const receiveStatementExtraction: typeof receiveStatements = (input) =>
   receiveStatements(input);
+export const receiveNativeStatementExtraction: typeof receiveOwnedStatements = (input) =>
+  receiveOwnedStatements(input);
 /** Settle stalled extraction under its existing User coordinator, retaining visible partial accounting. */
 export const reconcileStatementExtraction: typeof reconcileStatements = (input) =>
   reconcileStatements(input);
@@ -131,7 +143,7 @@ type StatementCoordinator = Readonly<{ getByName: (name: string) => Pick<Fetcher
 
 /** Cloudflare stores only the bounded work identity and the named activity outcome. */
 export class StatementExtractionWorkflowV1 extends WorkflowEntrypoint<
-  Readonly<{ USER_TRANSACTION_COORDINATOR: StatementCoordinator; DB: D1Database }>,
+  Readonly<{ USER_STORE: StatementCoordinator }>,
   unknown
 > {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
@@ -139,7 +151,7 @@ export class StatementExtractionWorkflowV1 extends WorkflowEntrypoint<
       () =>
         runStatementExtractionWorkflow({
           payload: event.payload,
-          coordinator: this.env.USER_TRANSACTION_COORDINATOR,
+          coordinator: this.env.USER_STORE,
           activity: (name, options, run) => step.do(name, options, run),
         }),
       {
@@ -160,19 +172,9 @@ export const receiveForwardedEmail = ({
   environment,
 }: Readonly<{
   message: ForwardedEmailMessage;
-  environment: ForwardedEmailEnvironment;
-}>): Effect.Effect<void, Effect.Error<ReturnType<typeof receiveEmail>>> =>
-  receiveEmail(message, environment).pipe(
-    Effect.withSpan("forwarded-email.receive"),
-    Effect.provideService(SecureRandom.SecureRandom, emailSecureRandom)
-  );
-
-/** Reoffer only retained same-User receipt identities; an offer grants no processing authority. */
-export const dispatchForwardedEmail: typeof dispatchEmail = (environment) =>
-  dispatchEmail(environment);
-
-/** Expire private bytes and retain only the owner's bounded replay/review evidence. */
-export const sweepForwardedEmail: typeof retainEmail = (environment) => retainEmail(environment);
+  environment: NativeEmailEnvironment;
+}>): ReturnType<typeof acceptPrivateEmail> =>
+  acceptPrivateEmail(message, environment).pipe(Effect.withSpan("forwarded-email.receive"));
 
 /** Remove only expired Ingestion upload-admission records; live spend and other owners remain intact. now is the decision instant in Unix epoch milliseconds. */
 export const sweepExpiredUploadAdmission: typeof sweepUploadAdmission = (input) =>
@@ -186,3 +188,23 @@ export const sweepReviewDrafts = (
 ): Effect.Effect<void, ReviewUnavailable> => sweepDrafts(input);
 export const makeIngestionErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
   erasureProjections.map((projection) => makeErasureStore({ db, projection }));
+
+export const admitLocalDocument: typeof admitDocument = (...args) => admitDocument(...args);
+export const localPendingStatement: typeof pendingStatement = (...args) =>
+  pendingStatement(...args);
+export const localStatementActivity: typeof statementActivity = (...args) =>
+  statementActivity(...args);
+export const recoverLocalIngestion: typeof recoverIngestion = (...args) =>
+  recoverIngestion(...args);
+export const repairLocalIngestionAlarm: typeof repairIngestionAlarm = (...args) =>
+  repairIngestionAlarm(...args);
+
+export const admitLocalEmail: typeof acceptLocalEmail = (...args) => acceptLocalEmail(...args);
+export const processLocalEmail: typeof completeLocalEmail = (...args) =>
+  completeLocalEmail(...args);
+
+export const drainLocalIngestion: typeof drainIngestion = (...args) => drainIngestion(...args);
+export const handleSampleReview: typeof reviewRequest = (...args) => reviewRequest(...args);
+export const localSampleReview: typeof reviewLocal = (...args) => reviewLocal(...args);
+
+export const admitLocalMedia: typeof publishMedia = (input) => publishMedia(input);

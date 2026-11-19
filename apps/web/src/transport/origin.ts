@@ -1,4 +1,4 @@
-import { isHttpOrigin } from "@fidy/server/browser-transport";
+import { installedOrigins, isHttpOrigin } from "@fidy/server/browser-transport";
 
 const originConfigurationMessage = "VITE_API_ORIGIN must be an HTTP origin";
 
@@ -20,4 +20,24 @@ export const parseApiOrigin = (configured: unknown): string => {
   } catch {
     throw new Error(originConfigurationMessage);
   }
+};
+
+/** Select the matched API for the installed host pair before constructing the browser transport. */
+export const browserApiOrigin = ({
+  configured,
+  browserOrigin,
+}: {
+  configured: unknown;
+  browserOrigin: string;
+}): string => {
+  if (configured === "installed") {
+    if (browserOrigin === installedOrigins.acceptance.browser) {
+      return installedOrigins.acceptance.api;
+    }
+    if (browserOrigin === installedOrigins.production.browser) {
+      return installedOrigins.production.api;
+    }
+    throw new Error("Unexpected installed browser origin");
+  }
+  return parseApiOrigin(configured);
 };

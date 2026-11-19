@@ -1,3 +1,15 @@
+import {
+  InsightRecipient,
+  type NativeDeliveryOwner,
+  type ProactivityChannelClaim,
+  type ProactivityChannelReconciliation,
+  type ProactivityChannelScope,
+  type ProactivityChannelStage,
+  type WhatsAppStatusAdmission,
+  type WhatsAppTurnAdmission,
+  WhatsAppUnavailable,
+} from "../contract";
+import { claimRegisteredSend } from "./registered-send";
 import { Effect, Option, Schema } from "effect";
 import { UserId } from "../../../src/core/identity/contract";
 import { IanaTimeZone } from "../../../src/core/_shared/context";
@@ -16,16 +28,6 @@ import {
 } from "../../consent/operations";
 import { whatsAppIdentityQuery } from "../../identity/operations";
 import { newId } from "../../secret-material/operations";
-import {
-  InsightRecipient,
-  type ProactivityChannelClaim,
-  type ProactivityChannelReconciliation,
-  type ProactivityChannelScope,
-  type ProactivityChannelStage,
-  type WhatsAppStatusAdmission,
-  type WhatsAppTurnAdmission,
-  WhatsAppUnavailable,
-} from "../contract";
 
 const maximumDailyClaims = 32;
 const dayMs = 86400000;
@@ -134,8 +136,25 @@ const expireStaged = (input: ProactivityChannelScope): Effect.Effect<void, Whats
       .run()
   ).pipe(Effect.asVoid);
 
+const registerDelivery = Effect.fn(function* (
+  input: ProactivityChannelScope & NativeDeliveryOwner,
+  row: typeof Claim.Type
+) {
+  return yield* claimRegisteredSend(input.callbackOwner, {
+    userId: input.userId,
+    family: "proactivity",
+    operationId: input.id,
+    portfolio: row.portfolio_id,
+    bsuid: row.bsuid,
+    endpoint: row.business_phone_number_id,
+    correlation: row.correlation_token,
+    sandboxPhone: null,
+    deadline: row.expires_at_ms.epochMilliseconds,
+    content: row.template_json,
+  });
+});
 export const start = (
-  input: ProactivityChannelScope
+  input: ProactivityChannelScope & NativeDeliveryOwner
 ): Effect.Effect<ProactivityChannelClaim, WhatsAppUnavailable> =>
   Effect.gen(function* () {
     const select = yield* protectedAction(input, {
@@ -161,6 +180,8 @@ export const start = (
       portfolioId: row.portfolio_id,
       bsuid: row.bsuid,
     });
+    const beginSend = yield* registerDelivery(input, row);
+
     const update = yield* protectedAction(input, {
       sql: `UPDATE whatsapp_deliveries AS proactivity_whatsapp_claims SET state='sending',send_started_at_ms=? WHERE kind='proactivity' AND user_id=? AND delivery_id=? AND state='staged' AND correlation_token=? AND EXISTS (${input.guard.sql}) AND EXISTS (${association.sql}) AND (SELECT count(*) FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS proactivity_whatsapp_claims WHERE user_id=? AND send_started_at_ms>?)<?`,
       params: [
@@ -177,6 +198,7 @@ export const start = (
     });
     const changed = yield* attempt(() => update.run());
     if (changed.meta.changes !== 1) return { _tag: "NotClaimed" } as const;
+    yield* beginSend.claim;
     return {
       _tag: "Ready",
       correlationToken: row.correlation_token,

@@ -83,7 +83,7 @@ const json = (body: object, status = 200, headers?: HeadersInit): Response => {
   return Response.json(body, { status, headers: responseHeaders });
 };
 
-const samplePublicCode = (): string => {
+export const samplePublicCode = (): string => {
   let symbols = "";
   while (symbols.length < codeSymbols) {
     symbols += selectPublicCodeSymbols({

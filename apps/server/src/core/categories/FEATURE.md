@@ -13,6 +13,20 @@ no dedicated rule management view; Transactions use Category labels for filterin
 | Validation and capacity                | Trimmed nonempty keyword up to 80 characters, normalized duplicates, 100-rule limit, concurrent duplicate creates retain one winner                     | Normalized duplicate and unknown-Category refusals passed; capacity/concurrency not induced live |
 | Authority and atomicity                | Foreign User, read-only PAT, revoked session, browser Origin, Audit rollback, mixed-owner batch conflicts/capacity and OAuth destructive review         | Approved read/write grant admitted mutations; isolation/atomicity negatives remain local         |
 
+## Taxonomy releases
+
+Categories ships complete immutable definitions in `internal/taxonomy-release.json`. A stored
+Category reference combines its stable CategoryId with the revision selected for that operation.
+Keep previously shipped definitions intact. For a new revision, first deploy its complete reader
+definition while leaving `write` at the currently active revision. After that release serves,
+advance `write` in a subsequent deployment. Release capture compares the definitions in the
+serving and candidate revisions of the repository. The same check participates in code rollback.
+
+The native User store retains each Transaction’s Category revision, the previous and next
+revisions for a Correction, and the selected revision for keyword rules and Budgets. Local
+categorization runs in the owner's authorized transaction. History checks that the reader can
+interpret the effective Category before Audit and disclosure.
+
 ## Evidence and reruns
 
 The rerun passed **5 Core checks**, **153 Worker/D1 checks** and **1 built-browser check**.

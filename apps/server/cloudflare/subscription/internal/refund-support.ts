@@ -7,16 +7,15 @@ import { RequestBodyPolicy } from "../../http/contract";
 import { boundedJsonBody } from "../../http/operations";
 import {
   type RefundAuthority,
+  RefundRead,
   RefundSupportAdmission,
   type RefundSupportEnvironment,
   maximumRefundOperatorIdLength,
 } from "../contract";
-import { getRefund } from "./refund-acceptance";
-import { refundFailureResponse, refundResultResponse } from "./refund-http-response";
+import { refundFailureResponse } from "./refund-http-response";
 
 const maximumAssertionCharacters = 8192;
 const millisecondsPerSecond = 1000;
-const readStatus = 200;
 const bodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 4096,
   deadlineMilliseconds: 5000,
@@ -94,6 +93,25 @@ const authorize = (
       permission: "billing.refund" as const,
     });
   }).pipe(Effect.orElseSucceed(Option.none));
+const routeOwner = Effect.fnUntraced(function* (
+  environment: RefundSupportEnvironment,
+  user: string,
+  body: string
+) {
+  const owners = environment.USER_STORE;
+  if (owners === undefined) return refundFailureResponse("unavailable");
+  const trace = yield* captureTraceHeaders;
+  return yield* Effect.tryPromise((signal) =>
+    owners.getByName(user).fetch(
+      new Request("https://user.invalid/billing/refund-support", {
+        method: "POST",
+        headers: { "content-type": "application/json", ...trace },
+        body,
+        signal,
+      })
+    )
+  );
+});
 const submit = (
   input: Readonly<{
     request: Request;
@@ -122,17 +140,7 @@ const submit = (
     const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(RefundSupportAdmission))(
       admission
     );
-    const traceHeaders = yield* captureTraceHeaders;
-    const response = yield* Effect.tryPromise(() =>
-      input.environment.USER_TRANSACTION_COORDINATOR.getByName(body.value.userId).fetch(
-        new Request("https://coordinator.internal/billing-refund-work", {
-          method: "POST",
-          headers: { "content-type": "application/json", ...traceHeaders },
-          body: encoded,
-        })
-      )
-    );
-    return response;
+    return yield* routeOwner(input.environment, body.value.userId, encoded);
   }).pipe(Effect.orElseSucceed(() => refundFailureResponse("unavailable")));
 /** Authentication is reverified at Core even when Access/ingress has already checked the assertion. */
 export const handleRefundSupport = (
@@ -159,13 +167,13 @@ export const handleRefundSupport = (
     }
     const userId = path.split("/").at(userPathPosition) ?? "";
     const refundAttemptId = path.split("/").at(-1) ?? "";
-    return yield* refundResultResponse({
-      status: readStatus,
-      result: getRefund({
-        db: input.environment.DB,
-        authority: authority.value,
-        userId,
-        refundAttemptId,
-      }),
+    const read = Schema.decodeOption(RefundRead)({
+      _tag: "ReadBillingRefund",
+      authority: authority.value,
+      userId,
+      refundAttemptId,
     });
-  });
+    if (Option.isNone(read)) return refundFailureResponse("charge-unavailable");
+    const body = yield* Schema.encodeEffect(Schema.fromJsonString(RefundRead))(read.value);
+    return yield* routeOwner(input.environment, userId, body);
+  }).pipe(Effect.orElseSucceed(() => refundFailureResponse("unavailable")));

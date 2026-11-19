@@ -1,3 +1,7 @@
+import {
+  claimRegisteredSend as claimRegisteredSendOwned,
+  recordRegisteredSend as recordRegisteredSendOwned,
+} from "./internal/registered-send";
 import { makeStatusLookupAdmission as makeStatusLookupAdmissionOwned } from "./internal/status-admission";
 import { Effect } from "effect";
 import * as proactivity from "./internal/proactivity-delivery";
@@ -328,3 +332,8 @@ export const submitHostedReply = (
   input: Parameters<typeof submitHostedReplyOwned>[0]
 ): Effect.Effect<Effect.Success<ReturnType<typeof submitHostedReplyOwned>>, WhatsAppUnavailable> =>
   submitHostedReplyOwned(input).pipe(Effect.mapError(() => new WhatsAppUnavailable()));
+
+export const claimRegisteredSend: typeof claimRegisteredSendOwned = (...args) =>
+  claimRegisteredSendOwned(...args);
+export const recordRegisteredSend: typeof recordRegisteredSendOwned = (...args) =>
+  recordRegisteredSendOwned(...args);

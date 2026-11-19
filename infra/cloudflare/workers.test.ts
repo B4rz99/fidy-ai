@@ -1,10 +1,9 @@
 import { openAiTestKey } from "../../apps/server/cloudflare/openai.test-fixture";
 import { browserSessionBindingPath, telemetryTraceHeader } from "@fidy/server/browser-transport";
 import { receiveSmoke } from "../../apps/server/cloudflare/runtime/release-smoke/operations";
-import {
-  installTestSchema,
-  isolatedTestDatabases,
-} from "../../apps/server/cloudflare/d1-test-fixture";
+import { nativeUserPlatform } from "../../apps/server/cloudflare/user-store.test-fixture";
+import type { SharedBindings } from "../../apps/server/cloudflare/storage-bootstrap/contract";
+import { NodeFileSystem } from "@effect/platform-node";
 
 import {
   microsoftProviderPaths,
@@ -17,13 +16,12 @@ import {
   TelemetryTraceId,
   TelemetryWorkRecord,
 } from "@fidy/server/telemetry-contract";
-import { type Cause, Clock, DateTime, Effect, Result, Schema } from "effect";
-import { afterAll, describe, expect } from "vitest";
-import { Miniflare } from "miniflare";
-import {
-  fixtureWorker as coreWorker,
-  makeFixtureWorker as makeCoreWorker,
-} from "../../apps/server/cloudflare/core-worker.test-fixture";
+import { Clock, DateTime, Effect, Result, Schema } from "effect";
+import { describe, expect } from "vitest";
+import coreWorker, {
+  makeCoreWorker as composeWorker,
+} from "../../apps/server/cloudflare/core-worker";
+import { registeredConnectionInstitutionIds } from "../../apps/server/src/shell/connections/contract";
 import {
   type ReleaseMetadata,
   resolveDeploymentConfiguration,
@@ -44,48 +42,6 @@ import {
   productionTopology,
 } from "../../apps/server/cloudflare/runtime/contract";
 
-const smokeDatabases = isolatedTestDatabases();
-afterAll(() => smokeDatabases.dispose());
-const withIsolatedD1 = <A, E, R>(
-  name: string,
-  use: (db: D1Database) => Effect.Effect<A, E, R>
-): Effect.Effect<A, E | Cause.UnknownError, R> =>
-  Effect.scoped(
-    Effect.acquireUseRelease(
-      Effect.sync(
-        () =>
-          new Miniflare({
-            workers: [
-              {
-                config: {
-                  name,
-                  type: "worker",
-                  compatibilityDate: "2026-09-08",
-                  env: { DB: { id: name, type: "d1" } },
-                  manifest: {
-                    mainModule: "index.mjs",
-                    modules: {
-                      "index.mjs": {
-                        contents: "export default { fetch() { return new Response('ok') } }",
-                        type: "esm",
-                      },
-                    },
-                  },
-                },
-              },
-            ],
-          })
-      ),
-      (instance) =>
-        Effect.gen(function* () {
-          yield* Effect.tryPromise(() => instance.ready);
-          const db = yield* Effect.tryPromise(() => instance.getD1Database("DB"));
-          return yield* use(db);
-        }),
-      (instance) => Effect.tryPromise(() => instance.dispose()).pipe(Effect.orDie)
-    )
-  );
-
 const withMethods = SyntheticBindings.withMethods;
 const gitRevision = "0123456789abcdef0123456789abcdef01234567";
 const contractDigest = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
@@ -100,20 +56,19 @@ const smokeBody = (coreVersion: string): string =>
   });
 
 const privateFailureDetail =
-  "D1_ERROR: no such table: categories; SELECT secret_value FROM internal_topology";
+  "SQLITE_ERROR: categories unavailable; private query and topology detail";
 
-const failDatabaseOperation = (): never => {
+const failPrivateOperation = (): never => {
   throw new Error(privateFailureDetail);
 };
 
-const failingDatabase: D1Database = {
-  batch: failDatabaseOperation,
-  dump: failDatabaseOperation,
-  exec: failDatabaseOperation,
-  prepare: failDatabaseOperation,
-  withSession: failDatabaseOperation,
+const makeCoreWorker = (telemetry: TelemetryService): typeof coreWorker =>
+  composeWorker({ telemetry, institutions: registeredConnectionInstitutionIds });
+const unavailableUserStore = {
+  getByName: (): Pick<Fetcher, "fetch"> => ({
+    fetch: (): Promise<Response> => Promise.reject(new Error("unused")),
+  }),
 };
-
 const unusedAiBinding = {
   run: (): Promise<never> => Promise.reject(new Error("Unused OpenAI binding")),
 };
@@ -121,18 +76,12 @@ const unusedAiBinding = {
 const coreEnvironment: Parameters<typeof coreWorker.fetch>[1] = {
   OPENAI_API_KEY: openAiTestKey(unusedAiBinding),
   CONTRACT_DIGEST: contractDigest,
-  DB: failingDatabase,
   HOSTED_AI_MODEL: approvedOpenAiModel,
   BROWSER_ORIGIN: "https://app.fidyapp.com",
   WOMPI_ENVIRONMENT: "",
   WOMPI_PUBLIC_KEY: "",
   WOMPI_PRIVATE_KEY: "",
   WOMPI_INTEGRITY_SECRET: "",
-  USER_TRANSACTION_COORDINATOR: {
-    getByName: (): Pick<Fetcher, "fetch"> => ({
-      fetch: (): Promise<Response> => Promise.reject(new Error("unused")),
-    }),
-  },
   KAPSO_API_KEY: "",
   WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
   KAPSO_WEBHOOK_SECRET: "",
@@ -181,6 +130,103 @@ const makePublicEnvironment = (overrides: Partial<PublicEnvironment> = {}): Publ
   ...overrides,
 });
 
+const publishSmokeThroughCore = Effect.fnUntraced(function* () {
+  let work: unknown;
+  let started: unknown;
+  let acked = false;
+  const owners = yield* (yield* nativeUserPlatform)();
+  const bindings = yield* Effect.tryPromise(() =>
+    owners.getBindings<Required<SharedBindings>>("core")
+  );
+  const marker = new Map<string, string>();
+  const environment: Parameters<typeof coreWorker.fetch>[1] = {
+    ...coreEnvironment,
+    USER_STORE: bindings.USER_STORE,
+    DIRECTORY: bindings.DIRECTORY,
+    PRICING: bindings.PRICING,
+    MAINTENANCE: bindings.MAINTENANCE,
+    ERASURE: bindings.ERASURE,
+    SMOKE_LIMITER: smokeEnvironment().SMOKE_LIMITER,
+    SMOKE_PROOF: "a".repeat(64),
+    CF_VERSION_METADATA: { id: "dc8dcd28-271b-4367-9840-6c244f84cb40" },
+    SMOKE_QUEUE_NAME: "SmokeQueue",
+    SMOKE_QUEUE: withMethods(unavailableQueue, {
+      send: (value: unknown): Promise<void> => {
+        work = value;
+        return Promise.resolve();
+      },
+    }),
+    SMOKE_BUCKET: withMethods(unavailableBucket, {
+      put: (key: string, value: string): Promise<void> => {
+        marker.set(key, value);
+        return Promise.resolve();
+      },
+      get: (key: string): Promise<object> =>
+        Promise.resolve({ text: () => Promise.resolve(marker.get(key)) }),
+    }),
+    SMOKE_WORKFLOW: withMethods(unavailableWorkflow, {
+      create: (value: unknown): Promise<object> => {
+        started = value;
+        return Promise.resolve({});
+      },
+    }),
+    KAPSO_API_KEY: "configured",
+    WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
+    KAPSO_WEBHOOK_SECRET: "configured",
+    RESEND_API_KEY: "configured",
+    WOMPI_PRIVATE_KEY: "configured",
+    WOMPI_INTEGRITY_SECRET: "configured",
+    WOMPI_EVENT_SECRET: "configured",
+  };
+  const response = yield* Effect.tryPromise(() =>
+    coreWorker.fetch(
+      new Request("https://core.internal/internal/release-smoke", {
+        method: "POST",
+        headers: {
+          "x-fidy-smoke-proof": "a".repeat(64),
+          "content-type": "application/json",
+        },
+        body: smokeBody("dc8dcd28-271b-4367-9840-6c244f84cb40"),
+      }),
+      environment
+    )
+  );
+  expect(response.status).toBe(202);
+  expect(work).toMatchObject({
+    protocolVersion: 2,
+    probeId: "b".repeat(32),
+    gitRevision,
+    coreVersionId: "dc8dcd28-271b-4367-9840-6c244f84cb40",
+    contractDigest,
+  });
+  const fixtureMessage = queueBatch({}).messages.at(0);
+  if (fixtureMessage === undefined) throw new Error("Missing Queue fixture message");
+  yield* Effect.tryPromise(() =>
+    receiveSmoke({
+      batch: {
+        ...queueBatch(work),
+        queue: "SmokeQueue",
+        messages: [
+          {
+            ...fixtureMessage,
+            body: work,
+            ack: (): void => {
+              acked = true;
+            },
+          },
+        ],
+      },
+      environment: smokeEnvironment(environment),
+    })
+  );
+  expect(acked).toBe(true);
+  expect(started).toEqual({
+    id: `smoke-v2-dc8dcd28-271b-4367-9840-6c244f84cb40-${"b".repeat(32)}`,
+    params: work,
+    retention: { successRetention: "1 day", errorRetention: "1 day" },
+  });
+});
+
 describe("Core smoke adapter", () => {
   it.effect("routes the reserved endpoint and dedicated Queue without touching User work", () =>
     Effect.gen(function* () {
@@ -191,9 +237,9 @@ describe("Core smoke adapter", () => {
         SMOKE_PROOF: proof,
         CF_VERSION_METADATA: { id: "dc8dcd28-271b-4367-9840-6c244f84cb40" },
         SMOKE_QUEUE_NAME: "SmokeQueue",
-        SMOKE_QUEUE: withMethods(unavailableQueue, { send: failDatabaseOperation }),
-        SMOKE_BUCKET: withMethods(unavailableBucket, { put: failDatabaseOperation }),
-        SMOKE_WORKFLOW: withMethods(unavailableWorkflow, { create: failDatabaseOperation }),
+        SMOKE_QUEUE: withMethods(unavailableQueue, { send: failPrivateOperation }),
+        SMOKE_BUCKET: withMethods(unavailableBucket, { put: failPrivateOperation }),
+        SMOKE_WORKFLOW: withMethods(unavailableWorkflow, { create: failPrivateOperation }),
       };
       const response = yield* Effect.tryPromise(() =>
         coreWorker.fetch(
@@ -239,97 +285,12 @@ describe("Core smoke adapter", () => {
     })
   );
 
-  it.effect(
-    "publishes an admitted probe through Core fetch and hands it to the private smoke executor",
-    () =>
-      Effect.gen(function* () {
-        let work: unknown;
-        let started: unknown;
-        let acked = false;
-        const database = yield* Effect.tryPromise(() => smokeDatabases.acquire());
-        yield* Effect.tryPromise(() => installTestSchema({ db: database }));
-        const environment: Parameters<typeof coreWorker.fetch>[1] = {
-          ...coreEnvironment,
-          DB: database,
-          SMOKE_LIMITER: smokeEnvironment().SMOKE_LIMITER,
-          SMOKE_PROOF: "a".repeat(64),
-          CF_VERSION_METADATA: { id: "dc8dcd28-271b-4367-9840-6c244f84cb40" },
-          SMOKE_QUEUE_NAME: "SmokeQueue",
-          SMOKE_QUEUE: withMethods(unavailableQueue, {
-            send: (value: unknown): Promise<void> => {
-              work = value;
-              return Promise.resolve();
-            },
-          }),
-          SMOKE_BUCKET: withMethods(unavailableBucket, {
-            put: (): Promise<void> => Promise.resolve(),
-            get: (): Promise<object> => Promise.resolve({}),
-          }),
-          SMOKE_WORKFLOW: withMethods(unavailableWorkflow, {
-            create: (value: unknown): Promise<object> => {
-              started = value;
-              return Promise.resolve({});
-            },
-          }),
-          USER_TRANSACTION_COORDINATOR: {
-            getByName: (): Pick<Fetcher, "fetch"> => ({
-              fetch: (): Promise<Response> =>
-                Promise.resolve(Response.json({ status: "compatible" })),
-            }),
-          },
-          KAPSO_API_KEY: "configured",
-          WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
-          KAPSO_WEBHOOK_SECRET: "configured",
-          RESEND_API_KEY: "configured",
-          WOMPI_PRIVATE_KEY: "configured",
-          WOMPI_INTEGRITY_SECRET: "configured",
-          WOMPI_EVENT_SECRET: "configured",
-        };
-        const response = yield* Effect.tryPromise(() =>
-          coreWorker.fetch(
-            new Request("https://core.internal/internal/release-smoke", {
-              method: "POST",
-              headers: { "x-fidy-smoke-proof": "a".repeat(64), "content-type": "application/json" },
-              body: smokeBody("dc8dcd28-271b-4367-9840-6c244f84cb40"),
-            }),
-            environment
-          )
-        );
-        expect(response.status).toBe(202);
-        expect(work).toMatchObject({
-          protocolVersion: 2,
-          probeId: "b".repeat(32),
-          gitRevision,
-          coreVersionId: "dc8dcd28-271b-4367-9840-6c244f84cb40",
-          contractDigest,
-        });
-        const fixtureMessage = queueBatch({}).messages.at(0);
-        if (fixtureMessage === undefined) throw new Error("Missing Queue fixture message");
-        yield* Effect.tryPromise(() =>
-          receiveSmoke({
-            batch: {
-              ...queueBatch(work),
-              queue: "SmokeQueue",
-              messages: [
-                {
-                  ...fixtureMessage,
-                  body: work,
-                  ack: (): void => {
-                    acked = true;
-                  },
-                },
-              ],
-            },
-            environment: smokeEnvironment(environment),
-          })
-        );
-        expect(acked).toBe(true);
-        expect(started).toEqual({
-          id: `smoke-v2-dc8dcd28-271b-4367-9840-6c244f84cb40-${"b".repeat(32)}`,
-          params: work,
-          retention: { successRetention: "1 day", errorRetention: "1 day" },
-        });
-      })
+  it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) =>
+    test.effect(
+      "publishes an admitted probe through Core fetch and hands it to the private smoke executor",
+      publishSmokeThroughCore,
+      { timeout: 30_000 }
+    )
   );
 });
 
@@ -440,11 +401,9 @@ describe("Deployment configuration", () => {
 describe("Production topology contract", () => {
   it("assigns separate static site and product hostnames with private Core", () => {
     expect(productionTopology.web).toEqual({
-      adoptExistingWorker: true,
       hostname: "app.fidyapp.com",
       localPort: 5173,
       redirects: [],
-      workerName: "fidy-web",
       workersDev: false,
     });
     expect(productionTopology.site).toEqual({
@@ -455,7 +414,6 @@ describe("Production topology contract", () => {
     });
     expect(productionTopology.ingress.hostname).toBe("api.fidyapp.com");
     expect(productionTopology.core).toEqual({
-      d1Binding: "DB",
       localPort: 8788,
       workersDev: false,
     });
@@ -475,7 +433,7 @@ describe("Production topology contract", () => {
         phases: ["http_request_sbfm"],
         products: ["bic", "hot", "securityLevel", "uaBlock", "zoneLockdown"],
       },
-      expression: '(http.host eq "api.fidyapp.com")',
+      expression: '(http.host in {"api.fidyapp.com" "storage-acceptance.fidyapp.com"})',
     });
     expect(edgeSecurityPolicy.rulesets.managedFirewall.rules[0]).toMatchObject({
       action: "execute",
@@ -507,7 +465,7 @@ describe("Production topology contract", () => {
       action: "block",
       enabled: true,
       expression:
-        'not http.host in {"docs.fidyapp.com" "fidyapp.com" "app.fidyapp.com" "api.fidyapp.com"}',
+        'not http.host in {"docs.fidyapp.com" "fidyapp.com" "app.fidyapp.com" "api.fidyapp.com" "storage-acceptance.fidyapp.com" "storage-web-acceptance.fidyapp.com"}',
     });
     expect(rules[4]).toEqual({
       action: "skip",
@@ -530,7 +488,7 @@ describe("Production topology contract", () => {
     expect(edgeSecurityPolicy.rulesets.customFirewall.rules[2]).toMatchObject({
       action: "block",
       expression:
-        '(http.host eq "api.fidyapp.com" and not (http.request.method in {"GET" "POST" "OPTIONS" "DELETE" "PUT" "PATCH"}))',
+        '(http.host in {"api.fidyapp.com" "storage-acceptance.fidyapp.com"} and not (http.request.method in {"GET" "POST" "OPTIONS" "DELETE" "PUT" "PATCH"}))',
     });
   });
 
@@ -782,51 +740,48 @@ describe("Cloudflare Worker topology", () => {
 });
 
 it.live("routes the private canary Queue to a real Workflow handoff, not to application work", () =>
-  withIsolatedD1("canary-queue-test", (db) =>
-    Effect.gen(function* () {
-      let created = false;
-      const done = (): Promise<void> => Promise.resolve();
-      const canaryInstance: WorkflowInstance = {
-        id: "canary",
-        status: () => Promise.resolve({ status: "complete" }),
-        pause: done,
-        resume: done,
-        restart: done,
-        terminate: done,
-        delete: done,
-        sendEvent: done,
-        subscribe: () =>
-          Promise.resolve({
-            next: () => Promise.resolve({ done: true as const, value: undefined }),
-            [Symbol.dispose]: () => {},
-          }),
-      };
-      const workflow: Workflow = {
-        create: () => {
-          created = true;
-          return Promise.resolve(canaryInstance);
-        },
-        get: () => Promise.resolve(canaryInstance),
-        createBatch: (): Promise<never> =>
-          Promise.reject(new Error("Canary handoff must create one Workflow")),
-        deleteBatch: () => Promise.resolve({ deleted: [], errors: [] }),
-      };
-      const now = yield* Clock.currentTimeMillis;
-      const batch = {
-        ...queueBatch({ version: 1, sentAtMs: Math.floor(now / 300_000) * 300_000 }),
-        queue: "OperationalCanaryQueue",
-      };
-      yield* Effect.tryPromise(() =>
-        makeCoreWorker(collectingTelemetry([])).queue(batch, {
-          ...coreEnvironment,
-          DB: db,
-          OPERATIONAL_CANARY_QUEUE_NAME: "OperationalCanaryQueue",
-          OPERATIONAL_CANARY_WORKFLOW: workflow,
-        })
-      );
-      expect(created).toBe(true);
-    })
-  )
+  Effect.gen(function* () {
+    let created = false;
+    const done = (): Promise<void> => Promise.resolve();
+    const canaryInstance: WorkflowInstance = {
+      id: "canary",
+      status: () => Promise.resolve({ status: "complete" }),
+      pause: done,
+      resume: done,
+      restart: done,
+      terminate: done,
+      delete: done,
+      sendEvent: done,
+      subscribe: () =>
+        Promise.resolve({
+          next: () => Promise.resolve({ done: true as const, value: undefined }),
+          [Symbol.dispose]: () => {},
+        }),
+    };
+    const workflow: Workflow = {
+      create: () => {
+        created = true;
+        return Promise.resolve(canaryInstance);
+      },
+      get: () => Promise.resolve(canaryInstance),
+      createBatch: (): Promise<never> =>
+        Promise.reject(new Error("Canary handoff must create one Workflow")),
+      deleteBatch: () => Promise.resolve({ deleted: [], errors: [] }),
+    };
+    const now = yield* Clock.currentTimeMillis;
+    const batch = {
+      ...queueBatch({ version: 1, sentAtMs: Math.floor(now / 300_000) * 300_000 }),
+      queue: "OperationalCanaryQueue",
+    };
+    yield* Effect.tryPromise(() =>
+      makeCoreWorker(collectingTelemetry([])).queue(batch, {
+        ...coreEnvironment,
+        OPERATIONAL_CANARY_QUEUE_NAME: "OperationalCanaryQueue",
+        OPERATIONAL_CANARY_WORKFLOW: workflow,
+      })
+    );
+    expect(created).toBe(true);
+  })
 );
 
 describe("Cloudflare Worker topology (scheduled)", () => {
@@ -1025,6 +980,18 @@ describe("Cloudflare Worker topology (continued)", () => {
     Effect.gen(function* () {
       const records: Array<TelemetryWorkRecord> = [];
       const telemetry = collectingTelemetry(records);
+      const directoryRequests: string[] = [];
+      const directoryStub: Pick<Fetcher, "fetch"> = {
+        fetch: (input): Promise<Response> => {
+          directoryRequests.push(new Request(input).url);
+          return failPrivateOperation();
+        },
+      };
+      const nativeEnvironment = {
+        ...coreEnvironment,
+        DIRECTORY: { getByName: (): typeof directoryStub => directoryStub },
+        USER_STORE: unavailableUserStore,
+      };
       const observedCore = makeCoreWorker(telemetry);
       const observedPublic = makePublicWorker(telemetry);
       const response = yield* Effect.tryPromise(() =>
@@ -1037,20 +1004,17 @@ describe("Cloudflare Worker topology (continued)", () => {
           }),
           makePublicEnvironment({
             CORE: {
-              fetch: (request) =>
-                observedCore.fetch(new Request(request), {
-                  ...coreEnvironment,
-                  DB: failingDatabase,
-                }),
+              fetch: (request) => observedCore.fetch(new Request(request), nativeEnvironment),
             },
           })
         )
       );
       const text = yield* Effect.tryPromise(() => response.text());
 
+      expect(directoryRequests).toHaveLength(1);
       expect(response.status).toBe(503);
       expect(text).toBe(
-        '{"error":{"code":"unavailable","message":"Categories are temporarily unavailable. Retry later."},"next":[]}'
+        '{"error":{"code":"unavailable","message":"The operation is unavailable. Retry later."},"next":[]}'
       );
       expect(text).not.toContain("no such table");
       expect(text).not.toContain("SELECT");

@@ -1,3 +1,5 @@
+import { installedOrigins } from "../src/shell/browser-transport/contract";
+import { isStorageProbe } from "./storage-bootstrap/contract";
 import {
   browserSessionBindingHeader,
   browserSessionBindingPath,
@@ -12,7 +14,11 @@ import {
 import { oauthPaths } from "../src/shell/oauth-agents/contract";
 import { processingConsentTransport } from "../src/shell/processing-consent/runtime";
 import { connectionBrowserTransport } from "../src/shell/connections/runtime";
-import { refundSupportBasePath, refundSupportReadPath } from "./subscription/contract";
+import {
+  pricePublicationPath,
+  refundSupportBasePath,
+  refundSupportReadPath,
+} from "./subscription/contract";
 import { deriveAnonymousSource } from "./anonymous-admission/operations";
 import { keywordRulePath, listCategoriesPath } from "../src/shell/categories/contract";
 import { atomicBatchOperation } from "../src/shell/operations/contract";
@@ -44,17 +50,22 @@ import {
   smokeIdentityHeader,
   smokeManifest,
   smokePath,
+  smokeProofAccepted,
   smokeProofHeader,
   smokeVersionHeader,
 } from "./runtime/release-smoke/contract";
-import { smokeProofAccepted } from "./runtime/release-smoke/operations";
 import { patBrowserRoute, patDirectRoute, patMethods, patRoute } from "./tokens/operations";
 import { canonicalMethods, canonicalOperation, canonicalRoute } from "./routing/operations";
-import { type ErasureRegistryNamespace, erasureRegistryName } from "./erasure/contract";
-import { sharedStorageRead } from "./routing/runtime";
 import { bancolombiaSandboxResponse } from "./bancolombia-sandbox/operations";
 import { connectionCallbackPath } from "./connections/contract";
-import { recoveryIsolationResponse } from "./release-isolation/operations";
+import {
+  closedHostEnvironment,
+  isAcceptanceReceipt,
+  isAcceptanceWindow,
+  releaseAdmission,
+  signAcceptanceRequest,
+} from "./release-isolation/operations";
+import { acceptanceApiHeader, acceptanceProofHeader } from "./release-isolation/contract";
 
 type PublicEnvironment = WorkerTelemetryEnvironment & {
   readonly BROWSER_ORIGIN: string;
@@ -65,9 +76,10 @@ type PublicEnvironment = WorkerTelemetryEnvironment & {
     Readonly<{
       SMOKE_PROOF: string;
       RECOVERY_ISOLATION: string;
+      NATIVE_STORAGE_ADMISSION: string;
+      SQLITE_STORAGE_RELEASE: string;
       CONTRACT_DIGEST: string;
       CF_VERSION_METADATA: { readonly id: string };
-      ERASURE_REGISTRY_COORDINATOR: ErasureRegistryNamespace;
     }>
   >;
 
@@ -88,6 +100,9 @@ const apiSecurityHeaders = {
 const resolveBrowserOrigin = (configuredOrigin: string): Option.Option<string> => {
   if (configuredOrigin === browserOrigins.local) return Option.some(browserOrigins.local);
   if (configuredOrigin === browserOrigins.acceptance) return Option.some(browserOrigins.acceptance);
+  if (configuredOrigin === browserOrigins.nativeAcceptance) {
+    return Option.some(browserOrigins.nativeAcceptance);
+  }
   if (configuredOrigin === browserOrigins.production) return Option.some(browserOrigins.production);
   return Option.none();
 };
@@ -217,11 +232,7 @@ const categoryAuthorizationFailure = (
   ) {
     return Option.none();
   }
-  if (
-    request.headers.get("authorization")?.startsWith("Bearer ") === true ||
-    (environment.LOCAL_CANONICAL_READ_BEARER.length > 0 &&
-      request.headers.get("authorization") === `Bearer ${environment.LOCAL_CANONICAL_READ_BEARER}`)
-  ) {
+  if (request.headers.get("authorization")?.startsWith("Bearer ") === true) {
     return Option.none();
   }
   return Option.some(unauthenticated());
@@ -242,6 +253,7 @@ const replacementPaths = [
   emailReplacementOperations.request.path,
   emailReplacementOperations.complete.path,
 ] as const;
+const sampleReviewPath = "/internal/sample-review";
 const erasureSupportPath = "/internal/titular-erasure";
 const supportRecoveryPath = "/internal/support-recovery";
 const refundMethods = (path: string): ReadonlyArray<string> =>
@@ -259,6 +271,8 @@ const postPaths = new Set<string>([
   ...replacementPaths,
   supportRecoveryPath,
   erasureSupportPath,
+  sampleReviewPath,
+  pricePublicationPath,
   "/web/privacy/erasure",
   microsoftProviderPaths.start,
   microsoftProviderPaths.status,
@@ -398,7 +412,8 @@ const forwardsSession = (request: Request, path: string): boolean =>
   memoryPath(path) ||
   (path === listCategoriesPath && request.headers.has("cookie"));
 
-const credentialPath = (path: string): boolean => transactionPath(path) || memoryPath(path);
+const credentialPath = (path: string): boolean =>
+  path === userPath || transactionPath(path) || memoryPath(path);
 const credentialBearerHeaders = (request: Request, path: string): Option.Option<Headers> =>
   credentialPath(path) && !request.headers.has("cookie") && request.headers.has("authorization")
     ? Option.some(
@@ -416,7 +431,12 @@ const directHeaders = (request: Request, path: string): Option.Option<Headers> =
   if (path === callbackPath || path === wompiBillingEventPath) {
     return Option.some(providerHeaders(request, path));
   }
-  if ([supportRecoveryPath, erasureSupportPath].includes(path) || refundSupportPath(path)) {
+  if (
+    [supportRecoveryPath, erasureSupportPath, pricePublicationPath, sampleReviewPath].includes(
+      path
+    ) ||
+    refundSupportPath(path)
+  ) {
     return Option.some(supportHeaders(request));
   }
   return Option.none();
@@ -551,6 +571,13 @@ const forwardCandidateVersionOverride = (
   const override = request.headers.get(smokeVersionHeader);
   if (override !== null) headers.set(smokeVersionHeader, override);
 };
+const needsProviderSource = (path: string): boolean =>
+  [
+    "/web/pairings",
+    "/web/pairings/redeem",
+    ...Object.values(providerPaths),
+    ...Object.values(microsoftProviderPaths),
+  ].some((owned) => owned === path);
 const coreRequest = (
   request: Request,
   environment: PublicEnvironment
@@ -563,11 +590,7 @@ const coreRequest = (
     forwardCandidateVersionOverride(request, environment, headers);
     yield* canonicalAdmissionHeaders(request, environment, headers);
     headers.delete("x-provider-source");
-    if (
-      [...Object.values(providerPaths), ...Object.values(microsoftProviderPaths)].some(
-        (owned) => owned === path
-      )
-    ) {
+    if (needsProviderSource(path)) {
       headers.set(
         "x-provider-source",
         yield* deriveAnonymousSource({
@@ -624,7 +647,9 @@ const isPreflight = (request: Request, path: string, origin: Option.Option<strin
   request.method === "OPTIONS" && hasPreflight(path) && Option.isSome(origin);
 
 const disallowedSupportOrigin = (path: string, origin: Option.Option<string>): boolean =>
-  (path === supportRecoveryPath || path === erasureSupportPath) && Option.isSome(origin);
+  [supportRecoveryPath, erasureSupportPath, pricePublicationPath, sampleReviewPath].includes(
+    path
+  ) && Option.isSome(origin);
 
 const isAllowedMethod = (request: Request, path: string): boolean =>
   allowedMethods(path).includes(request.method);
@@ -648,10 +673,12 @@ const oauthBrowserPath = (path: string): boolean =>
     oauthPaths.revoke,
     oauthPaths.revokeAll,
   ].some((owned) => owned === path);
+const bearerUserRead = (request: Request, path: string): boolean =>
+  path === userPath && request.headers.has("authorization") && !request.headers.has("cookie");
 const requiresBrowserOrigin = (request: Request, path: string): boolean =>
   dedicatedBrowserPath(path) ||
   oauthBrowserPath(path) ||
-  sessionPaths.has(path) ||
+  (sessionPaths.has(path) && !bearerUserRead(request, path)) ||
   enrollmentPath(path) ||
   (cookieAdmittedPath(path) && request.headers.has("cookie")) ||
   patBrowserRoute(path);
@@ -665,6 +692,10 @@ const rejectsSmokeIngress = (
   (Option.isSome(origin) ||
     !smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" }));
 
+const mixedConsentCredentials = (request: Request, path: string): boolean =>
+  Option.isSome(processingConsentTransport(path)) &&
+  request.headers.has("authorization") &&
+  request.headers.has("cookie");
 /** MCP serves native clients only; validate public coordinates before private forwarding erases them. */
 const rejectsMcpIngress = (request: Request, browserOrigin: string): boolean => {
   const url = new URL(request.url);
@@ -680,6 +711,17 @@ const rejectsMcpIngress = (request: Request, browserOrigin: string): boolean => 
   return url.origin !== apiOrigin || (host !== null && host.toLowerCase() !== url.host);
 };
 
+const rejectedBrowserProof = (
+  request: Request,
+  environment: PublicEnvironment,
+  origin: Option.Option<string>
+): boolean => {
+  const path = new URL(request.url).pathname;
+  return (
+    mixedConsentCredentials(request, path) ||
+    (requiresBrowserOrigin(request, path) && !Option.contains(origin, environment.BROWSER_ORIGIN))
+  );
+};
 const gateOwnedRequest = (
   request: Request,
   environment: PublicEnvironment,
@@ -715,10 +757,7 @@ const gateOwnedRequest = (
       )
     );
   }
-  if (
-    requiresBrowserOrigin(request, path) &&
-    !Option.contains(origin, environment.BROWSER_ORIGIN)
-  ) {
+  if (rejectedBrowserProof(request, environment, origin)) {
     return policy(forbiddenOrigin());
   }
   return Option.map(categoryAuthorizationFailure(request, environment), (response) =>
@@ -789,18 +828,48 @@ const projectCoreSmokeResponse = (
     );
   });
 
-const readTarget = (request: Request, environment: PublicEnvironment): Pick<Fetcher, "fetch"> =>
-  sharedStorageRead(request) && environment.ERASURE_REGISTRY_COORDINATOR !== undefined
-    ? environment.ERASURE_REGISTRY_COORDINATOR.getByName(erasureRegistryName, {
-        locationHint: "enam",
-      })
-    : environment.CORE;
+const hasMixedQueryCredentials = (request: Request): boolean =>
+  request.method === "GET" &&
+  request.headers.has("authorization") &&
+  request.headers.has("cookie") &&
+  canonicalRoute(new URL(request.url).pathname);
 
+const bindCoreAcceptance = Effect.fn(function* (
+  forwarded: Request,
+  environment: PublicEnvironment,
+  deadline: Option.Option<number>
+) {
+  forwarded.headers.delete(acceptanceProofHeader);
+  forwarded.headers.delete(acceptanceApiHeader);
+  if (Option.isSome(deadline)) {
+    const pair = Object.values(installedOrigins).find(
+      (item) => item.browser === environment.BROWSER_ORIGIN
+    );
+    if (pair !== undefined) forwarded.headers.set(acceptanceApiHeader, pair.api);
+    forwarded.headers.set(
+      acceptanceProofHeader,
+      yield* signAcceptanceRequest({
+        request: forwarded,
+        environment,
+        boundary: "core",
+        deadline: deadline.value,
+      })
+    );
+  }
+});
+type OwnedRouting = {
+  origin: Option.Option<string>;
+  telemetry: TelemetryService;
+  deadline: Option.Option<number>;
+};
 const routeOwnedRequest = (
   request: Request,
   environment: PublicEnvironment,
-  { origin, telemetry }: Readonly<{ origin: Option.Option<string>; telemetry: TelemetryService }>
+  { origin, telemetry, deadline }: OwnedRouting
 ): Effect.Effect<Response> => {
+  if (hasMixedQueryCredentials(request)) {
+    return Effect.succeed(applyApiPolicy(unauthenticated(), environment.BROWSER_ORIGIN, origin));
+  }
   if (rejectsMcpIngress(request, environment.BROWSER_ORIGIN)) {
     return Effect.succeed(
       applyApiPolicy(
@@ -816,13 +885,15 @@ const routeOwnedRequest = (
   }
   return Effect.gen(function* () {
     const forwarded = yield* coreRequest(request, environment);
+    yield* bindCoreAcceptance(forwarded, environment, deadline);
     forwarded.headers.delete(workerInternalTraceHeader);
     const trace = yield* telemetry.captureDurableContext;
     if (Option.isSome(trace)) {
       forwarded.headers.set(workerInternalTraceHeader, encodeTraceParent(trace.value));
     }
     const response = yield* Effect.tryPromise({
-      try: (signal) => readTarget(forwarded, environment).fetch(forwarded, { signal }),
+      try: (signal) =>
+        environment.CORE.fetch(forwarded, { signal: AbortSignal.any([request.signal, signal]) }),
       catch: () => undefined,
     });
     return yield* projectCoreSmokeResponse(response, request, environment);
@@ -863,6 +934,32 @@ const annotateSmokeVersion = (
   return new Response(response.body, { status: response.status, headers });
 };
 
+const forwardStorageProbe = Effect.fn(function* (request: Request, environment: PublicEnvironment) {
+  if (
+    environment.RECOVERY_ISOLATION !== "isolated" ||
+    !smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" })
+  ) {
+    return new Response(null, { status: 404 });
+  }
+  const admitted = new Headers({ [smokeProofHeader]: environment.SMOKE_PROOF ?? "" });
+  forwardCandidateVersionOverride(request, environment, admitted);
+  const result = yield* Effect.tryPromise(() =>
+    environment.CORE.fetch(request.url, {
+      method: request.method,
+      headers: admitted,
+      signal: request.signal,
+    })
+  ).pipe(Effect.orElseSucceed(() => new Response(null, { status: 503 })));
+  const headers = new Headers({
+    "cache-control": "no-store",
+    "content-type": "application/json",
+    "x-fidy-smoke-worker-version": environment.CF_VERSION_METADATA?.id ?? "",
+  });
+  return new Response(result.body, { status: result.status, headers });
+});
+
+const privateReleaseRequest = (request: Request): boolean =>
+  isStorageProbe(request) || isAcceptanceWindow(request) || isAcceptanceReceipt(request);
 const fetchEffect = (
   request: Request,
   environment: PublicEnvironment,
@@ -882,15 +979,12 @@ const fetchEffect = (
     if (Option.exists(origin, (value) => value !== browserOrigin.value)) {
       return applyApiPolicy(forbiddenOrigin(), browserOrigin.value, origin);
     }
-    const recoveryResponse = recoveryIsolationResponse({
-      request,
-      environment: {
-        mode: Option.fromUndefinedOr(environment.RECOVERY_ISOLATION),
-        proof: Option.fromUndefinedOr(environment.SMOKE_PROOF),
-      },
-    });
-    if (Option.isSome(recoveryResponse)) {
-      return applyApiPolicy(recoveryResponse.value, browserOrigin.value, origin);
+    const admitted = yield* releaseAdmission(request, environment, "ingress");
+    if (Option.isSome(admitted.denial)) {
+      return applyApiPolicy(admitted.denial.value, browserOrigin.value, origin);
+    }
+    if (privateReleaseRequest(request)) {
+      return yield* forwardStorageProbe(request, environment);
     }
     const distributionResponse = yield* cliDistributionResponse(request);
     if (Option.isSome(distributionResponse)) {
@@ -903,7 +997,7 @@ const fetchEffect = (
     return yield* routeOwnedRequest(
       request,
       { ...environment, BROWSER_ORIGIN: browserOrigin.value },
-      { origin, telemetry }
+      { origin, telemetry, deadline: admitted.deadline }
     );
   }).pipe(
     Effect.catchCauseIf(
@@ -923,7 +1017,11 @@ const fetchEffect = (
 export const makePublicWorker = (telemetry: TelemetryService): PublicWorker => ({
   fetch: (request, environment) =>
     Effect.runPromise(
-      fetchEffect(request, environment, telemetry).pipe(
+      fetchEffect(
+        request,
+        closedHostEnvironment({ request, environment, boundary: "ingress" }),
+        telemetry
+      ).pipe(
         Effect.flatMap((response) =>
           Effect.map(telemetry.captureDurableContext, (trace) => {
             const headers = new Headers(response.headers);

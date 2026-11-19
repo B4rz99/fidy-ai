@@ -1,4 +1,4 @@
-import { BootstrapUnavailable } from "../contract";
+import { BootstrapUnavailable, oauthClientIdleMs } from "../contract";
 import { Data, Effect, Option, Schema } from "effect";
 import { OAuthAuthorization, OAuthRegistration } from "../../../src/shell/oauth-agents/contract";
 import { PATScopes } from "../../../src/core/tokens/contract";
@@ -11,8 +11,8 @@ const policy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 16384,
   deadlineMilliseconds: 3000,
 });
-const attemptLifetimeMs = 600_000;
-const unusedLifetimeMs = 2_592_000_000;
+export const attemptLifetimeMs = 600_000;
+
 const millisecondsPerSecond = 1000;
 const registrationStatus = 201;
 const invalidStatus = 400;
@@ -42,10 +42,12 @@ export const decodePayload = <Shape extends Schema.ConstraintDecoder<unknown>>(
       onExcessProperty: input.onExcessProperty,
     })(text);
   }).pipe(Effect.catchCause(() => Effect.fail(new BootstrapInvalid())));
-export const registerClient = (
-  input: Readonly<{ request: Request; db: D1Database; current: number }>
-): Effect.Effect<Response, BootstrapInvalid | BootstrapUnavailable | Schema.SchemaError> =>
-  Effect.gen(function* () {
+export const registerWithStore = Effect.fn(
+  function* <R>(input: {
+    request: Request;
+    current: number;
+    persist: (id: string, encoded: string) => Effect.Effect<void, BootstrapUnavailable, R>;
+  }) {
     const metadata = yield* decodePayload({
       request: input.request,
       schema: OAuthRegistration,
@@ -59,20 +61,7 @@ export const registerClient = (
     }
     const id = newId();
     const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(OAuthRegistration))(metadata);
-    yield* dbWork(() =>
-      input.db.batch([
-        input.db
-          .prepare(
-            "DELETE FROM oauth_public_clients WHERE id IN (SELECT id FROM oauth_public_clients WHERE last_used_at_ms <= ? ORDER BY last_used_at_ms LIMIT 64)"
-          )
-          .bind(input.current - unusedLifetimeMs),
-        input.db
-          .prepare(
-            "INSERT INTO oauth_public_clients(id, metadata_json, created_at_ms, last_used_at_ms) VALUES (?, ?, ?, ?)"
-          )
-          .bind(id, encoded, input.current, input.current),
-      ])
-    );
+    yield* input.persist(id, encoded);
     return jsonResponse({
       body: {
         client_id: id,
@@ -84,19 +73,48 @@ export const registerClient = (
       },
       status: registrationStatus,
     });
-  }).pipe(
-    Effect.catchTags({
-      BootstrapInvalid: () =>
-        Effect.succeed(
-          jsonResponse({ body: { error: "invalid_client_metadata" }, status: invalidStatus })
-        ),
-      SchemaError: () =>
-        Effect.succeed(
-          jsonResponse({ body: { error: "invalid_client_metadata" }, status: invalidStatus })
-        ),
-    })
-  );
-const registeredRedirect = (registered: string, requested: string): boolean => {
+  },
+  Effect.catchTags({
+    BootstrapInvalid: () =>
+      Effect.succeed(
+        jsonResponse({ body: { error: "invalid_client_metadata" }, status: invalidStatus })
+      ),
+    SchemaError: () =>
+      Effect.succeed(
+        jsonResponse({ body: { error: "invalid_client_metadata" }, status: invalidStatus })
+      ),
+  })
+);
+export const registerClient = (input: {
+  request: Request;
+  current: number;
+  db: D1Database;
+}): Effect.Effect<Response, BootstrapUnavailable> =>
+  registerWithStore({
+    ...input,
+    persist: (id, encoded) =>
+      dbWork(() =>
+        input.db.batch([
+          input.db
+            .prepare(
+              "DELETE FROM oauth_public_clients WHERE id IN (SELECT id FROM oauth_public_clients WHERE last_used_at_ms <= ? ORDER BY last_used_at_ms LIMIT 64)"
+            )
+            .bind(input.current - oauthClientIdleMs),
+          input.db
+            .prepare(
+              "INSERT INTO oauth_public_clients(id, metadata_json, created_at_ms, last_used_at_ms) VALUES (?, ?, ?, ?)"
+            )
+            .bind(id, encoded, input.current, input.current),
+        ])
+      ).pipe(Effect.asVoid),
+  });
+export const registeredRedirect = ({
+  registered,
+  requested,
+}: {
+  registered: string;
+  requested: string;
+}): boolean => {
   if (registered === requested) return true;
   const original = new URL(registered);
   if (original.protocol !== "http:") return false;
@@ -168,13 +186,17 @@ export const startAuthorization = (
         .prepare(
           "SELECT metadata_json FROM oauth_public_clients WHERE id = ? AND last_used_at_ms > ?"
         )
-        .bind(request.client_id, input.current - unusedLifetimeMs)
+        .bind(request.client_id, input.current - oauthClientIdleMs)
         .first<string>("metadata_json")
     );
     const metadata = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(OAuthRegistration))(
       found
     );
-    if (!metadata.redirect_uris.some((uri) => registeredRedirect(uri, request.redirect_uri))) {
+    if (
+      !metadata.redirect_uris.some((uri) =>
+        registeredRedirect({ registered: uri, requested: request.redirect_uri })
+      )
+    ) {
       return invalidRequest();
     }
     const id = yield* retainAuthorization({ ...input, request });

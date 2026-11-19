@@ -6,10 +6,9 @@ import { type OwnedStatement } from "../../../src/shell/owner-write/contract";
 import type { WhatsAppTurnAdmission } from "../../whatsapp/contract";
 import { weeklyQuestionDeliveryQuery, weeklySummaryReplyQuery } from "../../whatsapp/operations";
 import { currentWeeklyGrantQuery, prepareConsentAction } from "../../consent/operations";
-import { InsightUnavailable, WeeklyGovernor } from "../contract";
+import { InsightUnavailable, WeeklyGovernor, weeklyPauseMention } from "../contract";
 
-export const pauseMention =
-  "Pausé tus resúmenes semanales porque no recibí respuesta. Puedes pedirme que los reactive.";
+export const pauseMention = weeklyPauseMention;
 
 export const findGovernor = (
   input: Readonly<{ db: D1Database; userId: UserId }>

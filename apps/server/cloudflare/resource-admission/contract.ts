@@ -266,3 +266,14 @@ export type ResourceCounterRequest = Readonly<{
 export type ResourceCounterQuery =
   | Readonly<{ kind: "email_pairing_global" }>
   | Readonly<{ kind: "email_pairing_user" | "email_replacement"; subject: OwnedStatement }>;
+
+export const ProviderSpend = Schema.Struct({
+  phase: Schema.Literals(["model", "reminderGeneration", "reminderSend"]),
+  units: Schema.Int.check(Schema.isGreaterThan(0)),
+});
+export const providerAllowanceUrl = "https://directory.invalid/provider-allowance";
+export const providerAllowanceSchema = [
+  "CREATE TABLE provider_spend_attempts(phase TEXT NOT NULL,at_ms INTEGER NOT NULL,units INTEGER NOT NULL CHECK(units>=0)) STRICT",
+  "CREATE INDEX provider_spend_by_phase ON provider_spend_attempts(phase,at_ms,units)",
+  "CREATE INDEX provider_spend_expiry ON provider_spend_attempts(at_ms)",
+] as const;

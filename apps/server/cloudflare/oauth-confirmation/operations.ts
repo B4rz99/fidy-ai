@@ -1,5 +1,14 @@
+import {
+  acceptedNativeResponse,
+  canonicalJson,
+  disclosureRevision,
+  maximumInputBytes,
+  reviewLifetimeMilliseconds,
+  oauthReviewResponse as reviewResponse,
+} from "./internal/native-disclosure";
+import { localConfirmation } from "./internal/local";
 import { prepareChangedRowAssertion } from "../../src/shell/sql-assertions/operations";
-import { Array as Arr, Cause, Clock, Effect, Option, Predicate, Schema } from "effect";
+import { Cause, Clock, Effect, Schema } from "effect";
 import { digestBytes, newId } from "../secret-material/operations";
 import { liveOAuthCommitAuthority } from "../../src/shell/oauth-agents/operations";
 import type { OAuthCaller } from "../../src/shell/oauth-agents/contract";
@@ -32,33 +41,8 @@ export const oauthMutationReview = (
   ],
 });
 
-const disclosureRevision = "oauth-native-1564-v1";
-const lifetimeMilliseconds = 300000;
-const maximumInputBytes = 16384;
-const AcceptedResponse = Schema.Struct({
-  action: Schema.Literal("accept"),
-  content: Schema.Struct({ confirm: Schema.Literal(true) }),
-});
 const databaseCurrent =
   "(CAST(strftime('%s', 'now') AS INTEGER) * 1000 + CAST(substr(strftime('%f', 'now'), 4, 3) AS INTEGER))";
-const canonicalJson = (value: Schema.Json): Schema.Json => {
-  if (
-    Predicate.isNull(value) ||
-    Predicate.isString(value) ||
-    Predicate.isNumber(value) ||
-    Predicate.isBoolean(value)
-  ) {
-    return value;
-  }
-  if (Arr.isArray<Schema.JsonArray | Schema.JsonObject>(value)) {
-    return value.map(canonicalJson);
-  }
-  return Object.fromEntries(
-    Object.keys(value)
-      .sort()
-      .map((key) => [key, canonicalJson(value[key] ?? null)])
-  );
-};
 type ConfirmationPreparation =
   | Readonly<{ _tag: "Review"; review: OAuthNativeReview }>
   | Readonly<{ _tag: "Refused" }>
@@ -97,11 +81,7 @@ const consumeIntent = (
   work: IntentWork,
   attempt: NativeDecision
 ): Effect.Effect<ConfirmationPreparation, Cause.UnknownError> => {
-  if (
-    Option.isNone(
-      Schema.decodeUnknownOption(AcceptedResponse, { onExcessProperty: "error" })(attempt.response)
-    )
-  ) {
+  if (!acceptedNativeResponse(attempt.response)) {
     return discardIntent(work, attempt.reference);
   }
   const { db, subject } = work.input;
@@ -184,7 +164,7 @@ const issueIntent = (
     const review = yield* Schema.decodeEffect(OAuthNativeReview)({
       reference,
       message,
-      expiresAtMilliseconds: work.current + lifetimeMilliseconds,
+      expiresAtMilliseconds: work.current + reviewLifetimeMilliseconds,
     });
     const issued = yield* Effect.tryPromise(() =>
       work.input.db.batch([...issueStatements(work, review)])
@@ -223,8 +203,6 @@ export const prepareOAuthConfirmation = (
   }).pipe(Effect.catchCause(() => Effect.succeed({ _tag: "Refused" } as const)));
 
 /** Private protocol handoff, never a canonical success or a model-callable approval tool. */
-export const oauthReviewResponse = (review: OAuthNativeReview): Response =>
-  Response.json(Schema.encodeSync(OAuthNativeReview)(review), {
-    status: 409,
-    headers: { "cache-control": "no-store", "fidy-oauth-review": "1" },
-  });
+export const oauthReviewResponse: typeof reviewResponse = (review) => reviewResponse(review);
+
+export const confirmLocalOAuth: typeof localConfirmation = (...args) => localConfirmation(...args);

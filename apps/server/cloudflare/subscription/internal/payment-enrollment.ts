@@ -1,3 +1,14 @@
+import {
+  WompiConfiguration,
+  billingAttemptIdFor,
+  daviplataPolicy,
+  enrollmentDigest as digest,
+  enrollmentConfigured,
+  enrollmentDisclosureRevisions,
+  readEnrollmentBody,
+  submittedToken,
+  walletTokenPatterns,
+} from "./enrollment-policy";
 import { preparePredicateAssertion } from "../../../src/shell/sql-assertions/operations";
 import { verifiedEmailQuery } from "../../email-authentication/operations";
 import { WompiEnvironment } from "../../../src/shell/secret-material/contract";
@@ -12,7 +23,6 @@ import {
   BillingAttempt,
   BillingAttemptId,
   BillingEmail,
-  DaviplataOtpPolicy,
   EnrollmentAvailability,
   EnrollmentMethod,
   PaymentEnrollment,
@@ -49,28 +59,9 @@ import { Hex } from "effect/encoding";
 import { claimPreparedPaymentEnrollment } from "./payment-enrollment-claim";
 import { admitEnrollmentAttempt } from "./enrollment-admission";
 import { ResourceAdmissionRefused } from "../../resource-admission/contract";
-import { RequestBodyPolicy } from "../../http/contract";
-import { readBoundedRequestBody } from "../../http/operations";
-import { browserOrigins } from "../../runtime/contract";
 import { type WompiTransportFactory, workerDigest, workerSecureRandom } from "./wompi-runtime";
 import { type EnrollmentEnvironment } from "../contract";
 
-const Origin = Schema.Literals([
-  browserOrigins.production,
-  browserOrigins.local,
-  browserOrigins.acceptance,
-]);
-const WompiConfiguration = Schema.Struct({
-  BROWSER_ORIGIN: Origin,
-  WOMPI_ENVIRONMENT: WompiEnvironment,
-  WOMPI_PUBLIC_KEY: Schema.String.check(Schema.isPattern(/^pub_(?:test|prod)_[A-Za-z0-9_-]{8,}$/u)),
-  WOMPI_PRIVATE_KEY: Schema.String.check(
-    Schema.isPattern(/^prv_(?:test|prod)_[A-Za-z0-9_-]{8,}$/u)
-  ),
-  WOMPI_INTEGRITY_SECRET: Schema.String.check(
-    Schema.isPattern(/^(?:test|prod)_integrity_[A-Za-z0-9_-]{8,}$/u)
-  ),
-});
 const Session = Schema.Struct({
   session_id: Schema.String,
   user_id: UserId,
@@ -131,53 +122,14 @@ const AttemptRow = Schema.Struct({
   ends_at_ms: Schema.NullOr(Schema.Finite),
   renewal_anchor_ms: Schema.NullOr(Schema.Finite),
 });
-const enrollmentDisclosureRevisions = {
-  card: "wompi-card-enrollment-v2",
-  nequi: "wompi-nequi-enrollment-v1",
-  daviplata: "wompi-daviplata-enrollment-v1",
-} as const satisfies Readonly<Record<EnrollmentMethod, RecurringDisclosure["revision"]>>;
-
-const submittedToken = (
-  input: Extract<SubmitPaymentEnrollmentPayload, { paymentSourceMode: "create" }>
-): Redacted.Redacted<string> => {
-  switch (input.method) {
-    case "card":
-      return input.cardToken;
-    case "nequi":
-      return input.nequiToken;
-    case "daviplata":
-      return input.daviplataToken;
-  }
-};
-
-const walletTokenPatterns = {
-  sandbox: { nequi: /^nequi_test_/u, daviplata: /^daviplata_(?:test|devtest|devint)_/u },
-  production: { nequi: /^nequi_prod_/u, daviplata: /^daviplata_prod_/u },
-} as const;
-
 const preparationWindowMs = 3_600_000;
 const verificationCooldownMs = 3_000;
 const maximumVerificationAttempts = 8;
 const maximumPreparationsPerHour = 12;
 const enrollmentLifetimeMs = 900_000;
 const hexBase = 16;
-const uuidByteCount = 16;
-const uuidVersionByte = 6;
-const uuidVariantByte = 8;
-const versionMask = 0x0f;
-const versionBits = 0x40;
-const variantMask = 0x3f;
-const variantBits = 0x80;
-const firstGroupEnd = 8;
-const secondGroupEnd = 12;
-const thirdGroupEnd = 16;
-const fourthGroupEnd = 20;
 const forbiddenStatus = 403;
 const unauthorizedStatus = 401;
-const jsonPolicy = Schema.decodeSync(RequestBodyPolicy)({
-  maximumBytes: 6144,
-  deadlineMilliseconds: 2000,
-});
 const noStore = { "cache-control": "no-store" };
 const invalid = (status = 400): Response =>
   Response.json(paymentEnrollmentInvalidBody, { status, headers: noStore });
@@ -188,24 +140,6 @@ const rateLimited = (): Response =>
 const json = (body: unknown): Response => Response.json(body, { headers: noStore });
 const instant = (ms: number): string => DateTime.formatIso(DateTime.makeUnsafe(ms));
 const id = workerSecureRandom.uuidV4().pipe(Effect.orDie);
-const digest = (text: string): Promise<Uint8Array> =>
-  crypto.subtle
-    .digest("SHA-256", new TextEncoder().encode(text))
-    .then((bytes) => new Uint8Array(bytes));
-
-/** Derive one BillingAttempt ID from the authenticated User and the validated, retry-stable PaymentRequestId for a single payment action. Never use a new PaymentRequestId to retry the same action. */
-export const billingAttemptIdFor = (
-  input: Readonly<{ userId: UserId; requestId: PaymentRequestId }>
-): Promise<BillingAttemptId> =>
-  digest(`billing-attempt-v1:${input.userId}:${input.requestId}`).then((hash) => {
-    const bytes = hash.slice(0, uuidByteCount);
-    bytes[uuidVersionByte] = ((bytes[uuidVersionByte] ?? 0) & versionMask) | versionBits;
-    bytes[uuidVariantByte] = ((bytes[uuidVariantByte] ?? 0) & variantMask) | variantBits;
-    const hex = Array.from(bytes, (byte) => byte.toString(hexBase).padStart(2, "0")).join("");
-    return BillingAttemptId.make(
-      `${hex.slice(0, firstGroupEnd)}-${hex.slice(firstGroupEnd, secondGroupEnd)}-${hex.slice(secondGroupEnd, thirdGroupEnd)}-${hex.slice(thirdGroupEnd, fourthGroupEnd)}-${hex.slice(fourthGroupEnd)}`
-    );
-  });
 const decodeJson = (text: string): unknown => JSON.parse(text);
 const parse = <A, E>(schema: Schema.Codec<A, E>, text: string): Option.Option<A> =>
   Schema.decodeUnknownOption(schema, { onExcessProperty: "error" })(decodeJson(text));
@@ -214,33 +148,6 @@ const decodeRow = <A, E>(schema: Schema.Codec<A, E>, row: unknown): Option.Optio
 
 type ConfiguredEnrollmentEnvironment = typeof WompiConfiguration.Type &
   EnrollmentEnvironment & { readonly wompiHttp: WompiTransportFactory };
-
-const daviplataPolicy = (
-  environment: EnrollmentEnvironment & { readonly WOMPI_ENVIRONMENT: string }
-): Option.Option<DaviplataOtpPolicy> => {
-  if (
-    environment.WOMPI_ENVIRONMENT === "production" &&
-    environment.WOMPI_DAVIPLATA_ACTIVATED !== "enabled"
-  ) {
-    return Option.none();
-  }
-  const policy = Schema.decodeUnknownOption(DaviplataOtpPolicy)({
-    sendUrl: environment.WOMPI_DAVIPLATA_OTP_SEND_URL,
-    confirmUrl: environment.WOMPI_DAVIPLATA_OTP_CONFIRM_URL,
-  });
-  const origin =
-    environment.WOMPI_ENVIRONMENT === "sandbox"
-      ? "https://sandbox.wompi.co/"
-      : "https://production.wompi.co/";
-  return Option.filter(policy, (value) =>
-    [value.sendUrl, value.confirmUrl].every(
-      (url) =>
-        url.startsWith(origin) ||
-        (environment.WOMPI_ENVIRONMENT === "sandbox" &&
-          url === "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox")
-    )
-  );
-};
 
 const makeWompi = (
   environment: ConfiguredEnrollmentEnvironment
@@ -420,27 +327,6 @@ const project = (
   }
 };
 
-class EnrollmentBodyMalformed extends Data.TaggedError("EnrollmentBodyMalformed")<{}> {}
-
-const readBody = <A, E>(
-  request: Request,
-  schema: Schema.Codec<A, E>
-): Effect.Effect<Option.Option<A>> =>
-  Effect.gen(function* () {
-    if (
-      request.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !==
-      "application/json"
-    ) {
-      return Option.none();
-    }
-    const result = yield* Effect.exit(readBoundedRequestBody(request, jsonPolicy));
-    if (Exit.isFailure(result)) return Option.none();
-    return yield* Effect.try({
-      try: () => parse(schema, new TextDecoder("utf-8", { fatal: true }).decode(result.value)),
-      catch: () => new EnrollmentBodyMalformed(),
-    }).pipe(Effect.catchTag("EnrollmentBodyMalformed", () => Effect.succeedNone));
-  });
-
 const prepare = ({
   request,
   session,
@@ -453,7 +339,7 @@ const prepare = ({
   now: number;
 }>): Effect.Effect<Response, EnrollmentBoundaryFailure | Schema.SchemaError> =>
   Effect.gen(function* () {
-    const body = yield* readBody(request, PreparePaymentEnrollmentPayload);
+    const body = yield* readEnrollmentBody({ request, schema: PreparePaymentEnrollmentPayload });
     if (Option.isNone(body)) return invalid();
     const currentSource = yield* waitFor(() =>
       environment.DB.prepare(
@@ -1015,7 +901,7 @@ const submit = ({
   now: number;
 }>): Effect.Effect<Response, EnrollmentBoundaryFailure | Schema.SchemaError> =>
   Effect.gen(function* () {
-    const body = yield* readBody(request, SubmitPaymentEnrollmentPayload);
+    const body = yield* readEnrollmentBody({ request, schema: SubmitPaymentEnrollmentPayload });
     if (Option.isNone(body)) return invalid();
     const input = body.value;
     let row = yield* waitFor(() => enrollment(environment.DB, session.user_id, input.enrollmentId));
@@ -1225,16 +1111,7 @@ export const paymentEnrollmentWork = ({
 }): Effect.Effect<Response, EnrollmentBoundaryFailure | Schema.SchemaError> =>
   Effect.suspend(() => {
     const config = decodeRow(WompiConfiguration, environment);
-    if (
-      Option.isNone(config) ||
-      (config.value.WOMPI_ENVIRONMENT === "sandbox"
-        ? !config.value.WOMPI_PUBLIC_KEY.startsWith("pub_test_") ||
-          !config.value.WOMPI_PRIVATE_KEY.startsWith("prv_test_") ||
-          !config.value.WOMPI_INTEGRITY_SECRET.startsWith("test_integrity_")
-        : !config.value.WOMPI_PUBLIC_KEY.startsWith("pub_prod_") ||
-          !config.value.WOMPI_PRIVATE_KEY.startsWith("prv_prod_") ||
-          !config.value.WOMPI_INTEGRITY_SECRET.startsWith("prod_integrity_"))
-    ) {
+    if (Option.isNone(config) || !enrollmentConfigured(environment)) {
       return Effect.succeed(unavailable());
     }
     const configured = { ...environment, ...config.value, wompiHttp };

@@ -508,11 +508,7 @@ export const startDaviplataWithWompi = (
       return yield* new DaviplataAuthorizationFailed({ status: "refused" });
     }
     const authority = makeAuthority(input, { deadline, now, clock: yield* Clock.Clock });
-    yield* initialize(authority, origin).pipe(
-      Effect.onExit((exit) =>
-        exit._tag === "Failure" ? Effect.sync(authority.dispose) : Effect.void
-      )
-    );
+    yield* initialize(authority, origin).pipe(Effect.onError(() => Effect.sync(authority.dispose)));
     return {
       signal: authority.signal,
       resend: () => perform(authority, { type: "send" }),

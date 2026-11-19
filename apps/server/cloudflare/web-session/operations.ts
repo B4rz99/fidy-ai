@@ -3,18 +3,18 @@ import { prepareBrowserMetadata as prepareMetadata, readMetadata } from "./inter
 import { bindingResponse } from "./internal/binding";
 import { type Effect, Option, Schema } from "effect";
 import { WebSessionId } from "../../src/core/web-session/contract";
-import type {
-  FreshSessionSubject,
-  WebSessionAuthority,
+import {
+  type FreshSessionSubject,
+  type WebSessionAuthority,
 } from "../../src/shell/web-session/contract";
 import { completePairing, logout } from "./internal/lifecycle";
 import { currentUser } from "./internal/current-user";
-import type {
-  AuthenticatedWebSession,
-  BoundWebSessionLookup,
-  WebSessionAuthentication,
-  WebSessionEstablishment,
-  WebSessionRequest,
+import {
+  type AuthenticatedWebSession,
+  type BoundWebSessionLookup,
+  type WebSessionAuthentication,
+  type WebSessionEstablishment,
+  type WebSessionRequest,
 } from "./contract";
 import {
   authenticate,
@@ -22,20 +22,51 @@ import {
   observeEntry,
   prepareBrowserSessionLookup as prepareBrowserLookup,
   prepareBrowserEntryLookup as prepareEntryLookup,
-  prepareSessionLookup,
+  sessionDigestLookup,
 } from "./internal/authentication";
+import {
+  sessionCookie as nativeSessionCookie,
+  sessionDigest as nativeSessionDigest,
+  sessionSetCookie as nativeSessionSetCookie,
+} from "./internal/credentials";
 
-/** Prepare exact cookie, mounted identity, expiry and Consent proof for one atomic admission batch. */
+/** Digest the one cookie and decode its mounted binding before entering the local transaction. */
+export const readBoundWebSessionProof = (
+  request: Request
+): Promise<Option.Option<{ binding: WebSessionId; digest: Uint8Array }>> => {
+  const binding = Schema.decodeUnknownOption(WebSessionId)(
+    request.headers.get(browserSessionBindingHeader)
+  );
+  const bearer = sessionCookie(request);
+  if (Option.isNone(binding) || Option.isNone(bearer)) {
+    return Promise.resolve(Option.none<{ binding: WebSessionId; digest: Uint8Array }>());
+  }
+  return sessionDigest(bearer.value).then((digest) =>
+    Option.some({ digest, binding: binding.value })
+  );
+};
+
+type BoundProof = Readonly<{ digest: Uint8Array; binding: WebSessionId; current: number }>;
+const lookupBoundProof = (input: BoundProof, requireConsent: boolean): BoundWebSessionLookup =>
+  sessionDigestLookup({
+    ...input,
+    binding: Option.some(input.binding),
+    freshness: "live",
+    requireConsent,
+  });
+/** Apply current processing Consent to an exact mounted credential. */
+export const boundSessionLookup = (input: BoundProof): BoundWebSessionLookup =>
+  lookupBoundProof(input, true);
+/** Account security controls remain usable with withdrawn processing Consent. */
+export const boundSecuritySessionLookup = (input: BoundProof): BoundWebSessionLookup =>
+  lookupBoundProof(input, false);
+
 export const prepareBoundCanonicalWebSession = (
   input: Readonly<{ request: Request; current: number }>
-): Promise<Option.Option<BoundWebSessionLookup>> => {
-  const binding = Schema.decodeUnknownOption(WebSessionId)(
-    input.request.headers.get(browserSessionBindingHeader)
+): Promise<Option.Option<BoundWebSessionLookup>> =>
+  readBoundWebSessionProof(input.request).then(
+    Option.map((proof) => boundSessionLookup({ ...proof, current: input.current }))
   );
-  return Option.isNone(binding)
-    ? Promise.resolve(Option.none())
-    : prepareSessionLookup({ ...input, binding, freshness: "live", requireConsent: true });
-};
 
 /** Decode only the row returned by the exact prepared lookup; later work must recheck authority. */
 export const resolveBoundCanonicalWebSession = (
@@ -152,3 +183,30 @@ export const prepareBrowserSessionLookup: typeof prepareBrowserLookup = (input) 
 /** Prepare exact entry binding and credential-only signed-out classification in one snapshot. */
 export const prepareBrowserEntryLookup: typeof prepareEntryLookup = (input) =>
   prepareEntryLookup(input);
+
+export const sessionSetCookie: typeof nativeSessionSetCookie = (...args) =>
+  nativeSessionSetCookie(...args);
+export const sessionCookie: typeof nativeSessionCookie = (...args) => nativeSessionCookie(...args);
+export const sessionDigest: typeof nativeSessionDigest = (...args) => nativeSessionDigest(...args);
+
+export const absentSessionResponse = (path: string): Response => {
+  if (path === "/web/session/binding") {
+    return Response.json({ binding: null }, { headers: { "cache-control": "no-store" } });
+  }
+  if (path === "/web/session/logout") {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "set-cookie": "__Host-fidy_session=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0",
+        "cache-control": "no-store",
+      },
+    });
+  }
+  return Response.json(
+    {
+      error: { code: "unauthenticated", message: "Present a valid credential and retry." },
+      next: [],
+    },
+    { status: 401 }
+  );
+};

@@ -1,4 +1,6 @@
-import { Data, Schema } from "effect";
+import type { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
+import type { UserStoreBindings } from "../directory/contract";
+import { Context, Data, Effect, type Option, Schema } from "effect";
 import { ConsentRecordId } from "../../src/core/consent/contract";
 import {
   InsightEventId,
@@ -15,7 +17,6 @@ import { WeeklySummaryPayload } from "../../src/core/insights/weekly-summary/con
 import { InsightTemplateSummary } from "../../src/shell/channels/whatsapp/contract";
 import type { QueryAuthority } from "../canonical-work/contract";
 import type { CanonicalCapability } from "../../src/core/canonical-operations/contract";
-import type { Option } from "effect";
 
 const messageContext = {
   id: Schema.String.check(Schema.isUUID()),
@@ -127,6 +128,7 @@ export const WeeklyQuestionWork = Schema.Struct({
 export type WeeklyQuestionWork = typeof WeeklyQuestionWork.Type;
 /** Content-free continuation for one frozen category message; the report owns its role and live grant. */
 export const CategoryDeliveryWork = Schema.Struct({
+  owner: Schema.optionalKey(Schema.Literal("user")),
   traceContext: Schema.optionalKey(Schema.Unknown),
   kind: Schema.Literal("proactivity-delivery"),
   version: Schema.Literal(1),
@@ -206,7 +208,8 @@ export const ProactivityActivityResult = Schema.Union([
 ]);
 export type ProactivityActivityResult = typeof ProactivityActivityResult.Type;
 /** Both approved templates and an explicit enablement gate are required before native execution. */
-export type ProactivityEnvironment = Readonly<{ DB: D1Database }> &
+export type ProactivityEnvironment = Partial<UserStoreBindings> &
+  Readonly<{ DB: D1Database }> &
   Partial<
     Readonly<{
       PROACTIVITY_ENABLED: string;
@@ -234,3 +237,45 @@ export class InsightUnavailable extends Data.TaggedError("InsightUnavailable") {
 export type RecurringDigestAdvanceResult =
   | Readonly<{ _tag: "NoWork" | "Progress" }>
   | Readonly<{ _tag: "Created"; id: InsightEventId }>;
+
+export type NativeReminderEnvironment = UserStoreBindings &
+  Pick<
+    ProactivityEnvironment,
+    | "KAPSO_API_KEY"
+    | "PROACTIVITY_ENABLED"
+    | "PROACTIVITY_TEMPLATE_JSON"
+    | "WEEKLY_SUMMARY_ENABLED"
+    | "WEEKLY_QUESTION_TEMPLATE_JSON"
+    | "WEEKLY_SUMMARY_TEMPLATE_JSON"
+    | "PROACTIVITY_ASK_AFTER"
+    | "PROACTIVITY_PAUSE_AFTER"
+  > &
+  Partial<{ WEEKLY_DELIVERY_QUEUE: Pick<Queue<ProactivityDeliveryWork>, "send"> }>;
+
+export const weeklyPauseMention =
+  "Pausé tus resúmenes semanales porque no recibí respuesta. Puedes pedirme que los reactive.";
+export const reminderPauseMention =
+  "Pausé tus recordatorios de registro manual porque no recibí respuesta. Puedes pedirme que los reactive.";
+export type PauseNoticeService = {
+  bind: (
+    turn: { id: string; user: string; session: string },
+    newSession: boolean
+  ) => Effect.Effect<void, InsightUnavailable, SqliteClient>;
+  include: (
+    turn: string,
+    text: TranscriptText
+  ) => Effect.Effect<TranscriptText, InsightUnavailable, SqliteClient>;
+  acknowledge: (turn: string) => Effect.Effect<void, InsightUnavailable, SqliteClient>;
+};
+export const HostedPauseNotice = Context.Reference<PauseNoticeService>(
+  "@fidy/server/cloudflare/insights/contract/HostedPauseNotice",
+  {
+    defaultValue: (): PauseNoticeService => ({
+      bind: (): Effect.Effect<never, InsightUnavailable> => Effect.fail(new InsightUnavailable()),
+      include: (): Effect.Effect<never, InsightUnavailable> =>
+        Effect.fail(new InsightUnavailable()),
+      acknowledge: (): Effect.Effect<never, InsightUnavailable> =>
+        Effect.fail(new InsightUnavailable()),
+    }),
+  }
+);

@@ -1,3 +1,4 @@
+import type { Transaction } from "../../../src/core/transactions/contract";
 import { BigDecimal, DateTime, Effect, Option, Schema } from "effect";
 import {
   type RecurringCommand,
@@ -56,15 +57,31 @@ const validFinancialReference = ({
       selection: { kind: "ids", ids: [command.edit.fulfillment.transactionId] },
     });
     const transaction = Option.isSome(selected) ? selected.value.transactions[0] : undefined;
-    const item = readRecurringOccurrence({ document, planId: mark.planId, date: mark.date });
-    if (transaction === undefined || Option.isNone(item)) return false;
-    const fact = planningFact({ transaction, timeZone: item.value.plan.timeZone });
-    return (
-      validAssociation({ plan: item.value.plan, fact }) &&
-      fact.date === mark.actualDate &&
-      BigDecimal.equals(fact.money.amount, mark.money.amount)
-    );
+    return validLinkedFulfillment({
+      document,
+      mark,
+      transaction: Option.fromUndefinedOr(transaction),
+    });
   }).pipe(Effect.orElseSucceed(() => false));
+
+export const validLinkedFulfillment = ({
+  document,
+  mark,
+  transaction,
+}: {
+  document: RecurringDocument;
+  mark: RecurringDocument["fulfillments"][number];
+  transaction: Option.Option<Transaction>;
+}): boolean => {
+  const item = readRecurringOccurrence({ document, planId: mark.planId, date: mark.date });
+  if (Option.isNone(transaction) || Option.isNone(item)) return false;
+  const fact = planningFact({ transaction: transaction.value, timeZone: item.value.plan.timeZone });
+  return (
+    validAssociation({ plan: item.value.plan, fact }) &&
+    fact.date === mark.actualDate &&
+    BigDecimal.equals(fact.money.amount, mark.money.amount)
+  );
+};
 
 const validPlanReferences = ({
   work,
@@ -74,20 +91,24 @@ const validPlanReferences = ({
   document: RecurringDocument;
 }>): Effect.Effect<boolean> =>
   Effect.gen(function* () {
-    const plans = [
-      ...document.plans.flatMap((plan) => plan.revisions.map((entry) => entry.plan)),
-      ...document.exceptions.flatMap((entry) =>
-        entry.replacement === undefined ? [] : [entry.replacement]
-      ),
-    ];
     const categories = yield* listCategories({ db: work.db }).pipe(Effect.orElseSucceed(() => []));
-    return plans.every((plan) =>
-      validPlanReference(
-        plan,
-        categories.map((category) => category.id)
-      )
-    );
+    return validPlanCategories({ document, categories: categories.map((category) => category.id) });
   });
+export const validPlanCategories = ({
+  document,
+  categories,
+}: {
+  document: RecurringDocument;
+  categories: ReadonlyArray<string>;
+}): boolean => {
+  const plans = [
+    ...document.plans.flatMap((plan) => plan.revisions.map((entry) => entry.plan)),
+    ...document.exceptions.flatMap((entry) =>
+      entry.replacement === undefined ? [] : [entry.replacement]
+    ),
+  ];
+  return plans.every((plan) => validPlanReference(plan, categories));
+};
 const validPlanReference = (
   plan: RecurringPlanInput,
   categories: ReadonlyArray<string>

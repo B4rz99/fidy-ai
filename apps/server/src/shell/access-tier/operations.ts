@@ -6,7 +6,7 @@ import { activePaidSubscriptionForUserSelection } from "~/shell/subscription/ope
 import { activeTrialPeriodForUserSelection } from "~/shell/identity/operations";
 
 /**
- * Decide Pro standing inside the caller's D1 unit from the original TrialPeriod or a settled
+ * Decide Pro standing inside the caller's User transaction from the original TrialPeriod or a settled
  * paid period or ManualProGrant at the same instant as its protected action. The explicit stable User is not
  * authorization: callers must compose their live credential/Consent guard in that same unit.
  * Invalid identities and missing or inactive periods are false; storage failure remains the

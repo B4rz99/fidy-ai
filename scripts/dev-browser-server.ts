@@ -19,11 +19,10 @@ const server = await createServer({
     https: { key: await Bun.file(key).text(), cert: await Bun.file(certificate).text() },
   },
 });
-const api = Bun.spawn([process.execPath, "apps/server/cloudflare/browser-acceptance-preview.ts"], {
+const api = Bun.spawn([process.execPath, "scripts/dev-browser-api.ts"], {
   cwd: root,
   env: {
     ...Bun.env,
-    CLI_ACCEPTANCE_MODE: "shared",
     PLAYWRIGHT_TLS_CERT: certificate,
     PLAYWRIGHT_TLS_KEY: key,
   },

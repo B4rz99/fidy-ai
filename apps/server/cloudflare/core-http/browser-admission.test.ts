@@ -1,788 +1,288 @@
-import { browserSessionBindingHeader } from "~/shell/browser-transport/contract";
-import { type Cause, Clock, DateTime, Effect, Option } from "effect";
-import { listPATs } from "../tokens/operations";
-import { executeProtectedSubscriptionQuery } from "../subscription/operations";
-import { browseTransactions } from "../transactions/operations";
-import { type Mock, afterAll, expect, it, vi } from "vitest";
-import { getBoundOperationCatalog } from "../../src/shell/canonical-catalog/contract";
-
-import { webAuthenticationEndpoints } from "../../src/shell/web-authentication/contract";
+import { NodeFileSystem } from "@effect/platform-node";
+import { it } from "@effect/vitest";
+import { Clock, Effect, Schema } from "effect";
+import { expect } from "vitest";
 import { oauthPaths } from "../../src/shell/oauth-agents/contract";
+import { operationCatalog } from "../../src/shell/api";
 import { canonicalAllowanceHeaders } from "../../src/shell/quotas/contract";
-import { installTestSchema, isolatedTestDatabases, isolatedTestStorage } from "../d1-test-fixture";
-import { maintenancePerformanceDatabase } from "../maintenance-performance.test-fixture";
-import { registeredConnectionInstitutionIds } from "../../src/shell/connections/contract";
-import { cloudflareWorkerTelemetry } from "../runtime/telemetry/operations";
-import { type CoreHttpEnvironment, type CoreHttpHandler } from "./contract";
-import { makeCoreHttp } from "./runtime";
+import { DisclosureSnapshot } from "../../src/shell/consent/contract";
+import { currentDisclosureFor } from "../../src/shell/consent/operations";
+import { native, nativeLostReadPlatform } from "../user-store.test-fixture";
+import { alice, bob, makeNativeTransactionJourney } from "../financial-user-store.test-fixture";
 
-const databases = isolatedTestDatabases();
-const storage = isolatedTestStorage();
-const browserQueries = new Map<string, string>([
-  ["budgets.getBudgetStatus", "?timeZone=America%2FBogota"],
+const listings = [
+  ["pats.listPATs", ""],
+  ["subscription.listSubscriptionOffers", ""],
+  ["subscription.getSubscriptionStatus", ""],
   ["recurringPlans.getRecurringWorkspace", "?month=2026-10&view=compact"],
-]);
-const atomicListings = [
-  "pats.listPATs",
-  "subscription.listSubscriptionOffers",
-  "subscription.getSubscriptionStatus",
-  "recurringPlans.getRecurringWorkspace",
-  "categories.listCategories",
-  "dashboard.listDashboardCatalog",
-  "transactions.listTransactions",
-  "budgets.getBudgetStatus",
-  "ingestion.getReviewWorkspace",
-  "ingestion.getReviewPageContext",
+  ["categories.listCategories", ""],
+  ["dashboard.listDashboardCatalog", ""],
+  ["budgets.getBudgetStatus", "?timeZone=America%2FBogota"],
+  ["ingestion.getReviewWorkspace", ""],
+  ["ingestion.getReviewPageContext", ""],
 ] as const;
-afterAll(() => databases.dispose());
-afterAll(() => storage.dispose());
-
-type BrowserReadFixture = Readonly<{
-  db: D1Database;
-  bucket: R2Bucket;
-  current: number;
-  token: string;
-  sessionId: string;
-  userId: string;
-  generationReads: Mock;
-  core: CoreHttpHandler;
-  environment: CoreHttpEnvironment;
-  request: (headers?: Readonly<Record<string, string>>) => Promise<Response>;
-}>;
-
-const browserFixture = (
-  operationId: (typeof atomicListings)[number] = "categories.listCategories"
-): Effect.Effect<BrowserReadFixture, Cause.UnknownError> =>
-  Effect.gen(function* () {
-    const db = yield* Effect.tryPromise(() => databases.acquire());
-    yield* Effect.tryPromise(() => installTestSchema({ db }));
-    const current = yield* Clock.currentTimeMillis;
-    const token = "b".repeat(43);
-    const digest = new Uint8Array(
-      yield* Effect.tryPromise(() =>
-        crypto.subtle.digest("SHA-256", new TextEncoder().encode(token))
+const endpoints = listings.map(([id, query]) => {
+  const op = operationCatalog.byId.get(id);
+  if (op === undefined) throw new Error("Missing operation " + id);
+  return { id, path: op.route + query, operation: op };
+});
+const fixture = Effect.gen(function* () {
+  const store = yield* makeNativeTransactionJourney(undefined, nativeLostReadPlatform);
+  const sql = (
+    ...args: Parameters<typeof store.exec>
+  ): Effect.Effect<Awaited<ReturnType<typeof store.exec>>> => native(() => store.exec(...args));
+  const now = yield* Clock.currentTimeMillis;
+  yield* sql(
+    "UPDATE users SET trial_started_at_ms=created_at_ms-1209600000,trial_ends_at_ms=created_at_ms-604800000 WHERE id=?",
+    alice.user
+  );
+  yield* native(() =>
+    store
+      .owner(bob.user)
+      .exec(
+        "UPDATE users SET trial_started_at_ms=created_at_ms,trial_ends_at_ms=created_at_ms+604800000 WHERE id=?",
+        bob.user
       )
-    );
-    const userId = "10000000-0000-4000-8000-000000000001";
-    const pairingId = "20000000-0000-4000-8000-000000000001";
-    const sessionId = "30000000-0000-4000-8000-000000000001";
-    yield* Effect.tryPromise(() =>
-      db.batch([
-        db
-          .prepare(
-            "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?,'CO','es-CO','America/Bogota',?)"
-          )
-          .bind(userId, current),
-        db
-          .prepare(
-            "INSERT INTO browser_login_pairings(id,public_code,verifier_digest,user_id,state,created_at_ms,expires_at_ms) VALUES (?,'BCDF-GHJK',?,?,'consumed',?,?)"
-          )
-          .bind(pairingId, digest, userId, current, current + 600000),
-        db
-          .prepare(
-            "INSERT INTO web_sessions(id,pairing_id,user_id,token_digest,created_at_ms,fresh_until_ms,idle_expires_at_ms,hard_expires_at_ms) VALUES (?,?,?,?,?,?,?,?)"
-          )
-          .bind(
-            sessionId,
-            pairingId,
-            userId,
-            digest,
-            current,
-            current + 600000,
-            current + 3600000,
-            current + 7776000000
-          ),
-      ])
-    );
-    if (operationId === "subscription.getSubscriptionStatus") {
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare("UPDATE users SET trial_started_at_ms=?,trial_ends_at_ms=? WHERE id=?")
-          .bind(current - 1209600000, current - 604800000, userId)
-          .run()
-      );
-    }
-    const { bucket } = yield* Effect.tryPromise(() => storage.acquire());
-    yield* Effect.tryPromise(() => bucket.put("recovery/generation", "initial"));
-    const generationReads = vi.fn();
-    const observedBucket = new Proxy(bucket, {
-      get: (target, property): unknown =>
-        property === "get"
-          ? (key: string): ReturnType<R2Bucket["get"]> => {
-              generationReads();
-              return target.get(key);
-            }
-          : Reflect.get(target, property, target),
-    });
-    const environment: CoreHttpEnvironment = {
-      DB: maintenancePerformanceDatabase({ db, bucket: observedBucket }),
-      RELEASE_GIT_SHA: "0".repeat(40),
-      CONTRACT_DIGEST: "0".repeat(64),
-      BROWSER_ORIGIN: "https://app.fidyapp.com",
-      USER_TRANSACTION_COORDINATOR: {
-        getByName: () => ({
-          fetch: () => Promise.reject(new Error("No coordinator work authorized")),
-        }),
-      },
-      KAPSO_API_KEY: "unused",
-      KAPSO_WEBHOOK_SECRET: "unused",
-      WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
-      WHATSAPP_BUSINESS_PORTFOLIO_ID: "unused",
-      CLOUDFLARE_ACCESS_ISSUER: "https://unused.example",
-      CLOUDFLARE_ACCESS_AUDIENCE: "unused",
-      WOMPI_ENVIRONMENT: "sandbox",
-      WOMPI_PUBLIC_KEY: "",
-      WOMPI_PRIVATE_KEY: "",
-      WOMPI_INTEGRITY_SECRET: "",
-    };
-    const core = makeCoreHttp({
-      telemetry: cloudflareWorkerTelemetry,
-      institutions: registeredConnectionInstitutionIds,
-    });
-    const categoryRoute = Option.getOrThrow(
-      Option.fromUndefinedOr(getBoundOperationCatalog().byId.get(operationId))
-    ).route;
-    const request = (headers: Readonly<Record<string, string>> = {}): Promise<Response> =>
-      core(
-        new Request(
-          `https://api.fidyapp.com${categoryRoute}${browserQueries.get(operationId) ?? ""}`,
-          {
-            headers: {
-              cookie: `__Host-fidy_session=${token}`,
-              [browserSessionBindingHeader]: sessionId,
-              ...headers,
-            },
-          }
-        ),
-        { ...environment, DB: db, ERASURE_REQUIRED: "true", ERASURE_BUCKET: observedBucket }
-      );
-    return {
-      db,
-      bucket,
-      current,
-      token,
-      sessionId,
-      userId,
-      generationReads,
-      core,
-      environment,
-      request,
-    };
-  });
-
-it.each([
-  ["quota.getQuota", 3],
-  ["recurringPlans.getRecurringWorkspace", 1],
-  ["categories.listCategories", 1],
-  ["transactions.listTransactions", 1],
-  ["budgets.getBudgetStatus", 1],
-] as const)("serves %s within %i fresh recovery-generation checks", (operationId, checks) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, token, sessionId, generationReads, core, environment } = yield* browserFixture();
-      const operation = Option.getOrThrow(
-        Option.fromUndefinedOr(getBoundOperationCatalog().byId.get(operationId))
-      );
-      const response = yield* Effect.tryPromise(() =>
-        core(
-          new Request(
-            `https://api.fidyapp.com${operation.route}${browserQueries.get(operationId) ?? ""}`,
-            {
-              headers: {
-                cookie: `__Host-fidy_session=${token}`,
-                [browserSessionBindingHeader]: sessionId,
-              },
-            }
-          ),
-          environment
-        )
-      );
-      expect(response.status).toBe(200);
-      expect(generationReads).toHaveBeenCalledTimes(checks);
-      const listing = Option.getOrThrow(
-        Option.fromUndefinedOr(getBoundOperationCatalog().byId.get("pats.listPATs"))
-      );
-      for (const route of [
-        { method: "GET", path: oauthPaths.authorize },
-        { method: "POST", path: "/providers/kapso/callback" },
-        { method: "POST", path: "/web/subscription/payment-enrollments/prepare" },
-        { method: "POST", path: "/web/hosted-turns" },
-        { method: "GET", path: webAuthenticationEndpoints.currentUser.path },
-        { method: "GET", path: "/health" },
-        { method: "POST", path: "/internal/titular-erasure" },
-        { method: "GET", path: listing.route },
-        { method: "GET", path: operation.route },
-        { method: "GET", path: operation.route, authorization: "Bearer invalid" },
-      ]) {
-        generationReads.mockClear();
-        const headers = new Headers({
-          cookie: `__Host-fidy_session=${token}`,
-          [browserSessionBindingHeader]: "30000000-0000-4000-8000-000000000002",
-        });
-        if (typeof route.authorization === "string") {
-          headers.set("authorization", route.authorization);
-        }
-        const denied = yield* Effect.tryPromise(() =>
-          core(
-            new Request(`https://api.fidyapp.com${route.path}`, { method: route.method, headers }),
-            environment
-          )
-        );
-        expect(denied.status, `${route.method} ${route.path}`).toBe(401);
-        expect(generationReads).toHaveBeenCalledTimes(1);
-      }
-      expect(
-        yield* Effect.tryPromise(() =>
-          db.prepare("SELECT count(*) AS total FROM canonical_request_buckets").first()
-        )
-      ).toEqual({ total: 1 });
-      expect(
-        yield* Effect.tryPromise(() =>
-          db.prepare("SELECT count(*) AS total FROM canonical_request_leases").first()
-        )
-      ).toEqual({ total: 0 });
-    })
-  )
-);
-
-const refusedBrowserHeaders: Readonly<Record<string, Readonly<Record<string, string>>>> = {
-  "invalid Authorization": { authorization: "Bearer invalid" },
-  "missing binding": { [browserSessionBindingHeader]: "" },
-  "mismatched binding": { [browserSessionBindingHeader]: "30000000-0000-4000-8000-000000000002" },
-  "missing cookie": { cookie: "" },
-};
-
-it.each(
-  atomicListings.flatMap((operationId) =>
-    (
-      [
-        "revoked",
-        "expired",
-        "withdrawn Consent",
-        "invalid Authorization",
-        "missing binding",
-        "mismatched binding",
-        "missing cookie",
-      ] as const
-    ).map((refusal) => [operationId, refusal] as const)
-  )
-)("refuses atomic %s for %s without Audit, quota or a retained lease", (operationId, refusal) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const fixture = yield* browserFixture(operationId);
-      const { db, userId, sessionId, current } = fixture;
-      if (refusal === "revoked") {
-        yield* Effect.tryPromise(() =>
-          db.prepare("UPDATE web_sessions SET revoked_at_ms = ?").bind(current).run()
-        );
-      }
-      if (refusal === "expired") {
-        yield* Effect.tryPromise(() =>
-          db.prepare("UPDATE web_sessions SET idle_expires_at_ms = ?").bind(current).run()
-        );
-      }
-      if (refusal === "withdrawn Consent") {
-        yield* Effect.tryPromise(() =>
-          db.batch([
-            db
-              .prepare(
-                "INSERT INTO consent_history(record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)"
-              )
-              .bind("grant", userId, current, current),
-            db
-              .prepare(
-                "INSERT INTO consent_history(record_type,id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES ('processing_withdrawal',?,?,?,?,?)"
-              )
-              .bind("withdrawal", userId, "grant", sessionId, current),
-          ])
-        );
-      }
-      const headers = Option.getOrElse(
-        Option.fromUndefinedOr(refusedBrowserHeaders[refusal]),
-        () => ({})
-      );
-      const response = yield* Effect.tryPromise(() => fixture.request(headers));
-      expect(response.status).toBe(401);
-      for (const table of [
-        "audit_entries",
-        "canonical_request_buckets",
-        "canonical_request_leases",
-        "commercial_allowance_consumptions",
-      ]) {
-        expect(
-          yield* Effect.tryPromise(() =>
-            db.prepare(`SELECT count(*) AS total FROM ${table}`).first()
-          )
-        ).toEqual({ total: 0 });
-      }
-    })
-  )
-);
-
-it.each(atomicListings)(
-  "keeps atomic %s standing bound to its caller when another User has an active TrialPeriod",
-  (operationId) =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const fixture = yield* browserFixture(operationId);
-        yield* Effect.tryPromise(() =>
-          fixture.db
-            .prepare(
-              "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,trial_started_at_ms,trial_ends_at_ms) VALUES (?,'CO','es-CO','America/Bogota',?,?,?)"
-            )
-            .bind(
-              "10000000-0000-4000-8000-000000000002",
-              fixture.current,
-              fixture.current,
-              fixture.current + 604800000
-            )
-            .run()
-        );
-        const response = yield* Effect.tryPromise(() => fixture.request());
-        expect(response.status).toBe(200);
-        expect(response.headers.get("server-timing")).toMatch(/canonical-storage;dur=[0-9.]+/u);
-        expect(response.headers.get("server-timing")).toMatch(/recovery-r2;dur=[0-9.]+/u);
-        expect(response.headers.get("server-timing")).toMatch(/recovery-d1;dur=[0-9.]+/u);
-        expect(response.headers.get("fidy-recovery-batches")).toBe("1");
-        expect(response.headers.get("server-timing")).toMatch(/canonical-present;dur=[0-9.]+/u);
-        const limit = response.headers.get(canonicalAllowanceHeaders.limit);
-        expect(limit).toMatch(/^[1-9][0-9]*$/u);
-        expect(response.headers.get(canonicalAllowanceHeaders.remaining)).toBe(limit);
-      })
-    )
-);
-
-it.each(["caller", "another User"] as const)(
-  "preserves outstanding leases for %s during an atomic Category read",
-  (owner) =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const fixture = yield* browserFixture();
-        const leaseUserId =
-          owner === "caller" ? fixture.userId : "10000000-0000-4000-8000-000000000002";
-        if (owner === "another User") {
-          yield* Effect.tryPromise(() =>
-            fixture.db
-              .prepare(
-                "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?,'CO','es-CO','America/Bogota',?)"
-              )
-              .bind(leaseUserId, fixture.current)
-              .run()
-          );
-        }
-        const count = owner === "caller" ? 1 : 2;
-        yield* Effect.tryPromise(() =>
-          fixture.db.batch(
-            Array.from({ length: count }, (_, index) =>
-              fixture.db
-                .prepare(
-                  "INSERT INTO canonical_request_leases(id,user_id,expires_at_ms) VALUES (?,?,?)"
-                )
-                .bind(`held-${index}`, leaseUserId, fixture.current + 60000)
-            )
-          )
-        );
-        const response = yield* Effect.tryPromise(() => fixture.request());
-        expect(response.status).toBe(200);
-        expect(
-          yield* Effect.tryPromise(() =>
-            fixture.db
-              .prepare("SELECT count(*) AS total FROM canonical_request_leases WHERE user_id = ?")
-              .bind(leaseUserId)
-              .first()
-          )
-        ).toEqual({ total: count });
-      })
-    )
-);
-
-it.each(
-  atomicListings.flatMap((operationId) =>
-    (["rate", "concurrency"] as const).map((limit) => [operationId, limit] as const)
-  )
-)("preserves atomic %s %s protection", (operationId, limit) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const fixture = yield* browserFixture(operationId);
-      const { db, userId, current } = fixture;
-      if (limit === "rate") {
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare("INSERT INTO canonical_request_buckets VALUES (?,?)")
-            .bind(`user:${userId}`, current + 60000)
-            .run()
-        );
-      } else {
-        yield* Effect.tryPromise(() =>
-          db.batch(
-            ["occupied-1", "occupied-2"].map((id) =>
-              db
-                .prepare("INSERT INTO canonical_request_leases VALUES (?,?,?)")
-                .bind(id, userId, current + 60000)
-            )
-          )
-        );
-      }
-      const response = yield* Effect.tryPromise(() => fixture.request());
-      expect(response.status).toBe(429);
-      expect(response.headers.get("retry-after")).toBe("1");
-      expect(
-        yield* Effect.tryPromise(() =>
-          db.prepare("SELECT count(*) AS total FROM canonical_request_leases").first()
-        )
-      ).toEqual({ total: limit === "concurrency" ? 2 : 0 });
-      expect(
-        yield* Effect.tryPromise(() =>
-          db.prepare("SELECT count(*) AS total FROM audit_entries").first()
-        )
-      ).toEqual({ total: 0 });
-      expect(
-        yield* Effect.tryPromise(() =>
-          db.prepare("SELECT count(*) AS total FROM commercial_allowance_consumptions").first()
-        )
-      ).toEqual({ total: 0 });
-    })
-  )
-);
-
-it.each(atomicListings)(
-  "rolls back %s pressure and disclosure when required Audit is ignored",
-  (operationId) =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const fixture = yield* browserFixture(operationId);
-        const { db } = fixture;
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "CREATE TRIGGER ignore_category_audit BEFORE INSERT ON audit_entries WHEN NEW.operation IN ('categories.listCategories','transactions.listTransactions','budgets.getBudgetStatus','ingestion.getReviewWorkspace','ingestion.getReviewPageContext','dashboard.listDashboardCatalog','recurringPlans.getRecurringWorkspace','pats.listPATs','subscription.listSubscriptionOffers','subscription.getSubscriptionStatus') BEGIN SELECT RAISE(IGNORE); END"
-            )
-            .run()
-        );
-        const response = yield* Effect.tryPromise(() => fixture.request());
-        expect(response.status).toBe(503);
-        for (const table of [
-          "audit_entries",
-          "canonical_request_buckets",
-          "canonical_request_leases",
-          "commercial_allowance_consumptions",
-        ]) {
-          expect(
-            yield* Effect.tryPromise(() =>
-              db.prepare(`SELECT count(*) AS total FROM ${table}`).first()
-            )
-          ).toEqual({ total: 0 });
-        }
-      })
-    )
-);
-
-it("closes malformed Category projections without leaving a lease or spending commercial quota", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const fixture = yield* browserFixture();
-      const { db } = fixture;
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare("INSERT INTO categories VALUES ('invalid-category','invalid fixture',1000000)")
-          .run()
-      );
-      const response = yield* Effect.tryPromise(() => fixture.request());
-      expect(response.status).toBe(503);
-      expect(
-        yield* Effect.tryPromise(() =>
-          db.prepare("SELECT count(*) AS total FROM canonical_request_leases").first()
-        )
-      ).toEqual({ total: 0 });
-      expect(
-        yield* Effect.tryPromise(() =>
-          db.prepare("SELECT count(*) AS total FROM commercial_allowance_consumptions").first()
-        )
-      ).toEqual({ total: 0 });
-    })
-  ));
-
-it.each(atomicListings)(
-  "freshly fences atomic %s after a recovery-generation change",
-  (operationId) =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const fixture = yield* browserFixture(operationId);
-        expect((yield* Effect.tryPromise(() => fixture.request())).status).toBe(200);
-        yield* Effect.tryPromise(() => fixture.bucket.put("recovery/generation", "restored"));
-        fixture.generationReads.mockClear();
-        const response = yield* Effect.tryPromise(() => fixture.request());
-        expect(response.status).toBe(503);
-        expect(fixture.generationReads).toHaveBeenCalled();
-        expect(
-          yield* Effect.tryPromise(() =>
-            fixture.db
-              .prepare("SELECT count(*) AS total FROM audit_entries WHERE operation=?")
-              .bind(operationId)
-              .first()
-          )
-        ).toEqual({ total: 1 });
-      })
-    )
-);
-
-it.each(atomicListings)(
-  "does not replay %s after losing an already committed native response",
-  (operationId) =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const fixture = yield* browserFixture(operationId);
-        // Establish the recovery fence before injecting loss into the next owner batch.
-        expect((yield* Effect.tryPromise(() => fixture.request())).status).toBe(200);
-        let loseResponse = true;
-        const native = new Proxy(fixture.db, {
-          get: (target, property): unknown => {
-            if (property === "batch") {
-              return (statements: Array<D1PreparedStatement>): Promise<Array<D1Result>> =>
-                target.batch(statements).then((rows) => {
-                  if (loseResponse) {
-                    loseResponse = false;
-                    throw new Error("Synthetic response loss after native commit");
-                  }
-                  return rows;
-                });
-            }
-            const member: unknown = Reflect.get(target, property, target);
-            return typeof member === "function" ? member.bind(target) : member;
+  );
+  const request = (path: string, headers: Record<string, string> = {}): Effect.Effect<Response> =>
+    native(() =>
+      store.send(
+        new Request("https://api.fidyapp.com" + path, {
+          headers: {
+            origin: "https://app.fidyapp.com",
+            cookie: "__Host-fidy_session=" + alice.bearer,
+            "Fidy-Session-Binding": alice.session,
+            ...headers,
           },
-        });
-        const request = new Request(
-          `https://api.fidyapp.com${Option.getOrThrow(Option.fromUndefinedOr(getBoundOperationCatalog().byId.get(operationId))).route}${browserQueries.get(operationId) ?? ""}`,
-          {
-            headers: {
-              cookie: `__Host-fidy_session=${fixture.token}`,
-              [browserSessionBindingHeader]: fixture.sessionId,
-            },
-          }
-        );
-        const response = yield* Effect.tryPromise(() =>
-          fixture.core(request, {
-            ...fixture.environment,
-            DB: maintenancePerformanceDatabase({ db: native, bucket: fixture.bucket }),
-          })
-        );
-        expect(response.status).toBe(503);
-        expect(loseResponse).toBe(false);
-        expect(
-          yield* Effect.tryPromise(() =>
-            fixture.db
-              .prepare("SELECT count(*) AS total FROM audit_entries WHERE operation=?")
-              .bind(operationId)
-              .first()
-          )
-        ).toEqual({ total: 2 });
-        expect(
-          yield* Effect.tryPromise(() =>
-            fixture.db.prepare("SELECT count(*) AS total FROM canonical_request_leases").first()
-          )
-        ).toEqual({ total: 0 });
-        expect(
-          yield* Effect.tryPromise(() =>
-            fixture.db
-              .prepare("SELECT count(*) AS total FROM commercial_allowance_consumptions")
-              .first()
-          )
-        ).toEqual({ total: 0 });
-      })
-    )
-);
-
-const historyId = (index: number): string =>
-  `40000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
-const historyStart = 1767225600000;
-const historyMinute = 60000;
-
-it("refuses malformed atomic Transaction projections without a lease or commercial spend", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const fixture = yield* browserFixture("transactions.listTransactions");
-      yield* seedScopedHistory(fixture);
-      yield* Effect.tryPromise(() =>
-        fixture.db
-          .prepare(
-            "UPDATE transaction_projection_leaf SET amount='invalid-money' WHERE user_id=? AND id=?"
-          )
-          .bind(fixture.userId, historyId(3))
-          .run()
-      );
-      const response = yield* Effect.tryPromise(() => fixture.request());
-      expect(response.status).toBe(503);
-      for (const table of ["canonical_request_leases", "commercial_allowance_consumptions"]) {
-        expect(
-          yield* Effect.tryPromise(() =>
-            fixture.db.prepare(`SELECT count(*) AS total FROM ${table}`).first()
-          )
-        ).toEqual({ total: 0 });
-      }
-    })
-  ));
-
-const seedScopedHistory = (fixture: BrowserReadFixture): Effect.Effect<void, Cause.UnknownError> =>
-  Effect.gen(function* () {
-    const foreignUser = "10000000-0000-4000-8000-000000000002";
-    yield* Effect.tryPromise(() =>
-      fixture.db
-        .prepare(
-          "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?,'CO','es-CO','America/Bogota',0)"
-        )
-        .bind(foreignUser)
-        .run()
-    );
-    yield* Effect.tryPromise(() =>
-      fixture.db.batch(
-        Array.from({ length: 10 }, (_, offset) => {
-          const index = offset + 1;
-          return fixture.db
-            .prepare(
-              "INSERT INTO transactions(id,user_id,amount,currency,direction,counterparty,category_id,notes,occurred_at_ms,created_at_ms,revision) VALUES (?,?,?,?,?,'shop','10000000-0000-4000-8000-000000000016',?,?,?,?)"
-            )
-            .bind(
-              historyId(index),
-              index > 8 ? foreignUser : fixture.userId,
-              index === 3 ? "9007199254740993.01" : "100",
-              index === 8 ? "USD" : "COP",
-              index === 8 ? "inflow" : "outflow",
-              index === 3 ? "corrected" : null,
-              historyStart + index * historyMinute,
-              historyStart + index * historyMinute + 1000,
-              index === 3 ? 1 : 0
-            );
         })
       )
     );
-    yield* Effect.tryPromise(() =>
-      fixture.db.batch([
-        fixture.db
-          .prepare("INSERT INTO transaction_reconciliation_decisions VALUES (?,?,?,'linked',?,?)")
-          .bind(fixture.userId, historyId(1), historyId(2), historyId(1), historyStart),
-        fixture.db
-          .prepare(
-            "UPDATE transactions SET reconciliation_first_id=?,reconciliation_second_id=? WHERE user_id=? AND id IN (?,?)"
-          )
-          .bind(historyId(1), historyId(2), fixture.userId, historyId(1), historyId(2)),
-      ])
+  const counts = (): ReturnType<typeof sql> =>
+    sql(
+      "SELECT (SELECT count(*) FROM audit_entries) AS audit,(SELECT count(*) FROM canonical_request_buckets) AS buckets,(SELECT count(*) FROM canonical_request_leases) AS leases,(SELECT count(*) FROM commercial_allowance_consumptions) AS charges"
     );
-  });
-
-it.each(["ready", "rebuilding", "absent"] as const)(
-  "keeps atomic History identical across filters, pages and %s projection state",
-  (readiness) =>
-    Effect.runPromise(
+  return { store, sql, request, counts, now };
+});
+const refusedHeaders: ReadonlyArray<Record<string, string>> = [
+  { authorization: "Bearer invalid" },
+  { "Fidy-Session-Binding": "" },
+  { "Fidy-Session-Binding": bob.session },
+  { cookie: "" },
+];
+const wrongCredentials = Effect.fnUntraced(function* (subject: Effect.Success<typeof fixture>) {
+  const before = yield* subject.counts();
+  for (const target of endpoints) {
+    for (const headers of refusedHeaders) {
+      const response = yield* subject.request(target.path, headers);
+      expect(response.status, target.id + " " + Object.keys(headers).join(",")).toBe(401);
+    }
+  }
+  expect(yield* subject.counts()).toEqual(before);
+});
+const refusedStanding = Effect.fnUntraced(function* (mode: "revoked" | "expired" | "withdrawn") {
+  const subject = yield* fixture;
+  if (mode === "revoked") {
+    yield* subject.sql(
+      "UPDATE web_sessions SET revoked_at_ms=? WHERE id=?",
+      subject.now,
+      alice.session
+    );
+  }
+  if (mode === "expired") {
+    yield* subject.sql(
+      "UPDATE web_sessions SET idle_expires_at_ms=? WHERE id=?",
+      subject.now,
+      alice.session
+    );
+  }
+  if (mode === "withdrawn") {
+    const snapshot = yield* Schema.encodeEffect(Schema.fromJsonString(DisclosureSnapshot))(
+      currentDisclosureFor()
+    );
+    yield* subject.sql(
+      "INSERT INTO consent_history(id,user_id,record_type,occurred_at_ms,disclosure_json) VALUES('grant',?,'processing_grant',?,?)",
+      alice.user,
+      subject.now,
+      snapshot
+    );
+    yield* subject.sql(
+      "INSERT INTO consent_history(id,user_id,record_type,grant_record_id,session_id,occurred_at_ms) VALUES('withdraw',?,'processing_withdrawal','grant',?,?)",
+      alice.user,
+      alice.session,
+      subject.now
+    );
+  }
+  const before = yield* subject.counts();
+  for (const target of endpoints) {
+    const response = yield* subject.request(target.path);
+    expect(response.status, mode + " " + target.id).toBe(401);
+  }
+  expect(yield* subject.counts()).toEqual(before);
+});
+it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
+  test.effect(
+    "refuses absent or mismatched binding, missing cookies and explicit invalid authorization for every listing before accounting",
+    () =>
       Effect.gen(function* () {
-        const fixture = yield* browserFixture("transactions.listTransactions");
-        yield* seedScopedHistory(fixture);
-        if (readiness === "absent") {
-          yield* Effect.tryPromise(() =>
-            fixture.db
-              .prepare("DELETE FROM transaction_projection_state WHERE user_id=?")
-              .bind(fixture.userId)
-              .run()
+        yield* wrongCredentials(yield* fixture);
+      })
+  );
+  test.effect(
+    "rejects a mismatched mounted cookie before independent provider, support, health or bootstrap work",
+    () =>
+      Effect.gen(function* () {
+        const subject = yield* fixture;
+        const core = yield* native(() => subject.store.runtime.getWorker("core"));
+        const routes = [
+          ["GET", oauthPaths.authorize],
+          ["POST", "/providers/kapso/callback"],
+          ["POST", "/web/subscription/payment-enrollments/prepare"],
+          ["POST", "/web/hosted-turns"],
+          ["GET", "/user"],
+          ["GET", "/health"],
+          ["POST", "/internal/titular-erasure"],
+        ];
+        const before = yield* subject.counts();
+        for (const [method, path] of routes) {
+          const reply = yield* native(() =>
+            core.fetch("https://api.fidyapp.com" + path, {
+              method,
+              headers: {
+                cookie: "__Host-fidy_session=" + alice.bearer,
+                "Fidy-Session-Binding": bob.session,
+              },
+            })
+          );
+          const replyBody = yield* native(() => reply.text());
+          expect(reply.status, path + " " + replyBody).toBe(401);
+        }
+        expect(yield* subject.counts()).toEqual(before);
+      })
+  );
+  for (const state of ["revoked", "expired", "withdrawn"] as const) {
+    test.effect(
+      "refuses every listing with " + state + " authority without charging or disclosing",
+      () => refusedStanding(state)
+    );
+  }
+  test.effect("preserves each User's quota, active leases and complete listing response", () =>
+    Effect.gen(function* () {
+      const subject = yield* fixture;
+      yield* subject.sql(
+        "INSERT INTO canonical_request_leases VALUES('own',?,?)",
+        alice.user,
+        subject.now + 60000
+      );
+      yield* native(() =>
+        subject.store
+          .owner(bob.user)
+          .exec(
+            "INSERT INTO canonical_request_leases VALUES('other-1',?,?),('other-2',?,?)",
+            bob.user,
+            subject.now + 60000,
+            bob.user,
+            subject.now + 60000
+          )
+      );
+      yield* subject.sql(
+        "INSERT INTO categories VALUES('invalid-category','unrelated invalid Category',1000000)"
+      );
+      for (const target of endpoints) {
+        const response = yield* subject.request(target.path);
+        expect(response.status, target.id).toBe(200);
+        const body = yield* native(() => response.json());
+        yield* Schema.decodeUnknownEffect(target.operation.success)(body);
+        expect(
+          yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(body)
+        ).not.toContain("unrelated invalid Category");
+        const limit = response.headers.get(canonicalAllowanceHeaders.limit);
+        expect(limit, target.id).toMatch(/^[1-9][0-9]*$/u);
+        expect(response.headers.get(canonicalAllowanceHeaders.remaining), target.id).toBe(limit);
+      }
+      expect(yield* subject.sql("SELECT id FROM canonical_request_leases")).toEqual([
+        { id: "own" },
+      ]);
+      expect(
+        yield* native(() =>
+          subject.store.owner(bob.user).exec("SELECT count(*) AS n FROM canonical_request_leases")
+        )
+      ).toEqual([{ n: 2 }]);
+      expect(
+        yield* subject.sql("SELECT count(*) AS n FROM commercial_allowance_consumptions")
+      ).toEqual([{ n: 0 }]);
+    })
+  );
+  for (const pressure of ["rate", "concurrency"] as const) {
+    test.effect("enforces shared " + pressure + " protection across all canonical listings", () =>
+      Effect.gen(function* () {
+        const subject = yield* fixture;
+        if (pressure === "rate") {
+          yield* subject.sql(
+            "INSERT INTO canonical_request_buckets VALUES(?,?)",
+            "user:" + alice.user,
+            subject.now + 60000
           );
         } else {
-          yield* Effect.tryPromise(() =>
-            fixture.db
-              .prepare("UPDATE transaction_projection_state SET readiness=? WHERE user_id=?")
-              .bind(readiness, fixture.userId)
-              .run()
+          yield* subject.sql(
+            "INSERT INTO canonical_request_leases VALUES('first',?,?),('second',?,?)",
+            alice.user,
+            subject.now + 60000,
+            alice.user,
+            subject.now + 60000
           );
         }
-        const digest = new Uint8Array(
-          yield* Effect.tryPromise(() =>
-            crypto.subtle.digest("SHA-256", new TextEncoder().encode(fixture.token))
-          )
+        const before = yield* subject.counts();
+        for (const target of endpoints) {
+          const reply = yield* subject.request(target.path);
+          expect(reply.status, target.id).toBe(429);
+          expect(reply.headers.get("retry-after"), target.id).toBe("1");
+        }
+        expect(yield* subject.counts()).toEqual(before);
+      })
+    );
+  }
+  test.effect(
+    "rolls back admission and disclosures if the User cannot commit the required Audit",
+    () =>
+      Effect.gen(function* () {
+        const subject = yield* fixture;
+        yield* subject.sql(
+          "CREATE TRIGGER interrupt_audit BEFORE INSERT ON audit_entries BEGIN SELECT RAISE(IGNORE); END"
         );
-        const route = Option.getOrThrow(
-          Option.fromUndefinedOr(
-            getBoundOperationCatalog().byId.get("transactions.listTransactions")
-          )
-        ).route;
-        const cursor = `${DateTime.formatIso(DateTime.makeUnsafe(historyStart + 6 * historyMinute))}|${DateTime.formatIso(DateTime.makeUnsafe(historyStart + 6 * historyMinute + 1000))}|${historyId(6)}`;
-        for (const test of [
-          { query: "?limit=100", status: 200 },
-          { query: "?limit=2", status: 200 },
-          { query: "?limit=5&currency=COP&direction=outflow&counterparty=shop", status: 200 },
-          { query: "?from=2026-01-01T00:00:00Z&to=2026-01-01T00:10:00Z", status: 200 },
-          { query: `?limit=2&cursor=${encodeURIComponent(cursor)}`, status: 200 },
-          { query: "?limit=invalid", status: 400 },
-          { query: "?limit=2&limit=3", status: 400 },
-        ]) {
-          const request = new Request(`https://api.fidyapp.com${route}${test.query}`, {
-            headers: {
-              cookie: `__Host-fidy_session=${fixture.token}`,
-              [browserSessionBindingHeader]: fixture.sessionId,
-            },
-          });
-          fixture.generationReads.mockClear();
-          const actual = yield* Effect.tryPromise(() => fixture.core(request, fixture.environment));
-          expect(actual.status).toBe(test.status);
-          expect(fixture.generationReads).toHaveBeenCalledTimes(1);
-          const expected = yield* browseTransactions({
-            db: fixture.db,
-            selection: {
-              request,
-              search: false,
-              id: Option.none(),
-              subject: { id: fixture.sessionId, userId: fixture.userId, digest },
-            },
-          });
-          expect(expected.status).toBe(test.status);
-          const body = yield* Effect.tryPromise(() => actual.text());
-          expect(body).toBe(yield* Effect.tryPromise(() => expected.text()));
-          expect(body).not.toContain(historyId(9));
-          expect(body).not.toContain(historyId(10));
-          if (test.query === "?limit=100") {
-            expect(body).toContain("9007199254740993.01");
-            expect(body).not.toContain(historyId(2));
-          }
+        const before = yield* subject.counts();
+        for (const target of endpoints) {
+          expect((yield* subject.request(target.path)).status, target.id).toBe(503);
+        }
+        expect(yield* subject.counts()).toEqual(before);
+      })
+  );
+  test.effect(
+    "losing a committed owner reply returns unavailable and never repeats listing work",
+    () =>
+      Effect.gen(function* () {
+        const subject = yield* fixture;
+        yield* subject.sql("CREATE TABLE lose_read_reply(path TEXT PRIMARY KEY) STRICT");
+        for (const target of endpoints) {
+          const path = target.path.split("?")[0];
+          yield* subject.sql("INSERT INTO lose_read_reply VALUES(?)", path);
+          expect((yield* subject.request(target.path)).status, target.id).toBe(503);
+          expect(
+            yield* subject.sql(
+              "SELECT count(*) AS n FROM audit_entries WHERE operation=? AND record_type='session_call'",
+              target.id
+            ),
+            target.id
+          ).toEqual([{ n: 1 }]);
+          expect(yield* subject.sql("SELECT count(*) AS n FROM lose_read_reply")).toEqual([
+            { n: 0 },
+          ]);
         }
         expect(
-          yield* Effect.tryPromise(() =>
-            fixture.db.prepare("SELECT count(*) AS total FROM canonical_request_leases").first()
-          )
-        ).toEqual({ total: 0 });
-        expect(
-          yield* Effect.tryPromise(() =>
-            fixture.db
-              .prepare("SELECT count(*) AS total FROM commercial_allowance_consumptions")
-              .first()
-          )
-        ).toEqual({ total: 0 });
+          yield* subject.sql("SELECT count(*) AS n FROM commercial_allowance_consumptions")
+        ).toEqual([{ n: 0 }]);
+        expect(yield* subject.sql("SELECT count(*) AS n FROM canonical_request_leases")).toEqual([
+          { n: 0 },
+        ]);
       })
-    )
-);
-
-it.each([
-  "pats.listPATs",
-  "subscription.listSubscriptionOffers",
-  "subscription.getSubscriptionStatus",
-] as const)("preserves complete %s metadata in the bound snapshot", (operation) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const fixture = yield* browserFixture(operation);
-      const actual = yield* Effect.tryPromise(() => fixture.request());
-      const subject = {
-        id: fixture.sessionId,
-        userId: fixture.userId,
-        digest: new Uint8Array(
-          yield* Effect.tryPromise(() =>
-            crypto.subtle.digest("SHA-256", new TextEncoder().encode(fixture.token))
-          )
-        ),
-      };
-      const expected =
-        operation === "pats.listPATs"
-          ? yield* listPATs({ db: fixture.db, subject })
-          : yield* executeProtectedSubscriptionQuery({ db: fixture.db, subject, operation });
-      expect(actual.status).toBe(200);
-      expect(expected.status).toBe(200);
-      expect(yield* Effect.tryPromise(() => actual.json())).toEqual(
-        yield* Effect.tryPromise(() => expected.json())
-      );
-    })
-  )
-);
+  );
+});

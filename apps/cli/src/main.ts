@@ -17,6 +17,8 @@ import { makeCredentialStore, supportedBunRevision } from "./credential/runtime"
 import { makePairingClient } from "./direct-client/runtime";
 import { runOperationCommand } from "./canonical/operations";
 import { makeCanonicalClient, readOperationInput } from "./canonical/runtime";
+import { runSampleReview } from "./sample-review/operations";
+import { makeReviewer } from "./sample-review/runtime";
 import { runSupportRecovery } from "./support-recovery/operations";
 import { makeRecoveryOperator } from "./support-recovery/runtime";
 
@@ -36,13 +38,17 @@ const validateFlags = Effect.fn(function* () {
   }
 });
 const runOperator = Effect.fn(function* () {
-  const operator = yield* makeRecoveryOperator(yield* HttpClient.HttpClient, {
+  const terminalOutput = {
     interactive: process.stdin.isTTY === true && process.stderr.isTTY === true,
-    write: (text) =>
+    write: (message: string): Effect.Effect<void> =>
       Effect.sync(() => {
-        process.stderr.write(text);
+        process.stderr.write(message);
       }),
-  });
+  };
+  if (commandArgs[0] === "sample-review") {
+    return yield* runSampleReview(args, yield* makeReviewer(terminalOutput));
+  }
+  const operator = yield* makeRecoveryOperator(yield* HttpClient.HttpClient, terminalOutput);
   if (yield* runSupportRecovery(args, operator)) process.exitCode = 1;
 });
 const localCredentialStore = Effect.gen(function* () {
@@ -55,7 +61,7 @@ const localCredentialStore = Effect.gen(function* () {
 });
 const authenticatedProgram = Effect.gen(function* () {
   yield* validateFlags();
-  if (commandArgs[0] === "support-recovery") {
+  if (commandArgs[0] === "sample-review" || commandArgs[0] === "support-recovery") {
     return yield* runOperator();
   }
   const credential = yield* localCredentialStore;

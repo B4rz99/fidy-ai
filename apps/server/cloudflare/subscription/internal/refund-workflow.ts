@@ -40,7 +40,7 @@ const RefundWork = Schema.Union([
     ),
   }),
 ]);
-const Snapshot = Schema.Struct({
+export const RefundSubmissionSnapshot = Schema.Struct({
   id: RefundAttemptId,
   kind: Schema.Literals(["refund", "card-void"]),
   transaction_id: WompiTransactionId,
@@ -56,7 +56,7 @@ const noRetry = {
 const pendingLimit = 32;
 const publicationCooldownMs = 60_000;
 export const isRefundWork = (body: unknown): boolean => Schema.is(RefundWork)(body);
-const submission = (row: typeof Snapshot.Type): RefundSubmission => ({
+export const submission = (row: typeof RefundSubmissionSnapshot.Type): RefundSubmission => ({
   id: row.id,
   kind: row.kind,
   transactionId: row.transaction_id,
@@ -156,7 +156,7 @@ const execute = (
         .first()
     );
     if (raw === null) return;
-    const captured = submission(yield* Schema.decodeUnknownEffect(Snapshot)(raw));
+    const captured = submission(yield* Schema.decodeUnknownEffect(RefundSubmissionSnapshot)(raw));
     const claimed = yield* submissionClaim(environment.DB, work);
     if (claimed === "absent") return;
     const http = yield* wompiHttp({ ...environment, WOMPI_ENVIRONMENT: "sandbox" });

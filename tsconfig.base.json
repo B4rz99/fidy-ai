@@ -150,17 +150,6 @@
             }
           },
           {
-            "include": [
-              "./apps/server/cloudflare/browser-acceptance-core-module.ts",
-              "./scripts/browser-core-bundle.test.ts"
-            ],
-            "options": {
-              "diagnosticSeverity": {
-                "strictEffectProvide": "off"
-              }
-            }
-          },
-          {
             "include": ["./apps/cli/src/main.ts", "./apps/cli/test/recovery-entry.ts"],
             "options": {
               "diagnosticSeverity": {
@@ -210,7 +199,7 @@
           {
             "include": [
               "./infra/cloudflare/inspect-worker-drift.ts",
-              "./infra/cloudflare/production-resources.ts"
+              "./infra/cloudflare/native-storage-resources.ts"
             ],
             "options": {
               "diagnosticSeverity": {

@@ -207,3 +207,9 @@ export {
 export { ReviewCommand, ReviewDraft } from "~/core/ingestion/contract";
 
 export { telemetryTraceHeader } from "~/shell/browser-transport/contract";
+
+export {
+  SampleReviewCommand,
+  SampleReviewResult,
+  sampleReviewPath,
+} from "~/core/ingestion/contract";

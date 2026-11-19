@@ -15,7 +15,6 @@ export type VerifiedOutcome =
       finalizedAtMs: Option.Option<number>;
     }>;
 type Settlement = Readonly<{
-  db: D1Database;
   attemptId: BillingAttemptId;
   transactionId: WompiTransactionId;
   observedAtMs: number;
@@ -23,8 +22,16 @@ type Settlement = Readonly<{
 }>;
 const retryOpportunityMs = Duration.toMillis(wompiRetryOpportunity);
 
-const evidenceAndOutcome = (input: Settlement): ReadonlyArray<D1PreparedStatement> => {
-  const { db, attemptId, transactionId, observedAtMs, outcome } = input;
+type Binder<Statement> = Readonly<{
+  prepare: (text: string) => {
+    bind: (...args: ReadonlyArray<unknown>) => Statement;
+  };
+}>;
+const evidenceAndOutcome = <Statement>(
+  db: Binder<Statement>,
+  input: Settlement
+): ReadonlyArray<Statement> => {
+  const { attemptId, transactionId, observedAtMs, outcome } = input;
   const negative =
     outcome.status === "DECLINED" || outcome.status === "VOIDED" || outcome.status === "ERROR";
   return [
@@ -78,8 +85,12 @@ const evidenceAndOutcome = (input: Settlement): ReadonlyArray<D1PreparedStatemen
   ];
 };
 
-const standingAndIntent = (input: Settlement): ReadonlyArray<D1PreparedStatement> => {
-  const { db, attemptId, observedAtMs, outcome } = input;
+const standingAndIntent = <Statement>(
+  db: Binder<Statement>,
+  input: Settlement,
+  auditTable: "audit_entries" | "billing_transition_audit"
+): ReadonlyArray<Statement> => {
+  const { attemptId, observedAtMs, outcome } = input;
   const period =
     outcome.status === "APPROVED" ? Option.some(outcome.paidPeriod) : Option.none<PaidPeriod>();
   return [
@@ -100,8 +111,8 @@ const standingAndIntent = (input: Settlement): ReadonlyArray<D1PreparedStatement
         <(SELECT paid_ends_at_ms FROM billing_attempt_context WHERE id=?1))`)
       .bind(attemptId),
     db
-      .prepare(`INSERT OR IGNORE INTO audit_entries(record_type,attempt_id,transition,occurred_at_ms)
-      SELECT 'billing_transition',id,status,? FROM billing_attempt_context WHERE id=? AND status IN('succeeded','failed')`)
+      .prepare(`INSERT OR IGNORE INTO ${auditTable}(${auditTable === "audit_entries" ? "record_type," : ""}attempt_id,transition,occurred_at_ms)
+      SELECT ${auditTable === "audit_entries" ? "'billing_transition'," : ""}id,status,? FROM billing_attempt_context WHERE id=? AND status IN('succeeded','failed')`)
       .bind(observedAtMs, attemptId),
     db
       .prepare(`UPDATE billing_attempts SET late_approval_observed_at_ms=?
@@ -115,11 +126,32 @@ const standingAndIntent = (input: Settlement): ReadonlyArray<D1PreparedStatement
     db
       .prepare(`UPDATE billing_attempts SET followup_due_at_ms=paid_ends_at_ms
       WHERE id=? AND paid_starts_at_ms IS NOT NULL AND followup_due_at_ms IS NULL
-      AND EXISTS(SELECT 1 FROM subscription_standing s WHERE s.attempt_id=billing_attempts.id)`)
+      AND EXISTS(SELECT 1 FROM subscription_standing s WHERE s.attempt_id=billing_attempts.id)
+      AND NOT EXISTS(SELECT 1 FROM erasure_requests e JOIN subscriptions s ON s.user_id=e.user_id WHERE s.id=billing_attempts.subscription_id)`)
       .bind(attemptId),
   ];
 };
 
 /** Persist verified evidence and all resulting Subscription state as one guarded D1 atomic unit. */
-export const recordVerifiedBillingEvidence = (input: Settlement): Promise<void> =>
-  input.db.batch([...evidenceAndOutcome(input), ...standingAndIntent(input)]).then(() => undefined);
+export const recordVerifiedBillingEvidence = (
+  input: Settlement & { db: D1Database }
+): Promise<void> =>
+  input.db
+    .batch([
+      ...evidenceAndOutcome(input.db, input),
+      ...standingAndIntent(input.db, input, "audit_entries"),
+    ])
+    .then(() => undefined);
+
+type LocalStatement = Readonly<{ text: string; params: ReadonlyArray<unknown> }>;
+export const nativeSettlementStatements = (input: Settlement): ReadonlyArray<LocalStatement> => {
+  const builder: Binder<LocalStatement> = {
+    prepare: (text) => ({
+      bind: (...params) => ({ text, params }),
+    }),
+  };
+  return [
+    ...evidenceAndOutcome(builder, input),
+    ...standingAndIntent(builder, input, "billing_transition_audit"),
+  ];
+};

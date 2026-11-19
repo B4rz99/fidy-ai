@@ -1,704 +1,391 @@
-import { openAiTestKey } from "../openai.test-fixture";
-import { type Cause, Clock, Data, DateTime, Effect, Option, Schema } from "effect";
-import { type ConsentUnavailable } from "./contract";
-import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
-import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
-import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
-import { UserTransactionCoordinator } from "../transactions/runtime";
-import { fixtureWorker as coreWorker } from "../core-worker.test-fixture";
-import publicWorker from "../public-worker";
-import { currentDisclosureFor } from "../../src/shell/consent/operations";
+import { it } from "@effect/vitest";
+import { NodeFileSystem } from "@effect/platform-node";
+import { Clock, Effect, Result, Schema } from "effect";
+import { expect } from "vitest";
+import { DisclosureSnapshot } from "../../src/core/consent/contract";
+import { currentDisclosureFor, webSignupDisclosure } from "../../src/shell/consent/operations";
 import {
-  PrivacyTransactionPage,
   ProcessingAuthorization,
   ProcessingConsentStatus,
 } from "../../src/shell/processing-consent/contract";
-import { DisclosureSnapshot } from "../../src/shell/consent/contract";
-import {
-  executeConsentRenewal,
-  executeConsentWithdrawal,
-  prepareConsentAction,
-  readConsentStatus,
-  recordWebOnboardingConsent,
-} from "./operations";
-import { UserId } from "../../src/core/identity/contract";
-import { ResourceLimited } from "../../src/shell/public-http/contract";
+import { alice, bob, nativeTransactionJourney } from "../financial-user-store.test-fixture";
+import { native } from "../user-store.test-fixture";
 
-const users = [
-  "10000000-0000-4000-8000-000000000051",
-  "10000000-0000-4000-8000-000000000052",
-] as const;
-const sessions = [
-  "10000000-0000-4000-8000-000000000061",
-  "10000000-0000-4000-8000-000000000062",
-] as const;
-const databases = isolatedTestDatabases();
-const bearer = (index: number): string => String(index + 1).repeat(43);
-const digest = (text: string): Promise<Uint8Array> =>
-  crypto.subtle
-    .digest("SHA-256", new TextEncoder().encode(text))
-    .then((value) => new Uint8Array(value));
-const seedUser = (
-  db: D1Database,
-  input: Readonly<{
-    user: string;
-    index: number;
-    current: number;
-  }>
-): Effect.Effect<void, Cause.UnknownError> =>
-  Effect.gen(function* () {
-    const { user, index, current } = input;
-    const verifierDigest = yield* Effect.tryPromise(() => digest(`verifier${index}`));
-    const tokenDigest = yield* Effect.tryPromise(() => digest(bearer(index)));
-    yield* Effect.tryPromise(() =>
-      db.batch([
-        db
-          .prepare(
-            "INSERT INTO users (id, service_market, locale, time_zone, created_at_ms) VALUES (?, 'CO', 'es-CO', 'America/Bogota', ?)"
-          )
-          .bind(user, current),
-        db
-          .prepare(
-            "INSERT INTO browser_login_pairings (id, public_code, verifier_digest, user_id, state, created_at_ms, expires_at_ms) VALUES (?, ?, ?, ?, 'consumed', ?, ?)"
-          )
-          .bind(
-            `10000000-0000-4000-8000-00000000007${index}`,
-            `ABCD-123${index}`,
-            verifierDigest,
-            user,
-            current,
-            current + 600000
-          ),
-        db
-          .prepare(
-            "INSERT INTO web_sessions (id, pairing_id, user_id, token_digest, created_at_ms, fresh_until_ms, idle_expires_at_ms, hard_expires_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-          )
-          .bind(
-            sessions[index],
-            `10000000-0000-4000-8000-00000000007${index}`,
-            user,
-            tokenDigest,
-            current,
-            current + 600000,
-            current + 3600000,
-            current + 7776000000
-          ),
-      ])
-    );
-  });
-const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
-  Effect.gen(function* () {
-    const db = yield* Effect.tryPromise(() => databases.acquire());
-
-    yield* Effect.tryPromise(() => installTestSchema({ db }));
-    const current = DateTime.nowUnsafe().epochMilliseconds;
-    yield* Effect.forEach(users, (user, index) => seedUser(db, { user, index, current }), {
-      discard: true,
-    });
-    return db;
-  });
-afterAll(() => databases.dispose());
-beforeEach(() => vi.useFakeTimers({ toFake: ["Date"] }));
-afterEach(() => {
-  vi.useRealTimers();
-  vi.unstubAllGlobals();
-});
-const coordinatorByDatabase = new WeakMap<D1Database, Map<string, UserTransactionCoordinator>>();
-const send = (
-  db: D1Database,
-  request: Request,
-  beforeCoordinate?: (database: D1Database) => Promise<unknown>
-): Promise<Response> => {
-  vi.setSystemTime(DateTime.nowUnsafe().epochMilliseconds + 1000);
-  request.headers.set("cf-connecting-ip", "192.0.2.35");
-  const coordinators =
-    coordinatorByDatabase.get(db) ?? new Map<string, UserTransactionCoordinator>();
-  coordinatorByDatabase.set(db, coordinators);
-  return publicWorker.fetch(request, {
-    BROWSER_ORIGIN: "https://app.fidyapp.com",
-    LOCAL_CANONICAL_READ_BEARER: "",
-    PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
-    RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
-    CORE: {
-      fetch: (internal) =>
-        coreWorker.fetch(new Request(internal), {
-          DB: db,
-          OPENAI_API_KEY: openAiTestKey({
-            run: (): Promise<never> => Promise.reject(new Error("unused")),
-          }),
-          CONTRACT_DIGEST: "a".repeat(64),
-          RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
-          HOSTED_AI_MODEL: approvedOpenAiModel,
-          BROWSER_ORIGIN: "https://app.fidyapp.com",
-          WOMPI_ENVIRONMENT: "",
-          WOMPI_PUBLIC_KEY: "",
-          WOMPI_PRIVATE_KEY: "",
-          WOMPI_INTEGRITY_SECRET: "",
-          USER_TRANSACTION_COORDINATOR: {
-            getByName: (name) => ({
-              fetch: (command) => {
-                let coordinator = coordinators.get(name);
-                if (coordinator === undefined) {
-                  coordinator = new UserTransactionCoordinator(
-                    {
-                      id: { name },
-                      storage: {
-                        getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> =>
-                          Promise.resolve(null),
-                        deleteAlarm: (): Promise<void> => Promise.resolve(),
-                        setAlarm: (): Promise<void> => Promise.resolve(),
-                      },
-                    },
-                    {
-                      DB: db,
-                      OPENAI_API_KEY: openAiTestKey({
-                        run: (): Promise<never> => Promise.reject(new Error("unused")),
-                      }),
-                      HOSTED_AI_MODEL: approvedOpenAiModel,
-                    }
-                  );
-                  coordinators.set(name, coordinator);
-                }
-                const admittedCoordinator = coordinator;
-                return beforeCoordinate === undefined
-                  ? admittedCoordinator.fetch(new Request(command))
-                  : beforeCoordinate(db).then(() =>
-                      admittedCoordinator.fetch(new Request(command))
-                    );
-              },
-            }),
-          },
-          KAPSO_API_KEY: "",
-          WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
-          KAPSO_WEBHOOK_SECRET: "",
-          WHATSAPP_BUSINESS_PORTFOLIO_ID: "portfolio",
-          CLOUDFLARE_ACCESS_ISSUER: "",
-          CLOUDFLARE_ACCESS_AUDIENCE: "",
-        }),
-    },
-  });
-};
-const request = (
-  index: number,
-  path: string,
-  ...args: [method?: string, body?: object]
-): Request => {
-  const [method = "GET", body] = args;
-  const init: RequestInit = {
-    method,
-    headers: {
-      origin: "https://app.fidyapp.com",
-      "Fidy-Session-Binding": sessions[index] ?? "invalid",
-      cookie: `__Host-fidy_session=${bearer(index)}`,
-      ...(body === undefined ? {} : { "content-type": "application/json" }),
-    },
-  };
-  return new Request(
-    `https://api.fidyapp.com${path}`,
-    body === undefined
-      ? init
-      : {
-          ...init,
-          body: JSON.stringify(body),
-        }
+const path = "/web/consent",
+  auth = path + "/authorization",
+  withdrawal = path + "/withdraw",
+  renewal = path + "/renew";
+const grantId = "30000000-0000-4000-8000-000000000000",
+  remoteGrant = "30000000-0000-4000-8000-000000000001";
+type Journey = Effect.Success<typeof nativeTransactionJourney>;
+type Call = { user: typeof alice; path: string } & Partial<
+  Readonly<{ method: string; body: unknown; headers: Readonly<Record<string, string>> }>
+>;
+const send = Effect.fn(function* (db: Journey, input: Call) {
+  return yield* native(() =>
+    db.send(
+      new Request("https://api.fidyapp.com" + input.path, {
+        method: input.method ?? "GET",
+        headers: {
+          origin: "https://app.fidyapp.com",
+          "content-type": "application/json",
+          "fidy-session-binding": input.user.session,
+          cookie: "__Host-fidy_session=" + input.user.bearer,
+          ...input.headers,
+        },
+        ...(input.method === "GET" || input.body === undefined
+          ? {}
+          : { body: JSON.stringify(input.body) }),
+      })
+    )
   );
-};
-
-const consentSetup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
-  Effect.gen(function* () {
-    const db = yield* setup();
-    const current = DateTime.nowUnsafe().epochMilliseconds;
-    yield* Effect.tryPromise(() =>
-      db.batch(
-        users.map((userId, index) =>
-          db
-            .prepare(
-              "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?, ?, ?, 'disclosed', 'accepted', ?, ?)"
-            )
-            .bind(
-              `30000000-0000-4000-8000-00000000000${index}`,
-              userId,
-              Schema.encodeSync(Schema.fromJsonString(DisclosureSnapshot))(currentDisclosureFor()),
-              current,
-              current
-            )
-        )
+});
+const json = Effect.fn(function* <Value, Encoded>(
+  reply: Response,
+  shape: Schema.Codec<Value, Encoded>
+) {
+  expect(reply.status).toBe(200);
+  return yield* Schema.decodeUnknownEffect(shape)(yield* native(() => reply.json()));
+});
+const granted = Effect.fn(function* (
+  db: Journey,
+  subject: typeof alice,
+  { reference, disclosure }: { reference: string; disclosure: DisclosureSnapshot }
+) {
+  const saved = yield* Schema.encodeEffect(Schema.fromJsonString(DisclosureSnapshot))(disclosure);
+  const now = yield* Clock.currentTimeMillis;
+  yield* native(() =>
+    db
+      .owner(subject.user)
+      .exec(
+        "INSERT INTO consent_history(id,user_id,record_type,occurred_at_ms,disclosure_json) VALUES(?,?,'processing_grant',?,?)",
+        reference,
+        subject.user,
+        now,
+        saved
       )
-    );
-    return db;
+  );
+  return { reference, acceptedAtMs: now, disclosure };
+});
+const setup = Effect.fn(function* () {
+  const db = yield* nativeTransactionJourney;
+  const first = yield* granted(db, alice, {
+    reference: grantId,
+    disclosure: webSignupDisclosure(),
   });
-
-it("preserves a declared retryable refusal for a pressured Consent read", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* consentSetup();
-      const availableAt = DateTime.nowUnsafe().epochMilliseconds + 60_000;
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare("INSERT INTO canonical_request_buckets VALUES (?,?)")
-          .bind(`user:${users[0]}`, availableAt)
-          .run()
-      );
-      const refused = yield* Effect.tryPromise(() => send(db, request(0, "/web/consent")));
-      expect(refused.status).toBe(429);
-      expect(refused.headers.get("retry-after")).toBe("1");
-      expect(refused.headers.get("cache-control")).toBe("no-store");
-      yield* Schema.decodeUnknownEffect(Schema.toCodecJson(ResourceLimited))(
-        yield* Effect.tryPromise(() => refused.json())
-      );
-      vi.setSystemTime(availableAt);
-      const accepted = yield* Effect.tryPromise(() => send(db, request(0, "/web/consent")));
-      expect(accepted.status).toBe(200);
-      const status = yield* Schema.decodeUnknownEffect(ProcessingConsentStatus)(
-        yield* Effect.tryPromise(() => accepted.json())
-      );
-      expect(status.status).toBe("Granted");
-    })
-  ));
-
-it("renews the exact withdrawn authorization through the public browser boundary and permits another withdrawal", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* consentSetup();
-      const withdrawn = yield* Effect.tryPromise(() =>
-        send(db, request(0, "/web/consent/withdraw", "POST", { confirm: true }))
-      );
-      const status = yield* Schema.decodeUnknownEffect(ProcessingConsentStatus)(
-        yield* Effect.tryPromise(() => withdrawn.json())
-      );
-      if (status.status !== "Revoked") throw new Error("Expected withdrawn test authorization");
-      const payload = {
-        confirm: true,
-        withdrawalReference: status.withdrawal.reference,
-        authorizationReference: "30000000-0000-4000-8000-000000000000",
-        disclosureSha256: currentDisclosureFor().contentSha256,
-      };
-      const renewed = yield* Effect.tryPromise(() =>
-        send(db, request(0, "/web/consent/renew", "POST", payload))
-      );
-      expect(renewed.status).toBe(200);
-      const receipt = yield* Effect.tryPromise(() => renewed.json());
-      const retry = yield* Effect.tryPromise(() =>
-        send(db, request(0, "/web/consent/renew", "POST", payload))
-      );
-      expect(retry.status).toBe(200);
-      expect(yield* Effect.tryPromise(() => retry.json())).toEqual(receipt);
-      const granted = yield* Effect.tryPromise(() => send(db, request(0, "/web/consent")));
-      expect(yield* Effect.tryPromise(() => granted.json())).toEqual({
-        status: "Granted",
-        withdrawal: null,
-      });
-      const second = yield* Effect.tryPromise(() =>
-        send(db, request(0, "/web/consent/withdraw", "POST", { confirm: true }))
-      );
-      const secondStatus = yield* Schema.decodeUnknownEffect(ProcessingConsentStatus)(
-        yield* Effect.tryPromise(() => second.json())
-      );
-      expect(secondStatus.status).toBe("Revoked");
-      if (secondStatus.status !== "Revoked") throw new Error("Expected another withdrawal");
-      expect(secondStatus.withdrawal.reference).not.toBe(status.withdrawal.reference);
-      const stale = yield* Effect.tryPromise(() =>
-        send(db, request(0, "/web/consent/renew", "POST", payload))
-      );
-      expect(stale.status).toBe(403);
-    })
-  ));
-
-const privacyHistorySetup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
-  Effect.gen(function* () {
-    const db = yield* consentSetup();
-    yield* Effect.tryPromise(() =>
-      db.batch(
-        users.map((userId, index) =>
-          db
-            .prepare(
-              "INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,notes,occurred_at_ms,created_at_ms) VALUES(?,?,'12000','COP','outflow','10000000-0000-4000-8000-000000000001',?,1790856000000,1790856000000)"
-            )
-            .bind(
-              `40000000-0000-4000-8000-00000000000${index}`,
-              userId,
-              `Synthetic owned record ${index}`
-            )
-        )
+  const second = yield* granted(db, bob, {
+    reference: remoteGrant,
+    disclosure: currentDisclosureFor(),
+  });
+  return { db, first, second };
+});
+const withdraw = (db: Journey): ReturnType<typeof send> =>
+  send(db, { user: alice, path: withdrawal, method: "POST", body: { confirm: true } });
+const decision = Effect.fn(function* (db: Journey) {
+  const reply = yield* json(yield* withdraw(db), ProcessingConsentStatus);
+  if (reply.status !== "Revoked") throw Error("Missing native withdrawal");
+  return {
+    confirm: true,
+    withdrawalReference: reply.withdrawal.reference,
+    authorizationReference: grantId,
+    disclosureSha256: webSignupDisclosure().contentSha256,
+  };
+});
+const original = Effect.fn(function* (db: Journey) {
+  return yield* json(yield* send(db, { user: alice, path: auth }), ProcessingAuthorization);
+});
+const counts = Effect.fn(function* (db: Journey, user: typeof alice) {
+  return yield* native(() =>
+    db
+      .owner(user.user)
+      .exec(
+        "SELECT (SELECT count(*) FROM consent_history WHERE record_type!='processing_grant') AS decisions,(SELECT count(*) FROM audit_entries WHERE operation IN('consent.withdraw','consent.renew') AND outcome='accepted') AS audit"
       )
-    );
-    return db;
-  });
-
-it("bounds privacy history pages and keeps every continuation bound to the authenticated User", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* privacyHistorySetup();
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(`WITH RECURSIVE n(value) AS (SELECT 1 UNION ALL SELECT value+1 FROM n WHERE value<100)
-      INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms)
-      SELECT printf('41000000-0000-4000-8000-%012d',value),?,'1000','COP','outflow','10000000-0000-4000-8000-000000000001',
-      1790942400000,1790942400000  FROM n`)
-          .bind(users[0])
-          .run()
-      );
-      const first = yield* Effect.tryPromise(() =>
-        send(db, request(0, "/web/privacy/transactions", "POST", { cursor: null }))
-      );
-      const firstPage = yield* Schema.decodeUnknownEffect(PrivacyTransactionPage)(
-        yield* Effect.tryPromise(() => first.json())
-      );
-      expect(firstPage.data).toHaveLength(100);
-      expect(firstPage.next).not.toBeNull();
-      const encoded = yield* Schema.encodeEffect(PrivacyTransactionPage)(firstPage);
-      const second = yield* Effect.tryPromise(() =>
-        send(db, request(0, "/web/privacy/transactions", "POST", { cursor: encoded.next }))
-      );
-      const secondPage = yield* Schema.decodeUnknownEffect(PrivacyTransactionPage)(
-        yield* Effect.tryPromise(() => second.json())
-      );
-      expect(secondPage.data).toHaveLength(1);
-      expect(secondPage.next).toBeNull();
-      expect(new Set([...firstPage.data, ...secondPage.data].map((record) => record.id)).size).toBe(
-        101
-      );
-      const other = yield* Effect.tryPromise(() =>
-        send(db, request(1, "/web/privacy/transactions", "POST", { cursor: encoded.next }))
-      );
-      const otherPage = yield* Schema.decodeUnknownEffect(PrivacyTransactionPage)(
-        yield* Effect.tryPromise(() => other.json())
-      );
-      expect(otherPage.data.every((record) => record.id.endsWith("001"))).toBe(true);
-      const wrongOrigin = request(0, "/web/privacy/transactions", "POST", { cursor: null });
-      wrongOrigin.headers.set("origin", "https://hostile.example");
-      expect((yield* Effect.tryPromise(() => send(db, wrongOrigin))).status).toBe(403);
-      const bearerOnly = request(0, "/web/privacy/transactions", "POST", { cursor: null });
-      bearerOnly.headers.delete("cookie");
-      bearerOnly.headers.set("authorization", "Bearer synthetic-pat");
-      expect((yield* Effect.tryPromise(() => send(db, bearerOnly))).status).toBe(401);
-    })
-  ));
-
-it("delivers actual same-User Transactions after withdrawal with scoped Audit and no renewed processing Consent", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* privacyHistorySetup();
-      yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE users SET time_zone='Europe/Madrid' WHERE id=?").bind(users[0]).run()
-      );
-      expect(
-        (yield* Effect.tryPromise(() =>
-          send(db, request(0, "/web/consent/withdraw", "POST", { confirm: true }))
-        )).status
-      ).toBe(200);
-      const response = yield* Effect.tryPromise(() =>
-        send(db, request(0, "/web/privacy/transactions", "POST", { cursor: null }))
-      );
-      expect(response.status).toBe(200);
-      expect(response.headers.get("cache-control")).toBe("no-store");
-      const page = yield* Schema.decodeUnknownEffect(PrivacyTransactionPage)(
-        yield* Effect.tryPromise(() => response.json())
-      );
-      expect(page.presentation).toEqual({ locale: "es-CO", timeZone: "Europe/Madrid" });
-      expect(
-        page.categories.find((category) => category.id === page.data[0]?.categoryId)?.label
-      ).toBe("Restaurantes");
-      expect(page.scope).toBe("transactions");
-      expect(page.data.map((record) => Option.getOrThrow(record.notes))).toEqual([
-        "Synthetic owned record 0",
-      ]);
-      expect(page.next).toBeNull();
-      const audit = yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "SELECT user_id,operation,outcome FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE id=?"
+  );
+});
+it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
+  test.effect(
+    "returns each original signup disclosure before and after withdrawal, renews its exact reference once and allows a new withdrawal",
+    () =>
+      Effect.gen(function* () {
+        const { db, first, second } = yield* setup();
+        expect(yield* original(db)).toEqual({ authorization: first });
+        const body = yield* decision(db);
+        expect(yield* original(db)).toEqual({ authorization: first });
+        expect(
+          yield* json(yield* send(db, { user: bob, path: auth }), ProcessingAuthorization)
+        ).toEqual({ authorization: second });
+        for (const input of [
+          { user: bob, body },
+          { user: alice, body: { ...body, authorizationReference: remoteGrant } },
+          { user: alice, body: { ...body, disclosureSha256: "0".repeat(64) } },
+        ]) {
+          expect((yield* send(db, { ...input, path: renewal, method: "POST" })).status).toBe(403);
+        }
+        const renew = (): ReturnType<typeof send> =>
+          send(db, { user: alice, path: renewal, method: "POST", body });
+        const one = yield* renew(),
+          repeated = yield* renew();
+        expect(one.status).toBe(200);
+        expect(yield* native(() => repeated.text())).toBe(yield* native(() => one.text()));
+        expect(yield* counts(db, alice)).toEqual([{ decisions: 2, audit: 2 }]);
+        expect(yield* counts(db, bob)).toEqual([{ decisions: 0, audit: 0 }]);
+        const next = yield* decision(db);
+        expect(next.withdrawalReference).not.toBe(body.withdrawalReference);
+        expect((yield* renew()).status).toBe(403);
+      })
+  );
+  test.effect(
+    "keeps pressure retryable and refuses hostile, mixed, oversized and mismatched browser decisions before legal or accounting effects",
+    () =>
+      Effect.gen(function* () {
+        const { db } = yield* setup();
+        const attempts: ReadonlyArray<Partial<Call> & { status: number }> = [
+          { headers: { origin: "https://other.example" }, status: 403 },
+          { headers: { authorization: "Bearer forbidden" }, status: 403 },
+          { headers: { "fidy-session-binding": bob.session }, status: 401 },
+          { body: { confirm: false }, status: 400 },
+          { body: { confirm: true, extra: "x" }, status: 400 },
+          { body: { confirm: "x".repeat(2048) }, status: 400 },
+          { method: "GET", status: 405 },
+        ];
+        for (const input of attempts) {
+          const { status, ...request } = input;
+          expect(
+            (yield* send(db, {
+              user: alice,
+              path: withdrawal,
+              method: "POST",
+              body: { confirm: true },
+              ...request,
+            })).status,
+            String(status)
+          ).toBe(status);
+        }
+        const available = (yield* Clock.currentTimeMillis) + 60000;
+        yield* native(() =>
+          db.exec(
+            "INSERT OR REPLACE INTO canonical_request_buckets VALUES(?,?)",
+            "user:" + alice.user,
+            available
           )
-          .bind(page.reference)
-          .first()
-      );
-      expect(audit).toEqual({
-        user_id: users[0],
-        operation: "privacy.transactions",
-        outcome: "accepted",
-      });
-      expect(yield* readConsentStatus({ db, userId: users[0] })).toBe("Revoked");
-      const foreignSelector = yield* Effect.tryPromise(() =>
-        send(
-          db,
-          request(0, "/web/privacy/transactions", "POST", { cursor: null, userId: users[1] })
-        )
-      );
-      expect(foreignSelector.status).toBe(400);
-      const other = yield* Effect.tryPromise(() =>
-        send(db, request(1, "/web/privacy/transactions", "POST", { cursor: null }))
-      );
-      const otherPage = yield* Schema.decodeUnknownEffect(PrivacyTransactionPage)(
-        yield* Effect.tryPromise(() => other.json())
-      );
-      expect(otherPage.presentation.timeZone).toBe("America/Bogota");
-      expect(otherPage.data.map((record) => Option.getOrThrow(record.notes))).toEqual([
-        "Synthetic owned record 1",
-      ]);
-    })
-  ));
-
-it("refuses stale or raced privacy proof and rolls back failed accountability without disclosing history", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* privacyHistorySetup();
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "UPDATE web_sessions SET created_at_ms=created_at_ms-600001,fresh_until_ms=fresh_until_ms-600001,hard_expires_at_ms=hard_expires_at_ms-600001 WHERE user_id=?"
-          )
-          .bind(users[0])
-          .run()
-      );
-      expect(
-        (yield* Effect.tryPromise(() =>
-          send(db, request(0, "/web/privacy/transactions", "POST", { cursor: null }))
-        )).status
-      ).toBe(401);
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "UPDATE web_sessions SET created_at_ms=created_at_ms+600001,fresh_until_ms=fresh_until_ms+600001,hard_expires_at_ms=hard_expires_at_ms+600001 WHERE user_id=?"
-          )
-          .bind(users[0])
-          .run()
-      );
-      yield* Effect.tryPromise(() =>
-        db.exec(
-          "CREATE TRIGGER fail_privacy_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='credential_call' AND NEW.operation='privacy.transactions' BEGIN SELECT RAISE(ABORT,'synthetic audit failure'); END;"
-        )
-      );
-      const failed = yield* Effect.tryPromise(() =>
-        send(db, request(0, "/web/privacy/transactions", "POST", { cursor: null }))
-      );
-      expect(failed.status).toBe(503);
-      expect(yield* Effect.tryPromise(() => failed.text())).not.toContain("Synthetic owned record");
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "SELECT COUNT(*) AS n FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation='privacy.transactions'"
-            )
-            .first()
-        ))?.n
-      ).toBe(0);
-      yield* Effect.tryPromise(() =>
-        db.exec(
-          "DROP TRIGGER fail_privacy_audit; CREATE TRIGGER expire_privacy_session AFTER INSERT ON canonical_request_leases BEGIN UPDATE web_sessions SET created_at_ms=created_at_ms-600001,fresh_until_ms=fresh_until_ms-600001,hard_expires_at_ms=hard_expires_at_ms-600001; END;"
-        )
-      );
-      expect(
-        (yield* Effect.tryPromise(() =>
-          send(db, request(0, "/web/privacy/transactions", "POST", { cursor: null }))
-        )).status
-      ).toBe(401);
-    })
-  ));
-
-it("withdraws only the authenticated User, keeps one stable receipt on concurrent replay and refuses later protected work", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* consentSetup();
-      const before = yield* Effect.tryPromise(() => send(db, request(0, "/web/consent")));
-      expect(before.status).toBe(200);
-      const queued = prepareConsentAction({
-        db,
-        subject: { _tag: "User", userId: users[0] },
-        requirement: "active",
-        statement: { sql: "UPDATE users SET time_zone='Etc/UTC' WHERE id=?", params: [users[0]] },
-      });
-      const results = yield* Effect.tryPromise(() =>
-        Promise.all([
-          send(db, request(0, "/web/consent/withdraw", "POST", { confirm: true })),
-          send(db, request(0, "/web/consent/withdraw", "POST", { confirm: true })),
-        ])
-      );
-      expect(results.map((response) => response.status)).toEqual([200, 200]);
-      const receipts = yield* Effect.tryPromise(() =>
-        Promise.all(results.map((response) => response.json()))
-      );
-      expect(receipts[0]).toEqual(receipts[1]);
-      const decodedReceipt = yield* Schema.decodeUnknownEffect(ProcessingConsentStatus)(
-        receipts[0]
-      );
-      expect(decodedReceipt.status).toBe("Revoked");
-      expect(decodedReceipt.withdrawal).not.toBeNull();
-      expect(yield* readConsentStatus({ db, userId: users[1] })).toBe("Granted");
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "SELECT COUNT(*) AS n FROM (SELECT w.id,w.user_id,w.grant_record_id,w.session_id,w.occurred_at_ms FROM consent_history w WHERE w.record_type='processing_withdrawal' AND NOT EXISTS(SELECT 1 FROM consent_history n WHERE n.record_type='processing_renewal' AND n.withdrawal_id=w.id AND n.user_id=w.user_id)) AS consent_user_revocations"
-            )
-            .first()
-        ))?.n
-      ).toBe(1);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "SELECT COUNT(*) AS n FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation='consent.withdraw'"
-            )
-            .first()
-        ))?.n
-      ).toBe(1);
-      const after = yield* Effect.tryPromise(() => send(db, request(0, "/web/consent")));
-      expect(yield* Effect.tryPromise(() => after.json())).toEqual(receipts[0]);
-      const rejected = yield* Effect.tryPromise(() =>
-        send(db, request(0, "/transactions?limit=1"))
-      );
-      expect(rejected.status).toBe(401);
-      expect((yield* Effect.tryPromise(() => queued.run())).meta.changes).toBe(0);
-    })
-  ));
-
-it("rejects hostile origin, bearer-only calls, malformed decisions and wrong methods without withdrawal", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* consentSetup();
-      const hostile = request(0, "/web/consent/withdraw", "POST", { confirm: true });
-      hostile.headers.set("origin", "https://attacker.example");
-      const anonymous = request(0, "/web/consent/withdraw", "POST", { confirm: true });
-      anonymous.headers.delete("cookie");
-      anonymous.headers.set("authorization", "Bearer " + bearer(0));
-      const originless = request(0, "/web/consent/withdraw", "POST", { confirm: true });
-      originless.headers.delete("origin");
-      const scenarios = [
-        { request: hostile, status: 403 },
-        { request: originless, status: 403 },
-        { request: anonymous, status: 401 },
-        { request: request(0, "/web/consent/withdraw"), status: 405 },
-        { request: request(0, "/web/consent/withdraw", "POST", { confirm: false }), status: 400 },
-        {
-          request: request(0, "/web/consent/withdraw", "POST", { confirm: true, userId: users[1] }),
-          status: 400,
-        },
-        {
-          request: request(0, "/web/consent/withdraw?userId=" + users[1], "POST", {
-            confirm: true,
-          }),
-          status: 400,
-        },
-      ];
-      for (const scenario of scenarios) {
-        expect((yield* Effect.tryPromise(() => send(db, scenario.request))).status).toBe(
-          scenario.status
         );
-      }
-      expect(yield* readConsentStatus({ db, userId: users[0] })).toBe("Granted");
-      expect(yield* readConsentStatus({ db, userId: users[1] })).toBe("Granted");
-    })
-  ));
-
-it("rechecks revoked proof at coordinated commit and rolls withdrawal back when Audit fails", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* consentSetup();
-      const stale = yield* Effect.tryPromise(() =>
-        send(db, request(0, "/web/consent/withdraw", "POST", { confirm: true }), (database) =>
-          database
-            .prepare("UPDATE web_sessions SET revoked_at_ms=? WHERE id=?")
-            .bind(DateTime.nowUnsafe().epochMilliseconds, sessions[0])
-            .run()
-        )
-      );
-      expect(stale.status).toBe(401);
-      expect(yield* readConsentStatus({ db, userId: users[0] })).toBe("Granted");
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "CREATE TRIGGER test_withdraw_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='credential_call' AND NEW.operation='consent.withdraw' BEGIN SELECT RAISE(ABORT,'synthetic_failure'); END;"
+        const refused = yield* send(db, { user: alice, path });
+        expect(refused.status).toBe(429);
+        expect(refused.headers.get("retry-after")).toBe("1");
+        expect(refused.headers.get("cache-control")).toBe("no-store");
+        yield* native(() => db.exec("DELETE FROM canonical_request_buckets"));
+        expect((yield* send(db, { user: alice, path })).status).toBe(200);
+        expect(yield* counts(db, alice)).toEqual([{ decisions: 0, audit: 0 }]);
+      })
+  );
+  test.effect.each(["ignore", "abort"] as const)(
+    "rolls back withdrawal and renewal with their Audit when SQLite rejects publication by %s and preserves replay",
+    (failure) =>
+      Effect.gen(function* () {
+        const { db } = yield* setup();
+        const interrupt = (action: string): Effect.Effect<unknown> =>
+          native(() =>
+            db.exec(
+              "CREATE TRIGGER break_decision BEFORE INSERT ON audit_entries WHEN NEW.operation='" +
+                action +
+                "' BEGIN SELECT " +
+                (failure === "ignore" ? "RAISE(IGNORE)" : "RAISE(ABORT,'required_audit')") +
+                "; END"
+            )
+          );
+        yield* interrupt("consent.withdraw");
+        expect((yield* withdraw(db)).status).toBe(503);
+        expect(yield* counts(db, alice)).toEqual([{ decisions: 0, audit: 0 }]);
+        yield* native(() => db.exec("DROP TRIGGER break_decision"));
+        const body = yield* decision(db);
+        yield* interrupt("consent.renew");
+        const renew = (): ReturnType<typeof send> =>
+          send(db, { user: alice, path: renewal, method: "POST", body });
+        expect((yield* renew()).status).toBe(503);
+        expect(yield* counts(db, alice)).toEqual([{ decisions: 1, audit: 1 }]);
+        yield* native(() => db.exec("DROP TRIGGER break_decision"));
+        const accepted = yield* renew(),
+          replay = yield* renew();
+        expect(accepted.status).toBe(200);
+        expect(yield* native(() => accepted.text())).toBe(yield* native(() => replay.text()));
+        expect(yield* counts(db, alice)).toEqual([{ decisions: 2, audit: 2 }]);
+      })
+  );
+  test.effect.each(["idle", "hard", "revoked", "foreign-route", "retired-binding"] as const)(
+    "revalidates %s proof inside the original User before any disclosure or new decision",
+    (mode) =>
+      Effect.gen(function* () {
+        const { db } = yield* setup();
+        if (mode === "foreign-route") {
+          yield* native(() =>
+            db.directory.exec(
+              "UPDATE session_routes SET user_id=? WHERE session_id=?",
+              bob.user,
+              alice.session
+            )
+          );
+        } else if (mode === "retired-binding") {
+          yield* native(() =>
+            db.directory.exec("DELETE FROM session_routes WHERE session_id=?", alice.session)
+          );
+        } else if (mode === "revoked") {
+          yield* native(() => db.exec("UPDATE web_sessions SET revoked_at_ms=created_at_ms"));
+        } else if (mode === "hard") {
+          yield* native(() =>
+            db.exec(
+              "UPDATE web_sessions SET created_at_ms=0,fresh_until_ms=600000,idle_expires_at_ms=7776000000,hard_expires_at_ms=7776000000"
+            )
+          );
+        } else {
+          yield* native(() => db.exec("UPDATE web_sessions SET idle_expires_at_ms=created_at_ms"));
+        }
+        for (const testPath of [path, auth, withdrawal]) {
+          const reply = yield* send(db, {
+            user: alice,
+            path: testPath,
+            ...(testPath === withdrawal ? { method: "POST", body: { confirm: true } } : {}),
+          });
+          expect(reply.status).toBe(401);
+          expect(yield* native(() => reply.text())).not.toContain(
+            webSignupDisclosure().contentSha256
+          );
+        }
+        expect(yield* counts(db, alice)).toEqual([{ decisions: 0, audit: 0 }]);
+        expect(yield* counts(db, bob)).toEqual([{ decisions: 0, audit: 0 }]);
+      })
+  );
+  test.effect.each(["copy", "withdraw", "renew"] as const)(
+    "revalidates original clock and credential after admitted pressure or receipt work for %s",
+    (mode) =>
+      Effect.gen(function* () {
+        const { db } = yield* setup(),
+          body = mode === "renew" ? yield* decision(db) : { confirm: true };
+        const before = yield* counts(db, alice);
+        yield* native(() => db.exec("DELETE FROM canonical_request_buckets"));
+        const edge =
+          mode === "copy"
+            ? "AFTER INSERT ON canonical_request_buckets"
+            : "AFTER INSERT ON audit_entries WHEN NEW.operation='consent." + mode + "'";
+        yield* native(() =>
+          db.exec(
+            "CREATE TRIGGER revoke_in_flight " +
+              edge +
+              " BEGIN UPDATE web_sessions SET revoked_at_ms=created_at_ms; END"
           )
-          .run()
-      );
-      const failed = yield* Effect.tryPromise(() =>
-        send(db, request(1, "/web/consent/withdraw", "POST", { confirm: true }))
-      );
-      expect(failed.status).toBe(503);
-      expect(yield* readConsentStatus({ db, userId: users[1] })).toBe("Granted");
-      yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER test_withdraw_audit").run());
-      expect(
-        (yield* Effect.tryPromise(() =>
-          send(db, request(1, "/web/consent/withdraw", "POST", { confirm: true }))
-        )).status
-      ).toBe(200);
-    })
-  ));
-
-it("rolls back withdrawal when Audit silently refuses and keeps the eventual receipt on replay", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* consentSetup();
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "CREATE TRIGGER refuse_withdrawal_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='credential_call' AND NEW.operation='consent.withdraw' BEGIN SELECT RAISE(IGNORE); END"
+        );
+        const result = yield* send(db, {
+          user: alice,
+          path: { copy: auth, renew: renewal, withdraw: withdrawal }[mode],
+          ...(mode === "copy" ? {} : { method: "POST", body }),
+        });
+        expect(result.status).toBe(401);
+        expect(yield* native(() => result.text())).not.toContain(
+          webSignupDisclosure().contentSha256
+        );
+        expect(yield* counts(db, alice)).toEqual(before);
+        expect(yield* counts(db, bob)).toEqual([{ decisions: 0, audit: 0 }]);
+      })
+  );
+  test.effect(
+    "a cancelled native browser delivery cannot publish withdrawal or renewal evidence",
+    () =>
+      Effect.gen(function* () {
+        const { db } = yield* setup();
+        for (const target of [withdrawal, renewal]) {
+          const body = target === withdrawal ? { confirm: true } : yield* decision(db);
+          const before = yield* counts(db, alice);
+          const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(body);
+          const outcome = yield* Effect.result(
+            Effect.tryPromise(() =>
+              db.runtime.dispatchFetch("https://api.fidyapp.com" + target, {
+                method: "POST",
+                headers: {
+                  origin: "https://app.fidyapp.com",
+                  cookie: "__Host-fidy_session=" + alice.bearer,
+                  "fidy-session-binding": alice.session,
+                  "content-type": "application/json",
+                },
+                body: encoded,
+                signal: AbortSignal.abort(),
+              })
+            )
+          );
+          if (Result.isSuccess(outcome)) expect(outcome.success.status).toBe(503);
+          expect(yield* counts(db, alice)).toEqual(before);
+        }
+      })
+  );
+  test.effect.each(["short", "long", "bad-character", "bad-json", "oversized"] as const)(
+    "withholds malformed saved authorization (%s) without returning any legal copy",
+    (mode) =>
+      Effect.gen(function* () {
+        const db = yield* nativeTransactionJourney;
+        const saved = yield* Schema.encodeEffect(Schema.fromJsonString(DisclosureSnapshot))(
+          webSignupDisclosure()
+        );
+        const corrupt = {
+          short: { reference: "a".repeat(42), body: saved },
+          long: { reference: "a".repeat(44), body: saved },
+          "bad-character": { reference: "!".repeat(43), body: saved },
+          "bad-json": { reference: grantId, body: "{" },
+          oversized: { reference: grantId, body: saved + " ".repeat(32768) },
+        };
+        const { reference, body } = corrupt[mode];
+        yield* native(() =>
+          db.exec(
+            "INSERT INTO consent_history(id,user_id,record_type,occurred_at_ms,disclosure_json) VALUES(?,?,'processing_grant',100,?)",
+            reference,
+            alice.user,
+            body
           )
-          .run()
-      );
-      const failed = yield* Effect.tryPromise(() =>
-        send(db, request(0, "/web/consent/withdraw", "POST", { confirm: true }))
-      );
-      expect(failed.status).toBe(503);
-      expect(yield* readConsentStatus({ db, userId: users[0] })).toBe("Granted");
-      yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER refuse_withdrawal_audit").run());
-      const accepted = yield* Effect.tryPromise(() =>
-        send(db, request(0, "/web/consent/withdraw", "POST", { confirm: true }))
-      );
-      expect(accepted.status).toBe(200);
-      const receipt = yield* Effect.tryPromise(() => accepted.json());
-      const replay = yield* Effect.tryPromise(() =>
-        send(db, request(0, "/web/consent/withdraw", "POST", { confirm: true }))
-      );
-      expect(replay.status).toBe(200);
-      expect(yield* Effect.tryPromise(() => replay.json())).toEqual(receipt);
-    })
-  ));
-
-it("refuses foreign coordinator, mismatched digest, expired admission and aborted work without effects", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* consentSetup();
-      const current = yield* Clock.currentTimeMillis;
-      const bytes = yield* Effect.tryPromise(() => digest(bearer(0)));
-      const admission = {
-        userId: users[0],
-        sessionId: sessions[0],
-        digest: Array.from(bytes),
-        deadlineMilliseconds: current + 5000,
-      };
-      const abortedSignal = AbortSignal.abort();
-      const liveSignal = yield* Effect.abortSignal;
-      for (const scenario of [
-        {
-          candidate: admission,
-          userId: users[1],
-          signal: liveSignal,
-          status: 503,
-        },
-        {
-          candidate: { ...admission, digest: Array(32).fill(0) },
-          userId: users[0],
-          signal: liveSignal,
-          status: 401,
-        },
-        {
-          candidate: { ...admission, deadlineMilliseconds: current },
-          userId: users[0],
-          signal: liveSignal,
-          status: 503,
-        },
-        { candidate: admission, userId: users[0], signal: abortedSignal, status: 503 },
-      ]) {
-        expect((yield* executeConsentWithdrawal({ db, ...scenario })).status).toBe(scenario.status);
-      }
-      expect(yield* readConsentStatus({ db, userId: users[0] })).toBe("Granted");
-    }).pipe(Effect.scoped)
-  ));
+        );
+        const reply = yield* send(db, { user: alice, path: auth });
+        expect(reply.status).toBe(503);
+        expect(yield* native(() => reply.text())).not.toContain(
+          webSignupDisclosure().contentSha256
+        );
+      })
+  );
+  test.effect(
+    "requires fresh proof for renewal and retains immutable legal evidence through a lost response",
+    () =>
+      Effect.gen(function* () {
+        const { db } = yield* setup(),
+          body = yield* decision(db);
+        yield* native(() =>
+          db.exec(
+            "UPDATE web_sessions SET created_at_ms=created_at_ms-1200000,fresh_until_ms=fresh_until_ms-1200000,hard_expires_at_ms=hard_expires_at_ms-1200000"
+          )
+        );
+        const renew = (): ReturnType<typeof send> =>
+          send(db, { user: alice, path: renewal, method: "POST", body });
+        expect((yield* renew()).status).toBe(401);
+        expect(yield* counts(db, alice)).toEqual([{ decisions: 1, audit: 1 }]);
+        yield* native(() =>
+          db.exec(
+            "UPDATE web_sessions SET created_at_ms=created_at_ms+1200000,fresh_until_ms=fresh_until_ms+1200000,hard_expires_at_ms=hard_expires_at_ms+1200000"
+          )
+        );
+        expect((yield* renew()).status).toBe(200);
+        for (const type of ["processing_withdrawal", "processing_renewal"]) {
+          for (const statement of [
+            "UPDATE consent_history SET occurred_at_ms=0 WHERE record_type=?",
+            "DELETE FROM consent_history WHERE record_type=?",
+          ]) {
+            const result = yield* Effect.result(Effect.tryPromise(() => db.exec(statement, type)));
+            expect(Result.isFailure(result)).toBe(true);
+          }
+        }
+        expect((yield* renew()).status).toBe(200);
+        expect(yield* counts(db, alice)).toEqual([{ decisions: 2, audit: 2 }]);
+      })
+  );
+});
 
 it("rejects receipt/status combinations that cannot represent a processing authorization", () => {
   const decode = Schema.decodeUnknownOption(ProcessingConsentStatus);
-  const receipt = { reference: users[0], occurredAtMs: 1000 };
+  const receipt = { reference: alice.user, occurredAtMs: 1000 };
   for (const value of [
     { status: "Revoked", withdrawal: null },
     { status: "Granted", withdrawal: receipt },
@@ -708,498 +395,3 @@ it("rejects receipt/status combinations that cannot represent a processing autho
   }
   expect(decode({ status: "Revoked", withdrawal: receipt })._tag).toBe("Some");
 });
-
-const expireSession = (
-  db: D1Database,
-  expiry: "idle_expires_at_ms" | "hard_expires_at_ms"
-): Promise<D1Result> => {
-  const current = DateTime.nowUnsafe().epochMilliseconds;
-  return expiry === "idle_expires_at_ms"
-    ? db
-        .prepare("UPDATE web_sessions SET idle_expires_at_ms=? WHERE id=?")
-        .bind(current, sessions[0])
-        .run()
-    : db
-        .prepare(
-          "UPDATE web_sessions SET created_at_ms=?,fresh_until_ms=?,idle_expires_at_ms=?,hard_expires_at_ms=? WHERE id=?"
-        )
-        .bind(current - 7776000000, current - 7775400000, current, current, sessions[0])
-        .run();
-};
-
-const expectNoWithdrawal = (
-  db: D1Database
-): Effect.Effect<void, Cause.UnknownError | ConsentUnavailable> =>
-  Effect.gen(function* () {
-    expect(yield* readConsentStatus({ db, userId: users[0] })).toBe("Granted");
-    const evidence = yield* Effect.tryPromise(() =>
-      db.batch([
-        db.prepare(
-          "SELECT COUNT(*) AS n FROM (SELECT w.id,w.user_id,w.grant_record_id,w.session_id,w.occurred_at_ms FROM consent_history w WHERE w.record_type='processing_withdrawal' AND NOT EXISTS(SELECT 1 FROM consent_history n WHERE n.record_type='processing_renewal' AND n.withdrawal_id=w.id AND n.user_id=w.user_id)) AS consent_user_revocations"
-        ),
-        db.prepare(
-          "SELECT COUNT(*) AS n FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation='consent.withdraw'"
-        ),
-      ])
-    );
-    expect(evidence.map((result) => result.results)).toEqual([[{ n: 0 }], [{ n: 0 }]]);
-  });
-
-it("refuses idle- and hard-expired cookies at public admission and coordinated commit without withdrawal or Audit", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      for (const expiry of ["idle_expires_at_ms", "hard_expires_at_ms"] as const) {
-        const expired = yield* consentSetup();
-        yield* Effect.tryPromise(() => expireSession(expired, expiry));
-        const read = yield* Effect.tryPromise(() => send(expired, request(0, "/web/consent")));
-        expect(read.status).toBe(401);
-        const authorization = yield* Effect.tryPromise(() =>
-          send(expired, request(0, "/web/consent/authorization"))
-        );
-        expect(authorization.status).toBe(401);
-        const withdrawal = yield* Effect.tryPromise(() =>
-          send(expired, request(0, "/web/consent/withdraw", "POST", { confirm: true }))
-        );
-        expect(withdrawal.status).toBe(401);
-        yield* expectNoWithdrawal(expired);
-        const racing = yield* consentSetup();
-        const refused = yield* Effect.tryPromise(() =>
-          send(racing, request(0, "/web/consent/withdraw", "POST", { confirm: true }), (database) =>
-            expireSession(database, expiry)
-          )
-        );
-        expect(refused.status).toBe(401);
-        yield* expectNoWithdrawal(racing);
-      }
-    })
-  ));
-
-it("returns the exact provider-signup authorization before and after withdrawal", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* setup();
-      const reference = "a".repeat(43);
-      const acceptedAtMs = yield* Clock.currentTimeMillis;
-      const disclosure = currentDisclosureFor();
-      yield* Effect.tryPromise(() =>
-        recordWebOnboardingConsent({
-          db,
-          userId: UserId.make(users[0]),
-          attemptId: reference,
-          disclosure,
-          acceptedAtMs,
-        }).run()
-      );
-      const readCopy = (): Effect.Effect<unknown, Cause.UnknownError> =>
-        Effect.gen(function* () {
-          const response = yield* Effect.tryPromise(() =>
-            send(db, request(0, "/web/consent/authorization"))
-          );
-          expect(response.status).toBe(200);
-          expect(response.headers.get("cache-control")).toContain("no-store");
-          return yield* Effect.tryPromise(() => response.json());
-        });
-      const expected = { authorization: { reference, acceptedAtMs, disclosure } };
-      expect(yield* readCopy()).toEqual(expected);
-      const other = yield* Effect.tryPromise(() =>
-        send(db, request(1, "/web/consent/authorization"))
-      );
-      expect(yield* Effect.tryPromise(() => other.json())).toEqual({ authorization: null });
-      const withdrawal = yield* Effect.tryPromise(() =>
-        send(db, request(0, "/web/consent/withdraw", "POST", { confirm: true }))
-      );
-      expect(withdrawal.status).toBe(200);
-      expect(yield* readCopy()).toEqual(expected);
-      expect(yield* readConsentStatus({ db, userId: users[0] })).toBe("Revoked");
-    })
-  ));
-
-it("returns each authenticated User's exact authorization copy after withdrawal without reviving Consent", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* consentSetup();
-      const copy = yield* Effect.tryPromise(() =>
-        send(db, request(0, "/web/consent/authorization"))
-      );
-      expect(copy.status).toBe(200);
-      expect(copy.headers.get("cache-control")).toContain("no-store");
-      const first = yield* Schema.decodeUnknownEffect(ProcessingAuthorization)(
-        yield* Effect.tryPromise(() => copy.json())
-      );
-      expect(first.authorization?.reference).toBe("30000000-0000-4000-8000-000000000000");
-      expect(first.authorization?.disclosure).toEqual(currentDisclosureFor());
-      const second = yield* Effect.tryPromise(() =>
-        send(db, request(1, "/web/consent/authorization"))
-      );
-      const other = yield* Schema.decodeUnknownEffect(ProcessingAuthorization)(
-        yield* Effect.tryPromise(() => second.json())
-      );
-      expect(other.authorization?.reference).toBe("30000000-0000-4000-8000-000000000001");
-      yield* Effect.tryPromise(() =>
-        send(db, request(0, "/web/consent/withdraw", "POST", { confirm: true }))
-      );
-      const after = yield* Effect.tryPromise(() =>
-        send(db, request(0, "/web/consent/authorization"))
-      );
-      expect(yield* Effect.tryPromise(() => after.json())).toEqual(first);
-      expect(yield* readConsentStatus({ db, userId: users[0] })).toBe("Revoked");
-      expect(
-        (yield* Effect.tryPromise(() =>
-          send(db, request(0, "/web/consent/authorization?userId=" + users[1]))
-        )).status
-      ).toBe(400);
-    })
-  ));
-
-it("refuses malformed saved onboarding references instead of publishing an authorization copy", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      for (const reference of ["a".repeat(42), "a".repeat(44), "!".repeat(43)]) {
-        const db = yield* setup();
-        const acceptedAtMs = yield* Clock.currentTimeMillis;
-        yield* Effect.tryPromise(() =>
-          recordWebOnboardingConsent({
-            db,
-            userId: UserId.make(users[0]),
-            attemptId: reference,
-            disclosure: currentDisclosureFor(),
-            acceptedAtMs,
-          }).run()
-        );
-        const response = yield* Effect.tryPromise(() =>
-          send(db, request(0, "/web/consent/authorization"))
-        );
-        expect(response.status).toBe(503);
-        expect(response.headers.get("cache-control")).toContain("no-store");
-        expect(yield* Effect.tryPromise(() => response.text())).not.toContain(reference);
-      }
-    })
-  ));
-
-it("refuses authorization copies with lost proof, hostile origins or malformed and oversized saved disclosures", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* consentSetup();
-      const hostile = request(0, "/web/consent/authorization");
-      hostile.headers.set("origin", "https://attacker.example");
-      expect((yield* Effect.tryPromise(() => send(db, hostile))).status).toBe(403);
-      const bearerOnly = request(0, "/web/consent/authorization");
-      bearerOnly.headers.delete("cookie");
-      bearerOnly.headers.set("authorization", "Bearer " + bearer(0));
-      expect((yield* Effect.tryPromise(() => send(db, bearerOnly))).status).toBe(401);
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "CREATE TRIGGER revoke_copy_session AFTER INSERT ON canonical_request_leases BEGIN UPDATE web_sessions SET revoked_at_ms=created_at_ms WHERE id='10000000-0000-4000-8000-000000000061'; END"
-          )
-          .run()
-      );
-      expect(
-        (yield* Effect.tryPromise(() => send(db, request(0, "/web/consent/authorization")))).status
-      ).toBe(401);
-      yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER revoke_copy_session").run());
-      // Simulate corrupt stored evidence to verify the public reader fails closed.
-      yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER consent_history_no_update").run());
-      for (const value of ["{}", '{"padding":"' + "x".repeat(32769) + '"}']) {
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "UPDATE consent_history SET disclosure_json=? WHERE record_type='processing_grant' AND user_id=?"
-            )
-            .bind(value, users[1])
-            .run()
-        );
-        const refused = yield* Effect.tryPromise(() =>
-          send(db, request(1, "/web/consent/authorization"))
-        );
-        expect(refused.status).toBe(503);
-        expect(yield* Effect.tryPromise(() => refused.json())).toEqual({
-          error: { code: "consent_unavailable" },
-        });
-      }
-      expect(yield* readConsentStatus({ db, userId: users[1] })).toBe("Granted");
-    })
-  ));
-
-const withdrawnRenewal = (): Effect.Effect<
-  Readonly<{
-    db: D1Database;
-    payload: Readonly<{
-      confirm: true;
-      withdrawalReference: string;
-      authorizationReference: string;
-      disclosureSha256: string;
-    }>;
-    status: Extract<ProcessingConsentStatus, { status: "Revoked" }>;
-  }>,
-  Cause.UnknownError | Schema.SchemaError
-> =>
-  Effect.gen(function* () {
-    const db = yield* consentSetup();
-    const response = yield* Effect.tryPromise(() =>
-      send(db, request(0, "/web/consent/withdraw", "POST", { confirm: true }))
-    );
-    const status = yield* Schema.decodeUnknownEffect(ProcessingConsentStatus)(
-      yield* Effect.tryPromise(() => response.json())
-    );
-    if (status.status !== "Revoked") throw new Error("Expected withdrawn test authorization");
-    return {
-      db,
-      payload: {
-        confirm: true as const,
-        withdrawalReference: status.withdrawal.reference,
-        authorizationReference: "30000000-0000-4000-8000-000000000000",
-        disclosureSha256: currentDisclosureFor().contentSha256,
-      },
-      status,
-    };
-  });
-
-it.each([
-  {
-    name: "another User's withdrawal",
-    patch: { withdrawalReference: "10000000-0000-4000-8000-000000000001" },
-  },
-  {
-    name: "another authorization",
-    patch: { authorizationReference: "30000000-0000-4000-8000-000000000001" },
-  },
-  { name: "an altered disclosure", patch: { disclosureSha256: "0".repeat(64) } },
-  { name: "no explicit acceptance", patch: { confirm: false } },
-  { name: "extra authority claims", patch: { userId: users[1] } },
-])("refuses renewal with $name without changing withdrawal", ({ patch }) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, payload, status } = yield* withdrawnRenewal();
-      const response = yield* Effect.tryPromise(() =>
-        send(db, request(0, "/web/consent/renew", "POST", { ...payload, ...patch }))
-      );
-      expect([400, 403]).toContain(response.status);
-      const unchanged = yield* Effect.tryPromise(() => send(db, request(0, "/web/consent")));
-      expect(yield* Effect.tryPromise(() => unchanged.json())).toEqual(status);
-    })
-  )
-);
-
-it("refuses renewal when fresh browser authority expires between admission and commit", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, payload, status } = yield* withdrawnRenewal();
-      const response = yield* Effect.tryPromise(() =>
-        send(db, request(0, "/web/consent/renew", "POST", payload), (database) =>
-          database
-            .prepare(
-              "UPDATE web_sessions SET created_at_ms=created_at_ms-600001,fresh_until_ms=fresh_until_ms-600001,hard_expires_at_ms=hard_expires_at_ms-600001 WHERE id=?"
-            )
-            .bind(sessions[0])
-            .run()
-        )
-      );
-      expect(response.status).toBe(403);
-      const unchanged = yield* Effect.tryPromise(() => send(db, request(0, "/web/consent")));
-      expect(yield* Effect.tryPromise(() => unchanged.json())).toEqual(status);
-    })
-  ));
-
-class LostConsentCommitResponse extends Data.TaggedError("LostConsentCommitResponse") {}
-
-it("reconciles a lost renewal commit response without replacing the exact evidence", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, payload } = yield* withdrawnRenewal();
-      const current = yield* Clock.currentTimeMillis;
-      const bytes = yield* Effect.tryPromise(() => digest(bearer(0)));
-      const admission = {
-        userId: users[0],
-        sessionId: sessions[0],
-        digest: Array.from(bytes),
-        deadlineMilliseconds: current + 5000,
-        renewal: payload,
-      };
-      const runNative = Effect.runPromiseWith(yield* Effect.context<never>());
-      const uncertain = new Proxy(db, {
-        get(target, key, receiver): unknown {
-          if (key === "batch") {
-            return (statements: D1PreparedStatement[]): Promise<never> =>
-              runNative(
-                Effect.tryPromise(() => target.batch(statements)).pipe(
-                  Effect.andThen(Effect.fail(new LostConsentCommitResponse()))
-                )
-              );
-          }
-          const value: unknown = Reflect.get(target, key, receiver);
-          return typeof value === "function" ? value.bind(target) : value;
-        },
-      });
-      const signal = yield* Effect.abortSignal;
-      const response = yield* executeConsentRenewal({
-        db: uncertain,
-        candidate: admission,
-        userId: users[0],
-        signal,
-      });
-      expect(response.status).toBe(200);
-      const receipt = yield* Effect.tryPromise(() => response.json());
-      const retry = yield* executeConsentRenewal({
-        db,
-        candidate: admission,
-        userId: users[0],
-        signal,
-      });
-      expect(retry.status).toBe(200);
-      expect(yield* Effect.tryPromise(() => retry.json())).toEqual(receipt);
-      expect(yield* readConsentStatus({ db, userId: users[0] })).toBe("Granted");
-    }).pipe(Effect.scoped)
-  ));
-
-it("rolls back renewal when Audit silently refuses its acceptance", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, payload, status } = yield* withdrawnRenewal();
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "CREATE TRIGGER refuse_renewal_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='credential_call' AND NEW.operation='consent.renew' BEGIN SELECT RAISE(IGNORE); END"
-          )
-          .run()
-      );
-      const response = yield* Effect.tryPromise(() =>
-        send(db, request(0, "/web/consent/renew", "POST", payload))
-      );
-      expect(response.status).toBe(503);
-      const unchanged = yield* Effect.tryPromise(() => send(db, request(0, "/web/consent")));
-      expect(yield* Effect.tryPromise(() => unchanged.json())).toEqual(status);
-      yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER refuse_renewal_audit").run());
-      const retried = yield* Effect.tryPromise(() =>
-        send(db, request(0, "/web/consent/renew", "POST", payload))
-      );
-      expect(retried.status).toBe(200);
-    })
-  ));
-
-it("keeps withdrawal and renewal evidence immutable", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, payload } = yield* withdrawnRenewal();
-      const accepted = yield* Effect.tryPromise(() =>
-        send(db, request(0, "/web/consent/renew", "POST", payload))
-      );
-      expect(accepted.status).toBe(200);
-      for (const recordType of ["processing_withdrawal", "processing_renewal"]) {
-        yield* Effect.tryPromise(() =>
-          expect(
-            db
-              .prepare(
-                `UPDATE consent_history SET user_id=? WHERE record_type='${recordType}' AND user_id=?`
-              )
-              .bind(users[1], users[0])
-              .run()
-          ).rejects.toThrow("consent_history_immutable")
-        );
-        yield* Effect.tryPromise(() =>
-          expect(
-            db
-              .prepare(
-                `DELETE FROM consent_history WHERE record_type='${recordType}' AND user_id=?`
-              )
-              .bind(users[0])
-              .run()
-          ).rejects.toThrow("consent_history_retention_required")
-        );
-      }
-    })
-  ));
-
-it("refuses renewal without same-User browser proof and preserves the exact receipt", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, payload, status } = yield* withdrawnRenewal();
-      const foreign = request(1, "/web/consent/renew", "POST", payload);
-      const hostile = request(0, "/web/consent/renew", "POST", payload);
-      hostile.headers.set("origin", "https://attacker.example");
-      const anonymous = request(0, "/web/consent/renew", "POST", payload);
-      anonymous.headers.delete("cookie");
-      for (const candidate of [foreign, hostile, anonymous]) {
-        const response = yield* Effect.tryPromise(() => send(db, candidate));
-        expect([401, 403]).toContain(response.status);
-      }
-      const unchanged = yield* Effect.tryPromise(() => send(db, request(0, "/web/consent")));
-      expect(yield* Effect.tryPromise(() => unchanged.json())).toEqual(status);
-    })
-  ));
-
-it("refuses foreign coordinators, forged digests, expired renewal admissions and aborted work", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, payload, status } = yield* withdrawnRenewal();
-      const current = yield* Clock.currentTimeMillis;
-      const bytes = yield* Effect.tryPromise(() => digest(bearer(0)));
-      const admission = {
-        userId: users[0],
-        sessionId: sessions[0],
-        digest: Array.from(bytes),
-        deadlineMilliseconds: current + 5000,
-        renewal: payload,
-      };
-      const liveSignal = yield* Effect.abortSignal;
-      for (const scenario of [
-        { candidate: admission, userId: users[1], signal: liveSignal, status: 503 },
-        {
-          candidate: { ...admission, digest: Array(32).fill(0) },
-          userId: users[0],
-          signal: liveSignal,
-          status: 403,
-        },
-        {
-          candidate: { ...admission, deadlineMilliseconds: current },
-          userId: users[0],
-          signal: liveSignal,
-          status: 503,
-        },
-        { candidate: admission, userId: users[0], signal: AbortSignal.abort(), status: 503 },
-      ]) {
-        expect((yield* executeConsentRenewal({ db, ...scenario })).status).toBe(scenario.status);
-      }
-      const unchanged = yield* Effect.tryPromise(() => send(db, request(0, "/web/consent")));
-      expect(yield* Effect.tryPromise(() => unchanged.json())).toEqual(status);
-    }).pipe(Effect.scoped)
-  ));
-
-it("reads Consent in one native batch and rejects retired or foreign bindings", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* consentSetup();
-      let batches = 0;
-      const observed = new Proxy(db, {
-        get(target, key, receiver): unknown {
-          if (key !== "batch") return Reflect.get(target, key, receiver);
-          return (statements: D1PreparedStatement[]) => {
-            batches++;
-            return target.batch(statements);
-          };
-        },
-      });
-      const accepted = yield* Effect.tryPromise(() => send(observed, request(0, "/web/consent")));
-      expect(accepted.status).toBe(200);
-      expect(batches).toBe(1);
-      const status = yield* Schema.decodeUnknownEffect(ProcessingConsentStatus)(
-        yield* Effect.tryPromise(() => accepted.json())
-      );
-      expect(status.status).toBe("Granted");
-      const foreign = request(0, "/web/consent");
-      foreign.headers.set("Fidy-Session-Binding", sessions[1]);
-      expect((yield* Effect.tryPromise(() => send(db, foreign))).status).toBe(401);
-      const missing = request(0, "/web/consent");
-      missing.headers.delete("Fidy-Session-Binding");
-      expect((yield* Effect.tryPromise(() => send(db, missing))).status).toBe(401);
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare("UPDATE web_sessions SET revoked_at_ms = ? WHERE id = ?")
-          .bind(DateTime.nowUnsafe().epochMilliseconds, sessions[0])
-          .run()
-      );
-      expect((yield* Effect.tryPromise(() => send(db, request(0, "/web/consent")))).status).toBe(
-        401
-      );
-    })
-  ));

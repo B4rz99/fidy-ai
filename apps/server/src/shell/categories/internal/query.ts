@@ -1,3 +1,4 @@
+import { listLaunchCategories } from "~/core/categories/operations";
 import { Option, Schema } from "effect";
 import { Category } from "~/core/categories/contract";
 import type { OwnedStatement } from "~/shell/owner-write/contract";
@@ -14,10 +15,10 @@ type Authority = Readonly<{
 
 /** One Category projection for hosted-agent and D1-protected HTTP reads. */
 export const categoryRowsQuery = (authority?: Authority): OwnedStatement => ({
-  sql: `SELECT id,label FROM categories
+  sql: `SELECT json_extract(value,'$.id') AS id,json_extract(value,'$.label') AS label FROM json_each(?)
     ${authority === undefined ? "" : `WHERE EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`}
-    ORDER BY display_order LIMIT ${maximumCategoryCount + 1}`,
-  params: authority?.bindings ?? [],
+    ORDER BY key LIMIT ${maximumCategoryCount + 1}`,
+  params: [JSON.stringify(listLaunchCategories()), ...(authority?.bindings ?? [])],
 });
 
 /** Apply the same bounded Category response codec in both execution adapters. */

@@ -3,17 +3,12 @@ import type { ScheduledOperation } from "../contract";
 const minuteMs = 60_000;
 
 const cadenceMinutes: Partial<Record<ScheduledOperation, number>> = {
-  "browserPairing.email.dispatch": 5,
-  "browserPairing.email.reconcile": 5,
   "emailReplacement.dispatch": 5,
   "emailReplacement.reconcile": 5,
-  "billing.renewal.dispatch": 15,
   "billing.cancellation.dispatch": 15,
   "dashboard.projectionRepair": 15,
   "billing.refund.reconcile": 5,
   "billing.refund.dispatch": 5,
-  "billing.collection.dispatch": 5,
-  "billing.collection.reconcile": 5,
   "consent.sweep": 60,
   "consent.proactivityOfferRetention": 60,
   "consent.disclosureRecovery": 5,
@@ -24,7 +19,6 @@ const cadenceMinutes: Partial<Record<ScheduledOperation, number>> = {
   "ingestion.mediaRetention": 60,
   "ingestion.uploadAdmissionSweep": 60,
   "agent.openAiAdmissionSweep": 60,
-  "billing.cardPreparationAdmissionSweep": 60,
   "provider.authenticationRetention": 60,
   "canonical.admissionRetention": 60,
   "oauth.confirmationRetention": 60,

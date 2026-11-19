@@ -8,7 +8,9 @@ import {
 } from "./contract";
 
 /** Fails when the request aborts and removes its listener when the waiting fiber is interrupted. */
-export const awaitRequestAbort = (request: Request): Effect.Effect<never, BoundedBodyReadFailed> =>
+export const awaitRequestAbort = (
+  request: Pick<Request, "signal">
+): Effect.Effect<never, BoundedBodyReadFailed> =>
   Effect.callback((resume, fiberSignal) => {
     const onAbort = (): void => {
       // A synchronous resume bypasses callback's returned finalizer in installed Effect 4.
@@ -117,7 +119,7 @@ const collectBody = Effect.fn(function* (
  * waiting on an untrusted cancellation promise; failures retain no body detail.
  */
 export const readBoundedRequestBody = Effect.fn(function* (
-  request: Request,
+  request: Pick<Request, "signal" | "body">,
   policy: RequestBodyPolicy
 ) {
   if (request.signal.aborted) return yield* Effect.failCause(Cause.interrupt());
@@ -154,12 +156,12 @@ export const readBoundedRequestBody = Effect.fn(function* (
  * without retaining any body detail. Request cancellation and caller interruption remain interruption,
  * never malformed-input absence.
  */
-export const boundedJsonBody = <A extends Schema.ConstraintDecoder<unknown>>({
+export const boundedJsonBodyWithSize = <A extends Schema.ConstraintDecoder<unknown>>({
   request,
   policy,
   schema,
 }: Readonly<{ request: Request; policy: RequestBodyPolicy; schema: A }>): Effect.Effect<
-  Option.Option<A["Type"]>
+  Option.Option<{ value: A["Type"]; byteLength: number }>
 > =>
   Effect.gen(function* () {
     if (request.signal.aborted) return yield* Effect.failCause(Cause.interrupt());
@@ -171,16 +173,30 @@ export const boundedJsonBody = <A extends Schema.ConstraintDecoder<unknown>>({
     }
     return yield* readBoundedRequestBody(request, policy).pipe(
       Effect.flatMap((bytes) =>
-        Effect.try({
-          try: () => new TextDecoder("utf-8", { fatal: true }).decode(bytes),
-          catch: () => new RequestBodyUnreadable(),
+        Effect.gen(function* () {
+          const text = yield* Effect.try({
+            try: () => new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+            catch: () => new RequestBodyUnreadable(),
+          });
+          const json = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(text);
+          const value = yield* Schema.decodeUnknownEffect(schema)(json);
+          return { value, byteLength: bytes.byteLength };
         })
       ),
-      Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))),
-      Effect.flatMap(Schema.decodeUnknownEffect(schema)),
       Effect.option
     );
   });
+
+export const boundedJsonBody = <A extends Schema.ConstraintDecoder<unknown>>({
+  request,
+  policy,
+  schema,
+}: Readonly<{ request: Request; policy: RequestBodyPolicy; schema: A }>): Effect.Effect<
+  Option.Option<A["Type"]>
+> =>
+  boundedJsonBodyWithSize({ request, policy, schema }).pipe(
+    Effect.map(Option.map(({ value }) => value))
+  );
 
 /**
  * The stable id the final segment of this request's path addresses, decoded by that id's own

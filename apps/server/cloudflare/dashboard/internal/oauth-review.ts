@@ -79,7 +79,13 @@ const describeEdit = (edit: DashboardEdit): string => {
   }
 };
 
-const describeEffect = (edit: Option.Option<DashboardEdit>, firstEdit: boolean): string =>
+export const describeDashboardEffect = ({
+  edit,
+  firstEdit,
+}: {
+  edit: Option.Option<DashboardEdit>;
+  firstEdit: boolean;
+}): string =>
   Option.match(edit, {
     onNone: () => "Inicializar el Dashboard predeterminado.",
     onSome: (edit) =>
@@ -135,7 +141,10 @@ export const dashboardOAuthReview = (
               }
             : { _tag: "Absent" }
         ),
-        effect: describeEffect(input.edit, Option.isNone(input.existing)),
+        effect: describeDashboardEffect({
+          edit: input.edit,
+          firstEdit: Option.isNone(input.existing),
+        }),
         guard: {
           sql: `${guard.sql} ${references.map(() => "AND EXISTS (SELECT 1 FROM categories WHERE id = ?)").join(" ")}`,
           params: [...guard.params, ...references],

@@ -6,13 +6,6 @@ const unavailable = (): never => {
 };
 
 /** Complete, fail-closed Cloudflare bindings; a test may proxy only the operations it exercises. */
-export const unavailableDatabase: D1Database = {
-  batch: unavailable,
-  dump: unavailable,
-  exec: unavailable,
-  prepare: unavailable,
-  withSession: unavailable,
-};
 export const unavailableBucket: R2Bucket = {
   head: unavailable,
   get: unavailable,
@@ -50,13 +43,12 @@ export class SyntheticBindings {
 }
 
 export const smokeEnvironment = (overrides: Partial<SmokeEnvironment> = {}): SmokeEnvironment => ({
-  DB: unavailableDatabase,
   SMOKE_LIMITER: { limit: (): Promise<{ success: boolean }> => Promise.resolve({ success: true }) },
   SMOKE_BUCKET: unavailableBucket,
   SMOKE_QUEUE: unavailableQueue,
   SMOKE_WORKFLOW: unavailableWorkflow,
   SMOKE_QUEUE_NAME: "reserved-smoke",
-  USER_TRANSACTION_COORDINATOR: { getByName: unavailable },
+  USER_STORE: { getByName: unavailable },
   SMOKE_PROOF: "a".repeat(proofLength),
   CF_VERSION_METADATA: { id: "dc8dcd28-271b-4367-9840-6c244f84cb40" },
   RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",

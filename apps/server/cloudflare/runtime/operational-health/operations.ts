@@ -1,28 +1,17 @@
-import { inspectWhatsApp } from "../../whatsapp/operations";
+import {
+  type ProactivityWorkObservations,
+  proactivityObservationLimit,
+} from "../../insights/contract";
 import {
   type AlertSignal,
   CanaryPayload,
-  type CapabilityProbe,
-  type OperationalHealthEnvironment,
   type OperationalSeverity,
   type OperationalSignal,
   type PendingSignal,
-  QueueKind,
-  WorkKind,
-  coordinatorProbeName,
 } from "./contract";
-import {
-  inspectPending,
-  inspectQueue,
-  inspectRetention,
-  unavailableSignal,
-} from "./internal/health-inspection";
-import { Clock, Effect, Exit, Option, Schema } from "effect";
+import { inspectQueue, inspectWorkflow } from "./internal/health-inspection";
+import { Effect, Exit, Option, Schema } from "effect";
 import { WorkflowStatus, periodMs, staleMs } from "./internal/canary";
-
-const Available = Schema.Struct({ usable: Schema.Literal(1) });
-const probeUrl = "https://internal.invalid/operational/probe";
-const probeSuccessStatus = 204;
 
 const validateCanary = (payload: unknown, now: number): Effect.Effect<CanaryPayload> =>
   Effect.suspend(() => {
@@ -105,98 +94,6 @@ export const sendCanary = ({
  * monitor reports its own closed signal without masking the other owners or changing domain work.
  * Workflow error messages and outputs are never retained. Counts are samples, not global totals.
  */
-export const observeOperationalHealth = (
-  environment: OperationalHealthEnvironment
-): Effect.Effect<ReadonlyArray<OperationalSignal>> =>
-  Effect.gen(function* () {
-    const current = yield* Clock.currentTimeMillis;
-    const signals = yield* Effect.forEach(
-      WorkKind.literals.filter(
-        (kind) =>
-          kind !== "proactivity" ||
-          environment.proactivity.weeklyEnabled === true ||
-          environment.proactivity.proactivityEnabled === true
-      ),
-      (operation) =>
-        inspectPending({ environment, operation, current }).pipe(
-          Effect.timeout("3 seconds"),
-          Effect.orElseSucceed((): OperationalSignal => unavailableSignal(operation))
-        ),
-      { concurrency: 2 }
-    );
-    const whatsapp = yield* inspectWhatsApp({ db: environment.DB, current }).pipe(
-      Effect.timeout("3 seconds"),
-      Effect.orElseSucceed((): OperationalSignal => unavailableSignal("whatsapp"))
-    );
-    const deadLetters = yield* inspectQueue({
-      operation: "deadLetters",
-      queue: environment.deadLetters,
-    });
-    const workQueues = yield* Effect.forEach(
-      QueueKind.literals.filter(
-        (kind) =>
-          kind !== "proactivityQueue" ||
-          environment.proactivity.weeklyEnabled === true ||
-          environment.proactivity.proactivityEnabled === true
-      ),
-      (operation) =>
-        inspectQueue({
-          operation,
-          queue: Option.fromUndefinedOr(environment.workQueues[operation]),
-        }),
-      { concurrency: 2 }
-    );
-    const retention = yield* inspectRetention({ db: environment.DB, now: current });
-    return [...signals, whatsapp, deadLetters, ...workQueues, retention];
-  });
-
-/** Private readiness evidence; configuration means present, not that an external provider succeeded. */
-export const inspectOperationalCapabilities = (
-  input: Readonly<{
-    d1: Readonly<{ prepare: (sql: string) => { first: () => Promise<unknown> } }>;
-    coordinator: Readonly<{
-      getByName: (name: string) => { fetch: (request: Request) => Promise<Response> };
-    }>;
-    requiredBindings: ReadonlyArray<boolean>;
-    providerConfigured: boolean;
-  }>
-): Effect.Effect<ReadonlyArray<CapabilityProbe>> =>
-  Effect.gen(function* () {
-    const d1 = yield* Effect.exit(
-      Effect.tryPromise(() => input.d1.prepare("SELECT 1 AS usable").first()).pipe(
-        Effect.timeout("2 seconds"),
-        Effect.flatMap(Schema.decodeUnknownEffect(Available))
-      )
-    );
-    const coordination = yield* Effect.exit(
-      Effect.tryPromise((signal) =>
-        input.coordinator.getByName(coordinatorProbeName).fetch(new Request(probeUrl, { signal }))
-      ).pipe(Effect.timeout("2 seconds"))
-    );
-    const status = (ready: boolean): CapabilityProbe["state"] =>
-      ready ? "healthy" : "unavailable";
-    return [
-      { component: "capability", operation: "d1", state: status(Exit.isSuccess(d1)) },
-      {
-        component: "capability",
-        operation: "requiredBindings",
-        state: status(input.requiredBindings.every(Boolean)),
-      },
-      {
-        component: "capability",
-        operation: "coordination",
-        state: status(
-          Exit.isSuccess(coordination) && coordination.value.status === probeSuccessStatus
-        ),
-      },
-      {
-        component: "capability",
-        operation: "providerConfig",
-        state: status(input.providerConfigured),
-      },
-    ];
-  });
-
 const minuteMs = 60_000;
 
 const warningAgeMs = 120_000;
@@ -263,3 +160,107 @@ export const operationalSeverity = (signal: AlertSignal): OperationalSeverity =>
   if (signal.operation === "whatsapp") return whatsappSeverity(signal);
   return pendingSeverity(signal);
 };
+
+export const logOperationalSignal = Effect.fn(function* (signal: OperationalSignal) {
+  const severity = operationalSeverity(signal);
+  const observation = {
+    ...signal,
+    severity,
+    message: `fidy.operational component=${signal.component} operation=${signal.operation} state=${signal.state} severity=${severity}`,
+  };
+  yield* severity === "none" ? Effect.logInfo(observation) : Effect.logWarning(observation);
+});
+const logRequiredBindings = Effect.fnUntraced(function* (healthy: boolean) {
+  const state = healthy ? "healthy" : "unavailable";
+  const message = `fidy.operational component=capability operation=requiredBindings state=${state} severity=${healthy ? "none" : "critical"}`;
+  if (!healthy) {
+    yield* Effect.logWarning({ message });
+    return yield* Effect.fail("missing_proactivity_bindings" as const);
+  }
+  yield* Effect.logInfo({ message });
+});
+/** Queue depth is a platform measurement. Domain health and eligible recovery come from native owner inspection. */
+export const inspectNativeQueues = Effect.fn(function* (
+  environment: Partial<
+    Readonly<{
+      ASYNC_HEALTH_ENABLED: string;
+      ASYNC_DEAD_LETTERS: Pick<Queue, "metrics">;
+      BROWSER_PAIRING_EMAIL_QUEUE: Pick<Queue, "metrics">;
+      FORWARDED_EMAIL_QUEUE: Pick<Queue, "metrics">;
+      BILLING_COLLECTION_QUEUE: Pick<Queue, "metrics">;
+      STATEMENT_EXTRACTION_QUEUE: Pick<Queue, "metrics">;
+      HOSTED_WHATSAPP_QUEUE: Pick<Queue, "metrics">;
+      WEEKLY_DELIVERY_QUEUE: Pick<Queue, "metrics">;
+      WEEKLY_DELIVERY_WORKFLOW: Pick<Workflow, "get">;
+      PROACTIVITY_ENABLED: string;
+      WEEKLY_SUMMARY_ENABLED: string;
+    }>
+  >
+) {
+  if (environment.ASYNC_HEALTH_ENABLED !== "enabled") return;
+  const proactivity =
+    environment.PROACTIVITY_ENABLED === "enabled" ||
+    environment.WEEKLY_SUMMARY_ENABLED === "enabled";
+  const queues = [
+    ["deadLetters", environment.ASYNC_DEAD_LETTERS],
+    ["browserPairingQueue", environment.BROWSER_PAIRING_EMAIL_QUEUE],
+    ["forwardedEmailQueue", environment.FORWARDED_EMAIL_QUEUE],
+    ["billingQueue", environment.BILLING_COLLECTION_QUEUE],
+    ["statementQueue", environment.STATEMENT_EXTRACTION_QUEUE],
+    ["whatsappQueue", environment.HOSTED_WHATSAPP_QUEUE],
+    ...(proactivity ? [["proactivityQueue", environment.WEEKLY_DELIVERY_QUEUE] as const] : []),
+  ] as const;
+  yield* Effect.forEach(
+    queues,
+    ([operation, binding]) =>
+      Effect.gen(function* () {
+        const signal = yield* inspectQueue({ operation, queue: Option.fromUndefinedOr(binding) });
+        yield* logOperationalSignal(signal);
+      }),
+    { concurrency: 4, discard: true }
+  );
+  const healthy =
+    !proactivity ||
+    (environment.WEEKLY_DELIVERY_QUEUE !== undefined &&
+      environment.WEEKLY_DELIVERY_WORKFLOW !== undefined);
+  yield* logRequiredBindings(healthy);
+});
+
+const pendingStaleMs = 120000;
+/** Only the sampled User's stale Workflow identities are inspected; logs contain aggregate values. */
+export const observeNativePending = Effect.fn(function* (
+  rows: ProactivityWorkObservations,
+  workflow: Parameters<typeof inspectWorkflow>[0],
+  now: number
+) {
+  const states = yield* Effect.forEach(
+    rows.filter((row) => now - row.created >= pendingStaleMs),
+    (row) => inspectWorkflow(workflow, row.id),
+    { concurrency: 2 }
+  );
+  const failedWorkflows = states.filter((state) => state === "failed").length,
+    unavailableWorkflows = states.filter((state) => state === "unavailable").length;
+  const oldestPendingAgeMilliseconds = Math.max(0, ...rows.map((row) => now - row.created));
+  const expiredUndelivered = rows.filter((row) =>
+    Option.exists(row.deadline, (deadline) => deadline <= now)
+  ).length;
+  yield* logOperationalSignal({
+    component: "async-health",
+    operation: "proactivity",
+    state:
+      oldestPendingAgeMilliseconds >= pendingStaleMs ||
+      expiredUndelivered > 0 ||
+      failedWorkflows > 0 ||
+      unavailableWorkflows > 0
+        ? "attention"
+        : "healthy",
+    sampledPending: rows.length,
+    sampleLimited: rows.length === proactivityObservationLimit,
+    oldestPendingAgeMilliseconds,
+    expiredUndelivered,
+    failedWorkflows,
+    unavailableWorkflows,
+    sampledRejectedEmailWork: 0,
+    rejectionSampleLimited: false,
+  });
+});

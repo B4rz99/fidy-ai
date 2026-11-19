@@ -1,7 +1,36 @@
-import type { UserId } from "../../src/core/identity/contract";
+import { EmailAddress } from "../../src/core/email-authentication/contract";
+import { UserId } from "../../src/core/identity/contract";
 import type { WorkflowStepConfig } from "cloudflare:workers";
 import { type Option, Schema } from "effect";
 
+export const loginAllowanceUrl = "https://directory.invalid/login-email/allowance";
+export const LoginMailboxCandidate = Schema.Struct({
+  user_id: UserId,
+  address: EmailAddress,
+  revision: Schema.Int,
+});
+export const loginCheckUrl = "https://user.invalid/login-email/check";
+export const loginStartUrl = "https://user.invalid/login-email/start";
+export const loginVerifyUrl = "https://user.invalid/login-email/verify";
+export const loginDeliverUrl = "https://user.invalid/login-email/deliver";
+export const LoginEmailHandoff = Schema.Struct({
+  id: Schema.String,
+  pairing_id: Schema.String,
+  user_id: UserId,
+  ordinal: Schema.Int,
+  verifier_digest: Schema.String,
+  expires_at_ms: Schema.Int,
+  wrong_attempts: Schema.Int,
+  last_poll_ms: Schema.NullOr(Schema.Int),
+  minimum_poll_seconds: Schema.Int,
+});
+export const NativeLoginEmailWork = Schema.Struct({
+  traceContext: Schema.optionalKey(Schema.Unknown),
+  kind: Schema.Literal("browser-pairing-email"),
+  version: Schema.Literal(2),
+  id: Schema.String.check(Schema.isUUID()),
+  userId: UserId,
+});
 export type VerifiedEmailQueryInput = Readonly<{ userId: UserId }>;
 export type EmailWorkOperation = "browserPairing" | "emailReplacement";
 export type EmailPendingWorkObservationInput = Readonly<{

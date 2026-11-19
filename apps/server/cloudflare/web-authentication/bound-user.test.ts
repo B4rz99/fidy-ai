@@ -1,194 +1,155 @@
-import { openAiTestKey } from "../openai.test-fixture";
-import { type Cause, Clock, Deferred, Effect, Fiber, Schema } from "effect";
-import { afterAll, expect, it } from "@effect/vitest";
-import { User } from "../../src/core/identity/contract";
-import { Category } from "../../src/core/categories/contract";
-import { browserSessionBindingHeader } from "../../src/shell/browser-transport/contract";
-import {
-  DisabledTelemetryResource,
-  makeTelemetryService,
-} from "../../src/shell/observability/operations";
-import {
-  installCurrentTestObjects,
-  isolatedTestDatabases,
-  observeRetentionCost,
-} from "../d1-test-fixture";
-import {
-  holdSessionCallback,
-  seedSession,
-  sessionId,
-  sessionToken,
-  sessionUser,
-} from "./session.test-fixture";
-import { makeFixtureWorker } from "../core-worker.test-fixture";
+import { NodeFileSystem } from "@effect/platform-node";
+import { it } from "@effect/vitest";
+import { Clock, Effect, Schema } from "effect";
+import { expect } from "vitest";
+import { alice, bob, nativeTransactionJourney } from "../financial-user-store.test-fixture";
+import { native } from "../user-store.test-fixture";
 
-const databases = isolatedTestDatabases();
-afterAll(() => databases.dispose());
-const current = Effect.runSync(Clock.currentTimeMillis);
-const idle = current + 60_000;
-const hard = current + 7_776_000_000;
-const telemetry = makeTelemetryService(DisabledTelemetryResource.adapter);
-const core = makeFixtureWorker(telemetry);
-const environment = (db: D1Database): Parameters<typeof core.fetch>[1] => ({
-  DB: db,
-  OPENAI_API_KEY: openAiTestKey({
-    run: (): Promise<never> => Promise.reject(new Error("Unused model")),
-  }),
-  HOSTED_AI_MODEL: "unused-bound-user-test",
-  RELEASE_GIT_SHA: "0".repeat(40),
-  CONTRACT_DIGEST: "0".repeat(64),
-  BROWSER_ORIGIN: "https://app.fidyapp.com",
-  USER_TRANSACTION_COORDINATOR: {
-    getByName: () => ({ fetch: () => Promise.reject(new Error("Unused coordinator")) }),
-  },
-  KAPSO_API_KEY: "unused-bound-user-test",
-  KAPSO_WEBHOOK_SECRET: "unused-bound-user-test",
-  WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
-  WHATSAPP_BUSINESS_PORTFOLIO_ID: "unused-bound-user-test",
-  CLOUDFLARE_ACCESS_ISSUER: "https://unused.example",
-  CLOUDFLARE_ACCESS_AUDIENCE: "unused",
-  WOMPI_ENVIRONMENT: "sandbox",
-  WOMPI_PUBLIC_KEY: "",
-  WOMPI_PRIVATE_KEY: "",
-  WOMPI_INTEGRITY_SECRET: "",
-});
-
-const setup = Effect.gen(function* () {
-  const db = yield* Effect.tryPromise(() => databases.acquire());
-  yield* Effect.tryPromise(() => installCurrentTestObjects({ db, tables: ["categories"] }));
-  yield* seedSession({ db, idle, hard });
-  return db;
-});
-
-const send = (db: D1Database, headers: Headers): Effect.Effect<Response, Cause.UnknownError> =>
-  Effect.tryPromise(() =>
-    core.fetch(new Request("https://api.fidyapp.com/user", { headers }), environment(db))
+const day = 86400000;
+const binding = "Fidy-Session-Binding";
+const cookie = "__Host-fidy_session=" + alice.bearer;
+const scenario = Effect.gen(function* () {
+  const db = yield* nativeTransactionJourney;
+  yield* native(() =>
+    db.exec(
+      "UPDATE users SET trial_started_at_ms=created_at_ms,trial_ends_at_ms=created_at_ms+604800000"
+    )
   );
-
-const headers = (): Headers =>
-  new Headers({
-    cookie: `__Host-fidy_session=${sessionToken}`,
-    [browserSessionBindingHeader]: sessionId,
-  });
-
-it.live("combines the current User binding proof with native idle renewal", () =>
-  Effect.gen(function* () {
-    const db = yield* setup;
-    const observed = observeRetentionCost(db);
-    const response = yield* send(observed.database, headers());
-    expect(response.status).toBe(200);
-    const body = yield* Schema.decodeUnknownEffect(
-      Schema.Struct({
-        data: Schema.toCodecJson(User),
-        categories: Schema.toCodecJson(Schema.Array(Category)),
-      })
-    )(yield* Effect.tryPromise(() => response.json()));
-    expect(body.data.id).toBe(sessionUser);
-    expect(body.categories).toHaveLength(16);
-    // Three User proof/read/Audit statements, plus the catalog replacing a separate HTTP read.
-    expect(observed.statements()).toHaveLength(4);
-    expect(
-      observed.statements().filter((statement) => statement.sql.includes("UPDATE web_sessions"))
-    ).toHaveLength(1);
-  })
-);
-
-const refusals = [
-  "foreign binding",
-  "malformed binding",
-  "missing binding",
-  "duplicate cookie",
-  "foreign cookie",
-  "revoked session",
-  "expired idle",
-  "expired hard",
-  "mixed credential mismatch",
-] as const;
-type Refusal = (typeof refusals)[number];
-const refusedHeaders = (refusal: Refusal): Headers => {
-  const requestHeaders = headers();
-  if (refusal === "foreign binding" || refusal === "mixed credential mismatch") {
-    requestHeaders.set(browserSessionBindingHeader, "20000000-0000-4000-8000-000000000002");
-  }
-  if (refusal === "mixed credential mismatch") {
-    requestHeaders.set("authorization", "Bearer unrelated-credential");
-  }
-  if (refusal === "malformed binding") requestHeaders.set(browserSessionBindingHeader, "invalid");
-  if (refusal === "missing binding") requestHeaders.delete(browserSessionBindingHeader);
-  if (refusal === "duplicate cookie") {
-    requestHeaders.set(
-      "cookie",
-      `__Host-fidy_session=${sessionToken}; __Host-fidy_session=${sessionToken}`
-    );
-  }
-  if (refusal === "foreign cookie") {
-    requestHeaders.set("cookie", `__Host-fidy_session=${"d".repeat(43)}`);
-  }
-  return requestHeaders;
-};
-
-const invalidateSession = (
-  db: D1Database,
-  refusal: Refusal
-): Effect.Effect<void, Cause.UnknownError> =>
-  Effect.gen(function* () {
-    if (refusal === "revoked session") {
-      yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE web_sessions SET revoked_at_ms=?").bind(current).run()
-      );
-    }
-    if (refusal === "expired idle") {
-      yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE web_sessions SET idle_expires_at_ms=?").bind(current).run()
-      );
-    }
-    if (refusal === "expired hard") {
-      yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE web_sessions SET hard_expires_at_ms=?").bind(current).run()
-      );
-    }
-  });
-
-it.live.each(refusals)(
-  "refuses %s without renewing the session or recording a User read",
-  (refusal) =>
-    Effect.gen(function* () {
-      const db = yield* setup;
-      yield* invalidateSession(db, refusal);
-      const response = yield* send(db, refusedHeaders(refusal));
-      expect(response.status).toBe(401);
-      expect(yield* Effect.tryPromise(() => response.text())).not.toContain(sessionUser);
-      expect(
-        yield* Effect.tryPromise(() =>
-          db.prepare("SELECT idle_expires_at_ms FROM web_sessions").first("idle_expires_at_ms")
-        )
-      ).toBe(refusal === "expired idle" ? current : idle);
-      expect(
-        yield* Effect.tryPromise(() =>
-          db.prepare("SELECT count(*) AS n FROM audit_entries").first("n")
-        )
-      ).toBe(0);
-    })
-);
-
-it.live("refuses a bound session revoked before the metadata transaction starts", () =>
-  Effect.gen(function* () {
-    const db = yield* setup;
-    const held = yield* holdSessionCallback({ db, sqlPrefix: "", method: "batch", before: true });
-    const running = yield* Effect.forkChild(send(held.db, headers()));
-    yield* Effect.gen(function* () {
-      yield* Deferred.await(held.entered);
-      yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE web_sessions SET revoked_at_ms=?").bind(current).run()
-      );
-    }).pipe(Effect.ensuring(held.release));
-    const response = yield* Fiber.join(running);
-    expect(response.status).toBe(401);
-    expect(yield* Effect.tryPromise(() => response.text())).not.toContain(sessionUser);
-    expect(
-      yield* Effect.tryPromise(() =>
-        db.prepare("SELECT count(*) AS n FROM audit_entries").first("n")
+  yield* native(() =>
+    db.exec(
+      "INSERT INTO consent_history(id,user_id,record_type,occurred_at_ms) VALUES(?,?,'processing_grant',1)",
+      alice.session,
+      alice.user
+    )
+  );
+  const send = (
+    headers: Record<string, string>,
+    path = "/user",
+    method = "GET"
+  ): Effect.Effect<Response> =>
+    native(() =>
+      db.send(
+        new Request("https://api.fidyapp.com" + path, {
+          method,
+          headers: { origin: "https://app.fidyapp.com", ...headers },
+        })
       )
-    ).toBe(0);
-  })
-);
+    );
+  const original = yield* native(() => db.exec("SELECT idle_expires_at_ms FROM web_sessions"));
+  const refusals: Array<Record<string, string>> = [
+    { cookie },
+    { cookie, [binding]: "invalid" },
+    { cookie, [binding]: bob.session },
+    { cookie: cookie + "; " + cookie, [binding]: alice.session },
+    { cookie: "__Host-fidy_session=" + bob.bearer, [binding]: alice.session },
+    { cookie, [binding]: bob.session, authorization: "Bearer unrelated-credential" },
+  ];
+  for (const headers of refusals) {
+    const rejected = yield* send(headers);
+    expect(rejected.status).toBe(401);
+    expect(yield* native(() => rejected.text())).not.toContain(alice.user);
+  }
+  expect(yield* native(() => db.exec("SELECT idle_expires_at_ms FROM web_sessions"))).toEqual(
+    original
+  );
+  expect(yield* native(() => db.exec("SELECT count(*) AS count FROM audit_entries"))).toEqual([
+    { count: 0 },
+  ]);
+  const headers = { cookie, [binding]: alice.session };
+  const response = yield* send(headers);
+  expect(response.status).toBe(200);
+  const profile = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({
+      data: Schema.Struct({ id: Schema.String }),
+      categories: Schema.Array(Schema.Unknown),
+    })
+  )(yield* native(() => response.json()));
+  expect(profile.data.id).toBe(alice.user);
+  const now = yield* Clock.currentTimeMillis;
+  yield* native(() =>
+    db.exec(
+      "UPDATE web_sessions SET created_at_ms=?,fresh_until_ms=?,idle_expires_at_ms=?,hard_expires_at_ms=?",
+      now - 89 * day,
+      now - 89 * day + 600000,
+      now + 60000,
+      now + day
+    )
+  );
+  expect((yield* send(headers)).status).toBe(200);
+  expect(
+    yield* native(() =>
+      db.exec("SELECT idle_expires_at_ms=hard_expires_at_ms AS capped FROM web_sessions")
+    )
+  ).toEqual([{ capped: 1 }]);
+  yield* native(() => db.exec("UPDATE web_sessions SET idle_expires_at_ms=?", now - 1));
+  expect((yield* send(headers)).status).toBe(401);
+  yield* native(() =>
+    db.exec(
+      "UPDATE web_sessions SET created_at_ms=?,fresh_until_ms=?,idle_expires_at_ms=?,hard_expires_at_ms=?",
+      now - 91 * day,
+      now - 91 * day + 600000,
+      now - day,
+      now - day
+    )
+  );
+  expect((yield* send(headers)).status).toBe(401);
+  yield* native(() =>
+    db.exec(
+      "UPDATE web_sessions SET created_at_ms=?,fresh_until_ms=?,idle_expires_at_ms=?,hard_expires_at_ms=?",
+      now,
+      now + 600000,
+      now + day,
+      now + 90 * day
+    )
+  );
+  yield* native(() =>
+    db.exec(
+      "CREATE TRIGGER lost_revocation BEFORE UPDATE OF revoked_at_ms ON web_sessions BEGIN SELECT RAISE(IGNORE); END"
+    )
+  );
+  expect((yield* send(headers, "/web/session/logout", "POST")).status).toBe(503);
+  yield* native(() => db.exec("DROP TRIGGER lost_revocation"));
+  expect((yield* send(headers, "/web/session/logout", "POST")).status).toBe(204);
+  expect((yield* send(headers)).status).toBe(401);
+  expect(
+    yield* native(() =>
+      db.exec("SELECT count(*) AS count FROM audit_entries WHERE record_type='identity_read'")
+    )
+  ).toEqual([{ count: 2 }]);
+});
+const revokedDuringRenewal = Effect.gen(function* () {
+  const db = yield* nativeTransactionJourney;
+  yield* native(() =>
+    db.exec(
+      "UPDATE users SET trial_started_at_ms=created_at_ms,trial_ends_at_ms=created_at_ms+604800000"
+    )
+  );
+  yield* native(() =>
+    db.exec(
+      "INSERT INTO consent_history(id,user_id,record_type,occurred_at_ms) VALUES(?,?,'processing_grant',1)",
+      alice.session,
+      alice.user
+    )
+  );
+  yield* native(() =>
+    db.exec(
+      "CREATE TRIGGER revoke_during_renewal AFTER UPDATE OF idle_expires_at_ms ON web_sessions BEGIN UPDATE web_sessions SET revoked_at_ms=1 WHERE id=NEW.id; END"
+    )
+  );
+  const response = yield* native(() => db.browser(0, "/user"));
+  expect(response.status).toBe(401);
+  expect(yield* native(() => response.text())).not.toContain(alice.user);
+  expect(
+    yield* native(() => db.exec("SELECT id FROM audit_entries WHERE record_type='identity_read'"))
+  ).toEqual([]);
+});
+it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
+  test.effect(
+    "refuses a session revoked during renewal before releasing its profile or read evidence",
+    () => revokedDuringRenewal
+  );
+  test.effect(
+    "requires the mounted binding for a User read and recognizes only the exact routed session",
+    () => scenario
+  );
+});

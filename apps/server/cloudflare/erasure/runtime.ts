@@ -1,7 +1,7 @@
 import { HttpClient } from "effect/http";
 import { makeAccessSigningKeysOutboundHttp } from "../../src/shell/outbound-http/operations";
 import type { ErasureOperatorEnvironment, ErasureRegistry } from "./contract";
-import { operatorRequest } from "./internal/operator-request";
+import { nativeOperatorRequest, operatorRequest } from "./internal/operator-request";
 import type { AuthenticatedWebSession } from "../web-session/contract";
 import { Clock, Effect, Option, Schema } from "effect";
 import { ErasureRequest } from "../../src/core/erasure/contract";
@@ -214,3 +214,15 @@ export const handleErasureOperator = (
       http,
     });
   });
+
+/** Only the independent Erasure namespace may continue or attest an admitted native case. */
+export const handleNativeErasureOperator = Effect.fn(function* (
+  request: Request,
+  environment: Parameters<typeof nativeOperatorRequest>[0]["environment"]
+) {
+  const http = makeAccessSigningKeysOutboundHttp({
+    issuer: environment.CLOUDFLARE_ACCESS_ISSUER,
+    httpClient: yield* HttpClient.HttpClient,
+  });
+  return yield* nativeOperatorRequest({ request, environment, http });
+});

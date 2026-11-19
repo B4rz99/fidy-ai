@@ -241,3 +241,5 @@ export const makePairingClient = Effect.fn(function* (httpClient: HttpClient.Htt
   };
   return pairing;
 });
+
+export { authenticateAccess } from "./internal/operator-access";

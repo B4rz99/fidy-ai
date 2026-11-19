@@ -34,9 +34,16 @@ const validateTarget = (
 const io = <A>(run: () => Promise<A>): Effect.Effect<A, PrivateObjectUnavailable> =>
   Effect.tryPromise({ try: run, catch: () => new PrivateObjectUnavailable() });
 
+type TrackedWrite<E, R> = PrivateObjectWrite<E, R> & {
+  put: (
+    key: string,
+    bytes: Uint8Array,
+    options: R2PutOptions
+  ) => Effect.Effect<unknown, E | PrivateObjectUnavailable, R>;
+};
 /** A positive result confirms payload publication. Failed or cancelled calls require owner reconciliation. Cleanup invalidates the placeholder ETag, so a delayed payload cannot restore deleted bytes. */
-export const writePrivateObject = <E, R>(
-  input: PrivateObjectWrite<E, R>
+const publishPrivateObject = <E, R>(
+  input: TrackedWrite<E, R>
 ): Effect.Effect<void, E | PrivateObjectUnavailable, R> =>
   Effect.gen(function* () {
     yield* validateTarget(input);
@@ -52,19 +59,17 @@ export const writePrivateObject = <E, R>(
     }
     const nonce = yield* Effect.sync(newId);
     const current = yield* Clock.currentTimeMillis;
-    const placeholder = yield* io(() =>
-      input.bucket.put(input.key, new TextEncoder().encode(nonce), {
-        onlyIf: Option.match(input.predecessor, {
-          onNone: () => ({ etagDoesNotMatch: "*" }),
-          onSome: ({ etag }) => ({ etagMatches: etag }),
-        }),
-        customMetadata: {
-          ...input.metadata,
-          purpose: "private-object-placeholder",
-          expiresAtMs: String(current + controlLifetimeMs),
-        },
-      })
-    );
+    const placeholder = yield* input.put(input.key, new TextEncoder().encode(nonce), {
+      onlyIf: Option.match(input.predecessor, {
+        onNone: () => ({ etagDoesNotMatch: "*" }),
+        onSome: ({ etag }) => ({ etagMatches: etag }),
+      }),
+      customMetadata: {
+        ...input.metadata,
+        purpose: "private-object-placeholder",
+        expiresAtMs: String(current + controlLifetimeMs),
+      },
+    });
     const stored = yield* Schema.decodeUnknownEffect(Stored)(placeholder).pipe(
       Effect.mapError(() => new PrivateObjectUnavailable())
     );
@@ -73,16 +78,22 @@ export const writePrivateObject = <E, R>(
       onNone: () => ({}),
       onSome: (digest) => ({ sha256: Uint8Array.from(digest).buffer }),
     });
-    const published = yield* io(() =>
-      input.bucket.put(input.key, input.bytes, {
-        onlyIf: { etagMatches: stored.etag },
-        customMetadata: { ...input.metadata },
-        ...checksum,
-      })
-    );
+    const published = yield* input.put(input.key, input.bytes, {
+      onlyIf: { etagMatches: stored.etag },
+      customMetadata: { ...input.metadata },
+      ...checksum,
+    });
     yield* Schema.decodeUnknownEffect(Stored)(published).pipe(
       Effect.mapError(() => new PrivateObjectUnavailable())
     );
+  });
+
+export const writePrivateObject = <E, R>(
+  input: PrivateObjectWrite<E, R>
+): Effect.Effect<void, E | PrivateObjectUnavailable, R> =>
+  publishPrivateObject({
+    ...input,
+    put: (key, bytes, options) => io(() => input.bucket.put(key, bytes, options)),
   });
 
 /** Delete an owner-qualified key only after its disposition permits deletion. Removing the placeholder invalidates a delayed payload's ETag without creating another object; unknown upload outcomes remain the owner's drain responsibility. */
@@ -118,3 +129,34 @@ export const eraseObservedPrivateObject = (
     );
     yield* io(() => input.bucket.delete(input.key));
   });
+
+/** Recover the same retained upload after its first placeholder write. A changed or deleted
+ * ETag prevents the late payload from recreating erased bytes. */
+export const resumePrivateUpload = Effect.fn(function* <E, R>(
+  work: TrackedWrite<E, R>,
+  observed: Option.Option<R2Object>
+) {
+  if (
+    Option.isNone(observed) ||
+    observed.value.customMetadata?.purpose !== "private-object-placeholder"
+  ) {
+    return yield* publishPrivateObject(work);
+  }
+  yield* validateTarget(work);
+  const metadata = observed.value.customMetadata;
+  if (metadata.sha256 !== work.metadata.sha256 || !(yield* work.authorise)) {
+    return yield* new PrivateObjectUnavailable();
+  }
+  const checksum = Option.match(work.digest, {
+    onNone: () => ({}),
+    onSome: (value) => ({ sha256: Uint8Array.from(value).buffer }),
+  });
+  const written = yield* work.put(work.key, work.bytes, {
+    onlyIf: { etagMatches: observed.value.etag },
+    customMetadata: { ...work.metadata },
+    ...checksum,
+  });
+  yield* Schema.decodeUnknownEffect(Stored)(written).pipe(
+    Effect.mapError(() => new PrivateObjectUnavailable())
+  );
+});

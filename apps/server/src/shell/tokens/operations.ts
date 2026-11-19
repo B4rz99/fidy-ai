@@ -35,7 +35,7 @@ import {
 } from "./contract";
 
 export const pairingMilliseconds = 600_000;
-const maxPairingsPerWindow = 4000;
+export const maxPairingsPerWindow = 4000;
 export const maxActivePATs = 100;
 export const issuanceWindowMilliseconds = 600_000;
 export const maxIssuancesPerUserWindow = 20;

@@ -14,16 +14,15 @@ import {
   smokeFailureHeader,
   smokeIdentityHeader,
   smokeManifest,
-  smokeProofHeader,
+  smokeProofAccepted,
 } from "./contract";
-import { verifyCategoryStorage } from "../../categories/operations";
-import { activeProUserCondition } from "../../../src/shell/access-tier/operations";
+import { initializeSharedStores } from "../../storage-bootstrap/operations";
+import { releaseProbeName, storeTransactionUrl } from "../sqlite/contract";
 import { Clock, Effect, Option, Schema } from "effect";
 
 import { RequestBodyPolicy } from "../../http/contract";
 import { boundedJsonBody } from "../../http/operations";
-import { SmokeWork, smokeExecutionId, smokeLifetimeMs } from "./internal/protocol";
-import { verifySmokeDatabase } from "./internal/database";
+import { SmokeWork, smokeExecutionId, smokeLifetimeMs, smokeMarkerKey } from "./internal/protocol";
 import { SmokeBindingFailed, platform } from "./internal/platform";
 
 /** The runner must compare observed Worker identities with its upload receipts, never trust a 2xx alone. */
@@ -35,32 +34,16 @@ export const verifySmokeIdentity = ({
   expected.contractDigest === observed.contractDigest &&
   expected.workerVersionId === observed.workerVersionId;
 
-const smokeSecretPattern = /^[0-9a-f]{64}$/u;
-
-/** A separate, randomly provisioned deployment-runner credential, never a User or provider grant. */
-export const smokeProofAccepted = ({
-  request,
-  secret,
-}: Readonly<{ request: Request; secret: string }>): boolean => {
-  const offered = request.headers.get(smokeProofHeader) ?? "";
-  if (!smokeSecretPattern.test(secret) || !smokeSecretPattern.test(offered)) return false;
-  let difference = 0;
-  for (let index = 0; index < secret.length; index++) {
-    difference |= secret.charCodeAt(index) ^ offered.charCodeAt(index);
-  }
-  return difference === 0;
-};
-
 const fail = (stage: SmokeFailureStage = "platform"): Response =>
   Response.json(
     { status: "unavailable" },
     { status: 503, headers: { [smokeFailureHeader]: stage } }
   );
 const refused = (): Response => Response.json({}, { status: 404 });
-const markerKey = "_release-smoke/marker-v1";
 const maxBodyBytes = 512;
 const acceptedStatus = 202;
 const completedStatus = 200;
+const storeProofStatus = 204;
 const bodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: maxBodyBytes,
   deadlineMilliseconds: 3000,
@@ -78,7 +61,7 @@ const responseFor = (environment: SmokeEnvironment, status: string, httpStatus: 
     { status: httpStatus }
   );
 
-const checkBindings = Effect.fn(function* (environment: SmokeEnvironment) {
+const checkBindings = Effect.fn(function* (environment: SmokeEnvironment, work: SmokeWork) {
   const secrets = [
     environment.SMOKE_PROOF,
     environment.KAPSO_API_KEY,
@@ -91,43 +74,31 @@ const checkBindings = Effect.fn(function* (environment: SmokeEnvironment) {
   if (secrets.some((secret) => typeof secret !== "string" || secret.length === 0)) {
     return yield* new SmokeBindingFailed({ stage: "secrets" });
   }
-  yield* verifySmokeDatabase(environment.DB);
-  yield* verifyCategoryStorage({ db: environment.DB }).pipe(
+  yield* initializeSharedStores(environment).pipe(
     Effect.mapError(() => new SmokeBindingFailed({ stage: "schema" }))
   );
-  // Prepare the same standing dependency every protected canonical read uses. No User is
-  // looked up or created: LIMIT 0 validates the deployed schema without producing a row.
-  const standing = activeProUserCondition({
-    userId: "00000000-0000-4000-8000-000000000000",
-    nowEpochMs: 0,
-  });
-  yield* platform({
-    tryWork: () =>
-      environment.DB.prepare(`SELECT ${standing.sql} AS active LIMIT 0`)
-        .bind(...standing.params)
-        .all(),
+  const store = environment.USER_STORE;
+  if (store === undefined) return yield* new SmokeBindingFailed({ stage: "schema" });
+  const checked = yield* platform({
     stage: "schema",
+    tryWork: () => store.getByName(releaseProbeName).fetch(storeTransactionUrl, { method: "POST" }),
   });
+  if (checked.status !== storeProofStatus) {
+    return yield* new SmokeBindingFailed({ stage: "schema" });
+  }
   yield* platform({
-    tryWork: () => environment.SMOKE_BUCKET.put(markerKey, "smoke-v1"),
+    tryWork: () => environment.SMOKE_BUCKET.put(smokeMarkerKey(work), work.contractDigest),
     stage: "storage",
   });
   if (
     (yield* platform({
-      tryWork: () => environment.SMOKE_BUCKET.get(markerKey),
+      tryWork: () =>
+        environment.SMOKE_BUCKET.get(smokeMarkerKey(work)).then((value) => value?.text()),
       stage: "storage",
-    })) === null
+    })) !== work.contractDigest
   ) {
     return yield* new SmokeBindingFailed({ stage: "storage" });
   }
-  const compatibility = yield* platform({
-    tryWork: () =>
-      environment.USER_TRANSACTION_COORDINATOR.getByName("_release-smoke-v1").fetch(
-        "https://coordinator.internal/release-smoke"
-      ),
-    stage: "coordinator",
-  });
-  if (!compatibility.ok) return yield* new SmokeBindingFailed({ stage: "coordinator" });
 });
 
 const matchesCore = (probe: SmokeRequestType, environment: SmokeEnvironment): boolean =>
@@ -172,12 +143,6 @@ const startProbe = Effect.fn(function* (
   });
   if (!admitted.success) return fail("admission");
   const now = yield* Clock.currentTimeMillis;
-  yield* checkBindings(environment);
-  if (probe.verifyBancolombiaSandbox === true) {
-    yield* bankAuthentication.pipe(
-      Effect.mapError((error) => new SmokeBindingFailed({ stage: error.stage }))
-    );
-  }
   const work: SmokeWork = {
     protocolVersion: 2,
     probeId: probe.probeId,
@@ -186,6 +151,12 @@ const startProbe = Effect.fn(function* (
     coreVersionId: environment.CF_VERSION_METADATA.id,
     expiresAtMs: now + smokeLifetimeMs,
   };
+  yield* checkBindings(environment, work);
+  if (probe.verifyBancolombiaSandbox === true) {
+    yield* bankAuthentication.pipe(
+      Effect.mapError((error) => new SmokeBindingFailed({ stage: error.stage }))
+    );
+  }
   yield* platform({ stage: "publication", tryWork: () => environment.SMOKE_QUEUE.send(work) });
   return responseFor(environment, "pending", acceptedStatus);
 });

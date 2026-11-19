@@ -1,3 +1,10 @@
+import {
+  directoryName,
+  rejectInvitationSendUrl,
+  whatsappBootstrapUrl,
+} from "../directory/contract";
+import { UserId } from "../../src/core/identity/contract";
+import { DateTime, Effect, Option, Redacted, Schema } from "effect";
 import { projections as erasureProjections } from "./internal/erasure";
 import { makeErasureStore } from "../erasure-store/runtime";
 import type { ErasureStore } from "../erasure-store/contract";
@@ -7,9 +14,10 @@ import type {
   WhatsAppIngressEnvironment,
 } from "../whatsapp/contract";
 import { HttpClient } from "effect/http";
-import { receiveHandoffText } from "./internal/whatsapp-handoff";
 import { ProviderAuthenticationRetentionUnavailable } from "./contract";
-import { Effect, Option, Redacted } from "effect";
+
+const noContentStatus = 204;
+const okStatus = 200;
 
 const admissionWindowMs = 60_000;
 const maximumSweepRows = 500;
@@ -52,29 +60,72 @@ export const sweepProviderAuthentication = ({
     Effect.mapError(() => new ProviderAuthenticationRetentionUnavailable())
   );
 
-/** Compose fixed outbound policy with authenticated pre-User channel confirmation; no model or Transcript participates. */
-export const receiveWhatsAppProviderHandoff = ({
-  environment,
-  inbound,
-}: Readonly<{
-  environment: WhatsAppIngressEnvironment;
-  inbound: WhatsAppAuthenticatedInbound;
-}>): Effect.Effect<Option.Option<Response>, never, HttpClient.HttpClient> =>
-  Effect.gen(function* () {
-    const httpClient = yield* HttpClient.HttpClient;
-    return yield* receiveHandoffText({
-      db: environment.DB,
-      browserOrigin: environment.BROWSER_ORIGIN,
-      inbound,
-      send: makeProviderHandoffSender({
-        apiKey: Redacted.make(environment.KAPSO_API_KEY),
-        httpClient,
-        sandboxPhoneNumberId: Option.fromNullishOr(environment.WHATSAPP_SANDBOX_PHONE_NUMBER_ID),
-      }),
-    });
-  });
-
 export const makeProviderAuthenticationErasureStores = (
   db: D1Database
 ): ReadonlyArray<ErasureStore> =>
   erasureProjections.map((projection) => makeErasureStore({ db, projection }));
+
+const sendInvitation = Effect.fn(function* (
+  environment: WhatsAppIngressEnvironment,
+  event: WhatsAppAuthenticatedInbound["event"],
+  { owner, invitation }: { owner: Pick<Fetcher, "fetch">; invitation: string }
+) {
+  const send = makeProviderHandoffSender({
+    apiKey: Redacted.make(environment.KAPSO_API_KEY),
+    httpClient: yield* HttpClient.HttpClient,
+    sandboxPhoneNumberId: Option.fromNullishOr(environment.WHATSAPP_SANDBOX_PHONE_NUMBER_ID),
+  });
+  const sent = yield* Effect.result(
+    send({
+      event,
+      text: `¡Hola! Para usar Fidy, acepta la política e inicia sesión con Google o Microsoft:\n${environment.BROWSER_ORIGIN}/login?handoff=${invitation}\nAl terminar, volverás a este chat.`,
+    })
+  );
+  if (sent._tag === "Failure") {
+    if (sent.failure.deliveryCertainty !== "rejected") return new Response(null, { status: 503 });
+    const receipt = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+      id: invitation,
+      message: event.messageEvidence.providerMessageId,
+    });
+    const settled = yield* Effect.tryPromise((signal) =>
+      owner.fetch(rejectInvitationSendUrl, { method: "POST", body: receipt, signal })
+    );
+    if (!settled.ok) return new Response(null, { status: 503 });
+  }
+  return new Response(null, { status: 200 });
+});
+/** Send only after the Directory atomically admits the exact authenticated chat and claims its invitation. */
+export const routeNativeInvitation = Effect.fn(
+  function* (environment: WhatsAppIngressEnvironment, inbound: WhatsAppAuthenticatedInbound) {
+    const { event } = inbound;
+    if (event.content._tag !== "Text" || environment.DIRECTORY === undefined) {
+      return new Response(null, { status: 503 });
+    }
+    const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+      portfolio: event.caller.businessPortfolioId,
+      bsuid: event.caller.businessScopedUserId,
+      endpoint: event.businessPhoneNumberId,
+      message: event.messageEvidence.providerMessageId,
+      phone: Option.getOrNull(event.caller.phoneNumber),
+      text: event.content.text,
+      receivedAt: inbound.receivedAtMs,
+      occurredAt: DateTime.toEpochMillis(event.occurredAt),
+    });
+    const owner = environment.DIRECTORY.getByName(directoryName);
+    const response = yield* Effect.tryPromise((signal) =>
+      owner.fetch(whatsappBootstrapUrl, { method: "POST", body, signal })
+    );
+    if (!response.ok || response.status === noContentStatus) {
+      return new Response(null, { status: response.ok ? okStatus : response.status });
+    }
+    const result = yield* Schema.decodeUnknownEffect(
+      Schema.Union([
+        Schema.Struct({ userId: UserId }),
+        Schema.Struct({ invitation: Schema.String }),
+      ])
+    )(yield* Effect.tryPromise(() => response.json()));
+    if ("userId" in result) return result.userId;
+    return yield* sendInvitation(environment, event, { owner, invitation: result.invitation });
+  },
+  Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
+);

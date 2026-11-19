@@ -1,8 +1,13 @@
 import { providerStatus } from "./internal/status";
 import { completeProvider } from "./internal/completion";
-import { providerCallback } from "./internal/callback";
-import type { HttpClient } from "effect/http";
-
+import {
+  rejectionReason as callbackFailure,
+  callbackRedirect as nativeCallbackRedirect,
+  cookieVerifier as nativeCookieVerifier,
+  validCode as nativeValidCode,
+  providerCallback,
+} from "./internal/callback";
+import { type HttpClient } from "effect/http";
 import { admitProviderRequest } from "./internal/admission";
 import { Effect, Option } from "effect";
 import {
@@ -10,8 +15,16 @@ import {
   providerPaths,
 } from "../../src/shell/provider-authentication/contract";
 import { webSignupDisclosure } from "../../src/shell/consent/operations";
-import type { ProviderCompletionRequest, ProviderEnvironment } from "./contract";
-import { providerJson, startProvider } from "./internal/start";
+import { type ProviderCompletionRequest, type ProviderEnvironment } from "./contract";
+import {
+  prepareAttempt as nativePrepareAttempt,
+  startedResponse as nativeStartedResponse,
+  providerJson,
+  startProvider,
+} from "./internal/start";
+import { providerConfiguration as nativeProviderConfiguration } from "./internal/configuration";
+import { validateGoogleToken as nativeValidateGoogleToken } from "./internal/google-token";
+import { validateMicrosoftToken as nativeValidateMicrosoftToken } from "./internal/microsoft-token";
 
 const invalidStatus = 400;
 /** Recognize the fixed first-party provider protocol surface; matching grants no authority. */
@@ -86,3 +99,26 @@ export const handleProviderAuthentication = (
     });
     return Option.isSome(refusal) ? refusal.value : yield* dispatchProviderAuthentication(input);
   });
+
+export const providerConfiguration: typeof nativeProviderConfiguration = (...args) =>
+  nativeProviderConfiguration(...args);
+
+export const callbackRedirect: typeof nativeCallbackRedirect = (...args) =>
+  nativeCallbackRedirect(...args);
+export const cookieVerifier: typeof nativeCookieVerifier = (...args) =>
+  nativeCookieVerifier(...args);
+export const validCode: typeof nativeValidCode = (...args) => nativeValidCode(...args);
+
+export const prepareAttempt: typeof nativePrepareAttempt = (...args) =>
+  nativePrepareAttempt(...args);
+export const startedResponse: typeof nativeStartedResponse = (...args) =>
+  nativeStartedResponse(...args);
+
+export const validateGoogleToken: typeof nativeValidateGoogleToken = (...args) =>
+  nativeValidateGoogleToken(...args);
+
+export const validateMicrosoftToken: typeof nativeValidateMicrosoftToken = (...args) =>
+  nativeValidateMicrosoftToken(...args);
+
+export const providerRejectionReason: typeof callbackFailure = (failure) =>
+  callbackFailure(failure);

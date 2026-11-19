@@ -1,3 +1,4 @@
+import { prepareConnection, queryConnections } from "./internal/sqlite-connections";
 import { type SecureRandom } from "effect/crypto";
 import { ConnectionInstitutions } from "../../src/shell/connections/contract";
 import {
@@ -332,3 +333,8 @@ export const requiresErasureSuppression = (
       catch: () => new ConnectionRetentionUnavailable(),
     }).pipe(Effect.map((pending) => pending !== 0));
   });
+
+export const queryLocalConnections: typeof queryConnections = (...args) =>
+  queryConnections(...args);
+export const prepareLocalConnection: typeof prepareConnection = (...args) =>
+  prepareConnection(...args);

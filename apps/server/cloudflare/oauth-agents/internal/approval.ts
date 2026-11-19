@@ -36,7 +36,13 @@ type ApprovalMaterial = Readonly<{
   expiresAt: number;
   digest: Uint8Array;
 }>;
-const grantStatement = (input: ApprovalInput, material: ApprovalMaterial): OwnedStatement => {
+export const grantStatement = ({
+  input,
+  material,
+}: {
+  input: Omit<ApprovalInput, "db">;
+  material: ApprovalMaterial;
+}): OwnedStatement => {
   const fresh = freshSessionConditions(input);
   return protectConsentStatement({
     subject: { _tag: "User", userId: input.session.user_id },
@@ -68,7 +74,7 @@ const commitApproval = (
   material: ApprovalMaterial
 ): Effect.Effect<unknown, BootstrapUnavailable> =>
   dbWork(() => {
-    const auditStatement = grantStatement(input, material);
+    const auditStatement = grantStatement({ input, material });
     const auditStatement2 = grantOAuthConsent({
       id: newId(),
       connectionId: material.connectionId,

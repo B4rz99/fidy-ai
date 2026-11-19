@@ -1,3 +1,4 @@
+import { foldHostedReceipt } from "./internal/local-channel-receipt";
 import { preparePredicateAssertion } from "../../src/shell/sql-assertions/operations";
 import { Effect, type Option } from "effect";
 import { mintHostedStatementCaller as statementCaller } from "./internal/statement-authority";
@@ -131,3 +132,6 @@ export const readAdmittedHostedConsent = (
   input: Readonly<{ db: D1Database; userId: UserId; turnId: TranscriptTurnId }>
 ): Effect.Effect<Option.Option<OnboardingConsentBasis>, AgentUnavailable> =>
   readAdmittedBasis(input);
+
+export const reconcileLocalHostedReceipt: typeof foldHostedReceipt = (...args) =>
+  foldHostedReceipt(...args);

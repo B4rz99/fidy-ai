@@ -16,7 +16,7 @@ const bodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 1048576,
   deadlineMilliseconds: 5000,
 });
-const normalized = (input: Schema.Json): Schema.Json => {
+export const normalized = (input: Schema.Json): Schema.Json => {
   if (Array.isArray(input)) return input.map(normalized);
   if (input !== null && typeof input === "object") {
     return Object.fromEntries(
@@ -164,3 +164,17 @@ export const cryptoHash = (value: string): Effect.Effect<string, CanonicalAdmiss
     try: () => crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)),
     catch: (cause) => new CanonicalAdmissionUnavailable({ cause }),
   }).pipe(Effect.map((digest) => Hex.encode(new Uint8Array(digest))));
+export const localCanonicalArguments = Effect.fnUntraced(function* (
+  request: Request,
+  operation: CatalogOperation
+) {
+  return yield* rawInput({ request, operation }).pipe(
+    Effect.flatMap(
+      Option.match({
+        onNone: () => Effect.succeedNone,
+        onSome: (decoded) => Schema.encodeEffect(operation.input)(decoded).pipe(Effect.asSome),
+      })
+    ),
+    Effect.orElseSucceed(() => Option.none())
+  );
+});

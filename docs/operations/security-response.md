@@ -57,7 +57,7 @@ outstanding requirements tracked in [#1262](https://github.com/B4rz99/fidy-ai/is
 Fix the demonstrated path with a negative test proving refusal and no unauthorized partial effects.
 Run affected security and release gates. Use guarded code rollback only when its binding/state
 compatibility conditions hold; it cannot undo data exposure, payments, messages, credential issuance,
-D1 migrations or provider effects. Reconcile ambiguous effects through their owner rather than
+SQLite owner history, committed User data or provider effects. Reconcile ambiguous effects through their owner rather than
 replaying them. Confirm the exact release, restored authorization, stale credential refusal, alert
 receipt and affected retention lifecycle before restoring the capability.
 

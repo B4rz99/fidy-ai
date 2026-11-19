@@ -1,6 +1,8 @@
+import { claimRegisteredSend, recordRegisteredSend } from "./registered-send";
+import type { ExternalEventBindings } from "../../directory/contract";
 import { TranscriptText, TranscriptTurnId } from "../../../src/core/agent/contract";
 import { E164PhoneNumber, UserId } from "../../../src/core/identity/contract";
-import { type Cause, Clock, DateTime, Effect, Option, Schema } from "effect";
+import { Cause, Clock, DateTime, Effect, Option, Schema } from "effect";
 import {
   HostedDeliveryCorrelationToken,
   type WhatsAppHostedLifecycleEvidence,
@@ -478,22 +480,71 @@ type HostedReplySender<E> = (
   E
 >;
 
-/** Own the complete hosted provider boundary; Agent still owns terminal Turn settlement. */
-export const submitHostedReply = <E>({
-  db,
+const registerHostedSend = Effect.fn(function* ({
+  callbackOwner,
   userId,
   turnId,
+  token,
+  recipient,
+  proposedAt,
   text,
-  send,
-  scheduleRecovery,
-}: Readonly<{
+}: {
+  callbackOwner: Partial<ExternalEventBindings>;
+  userId: UserId;
+  turnId: TranscriptTurnId;
+  token: HostedDeliveryCorrelationToken;
+  recipient: WhatsAppHostedRecipient;
+  proposedAt: number;
+  text: TranscriptText;
+}) {
+  const binding = {
+    userId,
+    family: "hosted" as const,
+    operationId: turnId,
+    correlation: token,
+    endpoint: recipient.businessPhoneNumberId,
+  };
+  const beginSend = yield* claimRegisteredSend(callbackOwner, {
+    ...binding,
+    portfolio: recipient.portfolioId,
+    bsuid: recipient.bsuid,
+    sandboxPhone: Option.getOrNull(recipient.sandboxPhone),
+    deadline: proposedAt + deliveryAcknowledgmentWindowMs,
+    content: text,
+  }).pipe(Effect.mapError((cause) => new Cause.UnknownError(cause)));
+
+  return { binding, beginSend };
+});
+const finishNativeSend = Effect.fn(function* (
+  callbackOwner: Partial<ExternalEventBindings>,
+  binding: Effect.Success<ReturnType<typeof registerHostedSend>>["binding"],
+  outcome: Effect.Success<ReturnType<HostedReplySender<never>>>
+) {
+  yield* recordRegisteredSend(callbackOwner, {
+    ...binding,
+    state: outcome.kind,
+    message: outcome.kind === "accepted" ? outcome.messageId : null,
+  }).pipe(Effect.mapError((cause) => new Cause.UnknownError(cause)));
+});
+type HostedReplyWork<E> = Readonly<{
+  callbackOwner: Partial<ExternalEventBindings>;
   db: D1Database;
   userId: UserId;
   turnId: TranscriptTurnId;
   text: TranscriptText;
   send: HostedReplySender<E>;
   scheduleRecovery: (dueAtMs: number) => Promise<void>;
-}>): Effect.Effect<
+}>;
+/** Own the complete hosted provider boundary; Agent still owns terminal Turn settlement. */
+export const submitHostedReply = <E>({
+  callbackOwner,
+  db,
+  userId,
+  turnId,
+  text,
+  send,
+  scheduleRecovery,
+}: HostedReplyWork<E>): Effect.Effect<
   Readonly<{ _tag: "Refused" | "NotSubmitted" | "AwaitingDelivery" }>,
   Cause.UnknownError | Schema.SchemaError
 > =>
@@ -507,6 +558,16 @@ export const submitHostedReply = <E>({
     const token = yield* stageWhatsAppDelivery({ db, userId, turnId, text, now: proposedAt });
     if (Option.isNone(token)) return { _tag: "NotSubmitted" as const };
     yield* Effect.tryPromise(() => scheduleRecovery(proposedAt + deliveryAcknowledgmentWindowMs));
+    const { binding, beginSend } = yield* registerHostedSend({
+      callbackOwner,
+      userId,
+      turnId,
+      token: token.value,
+      recipient: recipient.value,
+      proposedAt,
+      text,
+    });
+
     const started = yield* startWhatsAppSend({
       db,
       userId,
@@ -518,12 +579,14 @@ export const submitHostedReply = <E>({
       yield* rejectUnstartedWhatsAppDelivery({ db, userId, turnId, token: token.value });
       return { _tag: "Refused" as const };
     }
+    yield* beginSend.claim.pipe(Effect.mapError((cause) => new Cause.UnknownError(cause)));
     const outcome = yield* send({
       text,
       turnId,
       correlationToken: token.value,
       recipient: recipient.value,
     }).pipe(Effect.orElseSucceed(() => ({ kind: "ambiguous" as const })));
+    yield* finishNativeSend(callbackOwner, binding, outcome);
     const recorded = yield* recordWhatsAppSend({ db, userId, turnId, token: token.value, outcome });
     return outcome.kind === "rejected" && recorded
       ? { _tag: "Refused" as const }

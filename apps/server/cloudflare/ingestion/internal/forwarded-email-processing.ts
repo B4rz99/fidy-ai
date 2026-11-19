@@ -9,10 +9,10 @@ import { ReceivedEmailId } from "../../../src/core/ingestion/contract";
 import { CapturedInterpretationContext } from "../../../src/core/interpretation-evidence/contract";
 import { prepareNotificationEmailCapture } from "../../transactions/operations";
 import { interpretNotificationEmail } from "../../../src/shell/ingestion/operations";
-import { emailSecureRandom } from "./forwarded-email";
+import { emailSecureRandom } from "./email-envelope";
 
 const maximumTimeZoneCharacters = 128;
-const Receipt = Schema.Struct({
+export const Receipt = Schema.Struct({
   id: Schema.String.check(Schema.isUUID()),
   object_key: PrivateObjectKey,
   delivery_digest: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u)),
@@ -73,7 +73,7 @@ const active = `EXISTS (${activeSource})`;
 // Only these fixed HTML tags may leave the personal-evidence boundary; never store tag names
 // supplied by the email, attributes, text, URLs, dimensions, or content-dependent lengths.
 const structuralTags = ["table", "tr", "td", "p", "span", "div"] as const;
-const anonymizeStructure = (html: string): string => {
+export const anonymizeStructure = (html: string): string => {
   const counts: Record<(typeof structuralTags)[number], number> = {
     table: 0,
     tr: 0,
@@ -138,10 +138,13 @@ const readBytes = (
     return bytes;
   });
 
-const decideEmail = (
-  parsed: Awaited<ReturnType<typeof PostalMime.parse>>,
-  receipt: Receipt
-): Effect.Effect<EmailOutcome, Schema.SchemaError> =>
+export const decideEmail = ({
+  parsed,
+  receipt,
+}: {
+  parsed: Awaited<ReturnType<typeof PostalMime.parse>>;
+  receipt: Receipt;
+}): Effect.Effect<EmailOutcome, Schema.SchemaError> =>
   Effect.gen(function* () {
     const content = {
       receivedEmailId: ReceivedEmailId.make(receipt.id),
@@ -193,7 +196,7 @@ const readMaterial = (
     return {
       digest,
       html: Option.fromUndefinedOr(parsed.html),
-      interpretation: yield* decideEmail(parsed, receipt),
+      interpretation: yield* decideEmail({ parsed, receipt }),
     };
   });
 

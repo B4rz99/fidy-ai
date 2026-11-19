@@ -2,7 +2,13 @@ import { DateTime, Effect, Option, Schema } from "effect";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import type { RecurringWorkspaceQuery } from "../../../src/shell/recurring-plans/contract";
 import { type RecurringPlanningUnavailable, type RecurringReadProjection } from "../contract";
-import { decodeReadProjection, preparePlanningRows, prepareSelectedDocument } from "./store";
+import {
+  decodeReadProjection,
+  preparePlanningRows,
+  prepareSelectedDocument,
+  readLocalCompactProjection,
+  readLocalDocument,
+} from "./store";
 
 export const workspaceMonths = (
   query: typeof RecurringWorkspaceQuery.Type
@@ -105,3 +111,18 @@ export const prepareReadProjection = ({
       ),
   };
 };
+
+export const localWorkspaceProjection = Effect.fn(function* (
+  user: string,
+  query: typeof RecurringWorkspaceQuery.Type,
+  now: DateTime.Utc
+) {
+  const months = workspaceMonths(query);
+  if (query.view === "compact") {
+    const revisions = revisionSelection({ sql: "SELECT ? AS userId", params: [user] }, months, now);
+    const projection = yield* readLocalCompactProjection(user, revisions, now);
+    return { ...projection, months };
+  }
+  const document = yield* readLocalDocument(user);
+  return { schedule: document, editing: document, months };
+});

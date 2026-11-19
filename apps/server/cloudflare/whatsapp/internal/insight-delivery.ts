@@ -1,3 +1,17 @@
+import type { WhatsAppUnavailable } from "../contract";
+import {
+  InsightRecipient,
+  type InsightVerifiedDeliveryEvidence,
+  type InsightWhatsAppClaim,
+  type InsightWhatsAppReconciliation,
+  type InsightWhatsAppSendResult,
+  type InsightWhatsAppStage,
+  type InsightWhatsAppStart,
+  type NativeDeliveryOwner,
+  type WhatsAppStatusAdmission,
+  type WhatsAppTurnAdmission,
+} from "../contract";
+import { claimRegisteredSend } from "./registered-send";
 import { type Cause, DateTime, Duration, Effect, Option, Schema } from "effect";
 import { IanaTimeZone } from "../../../src/core/_shared/context";
 import { TranscriptText } from "../../../src/core/agent/contract";
@@ -22,17 +36,6 @@ import {
 import { whatsAppIdentityQuery } from "../../identity/operations";
 import { hostedTranscriptRetentionMs } from "../../agent/contract";
 import { newId } from "../../secret-material/operations";
-import {
-  InsightRecipient,
-  type InsightVerifiedDeliveryEvidence,
-  type InsightWhatsAppClaim,
-  type InsightWhatsAppReconciliation,
-  type InsightWhatsAppSendResult,
-  type InsightWhatsAppStage,
-  type InsightWhatsAppStart,
-  type WhatsAppStatusAdmission,
-  type WhatsAppTurnAdmission,
-} from "../contract";
 
 const Claim = Schema.Struct({
   user_id: UserId,
@@ -60,7 +63,11 @@ const providerTimestampPrecisionMs = 1000;
 const maximumFutureClockDriftMs = Duration.toMillis(
   Duration.minutes(maxWhatsAppFutureTimestampMinutes)
 );
-type InsightDeliveryFailure = Cause.UnknownError | Schema.SchemaError | InsightTemplateUnavailable;
+type InsightDeliveryFailure =
+  | WhatsAppUnavailable
+  | Cause.UnknownError
+  | Schema.SchemaError
+  | InsightTemplateUnavailable;
 
 const deliveryAction = (
   input: InsightWhatsAppStart,
@@ -200,8 +207,25 @@ const claimSend = (
 };
 
 /** No blind retry: a started, accepted or ambiguous claim can only be reconciled. */
+const registerDelivery = Effect.fn(function* (
+  input: InsightWhatsAppStart & NativeDeliveryOwner,
+  row: typeof Claim.Type
+) {
+  return yield* claimRegisteredSend(input.callbackOwner, {
+    userId: input.userId,
+    family: "insight",
+    operationId: input.insightEventId,
+    portfolio: row.portfolio_id,
+    bsuid: row.bsuid,
+    endpoint: row.business_phone_number_id,
+    correlation: row.correlation_token,
+    sandboxPhone: null,
+    deadline: row.expires_at_ms.epochMilliseconds,
+    content: row.summary_json,
+  });
+});
 export const startInsightSend = (
-  input: InsightWhatsAppStart
+  input: InsightWhatsAppStart & NativeDeliveryOwner
 ): Effect.Effect<InsightWhatsAppClaim, InsightDeliveryFailure> =>
   Effect.gen(function* () {
     const raw = yield* Effect.tryPromise(() =>
@@ -237,9 +261,12 @@ export const startInsightSend = (
     if (row.summary_json === null || row.text === null) {
       return { _tag: "NotClaimed" };
     }
+    const beginSend = yield* registerDelivery(input, row);
+
     if (!(yield* claimSend(input, row))) {
       return { _tag: "NotClaimed" };
     }
+    yield* beginSend.claim;
     return {
       _tag: "Ready",
       correlationToken: row.correlation_token,

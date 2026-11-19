@@ -1,7 +1,7 @@
 import { Cause, Clock, Effect, Option, Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import { digestBytes } from "../../secret-material/operations";
-import type { ProviderEnvironment } from "../contract";
+import type { ProviderConfiguration, ProviderEnvironment } from "../contract";
 import { providerConfiguration } from "./configuration";
 import { validateGoogleToken } from "./google-token";
 import { validateMicrosoftToken } from "./microsoft-token";
@@ -15,7 +15,7 @@ const Attempt = Schema.Struct({
   nonce: Schema.String,
   expires_at_ms: Schema.Int,
 });
-const validCode = (query: URLSearchParams): boolean => {
+export const validCode = (query: URLSearchParams): boolean => {
   const code = query.get("code") ?? "";
   return (
     !query.has("error") &&
@@ -24,7 +24,10 @@ const validCode = (query: URLSearchParams): boolean => {
     query.getAll("code").length === 1
   );
 };
-const cookieVerifier = (request: Request, cookieName: string): Option.Option<string> => {
+export const cookieVerifier = ({
+  request,
+  cookieName,
+}: Readonly<{ request: Request; cookieName: string }>): Option.Option<string> => {
   const values = (request.headers.get("cookie") ?? "")
     .split(";")
     .map((part) => part.trim())
@@ -33,13 +36,15 @@ const cookieVerifier = (request: Request, cookieName: string): Option.Option<str
   const value = values[0]?.slice(cookieName.length + 1) ?? "";
   return /^[A-Za-z0-9_-]{43}$/u.test(value) ? Option.some(value) : Option.none();
 };
-const rejectionReason = (
+export const rejectionReason = (
   failure: unknown
 ): ProviderVerificationFailure["reason"] | "verification_failed" | "verification_timed_out" => {
   if (failure instanceof ProviderVerificationFailure) return failure.reason;
   return Cause.isTimeoutError(failure) ? "verification_timed_out" : "verification_failed";
 };
-const verifyAttempt = (input: Validation): Effect.Effect<void, never, HttpClient.HttpClient> =>
+const verifyAttempt = (
+  input: Validation & Readonly<{ environment: ProviderEnvironment }>
+): Effect.Effect<void, never, HttpClient.HttpClient> =>
   Effect.gen(function* () {
     if (!validCode(input.query)) return yield* Effect.fail("invalid" as const);
     const identity = yield* input.provider === "google"
@@ -86,11 +91,15 @@ const verifyAttempt = (input: Validation): Effect.Effect<void, never, HttpClient
       )
     )
   );
-const callbackRedirect = (
-  environment: ProviderEnvironment,
-  provider: AuthenticationProvider,
-  clearCookie = false
-): Response =>
+export const callbackRedirect = ({
+  environment,
+  provider,
+  clearCookie,
+}: Readonly<{
+  environment: ProviderConfiguration;
+  provider: AuthenticationProvider;
+  clearCookie: boolean;
+}>): Response =>
   new Response(null, {
     status: redirectStatus,
     headers: {
@@ -115,20 +124,20 @@ export const providerCallback = ({
 }>): Effect.Effect<Response, never, HttpClient.HttpClient> =>
   Effect.gen(function* () {
     if (!providerConfiguration({ environment, provider }).configured) {
-      return callbackRedirect(environment, provider);
+      return callbackRedirect({ environment, provider, clearCookie: false });
     }
     const query = new URL(request.url).searchParams;
     const state = query.get("state") ?? "";
-    const cookie = cookieVerifier(
+    const cookie = cookieVerifier({
       request,
-      providerConfiguration({ environment, provider }).cookieName
-    );
+      cookieName: providerConfiguration({ environment, provider }).cookieName,
+    });
     if (
       !/^[A-Za-z0-9_-]{43}$/u.test(state) ||
       Option.isNone(cookie) ||
       query.getAll("state").length !== 1
     ) {
-      return callbackRedirect(environment, provider);
+      return callbackRedirect({ environment, provider, clearCookie: false });
     }
     const current = yield* Clock.currentTimeMillis;
     const digest = yield* digestBytes(new TextEncoder().encode(cookie.value));
@@ -147,5 +156,7 @@ export const providerCallback = ({
       verifier: cookie.value,
       attempt,
     });
-    return callbackRedirect(environment, provider, true);
-  }).pipe(Effect.orElseSucceed(() => callbackRedirect(environment, provider)));
+    return callbackRedirect({ environment, provider, clearCookie: true });
+  }).pipe(
+    Effect.orElseSucceed(() => callbackRedirect({ environment, provider, clearCookie: false }))
+  );

@@ -4,11 +4,10 @@ import { it } from "@effect/vitest";
 import { Effect } from "effect";
 import { expect, vi } from "vitest";
 import publicWorker from "./public-worker";
-import { erasureRegistryName } from "./erasure/contract";
 
-it.effect.each([false, true])(
+it.effect(
   "preserves the initial-context query, browser Origin and cookie through the public gateway",
-  (independent) =>
+  () =>
     Effect.gen(function* () {
       const cookie = `__Host-fidy_session=${"d".repeat(43)}`;
       const origin = "https://app.fidyapp.com";
@@ -21,14 +20,6 @@ it.effect.each([false, true])(
         expect(request.headers.has("authorization")).toBe(false);
         return Promise.resolve(Response.json({ binding: null }));
       });
-      const core = vi.fn(() => Promise.resolve(new Response(null, { status: 503 })));
-      const target = vi.fn(
-        (name: string, options?: DurableObjectNamespaceGetDurableObjectOptions) => {
-          expect(name).toBe(erasureRegistryName);
-          expect(options?.locationHint).toBe("enam");
-          return { fetch: forward };
-        }
-      );
       const response = yield* Effect.tryPromise(() =>
         publicWorker.fetch(
           new Request("https://api.fidyapp.com/web/session/binding?context=application", {
@@ -44,22 +35,18 @@ it.effect.each([false, true])(
             LOCAL_CANONICAL_READ_BEARER: "",
             PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
             RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
-            CORE: { fetch: independent ? core : forward },
-            ...(independent ? { ERASURE_REGISTRY_COORDINATOR: { getByName: target } } : {}),
+            CORE: { fetch: forward },
           }
         )
       );
       expect(response.status).toBe(200);
       expect(forward).toHaveBeenCalledTimes(1);
-      expect(core).not.toHaveBeenCalled();
-      expect(target).toHaveBeenCalledTimes(independent ? 1 : 0);
     })
 );
 
-it.effect("rejects an unapproved browser Origin before selecting the metadata read executor", () =>
+it.effect("rejects an unapproved browser Origin before forwarding to Core", () =>
   Effect.gen(function* () {
     const fetch = vi.fn(() => Promise.resolve(new Response()));
-    const getByName = vi.fn(() => ({ fetch }));
     const response = yield* Effect.tryPromise(() =>
       publicWorker.fetch(
         new Request("https://api.fidyapp.com/web/session/binding?context=application", {
@@ -74,12 +61,40 @@ it.effect("rejects an unapproved browser Origin before selecting the metadata re
           PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
           RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
           CORE: { fetch },
-          ERASURE_REGISTRY_COORDINATOR: { getByName },
         }
       )
     );
     expect(response.status).toBe(403);
     expect(fetch).not.toHaveBeenCalled();
-    expect(getByName).not.toHaveBeenCalled();
+  })
+);
+
+it.effect("allows the matching native browser preflight and refuses another browser", () =>
+  Effect.gen(function* () {
+    const browser = "https://storage-web-acceptance.fidyapp.com";
+    const fetch = vi.fn(() => Promise.resolve(new Response(null, { status: 200 })));
+    const environment = {
+      BROWSER_ORIGIN: browser,
+      LOCAL_CANONICAL_READ_BEARER: "",
+      PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
+      RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
+      CORE: { fetch },
+    };
+    for (const origin of [browser, "https://app.fidyapp.com"]) {
+      const result = yield* Effect.tryPromise(() =>
+        publicWorker.fetch(
+          new Request("https://storage-acceptance.fidyapp.com/transactions", {
+            method: "OPTIONS",
+            headers: { origin, "access-control-request-method": "GET" },
+          }),
+          environment
+        )
+      );
+      expect(result.status).toBe(origin === browser ? 204 : 403);
+      expect(result.headers.get("access-control-allow-origin")).toBe(
+        origin === browser ? browser : null
+      );
+    }
+    expect(fetch).not.toHaveBeenCalled();
   })
 );

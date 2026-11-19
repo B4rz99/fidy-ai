@@ -1,13 +1,28 @@
-import { withErasureRecovery } from "../erasure/runtime";
+import { checkLoginMailbox, startLoginEmail } from "./internal/login-admission";
+import { verifyLoginEmail } from "./internal/login-completion";
+import { deliverPendingReplacement as deliverLocal } from "./internal/native-mail-delivery";
 import { projections as erasureProjections } from "./internal/erasure";
 import { makeErasureStore } from "../erasure-store/runtime";
 import type { ErasureStore } from "../erasure-store/contract";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
-import type { Effect } from "effect";
+import { Effect, Option, Schema } from "effect";
+import {
+  NativeLoginEmailWork,
+  loginCheckUrl,
+  loginDeliverUrl,
+  loginStartUrl,
+  loginVerifyUrl,
+} from "./contract";
+import {
+  deliverLoginEmail as deliverLogin,
+  offerLoginEmail as offerLogin,
+  repairLoginAlarm as repairLogin,
+  runLoginDelivery,
+  startLoginWorkflow as startWorkflow,
+} from "./internal/login-delivery";
 import type {
   BrowserPairingEmailEnvironment,
   BrowserPairingEmailPublisher,
-  EmailDeliveryEnvironment,
   EmailPublication,
   EmailReplacementEnvironment,
   EmailReplacementPublisher,
@@ -51,18 +66,46 @@ export const runBrowserPairingEmailWorkflow = (input: EmailWorkflowInput): Promi
   runPairing(input);
 /** Select this Queue protocol without interpreting it as authority. */
 export const isBrowserPairingEmailWork = (value: unknown): boolean => recognizesPairing(value);
+export const offerLoginEmail: typeof offerLogin = (...args) => offerLogin(...args);
+export const repairLoginAlarm: typeof repairLogin = (...args) => repairLogin(...args);
+export const localLoginEmailRequest = Effect.fn(function* ({
+  request,
+  environment,
+  storage,
+  owns,
+}: Readonly<{
+  request: Request;
+  environment: { DIRECTORY: DurableObjectNamespace; RESEND_API_KEY: string };
+  storage: DurableObjectStorage;
+  owns: (id: string) => boolean;
+}>) {
+  switch (request.url) {
+    case loginCheckUrl:
+      return yield* checkLoginMailbox(request, owns);
+    case loginStartUrl:
+      return yield* startLoginEmail({ request, directory: environment.DIRECTORY, storage, owns });
+    case loginVerifyUrl:
+      return yield* verifyLoginEmail(request, owns);
+    case loginDeliverUrl:
+      return yield* deliverLogin(request, environment, owns);
+    default:
+      return new Response(null, { status: 404 });
+  }
+});
+export const startLoginWorkflow: typeof startWorkflow = (...args) => startWorkflow(...args);
+
 export class BrowserPairingEmailWorkflowV1 extends WorkflowEntrypoint<
-  EmailDeliveryEnvironment,
+  { USER_STORE: DurableObjectNamespace },
   unknown
 > {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
+    const work = Schema.decodeUnknownOption(NativeLoginEmailWork)(event.payload);
+    if (Option.isNone(work)) return Promise.resolve();
     return observeWorkerPromise(
       () =>
-        runPairing({
-          environment: withErasureRecovery(this.env),
-          payload: event.payload,
-          activity: (name, options, activity) => step.do(name, options, activity),
-        }),
+        step.do("send-browser-pairing-email-v2", { retries: { limit: 0, delay: "1 second" } }, () =>
+          Effect.runPromise(runLoginDelivery(this.env.USER_STORE, work.value))
+        ),
       {
         environment: workerRelease(this.env),
         telemetry: cloudflareWorkerTelemetry,
@@ -90,27 +133,7 @@ export const runEmailReplacementWorkflow = (input: EmailWorkflowInput): Promise<
   runReplacement(input);
 /** Select this Queue protocol without interpreting it as authority. */
 export const isEmailReplacementWork = (value: unknown): boolean => recognizesReplacement(value);
-export class EmailReplacementWorkflowV1 extends WorkflowEntrypoint<
-  EmailDeliveryEnvironment,
-  unknown
-> {
-  run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    return observeWorkerPromise(
-      () =>
-        runReplacement({
-          environment: withErasureRecovery(this.env),
-          payload: event.payload,
-          activity: (name, options, activity) => step.do(name, options, activity),
-        }),
-      {
-        environment: workerRelease(this.env),
-        telemetry: cloudflareWorkerTelemetry,
-        operation: "workflow.emailReplacement",
-        parent: workTraceParent(event.payload),
-      }
-    );
-  }
-}
-
 export const makeEmailAuthenticationErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
   erasureProjections.map((projection) => makeErasureStore({ db, projection }));
+
+export const deliverPendingReplacement: typeof deliverLocal = (...args) => deliverLocal(...args);

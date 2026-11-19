@@ -15,7 +15,7 @@ lifetime. Private browser proof, verified OIDC and exact originating-chat approv
 completion unit. An unfinished attempt may restart only in the same private browser and original
 lifetime; uncertainty cannot replay completion. Expired protocol metadata has a one-day retention
 limit and associated invitations participate in credential erasure. Migration
-The single `0001_schema.sql` baseline includes invitation constraints and erasure fences. Existing databases retain the applied invitation migration receipt; baseline consolidation does not replay it.
+The Directory owns invitation routing. The addressed User Store owns identity, Consent and the erasure fence. Each owner installs its versioned SQLite history before serving requests.
 
 Current evidence is local, not a deployed claim. The revised candidate passed all 172 native
 authentication/Consent checks (including 26 focused native linking checks), 256 web unit checks and

@@ -1,3 +1,8 @@
+import { refuseVoice } from "./internal/voice-refusal";
+import {
+  nativeDeliveryRequest as nativeDeliveryRequestOwned,
+  routeWhatsAppStatus as routeWhatsAppStatusOwned,
+} from "./internal/native-delivery";
 import { projections as erasureProjections } from "./internal/erasure";
 import { makeErasureStore } from "../erasure-store/runtime";
 import type { ErasureStore } from "../erasure-store/contract";
@@ -5,19 +10,6 @@ import { Effect } from "effect";
 import { WhatsAppUnavailable } from "./contract";
 import { receiveIngress } from "./internal/ingress";
 import { sweepExpiredWhatsAppWindows as sweepExpiredWhatsAppWindowsOwned } from "./internal/whatsapp-turn";
-import {
-  dispatchWhatsAppWork as dispatch,
-  receiveWhatsAppWork as receive,
-} from "./internal/whatsapp-work";
-/** Offer only bounded User/Turn identities; the transactional outbox survives missed publication. */
-export const dispatchWhatsAppWork = (
-  input: Parameters<typeof dispatch>[0]
-): Effect.Effect<void, WhatsAppUnavailable> =>
-  dispatch(input).pipe(Effect.mapError(() => new WhatsAppUnavailable()));
-/** Decode and dispatch each identity-only message to its same User coordinator; redelivery cannot duplicate a send. */
-export const receiveWhatsAppWork = (input: Parameters<typeof receive>[0]): Promise<void> =>
-  Effect.runPromise(receive(input).pipe(Effect.mapError(() => new WhatsAppUnavailable())));
-
 /** Own the bounded authenticated channel ingress; Consent, Identity and Turn execution retain their authorities. */
 export const receiveWhatsAppWebhook: typeof receiveIngress = (environment) =>
   receiveIngress(environment);
@@ -32,3 +24,10 @@ export const sweepExpiredWhatsAppWindows = (
 
 export const makeWhatsappErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
   erasureProjections.map((projection) => makeErasureStore({ db, projection }));
+
+export const nativeDeliveryRequest: typeof nativeDeliveryRequestOwned = (...args) =>
+  nativeDeliveryRequestOwned(...args);
+export const routeWhatsAppStatus: typeof routeWhatsAppStatusOwned = (...args) =>
+  routeWhatsAppStatusOwned(...args);
+
+export const nativeVoiceRefusal: typeof refuseVoice = (input) => refuseVoice(input);

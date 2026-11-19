@@ -63,7 +63,7 @@ const scheduledSweepLimit = 4000;
 const sourceDigest = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u));
 const reviewRetrySeconds = 60;
 const successStatus = 200;
-const rateLimited = (): Response =>
+export const rateLimited = (): Response =>
   response({
     body: {
       error: {
@@ -75,7 +75,7 @@ const rateLimited = (): Response =>
     },
     status: httpRateLimited,
   });
-const publicCode = (): string => {
+export const publicCode = (): string => {
   let symbols = "";
   while (symbols.length < symbolCount) {
     symbols += selectPATPairingPublicCodeSymbols({

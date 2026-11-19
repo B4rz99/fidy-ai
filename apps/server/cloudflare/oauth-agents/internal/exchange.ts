@@ -77,7 +77,7 @@ type Issuance = OAuthCredentialExpirations &
   }>;
 const invalidGrant = (): Response =>
   oauthResponse({ body: { error: "invalid_grant" }, status: 400 });
-const decodeExchange = (
+export const decodeExchange = (
   request: Request
 ): Effect.Effect<typeof TokenExchange.Type, BootstrapInvalid> =>
   Effect.gen(function* () {

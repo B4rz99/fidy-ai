@@ -1,3 +1,4 @@
+import { localProcessingConsent } from "./internal/local-processing";
 import {
   decodeProcessingConsentStatusRead,
   prepareSelectedProcessingConsentRead,
@@ -227,3 +228,6 @@ export const sweepProactivityConsentOffers = (
 
 export const makeConsentErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
   erasureProjections.map((projection) => makeErasureStore({ db, projection }));
+
+export const handleLocalProcessingConsent: typeof localProcessingConsent = (...args) =>
+  localProcessingConsent(...args);

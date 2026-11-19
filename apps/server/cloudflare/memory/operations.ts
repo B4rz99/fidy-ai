@@ -1,3 +1,4 @@
+import { prepareMemory, readMemories as readLocal } from "./internal/local-memory";
 import type { MemoryRefusalOutcome } from "../../src/shell/memory/contract";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import {
@@ -619,3 +620,6 @@ export const invalidMemoryInput = (
     current: number;
   }>
 ): CanonicalMutationRefusal => memoryRefusal({ ...input, outcome: "validation_failed" });
+
+export const prepareLocalMemory: typeof prepareMemory = (...input) => prepareMemory(...input);
+export const readLocalMemories: typeof readLocal = (user) => readLocal(user);

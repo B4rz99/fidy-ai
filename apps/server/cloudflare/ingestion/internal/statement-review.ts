@@ -27,7 +27,7 @@ export const ReviewPage = Schema.Struct({
   ),
   status: Schema.OptionFromNullOr(NeedsReviewStatus),
 });
-const reviewRow = Schema.Struct({
+export const reviewRow = Schema.Struct({
   id: Schema.String,
   submission_id: Schema.String,
   record_number: Schema.Int,
@@ -44,7 +44,7 @@ const reviewRow = Schema.Struct({
   extractor_revision: Schema.String,
 });
 type ReviewRow = typeof reviewRow.Type;
-const emailReviewRow = Schema.Struct({
+export const emailReviewRow = Schema.Struct({
   id: Schema.String,
   receipt_id: Schema.String,
   reason: Schema.String,
@@ -70,7 +70,7 @@ const resolutionMetadata = (
   });
 };
 
-const projectReviewRow = (row: ReviewRow): Option.Option<StatementNeedsReviewItem> =>
+export const projectReviewRow = (row: ReviewRow): Option.Option<StatementNeedsReviewItem> =>
   Schema.decodeUnknownOption(StatementNeedsReviewItem)({
     id: row.id,
     submissionId: row.submission_id,
@@ -89,10 +89,13 @@ const projectReviewRow = (row: ReviewRow): Option.Option<StatementNeedsReviewIte
     ...Option.getOrElse(resolutionMetadata(row), () => ({})),
   });
 
-const projectEmailRow = (
-  row: EmailReviewRow,
-  asOf: number
-): Option.Option<EmailNeedsReviewItem> => {
+export const projectEmailRow = ({
+  row,
+  asOf,
+}: {
+  row: EmailReviewRow;
+  asOf: number;
+}): Option.Option<EmailNeedsReviewItem> => {
   const expired = row.evidence_expires_at_ms.epochMilliseconds <= asOf;
   return Schema.decodeUnknownOption(EmailNeedsReviewItem)({
     id: row.id,
@@ -197,14 +200,14 @@ const loadEmailItems = (
     for (const raw of rows.results) {
       const row = Schema.decodeUnknownOption(emailReviewRow)(raw);
       if (Option.isNone(row)) return Option.none();
-      const item = projectEmailRow(row.value, asOf);
+      const item = projectEmailRow({ row: row.value, asOf });
       if (Option.isNone(item)) return Option.none();
       items.push(item.value);
     }
     return Option.some(items);
   });
 
-const reviewPage = (url: URL): Option.Option<typeof ReviewPage.Type> =>
+export const reviewPage = (url: URL): Option.Option<typeof ReviewPage.Type> =>
   Schema.decodeUnknownOption(ReviewPage)({
     offset: url.searchParams.get("offset") ?? "0",
     limit: url.searchParams.get("limit") ?? String(pageSize),
@@ -227,7 +230,7 @@ export const selectReviewPage = ({
 export const listNeedsReviewItems = (
   input: Readonly<{
     database: D1Database;
-    environment: Parameters<typeof commitReadAudit>[0];
+    environment: Parameters<typeof commitReadAudit>[0]["environment"];
     subject: QueryCaller;
     url: URL;
   }>
@@ -235,9 +238,13 @@ export const listNeedsReviewItems = (
   Effect.gen(function* () {
     const page = reviewPage(input.url);
     if (Option.isNone(page)) return validationFailed("Invalid review page.");
-    const refusal = yield* commitReadAudit(input.environment, input.subject, {
-      submissionId: "",
-      operation: "ingestion.listNeedsReviewItems",
+    const refusal = yield* commitReadAudit({
+      environment: input.environment,
+      subject: input.subject,
+      read: {
+        submissionId: "",
+        operation: "ingestion.listNeedsReviewItems",
+      },
     });
     if (Option.isSome(refusal)) return refusal.value;
     return yield* readCanonicalReviewPage({

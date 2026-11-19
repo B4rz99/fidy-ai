@@ -55,6 +55,32 @@ it("describes only the caller's eligible batch children without publishing an in
   }
 });
 
+it.effect(
+  "submits a scoped batch through the canonical CLI and prints the correlated envelope",
+  () =>
+    Effect.gen(function* () {
+      const id = "01900000-0000-4000-8000-000000000001";
+      const operation = "categories.deleteKeywordRule";
+      const result = {
+        data: { results: [{ callId: id, operation, output: { data: id, next: [] } }] },
+        next: [],
+      };
+      const fixture = makeQueryFixture({ body: encodeFixture(result), status: 200 }, ["write"]);
+      yield* runQueryCommand(["operations", "executeAtomicBatch", "--input", "-"], {
+        ...fixture.dependencies,
+        readInput: () =>
+          Effect.succeed(
+            encodeFixture({
+              payload: { calls: [{ callId: id, operation, input: { params: { id } } }] },
+            })
+          ),
+      });
+      expect(fixture.requests).toHaveLength(1);
+      expect(fixture.requests[0]).toMatch(/\/operations\/atomic-batch$/u);
+      expect(fixture.stdout.join("")).toContain(id);
+    })
+);
+
 it.effect("rejects a batch child outside the saved grant even when the envelope is eligible", () =>
   Effect.gen(function* () {
     for (const child of [

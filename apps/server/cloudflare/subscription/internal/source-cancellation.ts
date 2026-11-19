@@ -143,20 +143,7 @@ export const cancelSource = (
         .run()
     );
     if (reservation.meta.changes !== 1) return;
-    const response = yield* http
-      .execute({ _tag: "WompiVerifyPaymentSource", sourceId: source.wompi_source_id })
-      .pipe(
-        Effect.mapError((cause) => new BillingCollectionFailure({ cause: Option.some(cause) }))
-      );
-    if (response.status < httpSuccessMinimum || response.status >= httpSuccessMaximum) {
-      return yield* new BillingCollectionFailure({ cause: Option.none() });
-    }
-    const body = yield* decode(UnknownJsonString, new TextDecoder().decode(response.body));
-    const verified = yield* decode(Source, body);
-    if (verified.data.id !== source.wompi_source_id) {
-      return yield* new BillingCollectionFailure({ cause: Option.none() });
-    }
-    if (verified.data.status !== "VOIDED") return;
+    if (!(yield* verifyVoidedSource(http, source.wompi_source_id))) return;
     const verifiedAt = yield* Clock.currentTimeMillis;
     yield* wait(() =>
       db
@@ -167,6 +154,25 @@ export const cancelSource = (
         .run()
     );
   });
+
+/** Only independently verified provider state for this exact source settles an accepted void. */
+export const verifyVoidedSource = Effect.fnUntraced(function* (
+  http: Effect.Success<ReturnType<WompiTransportFactory>>,
+  sourceId: WompiSourceId
+) {
+  const response = yield* http
+    .execute({ _tag: "WompiVerifyPaymentSource", sourceId })
+    .pipe(Effect.mapError((cause) => new BillingCollectionFailure({ cause: Option.some(cause) })));
+  if (response.status < httpSuccessMinimum || response.status >= httpSuccessMaximum) {
+    return yield* new BillingCollectionFailure({ cause: Option.none() });
+  }
+  const body = yield* decode(UnknownJsonString, new TextDecoder().decode(response.body));
+  const verified = yield* decode(Source, body);
+  if (verified.data.id !== sourceId) {
+    return yield* new BillingCollectionFailure({ cause: Option.none() });
+  }
+  return verified.data.status === "VOIDED";
+});
 
 const submitVoid = (
   input: Readonly<{

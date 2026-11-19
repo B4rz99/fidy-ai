@@ -1,3 +1,4 @@
+import { type ExternalEventBindings, type UserStoreBindings } from "../directory/contract";
 import {
   type HostedAgentSessionId,
   TranscriptText,
@@ -13,7 +14,9 @@ import { type Sha256Digest } from "../../src/shell/consent/contract";
 import {
   HostedDeliveryCorrelationToken,
   type InsightTemplateSender,
+  type ProactivityTemplateSender,
   WhatsAppBusinessPhoneNumberId,
+  WhatsAppCaller,
   type WhatsAppDeliveryKey,
   WhatsAppDocument,
   type WhatsAppInboundEvent,
@@ -24,7 +27,7 @@ import { Data, type DateTime, type Option, Schema } from "effect";
 import { type ConsentRecordId } from "../../src/core/consent/contract";
 import { type IanaTimeZone } from "../../src/core/_shared/context";
 import { type InsightEventId } from "../../src/core/insights/contract";
-import type { ProactivityTemplateSender } from "../../src/shell/channels/whatsapp/contract";
+
 import { type OwnedStatement } from "../../src/shell/owner-write/contract";
 
 /** Owner-supplied report and category guards. Some queuedAdmission projects user_id for the exact unfinished, unexpired native item admitted under active Consent; None requires current Consent. A transport payload grants no authority. */
@@ -245,18 +248,24 @@ export type WhatsAppAuthenticatedInbound = Readonly<{
 }>;
 
 /** Binding and callbacks required by the authenticated Consent ingress composition. */
-export type WhatsAppIngressEnvironment = Readonly<{
-  readonly BROWSER_ORIGIN: string;
-  readonly DB: D1Database;
-  readonly KAPSO_API_KEY: string;
-  readonly KAPSO_WEBHOOK_SECRET: string;
-  readonly WHATSAPP_BUSINESS_PORTFOLIO_ID: string;
-  readonly WHATSAPP_SANDBOX_PHONE_NUMBER_ID: string;
-  readonly onHostedText: (
-    admission: WhatsAppTurnAdmission | WhatsAppDocumentAdmission
-  ) => Promise<Response>;
-  readonly onHostedStatus: (admission: WhatsAppStatusAdmission) => Promise<Response>;
-}>;
+export type WhatsAppIngressEnvironment = Partial<
+  Pick<UserStoreBindings, "DIRECTORY" | "USER_STORE"> &
+    Readonly<{
+      HOSTED_WHATSAPP_QUEUE: Readonly<{
+        send: (event: typeof WhatsAppLifecycleWork.Type) => Promise<unknown>;
+      }>;
+    }>
+> &
+  Readonly<{
+    readonly BROWSER_ORIGIN: string;
+    readonly KAPSO_API_KEY: string;
+    readonly KAPSO_WEBHOOK_SECRET: string;
+    readonly WHATSAPP_BUSINESS_PORTFOLIO_ID: string;
+    readonly WHATSAPP_SANDBOX_PHONE_NUMBER_ID: string;
+    readonly onHostedText: (
+      admission: WhatsAppTurnAdmission | WhatsAppDocumentAdmission
+    ) => Promise<Response>;
+  }>;
 
 /** Bounded operational sample containing no User identity, exact text, routing or provider evidence. */
 export type WhatsAppOperationalSignal =
@@ -277,3 +286,67 @@ export class WhatsAppUnavailable extends Data.TaggedError("WhatsAppUnavailable")
 
 /** Existing free-form reply window from original verified inbound activity, in milliseconds. */
 export const whatsAppServiceWindowMilliseconds = 86_400_000;
+
+export const DeliveryFamily = Schema.Literals([
+  "hosted",
+  "proactivity",
+  "insight",
+  "weekly-question",
+  "disclosure",
+]);
+const maximumDeliveryOperationLength = 128;
+const deliveryOperation = Schema.NonEmptyString.check(
+  Schema.isMaxLength(maximumDeliveryOperationLength)
+);
+export const DeliverySend = Schema.Struct({
+  userId: UserId,
+  family: DeliveryFamily,
+  operationId: deliveryOperation,
+  correlation: HostedDeliveryCorrelationToken,
+  portfolio: WhatsAppBusinessPortfolioId,
+  bsuid: WhatsAppBusinessScopedUserId,
+  endpoint: WhatsAppBusinessPhoneNumberId,
+  sandboxPhone: Schema.NullOr(E164PhoneNumber),
+  deadline: Schema.NullOr(Schema.Int),
+  contentDigest: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),
+});
+export const WhatsAppLifecycleWork = Schema.TaggedStruct("WhatsAppLifecycleEvent", {
+  portfolio: WhatsAppBusinessPortfolioId,
+  correlationToken: HostedDeliveryCorrelationToken,
+  businessPhoneNumberId: WhatsAppBusinessPhoneNumberId,
+  providerMessageId: WhatsAppProviderMessageId,
+  recipientUserId: Schema.optionalKey(WhatsAppBusinessScopedUserId),
+  recipientPhone: Schema.optionalKey(E164PhoneNumber),
+  outcome: Schema.Literals(["sent", "delivered", "failed"]),
+  occurredAtMs: Schema.Int,
+  receivedAtMs: Schema.Int,
+});
+export const DeliveredObservation = Schema.Struct({
+  userId: UserId,
+  operationId: deliveryOperation,
+  family: DeliveryFamily,
+  evidence: WhatsAppLifecycleWork,
+});
+export const SendReply = Schema.Struct({
+  userId: UserId,
+  operationId: deliveryOperation,
+  family: DeliveryFamily,
+  endpoint: WhatsAppBusinessPhoneNumberId,
+  correlation: HostedDeliveryCorrelationToken,
+  state: Schema.Literals(["accepted", "rejected", "ambiguous"]),
+  message: Schema.NullOr(WhatsAppProviderMessageId),
+});
+export const voiceRefusalUrl = "https://user.invalid/work/whatsapp/voice-refusal";
+export const VoiceRefusal = Schema.Struct({
+  userId: UserId,
+  caller: WhatsAppCaller,
+  message: WhatsAppProviderMessageId,
+  endpoint: WhatsAppBusinessPhoneNumberId,
+  occurredAt: Schema.Int,
+});
+export const reserveDeliveryUrl = "https://user.invalid/work/whatsapp/reserve";
+export const claimDeliveryUrl = "https://user.invalid/work/whatsapp/claim";
+export const statusDeliveryUrl = "https://user.invalid/work/whatsapp/status";
+export const replyDeliveryUrl = "https://user.invalid/work/whatsapp/reply";
+
+export type NativeDeliveryOwner = Readonly<{ callbackOwner: Partial<ExternalEventBindings> }>;

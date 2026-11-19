@@ -1,3 +1,8 @@
+import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
+import { resolveLocalCategory } from "../../categories/operations";
+import type { CategoryId } from "../../../src/core/categories/contract";
+import type { UserId } from "../../../src/core/identity/contract";
+import { ReviewCommand } from "../../../src/core/ingestion/contract";
 import { type Cause, Effect, Option, Schema } from "effect";
 import type { OAuthMutationReview } from "../../oauth-confirmation/contract";
 import { Hex } from "effect/encoding";
@@ -123,7 +128,7 @@ const reserveState = (snapshot: typeof Snapshot.Type, submissionId: string): str
   }
   return snapshot.entitlement.consumed_at_ms === null ? "sin consumir" : "consumida";
 };
-const exactEffect = (input: ReviewInput, snapshot: typeof Snapshot.Type): string => {
+const exactEffect = (input: Omit<ReviewInput, "db">, snapshot: typeof Snapshot.Type): string => {
   const undecided = snapshot.reviews.filter(
     (row) => !snapshot.decisions.some((decision) => decision.review_id === row.id)
   );
@@ -184,3 +189,77 @@ export const clarificationOAuthReview = (
       }),
     };
   });
+
+const categoryFor = Effect.fn(function* (
+  user: UserId,
+  extraction: TransactionExtraction,
+  caller: Option.Option<CategoryId>
+) {
+  const category = yield* resolveLocalCategory({
+    userId: user,
+    capture: { caller, direction: extraction.direction, counterparty: extraction.counterparty },
+  });
+  return category.categoryId;
+});
+
+/** The OAuth form binds the selected rows, original deadline, sibling decisions and current Category. */
+export const localClarificationReview = Effect.fn(function* (
+  input: Omit<ReviewInput, "db" | "userId"> & { userId: UserId }
+) {
+  const sql = yield* SqliteClient;
+  const [raw] = yield* sql.unsafe(
+    snapshotSql.replace("statement_backfill_entitlements", "statement_backfill"),
+    [input.submissionId, input.userId]
+  );
+  const encoded = yield* Schema.decodeUnknownEffect(StoredSnapshot)(raw);
+  const snapshot = yield* Schema.decodeEffect(Schema.fromJsonString(Snapshot))(encoded.snapshot);
+  const [versions] =
+    yield* sql`SELECT json_group_array(json_array(id,rev)) AS revisions FROM(SELECT id,coalesce(workspace_revision,0) AS rev FROM ingestion_review_items WHERE user_id=${input.userId} AND statement_submission_id=${input.submissionId} ORDER BY id)`;
+  const revisions = yield* Schema.decodeUnknownEffect(Schema.Struct({ revisions: Schema.String }))(
+    versions
+  );
+  const category = yield* Effect.transposeOption(
+    Option.map(input.extraction, (value) => categoryFor(input.userId, value, Option.none()))
+  );
+  const revision = Hex.encode(
+    yield* digestBytes(
+      new TextEncoder().encode(
+        encoded.snapshot + revisions.revisions + Option.getOrElse(category, () => "")
+      )
+    )
+  );
+  return {
+    effect:
+      exactEffect(input, snapshot) +
+      Option.match(category, {
+        onNone: () => "",
+        onSome: (id) => " Categoría de la nueva Transacción: " + id + ".",
+      }),
+    revision,
+  };
+});
+export const localReviewEditConfirmation = Effect.fn(function* (
+  command: ReviewCommand,
+  user: UserId
+) {
+  const refs = "items" in command ? command.items : [command];
+  const category =
+    command._tag === "Create"
+      ? Option.some(yield* categoryFor(user, command.extraction, command.categoryId))
+      : Option.none();
+  const encoded = yield* Schema.encodeEffect(
+    Schema.fromJsonString(Schema.toCodecJson(ReviewCommand))
+  )(command);
+  return {
+    effect:
+      encoded +
+      Option.match(category, {
+        onNone: () => "",
+        onSome: (id) => " Categoría de la nueva Transacción: " + id + ".",
+      }),
+    revision:
+      refs.map((ref) => ref.id + ":" + ref.revision).join(",") +
+      ":" +
+      Option.getOrElse(category, () => ""),
+  };
+});

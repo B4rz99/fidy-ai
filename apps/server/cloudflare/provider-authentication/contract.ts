@@ -3,7 +3,7 @@ import { Data } from "effect";
 import type { UserId } from "../../src/core/identity/contract";
 import type { DisclosureSnapshot } from "../../src/core/consent/contract";
 /** Operator-owned provider application configuration; absent configuration disables authentication. */
-export type ProviderEnvironment = Readonly<{ DB: D1Database; BROWSER_ORIGIN: string }> &
+export type ProviderConfiguration = Readonly<{ BROWSER_ORIGIN: string }> &
   Partial<
     Readonly<{
       GOOGLE_CLIENT_ID: string;
@@ -14,6 +14,8 @@ export type ProviderEnvironment = Readonly<{ DB: D1Database; BROWSER_ORIGIN: str
       MICROSOFT_REDIRECT_URI: string;
     }>
   >;
+
+export type ProviderEnvironment = ProviderConfiguration & Readonly<{ DB: D1Database }>;
 
 /** One-use verified web origin. Compose owner records only inside this request and commit them together. */
 export type ProvenProviderSignup = Readonly<{

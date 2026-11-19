@@ -1,17 +1,21 @@
+import type { ExternalEventBindings } from "../directory/contract";
 import type { ProactivityDeliveryWork } from "../insights/contract";
 
 /** Queue composition receives only native handoff bindings. */
-export type CoreQueueEnvironment = Readonly<{
-  DB: D1Database;
-  RELEASE_GIT_SHA: string;
-  USER_TRANSACTION_COORDINATOR: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
-}> &
+import type { BillingWorkRouting } from "../subscription/contract";
+
+export type CoreQueueEnvironment = BillingWorkRouting &
+  Partial<ExternalEventBindings> &
+  Readonly<{
+    RELEASE_GIT_SHA: string;
+  }> &
   Partial<
     Readonly<{
+      CONNECTION_SYNCHRONIZATION_WORKFLOW: Workflow;
+      CONNECTION_SYNCHRONIZATION_QUEUE_NAME: string;
       EMAIL_BUCKET: R2Bucket;
       RESEND_API_KEY: string;
       BROWSER_PAIRING_EMAIL_WORKFLOW: Workflow;
-      EMAIL_REPLACEMENT_WORKFLOW: Workflow;
       BILLING_COLLECTION_WORKFLOW: Workflow;
       BILLING_REFUND_WORKFLOW: Workflow;
       STATEMENT_EXTRACTION_WORKFLOW: Workflow;

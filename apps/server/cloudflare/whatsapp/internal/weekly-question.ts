@@ -1,3 +1,11 @@
+import {
+  InsightRecipient,
+  type NativeDeliveryOwner,
+  type WhatsAppStatusAdmission,
+  type WhatsAppTurnAdmission,
+  WhatsAppUnavailable,
+} from "../contract";
+import { claimRegisteredSend } from "./registered-send";
 import { readProactivityReplyChoice } from "./disclosure-reply";
 import { type DateTime, Effect, Option, Schema } from "effect";
 import { ConsentRecordId } from "../../../src/core/consent/contract";
@@ -19,12 +27,6 @@ import {
 } from "../../consent/operations";
 import { whatsAppIdentityQuery } from "../../identity/operations";
 import { newId } from "../../secret-material/operations";
-import {
-  InsightRecipient,
-  type WhatsAppStatusAdmission,
-  type WhatsAppTurnAdmission,
-  WhatsAppUnavailable,
-} from "../contract";
 
 const choiceLifetimeMs = 86400000;
 const QuestionRow = Schema.Struct({
@@ -143,8 +145,25 @@ const readQuestionForClaim = (input: QuestionStart): Effect.Effect<unknown, What
     return yield* Effect.tryPromise(() => authorized.first());
   }).pipe(Effect.mapError(() => new WhatsAppUnavailable()));
 
+const registerDelivery = Effect.fn(function* (
+  input: QuestionStart & NativeDeliveryOwner,
+  row: typeof QuestionRow.Type
+) {
+  return yield* claimRegisteredSend(input.callbackOwner, {
+    userId: input.userId,
+    family: "weekly-question",
+    operationId: input.id,
+    portfolio: row.portfolio_id,
+    bsuid: row.bsuid,
+    endpoint: row.business_phone_number_id,
+    correlation: row.correlation_token,
+    sandboxPhone: null,
+    deadline: row.expires_at_ms.epochMilliseconds,
+    content: Option.getOrThrow(row.offer_json),
+  });
+});
 export const startWeeklyQuestion = (
-  input: QuestionStart
+  input: QuestionStart & NativeDeliveryOwner
 ): Effect.Effect<
   | Readonly<{ _tag: "Done" }>
   | Readonly<{ _tag: "Deferred"; nextEligibleAtMs: number }>
@@ -179,8 +198,11 @@ export const startWeeklyQuestion = (
       return { _tag: "Done" } as const;
     }
     if (Option.isNone(row.offer_json)) return { _tag: "Done" } as const;
+    const beginSend = yield* registerDelivery(input, row);
+
     const result = yield* Effect.tryPromise(() => prepareQuestionClaim(input, row).run());
     if (result.meta.changes !== 1) return { _tag: "Done" } as const;
+    yield* beginSend.claim;
     return {
       _tag: "Ready",
       request: {

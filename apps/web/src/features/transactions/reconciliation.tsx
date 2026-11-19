@@ -90,6 +90,7 @@ type Props = Readonly<{
 }>;
 const captureLabels: Readonly<Record<CaptureSources[number]["kinds"][number], string>> = {
   manual: "Registro manual",
+  "connection-movement": "Movimiento bancario",
   "notification-email": "Correo de notificación",
   "statement-line": "Línea de extracto",
 };

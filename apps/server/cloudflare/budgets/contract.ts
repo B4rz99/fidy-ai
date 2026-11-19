@@ -1,4 +1,6 @@
-import { Data, type Option, Schema } from "effect";
+import type { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
+import { CanonicalAdmissionUnavailable } from "../canonical-admission/contract";
+import { Context, Data, Effect, type Option, Schema } from "effect";
 import { BudgetCrossing } from "../../src/core/budgets/contract";
 import { ConsentRecordId } from "../../src/core/consent/contract";
 import type { AppliedBudgetMonth, BudgetId } from "../../src/core/budgets/contract";
@@ -35,3 +37,16 @@ export type BudgetQueryOperation =
   | "budgets.listBudgets"
   | "budgets.getBudget"
   | "budgets.getBudgetStatus";
+
+type EvaluateThresholds = (
+  user: UserId,
+  current: number
+) => Effect.Effect<void, CanonicalAdmissionUnavailable, SqliteClient>;
+/** Financial owners publish each effective change inside their original User transaction. */
+export const BudgetThresholdEvaluation = Context.Reference<EvaluateThresholds>(
+  "@fidy/cloudflare/budgets/ThresholdEvaluation",
+  {
+    defaultValue: (): EvaluateThresholds => () =>
+      Effect.fail(new CanonicalAdmissionUnavailable({ cause: "missing_budget_owner" })),
+  }
+);

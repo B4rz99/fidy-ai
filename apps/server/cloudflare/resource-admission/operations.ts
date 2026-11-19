@@ -1,3 +1,8 @@
+import {
+  chargeProvider,
+  reserveSharedProvider,
+  sharedProviderRequest,
+} from "./internal/provider-allowance";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import { dual } from "effect/Function";
 import { Effect, Option } from "effect";
@@ -496,3 +501,9 @@ export const compactionCounterDeadline = (
     ORDER BY window_start_ms LIMIT 1`,
   params: [input.retentionMs + 1, input.userId],
 });
+
+export const chargeLocalProvider: typeof chargeProvider = (...input) => chargeProvider(...input);
+export const reserveSharedProviderSpend: typeof reserveSharedProvider = (...input) =>
+  reserveSharedProvider(...input);
+export const admitSharedProvider: typeof sharedProviderRequest = (request) =>
+  sharedProviderRequest(request);

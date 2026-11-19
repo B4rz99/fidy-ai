@@ -57,7 +57,7 @@ const Row = Schema.Struct({
   expires_at_ms: Schema.DateTimeUtcFromMillis,
 });
 const Reference = Schema.Struct({ requestId: OAuthRequestId });
-const readReference = (
+export const readReference = (
   request: Request
 ): Effect.Effect<typeof Reference.Type | OAuthReviewChoice, ReviewFailure> => {
   const path = new URL(request.url).pathname;
@@ -103,7 +103,7 @@ const bindPending = (
       Effect.mapError(() => new BootstrapUnavailable())
     );
   });
-const projectReview = (
+export const projectReview = (
   input: Readonly<{ row: typeof Row.Type; requestId: string; scopes: PATScopes; current: number }>
 ): Effect.Effect<Response, Schema.SchemaError> =>
   Effect.gen(function* () {

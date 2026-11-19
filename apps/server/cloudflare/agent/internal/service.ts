@@ -1,3 +1,12 @@
+import {
+  DeliveredObservation,
+  WhatsAppStatusAdmission as StatusAdmission,
+  WhatsAppInboundAdmission as TurnAdmission,
+  type WhatsAppDocumentAdmission,
+  WhatsAppHostedSubject,
+  type WhatsAppTurnAdmission,
+  WhatsAppWork,
+} from "../../whatsapp/contract";
 import { withStatementPublicationWake } from "../../ingestion/runtime";
 import { OutboundHttpLive } from "../../outbound-http/runtime";
 import { ConnectionSandboxAdmission } from "../../connections/contract";
@@ -72,14 +81,6 @@ import {
   cloudflareWorkerTelemetry,
   workerRelease,
 } from "../../runtime/telemetry/operations";
-import {
-  WhatsAppStatusAdmission as StatusAdmission,
-  WhatsAppInboundAdmission as TurnAdmission,
-  type WhatsAppDocumentAdmission,
-  WhatsAppHostedSubject,
-  type WhatsAppTurnAdmission,
-  WhatsAppWork,
-} from "../../whatsapp/contract";
 import { handleWeeklyChoice, reconcileWeeklyChannel, recordWeeklyReply } from "./weekly-channel";
 import {
   classifyWhatsAppAdmission,
@@ -211,6 +212,7 @@ const prepareWhatsAppExecution = (
   });
 
 type StartWhatsAppTurnInput = Readonly<{
+  callbackOwner: AgentEnvironment;
   db: D1Database;
   bucket: Option.Option<R2Bucket>;
   outbound: OutboundHttpService;
@@ -222,6 +224,7 @@ type StartWhatsAppTurnInput = Readonly<{
   onAdmitted: (turnId: TranscriptTurnId) => void;
 }>;
 const startWhatsAppTurn = ({
+  callbackOwner,
   db,
   proof,
   inference,
@@ -252,6 +255,7 @@ const startWhatsAppTurn = ({
     bucket,
     executeMutation: Option.none(),
     deliver: {
+      callbackOwner,
       _tag: "WhatsApp",
       contextualReplyQuery: contextualProactiveInsightQuery(proof),
       send: ({ text, correlationToken, confirmation, recipient }) =>
@@ -494,10 +498,25 @@ const runWhatsAppStatus = (owner: AgentServiceInput, request: Request): Promise<
       const candidate = yield* Effect.tryPromise(() => request.json()).pipe(
         Effect.orElseSucceed(() => undefined)
       );
-      const admission = Schema.decodeUnknownOption(StatusAdmission)(candidate);
-      if (Option.isNone(admission) || admission.value.userId !== userId) {
-        return transactionUnavailable();
-      }
+      const routed = Schema.decodeUnknownOption(DeliveredObservation)(candidate);
+      if (Option.isNone(routed) || routed.value.userId !== userId) return transactionUnavailable();
+      const work = routed.value;
+      const admission = Schema.decodeOption(StatusAdmission)({ ...work.evidence, userId });
+      if (Option.isNone(admission)) return transactionUnavailable();
+      const retained = yield* Effect.tryPromise(() =>
+        env.DB.prepare(`SELECT 1 FROM whatsapp_deliveries WHERE kind=? AND user_id=? AND
+        CASE kind WHEN 'hosted' THEN turn_id WHEN 'insight' THEN insight_event_id WHEN 'proactivity' THEN delivery_id WHEN 'weekly-question' THEN id END=?
+        AND correlation_token=? AND business_phone_number_id=? AND send_started_at_ms IS NOT NULL`)
+          .bind(
+            work.family,
+            userId,
+            work.operationId,
+            work.evidence.correlationToken,
+            work.evidence.businessPhoneNumberId
+          )
+          .first()
+      );
+      if (retained === null) return new Response(null, { status: 204 });
       if (yield* reconcileWeeklyChannel({ environment: env, userId, status: admission.value })) {
         return new Response(null, { status: 200 });
       }
@@ -558,6 +577,7 @@ const runWhatsAppWork = (
           onAdmitted: deadline.onAdmitted,
           scheduleRecovery: owner.scheduleRecovery,
           deliver: (admission) => ({
+            callbackOwner: env,
             _tag: "WhatsApp",
             contextualReplyQuery: contextualProactiveInsightQuery({
               ...admission,
@@ -623,6 +643,7 @@ const runWhatsAppTurn = (
     const prepared = yield* prepareWhatsAppExecution(env, owner.userId, deadline.admittedTurnId);
     if (Option.isNone(prepared)) return transactionUnavailable();
     return yield* startWhatsAppTurn({
+      callbackOwner: env,
       db: env.DB,
       proof,
       bucket: Option.fromUndefinedOr(env.STATEMENT_STAGING_BUCKET),

@@ -58,7 +58,7 @@ const query = (
     AND (a.status = 'pending' OR (a.status = 'consumed' AND a.prepared_session_id = ?))
     AND NOT EXISTS (SELECT 1 FROM connection_attempts newer WHERE newer.connection_id = a.connection_id AND newer.rowid > a.rowid)
     AND ${registered}`;
-const present = (candidate: unknown): Effect.Effect<Response, Schema.SchemaError> =>
+export const present = (candidate: unknown): Effect.Effect<Response, Schema.SchemaError> =>
   Effect.gen(function* () {
     const rows = yield* Schema.decodeUnknownEffect(Schema.Array(ContinuationRow))(candidate);
     const row = Option.fromUndefinedOr(rows[0]);

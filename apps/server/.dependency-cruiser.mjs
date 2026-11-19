@@ -10,11 +10,13 @@ export default {
         path: "^(src|cloudflare)/",
         pathNot: [
           "\\.test\\.ts$",
-          "^cloudflare/oauth-agents/oauth-ingress\\.test-fixture\\.ts$",
-          "^cloudflare/canonical-request-observer\\.test-fixture\\.ts$",
-          "^cloudflare/core-worker\\.test-fixture\\.ts$",
-          "^cloudflare/provider-authentication/journey\\.test-fixture\\.ts$",
-          "^cloudflare/(core-worker|public-worker|operational-canary-workflow|browser-acceptance-preview)\\.ts$",
+          "^cloudflare/(agent/hosted-alarm|core-http/lost-read|maintenance/native-monitor|transactions/addressed-read|user-clock|ingestion/private-email)\\.test-fixture\\.ts$",
+          "^cloudflare/capacity-worker\\.test-fixture\\.ts$",
+          "^cloudflare/connection-worker\\.test-fixture\\.ts$",
+          "^cloudflare/erasure-worker\\.test-fixture\\.ts$",
+          "^cloudflare/login-email-worker\\.test-fixture\\.ts$",
+          "^cloudflare/storage-forward-repair\\.test-fixture\\.ts$",
+          "^cloudflare/(core-worker|public-worker|operational-canary-workflow)\\.ts$",
           "^cloudflare/ingestion/email-worker\\.ts$",
           "\\.d\\.mts$",
         ],
@@ -67,12 +69,14 @@ export default {
         "Maintenance composes published owner runtimes and declarations only; SQL, policies, admission and lifecycle implementations remain with their owners (#614).",
       from: {
         path: "^cloudflare/maintenance/",
-        pathNot: "\\.test\\.ts$",
+        pathNot: ["\\.test\\.ts$", "^cloudflare/maintenance/native-monitor\\.test-fixture\\.ts$"],
       },
       to: {
         path: ["^cloudflare/", "^src/(core|shell)/"],
         pathNot: [
           "^cloudflare/maintenance/",
+          // The Maintenance registry owns its SQLite state and uses the shared storage runtime.
+          "^cloudflare/runtime/sqlite/operations\\.ts$",
           "^cloudflare/.+/(contract|runtime)\\.ts$",
           "^src/(core|shell)/[^/]+/(contract|runtime)\\.ts$",
         ],

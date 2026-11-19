@@ -1,3 +1,18 @@
+import { repairPATExpiry, sweepPATExpiry } from "./internal/native-expiry";
+import {
+  dispatchManagement,
+  isPATManagement,
+  readActivity,
+  readMetadata,
+} from "./internal/native-management";
+import { localClaim } from "./internal/native-claim";
+import { dispatchGrant, isNativeGrant, stageGrant } from "./internal/native-grants";
+import { directoryPATCommand } from "./internal/native-routes";
+import { nativePairing } from "./internal/native-pairing";
+import {
+  localPATCredential as localCredential,
+  patRouteProof as routeProof,
+} from "./internal/native-pat";
 import { prepareBoundPATList as prepareList } from "./internal/bound-pats";
 import type { CanonicalBrowserRead } from "../canonical-admission/contract";
 import { Effect } from "effect";
@@ -68,3 +83,28 @@ export const getHeldPATActivity = (input: PATActivityRead): Effect.Effect<Respon
   getHeldActivity(input);
 
 export const prepareBoundPATList: CanonicalBrowserRead = (input) => prepareList(input);
+
+/** Directory uses only the short id. The User verifies the full bearer inside the mutation. */
+export const patRouteProof: typeof routeProof = (request) => routeProof(request);
+export const localPATCredential: typeof localCredential = (input) => localCredential(input);
+
+export const nativePATPairing: typeof nativePairing = (...args) => nativePairing(...args);
+
+export const handlePATDirectoryCommand: typeof directoryPATCommand = (request) =>
+  directoryPATCommand(request);
+
+export const dispatchLocalPATGrant: typeof dispatchGrant = (input) => dispatchGrant(input);
+export const isLocalPATGrant: typeof isNativeGrant = (id) => isNativeGrant(id);
+export const stageLocalPATGrant: typeof stageGrant = (input) => stageGrant(input);
+
+export const claimLocalPAT: typeof localClaim = (...args) => localClaim(...args);
+
+export const isLocalPATManagement: typeof isPATManagement = (id) => isPATManagement(id);
+export const dispatchLocalPATManagement: typeof dispatchManagement = (unit) =>
+  dispatchManagement(unit);
+
+export const repairLocalPATExpiry: typeof repairPATExpiry = (...args) => repairPATExpiry(...args);
+export const recoverLocalPATExpiry: typeof sweepPATExpiry = (...args) => sweepPATExpiry(...args);
+
+export const readLocalPATMetadata: typeof readMetadata = (input) => readMetadata(input);
+export const readLocalPATActivity: typeof readActivity = (input) => readActivity(input);

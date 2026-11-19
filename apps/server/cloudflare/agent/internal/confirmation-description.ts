@@ -49,12 +49,8 @@ export type ConfirmationRead = (
   operation: CanonicalOperationId,
   input: Schema.Json
 ) => Effect.Effect<Option.Option<Schema.Json>>;
-type Context = Readonly<{
-  read: ConfirmationRead;
-  timeZone: string;
-  db: D1Database;
-  userId: UserId;
-}>;
+type ConfirmationContext = Readonly<{ read: ConfirmationRead; timeZone: string }>;
+type Context = ConfirmationContext | (ConfirmationContext & { db: D1Database; userId: UserId });
 const addressed = Schema.Struct({ params: Schema.Struct({ id: Schema.String }) });
 const quote = (text: string): string => `«${text}»`;
 const decode = <A>(schema: Schema.Decoder<A>, input: unknown): Option.Option<A> =>
@@ -524,6 +520,11 @@ const recurringSuggestionName = (
   edit: RecurringCommand["edit"]
 ): Effect.Effect<Option.Option<string>> =>
   edit.kind === "suggestion" ? recurringSeriesName(context, edit.seriesId) : Effect.succeedNone;
+const describeLifecycle = (
+  context: Context,
+  command: RecurringCommand
+): Effect.Effect<Option.Option<string>> =>
+  "db" in context ? describeRecurringLifecycle({ ...context, command }) : Effect.succeedNone;
 const describeRecurringChange = (
   context: Context,
   operation: string,
@@ -538,7 +539,7 @@ const describeRecurringChange = (
       return yield* describeRecurringCreation(context, edit);
     }
     if (edit.kind === "lifecycle") {
-      return yield* describeRecurringLifecycle({ ...context, command });
+      return yield* describeLifecycle(context, command);
     }
     const today = yield* DateTime.now;
     let date = DateTime.formatIsoDate(DateTime.setZoneNamedUnsafe(today, context.timeZone));
@@ -592,6 +593,7 @@ const describeInsightChange = (
     }
     const target = decode(Schema.Struct({ params: Schema.Struct({ id: InsightEventId }) }), input);
     if (Option.isNone(target)) return Option.none();
+    if (!("db" in context)) return Option.none();
     const found = yield* findInsight({
       db: context.db,
       userId: context.userId,
@@ -787,6 +789,13 @@ const describeTransactionPair = (
     );
   });
 const describeAdditionalChange = (operation: string, input: unknown): Option.Option<string> => {
+  if (operation === "connections.connectInstitution") {
+    return Option.map(
+      decode(Schema.Struct({ payload: Schema.Struct({ institutionId: Schema.String }) }), input),
+      ({ payload }) =>
+        `Iniciar la conexión con ${quote(payload.institutionId)} para que autorices el acceso en tu navegador.`
+    );
+  }
   if (operation === "subscription.cancelSubscription") {
     return Option.some(
       "Cancelar los próximos cobros de tu suscripción de Fidy. Esto no incluye un reembolso."

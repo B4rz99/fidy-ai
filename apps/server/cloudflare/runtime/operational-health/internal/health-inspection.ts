@@ -1,33 +1,10 @@
-import { proactivityObservationLimit } from "../../../insights/contract";
 import { Effect, Exit, Option, Schema } from "effect";
-import { type EmailWorkOperation } from "../../../email-authentication/contract";
-import {
-  prepareEmailPendingWorkObservation,
-  prepareEmailRejectedWorkObservation,
-} from "../../../email-authentication/operations";
-import {
-  prepareIngestionPendingWorkObservation,
-  prepareIngestionRetentionObservation,
-} from "../../../ingestion/operations";
-import { observeProactivityWork } from "../../../insights/operations";
-import { prepareBillingWorkObservation } from "../../../subscription/operations";
+import type { OperationalSignal, QueueKind } from "../contract";
 
-import {
-  type OperationalHealthEnvironment,
-  type OperationalSignal,
-  type PendingSignal,
-  type QueueKind,
-  type WorkKind,
-} from "../contract";
-
-type WorkflowStatusBinding = NonNullable<
-  OperationalHealthEnvironment["workflows"][Exclude<WorkKind, "forwardedEmail">]
->;
-const Pending = Schema.Struct({
-  id: Schema.String.check(Schema.isUUID()),
-  created: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-  deadline: Schema.OptionFromNullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
-});
+type WorkflowStatusBinding = Readonly<{
+  get: (id: string) => Promise<{ status: () => Promise<unknown> }>;
+}>;
+/** Private bindings used only for bounded metadata inspection, never replay or provider calls. */
 const Status = Schema.Struct({
   status: Schema.Literals([
     "queued",
@@ -41,16 +18,10 @@ const Status = Schema.Struct({
     "unknown",
   ]),
 });
-const Retained = Schema.Struct({ expires: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)) });
 const Backlog = Schema.Struct({
   backlogCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   backlogBytes: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 });
-const sampleLimit = 8;
-const staleAfterMilliseconds = 120_000;
-const retentionWarningAgeMs = 3_600_000;
-const rejectedWindowMilliseconds = 86_400_000;
-
 export const unavailableSignal = (
   operation: OperationalSignal["operation"]
 ): OperationalSignal => ({
@@ -59,92 +30,20 @@ export const unavailableSignal = (
   state: "unavailable",
 });
 
-const emptySignal = (operation: WorkKind): PendingSignal => ({
-  component: "async-health",
-  operation,
-  state: "healthy",
-  sampledRejectedEmailWork: 0,
-  rejectionSampleLimited: false,
-  sampledPending: 0,
-  sampleLimited: false,
-  oldestPendingAgeMilliseconds: 0,
-  expiredUndelivered: 0,
-  failedWorkflows: 0,
-  unavailableWorkflows: 0,
-});
-
-const isEmailWork = (operation: WorkKind): operation is EmailWorkOperation =>
-  operation === "browserPairing" || operation === "emailReplacement";
-const RejectionCount = Schema.Struct({
-  count: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: sampleLimit })),
-});
-
-/** The retained rejection state can follow provider refusal or exhausted proof attempts. */
-const rejectedEmailWork = (
-  environment: OperationalHealthEnvironment,
-  operation: WorkKind,
-  current: number
-): Effect.Effect<number, void> => {
-  if (!isEmailWork(operation)) return Effect.succeed(0);
-  return Effect.tryPromise(() =>
-    prepareEmailRejectedWorkObservation({
-      db: environment.DB,
-      operation,
-      sinceMs: current - rejectedWindowMilliseconds,
-      limit: sampleLimit,
-    }).first()
-  ).pipe(
-    Effect.flatMap(Schema.decodeUnknownEffect(RejectionCount)),
-    Effect.map((row) => row.count),
-    Effect.mapError(() => undefined)
-  );
-};
-
-const inspectWorkflow = (
+export const inspectWorkflow = Effect.fnUntraced(function* (
   workflow: Option.Option<WorkflowStatusBinding>,
   id: string
-): Effect.Effect<"available" | "failed" | "unavailable"> =>
-  Effect.gen(function* () {
-    if (Option.isNone(workflow)) return "unavailable";
-    const status = yield* Effect.exit(
-      Effect.tryPromise(() => workflow.value.get(id).then((instance) => instance.status())).pipe(
-        Effect.timeout("2 seconds"),
-        Effect.flatMap(Schema.decodeUnknownEffect(Status))
-      )
-    );
-    if (Exit.isFailure(status) || status.value.status === "unknown") return "unavailable";
-    return ["errored", "terminated", "paused"].includes(status.value.status)
-      ? "failed"
-      : "available";
-  });
-
-export const inspectRetention = ({
-  db,
-  now,
-}: Readonly<{ db: D1Database; now: number }>): Effect.Effect<OperationalSignal> =>
-  Effect.gen(function* () {
-    const result = yield* Effect.exit(
-      Effect.tryPromise(() =>
-        prepareIngestionRetentionObservation({ db, now, limit: sampleLimit }).all()
-      ).pipe(
-        Effect.timeout("2 seconds"),
-        Effect.flatMap((rows) => Schema.decodeUnknownEffect(Schema.Array(Retained))(rows.results))
-      )
-    );
-    if (Exit.isFailure(result)) return unavailableSignal("retention");
-    const oldestOverdueAgeMilliseconds = Math.max(
-      0,
-      ...result.value.map((row) => now - row.expires)
-    );
-    return {
-      component: "async-health",
-      operation: "retention",
-      state: oldestOverdueAgeMilliseconds >= retentionWarningAgeMs ? "attention" : "healthy",
-      sampledOverdue: result.value.length,
-      sampleLimited: result.value.length === sampleLimit,
-      oldestOverdueAgeMilliseconds,
-    };
-  });
+) {
+  if (Option.isNone(workflow)) return "unavailable";
+  const status = yield* Effect.exit(
+    Effect.tryPromise(() => workflow.value.get(id).then((instance) => instance.status())).pipe(
+      Effect.timeout("2 seconds"),
+      Effect.flatMap(Schema.decodeUnknownEffect(Status))
+    )
+  );
+  if (Exit.isFailure(status) || status.value.status === "unknown") return "unavailable";
+  return ["errored", "terminated", "paused"].includes(status.value.status) ? "failed" : "available";
+});
 
 export const inspectQueue = ({
   operation,
@@ -167,97 +66,5 @@ export const inspectQueue = ({
       operation,
       ...backlog.value,
       state: backlog.value.backlogCount > 0 ? "attention" : "healthy",
-    };
-  });
-
-const pendingState = (age: number, expired: number, failed: number): "attention" | "healthy" =>
-  age >= staleAfterMilliseconds || expired > 0 || failed > 0 ? "attention" : "healthy";
-
-const inspectPendingWorkflow = ({
-  environment,
-  operation,
-  rows,
-  current,
-}: Readonly<{
-  environment: OperationalHealthEnvironment;
-  operation: WorkKind;
-  rows: ReadonlyArray<typeof Pending.Type>;
-  current: number;
-}>): Effect.Effect<Readonly<{ failed: number; unavailable: number }>> =>
-  Effect.gen(function* () {
-    if (operation === "forwardedEmail") return { failed: 0, unavailable: 0 };
-    const workflow = Option.fromUndefinedOr(environment.workflows[operation]);
-    let failed = 0;
-    let unavailable = 0;
-    for (const row of rows) {
-      if (current - row.created < staleAfterMilliseconds) continue;
-      const status = yield* inspectWorkflow(workflow, row.id);
-      if (status === "unavailable") unavailable += 1;
-      if (status === "failed") failed += 1;
-    }
-    return { failed, unavailable };
-  });
-
-const pendingWorkStatement = (
-  environment: OperationalHealthEnvironment,
-  operation: Exclude<WorkKind, "proactivity">
-): D1PreparedStatement => {
-  const db = environment.DB;
-  if (operation === "billing") return prepareBillingWorkObservation({ db, limit: sampleLimit });
-  if (isEmailWork(operation)) {
-    return prepareEmailPendingWorkObservation({ db, operation, limit: sampleLimit });
-  }
-  return prepareIngestionPendingWorkObservation({ db, operation, limit: sampleLimit });
-};
-
-export const inspectPending = ({
-  environment,
-  operation,
-  current,
-}: Readonly<{
-  environment: OperationalHealthEnvironment;
-  operation: WorkKind;
-  current: number;
-}>): Effect.Effect<OperationalSignal> =>
-  Effect.gen(function* () {
-    const fetched = yield* Effect.exit(
-      operation === "proactivity"
-        ? observeProactivityWork({ db: environment.DB, ...environment.proactivity }).pipe(
-            Effect.mapError(() => undefined)
-          )
-        : Effect.tryPromise(() => pendingWorkStatement(environment, operation).all()).pipe(
-            Effect.flatMap((rows) =>
-              Schema.decodeUnknownEffect(
-                Schema.Array(Pending).check(Schema.isMaxLength(sampleLimit))
-              )(rows.results)
-            ),
-            Effect.mapError(() => undefined)
-          )
-    );
-    if (Exit.isFailure(fetched)) return unavailableSignal(operation);
-    const rejected = yield* Effect.exit(rejectedEmailWork(environment, operation, current));
-    if (Exit.isFailure(rejected)) return unavailableSignal(operation);
-    const rows = fetched.value;
-    const workflowStates = yield* inspectPendingWorkflow({ environment, operation, rows, current });
-    const oldestPendingAgeMilliseconds = Math.max(0, ...rows.map((row) => current - row.created));
-    const expiredUndelivered = rows.filter(
-      (row) => Option.isSome(row.deadline) && row.deadline.value <= current
-    ).length;
-    return {
-      ...emptySignal(operation),
-      sampledRejectedEmailWork: rejected.value,
-      rejectionSampleLimited: rejected.value === sampleLimit,
-      sampledPending: rows.length,
-      sampleLimited:
-        rows.length === (operation === "proactivity" ? proactivityObservationLimit : sampleLimit),
-      oldestPendingAgeMilliseconds,
-      expiredUndelivered,
-      failedWorkflows: workflowStates.failed,
-      unavailableWorkflows: workflowStates.unavailable,
-      state: pendingState(
-        oldestPendingAgeMilliseconds,
-        expiredUndelivered,
-        workflowStates.failed + rejected.value
-      ),
     };
   });

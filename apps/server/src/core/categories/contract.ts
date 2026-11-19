@@ -116,3 +116,45 @@ export const categoryIds = {
 
 /** Bounds one User's retained capture-time keyword instructions. */
 export const maximumKeywordRulesPerUser = 100;
+
+const maximumCategoriesPerRevision = 100;
+const CategoryTaxonomyRevisionId = Schema.String.check(Schema.isPattern(/^co-[1-9][0-9]{0,8}$/u));
+export const CategoryTaxonomyRevision = Schema.Struct({
+  id: CategoryTaxonomyRevisionId,
+  categories: Schema.Array(Category).check(
+    Schema.isMinLength(1),
+    Schema.isMaxLength(maximumCategoriesPerRevision)
+  ),
+}).check(
+  Schema.makeFilter(({ categories }) => {
+    const ids = new Set(categories.map(({ id }) => id));
+    return (
+      (ids.size === categories.length &&
+        ids.has(categoryIds.ingresos) &&
+        ids.has(categoryIds.otros)) ||
+      "Expected unique Category identities and both capture fallbacks"
+    );
+  })
+);
+export type CategoryTaxonomyRevision = typeof CategoryTaxonomyRevision.Type;
+
+/** Release-owned reader definitions and the one complete revision writers may select. */
+export const CategoryTaxonomyRelease = Schema.Struct({
+  write: CategoryTaxonomyRevisionId,
+  revisions: Schema.Array(CategoryTaxonomyRevision).check(Schema.isMinLength(1)),
+}).check(
+  Schema.makeFilter(({ write, revisions }) => {
+    const ids = new Set(revisions.map(({ id }) => id));
+    return (
+      (ids.size === revisions.length && ids.has(write)) ||
+      "Expected one definition per revision, including the writing revision"
+    );
+  })
+);
+export type CategoryTaxonomyRelease = typeof CategoryTaxonomyRelease.Type;
+
+export const CategoryReference = Schema.Struct({
+  revision: CategoryTaxonomyRevisionId,
+  categoryId: CategoryId,
+});
+export type CategoryReference = typeof CategoryReference.Type;

@@ -1,5 +1,6 @@
+import { RequestBodyPolicy } from "../http/contract";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
-import { Data } from "effect";
+import { Data, Schema } from "effect";
 
 /** Pairing state or proof processing is unavailable; no private dependency evidence escapes. */
 export type BrowserPairingStart = Readonly<{ db: D1Database; retainedPairings: OwnedStatement }>;
@@ -53,3 +54,8 @@ export type RecoveryBrowserPairingApproval = Readonly<{
   subject: OwnedStatement;
   current: number;
 }>;
+
+export const proofPolicy = Schema.decodeSync(RequestBodyPolicy)({
+  maximumBytes: 1024,
+  deadlineMilliseconds: 2000,
+});

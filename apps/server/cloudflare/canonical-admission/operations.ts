@@ -1,3 +1,28 @@
+import { prepareHostedBatch as prepareBatchForTurn } from "./internal/local-hosted-batch";
+import { runLocalBatch as executeBatch } from "./internal/local-batch";
+import type { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
+
+import { withStoreCapacity } from "../runtime/sqlite/operations";
+import {
+  exhausted,
+  invalid,
+  rateLimited as limited,
+  scopeMissing,
+  attachStanding as standingResponse,
+  noAuthority as unauthorized,
+  canonicalAdmissionUnavailable as unavailable,
+} from "./internal/responses";
+import {
+  isNativeAccountQuery as accountQuery,
+  readNativeAccountQuery as accountQueryResult,
+  admitLocalRequest as admitLocal,
+  externalRead,
+  repairReceiptAlarm as inspectReceipts,
+  localPreparationSubject as localPreparationSubjectOwned,
+  runLocalMutation as mutateLocal,
+  sweepReceiptWork as recoverReceipts,
+  sweepLocalReceipts as sweepReceipts,
+} from "./internal/local-mutation";
 import {
   type AuthorizedCanonicalCaller,
   CanonicalAdmissionUnavailable,
@@ -6,10 +31,12 @@ import {
   type CanonicalBrowserSnapshotOperation,
   type CanonicalBrowserSourceRead,
   type CanonicalReadCompletion,
+  type LocalMutationPlan,
+  type LocalMutationPreparation,
+  type LocalMutationResult,
   type PreparedCanonicalBrowserRead,
   type PreparedCanonicalReadCompletion,
   canonicalReadCompletionHeader,
-  canonicalRequestProtection,
 } from "./contract";
 
 import {
@@ -22,8 +49,8 @@ import {
 } from "./internal/response-timing";
 import { OAuthNativeReview } from "../oauth-confirmation/contract";
 import { liveOAuthAuthority } from "../../src/shell/oauth-agents/operations";
-import { Clock, DateTime, Duration, Effect, Exit, Option, Schema } from "effect";
-import { canonicalAllowanceHeaders } from "../../src/shell/quotas/contract";
+import { Clock, Duration, Effect, Exit, Option, Schema } from "effect";
+
 import { UserActionRequired } from "../../src/shell/public-http/contract";
 import type { CatalogOperation } from "../../src/shell/canonical-catalog/contract";
 import type { AuditAuthority } from "../../src/shell/audit/contract";
@@ -51,7 +78,7 @@ import {
   type QuotaStatus,
   canonicalRetryLifetimeMs,
 } from "../../src/core/quotas/contract";
-import { allowancePeriod } from "../../src/core/quotas/operations";
+
 import {
   bindConsumptionRetry,
   decodeQuotaStatus,
@@ -62,7 +89,11 @@ import {
 } from "../quotas/operations";
 import { newId } from "../secret-material/operations";
 
-import { cryptoHash, validatedCanonicalInput } from "./internal/request-input";
+import {
+  cryptoHash,
+  localCanonicalArguments as readArguments,
+  validatedCanonicalInput,
+} from "./internal/request-input";
 import {
   acquireBoundBrowserRequest,
   acquireRequest,
@@ -97,69 +128,9 @@ type MeteredCall<E, R> = Call<E, R> &
     inputHash: string;
     retryKey: Option.Option<string>;
   }>;
-const unavailable = (): Response =>
-  Response.json(
-    {
-      error: { code: "unavailable", message: "The operation is unavailable. Retry later." },
-      next: [],
-    },
-    { status: 503 }
-  );
-const noAuthority = (): Response =>
-  Response.json(
-    {
-      error: {
-        code: "unauthenticated",
-        message: "Present a currently authorized credential and retry.",
-      },
-      next: [],
-    },
-    { status: 401 }
-  );
-const scopeMissing = (): Response =>
-  Response.json(
-    {
-      error: {
-        code: "scope_missing",
-        message: "This credential lacks the required operation scope.",
-      },
-      next: [],
-    },
-    { status: 403 }
-  );
-const invalid = (message: string): Response =>
-  Response.json(
-    { error: { code: "validation_failed", message, fields: [] }, next: [] },
-    { status: 400 }
-  );
-const rateLimited = (): Response =>
-  Response.json(
-    {
-      error: {
-        code: "rate_limited",
-        message: "Too many concurrent or recent requests. Retry later.",
-        retryAfterSeconds: canonicalRequestProtection.retryAfterSeconds,
-      },
-      next: [],
-    },
-    {
-      status: 429,
-      headers: { "retry-after": String(canonicalRequestProtection.retryAfterSeconds) },
-    }
-  );
-const exhausted = (current: number): Response =>
-  Response.json(
-    {
-      error: {
-        code: "quota_exhausted",
-        message: "Your Free canonical-call allowance is exhausted.",
-        allowance: "canonical_call",
-        resetsAt: DateTime.formatIso(allowancePeriod(DateTime.makeUnsafe(current)).resetsAt),
-      },
-      next: [],
-    },
-    { status: 429 }
-  );
+export const canonicalAdmissionUnavailable = (): Response => unavailable();
+export const noAuthority = (): Response => unauthorized();
+export const rateLimited = (): Response => limited();
 /** Bound shared User request pressure without consuming a commercial allowance or adding canonical accounting. */
 export const protectCanonicalPressure = <A, E, R>(
   input: Readonly<{
@@ -294,24 +265,15 @@ const checkScopes = <E, R>(
     if (rows[0]?.results.length !== 1) return Option.some(noAuthority());
     return rows[1]?.results.length === 1 ? Option.none() : Option.some(scopeMissing());
   });
-const attachStanding = (response: Response, status: QuotaStatus, current: number): Response => {
-  const headers = new Headers(response.headers);
-  const meter = status.canonicalCalls;
-  headers.set(canonicalAllowanceHeaders.allowance, "canonical_call");
-  headers.set(
-    canonicalAllowanceHeaders.limit,
-    meter._tag === "Uncapped" ? "uncapped" : String(meter.limit)
-  );
-  headers.set(
-    canonicalAllowanceHeaders.remaining,
-    meter._tag === "Uncapped" ? "uncapped" : String(meter.remaining)
-  );
-  headers.set(
-    canonicalAllowanceHeaders.resetsAt,
-    DateTime.formatIso(allowancePeriod(DateTime.makeUnsafe(current)).resetsAt)
-  );
-  return new Response(response.body, { status: response.status, headers });
-};
+const attachStanding = (response: Response, status: QuotaStatus, current: number): Response =>
+  standingResponse({ response, status, current });
+/** Disclose current allowance only after the caller's atomic read and accountability succeed. */
+export const attachCanonicalStanding = ({
+  response,
+  status,
+  current,
+}: Readonly<{ response: Response; status: QuotaStatus; current: number }>): Response =>
+  attachStanding(response, status, current);
 const replayResponse = (replay: Replay): Response => {
   if (replay.state !== "completed" || Option.isNone(replay.status) || Option.isNone(replay.body)) {
     return unavailable();
@@ -1318,3 +1280,68 @@ export const protectCanonicalBrowserSource = (
       Effect.map(([duration, response]) => appendCanonicalTimings({ response, duration, timings }))
     );
   });
+
+/** The User transaction owns live authority, admission, owner work, Audit and exact receipt. */
+export const runLocalMutation: typeof mutateLocal = (input, invalidTarget) =>
+  mutateLocal(input, invalidTarget);
+export const admitLocalRequest: typeof admitLocal = (input) => admitLocal(input);
+
+/** Visit expired ordinary receipts, independently of new captures, within a bounded User maintenance page. */
+export const sweepLocalReceipts: typeof sweepReceipts = (current) => sweepReceipts(current);
+
+export const recoverLocalReceipts: typeof recoverReceipts = (current, storage) =>
+  recoverReceipts(current, storage);
+
+type LocalWrite<E> = {
+  targets: ReadonlyArray<string>;
+  commit: Effect.Effect<LocalMutationResult, E, SqliteClient>;
+};
+export const prepareLocalWrite = <E, Failure = never>(
+  write:
+    | LocalWrite<E>
+    | (LocalWrite<E> & { premises: ReadonlyArray<string> })
+    | (LocalWrite<E> & {
+        review: Effect.Effect<{ effect: string; revision: string }, Failure, SqliteClient>;
+      })
+): LocalMutationPlan => ({
+  removedTarget: Option.none(),
+  premises: "premises" in write ? write.premises : [],
+  targets: write.targets,
+  review:
+    "review" in write
+      ? Option.some(
+          write.review.pipe(
+            Effect.mapError((cause) => new CanonicalAdmissionUnavailable({ cause }))
+          )
+        )
+      : Option.none(),
+  commit: write.commit.pipe(
+    Effect.mapError((cause) => new CanonicalAdmissionUnavailable({ cause }))
+  ),
+});
+export const commitLocalWrite = (
+  preparation: LocalMutationPreparation
+): LocalMutationPlan["commit"] =>
+  "commit" in preparation ? preparation.commit : Effect.succeed(preparation);
+export const runLocalBatch: typeof executeBatch = (unit, owners) => executeBatch(unit, owners);
+export const localCanonicalArguments: typeof readArguments = (request, operation) =>
+  readArguments(request, operation);
+
+export const repairReceiptAlarm = Effect.fnUntraced(function* (
+  current: number,
+  storage: DurableObjectStorage
+) {
+  return yield* withStoreCapacity("required")(inspectReceipts(current, storage));
+});
+
+export const localPreparationSubject: typeof localPreparationSubjectOwned = (...args) =>
+  localPreparationSubjectOwned(...args);
+
+export const isNativeAccountQuery: typeof accountQuery = (operation) => accountQuery(operation);
+export const readNativeAccountQuery: typeof accountQueryResult = (...args) =>
+  accountQueryResult(...args);
+
+export const dispatchNativeExternalRead: typeof externalRead = (input) => externalRead(input);
+
+export const prepareHostedBatch: typeof prepareBatchForTurn = (input, context, owners) =>
+  prepareBatchForTurn(input, context, owners);

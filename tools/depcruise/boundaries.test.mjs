@@ -49,10 +49,10 @@ await test("the registered catalog generation composition can use owner runtime 
   );
 });
 
-await test("enrollment acceptance earns only named test-composition authority", () => {
-  const enrollment = "cloudflare/subscription/payment-enrollment.test.ts";
-  const runtime = "cloudflare/core-http/runtime.ts";
-  assert.deepEqual(inspect(enrollment, runtime), []);
+await test("support transport tests earn only named test-composition authority", () => {
+  const recovery = "cloudflare/recovery/support-recovery.test.ts";
+  const runtime = "cloudflare/outbound-http/runtime.ts";
+  assert.deepEqual(inspect(recovery, runtime), []);
   assert.equal(
     inspect("cloudflare/subscription/ordinary.test.ts", runtime).some(
       (violation) => violation.name === "runtime-outside-composition"
@@ -60,7 +60,7 @@ await test("enrollment acceptance earns only named test-composition authority", 
     true
   );
   assert.equal(
-    inspect("cloudflare/core-worker.ts", enrollment).some(
+    inspect("cloudflare/core-worker.ts", recovery).some(
       (violation) => violation.name === "production-imports-test-code"
     ),
     true
@@ -78,20 +78,18 @@ await test("a private runtime filename does not make its importer a composition 
 
 await test("an approved production root cannot import an approved integration test", () => {
   assert.equal(
-    inspect(
-      "cloudflare/core-worker.ts",
-      "cloudflare/onboarding/browser-authentication.test.ts"
-    ).some((violation) => violation.name === "production-imports-test-code"),
+    inspect("cloudflare/core-worker.ts", "cloudflare/onboarding/consent-ingress.test.ts").some(
+      (violation) => violation.name === "production-imports-test-code"
+    ),
     true
   );
 });
 
 await test("production roots cannot import the synthetic resource-admission Worker fixture", () => {
   assert.equal(
-    inspect(
-      "cloudflare/core-worker.ts",
-      "cloudflare/resource-admission/resource-admission-worker.fixture.ts"
-    ).some((violation) => violation.name === "production-imports-test-code"),
+    inspect("cloudflare/core-worker.ts", "cloudflare/connection-worker.test-fixture.ts").some(
+      (violation) => violation.name === "production-imports-test-code"
+    ),
     true
   );
 });
@@ -158,16 +156,8 @@ await test("future portable and native owners share one privacy and direction po
 await test("shared acceptance fixtures remain unavailable to production", () => {
   for (const { source, fixture } of [
     {
-      source: "cloudflare/agent/hosted-turn.test.ts",
+      source: "cloudflare/agent/native-turn-lifecycle.test.ts",
       fixture: "cloudflare/openai.test-fixture.ts",
-    },
-    {
-      source: "cloudflare/browser-acceptance-preview.ts",
-      fixture: "cloudflare/browser-acceptance-connections.test-fixture.ts",
-    },
-    {
-      source: "cloudflare/browser-acceptance-seed.ts",
-      fixture: "cloudflare/browser-assessment.test-fixture.ts",
     },
   ]) {
     assert.equal(

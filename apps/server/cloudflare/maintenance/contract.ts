@@ -1,7 +1,4 @@
-import type { BancolombiaSandboxEnvironment } from "../bancolombia-authentication/contract";
-import type { ProactivityDeliveryWork, ProactivityEnvironment } from "../insights/contract";
-import { Data, type Effect, type Option } from "effect";
-import type { PlatformMaintenanceInput } from "../runtime/contract";
+import { Data, type Effect } from "effect";
 
 export type ScheduledOperation =
   | "provider.authenticationRetention"
@@ -13,17 +10,11 @@ export type ScheduledOperation =
   | "connections.recovery"
   | "quota.consumptionRetention"
   | "operational.canary.publish"
-  | "browserPairing.email.dispatch"
-  | "browserPairing.email.reconcile"
   | "emailReplacement.dispatch"
   | "emailReplacement.reconcile"
   | "billing.refund.dispatch"
   | "billing.refund.reconcile"
-  | "billing.renewal.dispatch"
   | "billing.cancellation.dispatch"
-  | "billing.collection.dispatch"
-  | "billing.collection.reconcile"
-  | "billing.cardPreparationAdmissionSweep"
   | "consent.sweep"
   | "consent.proactivityOfferRetention"
   | "consent.disclosureRecovery"
@@ -58,25 +49,30 @@ export class ScheduledWorkFailed extends Data.TaggedError("ScheduledWorkFailed")
 /** A failed Email Worker tick retains its existing closed native failure classification. */
 export class EmailScheduleUnavailable extends Data.TaggedError("EmailScheduleUnavailable") {}
 
-/** Native Core bindings normalized once at the Worker boundary; no binding grants domain authority. */
-export type CoreMaintenanceInput = Omit<
-  PlatformMaintenanceInput,
-  | "BROWSER_PAIRING_EMAIL_QUEUE"
-  | "BILLING_COLLECTION_QUEUE"
-  | "STATEMENT_EXTRACTION_QUEUE"
-  | "HOSTED_WHATSAPP_QUEUE"
-> &
-  Readonly<{
-    BROWSER_PAIRING_EMAIL_QUEUE: Option.Option<Queue>;
-    BILLING_COLLECTION_QUEUE: Option.Option<Queue>;
-    STATEMENT_EXTRACTION_QUEUE: Option.Option<Queue>;
-    HOSTED_WHATSAPP_QUEUE: Option.Option<Queue>;
-  }> &
-  ProactivityEnvironment &
-  BancolombiaSandboxEnvironment &
-  Partial<
-    Readonly<{
-      WEEKLY_DELIVERY_QUEUE: Queue<ProactivityDeliveryWork>;
-      WEEKLY_DELIVERY_WORKFLOW: Workflow<ProactivityDeliveryWork>;
-    }>
-  >;
+/** Private singleton for lifetime discovery. One UserId always names one User store. */
+export const maintenanceName = "core-maintenance-v1";
+export const registrationAcceptedStatus = 204;
+export const registerLifetimeUrl = "https://maintenance.invalid/lifetime/register";
+export const fenceLifetimeUrl = "https://maintenance.invalid/lifetime/fence";
+export const retireLifetimeUrl = "https://maintenance.invalid/lifetime/retire";
+export class UserRegistrationUnavailable extends Data.TaggedError("UserRegistrationUnavailable") {}
+
+export const watchdogUrl = "https://maintenance.invalid/watchdog";
+export const ownerCheckUrl = "https://owner.internal/work/check";
+const privateCheckRequest =
+  (url: string) =>
+  (request: Request): boolean =>
+    request.url === url &&
+    request.method === "POST" &&
+    (request.body === null || request.headers.get("content-length") === "0");
+export const completedCheckStatus = 204;
+export const ownerCheckResponse = (repaired = false): Response =>
+  new Response(null, {
+    status: completedCheckStatus,
+    headers: { "fidy-alarm-repaired": repaired ? "1" : "0" },
+  });
+
+export const ownerCheckRequest = privateCheckRequest(ownerCheckUrl);
+export const watchdogRequest = privateCheckRequest(watchdogUrl);
+
+export const expireLifetimeUrl = "https://maintenance.invalid/lifetime/expire";

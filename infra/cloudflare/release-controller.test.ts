@@ -108,6 +108,7 @@ it.effect("permits resource retirement only while the promoted pair still owns e
     const promoted = yield* releaseController.promoteRelease(fixture.port, release, {
       exactPairPassed: true,
       middlePairPassed: true,
+      rollbackEligible: true,
     });
     const beforeVerification = [...fixture.changes];
     yield* releaseController.verifyRetirement(fixture.port, { release, promoted });
@@ -129,6 +130,7 @@ it.effect("refuses retirement for superseded, unreadable, or replaced deployment
       const promoted = yield* releaseController.promoteRelease(fixture.port, release, {
         exactPairPassed: true,
         middlePairPassed: true,
+        rollbackEligible: true,
       });
       if (scenario === "superseded") {
         fixture.supersede();
@@ -321,6 +323,7 @@ describe("zero-traffic Worker release", () => {
       yield* releaseController.promoteRelease(port, release, {
         exactPairPassed: true,
         middlePairPassed: true,
+        rollbackEligible: true,
       });
       expect((yield* port.current(coreName)).versions).toEqual([
         { id: versions.coreCandidate, percentage: 100 },
@@ -550,6 +553,7 @@ describe("zero-traffic Worker release", () => {
         yield* releaseController.promoteRelease(fixture.port, release, {
           exactPairPassed: true,
           middlePairPassed: true,
+          rollbackEligible: true,
         });
         expect(fixture.changes).toEqual([
           `${publicName}:100/0`,
@@ -597,6 +601,7 @@ describe("zero-traffic Worker release", () => {
         yield* releaseController.promoteRelease(delayed, release, {
           exactPairPassed: true,
           middlePairPassed: true,
+          rollbackEligible: true,
         });
         expect(fixture.changes).toEqual([
           `${publicName}:100/0`,
@@ -631,6 +636,7 @@ describe("zero-traffic Worker release", () => {
           yield* releaseController.promoteRelease(ambiguous, release, {
             exactPairPassed: true,
             middlePairPassed: true,
+            rollbackEligible: true,
           });
           expect((yield* fixture.port.current(coreName)).versions).toEqual([
             { id: versions.coreCandidate, percentage: 100 },
@@ -706,6 +712,7 @@ describe("zero-traffic Worker release", () => {
           releaseController.promoteRelease(fixture.port, release, {
             exactPairPassed: true,
             middlePairPassed: false,
+            rollbackEligible: true,
           }),
           "smoke"
         );
@@ -724,6 +731,7 @@ describe("zero-traffic Worker release", () => {
           releaseController.promoteRelease(fixture.port, release, {
             exactPairPassed: true,
             middlePairPassed: true,
+            rollbackEligible: true,
           }),
           "superseded"
         );
@@ -742,6 +750,7 @@ describe("zero-traffic Worker release", () => {
           releaseController.promoteRelease(fixture.port, release, {
             exactPairPassed: true,
             middlePairPassed: true,
+            rollbackEligible: true,
           }),
           "changed"
         );
@@ -774,6 +783,7 @@ describe("zero-traffic Worker release", () => {
           yield* releaseController.promoteRelease(ambiguous, release, {
             exactPairPassed: true,
             middlePairPassed: true,
+            rollbackEligible: true,
           });
           expect((yield* original.current(publicName)).versions).toEqual([
             { id: versions.publicCandidate, percentage: 100 },
@@ -807,6 +817,7 @@ describe("zero-traffic Worker release", () => {
           releaseController.promoteRelease(defective, release, {
             exactPairPassed: true,
             middlePairPassed: true,
+            rollbackEligible: true,
           }),
           "restored"
         );
@@ -833,6 +844,7 @@ describe("zero-traffic Worker release", () => {
           releaseController.promoteRelease(interrupted, release, {
             exactPairPassed: true,
             middlePairPassed: true,
+            rollbackEligible: true,
           })
         );
         expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
@@ -845,6 +857,29 @@ describe("zero-traffic Worker release", () => {
     )
   );
 
+  it.effect(
+    "preserves promoted Core for forward repair if an older version cannot reopen current stores",
+    () =>
+      advanceReleaseClock(
+        Effect.gen(function* () {
+          const fixture = harness();
+          const release = yield* staged(fixture.port);
+          fixture.fail(`${publicName}:100`);
+          yield* failure(
+            releaseController.promoteRelease(fixture.port, release, {
+              exactPairPassed: true,
+              middlePairPassed: true,
+              rollbackEligible: false,
+            }),
+            "forward repair"
+          );
+          expect((yield* fixture.port.current(coreName)).versions).toEqual([
+            { id: versions.coreCandidate, percentage: 100 },
+          ]);
+        })
+      )
+  );
+
   it.effect("restores stable Core when public promotion fails without committing", () =>
     advanceReleaseClock(
       Effect.gen(function* () {
@@ -855,6 +890,7 @@ describe("zero-traffic Worker release", () => {
           releaseController.promoteRelease(fixture.port, release, {
             exactPairPassed: true,
             middlePairPassed: true,
+            rollbackEligible: true,
           }),
           "restored"
         );

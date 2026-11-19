@@ -1,6 +1,5 @@
 import { Clock, DateTime, Effect } from "effect";
-import { afterAll, expect, it } from "vitest";
-import { isolatedTestDatabases } from "../d1-test-fixture";
+import { expect, it } from "vitest";
 import { makeWorkerTelemetry } from "../runtime/telemetry/operations";
 import { makeCoreQueue } from "./runtime";
 import type { CoreQueueEnvironment } from "./contract";
@@ -18,13 +17,10 @@ const workflowInstance: WorkflowInstance = {
   subscribe: unusedWorkflowOperation,
   status: () => Promise.resolve({ status: "complete" }),
 };
-const databases = isolatedTestDatabases();
-afterAll(() => databases.dispose());
 
 it("inherits the Queue owner's Clock when validating a native canary handoff", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* Effect.tryPromise(() => databases.acquire());
       const now = 100_000;
       const base = makeWorkerTelemetry(() => undefined);
       const queue = makeCoreQueue({
@@ -46,9 +42,8 @@ it("inherits the Queue owner's Clock when validating a native canary handoff", (
       });
       const created: unknown[] = [];
       const environment: CoreQueueEnvironment = {
-        DB: db,
         RELEASE_GIT_SHA: "test",
-        USER_TRANSACTION_COORDINATOR: {
+        USER_STORE: {
           getByName: () => ({ fetch: () => Promise.resolve(new Response()) }),
         },
         OPERATIONAL_CANARY_QUEUE_NAME: "canary",

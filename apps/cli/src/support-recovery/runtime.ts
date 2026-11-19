@@ -1,14 +1,14 @@
 import { Effect, Redacted, Schema, Terminal } from "effect";
 import { type HttpClient, HttpClientRequest } from "effect/http";
 import { ChildProcessSpawner } from "effect/process";
-import { makeProtectedClient } from "../direct-client/runtime";
+import { authenticateAccess, makeProtectedClient } from "../direct-client/runtime";
 import {
+  RecoveryFailure,
   RecoveryInput,
   type RecoveryOperator,
   type RecoveryOutcome,
   recoveryOperatorUrl,
 } from "./contract";
-import { authenticateAccess } from "./internal/access";
 import { readPrompt } from "./internal/prompt";
 
 const maximumResponseBytes = 1024;
@@ -70,7 +70,8 @@ export const makeRecoveryOperator = Effect.fn(function* (
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const operator: RecoveryOperator = {
     ...terminalOutput,
-    authenticate: authenticateAccess.pipe(
+    authenticate: authenticateAccess(recoveryOperatorUrl).pipe(
+      Effect.mapError(() => new RecoveryFailure({ reason: "AccessUnavailable" })),
       Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner)
     ),
     readPairing: readPrompt({

@@ -1,10 +1,27 @@
+import type { SharedBindings } from "../../storage-bootstrap/contract";
 import type { BancolombiaSandboxEnvironment } from "../../bancolombia-authentication/contract";
 import { Schema } from "effect";
 import { contractDigestPattern, gitRevisionPattern } from "../contract";
 
-export const smokePath = "/internal/release-smoke";
+export { smokePath } from "../contract";
 export const smokeVersionHeader = "cloudflare-workers-version-overrides";
 export const smokeProofHeader = "x-fidy-smoke-proof";
+const smokeSecretPattern = /^[0-9a-f]{64}$/u;
+
+/** A separate, randomly provisioned deployment-runner credential, never a User or provider grant. */
+export const smokeProofAccepted = ({
+  request,
+  secret,
+}: Readonly<{ request: Request; secret: string }>): boolean => {
+  const offered = request.headers.get(smokeProofHeader) ?? "";
+  if (!smokeSecretPattern.test(secret) || !smokeSecretPattern.test(offered)) return false;
+  let difference = 0;
+  for (let index = 0; index < secret.length; index++) {
+    difference |= secret.charCodeAt(index) ^ offered.charCodeAt(index);
+  }
+  return difference === 0;
+};
+
 export const smokeFailureHeader = "x-fidy-smoke-failure";
 export const smokeIdentityHeader = "x-fidy-smoke-identity";
 export const smokeCoreVersionHeader = "x-fidy-smoke-core-version";
@@ -20,7 +37,6 @@ export const SmokeFailureStage = Schema.Literals([
   "bancolombia_authentication",
   "bancolombia_token_lifecycle",
   "admission",
-  "d1_quota",
   "identity",
   "secrets",
   "schema",
@@ -78,14 +94,13 @@ export type SmokeCompletion = typeof SmokeCompletion.Type;
 
 /** Private release verification bindings; optional bank verification grants no User authority. */
 export type SmokeEnvironment = BancolombiaSandboxEnvironment &
+  SharedBindings &
   Readonly<{
-    DB: D1Database;
     SMOKE_LIMITER: RateLimit;
     SMOKE_BUCKET: R2Bucket;
     SMOKE_QUEUE: Queue;
     SMOKE_WORKFLOW: Workflow;
     SMOKE_QUEUE_NAME: string;
-    USER_TRANSACTION_COORDINATOR: { getByName: (name: string) => Pick<Fetcher, "fetch"> };
     SMOKE_PROOF: string;
     CF_VERSION_METADATA: { id: string };
     RELEASE_GIT_SHA: string;
@@ -115,7 +130,7 @@ export type SmokeQueueEnvironment = Pick<SmokeEnvironment, "SMOKE_QUEUE_NAME" | 
 /** Separate, release-owned executor: no User, provider, or public ingress authority. */
 export type SmokeExecutorEnvironment = Pick<
   SmokeEnvironment,
-  | "DB"
+  | "SMOKE_BUCKET"
   | "SMOKE_QUEUE_NAME"
   | "SMOKE_WORKFLOW"
   | "RELEASE_GIT_SHA"

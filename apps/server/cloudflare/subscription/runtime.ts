@@ -1,10 +1,75 @@
-import { withErasureRecovery } from "../erasure/runtime";
+import { backgroundWorkAllowed } from "../release-isolation/operations";
+import type { AcceptanceWindowBindings } from "../release-isolation/contract";
+import {
+  offerRefunds,
+  refundWake,
+  runOwnerRefund,
+  runRefundStep,
+} from "./internal/native-refund-work";
+import { handleLocalRefund } from "./internal/native-refund";
+import { ownerCheckRequest } from "../maintenance/contract";
+import {
+  fenceErasureParticipant,
+  handleSharedCleanup,
+  participantDrain,
+} from "../erasure-store/operations";
+import {
+  participantCleanupUrl,
+  participantDrainedUrl,
+  participantFenceUrl,
+} from "../erasure-store/contract";
+import { Hex } from "effect/encoding";
+import { digestBytes } from "../secret-material/operations";
+import {
+  type BillingCollectionFailure,
+  type BillingObservationWorkflow,
+  type BillingQueuePublisher,
+  type BillingRuntime,
+  type BillingWorkRouting,
+  type BillingWorkflowActivity,
+  type EnrollmentEnvironment,
+  type LocalBillingCollection,
+  LocalRefundWork,
+  LocalSourceCancellationWork,
+  type PricingEnvironment,
+  type RefundDispatchInput,
+  type RefundReceiveInput,
+  type RefundSupportEnvironment,
+  RefundWorkFailure,
+  type RefundWorkflowExecution,
+  type SubscriptionCancellationDispatchInput,
+  type SubscriptionRenewalDispatchInput,
+  WompiBillingEvent,
+  type WompiBindings,
+  type WompiEventEnvironment,
+  pricingName,
+} from "./contract";
+import { nativeBillingRequest } from "./internal/native-billing";
+import {
+  createStoreRuntime,
+  observeStoreCheck,
+  openSqliteStore,
+  storeReadiness,
+  withStoreCapacity,
+} from "../runtime/sqlite/operations";
+import { type StoreReleaseEnvironment, storeReadinessUrl } from "../runtime/sqlite/contract";
+
+import { pricingHistory } from "./pricing/operations";
+import {
+  cleanPricingCase,
+  outstandingPricingRegistrations,
+  pricingResponse,
+  recoverPricing,
+} from "./internal/pricing-object";
+import { observeCancellation, pendingCancellation } from "./internal/local-cancellation";
+import { RequestBodyPolicy } from "../http/contract";
+import { boundedJsonBody } from "../http/operations";
+import { publishPrice } from "./internal/publish-price";
 import { projections as erasureProjections } from "./internal/erasure";
 import { makeErasureStore } from "../erasure-store/runtime";
 import type { ErasureStore } from "../erasure-store/contract";
 import { makeWompiTransport } from "./internal/wompi-runtime";
-import { type WompiBindings } from "./contract";
-import { OutboundHttpLive } from "../outbound-http/runtime";
+import { OutboundHttpLive, installedProviderFetch } from "../outbound-http/runtime";
 import { dispatchCancellations } from "./internal/source-cancellation";
 import { dispatchSubscriptionRenewals as dispatchRenewals } from "./internal/subscription-renewal";
 import {
@@ -15,40 +80,15 @@ import {
   isRefundWork as recognizesRefund,
 } from "./internal/refund-workflow";
 import { handlePaymentEnrollment as enroll } from "./internal/payment-enrollment";
-import type {
-  EnrollmentEnvironment,
-  SubscriptionCancellationDispatchInput,
-  SubscriptionRenewalDispatchInput,
-} from "./contract";
-import {
-  WorkflowEntrypoint,
-  type WorkflowEvent,
-  type WorkflowStep,
-  type WorkflowStepConfig,
-} from "cloudflare:workers";
-import { type Cause, Context, Effect, Layer, type Option, Schema } from "effect";
+import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
+import { Cause, Clock, Context, Effect, Layer, Option, Result, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import {
   makeAccessSigningKeysOutboundHttp,
   type makeWompiOutboundHttp,
 } from "../../src/shell/outbound-http/operations";
-import {
-  type RefundDispatchInput,
-  type RefundReceiveInput,
-  type RefundSupportEnvironment,
-  RefundWorkFailure,
-  type RefundWorkflowExecution,
-} from "./contract";
 import { handleRefundSupport as supportRefund } from "./internal/refund-support";
 import {
-  type BillingCollectionEnvironment,
-  type BillingCollectionFailure,
-  type BillingObservationWorkflow,
-  type BillingQueuePublisher,
-  type BillingRuntime,
-} from "./contract";
-import {
-  captureObservedProviderFetch,
   cloudflareWorkerTelemetry,
   observeWorkerPromise,
   workTraceParent,
@@ -61,16 +101,47 @@ import {
   isBillingCollectionWork as recognizesWork,
   runBillingCollectionWorkflow as runWorkflow,
 } from "./internal/billing-workflow";
-import { reconcileBillingCandidates as reconcile } from "./internal/billing-observation";
+import {
+  receiveLocalSourceCancellation,
+  reconcileBillingCandidates as reconcile,
+} from "./internal/billing-observation";
 import { sweepExpiredEnrollmentAdmission as sweep } from "./internal/enrollment-admission";
 
+import {
+  type BillingRecovery,
+  billingWake as inspectBillingAlarm,
+  answerRegistration as readRegistration,
+  recoverLocalBilling,
+} from "./internal/local-billing-work";
+import { nativeEnrollment } from "./internal/native-enrollment";
+import type { EnrollmentContext } from "./internal/enrollment-session";
+
+export const offerLocalBilling = Effect.fn(function* (context: Omit<BillingRecovery, "transport">) {
+  return yield* recoverLocalBilling({ ...context, transport: wompiOutboundHttp });
+});
+export const handleLocalEnrollment = Effect.fn(function* (
+  request: Request,
+  context: Omit<EnrollmentContext, "transport">,
+  owns: (id: string) => boolean
+) {
+  return yield* nativeEnrollment({ ...context, transport: wompiOutboundHttp }, request, owns);
+});
+export const answerRegistration = Effect.fn(function* (
+  request: Request,
+  owns: (id: string) => boolean
+) {
+  return yield* readRegistration(request, owns);
+});
+export const billingWake = Effect.fn(function* (storage: DurableObjectStorage) {
+  return yield* withStoreCapacity("required")(inspectBillingAlarm(storage));
+});
 /** Construct the native provider transport at the Subscription composition boundary. */
 export const wompiOutboundHttp = (
   environment: WompiBindings
 ): Effect.Effect<ReturnType<typeof makeWompiOutboundHttp>> =>
   Effect.scoped(
     Effect.gen(function* () {
-      const fetcher = yield* captureObservedProviderFetch(globalThis.fetch, {
+      const fetcher = yield* installedProviderFetch({
         provider: "wompi",
         environment,
         telemetry: cloudflareWorkerTelemetry,
@@ -117,7 +188,7 @@ export const handleRefundSupport = (
         const clients = yield* Layer.build(OutboundHttpLive).pipe(
           Effect.provideService(
             FetchHttpClient.Fetch,
-            yield* captureObservedProviderFetch(globalThis.fetch, {
+            yield* installedProviderFetch({
               provider: "cloudflare-access",
               environment: workerRelease(input.environment),
               telemetry: cloudflareWorkerTelemetry,
@@ -143,15 +214,31 @@ export const runRefundWorkflow = (input: RefundWorkflowExecution): Promise<void>
     })
   );
 
-export class BillingRefundWorkflowV1 extends WorkflowEntrypoint<BillingRuntime, unknown> {
+export class BillingRefundWorkflowV1 extends WorkflowEntrypoint<
+  {
+    USER_STORE: DurableObjectNamespace;
+    RELEASE_GIT_SHA: string;
+    RECOVERY_ISOLATION: string;
+  } & AcceptanceWindowBindings,
+  unknown
+> {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
+    return Effect.runPromise(backgroundWorkAllowed(this.env)).then((allowed) => {
+      if (!allowed) throw Error("Billing execution is closed");
+      return this.execute(event, step);
+    });
+  }
+  private execute(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
     return observeWorkerPromise(
       () =>
-        runRefundWorkflow({
-          environment: withErasureRecovery(this.env),
-          payload: event.payload,
-          activity: (name, options, activity) => step.do(name, options, activity),
-        }),
+        step.do(
+          "submit-or-verify-correction-v1",
+          {
+            retries: { limit: 0, delay: "1 second", backoff: "constant" },
+            timeout: "30 seconds",
+          },
+          () => Effect.runPromise(runRefundStep(event.payload, this.env.USER_STORE))
+        ),
       {
         environment: workerRelease(this.env),
         telemetry: cloudflareWorkerTelemetry,
@@ -173,10 +260,11 @@ export const dispatchBillingCollection = (
 /** Hand identity-only Queue work to its deterministic Workflow without repeating a charge. */
 export const receiveBillingCollection = (
   input: Readonly<{
-    environment: Readonly<{
-      DB: D1Database;
-      BILLING_COLLECTION_WORKFLOW: BillingObservationWorkflow;
-    }>;
+    environment: BillingWorkRouting &
+      Readonly<{
+        DB: D1Database;
+        BILLING_COLLECTION_WORKFLOW: BillingObservationWorkflow;
+      }>;
     batch: Readonly<{ messages: ReadonlyArray<{ body: unknown; ack: () => void }> }>;
   }>
 ): Effect.Effect<void, BillingCollectionFailure> => receive(input);
@@ -184,7 +272,7 @@ export const receiveBillingCollection = (
 export const receiveWompiBillingEvent = (
   input: Readonly<{
     request: Request;
-    environment: BillingRuntime & Pick<BillingCollectionEnvironment, "WOMPI_EVENT_SECRET">;
+    environment: WompiEventEnvironment;
   }>
 ): Effect.Effect<Response> => acceptEvent(input);
 /** Start bounded reconciliation of retained unresolved billing identities. */
@@ -198,15 +286,25 @@ export const sweepExpiredEnrollmentAdmission = (
   input: Readonly<{ db: D1Database; now: number }>
 ): Effect.Effect<void, Cause.UnknownError> => sweep(input);
 
-export class BillingCollectionWorkflowV1 extends WorkflowEntrypoint<BillingRuntime, unknown> {
+export class BillingCollectionWorkflowV1 extends WorkflowEntrypoint<
+  Omit<BillingRuntime, "DB"> & AcceptanceWindowBindings,
+  unknown
+> {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
+    return Effect.runPromise(backgroundWorkAllowed(this.env)).then((allowed) => {
+      if (!allowed) throw Error("Billing execution is closed");
+      return this.execute(event, step);
+    });
+  }
+  private execute(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
     return observeWorkerPromise(
       () =>
         runBillingCollectionWorkflow({
-          environment: withErasureRecovery(this.env),
+          environment: this.env,
           payload: event.payload,
           activity: (name, options, activity) => step.do(name, options, activity),
           sleep: (name, duration) => step.sleep(name, duration),
+          observe: (name, options, activity) => step.do(name, options, activity),
         }),
       {
         environment: workerRelease(this.env),
@@ -221,16 +319,20 @@ export class BillingCollectionWorkflowV1 extends WorkflowEntrypoint<BillingRunti
 /** Execute one versioned billing Workflow through its bounded, no-retry activity seam. */
 export const runBillingCollectionWorkflow = (
   input: Readonly<{
-    environment: BillingRuntime;
+    environment: Omit<BillingRuntime, "DB">;
     payload: unknown;
     sleep: (name: string, duration: number) => Promise<void>;
-    activity: (
-      name: string,
-      options: WorkflowStepConfig,
-      run: () => Promise<void>
-    ) => Promise<void>;
-  }>
-): Promise<void> => runWorkflow({ ...input, wompiHttp: wompiOutboundHttp });
+  }> &
+    (
+      | Readonly<{ activity: BillingWorkflowActivity }>
+      | Readonly<{ activity: BillingWorkflowActivity; observe: BillingWorkflowActivity<boolean> }>
+    )
+): Promise<void> =>
+  runWorkflow({
+    ...input,
+    observe: "observe" in input ? Option.some(input.observe) : Option.none(),
+    wompiHttp: wompiOutboundHttp,
+  });
 
 /** Fresh-session browser enrollment; provider references and transient authorization stay private. */
 export const handlePaymentEnrollment = (
@@ -249,3 +351,244 @@ export const dispatchSubscriptionCancellations = (
 
 export const makeSubscriptionErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
   erasureProjections.map((projection) => makeErasureStore({ db, projection }));
+
+/** Private pricing namespace, selected by a stable name. Only Core holds this binding. */
+export class Pricing {
+  private readonly version: string;
+  private readonly state: DurableObjectState;
+  private readonly window: AcceptanceWindowBindings;
+  private readonly erasure: Option.Option<DurableObjectNamespace>;
+  private readonly users: Option.Option<DurableObjectNamespace>;
+  private readonly runtime;
+  constructor(
+    state: DurableObjectState,
+    env: StoreReleaseEnvironment &
+      AcceptanceWindowBindings &
+      Partial<Readonly<{ USER_STORE: DurableObjectNamespace; ERASURE: DurableObjectNamespace }>>
+  ) {
+    this.state = state;
+    this.window = env;
+    this.erasure = Option.fromUndefinedOr(env.ERASURE);
+    this.users = Option.fromUndefinedOr(env.USER_STORE);
+    this.version = env.CF_VERSION_METADATA.id;
+    this.runtime = createStoreRuntime({
+      storage: state.storage,
+      owner: "pricing",
+      ceilingBytes: env.SQLITE_STORE_CAPACITY_BYTES,
+    });
+    if (state.id.name === pricingName) {
+      state.waitUntil(
+        state.blockConcurrencyWhile(() =>
+          this.runtime.runPromise(openSqliteStore(pricingHistory, env.CF_VERSION_METADATA.id))
+        )
+      );
+    }
+  }
+
+  alarm(): Promise<void> {
+    return Effect.runPromise(backgroundWorkAllowed(this.window)).then((allowed) =>
+      allowed
+        ? Option.match(this.users, {
+            onNone: () => Promise.resolve(),
+            onSome: (users) =>
+              this.runtime
+                .runPromise(recoverPricing(this.state.storage, users))
+                .then(() => undefined),
+          })
+        : undefined
+    );
+  }
+  private erasureCommand(request: Request): Promise<Response> {
+    if (request.url === participantCleanupUrl && Option.isSome(this.erasure)) {
+      return this.runtime.runPromise(
+        handleSharedCleanup(request, this.erasure.value, cleanPricingCase).pipe(
+          Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
+        )
+      );
+    }
+    if (request.url === participantDrainedUrl) {
+      return this.runtime.runPromise(
+        participantDrain(request, outstandingPricingRegistrations).pipe(
+          Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
+        )
+      );
+    }
+    if (request.url === participantFenceUrl && Option.isSome(this.users)) {
+      return this.runtime.runPromise(
+        fenceErasureParticipant(request, this.users.value, this.state.storage).pipe(
+          Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
+        )
+      );
+    }
+    return Promise.resolve(new Response(null, { status: 503 }));
+  }
+  fetch(request: Request): Promise<Response> {
+    if (this.state.id.name !== pricingName) {
+      return Promise.resolve(new Response(null, { status: 404 }));
+    }
+    if (
+      request.method === "POST" &&
+      [participantCleanupUrl, participantDrainedUrl, participantFenceUrl].includes(request.url)
+    ) {
+      return this.erasureCommand(request);
+    }
+    if (request.method === "GET" && request.url === storeReadinessUrl) {
+      return this.runtime.runPromise(
+        storeReadiness({ history: pricingHistory, release: this.version })
+      );
+    }
+    const work = pricingResponse(request, this.state.storage, Option.isSome(this.users));
+    return this.runtime.runPromise(
+      (ownerCheckRequest(request)
+        ? work.pipe(
+            observeStoreCheck({
+              storage: this.state.storage,
+              history: pricingHistory,
+              release: this.version,
+            })
+          )
+        : work
+      ).pipe(Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 }))))
+    );
+  }
+}
+
+/** Construct the bounded Access signing-key transport for private Price publication. */
+export const handlePricePublication = (
+  input: Readonly<{ request: Request; environment: PricingEnvironment }>
+): Effect.Effect<Response, never, HttpClient.HttpClient> =>
+  Effect.gen(function* () {
+    const http = makeAccessSigningKeysOutboundHttp({
+      issuer: input.environment.CLOUDFLARE_ACCESS_ISSUER,
+      httpClient: yield* HttpClient.HttpClient,
+    });
+    return yield* publishPrice({ ...input, http });
+  });
+
+const workPendingStatus = 202;
+const workAbsentStatus = 204;
+const cancellationBody = Schema.decodeSync(RequestBodyPolicy)({
+  maximumBytes: 1024,
+  deadlineMilliseconds: 5000,
+});
+/** Only the private User owner receives these calls. The destination checks the object and retained work identity. */
+export const handleSourceCancellationWork = Effect.fnUntraced(function* (
+  input: Readonly<{
+    request: Request;
+    owns: (id: string) => boolean;
+    environment: WompiBindings;
+  }>
+) {
+  const action = new URL(input.request.url).pathname;
+  const body = yield* boundedJsonBody({
+    request: input.request,
+    policy: cancellationBody,
+    schema: LocalSourceCancellationWork,
+  });
+  if (Option.isNone(body) || !input.owns(body.value.userId)) {
+    return new Response(null, { status: 404 });
+  }
+  if (action === "/work/source-cancellation/observe") {
+    yield* observeCancellation({
+      work: body.value,
+      current: yield* Clock.currentTimeMillis,
+      environment: input.environment.WOMPI_ENVIRONMENT,
+      http: yield* wompiOutboundHttp(input.environment),
+    });
+  }
+  const pending = yield* pendingCancellation(body.value);
+  return new Response(null, { status: pending ? workPendingStatus : workAbsentStatus });
+});
+
+export const handleNativeBillingCallback = Effect.fn(function* (
+  input: Omit<Parameters<typeof nativeBillingRequest>[0], "transport">
+) {
+  return yield* nativeBillingRequest({ ...input, transport: wompiOutboundHttp });
+});
+
+const callbackWorkflowId = Effect.fn(function* (event: typeof WompiBillingEvent.Type) {
+  const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(WompiBillingEvent))(event);
+  return "wompi-event-" + Hex.encode(yield* digestBytes(new TextEncoder().encode(encoded)));
+});
+
+const acceptedWorkflowStates: ReadonlySet<InstanceStatus["status"]> = new Set([
+  "queued",
+  "running",
+  "waiting",
+  "complete",
+]);
+
+const workflowId = Effect.fnUntraced(function* (
+  work:
+    | typeof LocalBillingCollection.Type
+    | typeof LocalRefundWork.Type
+    | typeof WompiBillingEvent.Type
+) {
+  switch (work._tag) {
+    case "WompiBillingEvent":
+      return yield* callbackWorkflowId(work);
+    case "RunUserRefund":
+      return "refund-" + work.userId + "-" + work.refundAttemptId + "-" + work.verification;
+    case "CollectUserBillingAttempt":
+      return "collect-" + work.userId + "-" + work.attemptId;
+  }
+});
+export const offerNativeBillingWork = Effect.fn(function* (
+  workflow: BillingObservationWorkflow,
+  work:
+    | typeof LocalBillingCollection.Type
+    | typeof WompiBillingEvent.Type
+    | typeof LocalRefundWork.Type
+) {
+  const id = yield* workflowId(work);
+  const started = yield* Effect.result(
+    Effect.tryPromise(() =>
+      workflow.create({
+        id,
+        params: work,
+        retention: { successRetention: "3 days", errorRetention: "3 days" },
+      })
+    )
+  );
+  if (Result.isSuccess(started)) return;
+  const instance = yield* Effect.tryPromise(() => workflow.get(id));
+  const { status } = yield* Effect.tryPromise(() => instance.status());
+  if (acceptedWorkflowStates.has(status)) return;
+  if (status === "errored") return yield* Effect.tryPromise(() => instance.restart());
+  return yield* Effect.fail("billing-workflow-unavailable" as const);
+});
+
+export const handleNativeRefund: typeof handleLocalRefund = (...args) => handleLocalRefund(...args);
+
+export const recoverNativeRefunds = Effect.fnUntraced(function* (
+  input: Parameters<typeof offerRefunds>[0]
+) {
+  return yield* offerRefunds(input).pipe(Effect.mapError((cause) => new Cause.UnknownError(cause)));
+});
+export const repairRefundAlarm = Effect.fnUntraced(function* (storage: DurableObjectStorage) {
+  return yield* refundWake(storage).pipe(withStoreCapacity("required"));
+});
+export const handleNativeRefundWork = Effect.fnUntraced(function* (
+  request: Request,
+  context: Omit<Parameters<typeof runOwnerRefund>[1], "transport">
+) {
+  const work = yield* Effect.tryPromise(() => request.json()).pipe(
+    Effect.flatMap(Schema.decodeUnknownEffect(LocalRefundWork))
+  );
+  yield* runOwnerRefund(work, { ...context, transport: wompiOutboundHttp });
+  return new Response(null, { status: 204 });
+});
+
+export const receiveBillingHandoff = Effect.fn(function* ({
+  environment,
+  workflow,
+  body,
+}: {
+  environment: BillingWorkRouting;
+  workflow: BillingObservationWorkflow;
+  body: typeof LocalSourceCancellationWork.Type | Parameters<typeof offerNativeBillingWork>[1];
+}) {
+  return yield* Schema.is(LocalSourceCancellationWork)(body)
+    ? receiveLocalSourceCancellation({ environment, workflow, work: body })
+    : offerNativeBillingWork(workflow, body);
+});

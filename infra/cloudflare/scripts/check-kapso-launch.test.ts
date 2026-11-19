@@ -1,3 +1,4 @@
+/// <reference types="bun-types" />
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -54,7 +55,7 @@ describe("Kapso production launch check", () => {
     );
     expect(check(evidence).code).toBe(1);
     const workflow = readFileSync(
-      new URL("../../../.github/workflows/production.yml", import.meta.url),
+      new URL("../../../.github/workflows/native-storage-release.yml", import.meta.url),
       "utf8"
     );
     expect(workflow).not.toContain("bash infra/cloudflare/scripts/check-kapso-launch.sh");

@@ -1,3 +1,4 @@
+/// <reference types="bun-types" />
 import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -6,7 +7,7 @@ import { describe, expect, it } from "vitest";
 const scriptPath = fileURLToPath(new URL("./check-production-runtime-config.sh", import.meta.url));
 const workingDirectory = fileURLToPath(new URL("../", import.meta.url));
 const productionWorkflowPath = fileURLToPath(
-  new URL("../../../.github/workflows/production.yml", import.meta.url)
+  new URL("../../../.github/workflows/native-storage-release.yml", import.meta.url)
 );
 const testValue = "runtime-config-test-value";
 const smokeProof = "a".repeat(64);
@@ -98,13 +99,15 @@ describe("Production runtime configuration gate", () => {
     }
   });
 
-  it("passes the Wompi event secret to both Production planning and deployment", async () => {
-    const mapping = "WOMPI_EVENT_SECRET: ${{ secrets.WOMPI_EVENT_SECRET }}";
-    const planning = await workflowStep("Plan the complete Cloudflare topology");
-    const deployment = await workflowStep("Upload zero-traffic Worker candidates with Alchemy");
+  it("passes the Production environment's configured Access issuer secret to the protected release", async () => {
+    const workflow = await readFile(productionWorkflowPath, "utf8");
+    expect(workflow).toContain("CLOUDFLARE_ACCESS_ISSUER: ${{ secrets.CLOUDFLARE_ACCESS_ISSUER }}");
+  });
 
-    expect(planning).toContain(mapping);
-    expect(deployment).toContain(mapping);
+  it("keeps real payment secrets out of closed first installation", async () => {
+    const first = await workflowStep("Install the verified fresh native application");
+    expect(first).toContain("bun native-storage-resources.ts first-install");
+    expect(first).not.toContain("secrets.WOMPI_EVENT_SECRET");
   });
 
   it("rejects whitespace-only configuration", () => {

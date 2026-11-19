@@ -27,9 +27,9 @@ import { type ReviewQueryWork, ReviewUnavailable } from "../contract";
 import { reviewAudit } from "./review-audit";
 import { validationFailed } from "./statement-ingestion";
 
-const maximumExcerptCells = 16;
+export const maximumExcerptCells = 16;
 
-const ContextRow = Schema.Struct({
+export const ContextRow = Schema.Struct({
   id: Schema.String,
   record_number: Schema.OptionFromNullOr(Schema.Int),
   expires_at_ms: Schema.Finite,
@@ -87,7 +87,7 @@ const prepareContext = ({
           results[0]?.results
         );
         const data = yield* Schema.decodeEffect(Schema.toCodecJson(ReviewPageContext))({
-          items: rows.map((row, index) => projectContext(row, offset + index + 1)),
+          items: rows.map((row, index) => projectContext({ row, position: offset + index + 1 })),
         });
         const encoded = yield* Schema.encodeUnknownEffect(Schema.toCodecJson(ReviewPageContext))(
           data
@@ -154,7 +154,7 @@ export const browseReviewPageContext = ({
 
 // Materialize the bounded page before inspecting any original, and clip inside D1 so raw
 // statement rows (up to 2 MB each) never cross the database response boundary.
-const contextSql = (filter: string): string => `WITH page AS MATERIALIZED (
+export const contextSql = (filter: string): string => `WITH page AS MATERIALIZED (
         SELECT id,user_id,expires_at_ms FROM (
           ${reviewRelation}
         ) WHERE ${filter} ORDER BY expires_at_ms,id LIMIT ? OFFSET ?
@@ -175,10 +175,13 @@ const contextSql = (filter: string): string => `WITH page AS MATERIALIZED (
         LEFT JOIN forwarded_email_receipts e ON e.user_id=r.user_id AND e.id=r.email_receipt_id
         ORDER BY p.expires_at_ms,p.id`;
 
-const projectContext = (
-  row: typeof ContextRow.Type,
-  position: number
-): (typeof ReviewPageContext.Encoded)["items"][number] => ({
+export const projectContext = ({
+  row,
+  position,
+}: {
+  row: typeof ContextRow.Type;
+  position: number;
+}): (typeof ReviewPageContext.Encoded)["items"][number] => ({
   id: row.id,
   reference: Option.match(row.record_number, {
     onNone: () => `Elemento ${position}`,

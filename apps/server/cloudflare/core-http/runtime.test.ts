@@ -1,30 +1,19 @@
 import { registeredConnectionInstitutionIds } from "../../src/shell/connections/contract";
-import { type Cause, Effect, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { type CoreHttpEnvironment } from "./contract";
 import { it } from "@effect/vitest";
-import { afterAll, expect, vi } from "vitest";
-import { isolatedTestDatabases } from "../d1-test-fixture";
+import { expect, vi } from "vitest";
 import { makeCoreHttp } from "./runtime";
 import { cloudflareWorkerTelemetry } from "../runtime/telemetry/operations";
 
-const databases = isolatedTestDatabases();
-afterAll(() => databases.dispose());
-const database = (): Effect.Effect<D1Database, Cause.UnknownError> =>
-  Effect.tryPromise(() => databases.acquire());
 const burstLogs = (logs: ReadonlyArray<ReadonlyArray<unknown>>): ReadonlyArray<string> =>
   logs
     .map((call) => Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))(call))
     .filter((call) => call.includes("component=core-rejections"));
-const environment = (db: D1Database): CoreHttpEnvironment => ({
-  DB: db,
+const environment: CoreHttpEnvironment = {
   RELEASE_GIT_SHA: "0".repeat(40),
   CONTRACT_DIGEST: "0".repeat(64),
   BROWSER_ORIGIN: "https://app.fidyapp.com",
-  USER_TRANSACTION_COORDINATOR: {
-    getByName: () => ({
-      fetch: () => Promise.reject(new Error("No coordinator work authorized")),
-    }),
-  },
   KAPSO_API_KEY: "private-provider-key",
   KAPSO_WEBHOOK_SECRET: "private-webhook-secret",
   WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
@@ -35,11 +24,10 @@ const environment = (db: D1Database): CoreHttpEnvironment => ({
   WOMPI_PUBLIC_KEY: "",
   WOMPI_PRIVATE_KEY: "",
   WOMPI_INTEGRITY_SECRET: "",
-});
+};
 
 it.live("preserves actual Core callback refusals and never stores attacker request content", () =>
   Effect.gen(function* () {
-    const db = yield* database();
     const logs = vi.spyOn(console, "log").mockImplementation(() => undefined);
     yield* Effect.acquireRelease(
       Effect.sync(() => vi.spyOn(Date, "now").mockReturnValue(1_800_000)),
@@ -62,7 +50,7 @@ it.live("preserves actual Core callback refusals and never stores attacker reque
       });
     let original = "";
     for (let count = 0; count < 101; count += 1) {
-      const response = yield* Effect.tryPromise(() => core(request(), environment(db)));
+      const response = yield* Effect.tryPromise(() => core(request(), environment));
       expect(response.status).toBe(401);
       const body = yield* Effect.tryPromise(() => response.text());
       if (count === 0) original = body;
@@ -79,7 +67,6 @@ it.live(
   "counts malformed provider callbacks without accepting forged boundary labels or path prefixes",
   () =>
     Effect.gen(function* () {
-      const db = yield* database();
       const logs = vi.spyOn(console, "log").mockImplementation(() => undefined);
       yield* Effect.acquireRelease(
         Effect.sync(() => vi.spyOn(Date, "now").mockReturnValue(1_800_000)),
@@ -101,7 +88,7 @@ it.live(
             },
             body: '{"boundary":"providerCallback","secret":"private-user-content"}',
           }),
-          environment(db)
+          environment
         );
       for (let index = 0; index < 100; index += 1) {
         const response = yield* Effect.tryPromise(() => send("/providers/kapso/callback-extra"));

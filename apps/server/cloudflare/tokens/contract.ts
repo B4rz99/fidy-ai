@@ -33,3 +33,7 @@ export type PATActivityRead = Readonly<{
   current: number;
   authority: PATActivityAuthority;
 }>;
+
+export const nativePATDirectoryUrl = "https://directory.invalid/credentials/pat";
+
+export const localPATClaimUrl = "https://user.invalid/credentials/pat-claim";

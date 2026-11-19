@@ -1,8 +1,6 @@
-import { withErasureRecovery } from "../erasure/runtime";
 import { Effect } from "effect";
 import type { TelemetryService } from "../../src/shell/observability/contract";
-import type { ForwardedEmailEnvironment, ForwardedEmailMessage } from "./contract";
-import { runEmailMaintenance } from "../maintenance/runtime";
+import type { ForwardedEmailMessage } from "./contract";
 import {
   cloudflareWorkerTelemetry,
   observeWorkerExecution,
@@ -10,15 +8,11 @@ import {
 } from "../runtime/telemetry/operations";
 
 type EmailWorker = Readonly<{
-  email: (message: ForwardedEmailMessage, environment: ForwardedEmailEnvironment) => Promise<void>;
-  scheduled: (
-    controller: Pick<ScheduledController, "scheduledTime">,
-    environment: ForwardedEmailEnvironment
-  ) => Promise<void>;
+  email: (message: ForwardedEmailMessage, environment: unknown) => Promise<void>;
 }>;
 
 /** Refuse native delivery until institution verification and Connection admission exist;
- * maintenance still recovers retained work under its original admission and deadlines.
+ * the addressed User recovers previously admitted work from its own alarm.
  */
 export const makeEmailWorker = (telemetry: TelemetryService): EmailWorker => ({
   email: (message, environment) =>
@@ -27,18 +21,6 @@ export const makeEmailWorker = (telemetry: TelemetryService): EmailWorker => ({
         telemetry,
         environment: workerRelease(environment),
         operation: "worker.email.receive",
-      }),
-      Effect.runPromise
-    ),
-  scheduled: (controller, environment) =>
-    runEmailMaintenance({
-      environment: withErasureRecovery(environment),
-      scheduledAtEpochMs: controller.scheduledTime,
-    }).pipe(
-      observeWorkerExecution({
-        telemetry,
-        environment: workerRelease(environment),
-        operation: "worker.email.scheduled",
       }),
       Effect.runPromise
     ),

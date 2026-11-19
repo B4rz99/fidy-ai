@@ -1,8 +1,12 @@
+import { DurableObject } from "cloudflare:workers";
 import { Clock, Effect, Schema } from "effect";
 import { makeCoreQueue } from "./runtime";
 import { makeWorkerTelemetry } from "../runtime/telemetry/operations";
 
-type Environment = Readonly<{ DB: D1Database; WORK: Queue }>;
+const user = "10000000-0000-4000-8000-000000000001";
+type Environment = Readonly<{ OWNER: DurableObjectNamespace<QueueRecorder>; WORK: Queue }>;
+const availableStatus = 200,
+  missingStatus = 404;
 const Work = Schema.Struct({
   version: Schema.Literal(1),
   userId: Schema.String,
@@ -21,64 +25,87 @@ const instance = (id: string): WorkflowInstance => ({
   subscribe: unavailable,
   status: () => Promise.resolve({ status: "running" }),
 });
-const workflow = (db: D1Database): Workflow => ({
+export class QueueRecorder extends DurableObject {
+  offerable(now: number): (typeof Work.Type)[] {
+    const sql = this.ctx.storage.sql;
+    const rows = sql
+      .exec(
+        "UPDATE statement_submissions SET queued_at_ms=coalesce(queued_at_ms,?) WHERE status IN ('queued','processing') AND retention_expires_at_ms>? RETURNING 1 AS version,user_id AS userId,id AS submissionId",
+        now,
+        now
+      )
+      .toArray();
+    return rows.map((row) => Schema.decodeUnknownSync(Work)(row));
+  }
+  record(id: string, attempt: number, dead: boolean): void {
+    this.ctx.storage.sql.exec(
+      dead ? "INSERT INTO dead_letters VALUES(?,?)" : "INSERT INTO deliveries VALUES(?,?)",
+      id,
+      attempt
+    );
+  }
+  create(id: string, now: number): void {
+    const sql = this.ctx.storage.sql;
+    if (sql.exec("SELECT 1 FROM blocked WHERE id=?", id).toArray().length > 0) {
+      throw Error("Synthetic provider outage");
+    }
+    sql.exec("INSERT INTO handoffs(id,completed_at_ms) VALUES(?,?)", id, now);
+  }
+  exists(id: string): boolean {
+    return (
+      this.ctx.storage.sql.exec("SELECT 1 FROM handoffs WHERE id=?", id).toArray().length === 1
+    );
+  }
+  override fetch(request: Request): Promise<Response> {
+    return Effect.runPromise(
+      Effect.gen({ self: this }, function* () {
+        const work = yield* Schema.decodeUnknownEffect(Work)(
+          yield* Effect.tryPromise(() => request.json())
+        );
+        const now = yield* Clock.currentTimeMillis;
+        const found = this.ctx.storage.sql
+          .exec(
+            "SELECT 1 FROM statement_submissions WHERE id=? AND user_id=? AND status IN('queued','processing') AND retention_expires_at_ms>?",
+            work.submissionId,
+            work.userId,
+            now
+          )
+          .toArray();
+        return new Response(null, { status: found.length === 1 ? availableStatus : missingStatus });
+      })
+    );
+  }
+}
+const workflow = (owner: DurableObjectStub<QueueRecorder>): Workflow => ({
   create: (options) =>
     Effect.runPromise(
       Effect.gen(function* () {
         const id = options?.id;
-        if (id === undefined) throw new Error("Missing identity");
-        const blocked = yield* Effect.tryPromise(() =>
-          db.prepare("SELECT id FROM blocked WHERE id = ?").bind(id).first()
-        );
-        if (blocked !== null) throw new Error("Synthetic provider outage");
-        const current = yield* Clock.currentTimeMillis;
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare("INSERT INTO handoffs(id,completed_at_ms) VALUES (?,?)")
-            .bind(id, current)
-            .run()
-        );
+        if (id === undefined) throw Error("Missing identity");
+        const now = yield* Clock.currentTimeMillis;
+        yield* Effect.tryPromise(() => owner.create(id, now));
         return instance(id);
       })
     ),
   get: (id) =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const existing = yield* Effect.tryPromise(() =>
-          db.prepare("SELECT id FROM handoffs WHERE id = ?").bind(id).first()
-        );
-        if (existing === null) throw new Error("Workflow does not exist");
-        return instance(id);
-      })
-    ),
+    owner.exists(id).then((exists) => {
+      if (!exists) throw Error("Workflow does not exist");
+      return instance(id);
+    }),
   createBatch: unavailable,
   deleteBatch: unavailable,
 });
 const consume = makeCoreQueue(makeWorkerTelemetry(() => undefined));
 export default {
-  fetch: (_request: Request, environment: Environment): Promise<Response> =>
+  fetch: (_req: Request, env: Environment): Promise<Response> =>
     Effect.runPromise(
       Effect.gen(function* () {
         const now = yield* Clock.currentTimeMillis;
-        const rows = yield* Effect.tryPromise(() =>
-          environment.DB.prepare(
-            "SELECT 1 AS version, user_id AS userId, id AS submissionId FROM statement_submissions WHERE status IN ('queued', 'processing') AND retention_expires_at_ms > ?"
-          )
-            .bind(now)
-            .all()
-        );
-        const work = yield* Schema.decodeUnknownEffect(Schema.Array(Work))(rows.results);
-        yield* Effect.tryPromise(() =>
-          environment.DB.prepare(
-            "UPDATE statement_submissions SET queued_at_ms=coalesce(queued_at_ms,?) WHERE status IN ('queued','processing')"
-          )
-            .bind(now)
-            .run()
-        );
+        const work = yield* Effect.tryPromise(() => env.OWNER.getByName(user).offerable(now));
         const maximumOfferBatch = 100;
         for (let offset = 0; offset < work.length; offset += maximumOfferBatch) {
           yield* Effect.tryPromise(() =>
-            environment.WORK.sendBatch(
+            env.WORK.sendBatch(
               work.slice(offset, offset + maximumOfferBatch).map((body) => ({ body }))
             )
           );
@@ -86,38 +113,24 @@ export default {
         return new Response(null, { status: 202 });
       })
     ),
-  queue: (batch: MessageBatch<unknown>, environment: Environment): Promise<void> =>
+  queue: (batch: MessageBatch<unknown>, env: Environment): Promise<void> =>
     Effect.runPromise(
       Effect.gen(function* () {
-        if (batch.queue === "recovery-dead") {
-          for (const message of batch.messages) {
-            const work = yield* Schema.decodeUnknownEffect(Work)(message.body);
-            yield* Effect.tryPromise(() =>
-              environment.DB.prepare("INSERT INTO dead_letters VALUES (?, ?)")
-                .bind(work.submissionId, message.attempts)
-                .run()
-            );
-            message.ack();
-          }
+        const dead = batch.queue === "recovery-dead",
+          owner = env.OWNER.getByName(user);
+        for (const message of batch.messages) {
+          const work = yield* Schema.decodeUnknownEffect(Work)(message.body);
+          yield* Effect.tryPromise(() => owner.record(work.submissionId, message.attempts, dead));
+        }
+        if (dead) {
+          batch.ackAll();
           return;
         }
         yield* Effect.tryPromise(() =>
-          environment.DB.batch(
-            batch.messages.map((message) => {
-              const work = Schema.decodeUnknownSync(Work)(message.body);
-              return environment.DB.prepare("INSERT INTO deliveries VALUES (?, ?)").bind(
-                work.submissionId,
-                message.attempts
-              );
-            })
-          )
-        );
-        yield* Effect.tryPromise(() =>
           consume(batch, {
-            DB: environment.DB,
             RELEASE_GIT_SHA: "synthetic-proof",
-            USER_TRANSACTION_COORDINATOR: { getByName: () => ({ fetch: unavailable }) },
-            STATEMENT_EXTRACTION_WORKFLOW: workflow(environment.DB),
+            USER_STORE: env.OWNER,
+            STATEMENT_EXTRACTION_WORKFLOW: workflow(owner),
           })
         );
       })

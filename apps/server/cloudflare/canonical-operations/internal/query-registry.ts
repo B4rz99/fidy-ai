@@ -81,7 +81,8 @@ const historyOwner =
             },
     });
 
-const queryOwners = new Map<string, QueryOwner>([
+type HistoricalEntries = ReadonlyArray<readonly [string, QueryOwner]>;
+const workspaceOwners = (): HistoricalEntries => [
   ["ingestion.getReviewWorkspace", browseReviewWorkspace],
   ["ingestion.getReviewItem", browseReviewItem],
   ["ingestion.getReviewMaterial", browseReviewMaterial],
@@ -98,6 +99,8 @@ const queryOwners = new Map<string, QueryOwner>([
     operation,
     (work) => browseConnections({ ...work, operation }),
   ]),
+];
+const accountOwners = (): HistoricalEntries => [
   [
     "quota.getQuota",
     ({ db, subject }): Effect.Effect<Response, Cause.UnknownError> =>
@@ -139,6 +142,8 @@ const queryOwners = new Map<string, QueryOwner>([
     ({ db, subject }): Effect.Effect<Response, Cause.UnknownError> =>
       listOwnKeywordRules({ db, subject }),
   ],
+];
+const financialOwners = (): HistoricalEntries => [
   [
     "subscription.listSubscriptionOffers",
     ({ db, subject }): Effect.Effect<Response, Cause.UnknownError> =>
@@ -182,6 +187,8 @@ const queryOwners = new Map<string, QueryOwner>([
         operation: "dashboard.listDashboardCatalog",
       }),
   ],
+];
+const insightOwners = (): HistoricalEntries => [
   [
     "memory.recall",
     ({ db, subject }): Effect.Effect<Response, Cause.UnknownError> =>
@@ -212,6 +219,8 @@ const queryOwners = new Map<string, QueryOwner>([
     ({ db, subject, request }): Effect.Effect<Response, Cause.UnknownError> =>
       listPendingInsights({ db, subject, request }),
   ],
+];
+const ingestionOwners = (): HistoricalEntries => [
   [
     "ingestion.getEmailForwarding",
     ({ db, subject }): Effect.Effect<Response, Cause.UnknownError> =>
@@ -243,10 +252,24 @@ const queryOwners = new Map<string, QueryOwner>([
         url: new URL(request.url),
       }),
   ],
-]);
+];
+const historicalQueryOwners = (): ReadonlyMap<string, QueryOwner> =>
+  new Map([
+    ...workspaceOwners(),
+    ...accountOwners(),
+    ...financialOwners(),
+    ...insightOwners(),
+    ...ingestionOwners(),
+  ]);
 
 export const canonicalQueryOwner = (id: string): Option.Option<QueryOwner> =>
-  Option.fromUndefinedOr(queryOwners.get(id));
+  Option.fromUndefinedOr(historicalQueryOwners().get(id)).pipe(
+    Option.filter(() =>
+      operationCatalog.operations.some(
+        (operation) => operation.id === id && operation.policy.kind === "query"
+      )
+    )
+  );
 
 /** The same installed statement queries also accept Agent's held conversation authority. */
 type HostedQueryOwner = (
@@ -335,14 +358,3 @@ export const canonicalHostedStatementQueryOwner = (
       }).pipe(Effect.orElseSucceed(transactionUnavailable))
   );
 };
-
-const assertCanonicalQueryOwners = (): void => {
-  for (const id of queryOwners.keys()) {
-    const declaration = operationCatalog.operations.find((operation) => operation.id === id);
-    if (declaration?.policy.kind !== "query") {
-      throw new Error(`Canonical query adapter is not a declared query: ${id}`);
-    }
-  }
-};
-
-assertCanonicalQueryOwners();

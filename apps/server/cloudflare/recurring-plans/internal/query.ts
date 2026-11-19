@@ -79,7 +79,7 @@ type ProjectionWork = Readonly<{
   now: DateTime.Utc;
   finalization: Option.Option<CanonicalReadFinalization>;
 }>;
-type AutomaticProjection = Readonly<{
+export type AutomaticProjection = Readonly<{
   document: RecurringSchedule;
   matches: (typeof RecurringWorkspace.Type)["matches"];
 }> &
@@ -91,7 +91,7 @@ export const matchingRange = (month: string): PlanningTransactionRange => {
     through: DateTime.formatIso(DateTime.add(start, { months: 1, days: 4 })),
   };
 };
-const automaticFromFacts = ({
+export const automaticFromFacts = ({
   document,
   allocations,
   month,

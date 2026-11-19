@@ -1,70 +1,13 @@
-import { Data, type Effect, type Option } from "effect";
-import type { ProactivityEnvironment } from "../insights/contract";
-import type { OpenAiEnvironment } from "../ai/contract";
+import { installedOrigins } from "../../src/shell/browser-transport/contract";
 
-/** Platform-owned scheduled work exposes completion only, never diagnostic or provider details. */
-export class PlatformMaintenanceUnavailable extends Data.TaggedError(
-  "PlatformMaintenanceUnavailable"
-) {}
+export const smokePath = "/internal/release-smoke";
 
-/** Worker bindings and configuration; absent optional capabilities stay explicit at construction. */
-export type PlatformMaintenanceInput = Readonly<{
-  DB: D1Database;
-  USER_TRANSACTION_COORDINATOR: Readonly<{
-    getByName: (name: string) => Pick<Fetcher, "fetch">;
-  }>;
-  OPENAI_API_KEY: OpenAiEnvironment["OPENAI_API_KEY"];
-  RELEASE_GIT_SHA: string;
-  KAPSO_API_KEY: string;
-  KAPSO_WEBHOOK_SECRET: string;
-  WHATSAPP_SANDBOX_PHONE_NUMBER_ID: string;
-  HOSTED_AI_MODEL: string;
-  WOMPI_ENVIRONMENT: string;
-  WOMPI_PUBLIC_KEY: string;
-  WOMPI_PRIVATE_KEY: string;
-  WOMPI_INTEGRITY_SECRET: string;
-  ASYNC_HEALTH_ENABLED: Option.Option<"enabled">;
-  ASYNC_DEAD_LETTERS: Option.Option<Pick<Queue, "metrics">>;
-  FORWARDED_EMAIL_QUEUE: Option.Option<Pick<Queue, "metrics">>;
-  EMAIL_REPLACEMENT_HEALTH_QUEUE: Option.Option<Pick<Queue, "metrics">>;
-  OPERATIONAL_CANARY_QUEUE: Option.Option<Pick<Queue, "send">>;
-  OPERATIONAL_CANARY_WORKFLOW: Option.Option<Workflow>;
-  EMAIL_BUCKET: Option.Option<R2Bucket>;
-  STATEMENT_STAGING_BUCKET: Option.Option<R2Bucket>;
-  BROWSER_PAIRING_EMAIL_QUEUE: Option.Option<Pick<Queue, "metrics">>;
-  EMAIL_REPLACEMENT_QUEUE: Option.Option<Queue>;
-  BILLING_COLLECTION_QUEUE: Option.Option<Pick<Queue, "metrics">>;
-  STATEMENT_EXTRACTION_QUEUE: Option.Option<Pick<Queue, "metrics">>;
-  HOSTED_WHATSAPP_QUEUE: Option.Option<Pick<Queue, "metrics">>;
-  BROWSER_PAIRING_EMAIL_WORKFLOW: Option.Option<Workflow>;
-  EMAIL_REPLACEMENT_WORKFLOW: Option.Option<Workflow>;
-  BILLING_COLLECTION_WORKFLOW: Option.Option<Workflow>;
-  STATEMENT_EXTRACTION_WORKFLOW: Option.Option<Workflow>;
-  RESEND_API_KEY: Option.Option<string>;
-  WOMPI_EVENT_SECRET: Option.Option<string>;
-}> &
-  Pick<ProactivityEnvironment, "WEEKLY_SUMMARY_ENABLED" | "PROACTIVITY_ENABLED"> &
-  Partial<
-    Readonly<{
-      WEEKLY_DELIVERY_QUEUE: Pick<Queue, "metrics">;
-      WEEKLY_DELIVERY_WORKFLOW: Workflow;
-    }>
-  >;
-
-/** Fixed-policy platform maintenance; actions are independent. Decision instants are Unix epoch milliseconds. */
-export type PlatformMaintenance = Readonly<{
-  inspectHealth: () => Effect.Effect<void, PlatformMaintenanceUnavailable>;
-  publishCanary: (nowEpochMs: number) => Effect.Effect<void, PlatformMaintenanceUnavailable>;
-}>;
-
-/** Non-secret PAT fixture accepted only by the local canonical-operation harness. */
 export const localCanonicalReadBearer = "fin_localdev_local-emulation-category-read-token";
 
 /** Stable production network surface consumed by the Alchemy stack and topology tests. */
 export const productionTopology = {
   docs: { hostname: "docs.fidyapp.com" },
   core: {
-    d1Binding: "DB",
     localPort: 8788,
     workersDev: false,
   },
@@ -76,11 +19,9 @@ export const productionTopology = {
   },
   site: { hostname: "fidyapp.com", localPort: 4321, workerName: "fidy-site", workersDev: false },
   web: {
-    adoptExistingWorker: true,
     hostname: "app.fidyapp.com",
     localPort: 5173,
     redirects: [],
-    workerName: "fidy-web",
     workersDev: false,
   },
 } as const;
@@ -89,7 +30,8 @@ export const productionTopology = {
 export const browserOrigins = {
   local: `http://127.0.0.1:${productionTopology.web.localPort}`,
   acceptance: "https://127.0.0.1:4173",
-  production: `https://${productionTopology.web.hostname}`,
+  production: installedOrigins.production.browser,
+  nativeAcceptance: installedOrigins.acceptance.browser,
 } as const;
 
 /** Canonical lowercase release-identity formats shared by deployment and Worker boundaries. */

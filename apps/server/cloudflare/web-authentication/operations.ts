@@ -3,17 +3,11 @@ import { Cause, Effect, Option } from "effect";
 import type { HttpClient } from "effect/http";
 import { redeemBrowserPairing, startBrowserPairing } from "../browser-login/operations";
 import {
-  completeBrowserPairingEmail,
   completeEmailReplacement,
   requestEmailReplacement,
-  startBrowserPairingEmail,
 } from "../email-authentication/operations";
 import { supportRecoveryPath } from "../recovery/contract";
-import {
-  handleSupportRecovery,
-  retainedRecoveryPairingsQuery,
-  rotateBackupRecoveryCode,
-} from "../recovery/operations";
+import { retainedRecoveryPairingsQuery, rotateBackupRecoveryCode } from "../recovery/operations";
 import { handlePATRequest, patRoute } from "../tokens/operations";
 import { currentWebSessionUser, logoutWebSession } from "../web-session/operations";
 import type { WebAuthenticationRequest } from "./contract";
@@ -27,12 +21,8 @@ const handlers = {
     startBrowserPairing({ db, retainedPairings: retainedRecoveryPairingsQuery() }),
   redeemPairing: redeemBrowserPairing,
   logout: (input): Effect.Effect<Response, void> => logoutWebSession(input),
-  startEmail: ({ request, db, publish }): Effect.Effect<Response, Cause.UnknownError> =>
-    Effect.tryPromise(() =>
-      startBrowserPairingEmail({ request, db, onAccepted: (id) => publish("browserPairing", id) })
-    ),
-  completeEmail: (input): Effect.Effect<Response, Cause.UnknownError> =>
-    Effect.tryPromise(() => completeBrowserPairingEmail(input)),
+  startEmail: ({ loginEmail }): Effect.Effect<Response> => loginEmail,
+  completeEmail: ({ loginEmail }): Effect.Effect<Response> => loginEmail,
   requestReplacement: ({ request, db, publish }): Effect.Effect<Response, Cause.UnknownError> =>
     Effect.tryPromise(() =>
       requestEmailReplacement({ request, db, onAccepted: (id) => publish("emailReplacement", id) })
@@ -77,12 +67,15 @@ const methodNotAllowed = (): Response =>
     }
   );
 
-const supportResponse = ({
+export const supportResponse = ({
   request,
-  db,
   support,
   telemetry,
-}: WebAuthenticationRequest): Effect.Effect<Response, never, HttpClient.HttpClient> => {
+}: Pick<WebAuthenticationRequest, "request" | "support" | "telemetry">): Effect.Effect<
+  Response,
+  never,
+  HttpClient.HttpClient
+> => {
   if (request.method !== "POST") return Effect.succeed(methodNotAllowed());
   return telemetry.rootSpan(
     {
@@ -93,7 +86,7 @@ const supportResponse = ({
       workKind: "http_request",
       metadata: { _tag: "Http", method: "POST", route: supportRecoveryPath, status: Option.none() },
     },
-    handleSupportRecovery({ request, db, config: support }).pipe(
+    support.pipe(
       Effect.catchCauseIf(Cause.hasDies, () =>
         telemetry
           .captureFailure({

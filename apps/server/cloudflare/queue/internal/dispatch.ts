@@ -1,3 +1,13 @@
+import { SynchronizationWork } from "../../connections/contract";
+import { WhatsAppLifecycleWork } from "../../whatsapp/contract";
+import { routeWhatsAppStatus } from "../../whatsapp/runtime";
+import {
+  LocalBillingCollection,
+  LocalRefundWork,
+  LocalSourceCancellationWork,
+  WompiBillingEvent,
+} from "../../subscription/contract";
+import { receiveBillingHandoff } from "../../subscription/runtime";
 import { workTraceParent } from "../../runtime/telemetry/operations";
 import { Telemetry } from "../../../src/shell/observability/operations";
 import {
@@ -10,27 +20,15 @@ import { ProactivityDeliveryWork } from "../../insights/contract";
 import { receiveProactivityWork } from "../../insights/runtime";
 import { Cause, Clock, Context, Data, Effect, Exit, Option, Schema } from "effect";
 import type { CoreQueueEnvironment } from "../contract";
-import {
-  isBrowserPairingEmailWork,
-  isEmailReplacementWork,
-  receiveBrowserPairingEmail,
-  receiveEmailReplacement,
-} from "../../email-authentication/runtime";
+import { startLoginWorkflow } from "../../email-authentication/runtime";
+import { NativeLoginEmailWork } from "../../email-authentication/contract";
 import { receiveCanary } from "../../runtime/operational-health/operations";
 import {
   isForwardedEmailWork,
   isStatementExtractionWork,
   receiveForwardedEmailWork,
-  receiveStatementExtraction,
+  receiveNativeStatementExtraction,
 } from "../../ingestion/runtime";
-import { WhatsAppWork } from "../../whatsapp/contract";
-import { receiveWhatsAppWork } from "../../whatsapp/runtime";
-import {
-  isBillingCollectionWork,
-  isRefundWork,
-  receiveBillingCollection,
-  receiveRefunds,
-} from "../../subscription/runtime";
 
 /** Retain a native rejection privately; the runtime unwraps it after closed telemetry observation. */
 export class QueueDeliveryUnavailable extends Data.TaggedError("QueueDeliveryUnavailable")<{
@@ -151,29 +149,19 @@ const receiveEmailQueue = ({
   environment,
 }: QueueInput): Effect.Effect<void, QueueDeliveryUnavailable> =>
   Effect.gen(function* () {
-    if (batch.messages.some((message) => isEmailReplacementWork(message.body))) {
-      if (environment.EMAIL_REPLACEMENT_WORKFLOW === undefined) {
-        return yield* deliveryFailure(new Error("Email replacement unavailable"));
-      }
+    if (batch.messages.some((message) => Schema.is(NativeLoginEmailWork)(message.body))) {
+      const workflow = environment.BROWSER_PAIRING_EMAIL_WORKFLOW;
+      if (workflow === undefined) return yield* deliveryFailure("Login email unavailable");
       return yield* receiveWorkflowBatch(
         batch,
-        receiveEmailReplacement({
-          DB: environment.DB,
-          EMAIL_REPLACEMENT_WORKFLOW: environment.EMAIL_REPLACEMENT_WORKFLOW,
-        }),
-        4
-      ).pipe(Effect.withSpan("emailReplacement.receive"));
-    }
-    if (batch.messages.some((message) => isBrowserPairingEmailWork(message.body))) {
-      if (environment.BROWSER_PAIRING_EMAIL_WORKFLOW === undefined) {
-        return yield* deliveryFailure(new Error("Browser pairing email unavailable"));
-      }
-      return yield* receiveWorkflowBatch(
-        batch,
-        receiveBrowserPairingEmail({
-          DB: environment.DB,
-          BROWSER_PAIRING_EMAIL_WORKFLOW: environment.BROWSER_PAIRING_EMAIL_WORKFLOW,
-        }),
+        (entry) =>
+          Effect.gen(function* () {
+            for (const message of entry.messages) {
+              const work = yield* Schema.decodeUnknownEffect(NativeLoginEmailWork)(message.body);
+              yield* startLoginWorkflow(workflow, work);
+              message.ack();
+            }
+          }),
         4
       );
     }
@@ -194,39 +182,6 @@ const receiveCanaryBatch = ({
     return yield* nativeDelivery(() => receiveCanary({ workflow, payload: message.body, now }));
   });
 
-const receiveBillingQueue = ({
-  batch,
-  environment,
-}: QueueInput): Effect.Effect<void, QueueDeliveryUnavailable> =>
-  Effect.gen(function* () {
-    const refunds = batch.messages.filter((message) => isRefundWork(message.body));
-    const charges = batch.messages.filter((message) => isBillingCollectionWork(message.body));
-    if (refunds.length + charges.length !== batch.messages.length) {
-      return yield* deliveryFailure("Invalid billing work");
-    }
-    if (refunds.length > 0) {
-      if (environment.BILLING_REFUND_WORKFLOW === undefined) {
-        return yield* deliveryFailure("Billing refunds unavailable");
-      }
-      yield* receiveRefunds({
-        environment: { BILLING_REFUND_WORKFLOW: environment.BILLING_REFUND_WORKFLOW },
-        batch: { messages: refunds },
-      });
-    }
-    if (charges.length > 0) {
-      if (environment.BILLING_COLLECTION_WORKFLOW === undefined) {
-        return yield* deliveryFailure("Billing collection unavailable");
-      }
-      yield* receiveBillingCollection({
-        environment: {
-          DB: environment.DB,
-          BILLING_COLLECTION_WORKFLOW: environment.BILLING_COLLECTION_WORKFLOW,
-        },
-        batch: { messages: charges },
-      });
-    }
-  }).pipe(Effect.mapError(deliveryFailure));
-
 const receiveIdentityOnlyQueue = ({
   batch,
   environment,
@@ -236,70 +191,147 @@ const receiveIdentityOnlyQueue = ({
       receiveProactivityWork({
         messages: batch.messages,
         workflow: Option.fromUndefinedOr(environment.WEEKLY_DELIVERY_WORKFLOW),
-        coordinator: environment.USER_TRANSACTION_COORDINATOR,
+        users: Option.fromUndefinedOr(environment.USER_STORE),
       }).pipe(Effect.mapError(deliveryFailure))
-    );
-  }
-  if (batch.messages.some((message) => Schema.is(WhatsAppWork)(message.body))) {
-    return Option.some(
-      nativeDelivery(() =>
-        receiveWhatsAppWork({
-          messages: batch.messages,
-          coordinator: environment.USER_TRANSACTION_COORDINATOR,
-        })
-      )
     );
   }
   return Option.none();
 };
 
+const receiveNativeEmailWork = (
+  batch: QueueInput["batch"],
+  environment: CoreQueueEnvironment
+): Effect.Effect<void, QueueDeliveryUnavailable> => {
+  const owner = environment.USER_STORE;
+  if (environment.EMAIL_BUCKET === undefined || owner === undefined) {
+    return Effect.fail(deliveryFailure(new Error("Email evidence unavailable")));
+  }
+  return Effect.tryPromise({
+    try: () =>
+      receiveForwardedEmailWork({
+        messages: batch.messages,
+        coordinator: owner,
+      }),
+    catch: () => deliveryFailure(new ForwardedEmailDeliveryUnavailable()),
+  }).pipe(Effect.withSpan("ingestion.forwarded-email.queue"));
+};
 const receiveWorkQueue = (input: QueueInput): Effect.Effect<void, QueueDeliveryUnavailable> => {
   const { batch, environment } = input;
   const identityOnly = receiveIdentityOnlyQueue(input);
   if (Option.isSome(identityOnly)) return identityOnly.value;
   if (batch.messages.some((message) => isForwardedEmailWork(message.body))) {
-    if (environment.EMAIL_BUCKET === undefined) {
-      return Effect.fail(deliveryFailure(new Error("Email evidence unavailable")));
-    }
-    return Effect.tryPromise({
-      try: () =>
-        receiveForwardedEmailWork({
-          messages: batch.messages,
-          coordinator: environment.USER_TRANSACTION_COORDINATOR,
-        }),
-      catch: () => deliveryFailure(new ForwardedEmailDeliveryUnavailable()),
-    }).pipe(Effect.withSpan("ingestion.forwarded-email.queue"));
+    return receiveNativeEmailWork(batch, environment);
   }
   if (batch.messages.some((message) => isStatementExtractionWork(message.body))) {
     const workflow = environment.STATEMENT_EXTRACTION_WORKFLOW;
-    if (workflow === undefined) {
+    const owner = environment.USER_STORE;
+    if (workflow === undefined || owner === undefined) {
       return Effect.fail(deliveryFailure(new Error("Statement extraction unavailable")));
     }
     return receiveWorkflowBatch(
       batch,
       (entry) =>
-        receiveStatementExtraction({
-          environment: { DB: environment.DB, STATEMENT_EXTRACTION_WORKFLOW: workflow },
+        receiveNativeStatementExtraction({
+          environment: {
+            USER_STORE: owner,
+            STATEMENT_EXTRACTION_WORKFLOW: workflow,
+          },
           messages: entry.messages,
         }),
       statementHandoffConcurrency
     ).pipe(Effect.mapError(deliveryFailure));
   }
-  return batch.messages.some(
-    (message) => isBillingCollectionWork(message.body) || isRefundWork(message.body)
-  )
-    ? receiveWorkflowBatch(batch, (entry) => receiveBillingQueue({ batch: entry, environment }))
-    : receiveEmailQueue(input);
+  return receiveEmailQueue(input);
 };
 
+const CallbackWork = Schema.Union([
+  LocalRefundWork,
+  LocalSourceCancellationWork,
+  WhatsAppLifecycleWork,
+  WompiBillingEvent,
+  LocalBillingCollection,
+]);
+const callbackWork = Schema.is(CallbackWork);
+const deliverCallback = Effect.fn(function* (packet: unknown, environment: CoreQueueEnvironment) {
+  const body = yield* Schema.decodeUnknownEffect(CallbackWork)(packet);
+  if (Schema.is(WhatsAppLifecycleWork)(body)) {
+    const { DIRECTORY, USER_STORE } = environment;
+    if (DIRECTORY === undefined || USER_STORE === undefined) {
+      return yield* deliveryFailure("Callback routing unavailable");
+    }
+    return yield* routeWhatsAppStatus(body, {
+      DIRECTORY,
+      USER_STORE,
+    });
+  }
+  const workflow = Schema.is(LocalRefundWork)(body)
+    ? environment.BILLING_REFUND_WORKFLOW
+    : environment.BILLING_COLLECTION_WORKFLOW;
+  if (workflow === undefined) return yield* deliveryFailure("Billing workflow unavailable");
+  yield* receiveBillingHandoff({ environment, workflow, body });
+});
+const receiveCallbackBatch = ({
+  batch,
+  environment,
+}: QueueInput): Effect.Effect<void, QueueDeliveryUnavailable> =>
+  receiveWorkflowBatch(batch, (entry) =>
+    Effect.gen(function* () {
+      const [message] = entry.messages;
+      if (message === undefined) return;
+      if (!callbackWork(message.body)) {
+        return yield* receiveWorkQueue({ batch: entry, environment });
+      }
+      yield* deliverCallback(message.body, environment);
+      message.ack();
+    }).pipe(Effect.mapError(deliveryFailure))
+  );
+const selectQueue = (input: QueueInput): Effect.Effect<void, QueueDeliveryUnavailable> => {
+  if (input.batch.queue === input.environment.CONNECTION_SYNCHRONIZATION_QUEUE_NAME) {
+    return receiveWorkflowBatch(
+      input.batch,
+      (entry) =>
+        Effect.gen(function* () {
+          const [message] = entry.messages;
+          if (message === undefined) return;
+          const work = yield* Schema.decodeUnknownEffect(SynchronizationWork, {
+            onExcessProperty: "error",
+          })(message.body);
+          const workflow = input.environment.CONNECTION_SYNCHRONIZATION_WORKFLOW;
+          if (workflow === undefined) {
+            return yield* deliveryFailure("Synchronization Workflow unavailable");
+          }
+          const started = yield* Effect.tryPromise(() =>
+            workflow.create({ id: work.jobId, params: work })
+          ).pipe(Effect.result);
+          if (started._tag === "Failure") {
+            const instance = yield* Effect.tryPromise(() => workflow.get(work.jobId));
+            const status = (yield* Effect.tryPromise(() => instance.status())).status;
+            if (status === "errored") yield* Effect.tryPromise(() => instance.restart());
+            else if (
+              !["queued", "running", "waiting", "waitingForPause", "paused", "complete"].includes(
+                status
+              )
+            ) {
+              return yield* deliveryFailure("Synchronization handoff unavailable");
+            }
+          }
+          message.ack();
+        }).pipe(Effect.mapError(deliveryFailure)),
+      4
+    );
+  }
+  if (input.batch.queue === input.environment.OPERATIONAL_CANARY_QUEUE_NAME) {
+    return receiveCanaryBatch(input);
+  }
+  return input.batch.messages.some((message) => callbackWork(message.body))
+    ? receiveCallbackBatch(input)
+    : receiveWorkQueue(input);
+};
 /** Preserve native Queue selection order inside the telemetry-owned Effect; payload validation and acknowledgment stay owner-held. */
 export const dispatchCoreQueue = (
   input: QueueInput
 ): Effect.Effect<void, QueueDeliveryUnavailable> =>
-  (input.batch.queue === input.environment.OPERATIONAL_CANARY_QUEUE_NAME
-    ? receiveCanaryBatch(input)
-    : receiveWorkQueue(input)
-  ).pipe(
+  selectQueue(input).pipe(
     Effect.provideService(
       QueueRelease,
       Option.getOrElse(

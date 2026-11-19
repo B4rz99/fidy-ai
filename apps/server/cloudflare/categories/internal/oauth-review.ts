@@ -1,3 +1,4 @@
+import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { type Cause, Effect, Option, Schema } from "effect";
 import {
   CategoryId,
@@ -140,3 +141,16 @@ export const ruleOAuthReview = (
       })
     );
   });
+
+export const localRuleReview = Effect.fn(function* (user: string, outcome: KeywordRuleOutcome) {
+  const sql = yield* SqliteClient;
+  const snapshot = yield* Schema.decodeUnknownEffect(Snapshot)({
+    rules:
+      yield* sql`SELECT id,keyword,category_id,created_at_ms,updated_at_ms FROM keyword_rules WHERE user_id=${user} ORDER BY id LIMIT ${maximumKeywordRulesPerUser + 1}`,
+    categories: yield* sql`SELECT id,label,display_order FROM categories ORDER BY id LIMIT 101`,
+  });
+  return {
+    revision: yield* Schema.encodeEffect(Schema.fromJsonString(Snapshot))(snapshot),
+    effect: exactEffect(outcome, snapshot),
+  };
+});

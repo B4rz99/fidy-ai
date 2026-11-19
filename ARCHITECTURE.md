@@ -22,34 +22,24 @@ The workspace owns shared dependencies, tooling and CI.
 
 ## Production boundary
 
-Cloudflare is the sole Production runtime. Public ingress has no database binding and forwards
-API traffic to private server execution. Core owns the User-scoped API and coordinates mutations
-through per-User Durable Objects. When enabled, a shared read object serves existing query
-transports. The private Email Worker has a separate, narrow admission and retention boundary.
-Web, marketing and customer documentation are served by separate Workers.
+Public Ingress routes browser, CLI, MCP and provider requests to private Core. Core resolves pre-User proofs and routing keys through Directory. Each registered User has one SQLite Durable Object for financial facts, live authority, accountable reads and atomic mutations. Pricing publishes shared terms, Maintenance records bounded owner discovery, and Erasure holds independent custody evidence. Web, marketing and customer documentation have separate Workers.
 
 ```mermaid
 flowchart LR
-  Clients[Web / CLI / MCP clients] --> Ingress[Public ingress]
+  Clients[Web / CLI / MCP / callbacks] --> Ingress[Public Ingress]
   Ingress --> Core[Private Core]
-  Ingress --> Reads[Shared read object]
-  Reads --> D1[(D1)]
-  Core --> Coordinator[Per-User coordination]
-  Coordinator --> D1
-  Core --> Background[Queues / Workflows]
-  Background --> Coordinator
-  Email[Private Email Worker] --> D1
+  Core --> Directory[(Directory)]
+  Core --> User[(User)]
+  Core --> Pricing[(Pricing)]
+  Core --> Erasure[(Erasure)]
+  Cron[Core minute Cron] --> Maintenance[(Maintenance)]
+  Maintenance --> User
+  Core --> Background[Queues and Workflows]
+  Background --> User
+  User --> R2[Private files and approved samples]
 ```
 
-D1 holds application state; Durable Objects coordinate work; Queues and Workflows drive durable
-background execution; R2 holds private files. An independent erasure registry protects deletion
-across database restoration. External providers supply inference, messaging, authentication and
-payments through server-owned adapters. Local development uses the same Worker entrypoints and
-binding graph. See [the runtime decision](docs/adr/0026-cloudflare-native-production-replatform.md).
-
-The accepted [storage migration direction](docs/adr/0041-per-user-durable-object-storage-direction.md)
-will move application state and atomic execution into per-User SQLite Durable Objects. Its detailed
-design remains open; the topology above describes the current implementation.
+User alarms resume retained intent, recover missed queue handoffs and reconcile provider outcomes. R2 holds bytes separately from SQLite. The private forwarded Email Worker keeps external mail admission closed until sender verification and Connection admission are configured. The addressed User processes and expires eligible private Email. Local development uses the application Worker entrypoints and native SQLite bindings. [Storage ownership decision](docs/adr/0041-per-user-durable-object-storage-direction.md)
 
 ## Cross-application contract
 

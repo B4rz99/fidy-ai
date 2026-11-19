@@ -366,47 +366,41 @@ type StatementAuditRead = Readonly<{
   operation: "ingestion.getStatementSubmission" | "ingestion.listNeedsReviewItems";
 }>;
 
-export const commitReadAudit: {
-  (
-    subject: QueryCaller,
-    read: StatementAuditRead
-  ): (environment: StatementIngestionEnvironment) => Effect.Effect<Option.Option<Response>>;
-  (
-    environment: StatementIngestionEnvironment,
-    subject: QueryCaller,
-    read: StatementAuditRead
-  ): Effect.Effect<Option.Option<Response>>;
-} = Function.dual(
-  3,
-  (environment: StatementIngestionEnvironment, subject: QueryCaller, read: StatementAuditRead) =>
-    Effect.gen(function* () {
-      const isPAT = isPATCaller(subject);
-      const current = yield* Clock.currentTimeMillis;
-      const outcome = yield* Effect.result(
-        Effect.tryPromise({
-          try: () =>
-            environment.DB.batch([
-              ...readStatements({
-                current,
-                database: environment.DB,
-                subject,
-                submissionId: read.submissionId,
-                operation: read.operation,
-              }),
-            ]),
-          catch: (cause) => new IngestionAuditFailed({ cause }),
-        })
-      );
-      if (Result.isFailure(outcome)) {
-        return Option.some(unavailable());
-      }
-      const results = outcome.success;
-      const committed =
-        results[0]?.meta.changes === 1 && (!isPAT || results[1]?.meta.changes === 1);
-      if (committed) return Option.none<Response>();
-      return Option.some(yield* refusedCredential({ db: environment.DB, subject }));
-    })
-);
+export const commitReadAudit = ({
+  environment,
+  subject,
+  read,
+}: {
+  environment: StatementIngestionEnvironment;
+  subject: QueryCaller;
+  read: StatementAuditRead;
+}): Effect.Effect<Option.Option<Response>> =>
+  Effect.gen(function* () {
+    const isPAT = isPATCaller(subject);
+    const current = yield* Clock.currentTimeMillis;
+    const outcome = yield* Effect.result(
+      Effect.tryPromise({
+        try: () =>
+          environment.DB.batch([
+            ...readStatements({
+              current,
+              database: environment.DB,
+              subject,
+              submissionId: read.submissionId,
+              operation: read.operation,
+            }),
+          ]),
+        catch: (cause) => new IngestionAuditFailed({ cause }),
+      })
+    );
+    if (Result.isFailure(outcome)) {
+      return Option.some(unavailable());
+    }
+    const results = outcome.success;
+    const committed = results[0]?.meta.changes === 1 && (!isPAT || results[1]?.meta.changes === 1);
+    if (committed) return Option.none<Response>();
+    return Option.some(yield* refusedCredential({ db: environment.DB, subject }));
+  });
 
 /** One canonical submission query, with prepared transport authority and optional conversation scope. */
 export const readCanonicalSubmission = ({
@@ -455,9 +449,13 @@ export const readStatementSubmission = ({
   Effect.gen(function* () {
     const pathId = new URL(request.url).pathname.split("/").at(-1) ?? "";
     const submissionId = Schema.decodeOption(StatementSubmissionId)(pathId);
-    const refused = yield* commitReadAudit(environment, subject, {
-      submissionId: Option.getOrElse(submissionId, () => ""),
-      operation: "ingestion.getStatementSubmission",
+    const refused = yield* commitReadAudit({
+      environment,
+      subject,
+      read: {
+        submissionId: Option.getOrElse(submissionId, () => ""),
+        operation: "ingestion.getStatementSubmission",
+      },
     });
     if (Option.isSome(refused)) return refused.value;
     if (Option.isNone(submissionId)) return submissionNotFound();

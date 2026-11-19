@@ -36,56 +36,53 @@ shared-path and locality runners must stop before provisioning: they cannot acco
 coordinator work, migrations, retries and cleanup. A successful preflight alone does not make them
 safe to reuse. A replacement must demonstrate runtime budget enforcement before hosted execution.
 
-## Local investigation while hosted work is unavailable
+## Calibrate the hosted D1 fixture
 
-Use native integration tests with the existing observer from the repository root:
+The historical calibration lives at `15cfe773cd263b6a3d4e1b6e1b958f233cdde84f`. Its protected, disposable database and its SQL plan belong to the comparator. Run the documented local rehearsal from a separate checkout of that revision. Record the comparator revision, report, plan digest and measured headroom with the comparison. The release Worker graph has no D1 binding.
 
-```sh
-bun node_modules/vitest/vitest.mjs run --root apps/server \
-  --config ../../scripts/infra-performance/vitest.config.ts \
-  cloudflare/public-worker-browser-entry.test.ts \
-  cloudflare/transactions/transactions.test.ts \
-  cloudflare/budgets/budgets.test.ts \
-  cloudflare/recurring-plans/recurring-plans.test.ts \
-  cloudflare/dashboard/dashboard.test.ts \
-  cloudflare/ingestion/statement-review-budget.test.ts \
-  cloudflare/tokens/pats.test.ts \
-  cloudflare/oauth-agents/oauth-management.test.ts \
-  cloudflare/subscription/subscription-queries.test.ts \
-  cloudflare/consent/browser.test.ts --silent=false
-```
+## Local investigation
 
-`INFRA_REQUEST` covers Core fetch, including bootstrap and other non-canonical transports.
-`INFRA_OWNER` covers the held owner only. The records include response stage timings when present.
-Direct Core D1 counts exclude coordinator work; host-process CPU excludes workerd. Missing stage
-timings are unavailable evidence, not zero cost. Do not combine owner and request records as though
-they were independent requests or sum nested stage durations.
+Use `bun run verify --group cloudflare-adapters` for the native owner and Queue contracts. `bun run dev:browser` exercises a synthetic User on the local native browser topology. Record host and Worker revisions, synthetic identities, measured boundaries and any missing observations when reporting timings.
 
-For complete screen readiness, use the local browser assessment on the isolated CLI topology after
-checking ports 4183–4185 are unused (see `.patterns/testing.md`):
+### Pinned local reference
+
+Use Bun 1.4.4, Python 3.10+, OpenSSL, Chromium, and free loopback ports 4183–4185.
+Install the repository dependencies in both checkouts. Apply the three test-only fixtures to a
+disposable checkout of the pinned D1 revision. The application, schema, ingress and client come
+from that checkout. Record any proposed baseline replacement, its intervening behavior changes,
+and the decision on #2226 before collecting observations.
 
 ```sh
-cd apps/web
-CLI_ACCEPTANCE_MODE=cli FIDY_ASSESSMENT=small FIDY_ASSESSMENT_NETWORK=normal \
-  FIDY_ASSESSMENT_COLD_REPEATS=1 PREVIEW_COMPRESSION=gzip \
-  bun --bun playwright test --config playwright.assessment.config.ts \
-  --grep 'assesses isolated cold documents'
+git worktree add --detach ../fidy-d1-reference fb53d9e755c14393048dc945fc0b7f117730d872
+(cd ../fidy-d1-reference && bun install --frozen-lockfile)
+git -C ../fidy-d1-reference restore --source=972ecaa22bb58ab472de2e9458c76290c72aa09d --worktree -- \
+  apps/server/cloudflare/browser-assessment.test-fixture.ts \
+  apps/server/cloudflare/browser-acceptance-preview.ts apps/server/cloudflare/browser-acceptance-seed.ts
+bun install --frozen-lockfile
+bunx playwright install chromium
+python3 scripts/infra-performance/reference/run.py --d1 ../fidy-d1-reference --dataset production
 ```
 
-This uses local storage and synthetic records. Cold documents are new browser documents, not proof
-of a new Worker isolate. Local timings distinguish processing from request waterfalls; they cannot
-establish Cloudflare placement, production network latency or deployed cold-start performance.
-Keep generated profiles and measurements in ignored results and attach findings to the relevant PR.
+Set `ASSESSMENT_CHROMIUM` to select an existing Chromium executable. Use `--dataset small` for
+500 Transactions, `--dataset extreme` for 100,000 and `--dataset breaking` for the separate
+million-Transaction stress run. The `production` dataset contains eight originals, one linked
+pair, two Currencies, two RecurringPlans with two revisions each, and four NeedsReviewItems.
+The command runs every profile locally. It verifies the effective Transaction count and each
+fixture family's stored counts before Login.
 
-For fresh documents, the assessment records enabled controls, visible populated content and the
-first Transaction registration interaction independently of response completion. `nativeContentDomMs`
-marks the DOM predicate; `nativeContentReadyMs` follows two animation callbacks, which provide a
-paint opportunity rather than a compositor paint timestamp. `nativeInteractionStartMs` and
-`nativeInteractionReadyMs` bracket the first registration click and its visible form when cold
-interactions are enabled. These are document-relative observations, not timings of each later
-navigation. Unobserved milestones are `-1`, not zero. Compare them with the separately recorded
-request/body timings; neither the final API response nor an early enabled button establishes
-populated-content readiness.
+Open the freshly loaded Transactions workspace, refresh its November 2026 history, correct one
+fixed Counterparty, and observe the committed Correction in the refreshed ledger. The runner drives
+these actions automatically. It verifies ordering, page length, revision, all unaffected records,
+Session Audit, and commercial accounting. The browser carries a real WebSession through the
+canonical ingress. The local test server records ingress-to-complete-body time. Chromium records
+each request through body completion, and the journey clock ends when the matching row is
+enabled and has had a paint opportunity. This harness uses local acceptance composition and
+cannot observe a deployed Worker or Durable Object reconstruction.
+
+To compare the completed native candidate, supply its clean checkout with the same loopback
+fixture protocol:
+
+The command above records historical reference observations only. The native acceptance run uses the closed release’s own matched Web and API Workers, deployed revision and namespace identities. Report both observations and their independent provenance when evaluating a paired result.
 
 ## Recovery verification
 

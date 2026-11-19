@@ -2,6 +2,42 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
+import { Miniflare } from "miniflare";
+import { Schema } from "effect";
+
+/** @import { Call, Cost, Limits, StatementReply } from "./contracts.d.mts" */
+/** @typedef {{method?: string, headers?: Record<string, string>, body?: string}} Options */
+const Rows = Schema.Struct({ rowsRead: Schema.Int, rowsWritten: Schema.Int });
+const rowReceipt = Schema.decodeUnknownSync(
+  Schema.Struct({
+    ...Rows.fields,
+    route: Schema.optional(Schema.String),
+    calls: Schema.optional(Schema.Array(Schema.Struct({ ...Rows.fields, key: Schema.String }))),
+  })
+);
+const calibration = Schema.decodeUnknownSync(
+  Schema.Struct({
+    baseline: Schema.String,
+    verified: Schema.Record(Schema.String, Schema.Int),
+    batches: Schema.Array(
+      Schema.Struct({
+        batch: Schema.Array(
+          Schema.Struct({ sql: Schema.String, params: Schema.Array(Schema.Unknown) })
+        ),
+      })
+    ),
+  })
+);
+const routeBounds = Schema.decodeUnknownSync(
+  Schema.Record(Schema.String, Schema.Struct({ maximum: Rows }))
+);
+const paired = Schema.decodeUnknownSync(
+  Schema.Struct({ pairingId: Schema.String, privateVerifier: Schema.String })
+);
+const session = Schema.decodeUnknownSync(Schema.Struct({ binding: Schema.String }));
+const history = Schema.decodeUnknownSync(
+  Schema.Struct({ data: Schema.Array(Schema.Struct({ id: Schema.String })) })
+);
 
 const shaWidth = 64;
 const setupLifetimeMs = 180000;
@@ -15,32 +51,50 @@ const fixtureOriginalCount = 8;
 const readFactor = 1.7;
 const writeFactor = 1.55;
 const extraReads = 20;
+/** @param {Cost} entry Native row observation. */
 const headroom = (entry) => ({
   rowsRead: Math.ceil(entry.rowsRead * readFactor) + extraReads,
   rowsWritten: Math.ceil(entry.rowsWritten * writeFactor) + 4,
 });
+/**
+ * @param {Cost} left Earlier maximum.
+ * @param {Cost} right Latest observation.
+ */
 const maximumOf = (left, right) => ({
   rowsRead: Math.max(left.rowsRead, right.rowsRead),
   rowsWritten: Math.max(left.rowsWritten, right.rowsWritten),
 });
+/**
+ * @param {Cost} left Accumulated row counts.
+ * @param {Cost} right Newly observed rows.
+ */
 const add = (left, right) => ({
   rowsRead: left.rowsRead + right.rowsRead,
   rowsWritten: left.rowsWritten + right.rowsWritten,
 });
 const empty = () => ({ rowsRead: 0, rowsWritten: 0 });
+/**
+ * @template T
+ * @param {ReadonlyArray<T>} items Bounded work.
+ * @param {(item:T) => Promise<void>} visit Native operation.
+ */
 const eachInOrder = (items, visit) =>
   items.reduce((previous, item) => previous.then(() => visit(item)), Promise.resolve());
 const output = process.argv[2];
 const training = process.argv[3] === "train";
-const baseline = resolve("apps/server");
-const { Miniflare } = await import(Bun.resolveSync("miniflare", baseline));
-const { currentDisclosureFor } = await import(resolve(baseline, "src/shell/consent/operations.ts"));
+
+const disclosure = await Bun.file(resolve(output, "disclosure.json")).text();
 const origin = "https://app.fidyapp.com";
 const experimentKey = crypto.randomUUID();
 const ingressVersion = crypto.randomUUID();
 const subject = "24000000-0000-4000-8000-000000000481";
-const plan = await Bun.file(resolve(output, "plan.json")).json();
+const plan = calibration(await Bun.file(resolve(output, "plan.json")).json());
+/**
+ * @param {string} value Text binding.
+ * @returns {{type:"text",value:string}}
+ */
 const text = (value) => ({ type: "text", value });
+/** @type {{type:"durable-object",worker:string,exportName:string}} */
 const coordinator = {
   type: "durable-object",
   worker: "core",
@@ -51,6 +105,12 @@ const environment = {
   RELEASE_GIT_SHA: text(plan.baseline),
   CONTRACT_DIGEST: text("a".repeat(shaWidth)),
 };
+/**
+ * @param {string} name Isolated Worker name.
+ * @param {string} entry Compiled entrypoint.
+ * @param {Pick<import("miniflare").MiniflareWorkerConfig,"env" | "exports">} options Native configuration.
+ * @returns {Promise<{config: import("miniflare").MiniflareWorkerConfig}>}
+ */
 const config = async (name, entry, { env, exports = {} }) => ({
   config: {
     type: "worker",
@@ -100,12 +160,20 @@ const runtime = new Miniflare({
     }),
   ],
 });
+/** @type {Array<Cost & {route: string}>} */
+const requests = [];
+/** @type {Record<string, unknown>} */
 const metadata = {
+  requests,
   scope: "offline native comparator graph",
   fixture: plan.verified,
   baseline: plan.baseline,
 };
 const report = resolve(output, "probe.json");
+/**
+ * @param {string} path Scoped path.
+ * @param {Options} options Request options.
+ */
 const source = (path, options = {}) =>
   runtime.dispatchFetch("https://fidy-2259-aaaaaaaaaaaa-ingress.offline.workers.dev" + path, {
     ...options,
@@ -116,28 +184,40 @@ const source = (path, options = {}) =>
       ...options.headers,
     },
   });
+/** @type {Limits} */
 const estimates = {};
-const learn = (route, cost) => {
-  assert.equal(cost.route, route);
+/**
+ * @param {string} route Canonical method and path.
+ * @param {ReadonlyArray<Call>} calls Native calls for the request.
+ */
+const learn = (route, calls) => {
   const previous = estimates[route] ?? { maximum: empty(), statements: {} };
   const statements = { ...previous.statements };
-  for (const entry of cost.calls) {
+  for (const entry of calls) {
     statements[entry.key] = maximumOf(statements[entry.key] ?? empty(), headroom(entry));
   }
-  const maximum = cost.calls.reduce((total, entry) => add(total, statements[entry.key]), empty());
+  const maximum = calls.reduce((total, entry) => add(total, statements[entry.key]), empty());
   estimates[route] = { maximum: maximumOf(previous.maximum, maximum), statements };
 };
+/**
+ * @param {string} path Registered path.
+ * @param {Options} [options] Native request.
+ */
 const request = async (path, options) => {
   const reply = await source(path, options);
   assert.equal(reply.headers.get("x-fidy-comparison-worker"), ingressVersion);
-  const cost = JSON.parse(reply.headers.get("x-fidy-comparison-cost") ?? "null");
+  const cost = rowReceipt(JSON.parse(reply.headers.get("x-fidy-comparison-cost") ?? "null"));
   assert.ok(
     cost && Number.isSafeInteger(cost.rowsRead) && Number.isSafeInteger(cost.rowsWritten),
     "Missing native receipt: " + reply.status
   );
   const route = (options?.method ?? "GET") + " " + path;
-  if (training) learn(route, cost);
-  (metadata.requests ??= []).push({
+  if (training) {
+    assert.equal(cost.route, route);
+    assert.ok(cost.calls);
+    learn(route, cost.calls);
+  }
+  requests.push({
     route,
     rowsRead: cost.rowsRead,
     rowsWritten: cost.rowsWritten,
@@ -148,7 +228,12 @@ try {
   const db = await runtime.getD1Database("DB", "core");
   const bucket = await runtime.getR2Bucket("ERASURE_BUCKET", "core");
   const totals = { rowsRead: 0, rowsWritten: 0 };
+  /** @type {Array<{phase:string,actual:Cost,maximum:Cost}>} */
   const sqlBatches = [];
+  /**
+   * @param {string} phase Preparation phase.
+   * @param {ReadonlyArray<{success:boolean,meta:{rows_read:number,rows_written:number}}>} replies Native D1 results.
+   */
   const account = (phase, replies) => {
     const actual = { rowsRead: 0, rowsWritten: 0 };
     for (const { success, meta } of replies) {
@@ -188,15 +273,7 @@ try {
         .prepare(
           "INSERT INTO consent_history(record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,?,?,?,?,?)"
         )
-        .bind(
-          crypto.randomUUID(),
-          subject,
-          JSON.stringify(currentDisclosureFor()),
-          "disclosure",
-          "decision",
-          now,
-          now
-        ),
+        .bind(crypto.randomUUID(), subject, disclosure, "disclosure", "decision", now, now),
     ])
   );
   assert.equal(
@@ -207,7 +284,7 @@ try {
   assert.equal((await source("/transactions?limit=26")).status, forbidden);
   const start = await request("/web/pairings", { method: "POST" });
   assert.equal(start.status, success, "start Browser Login");
-  const pair = await start.json();
+  const pair = paired(await start.json());
   account("approval", [
     await db
       .prepare(
@@ -226,8 +303,9 @@ try {
   assert.ok(cookie?.startsWith("__Host-fidy_session="));
   const handshake = await request("/web/session/binding", { headers: { cookie } });
   assert.equal(handshake.status, success);
-  const { binding } = await handshake.json();
+  const { binding } = session(await handshake.json());
   assert.ok(binding);
+  /** @type {string | undefined} */
   let responseSha256;
   const firstOffer = performance.now();
   await eachInOrder(
@@ -239,7 +317,7 @@ try {
       });
       assert.equal(reply.status, success, "authenticated history on deployed graph");
       const body = await reply.text();
-      const { data } = JSON.parse(body);
+      const { data } = history(JSON.parse(body));
       assert.deepEqual(
         data.map(({ id }) => id),
         Array.from({ length: fixtureOriginalCount }, (_, ordinal) => ordinal)
@@ -258,11 +336,12 @@ try {
     .bind(subject)
     .all();
   account("audit", [audit]);
-  const counts = audit.results[0];
+  const counts = Schema.decodeUnknownSync(Schema.Struct({ n: Schema.Int }))(audit.results[0]);
   assert.equal(counts.n, sampleCount);
   metadata.sqlBatches = sqlBatches;
   if (!training) {
-    const limits = await Bun.file(resolve(output, "limits.json")).json();
+    const limits = routeBounds(await Bun.file(resolve(output, "limits.json")).json());
+    /** @param {number} pairs Number of D1 observations. */
     const estimate = (pairs) => {
       const caps = sqlBatches.map((batch) => batch.maximum);
       for (const route of [
@@ -275,6 +354,7 @@ try {
       for (let index = 0; index < pairs; index++) {
         caps.push(limits["GET /transactions?limit=25"].maximum);
       }
+      /** @param {keyof Cost} key Native count field. */
       const sum = (key) => caps.reduce((total, cap) => total + cap[key], 0);
       return { rowsRead: sum("rowsRead"), rowsWritten: sum("rowsWritten") };
     };

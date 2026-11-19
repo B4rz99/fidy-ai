@@ -2,6 +2,7 @@
 import { timingSafeEqual } from "node:crypto";
 import ingress from "./public-worker.mjs";
 
+/** @import {IngressEnvironment} from "./contracts.d.mts" */
 const paths = new Set([
   "POST /web/pairings",
   "POST /web/pairings/redeem",
@@ -9,10 +10,16 @@ const paths = new Set([
   "GET /transactions?limit=25",
 ]);
 const enc = new TextEncoder();
+/** @param {string} value Experiment proof. */
 const hash = (value) => crypto.subtle.digest("SHA-256", enc.encode(value));
+/** @type {string | undefined} */
 let born;
 let requests = 0;
 const keyBytes = 32;
+/**
+ * @param {Request} request Scoped request.
+ * @param {IngressEnvironment} env Experiment configuration.
+ */
 const admitted = async (request, env) => {
   const url = new URL(request.url);
   const deadline = Number(env.EXPERIMENT_DEADLINE);
@@ -31,6 +38,10 @@ const admitted = async (request, env) => {
   );
 };
 export const worker = {
+  /**
+   * @param {Request} request Scoped request.
+   * @param {IngressEnvironment} env Experiment configuration.
+   */
   async fetch(request, env) {
     if (!(await admitted(request, env))) {
       return new Response(null, { status: 403 });

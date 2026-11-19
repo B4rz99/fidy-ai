@@ -132,12 +132,13 @@ const run = async (db, batch) => {
     billed.reads += reply.meta.rows_read;
     billed.writes += reply.meta.rows_written;
     const expected = batch[index]?.check;
-    if (expected)
+    if (expected) {
       assert.equal(
         digest(reply.results),
         expected,
         "Final D1 verification differs for " + batch[index]?.sql
       );
+    }
   }
   return billed;
 };

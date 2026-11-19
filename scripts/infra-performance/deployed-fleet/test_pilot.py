@@ -28,3 +28,14 @@ class CoverageEvidence(unittest.TestCase):
             "at": 1000, "halt": "wrapped", "attempted": 4, "observed": 3, "failed": 0,
             "unknown": 1, "unsupported": 0, "repaired": 1})
         self.assertIsNone(data["completedWatchdogRecoveries"])
+
+    def test_an_empty_and_a_foreign_result_cannot_establish_coverage(self):
+        from observations import COVERAGE, observation
+        def lookup(events):
+            return observation(lambda *_: {"success": True, "result": {"events": {"events": events}}},
+                               "account", "expected", 0, 600000)
+        self.assertEqual(lookup([])["firstWindowTicks"], 0)
+        self.assertRaises(ValueError, lookup, [{
+            "$workers": {"scriptName": "fidy-native-storage-core", "scriptVersion": {"id": "other"}},
+            "$metadata": {"id": "other", "message": COVERAGE + "wrapped"}, "timestamp": 1,
+        }])

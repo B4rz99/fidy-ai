@@ -46,18 +46,30 @@ it.effect("recovers an established pilot session for cleanup after a lost signup
   Effect.gen(function* () {
     let stored = false;
     let cleaned = false;
-    const result = yield* Effect.exit(runFleetPilot({
-      inventory: () => Effect.succeed(stored ? new Map([["new", true]]) : new Map<string, boolean>()),
-      register: () => Effect.sync(() => { stored = true; }).pipe(Effect.andThen(Effect.fail(Error("reply lost")))),
-      login: () => Effect.succeed({
-        outcome: "approved",
-        erase: () => Effect.sync(() => { cleaned = true; stored = false; return "reference"; }),
-        denied: () => Effect.void,
-      }),
-      renew: () => Effect.void,
-      watch: () => Effect.die("Unexpected trial after incomplete signup"),
-      record: () => Effect.void,
-    }));
+    const result = yield* Effect.exit(
+      runFleetPilot({
+        inventory: () =>
+          Effect.succeed(stored ? new Map([["new", true]]) : new Map<string, boolean>()),
+        register: () =>
+          Effect.sync(() => {
+            stored = true;
+          }).pipe(Effect.andThen(Effect.fail(Error("reply lost")))),
+        login: () =>
+          Effect.succeed({
+            outcome: "approved",
+            erase: () =>
+              Effect.sync(() => {
+                cleaned = true;
+                stored = false;
+                return "reference";
+              }),
+            denied: () => Effect.void,
+          }),
+        renew: () => Effect.void,
+        watch: () => Effect.die("Unexpected trial after incomplete signup"),
+        record: () => Effect.void,
+      })
+    );
     expect(result._tag).toBe("Failure");
     expect(cleaned).toBe(true);
   })

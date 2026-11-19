@@ -1,3 +1,4 @@
+import type { FleetPilotBrowser } from "./native-fleet-pilot";
 import { type ErasureObservation, verifyIndependentErasure } from "./native-erasure";
 import { ErasureReceipt } from "../../apps/server/src/core/erasure/contract";
 import { UserId } from "../../apps/server/src/core/identity/contract";
@@ -133,7 +134,11 @@ type BrowserMember =
   | "performance-1"
   | "performance-2"
   | "fleet-1";
-const boot = Effect.fn(function* (input: Inputs, member: BrowserMember, intent: "signup" | "login" = "signup") {
+const boot = Effect.fn(function* (
+  input: Inputs,
+  member: BrowserMember,
+  intent: "signup" | "login" = "signup"
+) {
   const { post, call } = runner(input),
     proof = yield* result(
       yield* post("/web/pairings", {}),
@@ -380,7 +385,7 @@ const admitBrowserErasure = Effect.fn(function* (
   return admitted.reference;
 });
 
-export const fleetBrowser = (input: Inputs) => {
+export const fleetBrowser = (input: Inputs): FleetPilotBrowser => {
   const session = Effect.fn(function* (intent: "signup" | "login") {
     const member = yield* boot(input, "fleet-1", intent);
     return {
@@ -392,7 +397,11 @@ export const fleetBrowser = (input: Inputs) => {
           .pipe(Effect.flatMap((reply) => consume(reply, unauthorized))),
     };
   });
-  return {renew: () => renewWork(input), register: () => session("signup"), login: () => session("login")};
+  return {
+    renew: () => renewWork(input),
+    register: () => session("signup"),
+    login: () => session("login"),
+  };
 };
 const erasureEvidence = Effect.fn(function* (
   input: Inputs,

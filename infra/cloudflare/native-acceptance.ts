@@ -134,6 +134,25 @@ type BrowserMember =
   | "performance-1"
   | "performance-2"
   | "fleet-1";
+const providerCode = Effect.fn(function* (input: Inputs, auth: URL, subject: string) {
+  const key = new Bun.CryptoHasher("sha256", Redacted.value(input.proof))
+    .update(input.revision + "/oidc-code")
+    .digest("hex");
+  if (auth.searchParams.get("redirect_uri") !== input.origins.api + "/providers/google/callback") {
+    return yield* Effect.fail(Error("Protected signup selected another callback origin"));
+  }
+  return yield* issueAcceptanceProviderCode(
+    {
+      provider: "google",
+      host: input.origins.api === installedOrigins.production.api ? "production" : "acceptance",
+      subject,
+      nonce: auth.searchParams.get("nonce") ?? "",
+      challenge: auth.searchParams.get("code_challenge") ?? "",
+      deadline: (yield* Clock.currentTimeMillis) + acceptanceLifetimeMs,
+    },
+    key
+  );
+});
 const boot = Effect.fn(function* (
   input: Inputs,
   member: BrowserMember,
@@ -154,23 +173,7 @@ const boot = Effect.fn(function* (
       (yield* result(start, Schema.Struct({ authorizationUrl: Schema.String }))).authorizationUrl
     );
   const subject = `fidy-acceptance-${input.revision}-${member}`;
-  const key = new Bun.CryptoHasher("sha256", Redacted.value(input.proof))
-    .update(input.revision + "/oidc-code")
-    .digest("hex");
-  if (auth.searchParams.get("redirect_uri") !== input.origins.api + "/providers/google/callback") {
-    return yield* Effect.fail(Error("Protected signup selected another callback origin"));
-  }
-  const code = yield* issueAcceptanceProviderCode(
-    {
-      provider: "google",
-      host: input.origins.api === installedOrigins.production.api ? "production" : "acceptance",
-      subject,
-      nonce: auth.searchParams.get("nonce") ?? "",
-      challenge: auth.searchParams.get("code_challenge") ?? "",
-      deadline: (yield* Clock.currentTimeMillis) + acceptanceLifetimeMs,
-    },
-    key
-  );
+  const code = yield* providerCode(input, auth, subject);
   const location = new URLSearchParams({ state: auth.searchParams.get("state") ?? "", code });
   const callback = yield* call("/providers/google/callback?" + location, {
     headers: { cookie: transient },
@@ -390,8 +393,8 @@ export const fleetBrowser = (input: Inputs): FleetPilotBrowser => {
     const member = yield* boot(input, "fleet-1", intent);
     return {
       outcome: member.outcome,
-      erase: () => admitBrowserErasure(input, member),
-      denied: () =>
+      erase: (): Effect.Effect<string, Error> => admitBrowserErasure(input, member),
+      denied: (): Effect.Effect<void, Error> =>
         runner(input)
           .call("/transactions", { headers: member.headers })
           .pipe(Effect.flatMap((reply) => consume(reply, unauthorized))),

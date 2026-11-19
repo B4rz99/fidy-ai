@@ -41,9 +41,9 @@ import {
   type ProductionReleaseConfig as Config,
   ReleaseFailure,
   configureReleaseObservability,
+  releaseCommand,
   releaseEvidence,
   releaseFailureMessage,
-  releaseCommand,
   releasePort,
   verifyCoreDefaultPlacement,
   verifyReleaseObservability,
@@ -311,7 +311,7 @@ const erasureObservation = (
       encodeJson({ revision: env.revision, userNamespace, ...checkpoint })
     ),
 });
-const sendNative = (client: HttpClient.HttpClient) =>
+const sendNative = (client: HttpClient.HttpClient): ((request: Request) => Effect.Effect<Response, Error>) =>
   Effect.fn(function* (request: Request) {
     const reply = yield* client
       .execute(HttpClientRequest.fromWeb(request))
@@ -1057,11 +1057,24 @@ const prepareDiagnostics = Effect.fn(function* (
     client
   );
 });
-const meter = (phase: "begin" | "check" | "finish" | "probe-logs" | "logs", ...args: string[]) =>
+const meter = (phase: "begin" | "check" | "finish" | "probe-logs" | "logs", ...args: string[]): Effect.Effect<string, ReleaseFailure> =>
   releaseCommand({
     args: ["python3", "../../scripts/infra-performance/deployed-fleet/pilot.py", phase, ...args],
     lifetime: "read-only",
   });
+const settleFleetMeter = Effect.gen(function* () {
+  const settled = yield* meter("finish", String(yield* Clock.currentTimeMillis)).pipe(
+    Effect.map((status) => status.trim()),
+    Effect.repeat({
+      while: (status) => status === "pending",
+      times: 20,
+      schedule: Schedule.spaced("15 seconds"),
+    })
+  );
+  if (settled !== "observed") {
+    return yield* Effect.fail(Error("Post-cleanup Durable Object usage unavailable"));
+  }
+});
 const fleetPilot = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
@@ -1077,7 +1090,7 @@ const fleetPilot = Effect.fn(function* (
     erasure: Option.none(),
   });
   const events: Readonly<Record<string, string | number>>[] = [];
-  const record = (event: Readonly<Record<string, string | number>>) => {
+  const record = (event: Readonly<Record<string, string | number>>): Effect.Effect<void, Error> => {
     events.push(event);
     return writeFile(
       env.smokeAttestationFile + ".fleet",
@@ -1112,16 +1125,7 @@ const fleetPilot = Effect.fn(function* (
       }),
     })
   );
-  const settled = yield* meter("finish", String(yield* Clock.currentTimeMillis)).pipe(
-    Effect.map((status) => status.trim()),
-    Effect.repeat({
-      while: (status) => status === "pending",
-      times: 20,
-      schedule: Schedule.spaced("15 seconds"),
-    })
-  );
-  if (settled !== "observed")
-    return yield* Effect.fail(Error("Post-cleanup Durable Object usage unavailable"));
+  yield* settleFleetMeter;
   if (measured._tag === "Failure") return yield* Effect.failCause(measured.cause);
   yield* meter("logs");
 });

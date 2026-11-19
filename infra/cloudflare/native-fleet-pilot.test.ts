@@ -18,13 +18,13 @@ it.effect("erases its one new physical User if metering stops during observation
             registrations++;
             return {
               outcome: "created",
-              erase: () =>
+              erase: (): Effect.Effect<string> =>
                 Effect.sync(() => {
                   erased++;
                   stored = false;
                   return "reference";
                 }),
-              denied: () => Effect.void,
+              denied: (): Effect.Effect<void> => Effect.void,
             };
           }),
         login: () => Effect.die("Unexpected login after successful signup"),
@@ -57,13 +57,13 @@ it.effect("recovers an established pilot session for cleanup after a lost signup
         login: () =>
           Effect.succeed({
             outcome: "approved",
-            erase: () =>
+            erase: (): Effect.Effect<string> =>
               Effect.sync(() => {
                 cleaned = true;
                 stored = false;
                 return "reference";
               }),
-            denied: () => Effect.void,
+            denied: (): Effect.Effect<void> => Effect.void,
           }),
         renew: () => Effect.void,
         watch: () => Effect.die("Unexpected trial after incomplete signup"),

@@ -1,5 +1,5 @@
 import { Clock, Effect, Option, Schedule } from "effect";
-import { newStoredUser, physicalErasure, type UserObjects } from "./native-erasure-evidence";
+import { type UserObjects, newStoredUser, physicalErasure } from "./native-erasure-evidence";
 
 type Member = {
   outcome: string;
@@ -19,7 +19,10 @@ type Port = FleetPilotBrowser & {
 const maximumExistingObjects = 36;
 const censusPolls = 12;
 const cleanupPolls = 90;
-const waitFor = <A>(read: Effect.Effect<Option.Option<A>, Error>, times: number): Effect.Effect<A, Error> =>
+const waitFor = <A>(
+  read: Effect.Effect<Option.Option<A>, Error>,
+  times: number
+): Effect.Effect<A, Error> =>
   read.pipe(
     Effect.repeat({ while: Option.isNone, times, schedule: Schedule.spaced("5 seconds") }),
     Effect.flatMap(
@@ -30,8 +33,16 @@ const waitFor = <A>(read: Effect.Effect<Option.Option<A>, Error>, times: number)
     )
   );
 
-const cleanupPilot = Effect.fn(function* ({port, member, before, physical}: {
-  port: Port; member: Member; before: UserObjects; physical: Option.Option<string>;
+const cleanupPilot = Effect.fn(function* ({
+  port,
+  member,
+  before,
+  physical,
+}: {
+  port: Port;
+  member: Member;
+  before: UserObjects;
+  physical: Option.Option<string>;
 }) {
   // Even an absent census or refused subsequent sample ends through this User's own erasure.
   const reference = yield* member.erase();
@@ -76,7 +87,8 @@ export const runFleetPilot = Effect.fn(function* (port: Port) {
     // A single independently populated object permits one login-only recovery, never another signup.
     physical = Option.some(yield* targetFromCensus);
     member = yield* port.login();
-    if (member.outcome !== "approved") return yield* Effect.fail(Error("Established session required"));
+    if (member.outcome !== "approved")
+      return yield* Effect.fail(Error("Established session required"));
   }
   const observation = yield* Effect.exit(
     Effect.gen(function* () {
@@ -93,6 +105,6 @@ export const runFleetPilot = Effect.fn(function* (port: Port) {
     })
   );
 
-  yield* cleanupPilot({port, member, before, physical});
+  yield* cleanupPilot({ port, member, before, physical });
   if (observation._tag === "Failure") return yield* Effect.failCause(observation.cause);
 });

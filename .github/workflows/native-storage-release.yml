@@ -16,6 +16,7 @@ on:
           [
             verify,
             verify-erasure,
+            fleet-pilot,
             plan-first-install,
             first-install,
             stage-hosts,
@@ -45,12 +46,24 @@ jobs:
           sparse-checkout-cone-mode: false
       - run: python3 -m unittest discover -s scripts/infra-performance/deployed-fleet
       - uses: ./.github/actions/bun-install
-      - run: bun run --cwd infra/cloudflare test -- native-fleet-pilot.test.ts
+      - run: bun run --cwd infra/cloudflare test -- native-fleet-pilot.test.ts native-erasure-evidence.test.ts
+      - name: Check release types
+        run: bun run --cwd infra/cloudflare typecheck
+      - name: Format reviewed pilot files
+        if: always()
+        run: |
+          bun x --no-install oxfmt --write infra/cloudflare/native-{fleet-pilot,fleet-pilot.test,acceptance,storage-release}.ts .github/workflows/native-storage-release.yml
+          git diff > "$RUNNER_TEMP/fleet-format.patch"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: fleet-format
+          path: ${{ runner.temp }}/fleet-format.patch
 
   release:
     if: ${{ github.ref == 'refs/heads/trunk' && inputs.operation != 'publish-site' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     environment: production
     env:
       NATIVE_STORAGE_HOSTS: ${{ vars.NATIVE_STORAGE_HOSTS || 'acceptance' }}
@@ -113,7 +126,7 @@ jobs:
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts promote
       - name: Build the expected browser artifact for independent verification
-        if: inputs.operation == 'verify' || inputs.operation == 'verify-erasure' || inputs.operation == 'stage-hosts'
+        if: inputs.operation == 'verify' || inputs.operation == 'verify-erasure' || inputs.operation == 'fleet-pilot' || inputs.operation == 'stage-hosts'
         working-directory: apps/web
         run: bun run build:production
       - name: Stage only canonical Access paths and vacant hostnames on the verified closed release
@@ -124,13 +137,17 @@ jobs:
           bun native-storage-release.ts attach-hosts
       - name: Verify the installed application and retained schema markers
         id: verify
-        if: inputs.operation != 'plan-first-install' && inputs.operation != 'first-install' && inputs.operation != 'verify-erasure'
+        if: inputs.operation != 'plan-first-install' && inputs.operation != 'first-install' && inputs.operation != 'verify-erasure' && inputs.operation != 'fleet-pilot'
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts verify
       - name: Verify the installed application and physical erasure of one disposable User
         if: inputs.operation == 'first-install' || inputs.operation == 'verify-erasure'
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts verify-erasure
+      - name: Measure one disposable User on the exact closed release
+        if: inputs.operation == 'fleet-pilot'
+        working-directory: infra/cloudflare
+        run: bun native-storage-release.ts fleet-pilot
       - name: Restore only a compatible, tested target after failed promoted verification
         if: ${{ failure() && steps.promote.outcome == 'success' && steps.verify.outcome == 'failure' }}
         working-directory: infra/cloudflare
@@ -148,6 +165,8 @@ jobs:
             ${{ runner.temp }}/native-release.json*
             ${{ runner.temp }}/native-verification.json
             ${{ runner.temp }}/native-verification.json.erasure
+            ${{ runner.temp }}/native-verification.json.fleet
+            ${{ runner.temp }}/native-fleet-*.jsonl
           if-no-files-found: ignore
 
   site:

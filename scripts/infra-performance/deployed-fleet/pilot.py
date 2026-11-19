@@ -9,6 +9,8 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from observations import observation
+
 DAY = 86400
 MAX_AGE = 600
 # Keep an entire 36-User rehearsal's measured cost available for the one-User pilot,
@@ -101,6 +103,19 @@ def sample(phase):
     def record(stage, **values):
         with journal.open("a") as out:
             print(json.dumps({"stage": stage, "revision": os.environ["GITHUB_SHA"], **values}), file=out)
+    if phase == "logs":
+        evidence = json.loads(Path(os.environ["SMOKE_ATTESTATION_FILE"] + ".fleet").read_text())
+        if evidence["revision"] != os.environ["GITHUB_SHA"]:
+            raise ValueError("Foreign observation revision")
+        start, = [row["at"] for row in evidence["events"] if row["stage"] == "observation-start"]
+        end, = [row["at"] for row in evidence["events"] if row["stage"] == "observation-end"]
+        if end - start < 600_000:
+            raise ValueError("Two elapsed windows required")
+        observed = observation(query, os.environ["CLOUDFLARE_ACCOUNT_ID"], evidence["coreVersion"], start, end)
+        record(phase, **observed)
+        if not observed["firstWindowTicks"] or not observed["secondWindowTicks"]:
+            raise ValueError("Missing coverage events in one or both windows")
+        return
     if phase == "begin":
         current = usage()
         admit(current, int(time.time()))

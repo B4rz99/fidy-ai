@@ -188,7 +188,6 @@ const verifyProvider = Effect.fn(function* (
     subject,
     proof,
     expiresAt,
-    completion: yield* post("/web/providers/google/complete", proof),
   };
 });
 const boot = Effect.fn(function* (
@@ -196,9 +195,9 @@ const boot = Effect.fn(function* (
   member: Member,
   intent: "login" | "signup" = "signup"
 ) {
-  const { subject, proof, completion } = yield* verifyProvider(input, member, intent);
+  const { subject, proof } = yield* verifyProvider(input, member, intent);
   const { call, post } = runner(input);
-  const complete = yield* result(completion, phase);
+  const complete = yield* result(yield* post("/web/providers/google/complete", proof), phase);
   if (!(intent === "signup" && complete.status === "created") && complete.status !== "approved") {
     return yield* Effect.fail(Error("Original User did not complete synthetic signup"));
   }
@@ -416,23 +415,7 @@ const erasureEvidence = Effect.fn(function* (
     }),
   });
 });
-const ungrantedPairing = Effect.fn(function* (input: Inputs, record: ErasureProgress) {
-  const privateLogin = {
-    ...input,
-    send: Effect.fn(function* (request: Request) {
-      const reply = yield* input.send(request);
-      if (reply.headers.getSetCookie().some((value) => /(?:^|,\s*)__Host-fidy_session=/u.test(value))) {
-        return yield* Effect.fail(Error("Erased subject received a browser session"));
-      }
-      return reply;
-    }),
-  };
-  const { proof, expiresAt, completion } = yield* verifyProvider(
-    privateLogin,
-    "erasure-1",
-    "login"
-  );
-  yield* record("erased-provider-verified");
+const completionOutcome = Effect.fn(function* (completion: Response) {
   if (completion.status !== invalid && completion.status !== isolated) {
     return yield* Effect.fail(Error("Unexpected erased provider completion"));
   }
@@ -440,8 +423,30 @@ const ungrantedPairing = Effect.fn(function* (input: Inputs, record: ErasureProg
   yield* Schema.decodeUnknownEffect(Schema.Struct({ status: Schema.Literal(outcome) }))(
     yield* Effect.tryPromise(() => completion.json())
   );
-  yield* record(outcome === "invalid" ? "completion-invalid" : "completion-unavailable");
+  return outcome;
+});
+const ungrantedPairing = Effect.fn(function* (input: Inputs, record: ErasureProgress) {
+  const privateLogin = {
+    ...input,
+    send: Effect.fn(function* (request: Request) {
+      const reply = yield* input.send(request);
+      if (
+        reply.headers.getSetCookie().some((value) => /(?:^|,\s*)__Host-fidy_session=/u.test(value))
+      ) {
+        return yield* Effect.fail(Error("Erased subject received a browser session"));
+      }
+      return reply;
+    }),
+  };
+  const { proof, expiresAt } = yield* verifyProvider(
+    privateLogin,
+    "erasure-1",
+    "login"
+  );
+  yield* record("erased-provider-verified");
   const { post } = runner(privateLogin);
+  const outcome = yield* completionOutcome(yield* post("/web/providers/google/complete", proof));
+  yield* record(outcome === "invalid" ? "completion-invalid" : "completion-unavailable");
   const redeem = (): ReturnType<typeof post> => post("/web/pairings/redeem", proof);
   const pending = yield* validStatus(yield* redeem(), accepted);
   const observed = yield* Schema.decodeUnknownEffect(PendingBrowserLoginPairing)(

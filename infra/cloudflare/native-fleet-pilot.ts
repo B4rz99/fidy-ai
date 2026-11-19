@@ -33,7 +33,7 @@ export const runFleetPilot = Effect.fn(function* (port: Port) {
     return yield* Effect.fail(Error("Existing User inventory exceeds the pilot sizing envelope"));
   }
   yield* port.record({ stage: "census", existingObjects: before.size });
-  const targetFromCensus = waitFor(port.inventory().pipe(
+  const targetFromCensus = waitFor(Effect.suspend(port.inventory).pipe(
     Effect.flatMap((current) => Effect.try(() => newStoredUser({before, current})))
   ), 12);
   const registration = yield* Effect.exit(port.register());

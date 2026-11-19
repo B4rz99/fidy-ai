@@ -1,0 +1,19 @@
+apps/server/cloudflare/oauth-agents/native-grant.test.ts
+  s_a1be23a656acf0::t_6f673488cf5af2 3,10-55,104-136,142,251-262,270-274,322,328,337
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1d5bb6510baa40822312823491f011c755b0b906",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -21,8 +21,9 @@ const admitted = async (request, env) => {
     Date.now() >= deadline ||
     !env.EXPERIMENT_KEY ||
     env.EXPERIMENT_KEY.length < keyBytes
-  )
+  ) {
     return false;
+  }
   if (!paths.has(request.method + " " + url.pathname + url.search)) return false;
   return timingSafeEqual(
     await hash(env.EXPERIMENT_KEY),

@@ -272,8 +272,9 @@ try {
       ]) {
         caps.push(limits[route].maximum);
       }
-      for (let index = 0; index < pairs; index++)
+      for (let index = 0; index < pairs; index++) {
         caps.push(limits["GET /transactions?limit=25"].maximum);
+      }
       const sum = (key) => caps.reduce((total, cap) => total + cap[key], 0);
       return { rowsRead: sum("rowsRead"), rowsWritten: sum("rowsWritten") };
     };

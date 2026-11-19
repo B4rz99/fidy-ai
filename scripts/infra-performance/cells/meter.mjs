@@ -48,12 +48,14 @@ const reserve = (frame, key) => {
   for (const field of fields) frame.pending[field] += cap[field];
   return cap;
 };
+const confirmedRows = (reply) =>
+  reply?.success === true && count(reply.meta?.rows_read) && count(reply.meta?.rows_written);
 const nativeRows = (replies, length) => {
   if (!Array.isArray(replies) || !length || replies.length !== length) stop();
   const actual = zero();
   for (const reply of replies) {
     const meta = reply?.meta;
-    if (!reply?.success || !count(meta?.rows_read) || !count(meta?.rows_written)) stop();
+    if (!confirmedRows(reply)) stop();
     actual.rowsRead += meta.rows_read;
     actual.rowsWritten += meta.rows_written;
   }

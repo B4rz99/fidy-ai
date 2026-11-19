@@ -2,11 +2,12 @@ name: Rehearse the storage HTTP comparison
 
 on:
   push:
-    branches: [perf/hosted-storage-cells]
+    branches: [perf/hosted-storage-cells, perf/canonical-performance-fixture]
   pull_request:
     paths:
       - ".github/workflows/storage-http.yml"
       - "scripts/infra-performance/cells/**"
+      - "scripts/infra-performance/canonical-fixture/**"
       - "scripts/infra-performance/reference/native*.ts"
   workflow_dispatch:
 
@@ -23,7 +24,9 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - name: Verify comparison evidence and budget refusal
-        run: python3 -m unittest discover -s scripts/infra-performance/cells
+        run: |
+          python3 -m unittest discover -s scripts/infra-performance/cells
+          python3 -m unittest discover -s scripts/infra-performance/canonical-fixture
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: fb53d9e755c14393048dc945fc0b7f117730d872

@@ -42,12 +42,13 @@ BOUNDARIES = [
     "startup.browser",
 ]
 
+CALIBRATION_VIEWS = ["budgets.month.browser"]
 
 # Export only controlled stage names, error classes and harness source coordinates.
 STAGES = {
     "runtime", "user", "transactions", "planning", "reviews", "counts", "launch",
     "pairing", "approval", "redeem", "bootstrap", "accountability-before", "read",
-    "open-correction", "save", "fresh-read", "accountability-after",
+    "open-correction", "save", "fresh-read", "accountability-after", "budgets-month",
 }
 REASONS = {
     "foreign key constraint failed": "foreign-key",
@@ -65,7 +66,7 @@ REASONS = {
     "native worker build failed": "worker-build",
 }
 SOURCE_LOCATION = re.compile(
-    r"/(native-seed\.ts|native\.ts|fresh-transactions\.mjs|dev-browser-api\.ts|browser\.mjs|preview\.mjs):(\d{1,6}):(\d{1,6})\b"
+    r"/(native-seed\.ts|native\.ts|fresh-transactions\.mjs|fresh-workspaces\.mjs|dev-browser-api\.ts|browser\.mjs|preview\.mjs):(\d{1,6}):(\d{1,6})\b"
 )
 
 
@@ -206,21 +207,25 @@ def observation(path, env, destination, variant="d1"):
             result["correctionMs"],
             result["startupMs"],
         ]
-        return {**result, "seed": seed, "timings": dict(zip(BOUNDARIES, values, strict=True))}
+        timings = dict(zip(BOUNDARIES, values, strict=True))
+        timings.update({name: evidence["milliseconds"] for name, evidence in result["views"].items()})
+        return {**result, "seed": seed, "timings": timings}
 
 
 def equivalence(row):
     return (
         {key: value for key, value in row["seed"].items() if key != "milliseconds"},
         [(attempt["status"], attempt["bytes"], attempt["payload"]) for attempt in row["attempts"]],
+        {name: (view["http"]["status"], view["http"]["bytes"], view["http"]["digest"])
+         for name, view in row["views"].items()},
         row["accountability"],
         row["browser"],
     )
 
 
-def compare(samples, rows, variants, *, stress=False):
+def compare(samples, rows, variants, *, stress=False, calibration=False):
     result = {}
-    for key in BOUNDARIES:
+    for key in BOUNDARIES + (CALIBRATION_VIEWS if calibration else []):
         cell = {}
         for variant in variants:
             offered = [row for row in rows if row["variant"] == variant]
@@ -318,7 +323,7 @@ def main():
         "harnessRevision": output(["git", "rev-parse", "HEAD"], ROOT),
         "comparisonSourceSha256": {
             f.name: hashlib.sha256(f.read_bytes()).hexdigest()
-            for f in [Path(__file__), BROWSER, HERE / "fresh-transactions.mjs", HERE / "preview.mjs"]
+            for f in [Path(__file__), BROWSER, HERE / "fresh-transactions.mjs", HERE / "fresh-workspaces.mjs", HERE / "preview.mjs"]
         },
         "pairs": args.pairs,
         "order": "alternate D1-first and DO-first pairs" if args.candidate else "pinned D1 reference",
@@ -327,7 +332,7 @@ def main():
         "minimumRatio": 1.8,
         "failurePolicy": "failed attempts or unequal paired evidence fail every boundary; incomplete samples stay missing",
         "deployment": "local disposable processes and native SQLite images per variant per pair",
-        "boundaries": BOUNDARIES,
+        "boundaries": BOUNDARIES + (CALIBRATION_VIEWS if args.dataset == "production" else []),
     }
     (run / "plan.json").write_text(json.dumps(plan, indent=2))
     subprocess.run(
@@ -401,7 +406,7 @@ def main():
     finally:
         key.unlink(missing_ok=True)
         cert.unlink(missing_ok=True)
-        report = compare(args.pairs, rows, paths, stress=args.dataset == "breaking")
+        report = compare(args.pairs, rows, paths, stress=args.dataset == "breaking", calibration=args.dataset == "production")
         (run / "report.json").write_text(json.dumps(report, indent=2))
     if any(row["status"] != "ok" for row in rows) or any(
         cell["status"] == "fail" for cell in report.values()

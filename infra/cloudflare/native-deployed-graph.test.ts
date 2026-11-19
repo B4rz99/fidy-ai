@@ -1,6 +1,6 @@
 import { ConfigProvider, Effect, Result } from "effect";
 import { expect, it } from "vitest";
-import { inspectNativeResources, requireDeployedRole } from "./native-deployed-graph";
+import { inspectNativeResources, requireDeployedRole, verifyDeployedVersion } from "./native-deployed-graph";
 import { inspectNativeAccess } from "./native-deployed-access";
 import { nativeBindingInventory } from "./native-graph";
 
@@ -46,7 +46,7 @@ const consumers = (url: URL): unknown => {
     result: [
       {
         consumer_id: id,
-        script_name: id.startsWith("smoke-") ? smoke : core,
+        script: id.startsWith("smoke-") ? smoke : core,
         dead_letter_queue: "fidy-native-async-dead-letters",
         type: "worker",
         settings: {
@@ -98,6 +98,14 @@ it("requires all four buckets, eight exact Workflow owners and nine consumers wi
       expect(
         Result.isFailure(yield* Effect.result(inspectNativeResources(read, revision, false)))
       ).toBe(true);
+      for (const conflicting of [{ script: "incumbent" }, { script: core, script_name: "incumbent" }]) {
+        const drift = (path: string): Effect.Effect<unknown, Error> => path.includes("/billing-collection/consumers")
+          ? Effect.succeed({ ...basic, result: [{
+            consumer_id: "billing-collection", type: "worker", dead_letter_queue: "fidy-native-async-dead-letters",
+            settings: { batch_size: 10, max_retries: 3, max_wait_time_ms: 0 }, ...conflicting,
+          }] }) : read(path);
+        expect(Result.isFailure(yield* Effect.result(inspectNativeResources(drift, revision, true)))).toBe(true);
+      }
       const foreign = (path: string): Effect.Effect<unknown, Error> =>
         path.includes("/async-dead-letters/consumers")
           ? Effect.succeed({ ...basic, result: [{ consumer_id: "other" }] })
@@ -130,6 +138,28 @@ it("refuses a correct binding label connected to an incumbent or a foreign Worke
     ).toThrow();
   }
 });
+it("verifies the exact serving assets-only version independently of executable Worker bindings", () => {
+  const versionId = "2c096680-5f52-472f-afdd-5b3475b9418f";
+  const assets = {
+    html_handling: "none", not_found_handling: "single-page-application", base_path: "/",
+    serve_directly: true, raw_run_worker_first: false,
+  };
+  const staticResources = { bindings: [], script: {handlers: null}, script_runtime: { assets, compatibility_date: "2026-09-08" } };
+  const check = (resources: unknown, id = versionId, role: "Web" | "Ingress" = "Web"): void =>
+    verifyDeployedVersion({ raw: {success: true, result: { id, resources }}, versionId, revision, role });
+  expect(() => check(staticResources)).not.toThrow();
+  expect(() => check(staticResources, "another-version")).toThrow();
+  expect(() => check(staticResources, versionId, "Ingress")).toThrow();
+  for (const extra of [
+    { bindings: [{ type: "service", name: "CORE" }] }, { script: { handlers: ["fetch"] } },
+    { script: { handlers: null, named_handlers: [{ name: "extra", handlers: ["class"] }] } },
+    { script_runtime: {} }, { script_runtime: { assets: { ...assets, raw_run_worker_first: true } } },
+    { script_runtime: { assets: { ...assets, serve_directly: false } } },
+    { script_runtime: { assets: { ...assets, base_path: "/other" } } },
+    { script_runtime: { assets: { ...assets, not_found_handling: "404-page" } } },
+  ]) expect(() => check({ ...staticResources, ...extra })).toThrow();
+});
+
 const appRoles = [
   ["Fidy native support recovery", "/internal/support-recovery", "CLOUDFLARE_ACCESS_AUDIENCE"],
   ["Fidy native Titular erasure", "/internal/titular-erasure", "ERASURE_SUPPORT_AUDIENCE"],

@@ -117,6 +117,7 @@ class AccountExperiment:
         )
         self.state["active"] = dict(
             prefix=prefix,
+            ownership="owned-" + secrets.token_hex(16),
             deadline=int(time.time()) + LIFETIME,
             day=day,
             limit=limit,
@@ -147,9 +148,11 @@ class AccountExperiment:
         run["pending"] = dict(name=name, maximum=maximum)
         self.save()
         actual = counts(operation())
-        if any(actual[k] > maximum[k] for k in KEYS) or today() != run["day"]:
-            raise Refused("observed_cost_outside_reservation")
         run["spent"] = {k: run["spent"][k] + actual[k] for k in KEYS}
+        if any(actual[k] > maximum[k] for k in KEYS) or today() != run["day"]:
+            run["pending"]["observed"] = actual
+            self.save()
+            raise Refused("observed_cost_outside_reservation")
         run["pending"] = None
         self.save()
         return actual

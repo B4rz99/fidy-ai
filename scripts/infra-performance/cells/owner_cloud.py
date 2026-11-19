@@ -50,6 +50,7 @@ class Cloud:
             raise Refused("invalid_resource_scope")
         self.root = "https://api.cloudflare.com/client/v4/accounts/" + account + "/"
         self.prefix = prefix
+        self.ownership = None
         self.auth = os.environ["CLOUDFLARE_API_TOKEN"]
         self.transport = urllib.request.build_opener(NoRedirect(), urllib.request.ProxyHandler({}))
 
@@ -106,7 +107,10 @@ class Cloud:
 
     def identity(self, role):
         if role == "db":
-            entries = self.result("GET", "d1/database?name=" + self.prefix)
+            wire = self.request("GET", "d1/database?name=" + self.prefix)
+            entries = wire["result"]
+            if wire["result_info"]["total_count"] != len(entries):
+                raise Refused("incomplete_database_inventory")
             selected = [d for d in entries if d["name"] == self.prefix]
             if len(selected) > 1:
                 raise Refused("ambiguous_database")
@@ -121,7 +125,7 @@ class Cloud:
         settings = self.result("GET", self.worker(role) + "/script-settings", tolerate_absent=True)
         if settings is None:
             return None
-        if self.prefix not in settings.get("tags", []):
+        if not self.ownership or self.ownership not in settings.get("tags", []):
             raise Refused("foreign_worker")
         return self.prefix + "-" + role
 
@@ -156,10 +160,12 @@ class Cloud:
             raise Refused("owned_database_survived")
 
     def upload(self, role, module, bindings=(), migrations=None, new=False):
+        if not self.ownership or (not new and self.identity(role) is None):
+            raise Refused("worker_ownership_missing")
         metadata = dict(
             main_module="index.mjs",
             bindings=list(bindings),
-            tags=[self.prefix],
+            tags=[self.ownership],
             compatibility_date="2026-09-08",
             compatibility_flags=[
                 "enable_request_signal",
@@ -259,7 +265,10 @@ class Cloud:
         if role == "db":
             self.result("DELETE", "d1/database/" + str(UUID(identity)))
         elif role == "bucket":
-            if self.request("GET", self.marker(), raw=True, tolerate_absent=True) is not None:
+            marker = self.request("GET", self.marker(), raw=True, tolerate_absent=True)
+            if marker is not None:
+                if marker != b"initial":
+                    raise Refused("unexpected_generation_marker")
                 self.request("DELETE", self.marker(), raw=True)
             self.result("DELETE", "r2/buckets/" + self.prefix)
         else:

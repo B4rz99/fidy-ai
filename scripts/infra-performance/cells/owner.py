@@ -25,6 +25,7 @@ TRIAL_MS = 7 * 24 * 60 * 60 * 1000
 
 def prepare_inventory(owner, cloud):
     run = owner.available()
+    cloud.ownership = run["ownership"]
     if cloud.namespaces() or any(cloud.identity(role) is not None for role in ROLES):
         raise Refused("disposable_namespace_collision")
     for role in ROLES:
@@ -50,12 +51,14 @@ def teardown(owner, cloud, resumed=False):
     run = owner.active
     if run is None and owner.state["last"] and owner.state["last"]["prefix"] == cloud.prefix:
         last = owner.state["last"]
+        cloud.ownership = last["ownership"]
         cloud.verify_absent(last["inventory"], last["namespaceIds"])
         return last
     if run is None or cloud.prefix != run["prefix"]:
         raise Refused("cleanup_ownership_unavailable")
     if resumed and time.time() < run["deadline"] + 90:
         raise Refused("active_owner_may_still_be_running")
+    cloud.ownership = run["ownership"]
     run["cleaning"] = True
     recorded = run.get("namespaceIds", [])
     run["namespaceIds"] = (
@@ -87,6 +90,7 @@ def teardown(owner, cloud, resumed=False):
     )
     owner.state["last"] = dict(
         prefix=run["prefix"],
+        ownership=run["ownership"],
         day=run["day"],
         spent=run["spent"],
         pending=run["pending"],
@@ -321,7 +325,12 @@ def main():
     try:
         if args.action != "cleanup":
             sys.path.insert(0, str(HERE.parent / "canonical-fixture"))
-            from hosted import verify_native_fixture, read_native_session
+            try:
+                from hosted import verify_native_fixture, read_native_session
+            except ModuleNotFoundError as error:
+                if error.name != "hosted":
+                    raise
+                raise Refused("protected_native_receipt_verifier_missing") from None
 
             proof = verify_native_fixture(
                 args.fixture, revision=args.revision, resource_prefix=args.prefix
@@ -340,6 +349,9 @@ def main():
                 maximum=bundle.estimate,
                 pairs=args.pairs,
                 packageSha256=args.manifest_sha256,
+                costedD1Batches=len(bundle.direct),
+                costedD1Requests=len(LOGIN) + len(bundle.inspections) + args.pairs,
+                normalLedgerPuts=12 + 2 * (len(bundle.direct) + len(LOGIN) + len(bundle.inspections) + args.pairs),
                 nativeRevision=args.revision,
                 baseline=PIN,
             )
@@ -405,10 +417,14 @@ def main():
                     )
 
                 exercise(owner, cloud, bundle, send, read, versions, key, args.pairs, report, save)
+            except Exception as error:
+                report["runFailure"] = str(error) if isinstance(error, Refused) else type(error).__name__
+                raise
             finally:
                 report["cleanup"] = teardown(owner, cloud)
-        report["status"] = "completed"
-        return 0
+        failed = any(cell["status"] == "fail" for cell in report.get("boundaries", {}).values())
+        report["status"] = "failed" if failed else "completed"
+        return int(failed)
     except Exception as error:
         report.update(
             status="stopped",

@@ -150,7 +150,8 @@ class OwnerTests(unittest.TestCase):
                 if path.startswith("workers/durable_objects/namespaces?"):
                     wire = dict(result=[], result_info=dict(page=1, total_pages=1))
                 elif path == "d1/database?name=" + prefix:
-                    wire = dict(result=[self.stored] if self.stored else [])
+                    wire = dict(result=[self.stored] if self.stored else [],
+                                result_info=dict(total_count=int(self.stored is not None)))
                 elif path == "d1/database" and req.method == "POST":
                     assert json.loads(req.data) == dict(name=prefix)
                     self.stored = dict(name=prefix, uuid=uuid)

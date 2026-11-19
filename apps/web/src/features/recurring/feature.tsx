@@ -88,6 +88,7 @@ const Resources = (props: Props): JSX.Element => {
     </div>
   );
 };
+const noRequestedDisclosure = Option.none<string>();
 const useEarlierDisclosure = ({
   month,
   filters,
@@ -100,12 +101,12 @@ const useEarlierDisclosure = ({
 }> => {
   const scope = `${month}:${JSON.stringify(filters)}:`;
   const key = scope + Option.getOrElse(previous, () => "");
-  const requested = useRef(Option.none<string>());
+  const requested = useRef(noRequestedDisclosure);
   const reveal = useCallback<RefCallback<HTMLDetailsElement>>(
     (element) => {
       if (element === null) return;
       if (Option.contains(requested.current, key)) element.open = true;
-      requested.current = Option.none();
+      requested.current = noRequestedDisclosure;
     },
     [key]
   );

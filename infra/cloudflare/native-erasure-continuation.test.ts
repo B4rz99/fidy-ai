@@ -91,15 +91,25 @@ it.effect(
 it.effect("retains completed physical and survivor checks when the new login fails", () =>
   Effect.gen(function* () {
     const stages: Array<string> = [];
-    const failed = yield* Effect.isFailure(continueAdmittedErasure({
-      checkpoint: admitted, revision, userNamespace, baseline, survivors,
-      inventory: () => Effect.succeed(retained), renew: () => Effect.void,
-      logins: () => Effect.succeed(["two","one"]),
-      record: (stage) => Effect.sync(() => { stages.push(stage); }),
-      refused: () => Effect.fail(Error("No authenticated completion observation")),
-    }));
+    const failed = yield* Effect.isFailure(
+      continueAdmittedErasure({
+        checkpoint: admitted,
+        revision,
+        userNamespace,
+        baseline,
+        survivors,
+        inventory: () => Effect.succeed(retained),
+        renew: () => Effect.void,
+        logins: () => Effect.succeed(["two", "one"]),
+        record: (stage) =>
+          Effect.sync(() => {
+            stages.push(stage);
+          }),
+        refused: () => Effect.fail(Error("No authenticated completion observation")),
+      })
+    );
     expect(failed).toBe(true);
-    expect(stages).toEqual(["physical-absent","survivors-matched"]);
+    expect(stages).toEqual(["physical-absent", "survivors-matched"]);
   })
 );
 

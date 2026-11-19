@@ -47,7 +47,11 @@ function verifySeededPage(initial, calibration) {
       assert.equal(row.revision, 0);
       assert.equal(row.direction, "outflow");
       assert.deepEqual(row.money, { amount: "1000", currency: ordinal % 2 === 0 ? "COP" : "USD" });
-      assert.equal(row.presentation.kind, ordinal === 0 ? "visible-member" : "independent");
+      const category = ordinal % 3 === 0 ? 1 : ordinal + 2;
+      assert.equal(row.categoryId, "10000000-0000-4000-8000-" + String(category).padStart(12, "0"));
+      const timestamp = Date.parse("2026-11-17T12:00:00Z") - ordinal * 60000;
+      assert.equal(Date.parse(row.occurredAt), timestamp);
+      assert.equal(Date.parse(row.createdAt), timestamp);
     }
   }
   const target = initial.data.find((row) => row.id === targetId);

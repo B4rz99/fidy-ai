@@ -1,4 +1,5 @@
 import type { ErasureObservation } from "./native-erasure";
+import { verificationRevision } from "./installed-verification-revision";
 import { readUserObjects } from "./native-erasure-evidence";
 import { verifyNativeSmoke } from "./native-release-smoke";
 import { isDeepStrictEqual } from "node:util";
@@ -6,7 +7,7 @@ import { verifyIncumbentFence, verifyIncumbentMail } from "./native-incumbent-fe
 import { readProviderList } from "./native-provider-list";
 import { verifyInstalledWebsite } from "./native-deployed-web";
 import { inspectDeployedEdge } from "./native-deployed-edge";
-import { inspectNativeResources, requireDeployedRole } from "./native-deployed-graph";
+import { inspectNativeResources, verifyDeployedVersion } from "./native-deployed-graph";
 import type { NativeRole } from "./native-graph";
 import { exerciseClosedUsers } from "./native-acceptance";
 import { installedOrigins } from "@fidy/server/browser-transport";
@@ -39,6 +40,7 @@ import {
   type ProductionReleaseConfig as Config,
   ReleaseFailure,
   configureReleaseObservability,
+  releaseCommand,
   releaseEvidence,
   releaseFailureMessage,
   releasePort,
@@ -366,22 +368,37 @@ const verifyDeployedWorkers = Effect.fn(function* (
     ["Smoke", "fidy-native-smoke-" + env.revision],
     ["ForwardedEmail", installationNames.ForwardedEmail],
   ];
+  const verify = Effect.fn(function* ([role, name]: readonly [NativeRole, string]) {
+    const deployment = yield* port.current(name);
+    const id = yield* releaseController.servingVersion(deployment);
+    const raw = yield* releaseEvidence.readWorkerVersion(env, client, { name, id });
+    yield* Effect.try(() =>
+      verifyDeployedVersion({
+        role,
+        account: env.account,
+        revision: env.revision,
+        versionId: id,
+        raw,
+      })
+    );
+    yield* verifyReleaseObservability(env, name, client);
+    if (role === "Core") yield* verifyCoreDefaultPlacement(env, { name, version: id }, client);
+    if (role === "Core" || role === "Smoke" || role === "ForwardedEmail") {
+      yield* proveRecoveryCorePrivate(env, client, name);
+    }
+    return { role, name, versionId: id, deploymentId: deployment.id };
+  });
   return yield* Effect.forEach(
     workers,
-    Effect.fn(function* ([role, name]) {
-      const deployment = yield* port.current(name);
-      const id = yield* releaseController.servingVersion(deployment);
-      const version = yield* versionResources(env, client, { name, id, revision: env.revision });
-      yield* Effect.try(() =>
-        requireDeployedRole({ role, revision: env.revision, bindings: version.bindings })
-      );
-      yield* verifyReleaseObservability(env, name, client);
-      if (role === "Core") yield* verifyCoreDefaultPlacement(env, { name, version: id }, client);
-      if (role === "Core" || role === "Smoke" || role === "ForwardedEmail") {
-        yield* proveRecoveryCorePrivate(env, client, name);
-      }
-      return { role, name, versionId: id, deploymentId: deployment.id };
-    }),
+    (worker) =>
+      verify(worker).pipe(
+        Effect.mapError(
+          () =>
+            new ReleaseFailure({
+              message: "Native deployed Worker verification failed for " + worker[0],
+            })
+        )
+      ),
     { concurrency: 3 }
   );
 });
@@ -406,16 +423,36 @@ const verifyInstalledTopology = Effect.fn(function* (
       message: "Application versions changed during verification",
     });
   }
-  const resources = yield* inspectNativeResources(accountReader(env, client), env.revision, true);
+  const resources = yield* inspectNativeResources(
+    accountReader(env, client),
+    env.revision,
+    true
+  ).pipe(
+    Effect.mapError(
+      () => new ReleaseFailure({ message: "Native bucket, Queue or Workflow inventory differs" })
+    )
+  );
   const edge = yield* inspectDeployedEdge(env, client, {
     installed: true,
     bindings: input.bindings,
     hosts: input.hosts,
     staging: input.staging,
-  });
+  }).pipe(
+    Effect.mapError(
+      () => new ReleaseFailure({ message: "Native DNS, host or Access inventory differs" })
+    )
+  );
   const website = yield* Effect.forEach(
     nativeHostPairs(input.staging ? "acceptance" : input.hosts),
-    (pair) => verifyInstalledWebsite(client, env.revision, pair)
+    (pair) =>
+      verifyInstalledWebsite(client, env.revision, pair).pipe(
+        Effect.mapError(
+          () =>
+            new ReleaseFailure({
+              message: "Native browser asset, metadata or header verification failed",
+            })
+        )
+      )
   );
   return { workers, resources, edge, website };
 });
@@ -436,13 +473,11 @@ const UserNamespace = Schema.Struct({
   class_name: Schema.Literal("UserStore"),
   namespace_id: Schema.NonEmptyString,
 });
-const installedRelease = Effect.fn(function* (
+const readInstalledIdentity = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
-  { port, staging }: { port: ReleasePort; staging: boolean }
+  port: ReleasePort
 ) {
-  yield* releaseController.requireTrunk(port, env.revision);
-  yield* verifyNativeEdge(env, client, "verify");
   const receipts = yield* firstInstallWorkers();
   const pair = yield* readStablePair(
     {
@@ -455,9 +490,24 @@ const installedRelease = Effect.fn(function* (
   );
   if (pair.identity.stableRevision !== env.revision) {
     return yield* new ReleaseFailure({
-      message: "First-installed source differs from protected trunk",
+      message: "Installed source differs from expected release revision",
     });
   }
+  return pair;
+});
+const installedRelease = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  {
+    port,
+    staging,
+    verifierRevision,
+  }: { port: ReleasePort; staging: boolean; verifierRevision: string }
+) {
+  yield* releaseController.requireTrunk(port, verifierRevision);
+  yield* verifyNativeEdge(env, client, "verify");
+  const pair = yield* readInstalledIdentity(env, client, port);
+  yield* Effect.logInfo("Verified the closed edge and installed Ingress and Core identities.");
   yield* proveRecoveryCorePrivate(env, client, installationNames.Core);
   const ingress = yield* versionResources(env, client, {
     name: installationNames.Ingress,
@@ -473,6 +523,7 @@ const installedRelease = Effect.fn(function* (
     verifiedStoragePair({ ingress: ingress.bindings, core: core.bindings })
   );
   yield* verifyInstalledNamespaces({ env, client, storage, workers: [ingress, core] });
+  yield* Effect.logInfo("Verified private Core and the five installed SQLite namespaces.");
   const topology = yield* verifyInstalledTopology(env, client, {
     port,
     bindings: core.bindings,
@@ -481,6 +532,9 @@ const installedRelease = Effect.fn(function* (
     publicStable: pair.publicStable,
     coreStable: pair.coreStable,
   });
+  yield* Effect.logInfo(
+    "Verified installed Workers, data resources, Access and browser artifacts."
+  );
   const proof = yield* verifyInstalledMarkers({ env, client, pair, storage });
   return {
     revision: env.revision,
@@ -496,11 +550,30 @@ const installedRelease = Effect.fn(function* (
   };
 });
 const verifyFirstInstall = Effect.fn(function* (
-  env: Config,
+  verifier: Config,
   client: HttpClient.HttpClient,
   { port, erase }: { port: ReleasePort; erase: boolean }
 ) {
-  const installed = yield* installedRelease(env, client, { port, staging: false });
+  const requested = yield* ReleaseConfig.String("EXPECTED_INSTALLED_REVISION").pipe(
+    ReleaseConfig.withDefault("")
+  );
+  const revision = yield* verificationRevision(verifier.revision, requested, (args) =>
+    releaseCommand({ args: ["git", "-C", "../..", ...args], lifetime: "read-only" })
+  ).pipe(
+    Effect.mapError(
+      () =>
+        new ReleaseFailure({
+          message: "Installed revision must be the same protected runtime source",
+        })
+    )
+  );
+  const env = { ...verifier, revision };
+  const installed = yield* installedRelease(env, client, {
+    port,
+    staging: false,
+    verifierRevision: verifier.revision,
+  });
+  yield* Effect.logInfo("Verified schema markers and closed admission.");
   const contractDigest = yield* ReleaseConfig.String("CONTRACT_DIGEST"),
     identity = { gitRevision: env.revision, contractDigest };
   const smoke = yield* verifyNativeSmoke({
@@ -509,6 +582,7 @@ const verifyFirstInstall = Effect.fn(function* (
     public: { ...identity, workerVersionId: installed.publicVersionId },
     core: { ...identity, workerVersionId: installed.coreVersionId },
   }).pipe(Effect.provideService(HttpClient.HttpClient, client));
+  yield* Effect.logInfo("Verified release smoke against the installed Worker versions.");
   const synthetic = yield* Effect.forEach(nativeHostPairs(yield* hostMode), (pair) =>
     verifySyntheticUsers(env, client, {
       origins: pair,
@@ -521,7 +595,10 @@ const verifyFirstInstall = Effect.fn(function* (
   if (new Set(synthetic.map((result) => result.callback.workflow)).size !== 1) {
     return yield* Effect.fail(Error("Staged hosts reached different native payment attempts"));
   }
-  yield* writeFile(env.smokeAttestationFile, encodeJson({ ...installed, smoke, synthetic }));
+  yield* writeFile(
+    env.smokeAttestationFile,
+    encodeJson({ ...installed, verifierRevision: verifier.revision, smoke, synthetic })
+  );
 });
 
 type VerifyCommand = (
@@ -562,7 +639,11 @@ const inspectHostStage = Effect.fn(function* (
   port: ReleasePort
 ) {
   yield* requiredStaging();
-  const installed = yield* installedRelease(env, client, { port, staging: true }),
+  const installed = yield* installedRelease(env, client, {
+      port,
+      staging: true,
+      verifierRevision: env.revision,
+    }),
     account = accountReader(env, client);
   const writers = yield* verifyIncumbentFence(account);
   const zonePath = "https://api.cloudflare.com/client/v4/zones/" + installed.edge.zoneId + "/";
@@ -653,7 +734,11 @@ const attachCanonicalHosts = Effect.fn(function* (
       )
     );
   }
-  const verified = yield* installedRelease(env, client, { port, staging: false });
+  const verified = yield* installedRelease(env, client, {
+    port,
+    staging: false,
+    verifierRevision: env.revision,
+  });
   yield* requireSameInstallation(env, verified);
 });
 const requireTestedStorage = Effect.fn(function* (

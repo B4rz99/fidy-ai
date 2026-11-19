@@ -29,8 +29,8 @@ const observed = Effect.fn(function* <Value>(
   stage: CensusStage,
   transition: (rows: UserObjects) => Option.Option<Value>
 ) {
+  yield* port.record({ stage, observations: 0 });
   let observations = 0;
-  yield* port.record({ stage, observations });
   const census = Effect.gen(function* () {
     if (stage === "waiting-physical-erasure") yield* port.renew();
     const rows = yield* port.inventory();

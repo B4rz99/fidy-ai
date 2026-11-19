@@ -1,12 +1,58 @@
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Clock, Effect, Schema } from "effect";
 import { expect } from "vitest";
 import { oauthIssuer, oauthPaths, oauthResource } from "../../src/shell/oauth-agents/contract";
 import { alice, bob } from "../financial-user-store.test-fixture";
 import { nativeGrant, protocolFor, tokenPair } from "./native-grant.test-fixture";
 import { native, nativeOAuthPlatform } from "../user-store.test-fixture";
 
+const subscription = (
+  runtime: Parameters<typeof protocolFor>[0],
+  token: string
+): ReturnType<ReturnType<typeof protocolFor>> =>
+  native(() =>
+    runtime.dispatchFetch(oauthResource, {
+      method: "POST",
+      headers: {
+        "cf-connecting-ip": "192.0.2.75",
+        authorization: "Bearer " + token,
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        "mcp-protocol-version": "2026-07-28",
+        "mcp-method": "subscriptions/listen",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "subscriptions/listen",
+        params: {
+          notifications: { toolsListChanged: true },
+          _meta: {
+            "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+            "io.modelcontextprotocol/clientCapabilities": {},
+          },
+        },
+      }),
+    })
+  );
+const holdSubscription = Effect.fn(function* (subscribe: () => ReturnType<typeof subscription>) {
+  const reply = yield* subscribe();
+  expect(reply.status).toBe(200);
+  const reader = reply.body?.getReader();
+  if (reader === undefined) return yield* Effect.die("Missing resident stream");
+  return yield* Effect.acquireRelease(
+    Effect.gen(function* () {
+      const ack = yield* native(() => reader.read());
+      if (!(ack.value instanceof Uint8Array)) {
+        return yield* Effect.die("Missing MCP acknowledgement");
+      }
+      expect(new TextDecoder().decode(ack.value)).toContain("subscriptions/acknowledged");
+      return reader;
+    }),
+    (stream) => native(() => stream.cancel())
+  );
+});
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "refuses substituted token purpose, credential scope, client and resource without spending a refresh generation",
@@ -55,36 +101,45 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(allowed.status).toBe(200);
       })
   );
+  test.effect(
+    "releases eight occupied MCP slots at the original credential expiry and accepts a new resident",
+    () =>
+      Effect.gen(function* () {
+        const { runtime, credential, owner } = yield* nativeGrant;
+        const current = yield* Clock.currentTimeMillis,
+          originalExpiry = current + 4000;
+        yield* owner.exec(
+          "UPDATE oauth_credentials SET expires_at_ms=? WHERE kind='access'",
+          originalExpiry
+        );
+        const subscribe = (): ReturnType<typeof subscription> =>
+          subscription(runtime, credential.access_token);
+        const leases = yield* Effect.forEach(Array.from({ length: 8 }), () =>
+          holdSubscription(subscribe)
+        );
+        const refused = yield* subscribe();
+        expect(refused.status).toBe(503);
+        yield* native(() => refused.arrayBuffer());
+        const first = leases[0];
+        if (first === undefined) return yield* Effect.die("Missing first resident");
+        // A later extension of the authoritative credential cannot extend previously acquired SDK scopes.
+        yield* owner.exec(
+          "UPDATE oauth_credentials SET expires_at_ms=? WHERE kind='access'",
+          current + 60000
+        );
+        expect((yield* native(() => first.read()).pipe(Effect.timeout("10 seconds"))).done).toBe(
+          true
+        );
+        yield* holdSubscription(subscribe);
+      }),
+    { timeout: 15_000 }
+  );
   for (const reason of ["browser revocation", "refresh replay"] as const) {
     test.effect("closes a mounted MCP subscription after " + reason, () =>
       Effect.gen(function* () {
         const { runtime, credential, connectionId, client_id, exchange, session } =
           yield* nativeGrant;
-        const response = yield* native(() =>
-          runtime.dispatchFetch(oauthResource, {
-            method: "POST",
-            headers: {
-              "cf-connecting-ip": "192.0.2.75",
-              authorization: "Bearer " + credential.access_token,
-              "content-type": "application/json",
-              accept: "application/json, text/event-stream",
-              "mcp-protocol-version": "2026-07-28",
-              "mcp-method": "subscriptions/listen",
-            },
-            body: JSON.stringify({
-              jsonrpc: "2.0",
-              id: 1,
-              method: "subscriptions/listen",
-              params: {
-                notifications: { toolsListChanged: true },
-                _meta: {
-                  "io.modelcontextprotocol/protocolVersion": "2026-07-28",
-                  "io.modelcontextprotocol/clientCapabilities": {},
-                },
-              },
-            }),
-          })
-        );
+        const response = yield* subscription(runtime, credential.access_token);
         expect(response.status).toBe(200);
         const reader = response.body?.getReader();
         if (reader === undefined) return yield* Effect.die("Missing MCP subscription");
@@ -193,6 +248,18 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         });
         expect(records.status).toBe(200);
         expect(yield* native(() => records.json())).toMatchObject({ result: { isError: false } });
+        for (const name of [
+          "categories.listCategories",
+          "transactions.listTransactions",
+          "categories.listCategories",
+        ]) {
+          const next = yield* protocol(winner.access_token, "tools/call", {
+            name,
+            args: name === "categories.listCategories" ? {} : { query: {} },
+          });
+          expect(next.status).toBe(200);
+          expect(yield* native(() => next.json())).toMatchObject({ result: { isError: false } });
+        }
         const connections = yield* session(oauthPaths.connections, alice);
         expect(connections.status).toBe(200);
         expect(yield* native(() => connections.json())).toMatchObject({
@@ -200,7 +267,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             {
               connectionId,
               state: "active",
-              recentActivity: [{ operation: "transactions.listTransactions" }],
+              recentActivity: [
+                { operation: "categories.listCategories" },
+                { operation: "transactions.listTransactions" },
+                { operation: "categories.listCategories" },
+              ],
             },
           ],
         });
@@ -248,13 +319,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           owner.exec(
             "SELECT sum(units) AS n FROM commercial_allowance_consumptions WHERE allowance='canonical_call'"
           );
-        expect(yield* consumption()).toEqual([{ n: 3 }]);
+        expect(yield* consumption()).toEqual([{ n: 6 }]);
         const accepted = yield* destroy(secondReview.result.requestState);
         expect(yield* native(() => accepted.json())).toMatchObject({ result: { isError: false } });
         expect(yield* owner.exec("SELECT count(*) AS n FROM budgets WHERE id=?", id)).toEqual([
           { n: 0 },
         ]);
-        expect(yield* consumption()).toEqual([{ n: 3 }]);
+        expect(yield* consumption()).toEqual([{ n: 6 }]);
         const replayed = yield* destroy(secondReview.result.requestState);
         expect(yield* native(() => replayed.json())).toMatchObject({ result: { isError: true } });
         const independent = yield* protocol(credential.access_token, "tools/call", {
@@ -263,7 +334,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           continuation: secondReview.result.requestState,
         });
         expect(yield* native(() => independent.json())).toMatchObject({
-          result: { isError: false, _meta: { "co.fidy/canonicalAllowance": { remaining: "46" } } },
+          result: { isError: false, _meta: { "co.fidy/canonicalAllowance": { remaining: "43" } } },
         });
         const foreignRevoke = yield* session(oauthPaths.revoke, bob, { connectionId });
         expect(foreignRevoke.status).toBe(400);

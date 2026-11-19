@@ -45,7 +45,9 @@ const observed = Effect.fn(function* <Value>(
     Effect.repeat({ while: Option.isNone, schedule: Schedule.spaced("30 seconds") }),
     Effect.timeout("20 minutes")
   );
-  return yield* Effect.fromOption(found, () => Error("Required physical User transition was not observed"));
+  return yield* Effect.fromOption(found, () =>
+    Error("Required physical User transition was not observed")
+  );
 });
 
 const captureStableUsers = Effect.fn(function* (port: Port) {

@@ -214,9 +214,9 @@ it.effect(
       }).pipe(Effect.forkChild);
       yield* TestClock.adjust("7 minutes");
       expect(signedUp).toBe(0);
-      expect(stages).toContain("waiting-baseline");
       yield* TestClock.adjust("7 minutes");
       expect(signedUp).toBe(1);
+      expect(stages).toContain("waiting-baseline");
       expect(admitted).toBe(0);
       expect(stages).toContain("waiting-fresh-object");
       yield* TestClock.adjust("6 minutes");
@@ -228,29 +228,44 @@ it.effect(
     })
 );
 
-it.effect("ends a stalled post-admission census without a second signup or a new erasure request", () =>
-  Effect.gen(function* () {
-    const before = new Map([["probe", true], ["one", true], ["two", true]]);
-    const after = new Map([...before, ["subject", true]] as const);
-    const stages: string[] = [];
-    let signups = 0, admissions = 0;
-    const result = yield* verifyIndependentErasure({
-      inventory: () => Effect.sync(() => signups === 0 ? before : after),
-      record: (checkpoint) => Effect.sync(() => { stages.push(checkpoint.stage); }),
-      survivors: () => Effect.succeed(["one","two"]),
-      renew: () => Effect.void,
-      signup: () => Effect.sync(() => {
-        signups++;
-        return {id:"disposable",outcome:"created",headers:{}};
-      }),
-      admit: () => Effect.sync(() => {admissions++; return "same-reference";}),
-      denied: () => Effect.die("Physical erasure has not been observed"),
-    }).pipe(Effect.flip, Effect.forkChild);
-    yield* TestClock.adjust("21 minutes");
-    expect(yield* Fiber.join(result)).toMatchObject({ _tag: "TimeoutError" });
-    expect(signups).toBe(1);
-    expect(admissions).toBe(2);
-    expect(stages.at(-1)).toBe("waiting-physical-erasure");
-    expect(stages).not.toContain("physically-erased");
-  })
+it.effect(
+  "ends a stalled post-admission census without a second signup or a new erasure request",
+  () =>
+    Effect.gen(function* () {
+      const before = new Map([
+        ["probe", true],
+        ["one", true],
+        ["two", true],
+      ]);
+      const after = new Map([...before, ["subject", true]] as const);
+      const stages: string[] = [];
+      let signups = 0,
+        admissions = 0;
+      const result = yield* verifyIndependentErasure({
+        inventory: () => Effect.sync(() => (signups === 0 ? before : after)),
+        record: (checkpoint) =>
+          Effect.sync(() => {
+            stages.push(checkpoint.stage);
+          }),
+        survivors: () => Effect.succeed(["one", "two"]),
+        renew: () => Effect.void,
+        signup: () =>
+          Effect.sync(() => {
+            signups++;
+            return { id: "disposable", outcome: "created", headers: {} };
+          }),
+        admit: () =>
+          Effect.sync(() => {
+            admissions++;
+            return "same-reference";
+          }),
+        denied: () => Effect.die("Physical erasure has not been observed"),
+      }).pipe(Effect.flip, Effect.forkChild);
+      yield* TestClock.adjust("21 minutes");
+      expect(yield* Fiber.join(result)).toMatchObject({ _tag: "TimeoutError" });
+      expect(signups).toBe(1);
+      expect(admissions).toBe(2);
+      expect(stages.at(-1)).toBe("waiting-physical-erasure");
+      expect(stages).not.toContain("physically-erased");
+    })
 );

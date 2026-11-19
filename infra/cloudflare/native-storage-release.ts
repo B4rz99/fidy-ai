@@ -1,4 +1,4 @@
-import { rename } from "node:fs/promises";
+import { BunFileSystem } from "@effect/platform-bun";
 import type { ErasureObservation } from "./native-erasure";
 import { verificationRevision } from "./installed-verification-revision";
 import { readUserObjects } from "./native-erasure-evidence";
@@ -16,6 +16,7 @@ import { verifyNativeEdge } from "./native-edge";
 import {
   Context,
   Effect,
+  FileSystem,
   Layer,
   Option,
   Redacted,
@@ -310,18 +311,19 @@ const erasureObservation = (
     inventory: () => readUserObjects(accountReader(env, client), userNamespace),
     record: (checkpoint) =>
       Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
         checkpoints.push(checkpoint);
-        yield* writeFile(
+        yield* fs.writeFileString(
           path + ".next",
           encodeJson({ revision: env.revision, userNamespace, ...checkpoint, checkpoints })
         );
-        yield* Effect.tryPromise(() => rename(path + ".next", path));
+        yield* fs.rename(path + ".next", path);
         const progress =
           "observations" in checkpoint && checkpoint.listed !== undefined
             ? ` (observation ${checkpoint.observations}, listed ${checkpoint.listed}, populated ${checkpoint.populated})`
             : "";
         yield* Effect.logInfo("Physical User census " + checkpoint.stage + progress);
-      }),
+      }).pipe(Effect.provide(BunFileSystem.layer)),
   };
 };
 const verifySyntheticUsers = Effect.fn(function* (

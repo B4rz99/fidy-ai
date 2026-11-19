@@ -1,3 +1,9 @@
+import {
+  receiptAdmitted as admitsReceipt,
+  isPerformanceReceipt as matchesPerformanceReceipt,
+  openTransactionReceipt as openReceipt,
+  sealTransactionReceipt as sealReceipt,
+} from "./internal/performance-receipt";
 import { installedOrigins } from "../../src/shell/browser-transport/contract";
 import { browserOrigins } from "../runtime/contract";
 import { Clock, Effect, Option, Schema } from "effect";
@@ -240,3 +246,11 @@ export const fixtureChargeReceipt = Effect.fn(function* (
   );
   return Response.json(data, { headers: { "cache-control": "no-store" } });
 });
+
+export const isPerformanceReceipt: typeof matchesPerformanceReceipt = (request) =>
+  matchesPerformanceReceipt(request);
+export const receiptAdmitted: typeof admitsReceipt = (input) => admitsReceipt(input);
+export const sealTransactionReceipt: typeof sealReceipt = (credentials, coordinates, data) =>
+  sealReceipt(credentials, coordinates, data);
+export const openTransactionReceipt: typeof openReceipt = (secret, publicKey, value) =>
+  openReceipt(secret, publicKey, value);

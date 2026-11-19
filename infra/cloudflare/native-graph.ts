@@ -1,3 +1,4 @@
+import { installedOrigins } from "../../apps/server/src/shell/browser-transport/contract";
 import { Schema } from "effect";
 
 // This independent inventory guards the pinned Alchemy plan, including the static build and every delivery consumer.
@@ -180,26 +181,59 @@ const kinds: Readonly<Record<NativeRole, Readonly<Record<string, ReadonlyArray<s
     assets: ["ASSETS"],
   },
 };
-export const nativeBindingInventory = (role: NativeRole): ReadonlyMap<string, string> =>
-  new Map(
+export const nativeBindingInventory = (
+  role: NativeRole,
+  fingerprint = ""
+): ReadonlyMap<string, string> => {
+  const expected = new Map(
     Object.entries(kinds[role]).flatMap(([type, names]) =>
       names.map((name) => [name, type] as const)
     )
   );
+  if (fingerprint && !/^[a-f0-9]{64}$/u.test(fingerprint)) {
+    throw Error("Invalid expected native fixture signer fingerprint");
+  }
+  if (fingerprint && role === "Core") {
+    expected.set("NATIVE_FIXTURE_SIGNING_KEY", "secret_text");
+    expected.set("NATIVE_FIXTURE_SIGNER_SHA256", "plain_text");
+  }
+  return expected;
+};
 
 const Binding = Schema.StructWithRest(Schema.Struct({ name: Schema.String, type: Schema.String }), [
   Schema.Record(Schema.String, Schema.Unknown),
 ]);
 export type NativeBinding = typeof Binding.Type;
 export const NativeBindings = Schema.Array(Binding);
-export const requireRoleBindings = ({
-  role,
-  bindings,
-}: {
-  role: NativeRole;
-  bindings: ReadonlyArray<NativeBinding>;
-}): void => {
-  const expected = nativeBindingInventory(role);
+const requireClosedRole = (
+  role: NativeRole,
+  bindings: ReadonlyArray<NativeBinding>,
+  fingerprint: string
+): void => {
+  const text = (name: string): unknown => bindings.find((binding) => binding.name === name)?.text;
+  if (
+    fingerprint &&
+    role === "Core" &&
+    (text("NATIVE_FIXTURE_SIGNER_SHA256") !== fingerprint ||
+      text("BROWSER_ORIGIN") !== installedOrigins.acceptance.browser)
+  ) {
+    throw Error("Actual candidate receipt signer or closed acceptance origin differs");
+  }
+  if (text("RECOVERY_ISOLATION") !== "isolated" || text("NATIVE_STORAGE_ADMISSION") !== "closed") {
+    throw Error("Closed admission is required");
+  }
+};
+export const requireRoleBindings = (
+  {
+    role,
+    bindings,
+  }: {
+    role: NativeRole;
+    bindings: ReadonlyArray<NativeBinding>;
+  },
+  fingerprint = ""
+): void => {
+  const expected = nativeBindingInventory(role, fingerprint);
   if (
     bindings.length !== expected.size ||
     new Set(bindings.map((binding) => binding.name)).size !== expected.size ||
@@ -207,15 +241,7 @@ export const requireRoleBindings = ({
   ) {
     throw Error("Missing, extra or unexpected native Worker binding for " + role);
   }
-  if (role === "Ingress" || role === "Core") {
-    const text = (name: string): unknown => bindings.find((binding) => binding.name === name)?.text;
-    if (
-      text("RECOVERY_ISOLATION") !== "isolated" ||
-      text("NATIVE_STORAGE_ADMISSION") !== "closed"
-    ) {
-      throw Error("Closed admission is required");
-    }
-  }
+  if (role === "Ingress" || role === "Core") requireClosedRole(role, bindings, fingerprint);
 };
 
 export const smokeResource = (id: string): boolean =>

@@ -122,7 +122,12 @@ def main():
     artifacts["bounded-ingress"] = hashlib.sha256((out / "bounded-ingress.mjs").read_bytes()).hexdigest()
     artifacts["limits"] = hashlib.sha256((out / "limits.json").read_bytes()).hexdigest()
     artifacts["probe"] = hashlib.sha256((out / "probe.json").read_bytes()).hexdigest()
-    (out / "manifest.json").write_text(json.dumps(dict(baseline=PIN, calibration=CALIBRATION, sha256=artifacts), indent=2))
+    for name in ("snapshot-proof", "expected", "disclosure"):
+        path = out / (name + ".json")
+        if path.is_file():
+            artifacts[name] = hashlib.sha256(path.read_bytes()).hexdigest()
+    contract = subprocess.check_output(["bun", "run", "--silent", "--cwd", "apps/server", "contracts:digest"], cwd=root, text=True).strip()
+    (out / "manifest.json").write_text(json.dumps(dict(baseline=PIN, calibration=CALIBRATION, contractDigest=contract, sha256=artifacts), indent=2))
 
 
 if __name__ == "__main__":

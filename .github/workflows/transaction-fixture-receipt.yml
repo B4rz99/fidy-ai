@@ -1,0 +1,45 @@
+name: Rehearse closed Transaction fixture provenance
+on:
+  push:
+    branches: [perf/closed-transaction-fixture-receipt]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  receipt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/bun-runtime
+      - run: bash scripts/install-workspace.sh --ignore-scripts
+      - name: Verify closed release signer inventories on the real plan
+        working-directory: infra/cloudflare
+        run: bun run test native-application-plan.test.ts native-deployed-graph.test.ts
+      - name: Require genuine signed capture and own-fixture proof
+        if: always()
+        run: |
+          python3 -m unittest discover -s scripts/infra-performance/canonical-fixture
+          python3 scripts/infra-performance/canonical-fixture/hosted.py rehearse --out apps/server/test-results/closed-native-fixture
+      - name: Check receipt policy code
+        if: always()
+        run: |
+          bun x oxlint --deny-warnings --config .oxlintrc.json --type-aware --threads=1 apps/server/cloudflare/release-isolation/{internal/performance-receipt,operations}.ts apps/server/cloudflare/transactions/{internal/performance-receipt,operations}.ts apps/server/cloudflare/{core-http/runtime,user-store/runtime,public-worker,user-store.test-fixture}.ts scripts/infra-performance/canonical-fixture/{bridge,closed-runtime.test-fixture}.ts infra/cloudflare/{native-fixture-signer,native-application,native-graph,native-deployed-graph,native-storage-release,native-storage-resources,storage-installation}.ts
+      - name: Check owned modules and application types
+        if: always()
+        run: |
+          bun install --cwd tools/mcp-inspector --frozen-lockfile
+          bun install --cwd tools/astro --frozen-lockfile
+          bun install --cwd tools/mutation --frozen-lockfile
+          bun install --cwd tools/depcruise --frozen-lockfile
+          bun x tsc --build infra/cloudflare
+          bun run --cwd apps/server typecheck
+          bun run --cwd apps/server lint:deps
+      - name: Keep only aggregate result
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: closed-native-fixture-${{ github.run_id }}
+          path: apps/server/test-results/closed-native-fixture/summary.json

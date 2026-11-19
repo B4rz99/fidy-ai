@@ -1,3 +1,4 @@
+import { expectedFixtureSigner } from "./native-fixture-signer";
 import { BunFileSystem } from "@effect/platform-bun";
 import type { ErasureProgress } from "./native-erasure-continuation";
 import type { ErasureObservation } from "./native-erasure";
@@ -393,6 +394,7 @@ const verifyDeployedWorkers = Effect.fn(function* (
   client: HttpClient.HttpClient,
   port: ReleasePort
 ) {
+  const fingerprint = yield* expectedFixtureSigner;
   const workers: ReadonlyArray<readonly [NativeRole, string]> = [
     ["Ingress", installationNames.Ingress],
     ["Core", installationNames.Core],
@@ -405,13 +407,16 @@ const verifyDeployedWorkers = Effect.fn(function* (
     const id = yield* releaseController.servingVersion(deployment);
     const raw = yield* releaseEvidence.readWorkerVersion(env, client, { name, id });
     yield* Effect.try(() =>
-      verifyDeployedVersion({
-        role,
-        account: env.account,
-        revision: env.revision,
-        versionId: id,
-        raw,
-      })
+      verifyDeployedVersion(
+        {
+          role,
+          account: env.account,
+          revision: env.revision,
+          versionId: id,
+          raw,
+        },
+        fingerprint
+      )
     );
     yield* verifyReleaseObservability(env, name, client);
     if (role === "Core") yield* verifyCoreDefaultPlacement(env, { name, version: id }, client);

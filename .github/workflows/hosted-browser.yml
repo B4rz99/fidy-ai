@@ -7,6 +7,8 @@ on:
       - "scripts/infra-performance/hosted-browser/**"
       - "scripts/infra-performance/reference/fresh-transactions.mjs"
       - "scripts/infra-performance/reference/fresh-workspaces.mjs"
+      - "scripts/infra-performance/reference/fresh-dashboard.mjs"
+      - "scripts/infra-performance/reference/fresh-recurring.mjs"
       - "infra/cloudflare/native-acceptance.ts"
       - "apps/server/cloudflare/release-isolation/**"
   workflow_dispatch:
@@ -18,7 +20,7 @@ on:
       view:
         description: Browser journey on the prepared synthetic fixture
         type: choice
-        options: [transactions, budgets, needs-review]
+        options: [transactions, budgets, needs-review, dashboard, recurring]
         default: transactions
       network:
         description: Browser network profile

@@ -2,6 +2,8 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { Schema } from "effect";
+import { freshDashboard } from "../reference/fresh-dashboard.mjs";
+import { freshRecurring } from "../reference/fresh-recurring.mjs";
 import { freshBudgetMonth, freshPendingReview } from "../reference/fresh-workspaces.mjs";
 import { freshTransactions } from "../reference/fresh-transactions.mjs";
 import { protectedBrowserProxy } from "./proxy.mjs";
@@ -9,7 +11,7 @@ import { protectedBrowserProxy } from "./proxy.mjs";
 const { chromium } = await import("@playwright/test");
 /** @typedef {import("./proxy.mjs").Origins} Origins */
 /** @typedef {"ordinary" | "poor"} Network */
-/** @typedef {"transactions" | "budgets" | "needs-review"} View */
+/** @typedef {"transactions" | "budgets" | "needs-review" | "dashboard" | "recurring"} View */
 /** @typedef {(row: Readonly<Record<string, unknown>>) => void} EventSink */
 /** @typedef {import("@playwright/test").CDPSession} Cdp */
 /** @typedef {import("@playwright/test").Response} BrowserResponse */
@@ -138,7 +140,7 @@ const recordBrowser = (event, { network, view }, version) => {
     version,
     profile: network,
     view,
-    plannedJourneys: view === "transactions" ? 3 : 1,
+    plannedJourneys: ["transactions", "recurring"].includes(view) ? 3 : 1,
     network:
       network === "poor"
         ? { latencyMs, bytesPerSecondEachDirection: bytesPerSecond }
@@ -180,9 +182,14 @@ export const measureBrowser = async ({
     await setNetwork(cdp, network);
     recordBrowser(event, { network, view }, browser.version());
     recordResources(cdp, origins, event);
-    if (view === "budgets" || view === "needs-review") {
-      const measure = view === "budgets" ? freshBudgetMonth : freshPendingReview;
-      await measure({ page, ...origins, event });
+    if (view !== "transactions") {
+      const readers = {
+        budgets: freshBudgetMonth,
+        "needs-review": freshPendingReview,
+        dashboard: freshDashboard,
+        recurring: freshRecurring,
+      };
+      await readers[view]({ page, ...origins, event });
       return;
     }
     /**

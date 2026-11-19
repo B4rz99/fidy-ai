@@ -57,6 +57,40 @@ def verify_signed_originals(originals, capture):
             raise ValueError("Native owner facts differ for an original Transaction")
 
 
+def verify_signed_views(manifest, links):
+    originals = {row["id"]: row for row in manifest["originals"]}
+    inspections = manifest["inspections"]
+    if set(inspections) != set(originals) or len(links) != 1:
+        raise ValueError("The exact eight original inspections and one signed link are required")
+    link, = links
+    pair = [link["first"], link["second"]]
+    visible, suppressed = manifest["visible"], manifest["suppressed"]
+    if (visible != link["visible"] or visible == suppressed or set(pair) != {visible, suppressed}
+            or not set(pair) <= set(originals)):
+        raise ValueError("Manifest visible or suppressed original differs from the signed link")
+    ordered = sorted((row for row in originals.values() if row["id"] != suppressed),
+                     key=lambda row: (instant(row["occurredAt"]), instant(row["createdAt"]), row["id"]),
+                     reverse=True)
+    if manifest["history"].get("data") != ordered or manifest["history"].get("next") != []:
+        raise ValueError("Effective history differs from the signed original facts and link")
+    for requested, response in inspections.items():
+        linked = requested in pair
+        expected = originals[visible if linked else requested]
+        data = response["data"]
+        presentation = {"kind": "independent"}
+        reconciliation = {"kind": "independent"}
+        sources = []
+        if linked:
+            presentation = ({"kind": "visible-member"} if requested == visible else
+                            {"kind": "suppressed-member", "requestedId": requested})
+            reconciliation = {"kind": "linked", "firstTransaction": originals[pair[0]],
+                              "secondTransaction": originals[pair[1]]}
+            sources = [{"transactionId": item, "kinds": ["manual"]} for item in pair]
+        if data != {**expected, "presentation": presentation,
+                    "reconciliation": reconciliation, "sources": sources}:
+            raise ValueError("An inspection response differs from its signed original facts and link")
+
+
 def verified_provenance(directory, *, revision, resource_prefix):
     directory = Path(directory)
     manifest = private_file(directory, "manifest.json")
@@ -70,6 +104,7 @@ def verified_provenance(directory, *, revision, resource_prefix):
         raise ValueError("Native receipt coordinates differ from the approved experiment")
     evidence = open_envelope(sealed,revision)
     verify_signed_originals(manifest["originals"], evidence["capture"])
+    verify_signed_views(manifest, evidence["links"])
     if len(evidence["capture"])!=8 or len(evidence["links"])!=1:
         raise ValueError("Native owner receipt has the wrong fixture cardinality")
     return evidence, dict(nativeRevision=revision, member="performance-1", resourcePrefix=resource_prefix,

@@ -1,4 +1,4 @@
-import { UserStore as NativeUser } from "../user-store/runtime";
+import { UserStore as NativeUser } from "../core-worker";
 
 export { default } from "../core-worker";
 export * from "../core-worker";

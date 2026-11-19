@@ -49,10 +49,10 @@ await test("the registered catalog generation composition can use owner runtime 
   );
 });
 
-await test("enrollment acceptance earns only named test-composition authority", () => {
-  const enrollment = "cloudflare/subscription/payment-enrollment.test.ts";
-  const runtime = "cloudflare/core-http/runtime.ts";
-  assert.deepEqual(inspect(enrollment, runtime), []);
+await test("support transport tests earn only named test-composition authority", () => {
+  const recovery = "cloudflare/recovery/support-recovery.test.ts";
+  const runtime = "cloudflare/outbound-http/runtime.ts";
+  assert.deepEqual(inspect(recovery, runtime), []);
   assert.equal(
     inspect("cloudflare/subscription/ordinary.test.ts", runtime).some(
       (violation) => violation.name === "runtime-outside-composition"
@@ -60,7 +60,7 @@ await test("enrollment acceptance earns only named test-composition authority", 
     true
   );
   assert.equal(
-    inspect("cloudflare/core-worker.ts", enrollment).some(
+    inspect("cloudflare/core-worker.ts", recovery).some(
       (violation) => violation.name === "production-imports-test-code"
     ),
     true

@@ -1,4 +1,4 @@
-import { UserStore as ProductionUserStore } from "./user-store/runtime";
+import { UserStore as ProductionUserStore } from "./core-worker";
 
 export { default } from "./core-worker";
 export * from "./core-worker";

@@ -69,7 +69,7 @@ export default {
         "Maintenance composes published owner runtimes and declarations only; SQL, policies, admission and lifecycle implementations remain with their owners (#614).",
       from: {
         path: "^cloudflare/maintenance/",
-        pathNot: "\\.test\\.ts$",
+        pathNot: ["\\.test\\.ts$", "^cloudflare/maintenance/native-monitor\\.test-fixture\\.ts$"],
       },
       to: {
         path: ["^cloudflare/", "^src/(core|shell)/"],

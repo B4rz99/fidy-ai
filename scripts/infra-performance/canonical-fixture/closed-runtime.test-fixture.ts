@@ -1,3 +1,4 @@
+import { calibrateNative } from "./native-usage.test-fixture";
 import { serveFixture } from "./bridge";
 // Disposable production Workers and the pinned release's private Google provider, without an account transport.
 import { Effect, Option } from "effect";
@@ -15,6 +16,35 @@ const observedManifest = async (
   name: string
 ): Promise<NonNullable<MiniflareWorkerConfig["manifest"]>> => {
   const manifest = await Effect.runPromise(workerManifest(module));
+  if (name === "core" && process.env.FIDY_NATIVE_SIZING_DIR) {
+    const wrapOwners = Object.keys(nativeOwners)
+      .map(
+        (owner) =>
+          "export const " +
+          owner +
+          "=observed(" +
+          JSON.stringify(owner) +
+          ",Production." +
+          owner +
+          ");"
+      )
+      .join("\n");
+    const wrapped =
+      'import * as Production from "./production.mjs"; import {observed,totals} from "./meter.mjs"; export * from "./production.mjs";' +
+      wrapOwners +
+      'export default {...Production.default,fetch(request,...args){if(request.url==="https://offline.invalid/native-row-counts")return totals();return Production.default.fetch(request,...args);}};';
+    return {
+      mainModule: "index.mjs",
+      modules: {
+        "index.mjs": { type: "esm", contents: wrapped },
+        "production.mjs": manifest.modules["index.mjs"],
+        "meter.mjs": {
+          type: "esm",
+          contents: await Bun.file(new URL("./meter.test-fixture.mjs", import.meta.url)).text(),
+        },
+      },
+    };
+  }
   if (name !== "ingress") return manifest;
   // The local Miniflare entry listener supplies its loopback URL. Preserve the fixed original TLS
   // URL when delivering to the production Ingress so the real signed request can be verified.
@@ -64,6 +94,7 @@ export const closedRuntime = async (revision: string, secret: string): Promise<M
     SMOKE_BUCKET: { type: "r2" as const, name: "private-receipt-rehearsal" },
   };
   return new Miniflare({
+    resourcePersistencePath: process.env.FIDY_NATIVE_SIZING_DIR,
     handleStructuredLogs: () => undefined,
     workers: await Promise.all([
       worker("ingress", "./public-worker.ts", {
@@ -77,6 +108,9 @@ export const closedRuntime = async (revision: string, secret: string): Promise<M
         env: {
           ...shared,
           ...nativeOwnerBindings,
+          EMAIL_BUCKET: { type: "r2", name: "private-email" },
+          STATEMENT_STAGING_BUCKET: { type: "r2", name: "private-statements" },
+          SAMPLE_BUCKET: { type: "r2", name: "private-samples" },
           NATIVE_FIXTURE_SIGNING_KEY: text(process.env.TEST_FIXTURE_PRIVATE_KEY ?? ""),
           SQLITE_STORE_CAPACITY_BYTES: text("1000000000"),
           GOOGLE_CLIENT_ID: text("fidy-native-google"),
@@ -107,7 +141,8 @@ if (import.meta.main) {
       process.env.FIDY_NATIVE_REVISION ?? "",
       process.env.SMOKE_PROOF ?? ""
     );
-    await serveFixture(Option.some(runtime));
+    const output = process.env.FIDY_NATIVE_SIZING_DIR;
+    await serveFixture(Option.some(runtime), output ? calibrateNative(runtime, output) : undefined);
   } catch {
     process.stderr.write("Closed workerd rehearsal stopped\n");
     process.exitCode = 1;

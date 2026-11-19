@@ -197,17 +197,25 @@ const authority = (): Auth => {
   }
   return auth;
 };
-export const serveFixture = async (runtime: Option.Option<Miniflare>): Promise<void> => {
+export type FixtureSession = Session;
+export type FixtureClient = Client;
+export type RehearsalHooks = (service: Client) => Promise<(active: Session) => Promise<void>>;
+export const serveFixture = async (
+  runtime: Option.Option<Miniflare>,
+  hooks?: RehearsalHooks
+): Promise<void> => {
   const auth = authority(),
     local = Option.isSome(runtime);
   try {
-    const service = client(auth, transport(runtime)),
-      active = await start(service);
+    const service = client(auth, transport(runtime));
+    const finish = await hooks?.(service);
+    const active = await start(service);
     offer(active);
     for await (const line of createInterface({ input: process.stdin, terminal: false })) {
       const item = Schema.decodeUnknownSync(Schema.fromJsonString(command))(line);
       await execute(item, active, { local, service });
     }
+    await finish?.(active);
   } finally {
     if (Option.isSome(runtime)) await runtime.value.dispose();
   }

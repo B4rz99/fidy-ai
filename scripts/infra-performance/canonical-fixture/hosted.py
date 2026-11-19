@@ -105,12 +105,17 @@ def bridge(mode, revision, session):
         finally:
             child.stdin.close()
             try:
-                child.wait(timeout=20)
+                status=child.wait(timeout=1050 if mode=="rehearse" and os.environ.get("FIDY_NATIVE_SIZING_DIR") else 20)
+                if status!=0:
+                    raise ValueError("Closed native process failed during final verification")
             except subprocess.TimeoutExpired:
                 child.kill()
+                raise ValueError("Closed native owner exceeded its disposal deadline")
 
 
 def collect(mode, revision, prefix, out):
+    if mode != "rehearse":
+        raise ValueError("Hosted collection requires native row admission and an independent protected cleanup owner")
     directory=out/"fixture"
     directory.mkdir(mode=0o700, exist_ok=True)
     # Serialize Session creation and receipt issuance separately from the canonical mutation journal.

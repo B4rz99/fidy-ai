@@ -8,6 +8,7 @@ on:
         perf/canonical-performance-fixture,
         perf/frozen-d1-schema-snapshot,
         perf/protected-comparator-preparation,
+        perf/materialized-comparator-image,
       ]
   pull_request:
     paths:
@@ -71,6 +72,10 @@ jobs:
           sparse-checkout: |
             apps/server/scripts
             apps/server/cloudflare
+      - name: Restore and meter the complete materialized canonical comparison fixture
+        run: |
+          python3 scripts/infra-performance/cells/prepare.py --d1 baseline-d1 --calibration baseline-calibration \
+            --canonical-fixture apps/server/test-results/canonical-fixture/fixture --materialized --out apps/server/test-results/materialized
       - name: Reconstruct the final empty schema and repeat the fully verified comparator
         run: |
           python3 scripts/infra-performance/cells/prepare.py --d1 baseline-d1 --calibration baseline-calibration \
@@ -97,6 +102,9 @@ jobs:
             apps/server/test-results/storage-preparation/**/*.json
             apps/server/test-results/storage-preparation/*.json
             apps/server/test-results/storage-http/*.json*
+            apps/server/test-results/materialized/snapshot-proof.json
+            apps/server/test-results/materialized/probe.json
+            apps/server/test-results/materialized/refusal.json
             apps/server/test-results/canonical-snapshot/probe.json
             apps/server/test-results/canonical-snapshot/snapshot-proof.json
             apps/server/test-results/canonical-snapshot/limits.json

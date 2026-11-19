@@ -16,8 +16,8 @@ POST https://api.fidyapp.com/internal/support-recovery
 ```
 
 Restrict its allow policy to the `recovery-operator` group and set the user session duration to 15
-minutes. Production Alchemy owns the dedicated path application, its email-PIN identity provider
-and the group with exactly `RECOVERY_OPERATOR_EMAIL`. Configure that email in the GitHub Production
+minutes. Production Alchemy owns the dedicated path application and the group with exactly
+`RECOVERY_OPERATOR_EMAIL`. The application references the account’s existing One-time PIN provider. Configure that email in the GitHub Production
 environment variable and the existing organization issuer in `CLOUDFLARE_ACCESS_ISSUER`.
 Core receives the application's generated audience directly; no manually entered audience secret is
 used by deployment. Issuer and audience are public JWT verification metadata, not credentials.
@@ -33,8 +33,8 @@ organization and uploaded Core version. It refuses missing resources, broader gr
 non-15-minute authority or issuer/audience mismatches. The account's existing Zero Trust organization
 must be configured first; deployment does not overwrite organization-wide settings.
 
-The deployment API token needs account-scoped Access applications/policies, groups and identity
-providers edit permissions and organizations read permission. The observability token needs only
+The deployment API token needs account-scoped Access applications/policies and groups write access
+and identity-provider and organization read access. The observability token needs only
 the corresponding read permissions for verification. Keep token values out of repository files
 and terminal output.
 

@@ -1,6 +1,6 @@
 import { Hex } from "effect/encoding";
 import * as Cloudflare from "alchemy/Cloudflare";
-import type { Output } from "alchemy/Output";
+import { type Output, map } from "alchemy/Output";
 import { Config, Effect, Option, Redacted, Schema } from "effect";
 import { ApprovedOpenAiModel } from "@fidy/server/hosted-inference-contract";
 import { EmailAddress } from "@fidy/server/email-authentication-contract";
@@ -210,17 +210,19 @@ const accessRoles = {
   },
   BetaProAccess: { name: "Fidy native beta Pro operator", path: "/internal/beta-pro" },
 } as const;
+const recoveryPin = map(Cloudflare.Access.getIdentityProvider({ type: "onetimepin" }), (provider) =>
+  Schema.decodeUnknownSync(Schema.String.check(Schema.isUUID()))(provider?.identityProviderId)
+);
 const supportApplication = Effect.fn(function* (
   logicalId: keyof typeof accessRoles,
   member: Option.Option<string>,
   context: {
     release: NativeRelease;
     group: Cloudflare.Access.Group;
-    idp: Cloudflare.Access.IdentityProvider;
   }
 ) {
   const { name, path } = accessRoles[logicalId];
-  const { release, group, idp } = context;
+  const { release, group } = context;
   const hosts =
     release.hosts === "staged"
       ? [nativeIngressHost, productionTopology.ingress.hostname]
@@ -234,7 +236,7 @@ const supportApplication = Effect.fn(function* (
     destinations: hosts.map((host) => ({ type: "public", uri: host + path })),
     sessionDuration: "15m",
     appLauncherVisible: false,
-    allowedIdps: [idp.identityProviderId],
+    allowedIdps: [recoveryPin],
     autoRedirectToIdentity: true,
     policies: [{ name, decision: "allow", precedence: 1, sessionDuration: "15m", include }],
   });
@@ -263,16 +265,12 @@ export const privateAccessBindings = Effect.fn(function* (release: NativeRelease
   const issuer = yield* Config.String("CLOUDFLARE_ACCESS_ISSUER");
   const operator = yield* Config.schema(EmailAddress, "RECOVERY_OPERATOR_EMAIL");
   const reviewer = yield* Config.Literal("obarboza@fidyapp.com", "SAMPLE_REVIEWER_EMAIL");
-  const idp = yield* Cloudflare.Access.IdentityProvider("RecoveryIdentity", {
-    name: "Fidy native recovery email PIN",
-    type: "onetimepin",
-  });
   const group = yield* Cloudflare.Access.Group("RecoveryOperators", {
     name: "Fidy native recovery operators",
     include: [{ email: { email: operator } }],
   });
   const betaOperator = yield* Config.Literal("obarboza@fidyapp.com", "BETA_PRO_OPERATOR_EMAIL");
-  const context = { release, idp, group };
+  const context = { release, group };
   const recovery = yield* supportApplication("SupportRecoveryAccess", Option.none(), context);
   const erasure = yield* supportApplication(
     "TitularErasureAccess",

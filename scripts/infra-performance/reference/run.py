@@ -39,6 +39,7 @@ BOUNDARIES = [
     "correction.fresh-read.http",
     "correction.through-fresh-http",
     "correction.browser",
+    "startup.browser",
 ]
 
 
@@ -64,7 +65,7 @@ REASONS = {
     "native worker build failed": "worker-build",
 }
 SOURCE_LOCATION = re.compile(
-    r"/(native-seed\.ts|native\.ts|dev-browser-api\.ts|browser\.mjs|preview\.mjs):(\d{1,6}):(\d{1,6})\b"
+    r"/(native-seed\.ts|native\.ts|fresh-transactions\.mjs|dev-browser-api\.ts|browser\.mjs|preview\.mjs):(\d{1,6}):(\d{1,6})\b"
 )
 
 
@@ -203,6 +204,7 @@ def observation(path, env, destination, variant="d1"):
             requests[2]["httpMs"],
             requests[2]["startEpochMs"] + requests[2]["httpMs"] - requests[1]["startEpochMs"],
             result["correctionMs"],
+            result["startupMs"],
         ]
         return {**result, "seed": seed, "timings": dict(zip(BOUNDARIES, values, strict=True))}
 
@@ -309,14 +311,14 @@ def main():
             "d1": "direct ingress and Core calls in Bun; D1 binding uses Miniflare",
             "do": "Miniflare dispatchFetch to workerd ingress, Core and User store",
         },
-        "browserStart": "driver clock immediately before clicking Refresh or Save on the loaded workspace",
-        "browserEnd": "read requires search to disable then re-enable; both actions require the expected enabled row and two animation frames; payload verification follows timing",
+        "browserStart": "driver clock immediately before fresh document navigation, or Refresh/Save on the loaded workspace",
+        "browserEnd": "refresh requires search to disable then re-enable; startup, refresh and save require all expected ordered rows to be visible and enabled through two animation frames; payload verification follows timing",
         "lifecycle": "User and shared reconstruction unobserved",
         "warmup": "pairing and fixture preparation excluded; no measured attempts excluded",
         "harnessRevision": output(["git", "rev-parse", "HEAD"], ROOT),
         "comparisonSourceSha256": {
             f.name: hashlib.sha256(f.read_bytes()).hexdigest()
-            for f in [Path(__file__), BROWSER, HERE / "preview.mjs"]
+            for f in [Path(__file__), BROWSER, HERE / "fresh-transactions.mjs", HERE / "preview.mjs"]
         },
         "pairs": args.pairs,
         "order": "alternate D1-first and DO-first pairs" if args.candidate else "pinned D1 reference",

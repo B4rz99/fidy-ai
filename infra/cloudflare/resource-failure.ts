@@ -1,5 +1,6 @@
 import { Cause, Data, Effect, Option, Schema } from "effect";
 import { HttpClientError } from "effect/http";
+import { RecoveryPinUnavailable } from "./native-recovery-identity";
 
 const maximumRefusalReasons = 16;
 
@@ -71,6 +72,7 @@ const StateRefusal = Schema.TaggedStruct("StateStoreError", {
 });
 
 const refusalCategory = (error: unknown, failure: boolean): string => {
+  if (error instanceof RecoveryPinUnavailable) return "account recovery PIN " + error.reason;
   const state = Schema.decodeUnknownOption(StateRefusal)(error);
   if (Option.isSome(state)) return "StateStoreError; HTTP " + state.value.http.status;
   const refusal = Schema.decodeUnknownOption(ProviderRefusal)(error);
@@ -109,6 +111,7 @@ type NativeStage =
   | "Worker bindings"
   | "resource inventory"
   | "first-install ownership"
+  | "account recovery PIN"
   | "Access host plan"
   | "closed edge preparation"
   | "upload verification"

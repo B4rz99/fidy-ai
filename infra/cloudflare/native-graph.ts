@@ -4,7 +4,6 @@ import { Schema } from "effect";
 export const nativeResourceInventory = (revision: string): ReadonlyMap<string, string> => {
   if (!/^[a-f0-9]{40}$/u.test(revision)) throw Error("Missing native release revision");
   const resources: Readonly<Record<string, ReadonlyArray<string>>> = {
-    "Cloudflare.Access.IdentityProvider": ["RecoveryIdentity"],
     "Cloudflare.Access.Group": ["RecoveryOperators"],
     "Cloudflare.Access.Application": [
       "SupportRecoveryAccess",

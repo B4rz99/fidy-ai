@@ -1,0 +1,32 @@
+name: Verify protected comparator branch checks
+on:
+  push:
+    branches: [perf/scratch-protected-owner-checks]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: d7df5f05fa0ac808650c091178e3702804a78ddd
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/bun-runtime
+      - name: Check comparator commit messages
+        run: |
+          for commit in $(git rev-list 1a2572a093a5670825e22802a60e0ac584c474e3..HEAD); do
+            git show -s --format=%B "$commit" > "$RUNNER_TEMP/commit.txt"
+            bun scripts/check-commit-message.ts "$RUNNER_TEMP/commit.txt"
+          done
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LOG_OPTS: 1a2572a093a5670825e22802a60e0ac584c474e3..HEAD
+      - uses: trufflesecurity/trufflehog@20652fbbdefffcdaa493a5bf57ab2ac6b1db715b
+        with:
+          base: 1a2572a093a5670825e22802a60e0ac584c474e3
+          head: d7df5f05fa0ac808650c091178e3702804a78ddd
+          version: 3.97.1@sha256:deb2af10659a488a14d262a323addcde099d99827a1cf1dc4e93c17915c39f08
+          extra_args: --only-verified --exclude-paths=.trufflehog-exclude-paths.txt

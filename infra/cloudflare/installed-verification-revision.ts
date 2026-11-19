@@ -3,14 +3,20 @@ import { Effect, Schema } from "effect";
 const commit = Schema.is(Schema.String.check(Schema.isPattern(/^[a-f0-9]{40}$/u)));
 const verifierFiles = new Set([
   ".github/workflows/native-storage-release.yml",
+  ".github/workflows/native-fleet-pilot-check.yml",
   "docs/operations/production-releases.md",
   "infra/cloudflare/installed-verification-revision.ts",
+  "infra/cloudflare/native-acceptance.ts",
+  "infra/cloudflare/native-fleet-pilot.ts",
   "infra/cloudflare/native-deployed-edge.ts",
   "infra/cloudflare/native-deployed-graph.ts",
   "infra/cloudflare/native-deployed-web.ts",
   "infra/cloudflare/native-storage-release.ts",
   "infra/cloudflare/production-release.ts",
   "infra/cloudflare/verify-edge-policy.ts",
+  "scripts/infra-performance/deployed-fleet/observations.py",
+  "scripts/infra-performance/deployed-fleet/pilot.py",
+  "scripts/infra-performance/deployed-fleet/test_pilot.py",
 ]);
 const isVerificationFile = (path: string): boolean =>
   verifierFiles.has(path) || /^infra\/cloudflare\/[^/]+\.test\.ts$/u.test(path);

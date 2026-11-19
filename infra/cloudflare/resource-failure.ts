@@ -124,7 +124,7 @@ class NativeStageFailure extends Data.TaggedError("NativeStageFailure")<{ messag
 export type { NativeStageFailure };
 
 export const nativeResourceStage =
-  (stage: NativeStage | { stage: "planning"; details: () => string }) =>
+  (stage: NativeStage | { stage: "planning" | "closed edge preparation"; details: () => string }) =>
   <A, E, R>(operation: Effect.Effect<A, E, R>): Effect.Effect<A, E | NativeStageFailure, R> =>
     operation.pipe(
       Effect.catchCauseIf(

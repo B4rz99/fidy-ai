@@ -90,9 +90,9 @@ export const nativeEdgeChanges = (value: unknown): ReadonlyArray<Change> => {
 };
 
 export const verifyNativeEdge = Effect.fn(function* (
-  env: ProductionReleaseConfig,
+  env: Pick<ProductionReleaseConfig, "account" | "token">,
   client: HttpClient.HttpClient,
-  install: boolean
+  mode: "plan" | "install" | "verify"
 ) {
   const base = "https://api.cloudflare.com/client/v4";
   const headers = { authorization: "Bearer " + env.token };
@@ -121,8 +121,8 @@ export const verifyNativeEdge = Effect.fn(function* (
   for (let mutations = 0; mutations <= previousExpressions.length; mutations++) {
     const changes = yield* inspect();
     const change = changes[0];
-    if (change === undefined) return;
-    if (!install || mutations === previousExpressions.length) {
+    if (change === undefined || mode === "plan") return;
+    if (mode !== "install" || mutations === previousExpressions.length) {
       return yield* Effect.fail(Error("Acceptance hostname policy is incomplete"));
     }
     yield* releaseEvidence

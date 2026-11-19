@@ -99,6 +99,11 @@ describe("Production runtime configuration gate", () => {
     }
   });
 
+  it("passes the Production environment's configured Access issuer secret to the protected release", async () => {
+    const workflow = await readFile(productionWorkflowPath, "utf8");
+    expect(workflow).toContain("CLOUDFLARE_ACCESS_ISSUER: ${{ secrets.CLOUDFLARE_ACCESS_ISSUER }}");
+  });
+
   it("keeps real payment secrets out of closed first installation", async () => {
     const first = await workflowStep("Install the verified fresh native application");
     expect(first).toContain("bun native-storage-resources.ts first-install");

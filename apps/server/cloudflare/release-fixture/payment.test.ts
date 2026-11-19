@@ -3,7 +3,7 @@ import { it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import { expect } from "vitest";
 import { native, nativeBillingPlatform } from "../user-store.test-fixture";
-import { acceptancePaymentToken } from "./operations";
+import { acceptancePaymentToken } from "./contract";
 import { acceptanceProviderResponse } from "./runtime";
 
 const source = Effect.gen(function* () {

@@ -12,10 +12,8 @@ import {
   acceptanceLifetimeMs,
   acceptanceProofHeader,
 } from "../../apps/server/cloudflare/release-isolation/contract";
-import {
-  acceptancePaymentToken,
-  issueAcceptanceProviderCode,
-} from "../../apps/server/cloudflare/release-fixture/operations";
+import { acceptancePaymentToken } from "../../apps/server/cloudflare/release-fixture/contract";
+import { issueAcceptanceProviderCode } from "../../apps/server/cloudflare/release-fixture/operations";
 
 type Inputs = {
   revision: string;

@@ -1,7 +1,7 @@
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { Base64Url, Hex } from "effect/encoding";
-import type { AcceptanceProviderEnvironment } from "../contract";
-import { acceptancePaymentToken } from "./payment-token";
+import { type AcceptanceProviderEnvironment, acceptancePaymentToken } from "../contract";
+
 import { acceptanceSubject } from "../../release-isolation/operations";
 import { digestBytes } from "../../secret-material/operations";
 

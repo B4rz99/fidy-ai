@@ -1,8 +1,6 @@
 import { Effect } from "effect";
 import { Base64Url } from "effect/encoding";
 
-export { acceptancePaymentToken } from "./internal/payment-token";
-
 const fixtureMac = Effect.fn(function* (secret: string, content: string) {
   const key = yield* Effect.tryPromise(() =>
     crypto.subtle.importKey(

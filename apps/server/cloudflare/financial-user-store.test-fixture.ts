@@ -25,22 +25,26 @@ export const category = "10000000-0000-4000-8000-000000000016";
 export const transaction = "10000000-0000-4000-8000-000000000088";
 export const second = "10000000-0000-4000-8000-000000000089";
 export const instant = 1_700_000_000_000;
-/** The local client sends the original credentials and browser Origin to this instance’s Ingress binding. */
 type ServiceResponse = ReturnType<Awaited<ReturnType<Miniflare["getWorker"]>>["fetch"]>;
+/** The local client sends the original credentials and browser Origin to this instance’s Ingress binding. */
 export const nativeIngress =
   (runtime: Miniflare) =>
-  async (url: string, init: RequestInit): ServiceResponse => {
-    const client = await runtime.getWorker("financial-client");
+  (url: string, init: RequestInit): ServiceResponse => {
     const request = new Request(url, init);
-    return client.fetch("https://client.invalid/send", {
-      method: "POST",
-      body: JSON.stringify({
-        url: request.url,
-        method: request.method,
-        headers: Object.fromEntries(request.headers),
-        body: request.body === null ? null : await request.text(),
-      }),
-    });
+    return Promise.all([
+      runtime.getWorker("financial-client"),
+      request.body === null ? null : request.text(),
+    ]).then(([client, body]) =>
+      client.fetch("https://client.invalid/send", {
+        method: "POST",
+        body: JSON.stringify({
+          url: request.url,
+          method: request.method,
+          headers: Object.fromEntries(request.headers),
+          body,
+        }),
+      })
+    );
   };
 
 export const history = Effect.fn(function* (

@@ -1,4 +1,5 @@
 import { BunFileSystem } from "@effect/platform-bun";
+import type { ErasureProgress } from "./native-erasure-continuation";
 import type { ErasureObservation } from "./native-erasure";
 import { verificationRevision } from "./installed-verification-revision";
 import { readUserObjects } from "./native-erasure-evidence";
@@ -600,7 +601,26 @@ const verifyAdmittedErasure = Effect.fn(function* (
   const source = yield* Schema.decodeUnknownEffect(ErasureSource)(
     yield* readFile(yield* ReleaseConfig.String("ERASURE_SOURCE_EVIDENCE"))
   );
+  const fs = yield* FileSystem.FileSystem;
+  const path = env.smokeAttestationFile + ".erasure";
+  const stages: Array<Parameters<ErasureProgress>[0]> = [];
+  const record: ErasureProgress = Effect.fn(function* (stage) {
+    stages.push(stage);
+    yield* fs.writeFileString(
+      path + ".next",
+      encodeJson({
+        source,
+        revision: env.revision,
+        verifierRevision,
+        userNamespace: installed.userNamespace,
+        stages,
+      })
+    );
+    yield* fs.rename(path + ".next", path);
+    yield* Effect.logInfo("Erasure continuation verified " + stage);
+  });
   const erasure = yield* continueAdmittedErasure({
+    record,
     checkpoint: yield* readFile(env.smokeAttestationFile + ".prior"),
     revision: env.revision,
     userNamespace: installed.userNamespace,

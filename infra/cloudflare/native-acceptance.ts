@@ -1,4 +1,10 @@
-import type { ErasureContinuation } from "./native-erasure-continuation";
+import {
+  PendingBrowserLoginPairing,
+  browserLoginPairingInvalidBody,
+} from "../../apps/server/src/shell/browser-login/contract";
+import { browserLoginPairingLifetime } from "../../apps/server/src/core/browser-login/contract";
+import { isDeepStrictEqual } from "node:util";
+import type { ErasureContinuation, ErasureProgress } from "./native-erasure-continuation";
 import { type ErasureObservation, verifyIndependentErasure } from "./native-erasure";
 import { ErasureReceipt } from "../../apps/server/src/core/erasure/contract";
 import { UserId } from "../../apps/server/src/core/identity/contract";
@@ -7,7 +13,7 @@ import {
   pricePublicationPath,
   refundSupportBasePath,
 } from "../../apps/server/cloudflare/subscription/contract";
-import { Clock, DateTime, Effect, Option, Redacted, Schedule, Schema } from "effect";
+import { Clock, DateTime, Duration, Effect, Option, Redacted, Schedule, Schema } from "effect";
 import { installedOrigins } from "@fidy/server/browser-transport";
 import { ProcessingAuthorization } from "../../apps/server/src/shell/processing-consent/contract";
 import { webSignupDisclosure } from "../../apps/server/src/shell/consent/operations";
@@ -134,9 +140,13 @@ const verifyProvider = Effect.fn(function* (
   intent: "login" | "signup"
 ) {
   const { post, call } = runner(input),
-    proof = yield* result(
+    { expiresAt, ...proof } = yield* result(
       yield* post("/web/pairings", {}),
-      Schema.Struct({ pairingId: Schema.String, privateVerifier: Schema.String })
+      Schema.Struct({
+        pairingId: Schema.String,
+        privateVerifier: Schema.String,
+        expiresAt: Schema.DateTimeUtcFromString,
+      })
     );
   const start = yield* post("/web/providers/google/start", {
     ...proof,
@@ -174,16 +184,20 @@ const verifyProvider = Effect.fn(function* (
   if (confirmed.status !== "verified") {
     return yield* Effect.fail(Error("Provider did not verify the synthetic pairing"));
   }
-  return { subject, proof, completion: yield* post("/web/providers/google/complete", proof) };
+  return {
+    subject,
+    proof,
+    expiresAt,
+  };
 });
 const boot = Effect.fn(function* (
   input: Inputs,
   member: Member,
   intent: "login" | "signup" = "signup"
 ) {
-  const { subject, proof, completion } = yield* verifyProvider(input, member, intent);
+  const { subject, proof } = yield* verifyProvider(input, member, intent);
   const { call, post } = runner(input);
-  const complete = yield* result(completion, phase);
+  const complete = yield* result(yield* post("/web/providers/google/complete", proof), phase);
   if (!(intent === "signup" && complete.status === "created") && complete.status !== "approved") {
     return yield* Effect.fail(Error("Original User did not complete synthetic signup"));
   }
@@ -401,6 +415,62 @@ const erasureEvidence = Effect.fn(function* (
     }),
   });
 });
+const completionOutcome = Effect.fn(function* (completion: Response) {
+  if (completion.status !== invalid && completion.status !== isolated) {
+    return yield* Effect.fail(Error("Unexpected erased provider completion"));
+  }
+  const outcome = completion.status === invalid ? "invalid" : "unavailable";
+  yield* Schema.decodeUnknownEffect(Schema.Struct({ status: Schema.Literal(outcome) }))(
+    yield* Effect.tryPromise(() => completion.json())
+  );
+  return outcome;
+});
+const ungrantedPairing = Effect.fn(function* (input: Inputs, record: ErasureProgress) {
+  const privateLogin = {
+    ...input,
+    send: Effect.fn(function* (request: Request) {
+      const reply = yield* input.send(request);
+      if (
+        reply.headers.getSetCookie().some((value) => /(?:^|,\s*)__Host-fidy_session=/u.test(value))
+      ) {
+        return yield* Effect.fail(Error("Erased subject received a browser session"));
+      }
+      return reply;
+    }),
+  };
+  const { proof, expiresAt } = yield* verifyProvider(privateLogin, "erasure-1", "login");
+  yield* record("erased-provider-verified");
+  const { post } = runner(privateLogin);
+  const outcome = yield* completionOutcome(yield* post("/web/providers/google/complete", proof));
+  yield* record(outcome === "invalid" ? "completion-invalid" : "completion-unavailable");
+  const redeem = (): ReturnType<typeof post> => post("/web/pairings/redeem", proof);
+  const pending = yield* validStatus(yield* redeem(), accepted);
+  const observed = yield* Schema.decodeUnknownEffect(PendingBrowserLoginPairing)(
+    yield* Effect.tryPromise(() => pending.json())
+  );
+  const remaining = DateTime.toEpochMillis(expiresAt) - (yield* Clock.currentTimeMillis);
+  const skewMs = 2000;
+  if (
+    DateTime.toEpochMillis(observed.expiresAt) !== DateTime.toEpochMillis(expiresAt) ||
+    remaining <= 0 ||
+    remaining > Duration.toMillis(browserLoginPairingLifetime) + skewMs
+  ) {
+    return yield* Effect.fail(Error("Erased subject pairing expiry differs"));
+  }
+  yield* record("pairing-pending");
+  yield* Effect.sleep(remaining + skewMs);
+  const terminal = yield* validStatus(yield* redeem(), invalid);
+  if (
+    !isDeepStrictEqual(
+      yield* Effect.tryPromise(() => terminal.json()),
+      browserLoginPairingInvalidBody
+    )
+  ) {
+    return yield* Effect.fail(Error("Missing terminal pairing refusal"));
+  }
+  yield* record("pairing-expired");
+  return outcome;
+});
 /** The continuation authenticates the installed revision's existing subjects with login intent only. */
 export const admittedErasureLogins = (
   input: Omit<Inputs, "erasure">
@@ -421,13 +491,7 @@ export const admittedErasureLogins = (
           return current.data.id;
         })
       ),
-    refused: Effect.fn(function* () {
-      const { completion } = yield* verifyProvider(transport, "erasure-1", "login");
-      yield* validStatus(completion, invalid);
-      yield* Schema.decodeUnknownEffect(Schema.Struct({ status: Schema.Literal("invalid") }))(
-        yield* Effect.tryPromise(() => completion.json())
-      );
-    }),
+    refused: (record) => ungrantedPairing(transport, record),
   };
 };
 /** Exercise actual auth, private provider exchange and native financial callback through the installed protected release.

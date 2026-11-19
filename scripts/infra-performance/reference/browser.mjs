@@ -108,6 +108,9 @@ try {
     });
     process.stderr.write(JSON.stringify(attempts.at(-1)) + "\n");
     const success = 200;
+    if (status !== success) {
+      process.stderr.write(`REFERENCE_HTTP ${response.request().method()} ${status}\n`);
+    }
     assert.equal(status, success, `Canonical request failed with HTTP ${status}`);
     assert.ok(backendMs > 0 && timing.responseEnd > 0, "Missing backend or transport timing");
     return Schema.decodeSync(Schema.fromJsonString(Schema.Unknown))(body.toString("utf8"));

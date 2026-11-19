@@ -6,7 +6,10 @@ import { diagnoseNativePlan } from "./native-plan-diagnostics";
 import { requireNativeResourcePlan } from "./native-graph";
 import { type Plan, describePlan, describeResource } from "alchemy/Plan";
 import { Config, Effect, Schema } from "effect";
-import { releaseCommand } from "./production-release";
+import { HttpClient, HttpClientRequest } from "effect/http";
+import { releaseCommand, releaseEvidence } from "./production-release";
+import { readRecoveryPin } from "./native-recovery-identity";
+import { ReleaseHttpLive } from "./release-http";
 import { nativeResourceFailureMessage, nativeResourceStage } from "./resource-failure";
 import { type NativeHostMode, requireNativeBindings } from "./storage-installation";
 
@@ -31,17 +34,43 @@ const releaseChecks = {
   upload: "verify-upload",
   "stage-hosts": "capture-hosts",
 } as const;
+const protectedRecoveryPin = Effect.gen(function* () {
+  const { account, token } = releaseEvidence.config();
+  const client = yield* HttpClient.HttpClient;
+  return yield* readRecoveryPin(
+    (path) =>
+      releaseEvidence
+        .providerJson(
+          HttpClientRequest.get("https://api.cloudflare.com/client/v4/" + path, {
+            headers: { authorization: "Bearer " + token },
+          })
+        )
+        .pipe(Effect.provideService(HttpClient.HttpClient, client)),
+    "accounts/" + account + "/"
+  );
+}).pipe(Effect.provide(ReleaseHttpLive));
 const verifyResourcePlan = Effect.fn(function* ({
   phase,
   plan,
   revision,
   hosts,
+  pin,
 }: {
   phase: typeof Phase.Type;
   plan: Plan;
   revision: string;
   hosts: NativeHostMode;
+  pin: string;
 }) {
+  yield* Effect.sync(() => {
+    const allowed = Schema.Struct({ allowedIdps: Schema.Tuple([Schema.Literal(pin)]) });
+    for (const node of Object.values(plan.resources)) {
+      if (describeResource(node).resourceType === "Cloudflare.Access.Application") {
+        Schema.decodeUnknownSync(allowed)(node.action === "noop" ? node.state.props : node.props);
+      }
+    }
+  }).pipe(nativeResourceStage("account recovery PIN"));
+
   if (phase === "stage-hosts") {
     yield* Effect.sync(() => requireHostPlan(plan)).pipe(nativeResourceStage("Access host plan"));
   } else {
@@ -81,6 +110,7 @@ const resourceRelease = Effect.fn(function* (phase: typeof Phase.Type, preview: 
   ) {
     return yield* Effect.fail(Error("Unexpected native host selection"));
   }
+  const pin = yield* protectedRecoveryPin.pipe(nativeResourceStage("account recovery PIN"));
   const input = {
     target: { entrypoint: "alchemy.storage.ts", stage: "production", profile },
     operation: "deploy",
@@ -91,7 +121,7 @@ const resourceRelease = Effect.fn(function* (phase: typeof Phase.Type, preview: 
       ? Alchemist.Stack.plan({ ...input, include: stagedAccessApplications })
       : Alchemist.Stack.plan(input)
   ).pipe(diagnoseNativePlan(revision));
-  yield* verifyResourcePlan({ phase, plan: snapshot.native, revision, hosts });
+  yield* verifyResourcePlan({ phase, plan: snapshot.native, revision, hosts, pin });
   if (preview) return yield* Effect.logInfo("Verified the fresh native first-install plan.");
   const preflightStages = {
     "first-install": "closed edge preparation",

@@ -61,7 +61,27 @@ def main():
         inspection_ids = sorted(observed["inspections"])
         (out / "expected.json").write_text(json.dumps({"history": observed["history"], "inspections": observed["inspections"]}, ensure_ascii=False))
     if args.snapshot:
-        subprocess.run(["bun", str(HERE / "snapshot.mjs"), str(out)], cwd=root, check=True)
+        # Use the same package and migration registry as the frozen Alchemy D1 provider.
+        # Only the executor is directed to the private local workerd binding.
+        migration_module = root / "node_modules/alchemy/src/SQL/Migrations"
+        path_literal = lambda path: json.dumps(str(path))
+        entry = out / "derive-snapshot.mjs"
+        entry.write_text(
+            'import { Effect } from "effect";\n'
+            'import { BunServices } from "@effect/platform-bun";\n'
+            + 'import { applyAlchemyFormat, ALCHEMY_DEFAULT_TABLE } from ' + path_literal(migration_module / "AlchemyFormat.ts") + ';\n'
+            + 'import { readFlatRecords } from ' + path_literal(migration_module / "Records.ts") + ';\n'
+            + 'import { snapshotRuntime } from ' + path_literal(HERE / "snapshot-runtime.mjs") + ';\n'
+            + 'const db = await snapshotRuntime.getD1Database("ORACLE");\n'
+            + 'const records = await Effect.runPromise(readFlatRecords(' + path_literal(root / "apps/server/cloudflare/migrations")
+            + ').pipe(Effect.provide(BunServices.layer)));\n'
+            + 'const executor = {dialect:"sqlite",query:(sql,params=[])=>Effect.tryPromise(async ()=>(await db.prepare(sql).bind(...params).all()).results),'
+            + 'batch:statements=>Effect.tryPromise(async()=>{await db.batch(statements.map(sql=>db.prepare(sql)));})};\n'
+            + 'await Effect.runPromise(applyAlchemyFormat({executor,records,table:ALCHEMY_DEFAULT_TABLE}));\n'
+            + 'await import(' + path_literal(HERE / "snapshot.mjs") + ');\n')
+        (out / "snapshot-proof.json").write_text(json.dumps({"stage":"replay-frozen-alchemy","baseline":PIN}))
+        subprocess.run(["bun", str(entry), str(out)], cwd=root, check=True)
+
     artifacts["plan"] = hashlib.sha256((out / "plan.json").read_bytes()).hexdigest()
     (out / "manifest.json").write_text(json.dumps(dict(baseline=PIN, calibration=CALIBRATION, sha256=artifacts), indent=2))
     disclosure = subprocess.check_output(["bun", "-e",

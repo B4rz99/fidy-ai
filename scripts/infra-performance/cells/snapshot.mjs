@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
-import { Miniflare } from "miniflare";
+import { snapshotRuntime as runtime } from "./snapshot-runtime.mjs";
 import { Schema } from "effect";
 
 /** @typedef {{sql:string,params:ReadonlyArray<unknown>,check?:string}} Query */
@@ -36,9 +36,7 @@ const readSchema = Schema.decodeUnknownSync(
     })
   )
 );
-const readColumns = Schema.decodeUnknownSync(
-  Schema.Array(Schema.Struct({ name: Schema.String, hidden: Schema.Int }))
-);
+const readColumns = Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ name: Schema.String })));
 const readDependencies = Schema.decodeUnknownSync(
   Schema.Array(Schema.Struct({ table: Schema.String }))
 );
@@ -145,9 +143,26 @@ const literal = (field) =>
 const captureTable = async (db, def) => {
   assert.ok(def.sql);
   const name = id(def.name);
-  const columns = readColumns(await select(db, query("PRAGMA table_xinfo(" + name + ")")));
-  assert.ok(columns.length);
-  const fields = columns.map((col) => col.name);
+  const size = query("SELECT count(*) AS entries FROM " + name);
+  const counted = await select(db, size);
+  const [item] = Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ entries: Schema.Int })))(
+    counted
+  );
+  assert.ok(item);
+  if (item.entries === 0)
+    return {
+      name: def.name,
+      read: { ...size, check: digest(counted) },
+      inserts: [],
+      identities: [],
+      rowCount: 0,
+      dependencies: [],
+    };
+  const columns = readColumns(await select(db, query("PRAGMA table_info(" + name + ")")));
+  const first = await select(db, query("SELECT * FROM " + name + " LIMIT 1"));
+  const original = encodedRows(first)[0];
+  assert.ok(original && columns.length);
+  const fields = Object.keys(original);
   if (!/\bWITHOUT\s+ROWID\b/iu.test(def.sql)) {
     assert.ok(!fields.includes("_rowid_"));
     fields.unshift("_rowid_");
@@ -158,8 +173,9 @@ const captureTable = async (db, def) => {
     "SELECT " + projected.join(",") + " FROM " + name + " ORDER BY " + keys.join(",")
   );
   const rows = readValues(await select(db, read));
+  // table_info excludes generated columns; the verification SELECT retains their values as well.
   const insertable = fields.filter(
-    (field) => !columns.some((col) => col.name === field && col.hidden !== 0)
+    (field) => field === "_rowid_" || columns.some((col) => col.name === field)
   );
   const inserts = rows.map(
     (row) =>
@@ -200,30 +216,6 @@ const seedOrder = (tables) => {
   }
   return ordered;
 };
-const runtime = new Miniflare({
-  workers: [
-    {
-      config: {
-        type: "worker",
-        name: "snapshot-probe",
-        compatibilityDate: "2026-09-08",
-        env: {
-          ORACLE: { type: "d1", id: "migration-oracle" },
-          RESTORED: { type: "d1", id: "snapshot-restore" },
-        },
-        manifest: {
-          mainModule: "index.mjs",
-          modules: {
-            "index.mjs": {
-              type: "esm",
-              contents: "export default {fetch(){return new Response(null,{status:404})}}",
-            },
-          },
-        },
-      },
-    },
-  ],
-});
 /** @type {Record<string,unknown>} */
 const evidence = {
   baseline: plan.baseline,
@@ -235,11 +227,18 @@ const evidence = {
 try {
   const oracle = await runtime.getD1Database("ORACLE");
   const restored = await runtime.getD1Database("RESTORED");
-  const pristine = readSchema(await select(oracle, query(schemaSql)));
-  assert.deepEqual(readSchema(await select(restored, query(schemaSql))), pristine);
-  await serial(original, async (group) => {
-    await run(oracle, Array.from(group.batch));
-  });
+  const pristine = readSchema(await select(restored, query(schemaSql)));
+  const ledger = Schema.decodeUnknownSync(
+    Schema.Array(Schema.Struct({ name: Schema.String, hash: Schema.String }))
+  )(await select(oracle, query("SELECT name,hash FROM __alchemy_migrations ORDER BY name")));
+  assert.deepEqual(
+    ledger,
+    files.map((path) => ({
+      name: path.slice(migrationDir.length + 1),
+      hash: hash(git(["show", plan.baseline + ":" + path])),
+    }))
+  );
+  evidence.ledger = ledger;
   const schema = readSchema(await select(oracle, query(schemaSql)));
   const originalOrder = readSchema(
     await select(oracle, query("SELECT type,name,tbl_name,sql FROM sqlite_schema ORDER BY rowid"))
@@ -259,6 +258,7 @@ try {
   /** @type {Table[]} */
   const tables = [];
   await serial(owned, async (def) => {
+    evidence.stage = "capture-" + def.name;
     tables.push(await captureTable(oracle, def));
   });
   evidence.platformObjects = Array.from(platform);

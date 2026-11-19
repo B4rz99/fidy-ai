@@ -10,8 +10,9 @@ import { verifyInstalledWebsite } from "./native-deployed-web";
 import { inspectDeployedEdge } from "./native-deployed-edge";
 import { inspectNativeResources, verifyDeployedVersion } from "./native-deployed-graph";
 import type { NativeRole } from "./native-graph";
+import { continueAdmittedErasure } from "./native-erasure-continuation";
 import { runFleetPilot } from "./native-fleet-pilot";
-import { exerciseClosedUsers, fleetBrowser } from "./native-acceptance";
+import { admittedErasureLogins, exerciseClosedUsers, fleetBrowser } from "./native-acceptance";
 import { installedOrigins } from "@fidy/server/browser-transport";
 import { verifyNativeEdge } from "./native-edge";
 import {
@@ -333,9 +334,9 @@ const erasureObservation = ({
       }),
   };
 };
-const sendNative = (
+const acceptanceSend = (
   client: HttpClient.HttpClient
-): ((request: Request) => Effect.Effect<Response, Error>) =>
+): Parameters<typeof admittedErasureLogins>[0]["send"] =>
   Effect.fn(function* (request: Request) {
     const reply = yield* client
       .execute(HttpClientRequest.fromWeb(request))
@@ -360,12 +361,11 @@ const verifySyntheticUsers = Effect.fn(function* (
   }
 ) {
   const fs = yield* FileSystem.FileSystem;
-  const send = sendNative(client);
   const proof = yield* exerciseClosedUsers({
     revision: env.revision,
     proof: Redacted.make(env.smokeProof),
     origins,
-    send,
+    send: acceptanceSend(client),
     erasure: Option.map(erasureNamespace, (id) =>
       erasureObservation({ env, client, userNamespace: id, fs })
     ),
@@ -580,6 +580,51 @@ const installedRelease = Effect.fn(function* (
     admission: "closed",
   };
 });
+const evidenceDigest = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u));
+const artifactNumber = Schema.String.check(Schema.isPattern(/^[1-9][0-9]{0,19}$/u));
+const ErasureSource = Schema.Struct({
+  runId: artifactNumber,
+  artifactId: artifactNumber,
+  sourceRevision: Schema.String.check(Schema.isPattern(/^[a-f0-9]{40}$/u)),
+  archiveSha256: evidenceDigest,
+  checkpointSha256: evidenceDigest,
+  baselineSha256: evidenceDigest,
+  survivorsSha256: evidenceDigest,
+});
+const verifyAdmittedErasure = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  {
+    installed,
+    verifierRevision,
+  }: { installed: Effect.Success<ReturnType<typeof installedRelease>>; verifierRevision: string }
+) {
+  const source = yield* Schema.decodeUnknownEffect(ErasureSource)(
+    yield* readFile(yield* ReleaseConfig.String("ERASURE_SOURCE_EVIDENCE"))
+  );
+  const erasure = yield* continueAdmittedErasure({
+    checkpoint: yield* readFile(env.smokeAttestationFile + ".prior"),
+    revision: env.revision,
+    userNamespace: installed.userNamespace,
+    baseline: source.baselineSha256,
+    survivors: source.survivorsSha256,
+    inventory: () => readUserObjects(accountReader(env, client), installed.userNamespace),
+    ...admittedErasureLogins({
+      revision: env.revision,
+      proof: Redacted.make(env.smokeProof),
+      origins: installedOrigins.acceptance,
+      send: acceptanceSend(client),
+    }),
+  });
+  yield* writeFile(
+    env.smokeAttestationFile,
+    encodeJson({
+      ...installed,
+      verifierRevision,
+      continuation: { source, ...erasure },
+    })
+  );
+});
 const installedConfig = Effect.fn(function* (verifier: Config) {
   const requested = yield* ReleaseConfig.String("EXPECTED_INSTALLED_REVISION").pipe(
     ReleaseConfig.withDefault("")
@@ -599,7 +644,10 @@ const installedConfig = Effect.fn(function* (verifier: Config) {
 const verifyFirstInstall = Effect.fn(function* (
   verifier: Config,
   client: HttpClient.HttpClient,
-  { port, erase }: { port: ReleasePort; erase: boolean }
+  {
+    port,
+    operation,
+  }: { port: ReleasePort; operation: "verify" | "verify-erasure" | "continue-erasure" }
 ) {
   const env = yield* installedConfig(verifier);
   const installed = yield* installedRelease(env, client, {
@@ -608,6 +656,12 @@ const verifyFirstInstall = Effect.fn(function* (
     verifierRevision: verifier.revision,
   });
   yield* Effect.logInfo("Verified schema markers and closed admission.");
+  if (operation === "continue-erasure") {
+    return yield* verifyAdmittedErasure(env, client, {
+      installed,
+      verifierRevision: verifier.revision,
+    });
+  }
   const contractDigest = yield* ReleaseConfig.String("CONTRACT_DIGEST"),
     identity = { gitRevision: env.revision, contractDigest };
   const smoke = yield* verifyNativeSmoke({
@@ -621,7 +675,7 @@ const verifyFirstInstall = Effect.fn(function* (
     verifySyntheticUsers(env, client, {
       origins: pair,
       erasureNamespace:
-        erase && pair.api === installedOrigins.acceptance.api
+        operation === "verify-erasure" && pair.api === installedOrigins.acceptance.api
           ? Option.some(installed.userNamespace)
           : Option.none(),
     }).pipe(Effect.map((result) => ({ api: pair.api, ...result })))
@@ -641,9 +695,9 @@ type VerifyCommand = (
   port: ReleasePort
 ) => ReturnType<typeof verifyFirstInstall>;
 const verification =
-  (erase: boolean): VerifyCommand =>
+  (operation: "verify" | "verify-erasure" | "continue-erasure"): VerifyCommand =>
   (env, client, port) =>
-    verifyFirstInstall(env, client, { port, erase });
+    verifyFirstInstall(env, client, { port, operation });
 
 const coordinateIdentity = (
   installed: Effect.Success<ReturnType<typeof installedRelease>>
@@ -1243,7 +1297,7 @@ const fleetPilot = Effect.fn(function* (
     revision: env.revision,
     proof: Redacted.make(env.smokeProof),
     origins: installedOrigins.acceptance,
-    send: sendNative(client),
+    send: acceptanceSend(client),
     erasure: Option.none(),
   });
   const record = yield* fleetCheckpoints(env, verifier.revision, installed);
@@ -1286,8 +1340,9 @@ const commands = {
   "prepare-diagnostics": prepareDiagnostics,
   "verify-fresh-target": verifyFreshTarget,
   "verify-upload": verifyStorageUpload,
-  verify: verification(false),
-  "verify-erasure": verification(true),
+  verify: verification("verify"),
+  "verify-erasure": verification("verify-erasure"),
+  "continue-erasure": verification("continue-erasure"),
   capture: captureNative,
   stage: stageNative,
   promote: promoteClosed,
@@ -1305,6 +1360,7 @@ if (import.meta.main) {
         "verify-upload",
         "verify",
         "verify-erasure",
+        "continue-erasure",
         "capture",
         "stage",
         "promote",

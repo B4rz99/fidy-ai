@@ -1,4 +1,5 @@
 import type { FleetPilotBrowser } from "./native-fleet-pilot";
+import type { ErasureContinuation } from "./native-erasure-continuation";
 import { type ErasureObservation, verifyIndependentErasure } from "./native-erasure";
 import { ErasureReceipt } from "../../apps/server/src/core/erasure/contract";
 import { UserId } from "../../apps/server/src/core/identity/contract";
@@ -127,30 +128,11 @@ const verifyOriginalDisclosure = Effect.fn(function* (
     return yield* Effect.fail(Error("Missing original provider signup disclosure"));
   }
 });
-type BrowserMember = "smoke-1" | "smoke-2" | "erasure-1" | "fleet-1";
-const providerCode = Effect.fn(function* (input: Inputs, auth: URL, subject: string) {
-  const key = new Bun.CryptoHasher("sha256", Redacted.value(input.proof))
-    .update(input.revision + "/oidc-code")
-    .digest("hex");
-  if (auth.searchParams.get("redirect_uri") !== input.origins.api + "/providers/google/callback") {
-    return yield* Effect.fail(Error("Protected signup selected another callback origin"));
-  }
-  return yield* issueAcceptanceProviderCode(
-    {
-      provider: "google",
-      host: input.origins.api === installedOrigins.production.api ? "production" : "acceptance",
-      subject,
-      nonce: auth.searchParams.get("nonce") ?? "",
-      challenge: auth.searchParams.get("code_challenge") ?? "",
-      deadline: (yield* Clock.currentTimeMillis) + acceptanceLifetimeMs,
-    },
-    key
-  );
-});
-const boot = Effect.fn(function* (
+type Member = "smoke-1" | "smoke-2" | "erasure-1" | "fleet-1";
+const verifyProvider = Effect.fn(function* (
   input: Inputs,
-  member: BrowserMember,
-  intent: "signup" | "login" = "signup"
+  member: Member,
+  intent: "login" | "signup"
 ) {
   const { post, call } = runner(input),
     proof = yield* result(
@@ -167,7 +149,23 @@ const boot = Effect.fn(function* (
       (yield* result(start, Schema.Struct({ authorizationUrl: Schema.String }))).authorizationUrl
     );
   const subject = `fidy-acceptance-${input.revision}-${member}`;
-  const code = yield* providerCode(input, auth, subject);
+  const key = new Bun.CryptoHasher("sha256", Redacted.value(input.proof))
+    .update(input.revision + "/oidc-code")
+    .digest("hex");
+  if (auth.searchParams.get("redirect_uri") !== input.origins.api + "/providers/google/callback") {
+    return yield* Effect.fail(Error("Protected signup selected another callback origin"));
+  }
+  const code = yield* issueAcceptanceProviderCode(
+    {
+      provider: "google",
+      host: input.origins.api === installedOrigins.production.api ? "production" : "acceptance",
+      subject,
+      nonce: auth.searchParams.get("nonce") ?? "",
+      challenge: auth.searchParams.get("code_challenge") ?? "",
+      deadline: (yield* Clock.currentTimeMillis) + acceptanceLifetimeMs,
+    },
+    key
+  );
   const location = new URLSearchParams({ state: auth.searchParams.get("state") ?? "", code });
   const callback = yield* call("/providers/google/callback?" + location, {
     headers: { cookie: transient },
@@ -177,8 +175,17 @@ const boot = Effect.fn(function* (
   if (confirmed.status !== "verified") {
     return yield* Effect.fail(Error("Provider did not verify the synthetic pairing"));
   }
-  const complete = yield* result(yield* post("/web/providers/google/complete", proof), phase);
-  if (!["created", "approved"].includes(complete.status)) {
+  return { subject, proof, completion: yield* post("/web/providers/google/complete", proof) };
+});
+const boot = Effect.fn(function* (
+  input: Inputs,
+  member: Member,
+  intent: "login" | "signup" = "signup"
+) {
+  const { subject, proof, completion } = yield* verifyProvider(input, member, intent);
+  const { call, post } = runner(input);
+  const complete = yield* result(completion, phase);
+  if (!(intent === "signup" && complete.status === "created") && complete.status !== "approved") {
     return yield* Effect.fail(Error("Original User did not complete synthetic signup"));
   }
   const session = yield* validStatus(yield* post("/web/pairings/redeem", proof), ok);
@@ -348,6 +355,9 @@ const renewWork = Effect.fn(function* (input: Inputs) {
     { method: "POST", headers: { "x-fidy-smoke-proof": Redacted.value(input.proof) } },
     false
   );
+  if (lease.status !== ok) {
+    yield* Effect.logError("Protected background work lease returned HTTP " + lease.status);
+  }
   yield* result(
     lease,
     Schema.Struct({ revision: Schema.Literal(input.revision), deadline: Schema.Int })
@@ -416,6 +426,35 @@ const erasureEvidence = Effect.fn(function* (
     }),
   });
 });
+/** The continuation authenticates the installed revision's existing subjects with login intent only. */
+export const admittedErasureLogins = (
+  input: Omit<Inputs, "erasure">
+): Pick<ErasureContinuation, "renew" | "logins" | "refused"> => {
+  const transport = { ...input, erasure: Option.none<ErasureObservation>() };
+  const { call } = runner(transport);
+  return {
+    renew: () => renewWork(transport),
+    logins: () =>
+      Effect.forEach(
+        ["smoke-1", "smoke-2"] as const,
+        Effect.fn(function* (member) {
+          const user = yield* boot(transport, member, "login");
+          const current = yield* result(
+            yield* call("/user", { headers: user.headers }),
+            Schema.Struct({ data: Schema.Struct({ id: UserId }) })
+          );
+          return current.data.id;
+        })
+      ),
+    refused: Effect.fn(function* () {
+      const { completion } = yield* verifyProvider(transport, "erasure-1", "login");
+      yield* validStatus(completion, invalid);
+      yield* Schema.decodeUnknownEffect(Schema.Struct({ status: Schema.Literal("invalid") }))(
+        yield* Effect.tryPromise(() => completion.json())
+      );
+    }),
+  };
+};
 /** Exercise actual auth, private provider exchange and native financial callback through the installed protected release.
  * Callers verify the deterministic callback Workflow and the User-facing final projections before accepting its receipt.
  */

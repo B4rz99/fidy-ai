@@ -1,5 +1,4 @@
-import { observePhysicalCensus } from "./native-erasure";
-import { Clock, Effect, Option } from "effect";
+import { Clock, Effect, Option, Schedule } from "effect";
 import { type UserObjects, newStoredUser, physicalErasure } from "./native-erasure-evidence";
 
 type Member = {
@@ -19,10 +18,39 @@ type Port = FleetPilotBrowser & {
   watch: (physicalObject: string) => Effect.Effect<void, Error>;
   record: (event: Readonly<Record<string, string | number>>) => Effect.Effect<void, Error>;
 };
+// The admitted erasure checkpoint pins native-erasure.ts byte-for-byte to its source revision.
+const populated = (rows: UserObjects): number => [...rows.values()].filter(Boolean).length;
+const observePhysicalCensus = Effect.fn(function* <Value>(
+  port: Port,
+  stage: "waiting-baseline" | "waiting-fresh-object" | "waiting-physical-erasure",
+  transition: (rows: UserObjects) => Option.Option<Value>
+) {
+  yield* port.record({ stage, observations: 0 });
+  let observations = 0;
+  const census = Effect.gen(function* () {
+    if (stage === "waiting-physical-erasure") yield* port.renew();
+    const rows = yield* port.inventory();
+    yield* port.record({
+      stage,
+      observations: ++observations,
+      listed: rows.size,
+      populated: populated(rows),
+    });
+    return yield* Effect.try(() => transition(rows));
+  });
+  const found = yield* census.pipe(
+    Effect.repeat({ while: Option.isNone, schedule: Schedule.spaced("30 seconds") }),
+    Effect.timeout("20 minutes")
+  );
+  return yield* Effect.fromOption(found, () =>
+    Error("Required physical User transition was not observed")
+  );
+});
+
 const maximumExistingObjects = 36;
 const establishedOwners = 3;
 const baseline = (rows: UserObjects): Option.Option<UserObjects> =>
-  [...rows.values()].filter(Boolean).length >= establishedOwners
+  populated(rows) >= establishedOwners
     ? Option.some(rows)
     : Option.none();
 

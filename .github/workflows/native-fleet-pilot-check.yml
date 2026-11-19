@@ -27,11 +27,20 @@ jobs:
             !/.repos/
           sparse-checkout-cone-mode: false
       - uses: ./.github/actions/bun-install
-      - name: Verify the pinned combined release policy
-        run: bun infra/cloudflare/verify-edge-policy.ts
+      - name: Assemble the continuation and fleet policy
+        run: |
+          bun x --no-install oxfmt --write infra/cloudflare/native-{fleet-pilot,acceptance,storage-release}.ts .github/workflows/native-storage-release.yml
+          git diff > "$RUNNER_TEMP/continuation-fleet-source.patch"
+          bun -e 'import { edgePolicyDigest } from "./infra/cloudflare/verify-edge-policy.ts"; console.log(edgePolicyDigest)' > "$RUNNER_TEMP/continuation-fleet-digest.txt"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: continuation-fleet-policy
+          path: |
+            ${{ runner.temp }}/continuation-fleet-source.patch
+            ${{ runner.temp }}/continuation-fleet-digest.txt
       - run: bun run --cwd infra/cloudflare test -- installed-verification-revision.test.ts
       - run: python3 -m unittest discover -s scripts/infra-performance/deployed-fleet
-      - run: bun run --cwd infra/cloudflare test -- native-fleet-pilot.test.ts native-erasure-evidence.test.ts
+      - run: bun run --cwd infra/cloudflare test -- native-fleet-pilot.test.ts native-erasure-evidence.test.ts native-erasure-continuation.test.ts
       - name: Check release types
         run: bun node_modules/typescript/bin/tsc -b infra/cloudflare
       - name: Check pilot conventions and release dispatch

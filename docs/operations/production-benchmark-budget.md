@@ -253,11 +253,11 @@ python3 scripts/infra-performance/canonical-fixture/hosted.py hosted \
   --out "$PRIVATE_NATIVE_RUN"
 ```
 
-The hosted command verifies installation and then refuses before signup while the native
+The hosted command refuses before installation reads or signup while the native
 row-admission and independent cleanup owner are pending. The isolated Actions rehearsal exercises
 the entire receipt issuance path.
 
-Before opening the provider Session, the collector reads the acceptance hostname, actual
+The candidate verifier checks the acceptance hostname, actual
 deployments, version bindings and signer fingerprint from the account. It uses the fixed
 performance-1 provider identity, retains the original bound Session, captures eight originals
 through the atomic API, links the known pair, and inspects all eight Transactions. An ambiguous
@@ -275,3 +275,12 @@ verified installation, resource observations and native usage bounds.
 The credential-free command `hosted.py rehearse --out <private-directory>` runs the same
 closed provider, Ingress, Core and SQLite owners on workerd. Its temporary verifier credentials
 are private to that rehearsal. Upload only `summary.json`, which contains counts and digests.
+
+
+The protected closed rollout records the stable Core and Ingress version IDs and revision before
+upload. A signer candidate can promote only if the established compatibility policy permits
+return to that exact tested pair. Adding the two signer bindings to a previously unsigned Core
+changes its binding inventory and fails that precondition. The ordinary first-install target
+also requires an empty, explicitly named installation. Its fixed hostnames, stack and Worker
+names prevent it from acting as a second independent installation on the same account. Keep
+the incumbent release and its erasure/fleet qualifications in place while this remains true.

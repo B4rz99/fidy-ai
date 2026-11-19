@@ -12,7 +12,7 @@ import subprocess
 import sys
 import time
 
-from fixture import digest, prepare, serialized, validate_originals, write
+from fixture import digest, instant, prepare, serialized, validate_originals, write
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
@@ -39,6 +39,24 @@ def open_envelope(sealed, revision):
     return json.loads(check.stdout)
 
 
+def verify_signed_originals(originals, capture):
+    validate_originals(originals)
+    by_id = {item["transactionId"]: item for item in capture}
+    if len(capture) != 8 or set(by_id) != {item["id"] for item in originals}:
+        raise ValueError("Native owner signed different original identities")
+    for original in originals:
+        source = by_id[original["id"]]
+        expected = {
+            "amount": original["money"]["amount"], "currency": original["money"]["currency"],
+            "direction": original["direction"], "counterparty": original["counterparty"],
+            "categoryId": original["categoryId"], "occurred": instant(original["occurredAt"]),
+            "createdAtMs": instant(original["createdAt"]), "revision": original["revision"],
+            "notes": original.get("notes"),
+        }
+        if any(name not in source or source[name] != value for name, value in expected.items()):
+            raise ValueError("Native owner facts differ for an original Transaction")
+
+
 def verified_provenance(directory, *, revision, resource_prefix):
     directory = Path(directory)
     manifest = private_file(directory, "manifest.json")
@@ -50,8 +68,8 @@ def verified_provenance(directory, *, revision, resource_prefix):
             or sealed["member"] != "performance-1" or sealed["nativeManifestDigest"] != digest(manifest)
             or sealed["sessionBindingSha256"] != hashlib.sha256(session["binding"].encode()).hexdigest()):
         raise ValueError("Native receipt coordinates differ from the approved experiment")
-    validate_originals(manifest["originals"])
     evidence = open_envelope(sealed,revision)
+    verify_signed_originals(manifest["originals"], evidence["capture"])
     if len(evidence["capture"])!=8 or len(evidence["links"])!=1:
         raise ValueError("Native owner receipt has the wrong fixture cardinality")
     return evidence, dict(nativeRevision=revision, member="performance-1", resourcePrefix=resource_prefix,
@@ -176,19 +194,9 @@ def main():
         os.environ["TEST_FIXTURE_PRIVATE_KEY"],os.environ["FIDY_NATIVE_FIXTURE_PUBLIC_KEY"]=pair
         write(args.out/"rehearsal-verifier.json", {name:os.environ[name] for name in ("SMOKE_PROOF","FIDY_NATIVE_FIXTURE_PUBLIC_KEY")})
     else:
-        revision,prefix=args.native_revision or "",args.resource_prefix or ""
-        if not os.environ.get("FIDY_NATIVE_FIXTURE_PUBLIC_KEY") or not os.environ.get("SMOKE_PROOF"):
-            raise ValueError("Closed native receipt authority is unavailable")
+        raise ValueError("Hosted collection requires native row admission and an independent protected cleanup owner")
     if not re.fullmatch(r"[a-f0-9]{40}",revision) or not re.fullmatch(r"fidy-2259-[a-f0-9]{12}",prefix):
         raise ValueError("Missing exact native revision or allocated comparison prefix")
-    if args.mode=="hosted":
-        from installation import validate_candidate
-        sys.path.insert(0, str(HERE.parent/"cells"))
-        from pilot import cloudflare
-        inventory=validate_candidate(cloudflare, account=os.environ["CLOUDFLARE_ACCOUNT_ID"],revision=revision,
-                                     versions={"core":args.core_version or "", "ingress":args.ingress_version or ""},
-                                     public_key=os.environ["FIDY_NATIVE_FIXTURE_PUBLIC_KEY"])
-        write(args.out/"native-candidate.json", inventory)
     verified=collect(args.mode,revision,prefix,args.out)
     if args.mode=="rehearse":
         envelope=private_file(args.out/"fixture","native-receipt.json")

@@ -77,17 +77,6 @@ const linkedOriginals = (
     [link.first, link.second, link.visible].every((id) => pair.includes(id))
   );
 };
-const captureFields = Schema.Struct({
-  id: uuid,
-  transactionId: uuid,
-  kind: Capture.fields.kind,
-  serviceMarket: Capture.fields.serviceMarket,
-  locale: Capture.fields.locale,
-  timeZone: Capture.fields.timeZone,
-  interpretationRevision: Capture.fields.interpretationRevision,
-  createdAtMs: Schema.Int,
-  decisions: Schema.String,
-});
 const readEvidence = Effect.fn(function* (user: string, revision: string, binding: string) {
   const sql = yield* SqliteClient;
   const subject = "fidy-acceptance-" + revision + "-performance-1";
@@ -123,10 +112,7 @@ const readEvidence = Effect.fn(function* (user: string, revision: string, bindin
     FROM transaction_reconciliation_decisions WHERE user_id=${user} AND state='linked' LIMIT 2`
   );
   if (!linkedOriginals(links, capture)) return Option.none();
-  return Option.some({
-    capture: yield* Schema.decodeUnknownEffect(Schema.Array(captureFields))(capture),
-    links,
-  });
+  return Option.some({ capture, links });
 });
 type FixtureEnvironment = AcceptanceEnvironment &
   AcceptanceWindowBindings &

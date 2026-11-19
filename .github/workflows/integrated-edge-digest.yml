@@ -1,0 +1,18 @@
+name: Calculate integrated edge policy digest
+on:
+  push:
+    branches: [ci/2259-native-effects-digest]
+permissions:
+  contents: read
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/bun-runtime
+      - run: bash scripts/install-workspace.sh --ignore-scripts
+      - name: Calculate the SHA-256 digest from the integration manifest
+        run: bun -e 'import { edgePolicyDigest } from "./infra/cloudflare/verify-edge-policy.ts"; console.log("REVIEW_DIGEST="+edgePolicyDigest)'

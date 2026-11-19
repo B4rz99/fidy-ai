@@ -12,7 +12,10 @@ import {
   acceptanceLifetimeMs,
   acceptanceProofHeader,
 } from "../../apps/server/cloudflare/release-isolation/contract";
-import { issueAcceptanceProviderCode } from "../../apps/server/cloudflare/release-fixture/operations";
+import {
+  acceptancePaymentToken,
+  issueAcceptanceProviderCode,
+} from "../../apps/server/cloudflare/release-fixture/operations";
 
 type Inputs = {
   revision: string;
@@ -223,7 +226,7 @@ const submitCard = Effect.fn(function* (input: Inputs, user: User) {
         method: "card",
         paymentSourceMode: "create",
         billingEmail: user.subject + "@example.test",
-        cardToken: ["tok", "test", form.enrollmentId.replaceAll("-", "")].join("_"),
+        cardToken: acceptancePaymentToken("CARD", user.subject),
         enrollmentId: form.enrollmentId,
         paymentRequestId: "22570000-0000-4000-8000-000000000001",
         decisions: {

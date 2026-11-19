@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { Schema } from "effect";
-import { freshBudgetMonth } from "./fresh-workspaces.mjs";
+import { freshBudgetMonth, freshPendingReview } from "./fresh-workspaces.mjs";
 import { freshTransactions } from "./fresh-transactions.mjs";
 
 const { chromium } = await import("@playwright/test");
@@ -133,12 +133,10 @@ try {
   const views = {};
   if (process.env.FIDY_ASSESSMENT === "production") {
     process.stderr.write("REFERENCE_STAGE budgets-month\n");
-    views["budgets.month.browser"] = await freshBudgetMonth({
-      page,
-      api,
-      browser: app,
-      event: () => {},
-    });
+    const input = { page, api, browser: app, event: () => {} };
+    views["budgets.month.browser"] = await freshBudgetMonth(input);
+    process.stderr.write("REFERENCE_STAGE review-pending\n");
+    views["review.pending.browser"] = await freshPendingReview(input);
   }
   process.stdout.write(
     JSON.stringify({

@@ -78,17 +78,10 @@ const verifyBudgets = (value) => {
   assert.equal(period.timeZone, "America/Bogota");
   assert.equal(statuses.length, currencies.length * categories);
   // Seven effective outflows after one Reconciliation. Category 1 has two COP outflows and one USD outflow.
+  /** @type {Record<string, string>[]} */
   const outflows = [
-    new Map([
-      [1, "2000"],
-      [4, "1000"],
-      [6, "1000"],
-    ]),
-    new Map([
-      [1, "1000"],
-      [7, "1000"],
-      [9, "1000"],
-    ]),
+    { 1: "2000", 4: "1000", 6: "1000" },
+    { 1: "1000", 7: "1000", 9: "1000" },
   ];
   for (const [index, currency] of currencies.entries()) {
     for (let category = 1; category <= categories; category++) {
@@ -99,7 +92,7 @@ const verifyBudgets = (value) => {
       assert.equal(row.budget.groupName, "Grupo " + currency);
       assert.deepEqual(row.budget.cap, { amount: cap, currency });
       assert.equal(row.type, "under");
-      const amount = outflows[index].get(category) ?? "0";
+      const amount = outflows[index][String(category)] ?? "0";
       assert.deepEqual(row.spent, { amount, currency });
       assert.deepEqual(row.remaining, { amount: String(Number(cap) - Number(amount)), currency });
     }
@@ -110,28 +103,38 @@ const verifyBudgets = (value) => {
  * @param {string[]} totals Expected spend per group in declared Currency order.
  */
 const usableBudgets = async (page, totals) => {
-  for (const [index, currency] of currencies.entries()) {
-    const group = page.getByRole("region", {
-      name: "Grupo Grupo " + currency + " " + currency,
-      exact: true,
-    });
-    const spend = group
-      .locator(".budget-group-figures .budget-value")
-      .filter({ hasText: "Gastado" });
-    await spend.filter({ hasText: new RegExp(totals[index] + "(?:,00)?(?:\\s|$)") }).waitFor();
-    await page.waitForFunction(
-      ({ currency, count }) => {
-        const section = document.querySelector(
-          '[aria-label="Grupo Grupo ' + currency + " " + currency + '"]'
-        );
-        const fields = section?.querySelectorAll('input[aria-label^="Presupuesto de "]:enabled');
-        return (
-          fields?.length === count && [...fields].every((item) => item.getClientRects().length > 0)
-        );
-      },
-      { currency, count: categories }
-    );
-  }
+  await Promise.all(
+    currencies.map(async (currency, index) => {
+      const group = page.getByRole("region", {
+        name: "Grupo Grupo " + currency + " " + currency,
+        exact: true,
+      });
+      const spend = group
+        .locator(".budget-group-figures .budget-value")
+        .filter({ hasText: "Gastado" });
+      await spend
+        .filter({ hasText: new RegExp(currency + "\\s+" + totals[index] + "(?:,00)?$") })
+        .waitFor();
+      await page.waitForFunction(
+        ({ currency, count }) => {
+          const section = document.querySelector(
+            '[aria-label="Grupo Grupo ' + currency + " " + currency + '"]'
+          );
+          const fields = section?.querySelectorAll('input[aria-label^="Presupuesto de "]:enabled');
+          return (
+            fields?.length === count &&
+            [...fields].every(
+              (item) =>
+                item instanceof HTMLInputElement &&
+                /^100[.]?000(?:,00)?$/u.test(item.value) &&
+                item.getClientRects().length > 0
+            )
+          );
+        },
+        { currency, count: categories }
+      );
+    })
+  );
   await painted(page);
 };
 
@@ -155,4 +158,102 @@ export const freshBudgetMonth = async (input) => {
   verifyBudgets(value);
   event({ type: "completed", journey, milliseconds, http });
   return { milliseconds, http };
+};
+
+const reviewCount = 4,
+  inbox = "/ingestion/review-workspace";
+const reviewItem = Schema.Struct({
+  id: Schema.String,
+  status: Schema.String,
+  source: Schema.String,
+  reason: Schema.String,
+  timeZone: Schema.String,
+});
+const reviewPage = Schema.decodeUnknownSync(
+  Schema.Struct({
+    data: Schema.Struct({
+      total: Schema.Int,
+      pendingCount: Schema.Int,
+      items: Schema.Array(reviewItem),
+    }),
+  })
+);
+const pageContext = Schema.decodeUnknownSync(
+  Schema.Struct({
+    data: Schema.Struct({
+      items: Schema.Array(
+        Schema.Struct({ id: Schema.String, reference: Schema.String, excerpt: Schema.String })
+      ),
+    }),
+  })
+);
+const reviewRows = Array.from({ length: reviewCount }, (_, ordinal) => ({
+  id: "87000000-0000-4000-8000-" + digits(ordinal),
+  reference: "Fila " + (ordinal + 1),
+  excerpt: "Original sintético " + ordinal + ": 2026-10-01,25000,Mercado",
+}));
+/**
+ * @param {unknown} value Fresh summary.
+ * @param {unknown} context Browser-authorized source references and excerpts.
+ */
+const verifyPending = (value, context) => {
+  const { total, pendingCount, items } = reviewPage(value).data;
+  assert.equal(total, reviewCount);
+  assert.equal(pendingCount, reviewCount);
+  assert.deepEqual(
+    items,
+    reviewRows.map(({ id }) => ({
+      id,
+      status: "pending",
+      source: "statement",
+      reason: "mapping-unavailable",
+      timeZone: "America/Bogota",
+    }))
+  );
+  assert.deepEqual(pageContext(context).data.items, reviewRows);
+};
+/** @param {Page} page Mounted browser page. */
+const usableReviews = async (page) => {
+  await page.waitForFunction((expected) => {
+    const cards = document.querySelectorAll('[data-review="inbox-row"]');
+    return (
+      cards.length === expected.length &&
+      expected.every(({ reference, excerpt }, index) => {
+        const card = cards[index];
+        const open = card.querySelector('button[data-review="row-content"]:enabled');
+        return (
+          open?.getAttribute("aria-label") === "Abrir Extracto " + reference &&
+          open.getClientRects().length > 0 &&
+          card.querySelector('[data-review="context-excerpt"]')?.textContent === excerpt &&
+          card.querySelector('[role="checkbox"]:enabled') !== null
+        );
+      })
+    );
+  }, reviewRows);
+  await painted(page);
+};
+/** @param {Workspace} input Installed application and evidence sink. */
+export const freshPendingReview = async (input) => {
+  const { page, browser, event } = input;
+  const historical = responseFor(input, inbox, { status: "history" });
+  await page.goto(browser + "/app/needs-review?status=history", { waitUntil: "commit" });
+  const unselected = reviewPage((await consumed(await historical)).value).data;
+  assert.equal(unselected.total, 0);
+  assert.equal(unselected.pendingCount, reviewCount);
+  assert.deepEqual(unselected.items, []);
+  await page.getByRole("button", { name: "Historial", pressed: true, exact: true }).waitFor();
+  const workspace = responseFor(input, inbox, { status: "pending" });
+  const source = responseFor(input, inbox + "/context", { status: "pending" });
+  const journey = "review.pending.browser";
+  event({ type: "offered", journey });
+  const start = performance.now();
+  await page.getByRole("button", { name: /^Pendientes/u }).click();
+  const [reply, context] = await Promise.all([workspace, source]);
+  await usableReviews(page);
+  const milliseconds = performance.now() - start;
+  const [summary, original] = await Promise.all([consumed(reply), consumed(context)]);
+  verifyPending(summary.value, original.value);
+  const result = { milliseconds, http: summary.http, context: original.http };
+  event({ type: "completed", journey, ...result });
+  return result;
 };

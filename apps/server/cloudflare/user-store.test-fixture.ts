@@ -258,6 +258,7 @@ type NativeFixture =
   | "capacity"
   | "connection"
   | "health"
+  | "fleet"
   | "hosted"
   | "user"
   | "billing"
@@ -339,6 +340,7 @@ const fixtureModules: Partial<Record<NativeFixture, string>> = {
   "lost-read": "./core-http/lost-read.test-fixture.ts",
   hosted: "./agent/hosted-alarm.test-fixture.ts",
   health: "./maintenance/native-monitor.test-fixture.ts",
+  fleet: "./maintenance/native-fleet.test-fixture.ts",
   "addressed-read": "./transactions/addressed-read.test-fixture.ts",
   clock: "./user-clock.test-fixture.ts",
   capacity: "./capacity-worker.test-fixture.ts",
@@ -605,5 +607,6 @@ export const nativeBillingPlatform = createUserPlatform("billing");
 /** Preserve the public hostname across Miniflare's loopback HTTP bridge for MCP Host validation. */
 export const nativeOAuthPlatform = createUserPlatform("oauth");
 
+export const nativeFleetPlatform = createUserPlatform("fleet");
 export const nativeHealthPlatform = createUserPlatform("health");
 export const nativeHostedPlatform = createUserPlatform("hosted");

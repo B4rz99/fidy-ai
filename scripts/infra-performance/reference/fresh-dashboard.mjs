@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { Schema } from "effect";
-import { DashboardDocument, Widget } from "../../../apps/server/src/core/dashboard/contract";
+import { DashboardDocument } from "../../../apps/server/src/core/dashboard/contract";
 import { DashboardView } from "../../../apps/server/src/shell/dashboard/contract";
 import { consumed, painted, responseFor } from "./fresh-workspaces.mjs";
 
@@ -11,16 +11,32 @@ const idWidth = 12,
   success = 200;
 const fixedWidget = (/** @type {number} */ position) =>
   "88000000-0000-4000-8000-" + String(position).padStart(idWidth, "0");
-/**
- * @template Leaf
- * @param {import("../../../apps/server/src/core/dashboard/contract").LayoutNodeFor<Leaf>} node Document or projected layout node.
- * @returns {Leaf[]} Ordered leaves in the recorded layout.
- */
-const leaves = (node) =>
-  node.kind === "leaf" ? [node.widget] : node.children.flatMap((child) => leaves(child.node));
+const extra = Schema.Record(Schema.String, Schema.Unknown);
+const nodeShape = Schema.decodeUnknownSync(
+  Schema.Union([
+    Schema.Struct({ kind: Schema.Literal("leaf"), widget: Schema.Unknown }),
+    Schema.Struct({
+      kind: Schema.Literal("split"),
+      children: Schema.Array(Schema.Struct({ node: Schema.Unknown })),
+    }),
+  ])
+);
+/** @param {unknown} root Validated Dashboard layout. @returns {unknown[]} Ordered wire-format leaves. */
+const leaves = (root) => {
+  const node = nodeShape(root);
+  return node.kind === "leaf"
+    ? [node.widget]
+    : node.children.flatMap((child) => leaves(child.node));
+};
+const widget = Schema.StructWithRest(Schema.Struct({ id: Schema.String, type: Schema.String }), [
+  extra,
+]);
+const widgetConfig = Schema.decodeUnknownSync(widget);
 const documentReply = Schema.decodeUnknownSync(Schema.Struct({ data: DashboardDocument }));
+const documentLayout = Schema.decodeUnknownSync(
+  Schema.Struct({ data: Schema.Struct({ layout: Schema.Unknown }) })
+);
 const bindingReply = Schema.decodeUnknownSync(Schema.Struct({ binding: Schema.NonEmptyString }));
-const encodeWidget = Schema.encodeSync(Widget);
 
 /**
  * Assign matching WidgetIds through the normal synthetic WebSession on each disposable reference.
@@ -39,32 +55,31 @@ export const prepareReferenceDashboard = async (request, { api, browser }) => {
   };
   const initial = await request.post(api + "/dashboard/initialize", { headers });
   assert.equal(initial.status(), success);
-  const original = leaves(documentReply(await initial.json()).data.layout);
+  const initialValue = Schema.decodeUnknownSync(Schema.Unknown)(await initial.json());
+  documentReply(initialValue);
+  const original = leaves(documentLayout(initialValue).data.layout).map(widgetConfig);
   assert.deepEqual(
     original.map((widget) => widget.type),
     shape
   );
-  for (const [index, widget] of original.entries()) {
-    // Placement followed by removal preserves the enclosing split in its previous position.
-    const replacement = { ...encodeWidget(widget), id: fixedWidget(index) };
-    const edits = [
-      {
-        op: "add-widget",
-        widget: replacement,
-        at: { besideWidget: widget.id, axis: "row", side: "after" },
-      },
-      { op: "remove-widget", widgetId: widget.id },
-    ];
-    for (const data of edits) {
-      const reply = await request.post(api + "/dashboard/edits", { headers, data });
-      assert.equal(reply.status(), success, "Dashboard fixture edit failed");
-      documentReply(await reply.json());
-    }
-  }
+  const edits = original.flatMap((previous, index) => [
+    {
+      op: "add-widget",
+      widget: { ...previous, id: fixedWidget(index) },
+      at: { besideWidget: previous.id, axis: "row", side: "after" },
+    },
+    { op: "remove-widget", widgetId: previous.id },
+  ]);
+  // Each insertion and subsequent removal transform the previously committed layout.
+  await edits.reduce(async (applied, data) => {
+    await applied;
+    const reply = await request.post(api + "/dashboard/edits", { headers, data });
+    assert.equal(reply.status(), success, "Dashboard fixture edit failed");
+    documentReply(await reply.json());
+  }, Promise.resolve());
 };
 
 const completeView = Schema.decodeUnknownSync(Schema.Struct({ data: DashboardView }));
-const extra = Schema.Record(Schema.String, Schema.Unknown);
 const rawContext = Schema.StructWithRest(Schema.Struct({ calculatedAt: Schema.String }), [extra]);
 const rawData = Schema.StructWithRest(Schema.Struct({ context: rawContext }), [extra]);
 const rawResponse = Schema.decodeUnknownSync(
@@ -79,18 +94,35 @@ const comparableDashboard = (value) => {
   };
   return createHash("sha256").update(JSON.stringify(normalized)).digest("hex");
 };
-const ordinals = [0, 2, 3, 4, 5, 6, 7];
+const effectiveCount = 7;
+const ordinals = Array.from({ length: effectiveCount }, (_, index) =>
+  index === 0 ? 0 : index + 1
+);
 const expectedRows = ordinals.map((ordinal) => ({
   id: "81000000-0000-4000-8000-" + String(ordinal).padStart(idWidth, "0"),
   name: ordinal === 2 ? "Referencia corregida" : "Evaluación " + ordinal,
   currency: ordinal % 2 === 0 ? "COP" : "USD",
 }));
+const projected = Schema.decodeUnknownSync(Schema.Struct({ widget, result: Schema.Unknown }));
+const recentRows = Schema.decodeUnknownSync(
+  Schema.Struct({
+    transactions: Schema.Array(
+      Schema.Struct({
+        id: Schema.String,
+        direction: Schema.String,
+        counterparty: Schema.String,
+        money: Schema.Struct({ amount: Schema.String, currency: Schema.String }),
+      })
+    ),
+  })
+);
 /** @param {unknown} value Complete Dashboard projection. */
 const verifiedWidgets = (value) => {
-  const data = completeView(value).data,
-    widgets = leaves(data.layout);
-  assert.equal(data.title, "Tablero");
-  assert.equal(data.context.timeZone, "America/Bogota");
+  completeView(value);
+  const raw = rawResponse(value).data;
+  assert.equal(raw.title, "Tablero");
+  assert.equal(raw.context.timeZone, "America/Bogota");
+  const widgets = leaves(raw.layout).map(projected);
   assert.deepEqual(
     widgets.map((item) => item.widget.type),
     shape
@@ -99,20 +131,18 @@ const verifiedWidgets = (value) => {
     widgets.map((item) => item.widget.id),
     shape.map((_, index) => fixedWidget(index))
   );
-  const recent = widgets.find((item) => "transactions" in item.result);
-  assert.ok(recent && "transactions" in recent.result);
+  const recent = widgets.find((item) => item.widget.type === "transaction-list");
+  assert.ok(recent);
+  const { transactions } = recentRows(recent.result);
   assert.deepEqual(
-    recent.result.transactions.map((row) => row.id),
-    expectedRows.map((row) => row.id)
+    transactions,
+    expectedRows.map((row) => ({
+      id: row.id,
+      counterparty: row.name,
+      direction: "outflow",
+      money: { amount: "1000", currency: row.currency },
+    }))
   );
-  const wire = Schema.encodeSync(DashboardView)(data);
-  const list = leaves(wire.layout).find((item) => "transactions" in item.result);
-  assert.ok(list && "transactions" in list.result);
-  for (const [index, row] of list.result.transactions.entries()) {
-    assert.equal(row.counterparty, expectedRows[index].name);
-    assert.deepEqual(row.money, { amount: "1000", currency: expectedRows[index].currency });
-    assert.equal(row.direction, "outflow");
-  }
 };
 /** @param {Workspace} input Installed origins, mounted browser and evidence sink. */
 export const freshDashboard = async (input) => {

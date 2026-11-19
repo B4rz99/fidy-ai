@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { Schema } from "effect";
 import { freshBudgetMonth, freshPendingReview } from "./fresh-workspaces.mjs";
 import { freshDashboard, prepareReferenceDashboard } from "./fresh-dashboard.mjs";
+import { freshRecurring } from "./fresh-recurring.mjs";
 import { freshTransactions } from "./fresh-transactions.mjs";
 
 const { chromium } = await import("@playwright/test");
@@ -147,6 +148,8 @@ try {
     await prepareReferenceDashboard(request, input);
     process.stderr.write("REFERENCE_STAGE dashboard-fresh\n");
     views["dashboard.fresh.browser"] = await freshDashboard(input);
+    process.stderr.write("REFERENCE_STAGE recurring-fresh\n");
+    Object.assign(views, await freshRecurring(input));
   }
   process.stdout.write(
     JSON.stringify({

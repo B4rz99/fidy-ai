@@ -121,7 +121,7 @@ const coreWorker = Effect.fn(function* ({
       ...(yield* operatingBindings),
       ...access,
       ...(yield* providerBindings(release)),
-      ...(yield* fixtureSignerBindings(release)),
+      ...(yield* fixtureSignerBindings(release).pipe(Effect.orDie)),
       SMOKE_LIMITER: Cloudflare.RateLimit("ReleaseSmokeAdmission", {
         namespaceId: 2257,
         simple: { limit: 8, period: 60 },

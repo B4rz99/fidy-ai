@@ -1,6 +1,6 @@
-import { Buffer } from "node:buffer";
-import { createHash, createPrivateKey, createPublicKey } from "node:crypto";
 import { Config, Effect, Redacted } from "effect";
+
+import { Hex } from "effect/encoding";
 
 export const expectedFixtureSigner = Config.String("NATIVE_FIXTURE_SIGNER_SHA256").pipe(
   Config.withDefault("")
@@ -12,15 +12,27 @@ type SignerBindings = Partial<
     NATIVE_FIXTURE_SIGNER_SHA256: string;
   }>
 >;
-const publicFingerprint = (value: string): string => {
-  if (!/^(?:[0-9a-f]{2}){32,512}$/u.test(value)) throw Error("Invalid candidate signer encoding");
-  const key = createPrivateKey({ key: Buffer.from(value, "hex"), format: "der", type: "pkcs8" });
-  if (key.asymmetricKeyType !== "ec" || key.asymmetricKeyDetails?.namedCurve !== "prime256v1") {
-    throw Error("Candidate requires P-256 signing material");
-  }
-  return createHash("sha256")
-    .update(createPublicKey(key).export({ format: "der", type: "spki" }))
-    .digest("hex");
+const publicFingerprint = async (value: string): Promise<string> => {
+  const decoded = Hex.decode(value);
+  if (decoded._tag === "Failure") throw Error("Invalid candidate signing key");
+  const algorithm = { name: "ECDSA", namedCurve: "P-256" };
+  const key = await crypto.subtle.importKey(
+    "pkcs8",
+    Uint8Array.from(decoded.success),
+    algorithm,
+    true,
+    ["sign"]
+  );
+  const { x, y } = await crypto.subtle.exportKey("jwk", key);
+  const publicKey = await crypto.subtle.importKey(
+    "jwk",
+    { kty: "EC", crv: "P-256", x, y },
+    algorithm,
+    true,
+    ["verify"]
+  );
+  const der = await crypto.subtle.exportKey("spki", publicKey);
+  return Hex.encode(new Uint8Array(await crypto.subtle.digest("SHA-256", der)));
 };
 export const fixtureSignerBindings = Effect.fn(function* (release: {
   closed: boolean;
@@ -38,7 +50,7 @@ export const fixtureSignerBindings = Effect.fn(function* (release: {
       Error("A receipt signer requires a pinned closed acceptance candidate")
     );
   }
-  const actual = yield* Effect.try({
+  const actual = yield* Effect.tryPromise({
     try: () => publicFingerprint(value),
     catch: () => Error("Invalid candidate signing key"),
   });

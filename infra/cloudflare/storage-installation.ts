@@ -133,8 +133,9 @@ const requireSiteAsset = (role: NativeRole, props: unknown, bindings: NativeBind
   }
 };
 const requireSignerHost = (fingerprint: string, hosts: NativeHostMode): void => {
-  if (fingerprint && hosts !== "acceptance")
+  if (fingerprint && hosts !== "acceptance") {
     throw Error("Fixture signer cannot stage live host routes");
+  }
 };
 const roles = ["Core", "Ingress", "ForwardedEmail", "Web"] as const;
 export const requireNativeBindings = (

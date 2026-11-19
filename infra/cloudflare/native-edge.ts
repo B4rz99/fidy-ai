@@ -90,7 +90,7 @@ export const nativeEdgeChanges = (value: unknown): ReadonlyArray<Change> => {
 };
 
 export const verifyNativeEdge = Effect.fn(function* (
-  env: ProductionReleaseConfig,
+  env: Pick<ProductionReleaseConfig, "account" | "token">,
   client: HttpClient.HttpClient,
   mode: "plan" | "install" | "verify"
 ) {

@@ -1,0 +1,25 @@
+name: Format protected comparator sources
+on:
+  push:
+    branches: [perf/scratch-protected-owner-format]
+permissions:
+  contents: read
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Format the new Python and JavaScript sources
+        run: |
+          python3 -m venv "$RUNNER_TEMP/python-format"
+          "$RUNNER_TEMP/python-format/bin/pip" install 'ruff==0.14.5'
+          "$RUNNER_TEMP/python-format/bin/ruff" format --line-length 100 scripts/infra-performance/cells/{owner*.py,test_owner.py,rehearse-owner.py}
+          npx --yes oxfmt@0.78.0 --write scripts/infra-performance/cells/{owner-pipe,probe}.mjs .github/workflows/storage-http.yml docs/operations/production-benchmark-budget.md
+          git diff -- scripts/infra-performance/cells .github/workflows/storage-http.yml docs/operations/production-benchmark-budget.md > "$RUNNER_TEMP/owner-format.patch"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: owner-format
+          path: ${{ runner.temp }}/owner-format.patch
+          if-no-files-found: error

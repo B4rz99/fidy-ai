@@ -92,7 +92,11 @@ const repeatSafe = <A>(
     )
   );
 
-const retainedObjects = Effect.fn(function* (current: UserObjects, target: string, baseline: string) {
+const retainedObjects = Effect.fn(function* (
+  current: UserObjects,
+  target: string,
+  baseline: string
+) {
   const retained = new Map(current);
   retained.delete(target);
   if (
@@ -112,7 +116,8 @@ export const continueAdmittedErasure = Effect.fn(function* (input: ErasureContin
   const { target, reference } = yield* step("admitted checkpoint", readAdmission(input));
   const census = (): Effect.Effect<UserObjects, Error> =>
     repeatSafe("namespace census", input.inventory);
-  const retained = yield* retainedObjects(yield* census(), target, input.baseline);
+  const current = yield* census();
+  const retained = yield* retainedObjects(current, target, input.baseline);
   const state = (rows: UserObjects): Effect.Effect<ReturnType<typeof physicalErasure>, Error> =>
     Effect.try(() => physicalErasure({ before: retained, subject: target, current: rows }));
   const advance = Effect.gen(function* () {
@@ -121,7 +126,7 @@ export const continueAdmittedErasure = Effect.fn(function* (input: ErasureContin
     yield* Effect.logInfo("Erasure continuation census listed " + rows.size);
     return yield* state(rows);
   });
-  const result = yield* step(
+  const waitForErasure = step(
     "physical transition",
     advance.pipe(
       Effect.repeat({ while: Option.isNone, schedule: Schedule.spaced("30 seconds") }),
@@ -129,6 +134,10 @@ export const continueAdmittedErasure = Effect.fn(function* (input: ErasureContin
       Effect.flatMap((value) => Effect.fromOption(value, () => Error("Erasure transition missing")))
     )
   );
+  const result = yield* Option.match(yield* state(current), {
+    onSome: Effect.succeed,
+    onNone: () => waitForErasure,
+  });
   const ids = yield* step("survivor identities", input.logins());
   if (ids.length !== 2 || new Set(ids).size !== 2 || commitment(ids) !== input.survivors) {
     return yield* step(

@@ -36,7 +36,7 @@ it.effect("continues the original admitted evidence without a signup or erasure 
       baseline,
       survivors,
       inventory: () => Effect.succeed(retained),
-      renew: () => Effect.void,
+      renew: () => Effect.die("An already erased object needs no work lease"),
       logins: () => Effect.succeed(["one", "two"]),
       refused: () => Effect.void,
     });

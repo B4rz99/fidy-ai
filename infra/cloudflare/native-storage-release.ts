@@ -332,7 +332,9 @@ const erasureObservation = ({
       }),
   };
 };
-const acceptanceSend = (client: HttpClient.HttpClient): Parameters<typeof admittedErasureLogins>[0]["send"] =>
+const acceptanceSend = (
+  client: HttpClient.HttpClient
+): Parameters<typeof admittedErasureLogins>[0]["send"] =>
   Effect.fn(function* (request: Request) {
     const reply = yield* client
       .execute(HttpClientRequest.fromWeb(request))
@@ -590,33 +592,36 @@ const ErasureSource = Schema.Struct({
 const verifyAdmittedErasure = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
-  { installed, verifierRevision }: { installed: Effect.Success<ReturnType<typeof installedRelease>>; verifierRevision: string }
+  {
+    installed,
+    verifierRevision,
+  }: { installed: Effect.Success<ReturnType<typeof installedRelease>>; verifierRevision: string }
 ) {
-    const source = yield* Schema.decodeUnknownEffect(ErasureSource)(
-      yield* readFile(yield* ReleaseConfig.String("ERASURE_SOURCE_EVIDENCE"))
-    );
-    const erasure = yield* continueAdmittedErasure({
-      checkpoint: yield* readFile(env.smokeAttestationFile + ".prior"),
+  const source = yield* Schema.decodeUnknownEffect(ErasureSource)(
+    yield* readFile(yield* ReleaseConfig.String("ERASURE_SOURCE_EVIDENCE"))
+  );
+  const erasure = yield* continueAdmittedErasure({
+    checkpoint: yield* readFile(env.smokeAttestationFile + ".prior"),
+    revision: env.revision,
+    userNamespace: installed.userNamespace,
+    baseline: source.baselineSha256,
+    survivors: source.survivorsSha256,
+    inventory: () => readUserObjects(accountReader(env, client), installed.userNamespace),
+    ...admittedErasureLogins({
       revision: env.revision,
-      userNamespace: installed.userNamespace,
-      baseline: source.baselineSha256,
-      survivors: source.survivorsSha256,
-      inventory: () => readUserObjects(accountReader(env, client), installed.userNamespace),
-      ...admittedErasureLogins({
-        revision: env.revision,
-        proof: Redacted.make(env.smokeProof),
-        origins: installedOrigins.acceptance,
-        send: acceptanceSend(client),
-      }),
-    });
-    yield* writeFile(
-      env.smokeAttestationFile,
-      encodeJson({
-        ...installed,
-        verifierRevision,
-        continuation: { source, ...erasure },
-      })
-    );
+      proof: Redacted.make(env.smokeProof),
+      origins: installedOrigins.acceptance,
+      send: acceptanceSend(client),
+    }),
+  });
+  yield* writeFile(
+    env.smokeAttestationFile,
+    encodeJson({
+      ...installed,
+      verifierRevision,
+      continuation: { source, ...erasure },
+    })
+  );
 });
 const verifyFirstInstall = Effect.fn(function* (
   verifier: Config,
@@ -647,7 +652,10 @@ const verifyFirstInstall = Effect.fn(function* (
   });
   yield* Effect.logInfo("Verified schema markers and closed admission.");
   if (operation === "continue-erasure") {
-    return yield* verifyAdmittedErasure(env, client, { installed, verifierRevision: verifier.revision });
+    return yield* verifyAdmittedErasure(env, client, {
+      installed,
+      verifierRevision: verifier.revision,
+    });
   }
   const contractDigest = yield* ReleaseConfig.String("CONTRACT_DIGEST"),
     identity = { gitRevision: env.revision, contractDigest };

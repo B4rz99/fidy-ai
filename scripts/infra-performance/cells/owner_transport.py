@@ -112,6 +112,7 @@ def confirmed(receipt, account, *, exposed):
     if (
         db["name"] != "DB"
         or db.get("id", db.get("database_id")) != database["uuid"]
+        or db.get("database_id", database["uuid"]) != database["uuid"]
         or any(b["type"] == "d1" for b in ingress.values())
         or ingress["CORE"].get("service") != tag + "-core"
         or core["ERASURE_BUCKET"].get("bucket_name") != tag
@@ -122,7 +123,13 @@ def confirmed(receipt, account, *, exposed):
         core["ERASURE_REGISTRY_COORDINATOR"],
         ingress["ERASURE_REGISTRY_COORDINATOR"],
     ]
-    common = {"BROWSER_ORIGIN", "RELEASE_GIT_SHA", "CONTRACT_DIGEST"}
+    values = {"BROWSER_ORIGIN":"https://app.fidyapp.com", "RELEASE_GIT_SHA":PIN,
+              "CONTRACT_DIGEST":receipt["contractDigest"], "COMPARATOR_PACKAGE_SHA256":receipt["packageDigest"]}
+    for bindings in (core, ingress):
+        if any(bindings[name].get("type") != "plain_text" or bindings[name].get("text") != value
+               for name, value in values.items()):
+            raise Refused("Unexpected pinned release or fixture package binding")
+    common = set(values)
     if (
         set(core)
         != common

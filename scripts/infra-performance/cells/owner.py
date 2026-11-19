@@ -405,10 +405,10 @@ def main():
             report["cleanup"] = cleanup_evidence(owner, cloud, resumed=True)
         else:
             read = native_read(session, args.revision)
-            decision = admit(
-                ROOT, account, usage(account), owner.full_estimate(bundle.estimate, today())
-            )
-            owner.begin(args.prefix, decision, today())
+            observation = usage(account)
+            observed_day = observation["utcDate"]
+            decision = admit(ROOT, account, observation, owner.full_estimate(bundle.estimate, observed_day))
+            owner.begin(args.prefix, decision, observed_day)
             try:
                 prepare_inventory(owner, cloud)
                 key = secrets.token_urlsafe(40)
@@ -421,7 +421,8 @@ def main():
                 active["namespaceIds"] = namespaces
                 owner.save()
                 receipt = dict(resourcePrefix=args.prefix, accountId=account, versions=versions,
-                               databaseId=db, fixture=FIXTURE, baseline=PIN, day=today(), namespaceId=namespaces[0])
+                               databaseId=db, fixture=FIXTURE, baseline=PIN, day=today(), namespaceId=namespaces[0],
+                               packageDigest=bundle.digest, contractDigest=bundle.contract)
                 confirmed(receipt, account, exposed=False)
                 cloud.expose("ingress", True)
                 api = confirmed(receipt, account, exposed=True)

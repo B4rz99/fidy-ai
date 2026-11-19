@@ -218,6 +218,7 @@ class Cloud:
                 "RELEASE_GIT_SHA": PIN,
                 "BROWSER_ORIGIN": "https://app.fidyapp.com",
                 "CONTRACT_DIGEST": bundle.contract,
+                "COMPARATOR_PACKAGE_SHA256": bundle.digest,
             }.items()
         ]
         coordinator = dict(type="durable_object_namespace", class_name=CLASS)

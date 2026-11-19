@@ -22,6 +22,7 @@ class MaterializedBundle:
         manifest_data = (path / "manifest.json").read_bytes()
         if sha(manifest_data) != pinned_manifest:
             raise Refused("untrusted_package")
+        self.digest = pinned_manifest
         manifest = json.loads(manifest_data)
         if manifest["baseline"] != PIN or manifest["calibration"] != CALIBRATION:
             raise Refused("wrong_comparator_revision")

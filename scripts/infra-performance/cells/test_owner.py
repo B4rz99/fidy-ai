@@ -225,3 +225,51 @@ class OwnerTests(unittest.TestCase):
         with patch('owner_transport.cloudflare',side_effect=resolve):
             with self.assertRaisesRegex(Refused,'version mismatch'):
                 confirmed(dict(resourcePrefix=prefix,accountId=account,versions={'core':'authored'}),account,exposed=False)
+
+    def test_deploy_uses_only_provider_ids_for_the_exact_uploaded_bytes(self):
+        import io
+        import json
+        from email.parser import BytesParser
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from uuid import uuid4
+        from owner_cloud import Cloud
+
+        prefix = 'fidy-2259-123456abcdef'
+        modules = {'metered-core':b'export const marker="frozen core";',
+                   'bounded-ingress':b'export const marker="frozen ingress";'}
+        created, deployed = {}, {}
+        class Control:
+            def open(self, req, timeout):
+                route = req.selector.split('/workers/scripts/')[1]
+                name, _, suffix = route.partition('/')
+                expected = 'metered-core' if name.endswith('-core') else 'bounded-ingress'
+                if suffix == 'script-settings':
+                    result = dict(tags=['owned'])
+                elif suffix == 'deployments' and req.method == 'POST':
+                    body = json.loads(req.data)
+                    assert body['versions'] == [dict(version_id=created[name],percentage=100)]
+                    deployed[name] = body['versions'][0]['version_id']
+                    result = dict(id=str(uuid4()))
+                else:
+                    envelope = BytesParser().parsebytes(('Content-Type: '+req.headers['Content-type']+'\r\n\r\n').encode()+req.data)
+                    parts = {item.get_filename():item.get_payload(decode=True) for item in envelope.get_payload()}
+                    assert parts['index.mjs'] == modules[expected]
+                    metadata = json.loads(parts['metadata'])
+                    if suffix == 'versions' and req.method == 'POST':
+                        created[name] = str(uuid4())
+                        assert 'migrations' not in metadata
+                        result = dict(id=created[name])
+                    else:
+                        assert suffix == '' and req.method == 'PUT' and name == prefix+'-core' and metadata['migrations']['new_sqlite_classes']
+                        result = dict(id=name)
+                response = io.BytesIO(json.dumps(dict(success=True,result=result)).encode())
+                response.status = 200
+                return response
+        with patch.dict('os.environ',CLOUDFLARE_API_TOKEN='fixture'):
+            cloud = Cloud('a'*32,prefix)
+        cloud.transport, cloud.ownership = Control(), 'owned'
+        cloud.control = lambda *_: None
+        package = SimpleNamespace(modules=modules,contract='c'*64,digest='d'*64)
+        versions = cloud.deploy(package,str(uuid4()),'fixture-private',123456789)
+        self.assertEqual({prefix+'-'+role:id_ for role,id_ in versions.items()}, deployed)

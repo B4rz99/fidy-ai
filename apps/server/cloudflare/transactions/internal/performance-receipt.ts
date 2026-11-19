@@ -7,7 +7,7 @@ import {
   ReceiptRequest,
   receiptAdmitted,
   sealTransactionReceipt,
-} from "../../release-isolation/performance-receipt";
+} from "../../release-isolation/operations";
 import type {
   AcceptanceEnvironment,
   AcceptanceWindowBindings,

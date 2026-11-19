@@ -10,7 +10,7 @@ import {
   openTransactionReceipt,
   SealedTransactionReceipt,
   performanceReceiptPath,
-} from "../../../apps/server/cloudflare/release-isolation/performance-receipt";
+} from "../../../apps/server/cloudflare/release-isolation/operations";
 import { openPerformanceBrowser } from "../../../infra/cloudflare/native-acceptance";
 import { closedRuntime } from "./closed-runtime";
 

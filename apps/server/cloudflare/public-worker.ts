@@ -2,7 +2,7 @@ import {
   isPerformanceReceipt,
   performanceReceiptPath,
   receiptAdmitted,
-} from "./release-isolation/performance-receipt";
+} from "./release-isolation/operations";
 import { betaProPath } from "../src/shell/pro-grants/contract";
 import { installedOrigins } from "../src/shell/browser-transport/contract";
 import { isStorageProbe } from "./storage-bootstrap/contract";

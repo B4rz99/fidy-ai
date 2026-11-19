@@ -1,4 +1,4 @@
-import { isPerformanceReceipt } from "../release-isolation/performance-receipt";
+import { isPerformanceReceipt } from "../release-isolation/operations";
 import { ownPerformanceReceipt } from "../transactions/operations";
 import { betaUserUrl } from "../beta-pro/contract";
 import { runBetaUserCommand } from "../beta-pro/operations";

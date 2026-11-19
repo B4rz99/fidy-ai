@@ -240,3 +240,13 @@ export const fixtureChargeReceipt = Effect.fn(function* (
   );
   return Response.json(data, { headers: { "cache-control": "no-store" } });
 });
+
+export {
+  isPerformanceReceipt,
+  performanceReceiptPath,
+  receiptAdmitted,
+  sealTransactionReceipt,
+  openTransactionReceipt,
+  ReceiptRequest,
+  SealedTransactionReceipt,
+} from "./internal/performance-receipt";

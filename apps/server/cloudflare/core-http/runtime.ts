@@ -1,4 +1,4 @@
-import { isPerformanceReceipt, receiptAdmitted } from "../release-isolation/performance-receipt";
+import { isPerformanceReceipt, receiptAdmitted } from "../release-isolation/operations";
 import { routeSessionRequest } from "../directory/operations";
 import { isStorageBootstrap, isStorageCompatibility } from "../storage-bootstrap/contract";
 import { initializeSharedStores } from "../storage-bootstrap/operations";

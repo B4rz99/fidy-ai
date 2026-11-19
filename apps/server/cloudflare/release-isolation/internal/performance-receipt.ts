@@ -1,9 +1,9 @@
 import { Effect, Schema } from "effect";
 import { Hex } from "effect/encoding";
-import { installedOrigins } from "../../src/shell/browser-transport/contract";
-import type { AcceptanceEnvironment } from "./contract";
-import { acceptanceApiHeader } from "./contract";
-import { acceptanceRequestAdmitted } from "./operations";
+import { installedOrigins } from "../../../src/shell/browser-transport/contract";
+import type { AcceptanceEnvironment } from "../contract";
+import { acceptanceApiHeader } from "../contract";
+import { verifyRequest } from "./request-proof";
 
 export const performanceReceiptPath =
   "/internal/release-smoke?acceptance=transaction-fixture&cohort=performance&ordinal=1";
@@ -51,7 +51,7 @@ export const receiptAdmitted = (
   ) {
     return Effect.succeed(false);
   }
-  return acceptanceRequestAdmitted({ request, environment, boundary, now });
+  return verifyRequest({ request, environment, boundary, now });
 };
 
 const bytes = new TextEncoder();

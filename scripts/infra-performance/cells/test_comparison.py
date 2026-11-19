@@ -36,3 +36,11 @@ class D1BudgetTests(unittest.TestCase):
                 with self.assertRaises(Refused):
                     with Ledger(directory, account, decision):
                         self.fail("The account should remain fenced")
+
+    def test_pilot_retains_full_fixture_estimate_and_larger_observed_spend(self):
+        from pilot import pilot_estimate
+
+        full = {"rowsRead": 19972, "rowsWritten": 5490}
+        caps = {"rowsRead": 102, "rowsWritten": 25}
+        spent = {"rowsRead": 20500, "rowsWritten": 3000}
+        self.assertEqual(pilot_estimate(full, spent, caps), {"rowsRead": 20602, "rowsWritten": 5490})

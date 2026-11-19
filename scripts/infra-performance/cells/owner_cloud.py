@@ -8,7 +8,7 @@ import urllib.request
 from uuid import UUID
 
 from budget import Refused
-from pilot import NoRedirect
+from owner_transport import NoRedirect
 from prepare import PIN
 
 CLASS = 'UserTransactionCoordinator'
@@ -46,6 +46,8 @@ class Cloud:
                 return None
             raise Refused('cloud_control_' + str(error.code)) from None
         with response:
+            if response.status == 204 and method == 'DELETE' and not raw:
+                return dict(success=True, result=None)
             content = response.read(16_000_001)
         if len(content) > 16_000_000:
             raise Refused('control_response_too_large')

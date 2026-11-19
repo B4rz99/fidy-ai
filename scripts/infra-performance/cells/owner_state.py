@@ -68,15 +68,25 @@ class AccountExperiment:
         self.state['transition'] = secrets.token_hex(16)
         self.version = self.store.replace(self.version, self.state)
 
+    def prior(self, day):
+        charged = self.state['charged']
+        return counts(charged['spent']) if charged.get('day') == day else dict(rowsRead=0, rowsWritten=0)
+
+    def full_estimate(self, estimate, day):
+        previous = self.prior(day)
+        return counts({k: previous[k] + estimate[k] for k in KEYS})
+
     def begin(self, prefix, decision, day):
-        if (self.active is not None or self.state['charged'].get('day') == day or day != today()
+        last = self.state['last']
+        if (self.active is not None or (last and last['pending'] is not None) or day != today()
                 or decision.get('_tag') != 'Allowed' or not re.fullmatch('fidy-2259-[0-9a-f]{12}', prefix)):
             raise Refused('account_experiment_unavailable')
-        limit = counts(dict(rowsRead=decision['maximumRowsRead'], rowsWritten=decision['maximumRowsWritten']))
+        previous = self.prior(day)
+        limit = counts(dict(rowsRead=decision['maximumRowsRead'] - previous['rowsRead'],
+                            rowsWritten=decision['maximumRowsWritten'] - previous['rowsWritten']))
         self.state['active'] = dict(prefix=prefix, deadline=int(time.time()) + LIFETIME, day=day, limit=limit,
                                     spent=dict(rowsRead=0, rowsWritten=0), inventory={}, pending=None, cleaning=False)
-        # Hold the entire admitted ceiling through midnight, including lost replies and analytics lag.
-        self.state['charged'] = dict(day=day, maximum=limit)
+        self.state['charged'] = dict(day=day, spent=previous)
         self.save()
 
     def available(self):

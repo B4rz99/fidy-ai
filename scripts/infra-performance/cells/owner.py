@@ -3,7 +3,6 @@ import argparse
 import json
 import os
 from pathlib import Path
-import re
 import secrets
 import subprocess
 import sys
@@ -15,7 +14,7 @@ from comparison import FIXTURE, boundaries, observe
 from owner_bundle import MaterializedBundle, verified_batch, LOGIN, HISTORY
 from owner_cloud import Cloud, ROLES
 from owner_state import AccountExperiment, CustodyObject
-from pilot import HERE, ROOT, NATIVE_API, NATIVE_BROWSER, confirmed, fetch, usage
+from owner_transport import HERE, ROOT, NATIVE_API, NATIVE_BROWSER, confirmed, fetch, usage
 from prepare import PIN
 
 SUBJECT = '24000000-0000-4000-8000-000000000481'
@@ -70,6 +69,8 @@ def teardown(owner, cloud, resumed=False):
     for role in run['inventory']:
         if cloud.identity(role) is not None:
             raise Refused('owned_inventory_survived')
+    previous = owner.prior(run['day'])
+    owner.state['charged'] = dict(day=run['day'], spent={k: previous[k] + run['spent'][k] for k in previous})
     owner.state['last'] = dict(prefix=run['prefix'], day=run['day'], spent=run['spent'], pending=run['pending'],
                               removed=sorted(run['inventory']), namespacesAbsent=True)
     owner.state['active'] = None
@@ -183,6 +184,8 @@ def main():
         parser.add_argument('--'+name,type=Path,required=(name=='out'))
     for name in ('prefix','revision','manifest-sha256'):
         parser.add_argument('--'+name,required=(name=='prefix'))
+    parser.add_argument('--maximum-reads', type=int, help='Explicit approved D1 ceiling for this run')
+    parser.add_argument('--maximum-writes', type=int, help='Explicit approved D1 ceiling for this run')
     parser.add_argument('--pairs',type=int,choices=(1,30),default=1)
     args = parser.parse_args()
     os.umask(0o077)
@@ -204,9 +207,16 @@ def main():
                 raise Refused('missing_native_session')
             report.update(maximum=bundle.estimate, pairs=args.pairs, packageSha256=args.manifest_sha256,
                           nativeRevision=args.revision, baseline=PIN)
+            size = subprocess.run(['bun','scripts/infra-performance/d1-budget.ts','--estimate-only'],cwd=ROOT,
+                                  input=json.dumps(bundle.estimate),capture_output=True,text=True,timeout=15)
+            if size.returncode != 1 or json.loads(size.stdout) != {'_tag':'NeedsAccountObservation'}:
+                raise Refused('experiment_too_large_or_invalid')
             if args.action == 'propose':
                 report['status'] = 'verified cost proposal'
                 return 0
+            approved = counts(dict(rowsRead=args.maximum_reads,rowsWritten=args.maximum_writes))
+            if any(bundle.estimate[k] > approved[k] for k in approved):
+                raise Refused('outside_approved_cost_proposal')
         account = os.environ['CLOUDFLARE_ACCOUNT_ID']
         cloud = Cloud(account,args.prefix)
         owner = AccountExperiment(CustodyObject(account),account)
@@ -214,7 +224,7 @@ def main():
             report['cleanup'] = teardown(owner,cloud,resumed=True)
         else:
             read = native_read(session,args.revision)
-            decision = admit(ROOT,account,usage(account),bundle.estimate)
+            decision = admit(ROOT,account,usage(account),owner.full_estimate(bundle.estimate,today()))
             owner.begin(args.prefix,decision,today())
             try:
                 prepare_inventory(owner,cloud)
@@ -222,8 +232,11 @@ def main():
                 active = owner.available()
                 db = active['inventory']['db']['id']
                 versions = cloud.deploy(bundle,db,key,active['deadline'])
+                namespaces = cloud.namespaces()
+                if len(namespaces) != 1:
+                    raise Refused('missing_isolated_coordinator')
                 api = confirmed(dict(resourcePrefix=args.prefix,accountId=account,versions=versions,databaseId=db,
-                                     fixture=FIXTURE,baseline=PIN,day=today()),account)
+                                     fixture=FIXTURE,baseline=PIN,day=today(),namespaceId=namespaces[0]),account)
                 def send(method,path,headers,body):
                     return fetch(api+path,{**headers,'Content-Type':'application/json'},body if method=='GET' or body else b'')
                 exercise(owner,cloud,bundle,send,read,versions,key,args.pairs,report,save)

@@ -122,13 +122,9 @@ python3 scripts/infra-performance/cells/pilot.py \
   --bundle "$VERIFIED_D1_BUNDLE" --out apps/server/test-results/preparation-check
 ```
 
-With no prepared receipt, this writes `report.json` and exits unsuccessfully before reading
-Cloudflare credentials or contacting the account. It verifies the pinned plan and full rehearsal
-digests. The budget owner checks the one-pair estimate against the experiment ceiling. An
-oversized plan reports `experiment_too_large`. A smaller plan still needs a protected preparation
-receipt and a persistent account ledger. The canonical fixture currently proves its individual
-SourceAttestations only on disposable workerd. The repository has no hosted provisioner for
-that fixture and cannot issue a protected receipt from this rehearsal.
+This writes `report.json` and exits before looking up account credentials. The report names the
+protected owner command. The offline pilot verifies the frozen plan, rehearsal digests and the
+experiment-size limit. A smaller plan still needs the scoped native fixture and account admission.
 
 The workflow runs this pilot entry point separately with the materialized canonical fixture, the
 empty-schema canonical control and the historical fixed-ID control. The materialized run additionally
@@ -139,38 +135,53 @@ The workflow also stops the materialized workerd comparator after an authenticat
 read, disposes the graph, and independently verifies the runner's socket and owned temporary
 directory have gone. Its `storage-preparation` artifacts record the refusals and this local cleanup.
 
-### One hosted pair on prepared installations
+### Run the protected Transaction comparator
 
-The protected provisioning process must provide both equivalent synthetic fixtures and their
-bound WebSessions. It must reserve every schema, seed, approval and Login batch in the same
-persistent account ledger using `cells/budget.py`. Direct SQL batches use the verified native
-counters from each D1 result. The scoped HTTP setup uses the compiled request ceilings and the
-metered Core receipt. The native installation must accept the exact synthetic User behind its
-closed host pair. Provisioning retains responsibility for deleting and verifying its bounded
-resource inventory, including on interruption.
+Generate one unpredictable `fidy-2259-<12 lowercase hex>` prefix before collecting the protected
+`performance-1` native fixture. Keep that prefix through cleanup. Build the materialized package
+from the authenticated native receipt in the protected runner. Pin the SHA-256 of `manifest.json`
+through the trusted build output. The receipt, Worker modules, SQL, Transaction records and bound
+WebSession stay in private runner storage. Give the owner the pinned digest independently of the
+package directory. Use `--pairs 1` for a pilot or `--pairs 30` for the alternating isolated cohort.
 
-The protected deployment receipt includes the Cloudflare account ID, UTC day, the unique
-`fidy-2259-<12 lowercase hex>` resource prefix, database UUID, the active Ingress and Core version
-UUIDs, the pinned D1 and native source revisions, verified fixture counts, bundle digests and
-the reconciled ledger total through setup. The field names are `accountId`, `day`,
-`resourcePrefix`, `databaseId`, `versions.ingress`, `versions.core`, `baseline`, `nativeRevision`,
-`fixture`, `bundleSha256` and `spentThroughSetup`. Use the database name matching the prefix and
-Worker names ending in `-core` and `-ingress`. Load `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`,
-`SMOKE_PROOF`, `FIDY_COMPARISON_KEY` and `FIDY_COMPARISON_SESSIONS` into the protected runner.
-The last value is a JSON object with `d1` and `do` entries, each containing the complete `cookie`
-and the authenticated `binding`. Credentials remain in the runner.
-
-```sh
-python3 scripts/infra-performance/cells/pilot.py \
-  --prepared "$PROTECTED_COMPARISON_RECEIPT" --bundle "$VERIFIED_D1_BUNDLE" \
-  --ledger "$ACCOUNT_BENCHMARK_LEDGER" --out apps/server/test-results/hosted-http-pilot
+```bash
+owner=scripts/infra-performance/cells/owner.py
+args=(--prefix "$RESOURCE_PREFIX" --revision "$NATIVE_REVISION" --fixture "$PRIVATE_FIXTURE"
+      --bundle "$VERIFIED_D1_BUNDLE" --manifest-sha256 "$TRUSTED_MANIFEST_SHA256" --pairs 30)
+python3 "$owner" propose "${args[@]}" --out "$PRIVATE_OUTPUT/proposal"
+python3 "$owner" run "${args[@]}" --maximum-reads "$APPROVED_READS" --maximum-writes "$APPROVED_WRITES" \
+  --out "$PRIVATE_OUTPUT/attempt"
 ```
 
-The command verifies disposable resource identities, obtains fresh account-wide usage, reserves
-the larger of the verified full-plan ceiling and actual setup plus the remaining request,
-then reserves that request before dispatch. A missing or excessive native receipt fences the ledger. Its report preserves both complete-body observations and payload hashes. One pair
-with unobserved lifecycle supplies a pilot observation only. Never manufacture a provisioning
-receipt or reset a fenced ledger to launch this command.
+`propose` verifies the native binding, complete final-schema import, frozen package and ceilings
+for every SQL batch, Login, inspection, history read and final Audit check. Use the returned read
+and write maximums when approving the run. `run` obtains current account-wide D1 GraphQL analytics,
+adds previously accounted same-day experiment work and evaluates the repository's Free policy.
+The runner requires a protected `SMOKE_PROOF`, `CLOUDFLARE_ACCOUNT_ID` and an account-scoped
+Cloudflare API token with D1, Worker script, Durable Object, R2 and Analytics access. The operator's
+AWS CLI uses `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and optional `AWS_SESSION_TOKEN` for
+conditional GetObject/PutObject access to exactly
+`fidy-native-release-smoke/protected-storage/account/<account-id>/d1-ledger.json`. All comparator
+runs use that existing custody bucket and object. Preserve its contents across runners and days.
+R2 evaluates conditional writes atomically. [R2 conditional operations](https://developers.cloudflare.com/r2/api/s3/api/)
+
+The inventory contains one D1 database, one Standard R2 bucket containing the recovery generation,
+two Workers and one SQLite coordinator namespace. Core stays private. The signed-in HTTP test uses
+only the expiring private Ingress on its disposable workers.dev address. The run sets a 20-minute
+request deadline. Cleanup retires the coordinator class, independently rediscovers each owned
+resource, verifies absence and records the resulting inventory receipt. If the runner stops,
+wait for the deadline and 90-second in-flight grace period and run the following independently.
+
+```bash
+python3 scripts/infra-performance/cells/owner.py cleanup --prefix "$RESOURCE_PREFIX" \
+  --out "$PRIVATE_OUTPUT/recovery"
+```
+
+An unknown D1 batch outcome stays fenced after resource deletion. Preserve the account ledger for
+independent reconciliation. The only publishable runner output is `report.json`. Its attempt data
+contains status, response digests, byte counts and timings. Unobserved lifecycle remains missing
+acceptance evidence. The credential-free storage HTTP workflow drives this owner through a restored
+workerd fixture, loses the reply to an authenticated read and resumes teardown from account state.
 
 ### Canonical Transaction fixture
 

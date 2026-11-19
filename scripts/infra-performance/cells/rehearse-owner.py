@@ -11,7 +11,7 @@ import urllib.request
 from budget import Refused, today
 from owner import AccountExperiment, MaterializedBundle, exercise, prepare_inventory, teardown
 from owner_bundle import sha
-from pilot import ROOT, HERE, transport
+from owner_transport import ROOT, HERE, transport
 from test_owner import ConditionalObject
 
 

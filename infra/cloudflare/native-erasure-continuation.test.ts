@@ -38,7 +38,8 @@ it.effect("continues the original admitted evidence without a signup or erasure 
       inventory: () => Effect.succeed(retained),
       renew: () => Effect.die("An already erased object needs no work lease"),
       logins: () => Effect.succeed(["one", "two"]),
-      refused: () => Effect.void,
+      record: () => Effect.void,
+      refused: () => Effect.succeed("invalid"),
     });
     expect(proof).toMatchObject({
       reference,
@@ -47,7 +48,8 @@ it.effect("continues the original admitted evidence without a signup or erasure 
       admissionReplay: "same-reference",
       survivingUsers: 2,
       originalBrowserSessionDenial: "unavailable",
-      erasedProviderLogin: "refused",
+      providerCompletion: "invalid",
+      erasedProviderPairing: "pending-then-expired-without-session",
     });
   })
 );
@@ -65,7 +67,8 @@ it.effect(
         inventory: () => Effect.succeed(retained),
         renew: () => Effect.void,
         logins: () => Effect.succeed(["one", "two"]),
-        refused: () => Effect.void,
+        record: () => Effect.void,
+      refused: () => Effect.succeed("invalid"),
       };
       const substitutions: Array<Partial<ErasureContinuation>> = [
         { revision: "9".repeat(40) },
@@ -181,7 +184,8 @@ it.effect("retries safe lease renewal and rechecks erasure after authenticating 
           logins++;
           return ["two", "one"];
         }),
-      refused: () => Effect.void,
+      record: () => Effect.void,
+      refused: () => Effect.succeed("invalid"),
     }).pipe(Effect.isFailure, Effect.forkChild);
     yield* TestClock.adjust("1 minute");
     expect(yield* Fiber.join(runner)).toBe(true);

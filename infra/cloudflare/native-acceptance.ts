@@ -438,11 +438,7 @@ const ungrantedPairing = Effect.fn(function* (input: Inputs, record: ErasureProg
       return reply;
     }),
   };
-  const { proof, expiresAt } = yield* verifyProvider(
-    privateLogin,
-    "erasure-1",
-    "login"
-  );
+  const { proof, expiresAt } = yield* verifyProvider(privateLogin, "erasure-1", "login");
   yield* record("erased-provider-verified");
   const { post } = runner(privateLogin);
   const outcome = yield* completionOutcome(yield* post("/web/providers/google/complete", proof));

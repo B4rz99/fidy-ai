@@ -88,31 +88,46 @@ it.effect(
     })
 );
 
+it.effect("retains completed physical and survivor checks when the new login fails", () =>
+  Effect.gen(function* () {
+    const stages: Array<string> = [];
+    const failed = yield* Effect.isFailure(continueAdmittedErasure({
+      checkpoint: admitted, revision, userNamespace, baseline, survivors,
+      inventory: () => Effect.succeed(retained), renew: () => Effect.void,
+      logins: () => Effect.succeed(["two","one"]),
+      record: (stage) => Effect.sync(() => { stages.push(stage); }),
+      refused: () => Effect.fail(Error("No authenticated completion observation")),
+    }));
+    expect(failed).toBe(true);
+    expect(stages).toEqual(["physical-absent","survivors-matched"]);
+  })
+);
+
 const redemptionReply = Effect.fn(function* (scenario: string, expiresAt: string) {
-              if (scenario === "issued") {
-                return Response.json(
-                  { status: "authenticated" },
-                  {
-                    status: 200,
-                    headers: { "set-cookie": "__Host-fidy_session=unexpected; Secure; HttpOnly" },
-                  }
-                );
-              }
-              return (yield* Clock.currentTimeMillis) < Date.parse(expiresAt)
-                ? Response.json(
-                    { status: "pending_approval", expiresAt, pollingIntervalSeconds: 5 },
-                    { status: 202 }
-                  )
-                : Response.json(
-                    {
-                      error: {
-                        code: "pairing_invalid",
-                        message: "Esta vinculación ya no es válida. Inicia de nuevo.",
-                      },
-                    },
-                    { status: 400 }
-                  );
-            });
+  if (scenario === "issued") {
+    return Response.json(
+      { status: "authenticated" },
+      {
+        status: 200,
+        headers: { "set-cookie": "__Host-fidy_session=unexpected; Secure; HttpOnly" },
+      }
+    );
+  }
+  return (yield* Clock.currentTimeMillis) < Date.parse(expiresAt)
+    ? Response.json(
+        { status: "pending_approval", expiresAt, pollingIntervalSeconds: 5 },
+        { status: 202 }
+      )
+    : Response.json(
+        {
+          error: {
+            code: "pairing_invalid",
+            message: "Esta vinculación ya no es válida. Inicia de nuevo.",
+          },
+        },
+        { status: 400 }
+      );
+});
 
 it.effect("observes pending and expired redemption for the verified erased subject", () =>
   Effect.gen(function* () {
@@ -123,6 +138,7 @@ it.effect("observes pending and expired redemption for the verified erased subje
       scenario = "verified"
     ): { driver: ReturnType<typeof admittedErasureLogins>; paths: Array<string> } => {
       const paths: Array<string> = [];
+      const providerStatus = scenario === "pending" ? "pending" : "verified";
       const expiresAt = "1970-01-01T00:10:00.000Z";
       const driver = admittedErasureLogins({
         revision,
@@ -167,7 +183,7 @@ it.effect("observes pending and expired redemption for the verified erased subje
               );
               return new Response(null, { status: 303 });
             case "/web/providers/google/status":
-              return Response.json({ status: scenario === "pending" ? "pending" : "verified" });
+              return Response.json({ status: providerStatus });
             case "/web/providers/google/complete":
               return Response.json({ status: body }, { status });
             default:
@@ -189,7 +205,9 @@ it.effect("observes pending and expired redemption for the verified erased subje
       const run = yield* scenario.driver
         .refused((stage) => {
           states.push(stage);
-          return stage === "pairing-pending" ? Deferred.succeed(ready, undefined).pipe(Effect.asVoid) : Effect.void;
+          return stage === "pairing-pending"
+            ? Deferred.succeed(ready, undefined).pipe(Effect.asVoid)
+            : Effect.void;
         })
         .pipe(Effect.forkChild);
       yield* Deferred.await(ready);

@@ -1,0 +1,21 @@
+tools/mcp-inspector/bun.lock
+  s_a1be23a656acf0::t_8eecabdd548d74 9,31
+tools/mcp-inspector/package.json
+  s_a1be23a656acf0::t_b796f3d2a8c0d4 14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e6e67b586c5bfb55fc7546f29d0f541cd4a1c240",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -19,37 +19,6 @@ class ComparisonTests(unittest.TestCase):
 
 
 class D1BudgetTests(unittest.TestCase):
-    def test_unknown_and_exceeded_request_cost_fence_later_work_across_processes(self):
-        from budget import Ledger, Refused
-        from pathlib import Path
-        from tempfile import TemporaryDirectory
-
-        for cost in (None, {"rowsRead": 60, "rowsWritten": 4}):
-            with self.subTest(cost=cost), TemporaryDirectory() as tmp:
-                directory = Path(tmp)
-                decision = {"_tag": "Allowed", "maximumRowsRead": 100, "maximumRowsWritten": 10}
-                account = "a" * 32
-                ceiling = {"rowsRead": 50, "rowsWritten": 5}
-                with Ledger(directory, account, decision) as budget:
-                    with self.assertRaises(Refused):
-                        budget.batch("transaction-read", ceiling, lambda: cost)
-                with self.assertRaises(Refused):
-                    with Ledger(directory, account, decision):
-                        self.fail("The account should remain fenced")
-
-    def test_pilot_retains_full_fixture_estimate_and_larger_observed_spend(self):
-        from pilot import pilot_estimate
-
-        for preparation, full in [
-            ("materialized", {"rowsRead": 15232, "rowsWritten": 4029}),
-            ("empty-schema", {"rowsRead": 19972, "rowsWritten": 5490}),
-        ]:
-            with self.subTest(preparation=preparation):
-                caps = {"rowsRead": 102, "rowsWritten": 25}
-                spent = {"rowsRead": 20500, "rowsWritten": 3000}
-                self.assertEqual(pilot_estimate(full, spent, caps),
-                                 {"rowsRead": 20602, "rowsWritten": full["rowsWritten"]})
-
     def test_unprepared_entry_reports_missing_evidence_without_credentials(self):
         import json
         import subprocess

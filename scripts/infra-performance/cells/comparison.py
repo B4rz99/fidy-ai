@@ -67,7 +67,9 @@ def boundaries(rows, expected_pairs, users):
             if values:
                 frame[v].update(stats(values))
                 frame[v]["bytes"] = stats([r["bytes"] for r in group if r["ok"]])
-                frame[v]["schedulingDelayMs"] = stats([r["delayMs"] for r in group if r["ok"]])
+                delays = [r["delayMs"] for r in group if r["ok"] and "delayMs" in r]
+                if delays:
+                    frame[v]["schedulingDelayMs"] = stats(delays)
         status = "fail" if invalid else "missing"
         if not invalid and complete and len(expected) >= 30 and all(
                 g["completed"] == len(expected) and g["p95"] > 0 for g in frame.values()):
@@ -79,12 +81,16 @@ def boundaries(rows, expected_pairs, users):
 
 def observe(read, variant, pair, user, due, operation, verify):
     started = time.monotonic()
-    row = dict(variant=variant, pair=pair, user=user, delayMs=(started - due) * 1000, ok=False)
+    row = dict(variant=variant, pair=pair, user=user, ok=False)
+    if due is not None:
+        row["delayMs"] = (started - due) * 1000
     try:
         status, headers, body = read(user, READS[operation])
         ended = time.monotonic()
         row.update(status=status, bytes=len(body), digest=hashlib.sha256(body).hexdigest(),
-                   httpMs=(ended - started) * 1000, scheduledMs=(ended - due) * 1000)
+                   httpMs=(ended - started) * 1000)
+        if due is not None:
+            row["scheduledMs"] = (ended - due) * 1000
         if (status != 200 or headers.get_content_type() != "application/json"
                 or "no-store" not in headers.get("cache-control", "")):
             return row

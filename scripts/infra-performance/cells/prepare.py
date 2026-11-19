@@ -30,14 +30,26 @@ def main():
         artifacts[name] = hashlib.sha256(destination.read_bytes()).hexdigest()
 
     # Restore only test instrumentation. Every application module and SQL migration comes from PIN.
-    for name in ("apps/server/cloudflare/browser-assessment.test-fixture.ts", "apps/server/cloudflare/d1-test-fixture.ts",
-                 "apps/server/scripts/prepare-d1-calibration.ts"):
-        target = root / name
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(subprocess.check_output(["git", "show", f"HEAD:{name}"], cwd=source))
-    subprocess.run(["bun", "apps/server/scripts/prepare-d1-calibration.ts", str(out / "plan.json")], cwd=root, check=True)
+    originals = {}
+    try:
+        for name in ("apps/server/cloudflare/browser-assessment.test-fixture.ts", "apps/server/cloudflare/d1-test-fixture.ts",
+                     "apps/server/scripts/prepare-d1-calibration.ts"):
+            target = root / name
+            originals[target] = target.read_bytes() if target.exists() else None
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(subprocess.check_output(["git", "show", f"HEAD:{name}"], cwd=source))
+        subprocess.run(["bun", "apps/server/scripts/prepare-d1-calibration.ts", str(out / "plan.json")], cwd=root, check=True)
+    finally:
+        for path, original in originals.items():
+            if original is None:
+                path.unlink(missing_ok=True)
+            else:
+                path.write_bytes(original)
     artifacts["plan"] = hashlib.sha256((out / "plan.json").read_bytes()).hexdigest()
     (out / "manifest.json").write_text(json.dumps(dict(baseline=PIN, calibration=CALIBRATION, sha256=artifacts), indent=2))
+    (out / "private-ingress.mjs").write_bytes((HERE / "private-ingress.mjs").read_bytes())
+    subprocess.run(["bun", "build", "private-ingress.mjs", "--target=browser", "--external=cloudflare:workers", "--external=node:*",
+                    "--outfile", "bounded-ingress.mjs"], cwd=out, check=True)
     (out / "meter.mjs").write_bytes((HERE / "meter.mjs").read_bytes())
     (out / "limits.json").write_text("null")
     for mode in ("train", "bounded"):
@@ -45,6 +57,7 @@ def main():
                         "--outfile", "metered-core.mjs"], cwd=out, check=True)
         subprocess.run(["bun", str(HERE / "probe.mjs"), str(out), mode], cwd=root, check=True)
     artifacts["metered-core"] = hashlib.sha256((out / "metered-core.mjs").read_bytes()).hexdigest()
+    artifacts["bounded-ingress"] = hashlib.sha256((out / "bounded-ingress.mjs").read_bytes()).hexdigest()
     artifacts["limits"] = hashlib.sha256((out / "limits.json").read_bytes()).hexdigest()
     (out / "manifest.json").write_text(json.dumps(dict(baseline=PIN, calibration=CALIBRATION, sha256=artifacts), indent=2))
 

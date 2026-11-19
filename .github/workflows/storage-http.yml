@@ -69,5 +69,8 @@ jobs:
             apps/server/test-results/storage-http/*.json*
             apps/server/test-results/storage-http/d1/manifest.json
             apps/server/test-results/storage-http/d1/probe.json
-            apps/server/test-results/storage-http/d1/*.mjs
+            apps/server/test-results/storage-http/d1/limits.json
+            apps/server/test-results/storage-http/d1/plan.json
+            apps/server/test-results/storage-http/d1/metered-core.mjs
+            apps/server/test-results/storage-http/d1/bounded-ingress.mjs
           if-no-files-found: warn

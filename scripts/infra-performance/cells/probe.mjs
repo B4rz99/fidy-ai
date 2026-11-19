@@ -8,7 +8,9 @@ const training = process.argv[3] === "train";
 const baseline = resolve("apps/server");
 const { Miniflare } = await import(Bun.resolveSync("miniflare", baseline));
 const { currentDisclosureFor } = await import(resolve(baseline, "src/shell/consent/operations.ts"));
-const origin = "https://127.0.0.1:4173";
+const origin = "https://app.fidyapp.com";
+const experimentKey = crypto.randomUUID();
+const ingressVersion = crypto.randomUUID();
 const subject = "24000000-0000-4000-8000-000000000481";
 const plan = await Bun.file(resolve(output, "plan.json")).json();
 const text = (value) => ({ type: "text", value });
@@ -24,7 +26,9 @@ const config = async (name, entry, env, exports = {}) => ({
   },
 });
 const runtime = new Miniflare({ workers: [
-  await config("ingress", "public-worker", {
+  await config("ingress", "bounded-ingress", {
+    EXPERIMENT_KEY: text(experimentKey), EXPERIMENT_DEADLINE: text(String(Date.now() + 180000)),
+    CF_VERSION_METADATA: { type: "json", value: { id: ingressVersion } },
     ...environment, CORE: { type: "worker", worker: "core" }, ERASURE_REGISTRY_COORDINATOR: coordinator,
     LOCAL_CANONICAL_READ_BEARER: text(""), PAT_ADMISSION_KEY: text("test-only-admission-key-with-32-bytes"),
   }),
@@ -37,12 +41,13 @@ const runtime = new Miniflare({ workers: [
 ] });
 const metadata = { scope: "offline native comparator graph", fixture: plan.verified, baseline: plan.baseline };
 const report = resolve(output, "probe.json");
-const source = (path, options = {}) => runtime.dispatchFetch("https://api.fidyapp.com" + path, {
-  ...options, headers: { origin, "cf-connecting-ip": "127.0.0.1", ...options.headers },
+const source = (path, options = {}) => runtime.dispatchFetch("https://fidy-2259-aaaaaaaaaaaa-ingress.offline.workers.dev" + path, {
+  ...options, headers: { origin, "x-fidy-comparison-key": experimentKey, "cf-connecting-ip": "127.0.0.1", ...options.headers },
 });
 const estimates = {};
 const request = async (path, options) => {
   const reply = await source(path, options);
+  assert.equal(reply.headers.get("x-fidy-comparison-worker"), ingressVersion);
   const cost = JSON.parse(reply.headers.get("x-fidy-comparison-cost") ?? "null");
   assert.ok(cost && Number.isSafeInteger(cost.rowsRead) && Number.isSafeInteger(cost.rowsWritten), "Missing native " + path + " receipt: " + reply.status);
   const route = (options?.method ?? "GET") + " " + path;
@@ -92,6 +97,8 @@ try {
     db.prepare("INSERT INTO consent_history(record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,?,?,?,?,?)")
       .bind(crypto.randomUUID(), subject, JSON.stringify(currentDisclosureFor()), "disclosure", "decision", now, now),
   ]);
+  assert.equal((await source("/transactions?limit=25", { headers: { "x-fidy-comparison-key": "wrong" } })).status, 403);
+  assert.equal((await source("/transactions?limit=26")).status, 403);
   const start = await request("/web/pairings", { method: "POST" });
   assert.equal(start.status, 200, "start Browser Login");
   const pair = await start.json();

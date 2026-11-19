@@ -8,6 +8,7 @@ import { receiptAdmitted, sealTransactionReceipt } from "../../release-isolation
 import type {
   AcceptanceEnvironment,
   AcceptanceWindowBindings,
+  SealedTransactionReceipt,
 } from "../../release-isolation/contract";
 import { boundedJsonBody } from "../../http/operations";
 import { RequestBodyPolicy } from "../../http/contract";
@@ -43,7 +44,7 @@ const Link = Schema.Struct({ first: uuid, second: uuid, visible: uuid, decidedAt
 const denied = (): Response =>
   new Response(null, { status: 404, headers: { "cache-control": "no-store" } });
 const decisionsMatch = (raw: string): boolean => {
-  const value = Schema.decodeUnknownOption(
+  const value = Schema.decodeOption(
     Schema.fromJsonString(Schema.Record(Schema.String, Schema.Boolean))
   )(raw);
   return (
@@ -137,6 +138,20 @@ const boundUser = Effect.fn(function* (request: Request, owns: (user: string) =>
     ? yield* localPreparationSubject(request, owns, operation.value)
     : Option.none();
 });
+const issueOnce = Effect.fnUntraced(function* (input: {
+  bucket: Pick<R2Bucket, "put">;
+  revision: string;
+  prefix: string;
+  receipt: typeof SealedTransactionReceipt.Type;
+}) {
+  const key = "_release-smoke/" + input.revision + "/acceptance/transactions/performance-1";
+  const stored = yield* Effect.tryPromise(() =>
+    input.bucket.put(key, input.prefix, { onlyIf: { etagDoesNotMatch: "*" } })
+  );
+  return stored === null
+    ? denied()
+    : Response.json(input.receipt, { headers: { "cache-control": "no-store" } });
+});
 export const ownPerformanceReceipt = Effect.fn(function* (
   request: Request,
   environment: AcceptanceEnvironment &
@@ -172,12 +187,10 @@ export const ownPerformanceReceipt = Effect.fn(function* (
   const data = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))(evidence.value);
   const { secret, privateKey, bucket } = signer.value;
   const box = yield* sealTransactionReceipt({ secret, privateKey, coordinates, data });
-  const key =
-    "_release-smoke/" + environment.RELEASE_GIT_SHA + "/acceptance/transactions/performance-1";
-  const stored = yield* Effect.tryPromise(() =>
-    bucket.put(key, command.value.resourcePrefix, { onlyIf: { etagDoesNotMatch: "*" } })
-  );
-  return stored !== null
-    ? Response.json(box, { headers: { "cache-control": "no-store" } })
-    : denied();
+  return yield* issueOnce({
+    bucket,
+    revision: coordinates.nativeRevision,
+    prefix: coordinates.resourcePrefix,
+    receipt: box,
+  });
 }, Effect.orElseSucceed(denied));

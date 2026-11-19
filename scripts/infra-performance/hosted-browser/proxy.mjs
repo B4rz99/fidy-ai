@@ -25,8 +25,11 @@ const reads = new Set([
 const finiteJourney = (method, path) =>
   (method === "GET" && reads.has(path)) || (method === "PUT" && path === target);
 
-export function protectedBrowserProxy({ origins, environment, tls, forward = fetch }) {
+export function protectedBrowserProxy({ origins, environment, tls, forward }) {
   const native = environment !== undefined;
+  if (!native && forward === undefined)
+    throw Error("The D1 browser requires an admitted metered transport");
+  const send = forward ?? fetch;
   if (
     native &&
     (origins.api !== installedOrigins.acceptance.api ||
@@ -80,10 +83,12 @@ export function protectedBrowserProxy({ origins, environment, tls, forward = fet
           )
         );
       }
-      const response = await forward(request, { redirect: "error", decompress: false });
+      const response = await send(request, { redirect: "error", decompress: false });
       if (response.status >= 300 && response.status < 400)
         return new Response(null, { status: 502 });
-      return new Response(response.body, { status: response.status, headers: response.headers });
+      const replyHeaders = new Headers(response.headers);
+      replyHeaders.delete(acceptanceProofHeader);
+      return new Response(response.body, { status: response.status, headers: replyHeaders });
     },
   });
 }

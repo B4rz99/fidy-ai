@@ -92,13 +92,14 @@ export async function measureBrowser({ origins, environment, session, network, e
     const observe = async (response) => {
       const body = await response.body();
       const request = response.request();
+      const bootstrap = new URL(response.url()).pathname === "/web/session/binding";
       event({
-        type: "canonical",
+        type: bootstrap ? "bootstrap" : "canonical",
         method: request.method(),
         status: response.status(),
         bodyBytes: body.length,
         httpMs: request.timing().responseEnd,
-        payloadSha256: createHash("sha256").update(body).digest("hex"),
+        ...(bootstrap ? {} : { payloadSha256: createHash("sha256").update(body).digest("hex") }),
       });
       assert.equal(response.status(), 200);
       return JSON.parse(body.toString("utf8"));

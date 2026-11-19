@@ -5,9 +5,31 @@ import { it } from "@effect/vitest";
 import { Cause, Effect, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { describe, expect } from "vitest";
-import { resourceFailureMessage } from "./resource-failure";
+import {
+  nativeResourceFailureMessage,
+  nativeResourceStage,
+  resourceFailureMessage,
+} from "./resource-failure";
 
 describe("resource release refusal diagnostics", () => {
+  it.effect("identifies the failed native release stage without disclosing the provider body", () =>
+    Effect.gen(function* () {
+      const message = yield* Effect.die({
+        _tag: "Forbidden",
+        code: 10000,
+        message: "secret provider body",
+      }).pipe(
+        nativeResourceStage("planning"),
+        Effect.matchCause({ onFailure: nativeResourceFailureMessage, onSuccess: () => "success" })
+      );
+      expect(message).toBe(
+        "Native release failed during planning. Alchemy resource operation failed (Forbidden; code=10000); inspect release state."
+      );
+      expect(nativeResourceFailureMessage(Cause.fail(Error("secret config")))).toBe(
+        "Native release failed during configuration. Alchemy resource operation failed (Error); inspect release state."
+      );
+    })
+  );
   it("retains a migration refusal and its provider cause after serialization", () => {
     const wrapped = new Error("private migration text", {
       cause: BadRequest.make({ message: "private provider refusal" }),

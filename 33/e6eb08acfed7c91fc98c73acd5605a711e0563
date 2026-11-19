@@ -1,0 +1,46 @@
+apps/server/cloudflare/transactions/user-store.test.ts
+  s_a1be23a656acf0::t_5d1d6e634d01c0 15,43,145,212,251,386,753
+apps/server/cloudflare/financial-user-store.test-fixture.ts
+  s_a1be23a656acf0::t_5d1d6e634d01c0 42
+  s_a1be23a656acf0::t_d2fc949cb710d7 28-41,43-45,52
+apps/server/cloudflare/subscription/native-pro-grants.test.ts
+  s_a1be23a656acf0::t_5d1d6e634d01c0 84-87
+  s_a1be23a656acf0::t_a1ae3f06408748 83,88-89,98,100-101
+apps/server/cloudflare/release-fixture/internal/payments.ts
+  s_a1be23a656acf0::t_5d1d6e634d01c0 4,98-102
+apps/server/cloudflare/release-fixture/internal/payment-token.ts
+  s_a1be23a656acf0::t_5d1d6e634d01c0 1-12
+apps/server/cloudflare/release-fixture/payment.test.ts
+  s_a1be23a656acf0::t_5d1d6e634d01c0 37
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_5d1d6e634d01c0 12
+  s_a1be23a656acf0::t_8405767774465f 5
+apps/server/cloudflare/release-fixture/operations.ts
+  s_a1be23a656acf0::t_5d1d6e634d01c0 4
+infra/cloudflare/native-acceptance.ts
+  s_a1be23a656acf0::t_5d1d6e634d01c0 229
+.oxlintrc.json
+  s_a1be23a656acf0::t_a1687476b74af4 319
+apps/server/cloudflare/financial-client.test-fixture.ts
+  s_a1be23a656acf0::t_385ae3db8d765f 1-28
+apps/server/cloudflare/user-store.test-fixture.ts
+  s_a1be23a656acf0::t_8fd177204d7c81 514-525
+apps/server/cloudflare/user-store/operations.ts
+  s_a1be23a656acf0::t_18678425d516b1 1274-1281
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "33e6eb08acfed7c91fc98c73acd5605a711e0563",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

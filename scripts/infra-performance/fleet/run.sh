@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
-case "${1-}" in 36|1000) ;; *) exit 2 ;; esac
+if [[ "${1-}" != 36 && "${1-}" != 1000 ]]; then
+  exit 2
+fi
 report="apps/server/test-results/2261-fleet/$1"
 mkdir -p "$report"
 export TMPDIR

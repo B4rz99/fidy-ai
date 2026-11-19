@@ -155,6 +155,8 @@ const browserBindings = {
   },
   SAMPLE_BUCKET: { type: "r2", name: "anonymous-samples" },
   EMAIL_BUCKET: { type: "r2", name: "sample-controls-test" },
+  BETA_PRO_OPERATOR_EMAIL: { type: "text", value: "beta@example.test" },
+  BETA_PRO_AUDIENCE: { type: "text", value: "fixture-beta" },
   SAMPLE_REVIEWER_EMAIL: { type: "text", value: "reviewer@example.test" },
   SAMPLE_REVIEW_AUDIENCE: { type: "text", value: "fixture-review" },
   FIXTURE_PROVIDER: {

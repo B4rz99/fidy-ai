@@ -28,6 +28,8 @@ export type CoreHttpEnvironment = ProviderConfiguration &
       RECOVERY_ISOLATION: string;
       NATIVE_STORAGE_ADMISSION: string;
       SQLITE_STORAGE_RELEASE: string;
+      BETA_PRO_OPERATOR_EMAIL: string;
+      BETA_PRO_AUDIENCE: string;
       SAMPLE_REVIEW_AUDIENCE: string;
       SAMPLE_REVIEWER_EMAIL: string;
       SAMPLE_BUCKET: R2Bucket;

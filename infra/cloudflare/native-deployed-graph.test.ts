@@ -133,6 +133,7 @@ it("refuses a correct binding label connected to an incumbent or a foreign Worke
 const appRoles = [
   ["Fidy native support recovery", "/internal/support-recovery", "CLOUDFLARE_ACCESS_AUDIENCE"],
   ["Fidy native Titular erasure", "/internal/titular-erasure", "ERASURE_SUPPORT_AUDIENCE"],
+  ["Fidy native beta Pro operator", "/internal/beta-pro", "BETA_PRO_AUDIENCE"],
   ["Fidy native IngestSample review", "/internal/sample-review", "SAMPLE_REVIEW_AUDIENCE"],
 ] as const;
 const human = "obarboza@fidyapp.com",
@@ -147,9 +148,10 @@ const applications = appRoles.map(([name, path, binding]) => ({
   session_duration: "15m",
   app_launcher_visible: false,
 }));
-const bindings = Object.fromEntries(
-  appRoles.map(([, , key]) => [key, { type: "plain_text", text: key }])
-);
+const bindings = {
+  ...Object.fromEntries(appRoles.map(([, , key]) => [key, { type: "plain_text", text: key }])),
+  BETA_PRO_OPERATOR_EMAIL: { type: "plain_text", text: human },
+};
 const accessReply = (path: string): unknown => {
   if (path.startsWith("account/access/apps?") || path.startsWith("zone/access/apps?")) {
     return { ...basic, result: applications };
@@ -200,13 +202,15 @@ it("requires independent Access scopes, a distinct audience per role and the sol
             ConfigProvider.fromUnknown({
               RECOVERY_OPERATOR_EMAIL: operator,
               SAMPLE_REVIEWER_EMAIL: human,
+              BETA_PRO_OPERATOR_EMAIL: human,
             })
           )
         );
-      expect(yield* verify(accessReply)).toHaveLength(3);
+      expect(yield* verify(accessReply)).toHaveLength(4);
       for (const target of [
         "zone/access/apps",
         "account/access/apps/SAMPLE_REVIEW_AUDIENCE/policies",
+        "account/access/apps/BETA_PRO_AUDIENCE/policies",
       ]) {
         expect(
           Result.isFailure(

@@ -35,6 +35,7 @@ export const publishPrice = (
         requiredEmail: Option.none(),
         audience: environment.PRICING_PUBLISH_AUDIENCE ?? "",
         otherAudiences: [
+          Option.getOrElse(Option.fromNullishOr(environment.BETA_PRO_AUDIENCE), () => ""),
           environment.CLOUDFLARE_ACCESS_AUDIENCE,
           environment.BILLING_SUPPORT_AUDIENCE ?? "",
           environment.ERASURE_SUPPORT_AUDIENCE ?? "",

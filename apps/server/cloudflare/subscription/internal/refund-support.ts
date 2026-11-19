@@ -55,6 +55,7 @@ const signingKeys = (issuer: string, http: OutboundHttpService, signal: AbortSig
 const validSupportConfiguration = (environment: RefundSupportEnvironment): boolean =>
   /^https:\/\/[a-z0-9-]+\.cloudflareaccess\.com$/u.test(environment.CLOUDFLARE_ACCESS_ISSUER) &&
   (environment.BILLING_SUPPORT_AUDIENCE ?? "").length > 0 &&
+  environment.BILLING_SUPPORT_AUDIENCE !== environment.BETA_PRO_AUDIENCE &&
   environment.BILLING_SUPPORT_AUDIENCE !== environment.CLOUDFLARE_ACCESS_AUDIENCE;
 const userPathPosition = -2;
 const authorize = (

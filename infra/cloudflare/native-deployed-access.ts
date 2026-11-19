@@ -30,6 +30,11 @@ const App = Schema.Struct({
 });
 const subjects = [
   {
+    name: "Fidy native beta Pro operator",
+    path: "/internal/beta-pro",
+    binding: "BETA_PRO_AUDIENCE",
+  },
+  {
     name: "Fidy native support recovery",
     path: "/internal/support-recovery",
     binding: "CLOUDFLARE_ACCESS_AUDIENCE",
@@ -126,7 +131,7 @@ type Input = {
 const configuredRole = Effect.fn(function* (
   input: Input,
   selection: { app: typeof App.Type; role: (typeof subjects)[number] },
-  identities: { idp: string; group: string; reviewer: string }
+  identities: { idp: string; group: string; reviewer: string; betaOperator: string }
 ) {
   const { app, role } = selection;
   const approved = input.apiHosts.map((host) => host + role.path);
@@ -140,17 +145,13 @@ const configuredRole = Effect.fn(function* (
   if (app.aud !== audience.text || !appShape(app, paths, identities.idp)) {
     return yield* Effect.fail(Error("Unexpected Access application for " + role.name));
   }
-  const selector =
-    role.binding === "CLOUDFLARE_ACCESS_AUDIENCE"
-      ? { group: { id: identities.group } }
-      : {
-          email: {
-            email:
-              role.binding === "SAMPLE_REVIEW_AUDIENCE"
-                ? identities.reviewer
-                : "obarboza@fidyapp.com",
-          },
-        };
+  const email = {
+    SAMPLE_REVIEW_AUDIENCE: identities.reviewer,
+    BETA_PRO_AUDIENCE: identities.betaOperator,
+    ERASURE_SUPPORT_AUDIENCE: "obarboza@fidyapp.com",
+    CLOUDFLARE_ACCESS_AUDIENCE: null,
+  }[role.binding];
+  const selector = email === null ? { group: { id: identities.group } } : { email: { email } };
   yield* validatePolicy(
     input.read,
     input.account + "access/apps/" + app.id + "/policies",
@@ -160,7 +161,7 @@ const configuredRole = Effect.fn(function* (
     name: role.name,
     appId: app.id,
     paths,
-    membership: role.binding === "SAMPLE_REVIEW_AUDIENCE" ? identities.reviewer : role.binding,
+    membership: email ?? role.binding,
   };
 });
 const relevantApplications = Effect.fn(function* (input: Input) {
@@ -208,6 +209,10 @@ export const inspectNativeAccess = Effect.fn(function* (input: Input) {
   )(groups);
   const email = yield* Config.String("RECOVERY_OPERATOR_EMAIL"),
     reviewer = yield* Config.Literal("obarboza@fidyapp.com", "SAMPLE_REVIEWER_EMAIL");
+  const betaOperator = yield* Config.Literal("obarboza@fidyapp.com", "BETA_PRO_OPERATOR_EMAIL");
+  yield* Schema.decodeUnknownEffect(
+    Schema.Struct({ type: Schema.Literal("plain_text"), text: Schema.Literal(betaOperator) })
+  )(input.bindings.BETA_PRO_OPERATOR_EMAIL);
   if (active.size !== subjects.length || !matchesSelector(group, { email: { email } })) {
     return yield* Effect.fail(Error("Unexpected native Access authority inventory"));
   }
@@ -225,7 +230,7 @@ export const inspectNativeAccess = Effect.fn(function* (input: Input) {
       return yield* configuredRole(
         input,
         { app, role },
-        { idp: idp.id, group: group.id, reviewer }
+        { idp: idp.id, group: group.id, reviewer, betaOperator }
       );
     })
   );

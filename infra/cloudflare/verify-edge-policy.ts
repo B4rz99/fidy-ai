@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "03de0d9f7b7e9681778fe0b2b3b486161576f954c53ed1cc45f83c4f09706cdf";
+const expectedEdgePolicyDigest = "b7d2ad8a44cb42be03e7f3536b79189dfa2fb822b74898fe13ad4672bd4a11d4";
 const securityArtifacts = [
   ...(await Promise.all(
     [
@@ -11,6 +11,14 @@ const securityArtifacts = [
       "../../apps/server/cloudflare/release-fixture/internal/payments.ts",
       "../../apps/server/cloudflare/release-fixture/contract.ts",
       "../../apps/server/src/shell/pro-grants/operations.ts",
+      "../../apps/server/src/shell/pro-grants/contract.ts",
+      "../../apps/server/cloudflare/beta-pro/contract.ts",
+      "../../apps/server/cloudflare/beta-pro/runtime.ts",
+      "../../apps/server/cloudflare/beta-pro/operations.ts",
+      "../../apps/server/cloudflare/maintenance/internal/beta-registry.ts",
+      "../../apps/server/cloudflare/beta-pro/internal/user.ts",
+      "../../scripts/pro/main.ts",
+      "../../scripts/pro/runtime.ts",
       "../../apps/server/cloudflare/agent/internal/local-inference.ts",
       "../../apps/server/cloudflare/release-isolation/contract.ts",
       "../../apps/server/cloudflare/release-isolation/internal/deployment.ts",

@@ -39,11 +39,6 @@ const outboundHttpPolicies: Readonly<Record<OutboundHttpProvider, OutboundHttpPo
     redactedHeaders: ["authorization"],
     retainedResponseHeaders: ["content-type"],
   },
-  "cloudflare-d1": {
-    propagateTrace: false,
-    redactedHeaders: ["authorization"],
-    retainedResponseHeaders: [],
-  },
   bancolombia: {
     propagateTrace: false,
     redactedHeaders: ["authorization"],

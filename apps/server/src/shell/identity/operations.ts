@@ -115,12 +115,6 @@ export const activeTrialPeriodForUserSelection = ({
   params: [...users.params, nowEpochMs, nowEpochMs],
 });
 
-/** Select an existing stable User for trusted operator work; this is not authentication. */
-export const existingUserSelection = (userId: string): OwnedStatement => ({
-  sql: "SELECT id AS userId FROM users WHERE id = ?",
-  params: [userId],
-});
-
 /** Canonical metadata selected from an exact caller-owned live User relation. */
 export const prepareSelectedCurrentUser = (users: OwnedStatement): PreparedCurrentUserRead => ({
   statement: selectedCurrentUserQuery(users),

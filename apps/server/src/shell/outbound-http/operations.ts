@@ -1,6 +1,5 @@
 import { Digest } from "effect/crypto";
 import { openAiHttp } from "~/shell/outbound-http/internal/openai-http";
-import { operatorD1Http } from "~/shell/outbound-http/internal/operator-d1-http";
 import { bancolombiaSandboxHttp } from "~/shell/outbound-http/internal/bancolombia-http";
 import { cliReleaseHttp } from "~/shell/outbound-http/internal/cli-release-http";
 import { oidcHttp } from "~/shell/outbound-http/internal/oidc-http";
@@ -21,7 +20,6 @@ import type {
   BancolombiaSandboxHttpService,
   CliReleaseHttpService,
   OpenAiHttpService,
-  OperatorD1HttpService,
   OutboundHttpFailure,
   OutboundHttpRequest,
   OutboundHttpResponse,
@@ -171,16 +169,6 @@ export const makeCliReleaseOutboundHttp = (
 export const makeBancolombiaSandboxOutboundHttp = (
   client: HttpClient.HttpClient
 ): BancolombiaSandboxHttpService => bancolombiaSandboxHttp(client);
-
-/** Construct database-admin HTTP authority only in native operator tools; never wire it into Workers. */
-export const makeOperatorD1Http = (
-  input: Readonly<{
-    accountId: string;
-    databaseId: string;
-    token: Redacted.Redacted<string>;
-    client: HttpClient.HttpClient;
-  }>
-): OperatorD1HttpService => operatorD1Http(input);
 
 /** Fixed OpenAI transport with bounded responses, no redirects, and secret-free telemetry. */
 export const makeOpenAiOutboundHttp = (

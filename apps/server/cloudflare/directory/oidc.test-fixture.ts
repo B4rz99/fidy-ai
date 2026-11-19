@@ -101,6 +101,7 @@ const acceptMail = Effect.fn(function* (request: Request) {
   return Option.some(Response.json({ id: "fixture-delivery" }));
 });
 const operatorApplications = new Map([
+  ["/beta-assertion", { email: "beta@example.test", audience: "fixture-beta" }],
   ["/support-assertion", { email: "operator@example.test", audience: "fixture-support" }],
   ["/reviewer-assertion", { email: "reviewer@example.test", audience: "fixture-review" }],
   ["/erasure-assertion", { email: "obarboza@fidyapp.com", audience: "fixture-erasure" }],

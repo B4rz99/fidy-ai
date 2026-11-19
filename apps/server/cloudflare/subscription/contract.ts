@@ -67,6 +67,7 @@ export type RefundSupportEnvironment = Readonly<{
   Partial<
     Readonly<{
       BILLING_SUPPORT_AUDIENCE: string;
+      BETA_PRO_AUDIENCE: string;
       USER_STORE: {
         getByName: (name: string) => Pick<Fetcher, "fetch">;
       };
@@ -243,6 +244,7 @@ export type PricingEnvironment = Readonly<{
     Readonly<{
       ERASURE_SUPPORT_AUDIENCE: string;
       BILLING_SUPPORT_AUDIENCE: string;
+      BETA_PRO_AUDIENCE: string;
       PRICING_PUBLISH_AUDIENCE: string;
       PRICING: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
     }>

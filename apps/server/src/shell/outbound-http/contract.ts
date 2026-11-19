@@ -163,11 +163,6 @@ export type BancolombiaSandboxHttpService = Readonly<{
   ) => Effect.Effect<OutboundHttpResponse, OutboundHttpFailure | Cause.TimeoutError>;
 }>;
 
-/** Native admin tool only; authority is scoped to one configured Cloudflare D1 database. */
-export type OperatorD1HttpService = Readonly<{
-  execute: (body: string) => Effect.Effect<OutboundHttpResponse, OutboundHttpFailure>;
-}>;
-
 /** Fixed OpenAI inference destination and credential; returns only byte-bounded response evidence. */
 export type OpenAiHttpService = Readonly<{
   execute: (body: string) => Effect.Effect<OutboundHttpResponse, OutboundHttpFailure>;

@@ -138,13 +138,18 @@ const appRoles = [
 ] as const;
 const human = "obarboza@fidyapp.com",
   operator = "release@example.test";
+const pin = "cce95413-ef9d-4483-89ab-8a50a7e6cafa";
+const loginMethods = [
+  { id: pin, name: "Existing account email PIN", type: "onetimepin" },
+  { id: "4c744781-b096-4712-a549-de0397a916a6", name: "", type: "cloudflare" },
+];
 const applications = appRoles.map(([name, path, binding]) => ({
   id: binding,
   name,
   aud: binding,
   type: "self_hosted",
   destinations: [{ type: "public", uri: apiHost + path }],
-  allowed_idps: ["pin"],
+  allowed_idps: [pin],
   session_duration: "15m",
   app_launcher_visible: false,
 }));
@@ -159,7 +164,7 @@ const accessReply = (path: string): unknown => {
   if (path.startsWith("account/access/identity_providers")) {
     return {
       ...basic,
-      result: [{ id: "pin", name: "Fidy native recovery email PIN", type: "onetimepin" }],
+      result: loginMethods,
     };
   }
   if (path.startsWith("account/access/groups")) {
@@ -182,31 +187,82 @@ const accessReply = (path: string): unknown => {
     result: [{ decision: "allow", precedence: 1, session_duration: "15m", include: [selector] }],
   };
 };
+const verify = (
+  source: (path: string) => unknown,
+  installed = true
+): ReturnType<typeof inspectNativeAccess> =>
+  inspectNativeAccess({
+    account: "account/",
+    zone: "zone/",
+    hosts: [apiHost, "storage-web-acceptance.fidyapp.com"],
+    apiHosts: [apiHost],
+    staging: false,
+    workers: [core],
+    installed,
+    bindings,
+    read: (path) => Effect.try(() => source(path)),
+  }).pipe(
+    Effect.provideService(
+      ConfigProvider.ConfigProvider,
+      ConfigProvider.fromUnknown({
+        RECOVERY_OPERATOR_EMAIL: operator,
+        SAMPLE_REVIEWER_EMAIL: human,
+        BETA_PRO_OPERATOR_EMAIL: human,
+      })
+    )
+  );
+const fresh =
+  (result: readonly unknown[]): ((path: string) => unknown) =>
+  (path) =>
+    path.startsWith("account/access/identity_providers") ? { ...basic, result } : basic;
+it("requires exactly one account OTP before first install regardless of its display name", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      expect(yield* verify(fresh(loginMethods), false)).toEqual([]);
+      for (const [methods, reason] of [
+        [[], "missing"],
+        [
+          [{ id: pin, name: "Fidy native recovery email PIN", type: "oidc" }],
+          "name matches another type",
+        ],
+        [
+          [
+            ...loginMethods,
+            { id: "4fa581d3-75e5-4545-93b5-4e7b9d120f68", name: "another PIN", type: "onetimepin" },
+          ],
+          "ambiguous",
+        ],
+        [[{ id: "", name: "Email PIN", type: "onetimepin" }], "invalid ID"],
+      ] as const) {
+        const refusal = yield* Effect.flip(verify(fresh(methods), false));
+        expect(refusal).toMatchObject({ _tag: "RecoveryPinUnavailable", reason });
+      }
+    })
+  ));
 it("requires independent Access scopes, a distinct audience per role and the sole designated sample reviewer", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const verify = (source: (path: string) => unknown): ReturnType<typeof inspectNativeAccess> =>
-        inspectNativeAccess({
-          account: "account/",
-          zone: "zone/",
-          hosts: [apiHost, "storage-web-acceptance.fidyapp.com"],
-          apiHosts: [apiHost],
-          staging: false,
-          workers: [core],
-          installed: true,
-          bindings,
-          read: (path) => Effect.try(() => source(path)),
-        }).pipe(
-          Effect.provideService(
-            ConfigProvider.ConfigProvider,
-            ConfigProvider.fromUnknown({
-              RECOVERY_OPERATOR_EMAIL: operator,
-              SAMPLE_REVIEWER_EMAIL: human,
-              BETA_PRO_OPERATOR_EMAIL: human,
-            })
-          )
-        );
       expect(yield* verify(accessReply)).toHaveLength(4);
+      expect(
+        Result.isFailure(
+          yield* Effect.result(
+            verify((path) =>
+              path.startsWith("account/access/identity_providers")
+                ? {
+                    ...basic,
+                    result: [
+                      {
+                        id: "34150703-a00a-4bc1-b035-9d0901ff9b60",
+                        name: "Replaced",
+                        type: "onetimepin",
+                      },
+                    ],
+                  }
+                : accessReply(path)
+            )
+          )
+        )
+      ).toBe(true);
       for (const target of [
         "zone/access/apps",
         "account/access/apps/SAMPLE_REVIEW_AUDIENCE/policies",

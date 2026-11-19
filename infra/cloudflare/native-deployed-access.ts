@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import { Config, Effect, Schema } from "effect";
+import { readRecoveryPin } from "./native-recovery-identity";
 
 import { type ProviderRead as Read, readProviderList as readNamed } from "./native-provider-list";
 
@@ -181,29 +182,22 @@ const relevantApplications = Effect.fn(function* (input: Input) {
   }
   return active;
 });
-/** The independent account and zone app inventories must describe only the three authorized protected paths. */
+/** The independent account and zone app inventories must describe only the four authorized protected paths. */
 export const inspectNativeAccess = Effect.fn(function* (input: Input) {
   const { read, account, installed } = input;
   const active = yield* relevantApplications(input);
-  const idps = (yield* readNamed(
-    read,
-    account + "access/identity_providers",
-    Schema.Struct({ id: name, name, type: name })
-  )).filter((row) => row.name === "Fidy native recovery email PIN");
+  const idp = yield* readRecoveryPin(read, account);
   const groups = (yield* readNamed(
     read,
     account + "access/groups",
     Schema.Struct({ ...selectors.fields, id: name, name })
   )).filter((row) => row.name === "Fidy native recovery operators");
   if (!installed) {
-    if (active.size + idps.length + groups.length !== 0) {
+    if (active.size + groups.length !== 0) {
       return yield* Effect.fail(Error("Protected Access target already exists"));
     }
     return [];
   }
-  const [idp] = yield* Schema.decodeUnknownEffect(
-    Schema.Tuple([Schema.Struct({ id: name, type: Schema.Literal("onetimepin") })])
-  )(idps);
   const [group] = yield* Schema.decodeUnknownEffect(
     Schema.Tuple([Schema.Struct({ ...selectors.fields, id: name })])
   )(groups);
@@ -230,7 +224,7 @@ export const inspectNativeAccess = Effect.fn(function* (input: Input) {
       return yield* configuredRole(
         input,
         { app, role },
-        { idp: idp.id, group: group.id, reviewer, betaOperator }
+        { idp, group: group.id, reviewer, betaOperator }
       );
     })
   );

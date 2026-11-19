@@ -114,7 +114,8 @@ try {
     api,
     calibration: process.env.FIDY_ASSESSMENT === "production",
     observe,
-    observeStartup: (reply) => reply.json(),
+    observeStartup: async (reply) =>
+      Schema.decodeSync(Schema.fromJsonString(Schema.Unknown))(await reply.text()),
     beforeRefresh: evidence,
   });
   process.stderr.write("REFERENCE_STAGE accountability-after\n");

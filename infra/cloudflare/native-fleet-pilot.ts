@@ -50,9 +50,7 @@ const observePhysicalCensus = Effect.fn(function* <Value>(
 const maximumExistingObjects = 36;
 const establishedOwners = 3;
 const baseline = (rows: UserObjects): Option.Option<UserObjects> =>
-  populated(rows) >= establishedOwners
-    ? Option.some(rows)
-    : Option.none();
+  populated(rows) >= establishedOwners ? Option.some(rows) : Option.none();
 
 const cleanupPilot = Effect.fn(function* ({
   port,

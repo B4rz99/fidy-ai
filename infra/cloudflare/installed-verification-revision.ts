@@ -6,7 +6,6 @@ const verifierFiles = new Set([
   ".github/workflows/native-fleet-pilot-check.yml",
   "docs/operations/production-releases.md",
   "infra/cloudflare/installed-verification-revision.ts",
-  "infra/cloudflare/native-acceptance.ts",
   "infra/cloudflare/native-fleet-pilot.ts",
   "infra/cloudflare/native-deployed-edge.ts",
   "infra/cloudflare/native-deployed-graph.ts",

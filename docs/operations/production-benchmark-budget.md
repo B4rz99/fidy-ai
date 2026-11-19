@@ -141,8 +141,8 @@ python3 scripts/infra-performance/cells/pilot.py \
 ```
 
 The command verifies disposable resource identities, obtains fresh account-wide usage, reserves
-the D1 request before dispatch and stops if its native counter receipt is missing or exceeds the
-reservation. Its report preserves both complete-body observations and payload hashes. One pair
+the larger of the verified full-plan ceiling and actual setup plus the remaining request,
+then reserves that request before dispatch. A missing or excessive native receipt fences the ledger. Its report preserves both complete-body observations and payload hashes. One pair
 with unobserved lifecycle supplies a pilot observation only. Never manufacture a provisioning
 receipt or reset a fenced ledger to launch this command.
 
@@ -171,3 +171,17 @@ the altered setup, complete HTTP Login, eight inspections, history and Audit. In
 one-pair and 30-pair estimates in `canonical-mirror/probe.json`. Refuse a plan exceeding the
 shared-account ceiling before provisioning. Budget, Recurring and Needs Review equivalence still
 require their own verified native preparations.
+
+### Rehearse final-schema preparation
+
+Pass `--snapshot` with `--canonical-fixture` to `cells/prepare.py` to derive a disposable
+comparator schema on a GitHub runner. The frozen Alchemy migration provider first replays every
+migration into a private workerd D1 database and records its migration ledger. A second database
+receives the resulting table, index, view and trigger SQL and the exact seed and ledger rows.
+The verifier compares the complete schema, trigger order, table contents and foreign key check
+before applying the same canonical fixture. D1 manages its internal metadata table.
+
+The workflow preserves logical equivalence evidence in `canonical-snapshot/snapshot-proof.json`
+and the conservative one-pair and 30-pair estimates in `canonical-snapshot/probe.json`.
+Check both before considering the disposable comparator for a hosted experiment. The file sizes
+describe the two offline databases. Physical layout and hosted latency need separate observations.

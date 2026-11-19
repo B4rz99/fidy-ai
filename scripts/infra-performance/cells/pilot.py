@@ -112,6 +112,11 @@ def confirmed(receipt, account):
     return "https://" + tag + "-ingress." + subdomain + ".workers.dev"
 
 
+def pilot_estimate(verified, spent, request_maximum):
+    full, prior, remaining = (counts(entry) for entry in (verified, spent, request_maximum))
+    return counts({key: max(full[key], prior[key] + remaining[key]) for key in full})
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--prepared", type=Path, required=True, help="Protected deployment and prior-cost receipt")
@@ -141,7 +146,13 @@ def main():
         if (state["day"] != today() or state["pending"] is not None or not all(spent.values())
                 or spent != counts(receipt["spentThroughSetup"])):
             raise Refused("Provisioning and this run must share the same reconciled ledger")
-        decision = admit(ROOT, account, usage(account), {k: spent[k]+cap[k] for k in cap})
+        probe_bytes = (args.bundle / "probe.json").read_bytes()
+        if hashlib.sha256(probe_bytes).hexdigest() != manifest["sha256"]["probe"]:
+            raise Refused("Full comparator rehearsal digest mismatch")
+        probe = json.loads(probe_bytes)
+        if probe["result"] != "passed" or probe["baseline"] != PIN:
+            raise Refused("Missing verified full comparator rehearsal")
+        decision = admit(ROOT, account, usage(account), pilot_estimate(probe["fullEstimate"]["onePair"], spent, cap))
         sessions = json.loads(os.environ["FIDY_COMPARISON_SESSIONS"])
         headers = {}
         for v in ("d1", "do"):

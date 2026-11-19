@@ -65,7 +65,7 @@ it.effect(
             false
           );
           for (const application of applications) {
-            const { allowedIdps } = Schema.decodeUnknownSync(
+            const { allowedIdps } = yield* Schema.decodeUnknownEffect(
               Schema.Struct({ allowedIdps: Schema.Unknown })
             )(application.Props);
             expect(

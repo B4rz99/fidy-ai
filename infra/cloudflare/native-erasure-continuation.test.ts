@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest";
-import { Effect, Fiber, Redacted } from "effect";
+import { Clock, Deferred, Effect, Fiber, Redacted } from "effect";
 import { installedOrigins } from "@fidy/server/browser-transport";
 import { admittedErasureLogins } from "./native-acceptance";
 import { TestClock } from "effect/testing";
@@ -38,7 +38,8 @@ it.effect("continues the original admitted evidence without a signup or erasure 
       inventory: () => Effect.succeed(retained),
       renew: () => Effect.die("An already erased object needs no work lease"),
       logins: () => Effect.succeed(["one", "two"]),
-      refused: () => Effect.void,
+      record: () => Effect.void,
+      refused: () => Effect.succeed("invalid"),
     });
     expect(proof).toMatchObject({
       reference,
@@ -47,7 +48,8 @@ it.effect("continues the original admitted evidence without a signup or erasure 
       admissionReplay: "same-reference",
       survivingUsers: 2,
       originalBrowserSessionDenial: "unavailable",
-      erasedProviderLogin: "refused",
+      providerCompletion: "invalid",
+      erasedProviderPairing: "pending-then-expired-without-session",
     });
   })
 );
@@ -65,7 +67,8 @@ it.effect(
         inventory: () => Effect.succeed(retained),
         renew: () => Effect.void,
         logins: () => Effect.succeed(["one", "two"]),
-        refused: () => Effect.void,
+        record: () => Effect.void,
+        refused: () => Effect.succeed("invalid"),
       };
       const substitutions: Array<Partial<ErasureContinuation>> = [
         { revision: "9".repeat(40) },
@@ -85,15 +88,68 @@ it.effect(
     })
 );
 
-it.effect("proves refusal only for the verified erased provider subject at login completion", () =>
+it.effect("retains completed physical and survivor checks when the new login fails", () =>
+  Effect.gen(function* () {
+    const stages: Array<string> = [];
+    const failed = yield* Effect.isFailure(
+      continueAdmittedErasure({
+        checkpoint: admitted,
+        revision,
+        userNamespace,
+        baseline,
+        survivors,
+        inventory: () => Effect.succeed(retained),
+        renew: () => Effect.void,
+        logins: () => Effect.succeed(["two", "one"]),
+        record: (stage) =>
+          Effect.sync(() => {
+            stages.push(stage);
+          }),
+        refused: () => Effect.fail(Error("No authenticated completion observation")),
+      })
+    );
+    expect(failed).toBe(true);
+    expect(stages).toEqual(["physical-absent", "survivors-matched"]);
+  })
+);
+
+const redemptionReply = Effect.fn(function* (scenario: string, expiresAt: string) {
+  if (scenario === "issued") {
+    return Response.json(
+      { status: "authenticated" },
+      {
+        status: 200,
+        headers: { "set-cookie": "__Host-fidy_session=unexpected; Secure; HttpOnly" },
+      }
+    );
+  }
+  return (yield* Clock.currentTimeMillis) < Date.parse(expiresAt)
+    ? Response.json(
+        { status: "pending_approval", expiresAt, pollingIntervalSeconds: 5 },
+        { status: 202 }
+      )
+    : Response.json(
+        {
+          error: {
+            code: "pairing_invalid",
+            message: "Esta vinculación ya no es válida. Inicia de nuevo.",
+          },
+        },
+        { status: 400 }
+      );
+});
+
+it.effect("observes pending and expired redemption for the verified erased subject", () =>
   Effect.gen(function* () {
     const origins = installedOrigins.acceptance;
     const verify = (
       status: number,
       body: string,
-      providerStatus = "verified"
+      scenario = "verified"
     ): { driver: ReturnType<typeof admittedErasureLogins>; paths: Array<string> } => {
       const paths: Array<string> = [];
+      const providerStatus = scenario === "pending" ? "pending" : "verified";
+      const expiresAt = "1970-01-01T00:10:00.000Z";
       const driver = admittedErasureLogins({
         revision,
         origins,
@@ -103,7 +159,18 @@ it.effect("proves refusal only for the verified erased provider subject at login
           paths.push(url.pathname);
           switch (url.pathname) {
             case "/web/pairings":
-              return Response.json({ pairingId: "test-pairing", privateVerifier: "test-verifier" });
+              return Response.json({
+                pairingId: "test-pairing",
+                privateVerifier: "test-verifier",
+                expiresAt,
+              });
+            case "/web/pairings/redeem": {
+              expect(yield* Effect.tryPromise(() => request.json())).toEqual({
+                pairingId: "test-pairing",
+                privateVerifier: "test-verifier",
+              });
+              return yield* redemptionReply(scenario, expiresAt);
+            }
             case "/web/providers/google/start": {
               expect(yield* Effect.tryPromise(() => request.json())).toMatchObject({
                 intent: "login",
@@ -137,14 +204,40 @@ it.effect("proves refusal only for the verified erased provider subject at login
       return { driver, paths };
     };
     const accepted = verify(400, "invalid");
-    yield* accepted.driver.refused();
-    expect(accepted.paths.at(-1)).toBe("/web/providers/google/complete");
+    const pending = verify(503, "unavailable");
+    for (const [scenario, outcome] of [
+      [accepted, "invalid"],
+      [pending, "unavailable"],
+    ] as const) {
+      yield* TestClock.setTime(0);
+      const ready = yield* Deferred.make<void>();
+      const states: Array<string> = [];
+      const run = yield* scenario.driver
+        .refused((stage) => {
+          states.push(stage);
+          return stage === "pairing-pending"
+            ? Deferred.succeed(ready, undefined).pipe(Effect.asVoid)
+            : Effect.void;
+        })
+        .pipe(Effect.forkChild);
+      yield* Deferred.await(ready);
+      yield* TestClock.adjust("11 minutes");
+      expect(yield* Fiber.join(run)).toBe(outcome);
+      expect(states).toEqual([
+        "erased-provider-verified",
+        "completion-" + outcome,
+        "pairing-pending",
+        "pairing-expired",
+      ]);
+    }
+    expect(accepted.paths.slice(-2)).toEqual(["/web/pairings/redeem", "/web/pairings/redeem"]);
     for (const result of [
+      verify(503, "unavailable", "issued"),
       verify(401, "invalid"),
       verify(200, "approved"),
       verify(400, "invalid", "pending"),
     ]) {
-      expect(yield* Effect.isFailure(result.driver.refused())).toBe(true);
+      expect(yield* Effect.isFailure(result.driver.refused(() => Effect.void))).toBe(true);
     }
   })
 );
@@ -171,7 +264,8 @@ it.effect("retries safe lease renewal and rechecks erasure after authenticating 
           logins++;
           return ["two", "one"];
         }),
-      refused: () => Effect.void,
+      record: () => Effect.void,
+      refused: () => Effect.succeed("invalid"),
     }).pipe(Effect.isFailure, Effect.forkChild);
     yield* TestClock.adjust("1 minute");
     expect(yield* Fiber.join(runner)).toBe(true);

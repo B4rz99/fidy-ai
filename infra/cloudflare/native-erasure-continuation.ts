@@ -20,6 +20,18 @@ const Checkpoint = Schema.Struct({
 
 const commitment = (ids: ReadonlyArray<string>): string =>
   new Bun.CryptoHasher("sha256").update([...ids].sort().join("\n")).digest("hex");
+export type ErasureProgress = (
+  stage:
+    | "physical-empty"
+    | "physical-absent"
+    | "survivors-matched"
+    | "erased-provider-verified"
+    | "completion-invalid"
+    | "completion-unavailable"
+    | "pairing-pending"
+    | "pairing-expired"
+    | "physical-rechecked"
+) => Effect.Effect<void, Error>;
 export type ErasureContinuation = {
   checkpoint: unknown;
   revision: string;
@@ -29,7 +41,8 @@ export type ErasureContinuation = {
   inventory: () => Effect.Effect<UserObjects, Error>;
   renew: () => Effect.Effect<void, Error>;
   logins: () => Effect.Effect<ReadonlyArray<string>, Error>;
-  refused: () => Effect.Effect<void, Error>;
+  record: ErasureProgress;
+  refused: (record: ErasureProgress) => Effect.Effect<"invalid" | "unavailable", Error>;
 };
 
 const readAdmission = Effect.fn(function* (input: ErasureContinuation) {
@@ -138,6 +151,7 @@ export const continueAdmittedErasure = Effect.fn(function* (input: ErasureContin
     onSome: Effect.succeed,
     onNone: () => waitForErasure,
   });
+  yield* input.record(result === "empty" ? "physical-empty" : "physical-absent");
   const ids = yield* step("survivor identities", input.logins());
   if (ids.length !== 2 || new Set(ids).size !== 2 || commitment(ids) !== input.survivors) {
     return yield* step(
@@ -145,13 +159,15 @@ export const continueAdmittedErasure = Effect.fn(function* (input: ErasureContin
       Effect.fail(Error("Original survivor identities differ"))
     );
   }
-  yield* step("erased provider login", input.refused());
+  yield* input.record("survivors-matched");
+  const providerCompletion = yield* step("erased provider login", input.refused(input.record));
   yield* step(
     "physical transition",
     state(yield* census()).pipe(
       Effect.flatMap((value) => Effect.fromOption(value, () => Error("Physical erasure regressed")))
     )
   );
+  yield* input.record("physical-rechecked");
   return {
     reference,
     physicalObject: target,
@@ -160,7 +176,8 @@ export const continueAdmittedErasure = Effect.fn(function* (input: ErasureContin
     admissionReplay: "same-reference",
     survivingUsers: ids.length,
     survivorIdentitySet: "matched",
-    erasedProviderLogin: "refused",
+    providerCompletion,
+    erasedProviderPairing: "pending-then-expired-without-session",
     originalBrowserSessionDenial: "unavailable",
     custodianCompletion: "unverified",
     recoveryWindow: "pending",

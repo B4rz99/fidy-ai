@@ -64,8 +64,10 @@ def main():
                     "--outfile", "bounded-ingress.mjs"], cwd=out, check=True)
     (out / "meter.mjs").write_bytes((HERE / "meter.mjs").read_bytes())
     (out / "limits.json").write_text("null")
-    for mode in ("train", "bounded"):
+    for mode in ("train", "refuse", "bounded"):
         limits = {} if mode == "train" else json.loads((out / "limits.json").read_text())
+        if mode == "refuse":
+            limits["GET /transactions?limit=25"]["maximum"] = {"rowsRead": 0, "rowsWritten": 0}
         (out / "configured-limits.mjs").write_text("export const training = " + json.dumps(mode == "train")
                                                  + "; export const limits = " + json.dumps(limits) + ";")
         subprocess.run(["bun", "build", "core-entry.mjs", "--target=browser", "--external=cloudflare:workers", "--external=node:*",

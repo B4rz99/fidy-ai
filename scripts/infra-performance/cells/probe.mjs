@@ -82,6 +82,7 @@ const eachInOrder = (items, visit) =>
   items.reduce((previous, item) => previous.then(() => visit(item)), Promise.resolve());
 const output = process.argv[2];
 const training = process.argv[3] === "train";
+const refuse = process.argv[3] === "refuse";
 
 const disclosure = await Bun.file(resolve(output, "disclosure.json")).text();
 const origin = "https://app.fidyapp.com";
@@ -169,7 +170,7 @@ const metadata = {
   fixture: plan.verified,
   baseline: plan.baseline,
 };
-const report = resolve(output, "probe.json");
+const report = resolve(output, refuse ? "refusal.json" : "probe.json");
 /**
  * @param {string} path Scoped path.
  * @param {Options} options Request options.
@@ -305,63 +306,83 @@ try {
   assert.equal(handshake.status, success);
   const { binding } = session(await handshake.json());
   assert.ok(binding);
-  /** @type {string | undefined} */
-  let responseSha256;
-  const firstOffer = performance.now();
-  await eachInOrder(
-    Array.from({ length: sampleCount }, (_, index) => index),
-    async (index) => {
-      await Bun.sleep(Math.max(0, firstOffer + index * secondMs - performance.now()));
-      const reply = await request("/transactions?limit=25", {
-        headers: { cookie, "Fidy-Session-Binding": binding },
-      });
-      assert.equal(reply.status, success, "authenticated history on deployed graph");
-      const body = await reply.text();
-      const { data } = history(JSON.parse(body));
-      assert.deepEqual(
-        data.map(({ id }) => id),
-        Array.from({ length: fixtureOriginalCount }, (_, ordinal) => ordinal)
-          .filter((ordinal) => ordinal !== 1)
-          .map((ordinal) => "81000000-0000-4000-8000-" + String(ordinal).padStart(uuidDigits, "0"))
-      );
-      const hash = createHash("sha256").update(body).digest("hex");
-      if (responseSha256) assert.equal(hash, responseSha256);
-      responseSha256 = hash;
+  if (refuse) {
+    const denied = await source("/transactions?limit=25", {
+      headers: { cookie, "Fidy-Session-Binding": binding },
+    });
+    const unavailable = 503;
+    assert.equal(denied.status, unavailable, "a zero native ceiling must refuse before Audit");
+    assert.equal(denied.headers.get("x-fidy-comparison-cost"), null);
+    const noRead = await db
+      .prepare(
+        "SELECT count(*) AS total FROM audit_entries WHERE user_id=? AND operation='transactions.listTransactions'"
+      )
+      .bind(subject)
+      .first("total");
+    assert.equal(noRead, 0);
+    metadata.result = "zero ceiling refused authenticated work";
+  } else {
+    /** @type {string | undefined} */
+    let responseSha256;
+    const firstOffer = performance.now();
+    await eachInOrder(
+      Array.from({ length: sampleCount }, (_, index) => index),
+      async (index) => {
+        await Bun.sleep(Math.max(0, firstOffer + index * secondMs - performance.now()));
+        const reply = await request("/transactions?limit=25", {
+          headers: { cookie, "Fidy-Session-Binding": binding },
+        });
+        assert.equal(reply.status, success, "authenticated history on deployed graph");
+        const body = await reply.text();
+        const { data } = history(JSON.parse(body));
+        assert.deepEqual(
+          data.map(({ id }) => id),
+          Array.from({ length: fixtureOriginalCount }, (_, ordinal) => ordinal)
+            .filter((ordinal) => ordinal !== 1)
+            .map(
+              (ordinal) => "81000000-0000-4000-8000-" + String(ordinal).padStart(uuidDigits, "0")
+            )
+        );
+        const hash = createHash("sha256").update(body).digest("hex");
+        if (responseSha256) assert.equal(hash, responseSha256);
+        responseSha256 = hash;
+      }
+    );
+    const audit = await db
+      .prepare(
+        "SELECT count(*) AS n FROM audit_entries WHERE user_id=? AND operation='transactions.listTransactions' AND outcome='success'"
+      )
+      .bind(subject)
+      .all();
+    account("audit", [audit]);
+    const counts = Schema.decodeUnknownSync(Schema.Struct({ n: Schema.Int }))(audit.results[0]);
+    assert.equal(counts.n, sampleCount);
+    metadata.sqlBatches = sqlBatches;
+    if (!training) {
+      const limits = routeBounds(await Bun.file(resolve(output, "limits.json")).json());
+      /** @param {number} pairs Number of D1 observations. */
+      const estimate = (pairs) => {
+        const caps = sqlBatches.map((batch) => batch.maximum);
+        for (const route of [
+          "POST /web/pairings",
+          "POST /web/pairings/redeem",
+          "GET /web/session/binding",
+        ]) {
+          caps.push(limits[route].maximum);
+        }
+        for (let index = 0; index < pairs; index++) {
+          caps.push(limits["GET /transactions?limit=25"].maximum);
+        }
+        /** @param {keyof Cost} key Native count field. */
+        const sum = (key) => caps.reduce((total, cap) => total + cap[key], 0);
+        return { rowsRead: sum("rowsRead"), rowsWritten: sum("rowsWritten") };
+      };
+      metadata.fullEstimate = { onePair: estimate(1), thirtyPairs: estimate(sampleCount) };
     }
-  );
-  const audit = await db
-    .prepare(
-      "SELECT count(*) AS n FROM audit_entries WHERE user_id=? AND operation='transactions.listTransactions' AND outcome='success'"
-    )
-    .bind(subject)
-    .all();
-  account("audit", [audit]);
-  const counts = Schema.decodeUnknownSync(Schema.Struct({ n: Schema.Int }))(audit.results[0]);
-  assert.equal(counts.n, sampleCount);
-  metadata.sqlBatches = sqlBatches;
-  if (!training) {
-    const limits = routeBounds(await Bun.file(resolve(output, "limits.json")).json());
-    /** @param {number} pairs Number of D1 observations. */
-    const estimate = (pairs) => {
-      const caps = sqlBatches.map((batch) => batch.maximum);
-      for (const route of [
-        "POST /web/pairings",
-        "POST /web/pairings/redeem",
-        "GET /web/session/binding",
-      ]) {
-        caps.push(limits[route].maximum);
-      }
-      for (let index = 0; index < pairs; index++) {
-        caps.push(limits["GET /transactions?limit=25"].maximum);
-      }
-      /** @param {keyof Cost} key Native count field. */
-      const sum = (key) => caps.reduce((total, cap) => total + cap[key], 0);
-      return { rowsRead: sum("rowsRead"), rowsWritten: sum("rowsWritten") };
-    };
-    metadata.fullEstimate = { onePair: estimate(1), thirtyPairs: estimate(sampleCount) };
+    if (training)
+      await Bun.write(resolve(output, "limits.json"), JSON.stringify(estimates, null, 2));
+    Object.assign(metadata, { result: "passed", responseSha256, auditReads: counts.n });
   }
-  if (training) await Bun.write(resolve(output, "limits.json"), JSON.stringify(estimates, null, 2));
-  Object.assign(metadata, { result: "passed", responseSha256, auditReads: counts.n });
 } finally {
   await Bun.write(report, JSON.stringify(metadata, null, 2));
   await runtime.dispose();

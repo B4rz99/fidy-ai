@@ -71,6 +71,7 @@ jobs:
             apps/server/test-results/storage-http/*.json*
             apps/server/test-results/storage-http/d1/manifest.json
             apps/server/test-results/storage-http/d1/probe.json
+            apps/server/test-results/storage-http/d1/refusal.json
           if-no-files-found: warn
       - name: Preserve only the verified bounded Worker package
         if: success()
@@ -80,6 +81,7 @@ jobs:
           path: |
             apps/server/test-results/storage-http/d1/manifest.json
             apps/server/test-results/storage-http/d1/probe.json
+            apps/server/test-results/storage-http/d1/refusal.json
             apps/server/test-results/storage-http/d1/limits.json
             apps/server/test-results/storage-http/d1/plan.json
             apps/server/test-results/storage-http/d1/metered-core.mjs

@@ -78,9 +78,11 @@ def failure_metadata(log):
     for line in content.splitlines():
         if line.startswith("REFERENCE_STAGE ") and line[16:] in STAGES:
             details["stage"] = line[16:]
-        match = re.fullmatch(r"REFERENCE_HTTP ([1-5]\d\d)", line)
+        match = re.fullmatch(r"REFERENCE_HTTP (?:(GET|PUT) )?([1-5][0-9]{2})", line)
         if match:
-            details["httpStatus"] = int(match[1])
+            if match[1]:
+                details["httpMethod"] = match[1]
+            details["httpStatus"] = int(match[2])
     for message, reason in REASONS.items():
         if message in content.lower():
             details["reason"] = reason

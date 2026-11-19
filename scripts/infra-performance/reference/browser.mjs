@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { Schema } from "effect";
+import { freshBudgetMonth } from "./fresh-workspaces.mjs";
 import { freshTransactions } from "./fresh-transactions.mjs";
 
 const { chromium } = await import("@playwright/test");
@@ -129,8 +130,19 @@ try {
   process.stderr.write(JSON.stringify(accountability) + "\n");
   // WebSession requests in the pinned baseline write session Audit and carry no external retry key.
   assert.deepEqual(accountability, { reads: 2, corrections: 1, units: 0, receipts: 0 });
+  const views = {};
+  if (process.env.FIDY_ASSESSMENT === "production") {
+    process.stderr.write("REFERENCE_STAGE budgets-month\n");
+    views["budgets.month.browser"] = await freshBudgetMonth({
+      page,
+      api,
+      browser: app,
+      event: () => {},
+    });
+  }
   process.stdout.write(
     JSON.stringify({
+      views,
       browser: browser.version(),
       startupMs,
       readMs,

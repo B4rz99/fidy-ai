@@ -25,6 +25,14 @@ const web = Bun.serve({
   fetch: () =>
     new Response("<p>Transaction harness</p>", { headers: { "content-type": "text/html" } }),
 });
+assert.throws(
+  () =>
+    protectedBrowserProxy({
+      origins: { browser: "https://web.invalid", api: "https://api.invalid" },
+      tls,
+    }),
+  /metered transport/u
+);
 const observed = [];
 const proxy = protectedBrowserProxy({
   origins,

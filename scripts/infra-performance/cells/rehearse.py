@@ -109,6 +109,7 @@ def compare_fixture(root, baseline, dest, scratch):
     write(dest / "plan.json", plan)
     rows = []
     costs = []
+    coverage = {}
     with ExitStack() as stack:
         subjects = {}
         for variant, path, entry in (("d1", baseline, "apps/server/cloudflare/browser-acceptance-preview.ts"),
@@ -149,8 +150,11 @@ def compare_fixture(root, baseline, dest, scratch):
             if row["accountability"] != dict(reads=1, corrections=0, units=0, receipts=0):
                 row["ok"] = False
             write(dest / "attempts.json", rows)
+        for variant, subject in subjects.items():
+            status, _, _ = subject.canonical("/transactions/81000000-0000-4000-8000-000000000002/source-attestations")
+            coverage[variant] = {"sourceAttestationsHttpStatus": status}
     result = boundaries(rows, expected_pairs=2, users=1)
-    write(dest / "report.json", dict(scope=plan["scope"], lifecycle="unobserved", boundaries=result, d1RequestCost=costs))
+    write(dest / "report.json", dict(scope=plan["scope"], lifecycle="unobserved", boundaries=result, d1RequestCost=costs, coverage=coverage))
     if not all(row["ok"] and row.get("backendMs", 0) > 0 for row in rows) or result["httpMs"]["status"] == "fail":
         raise RuntimeError("Unequal or incomplete canonical read")
 

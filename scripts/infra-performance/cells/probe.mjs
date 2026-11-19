@@ -88,6 +88,16 @@ const disclosure = await Bun.file(resolve(output, "disclosure.json")).text();
 const origin = "https://app.fidyapp.com";
 const experimentKey = crypto.randomUUID();
 const ingressVersion = crypto.randomUUID();
+const expectation = Bun.file(resolve(output, "expected.json"));
+const expected = (await expectation.exists())
+  ? Schema.decodeUnknownSync(
+      Schema.Struct({
+        history: Schema.Unknown,
+        inspections: Schema.Record(Schema.String, Schema.Unknown),
+      })
+    )(await expectation.json())
+  : undefined;
+const inspections = Object.entries(expected?.inspections ?? {});
 const subject = "24000000-0000-4000-8000-000000000481";
 const plan = calibration(await Bun.file(resolve(output, "plan.json")).json());
 /**
@@ -335,19 +345,32 @@ try {
         assert.equal(reply.status, success, "authenticated history on deployed graph");
         const body = await reply.text();
         const { data } = history(JSON.parse(body));
-        assert.deepEqual(
-          data.map(({ id }) => id),
-          Array.from({ length: fixtureOriginalCount }, (_, ordinal) => ordinal)
-            .filter((ordinal) => ordinal !== 1)
-            .map(
-              (ordinal) => "81000000-0000-4000-8000-" + String(ordinal).padStart(uuidDigits, "0")
-            )
-        );
+        if (expected) {
+          assert.deepEqual(JSON.parse(body), expected.history);
+        } else {
+          assert.deepEqual(
+            data.map(({ id }) => id),
+            Array.from({ length: fixtureOriginalCount }, (_, ordinal) => ordinal)
+              .filter((ordinal) => ordinal !== 1)
+              .map(
+                (ordinal) => "81000000-0000-4000-8000-" + String(ordinal).padStart(uuidDigits, "0")
+              )
+          );
+        }
         const hash = createHash("sha256").update(body).digest("hex");
         if (responseSha256) assert.equal(hash, responseSha256);
         responseSha256 = hash;
       }
     );
+    await eachInOrder(inspections, async ([id, detail]) => {
+      await Bun.sleep(secondMs);
+      const reply = await request("/transactions/" + id, {
+        headers: { cookie, "Fidy-Session-Binding": binding },
+      });
+      assert.equal(reply.status, success);
+      assert.deepEqual(await reply.json(), detail);
+    });
+    metadata.comparedInspections = inspections.length;
     const audit = await db
       .prepare(
         "SELECT count(*) AS n FROM audit_entries WHERE user_id=? AND operation='transactions.listTransactions' AND outcome='success'"
@@ -370,6 +393,7 @@ try {
         ]) {
           caps.push(limits[route].maximum);
         }
+        for (const [id] of inspections) caps.push(limits["GET /transactions/" + id].maximum);
         for (let index = 0; index < pairs; index++) {
           caps.push(limits["GET /transactions?limit=25"].maximum);
         }

@@ -2,11 +2,12 @@ name: Rehearse the storage HTTP comparison
 
 on:
   push:
-    branches: [perf/hosted-storage-cells]
+    branches: [perf/hosted-storage-cells, perf/canonical-performance-fixture]
   pull_request:
     paths:
       - ".github/workflows/storage-http.yml"
       - "scripts/infra-performance/cells/**"
+      - "scripts/infra-performance/canonical-fixture/**"
       - "scripts/infra-performance/reference/native*.ts"
   workflow_dispatch:
 
@@ -23,7 +24,9 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - name: Verify comparison evidence and budget refusal
-        run: python3 -m unittest discover -s scripts/infra-performance/cells
+        run: |
+          python3 -m unittest discover -s scripts/infra-performance/cells
+          python3 -m unittest discover -s scripts/infra-performance/canonical-fixture
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: fb53d9e755c14393048dc945fc0b7f117730d872
@@ -48,6 +51,8 @@ jobs:
           (cd baseline-d1 && bash scripts/install-workspace.sh --ignore-scripts)
       - name: Check the comparator Worker code
         run: bun x oxlint --deny-warnings --config .oxlintrc.json --type-aware --threads=1 scripts/infra-performance/cells/*.mjs scripts/infra-performance/cells/*.d.mts
+      - name: Create eight Transactions with canonical capture and verify a resumed fixture
+        run: python3 scripts/infra-performance/canonical-fixture/rehearse.py --out apps/server/test-results/canonical-fixture
       - name: Measure the paired canonical HTTP read with real Sessions
         run: python3 scripts/infra-performance/cells/rehearse.py --d1 baseline-d1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -62,6 +67,10 @@ jobs:
         run: |
           python3 scripts/infra-performance/cells/prepare.py --d1 baseline-d1 \
             --calibration baseline-calibration --out apps/server/test-results/storage-http/d1
+      - name: Verify actual canonical originals, Reconciliation and provenance on the frozen graph
+        run: |
+          python3 scripts/infra-performance/cells/prepare.py --d1 baseline-d1 --calibration baseline-calibration \
+            --canonical-fixture apps/server/test-results/canonical-fixture/fixture --out apps/server/test-results/canonical-mirror
       - name: Preserve evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -69,6 +78,11 @@ jobs:
           name: storage-http-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             apps/server/test-results/storage-http/*.json*
+            apps/server/test-results/canonical-mirror/probe.json
+            apps/server/test-results/canonical-mirror/manifest.json
+            apps/server/test-results/canonical-mirror/limits.json
+            apps/server/test-results/canonical-fixture/*.json
+            apps/server/test-results/canonical-fixture/fixture/manifest.json
             apps/server/test-results/storage-http/d1/manifest.json
             apps/server/test-results/storage-http/d1/probe.json
             apps/server/test-results/storage-http/d1/refusal.json

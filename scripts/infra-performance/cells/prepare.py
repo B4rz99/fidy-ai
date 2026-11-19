@@ -4,6 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 import subprocess
+import sys
 
 PIN = "fb53d9e755c14393048dc945fc0b7f117730d872"
 CALIBRATION = "15cfe773cd263b6a3d4e1b6e1b958f233cdde84f"
@@ -15,6 +16,7 @@ def main():
     parser.add_argument("--d1", type=Path, required=True)
     parser.add_argument("--calibration", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--canonical-fixture", type=Path, help="Originals and actual private provenance from the disposable native rehearsal")
     args = parser.parse_args()
     root, source, out = (p.resolve() for p in (args.d1, args.calibration, args.out))
     for path, revision in ((root, PIN), (source, CALIBRATION)):
@@ -50,6 +52,13 @@ def main():
                 path.unlink(missing_ok=True)
             else:
                 path.write_bytes(original)
+    inspection_ids = []
+    if args.canonical_fixture:
+        sys.path.insert(0, str(HERE.parent / "canonical-fixture"))
+        from mirror import materialize
+        observed = materialize(out / "plan.json", args.canonical_fixture)
+        inspection_ids = sorted(observed["inspections"])
+        (out / "expected.json").write_text(json.dumps({"history": observed["history"], "inspections": observed["inspections"]}, ensure_ascii=False))
     artifacts["plan"] = hashlib.sha256((out / "plan.json").read_bytes()).hexdigest()
     (out / "manifest.json").write_text(json.dumps(dict(baseline=PIN, calibration=CALIBRATION, sha256=artifacts), indent=2))
     disclosure = subprocess.check_output(["bun", "-e",
@@ -59,7 +68,7 @@ def main():
     (out / "ingress-entry.mjs").write_text(
         'import ingress from "./public-worker.mjs";\n'
         'import { privateIngress } from "./private-ingress.mjs";\n'
-        'export default privateIngress(ingress);\n')
+        f'export default privateIngress(ingress, {json.dumps(inspection_ids)});\n')
     (out / "core-entry.mjs").write_text(
         'import core, { UserTransactionCoordinator as Coordinator } from "./core-worker.mjs";\n'
         'import { meteredCore } from "./meter.mjs";\n'
@@ -81,7 +90,7 @@ def main():
         subprocess.run(["bun", str(HERE / "probe.mjs"), str(out), mode], cwd=root, check=True)
     reference = json.loads((out.parent / "attempts.json").read_bytes()) if (out.parent / "attempts.json").exists() else []
     probe = json.loads((out / "probe.json").read_bytes())
-    if any(not row["ok"] or row["digest"] != probe["responseSha256"] for row in reference):
+    if not args.canonical_fixture and any(not row["ok"] or row["digest"] != probe["responseSha256"] for row in reference):
         raise ValueError("Frozen Worker graph and paired reference returned different response bytes")
     artifacts["metered-core"] = hashlib.sha256((out / "metered-core.mjs").read_bytes()).hexdigest()
     artifacts["bounded-ingress"] = hashlib.sha256((out / "bounded-ingress.mjs").read_bytes()).hexdigest()

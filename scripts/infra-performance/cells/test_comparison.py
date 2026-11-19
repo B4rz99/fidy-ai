@@ -44,3 +44,20 @@ class D1BudgetTests(unittest.TestCase):
         caps = {"rowsRead": 102, "rowsWritten": 25}
         spent = {"rowsRead": 20500, "rowsWritten": 3000}
         self.assertEqual(pilot_estimate(full, spent, caps), {"rowsRead": 20602, "rowsWritten": 5490})
+
+    def test_unprepared_entry_reports_missing_evidence_without_credentials(self):
+        import json
+        import subprocess
+        import sys
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+
+        with TemporaryDirectory() as tmp:
+            out = Path(tmp) / "evidence"
+            reply = subprocess.run([sys.executable, str(Path(__file__).with_name("pilot.py")),
+                                    "--bundle", str(Path(tmp) / "absent"), "--out", str(out)],
+                                   env={}, capture_output=True, check=False)
+            self.assertEqual(reply.returncode, 1)
+            report = json.loads((out / "report.json").read_text())
+            self.assertEqual(report["reason"], "verified_bundle_missing")
+            self.assertEqual(report["attempts"], [])

@@ -22,6 +22,14 @@ const ProviderRefusal = Schema.Struct({
     "CloudflareHttpError",
     "CloudflareParseError",
     "UnownedResource",
+    "OwnedBySomeoneElse",
+    "UnsatisfiedResourceCycle",
+    "StateStoreError",
+    "AuthError",
+    "CredentialsRequired",
+    "NeedsReauth",
+    "InvalidReferenceError",
+    "WorkerIdNotFound",
     "MissingProviderError",
     "WorkerVersionConfigError",
     "WorkerNotFound",
@@ -56,7 +64,16 @@ const exceptionCategory = (error: unknown, failure: boolean): string => {
   return failure ? "UnclassifiedFailure" : "UnclassifiedDefect";
 };
 
+const StateRefusal = Schema.Struct({
+  _tag: Schema.Literal("StateStoreError"),
+  http: Schema.Struct({
+    status: Schema.Int.check(Schema.isBetween({ minimum: 100, maximum: 599 })),
+  }),
+});
+
 const refusalCategory = (error: unknown, failure: boolean): string => {
+  const state = Schema.decodeUnknownOption(StateRefusal)(error);
+  if (Option.isSome(state)) return "StateStoreError; HTTP " + state.value.http.status;
   const refusal = Schema.decodeUnknownOption(ProviderRefusal)(error);
   if (Option.isNone(refusal)) return exceptionCategory(error, failure);
   const { _tag, code } = refusal.value;
@@ -102,8 +119,10 @@ type NativeStage =
 
 class NativeStageFailure extends Data.TaggedError("NativeStageFailure")<{ message: string }> {}
 
+export type { NativeStageFailure };
+
 export const nativeResourceStage =
-  (stage: NativeStage) =>
+  (stage: NativeStage, details?: () => string) =>
   <A, E, R>(operation: Effect.Effect<A, E, R>): Effect.Effect<A, E | NativeStageFailure, R> =>
     operation.pipe(
       Effect.catchCauseIf(
@@ -111,7 +130,7 @@ export const nativeResourceStage =
         (cause) =>
           Effect.fail(
             new NativeStageFailure({
-              message: `Native release failed during ${stage}. ${resourceFailureMessage(cause)}`,
+              message: `Native release failed during ${stage}. ${resourceFailureMessage(cause)}${details?.() ?? ""}`,
             })
           )
       )

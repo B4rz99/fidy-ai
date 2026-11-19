@@ -11,6 +11,7 @@ on:
           [
             verify,
             verify-erasure,
+            plan-first-install,
             first-install,
             stage-hosts,
             rollout,
@@ -67,6 +68,10 @@ jobs:
       - name: Check the reviewed release policy
         working-directory: infra/cloudflare
         run: bun verify-edge-policy.ts
+      - name: Verify the fresh native plan against the existing state store
+        if: inputs.operation == 'plan-first-install'
+        working-directory: infra/cloudflare
+        run: bun native-storage-resources.ts plan-first-install
       - name: Install the verified fresh native application
         if: inputs.operation == 'first-install'
         working-directory: infra/cloudflare
@@ -99,7 +104,7 @@ jobs:
           bun native-storage-release.ts attach-hosts
       - name: Verify the installed application and retained schema markers
         id: verify
-        if: inputs.operation != 'first-install' && inputs.operation != 'verify-erasure'
+        if: inputs.operation != 'plan-first-install' && inputs.operation != 'first-install' && inputs.operation != 'verify-erasure'
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts verify
       - name: Verify the installed application and physical erasure of one disposable User

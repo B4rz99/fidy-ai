@@ -39,7 +39,9 @@ const securityArtifacts = [
       "./native-graph.ts",
       "./native-host-plan.ts",
       "./native-incumbent-fence.ts",
+      "./native-plan-diagnostics.ts",
       "./native-provider-list.ts",
+      "./resource-failure.ts",
       "./native-release-smoke.ts",
     ].map((path) => Bun.file(new URL(path, import.meta.url)).text())
   )),

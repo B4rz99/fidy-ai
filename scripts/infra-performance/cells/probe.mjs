@@ -63,7 +63,7 @@ try {
       .bind(crypto.randomUUID(), subject, JSON.stringify(currentDisclosureFor()), "disclosure", "decision", now, now),
   ]);
   const start = await request("/web/pairings", { method: "POST" });
-  assert.equal(start.status, 201, "start Browser Login");
+  assert.equal(start.status, 200, "start Browser Login");
   const pair = await start.json();
   await db.prepare("UPDATE browser_login_pairings SET approval_portfolio_id=?,approval_message_id=?,approval_user_id=? WHERE id=? AND state='pending_approval' AND approval_message_id IS NULL")
     .bind("acceptance-portfolio", crypto.randomUUID(), subject, pair.pairingId).run();

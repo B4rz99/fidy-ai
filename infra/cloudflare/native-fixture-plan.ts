@@ -38,12 +38,24 @@ const knownResources = new Map([
   ...nativeResourceInventory(retainedProvider.revision),
 ]);
 type ObservedResource = Pick<PlanRows[number], "logicalId" | "resourceType" | "action">;
-export const projectFixtureInventory = (rows: PlanRows): ReadonlyArray<ObservedResource> =>
+const projectInventory = (
+  rows: PlanRows,
+  inventory: ReadonlyMap<string, string>
+): ReadonlyArray<ObservedResource> =>
   rows.map(({ logicalId, resourceType, action }) =>
-    knownResources.has(logicalId) && knownResources.get(logicalId) === resourceType
+    inventory.get(logicalId) === resourceType
       ? { logicalId, resourceType, action }
       : { logicalId: "unrecognized", resourceType: "unrecognized", action }
   );
+export const projectFixtureInventory = (rows: PlanRows): ReadonlyArray<ObservedResource> =>
+  projectInventory(rows, knownResources);
+export const projectSuccessorInventory = ({
+  rows,
+  revision,
+}: {
+  rows: PlanRows;
+  revision: string;
+}): ReadonlyArray<ObservedResource> => projectInventory(rows, nativeResourceInventory(revision));
 
 export class FixturePlanRefused extends Data.TaggedError("FixturePlanRefused")<{
   reason:

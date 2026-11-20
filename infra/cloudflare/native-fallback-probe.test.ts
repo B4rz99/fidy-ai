@@ -96,7 +96,14 @@ it.live(
       for (const body of ["json", "empty"] as const) {
         expect(yield* observePairingStart(pair, body, send)).toBe("HTTP 503");
       }
-      expect(calls).toHaveLength(3);
+      yield* controlsDigest(pair, (request) =>
+        acceptanceSend(
+          client,
+          "bytes"
+        )(request).pipe(Effect.provideService(FetchHttpClient.Fetch, receive))
+      ).pipe(Effect.ignore);
+      expect(calls).toHaveLength(4);
+      expect(calls[3]).toEqual(calls[0]);
       expect(calls[0]?.body).toBe("{}");
       expect(calls[1]).toEqual(calls[0]);
       expect(calls[2]).toEqual({ ...calls[0], body: null });

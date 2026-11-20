@@ -105,8 +105,27 @@ def resealed_document(verifier, artifact_id, digest, get=actions_get, git=git_re
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("source", "restore"))
+    parser.add_argument("action", choices=("source", "restore", "replacement"))
     args = parser.parse_args()
+    if args.action == "replacement":
+        env = os.environ
+        if (env.get("FIXTURE_RELEASE_OPERATION") not in ("plan-pairing-repair", "stage-pairing-repair")
+                or env.get("GITHUB_REPOSITORY") != REPO or env.get("GITHUB_ACTIONS") != "true"
+                or env.get("GITHUB_WORKFLOW_REF") != f"{REPO}/.github/workflows/native-storage-release.yml@refs/heads/trunk"
+                or env.get("GITHUB_REF_PROTECTED") != "true" or env.get("GITHUB_REF") != "refs/heads/trunk"
+                or env.get("GITHUB_EVENT_NAME") != "workflow_dispatch" or env.get("GITHUB_RUN_ATTEMPT") != "1"
+                or env.get("NATIVE_STORAGE_ADMISSION") != "closed" or env.get("NATIVE_STORAGE_HOSTS") != "acceptance"
+                or env.get("NATIVE_FIXTURE_BUILD") != "fallback"
+                or env.get("NATIVE_FIXTURE_SIGNER_SHA256") != fixture_upload()["fingerprint"]
+                or env.get("GITHUB_SHA") != git_read("rev-parse", "HEAD")
+                or env.get("RELEASE_GIT_SHA") != env["GITHUB_SHA"]
+                or git_read("merge-base", APPLICATION, env["GITHUB_SHA"]) != APPLICATION):
+            raise ValueError("Replacement requires the new protected application source and closed acceptance hosts")
+        staged, controls = staged_documents()
+        for name, value in [("native-release.json.predecessor", staged), ("native-release.json.source.controls", controls)]:
+            with os.fdopen(os.open(Path(env["RUNNER_TEMP"]) / name, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600), "w") as file:
+                json.dump(value, file)
+        return
     verify_dispatch(os.environ)
     if args.action == "source":
         staged_documents()

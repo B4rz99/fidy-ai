@@ -1,6 +1,21 @@
+import type * as Alchemist from "alchemy/Alchemist";
 import { Schema } from "effect";
 import { type Plan, describePlan, describeResource } from "alchemy/Plan";
 import retainedProvider from "./native-retained-provider.json" with { type: "json" };
+
+export const nativePlanOptions = ({
+  profile,
+  preview,
+  fingerprint,
+}: {
+  profile: string;
+  preview: boolean;
+  fingerprint: string;
+}): Parameters<typeof Alchemist.Stack.plan>[0] => ({
+  target: { entrypoint: "alchemy.storage.ts", stage: "production", profile },
+  operation: "deploy" as const,
+  updateStateStore: !preview && fingerprint === "",
+});
 
 const smokeResources = [
   "ReleaseSmoke-",

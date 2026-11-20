@@ -1,4 +1,4 @@
-import { verifyFixturePlan } from "./native-fixture-plan";
+import { nativePlanOptions, verifyFixturePlan } from "./native-fixture-plan";
 import { expectedFixtureSigner, fixtureBuild } from "./native-fixture-signer";
 import { productionTopology } from "../../apps/server/cloudflare/runtime/contract";
 import { requireHostPlan, stagedAccessApplications } from "./native-host-plan";
@@ -155,11 +155,7 @@ const resourceRelease = Effect.fn(function* (phase: typeof Phase.Type, preview: 
     return yield* Effect.fail(Error("Unexpected native host selection"));
   }
   const pin = yield* protectedRecoveryPin.pipe(nativeResourceStage("account recovery PIN"));
-  const input = {
-    target: { entrypoint: "alchemy.storage.ts", stage: "production", profile },
-    operation: "deploy",
-    updateStateStore: !preview,
-  } as const;
+  const input = nativePlanOptions({ profile, preview, fingerprint: yield* expectedFixtureSigner });
   const snapshot = yield* (
     phase === "stage-hosts"
       ? Alchemist.Stack.plan({ ...input, include: stagedAccessApplications })

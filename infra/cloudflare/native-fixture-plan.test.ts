@@ -1,6 +1,6 @@
 import type { describePlan } from "alchemy/Plan";
 import { expect, it } from "vitest";
-import { requireFixtureLifecycle } from "./native-fixture-plan";
+import { nativePlanOptions, requireFixtureLifecycle } from "./native-fixture-plan";
 import { nativeResourceInventory } from "./native-graph";
 import provider from "./native-retained-provider.json" with { type: "json" };
 
@@ -51,4 +51,15 @@ it("uploads only code to the prepared pair and refuses a new provider or resourc
   for (const extra of [...creation, row("Web", "Cloudflare.Worker", "update")]) {
     expect(() => validate([...active, extra], false)).toThrow();
   }
+});
+
+it("uses the existing Alchemy state Worker for preview and apply of a signed release", () => {
+  for (const preview of [true, false]) {
+    expect(
+      nativePlanOptions({ profile: "ci", preview, fingerprint: "a".repeat(64) }).updateStateStore
+    ).toBe(false);
+  }
+  expect(
+    nativePlanOptions({ profile: "ci", preview: false, fingerprint: "" }).updateStateStore
+  ).toBe(true);
 });

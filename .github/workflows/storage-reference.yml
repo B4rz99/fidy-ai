@@ -8,6 +8,10 @@ on:
       - "scripts/dev-browser-api.ts"
   workflow_dispatch:
     inputs:
+      dashboard_validation_revision:
+        description: Exact product-only Dashboard revision to validate instead of benchmarking
+        type: string
+        default: ""
       dataset:
         description: FinancialRecord fixture
         type: choice
@@ -54,7 +58,7 @@ concurrency:
 
 jobs:
   compare:
-    if: ${{ !inputs.workerd_load }}
+    if: ${{ !inputs.workerd_load && inputs.dashboard_validation_revision == '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
@@ -129,6 +133,29 @@ jobs:
             apps/web/test-results/reference/*/report.json
             apps/web/test-results/reference/*/phase-report.json
           if-no-files-found: warn
+
+  dashboard-validation:
+    if: inputs.dashboard_validation_revision != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.dashboard_validation_revision }}
+          persist-credentials: false
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+      - uses: ./.github/actions/bun-runtime
+      - name: Install the product revision's locked workspace
+        run: bash scripts/install-workspace.sh --ignore-scripts
+      - name: Check web types
+        run: bun run --cwd apps/web typecheck
+      - name: Check Dashboard behavior
+        run: bun run --cwd apps/web test src/features/dashboard
+      - name: Check the initial browser graph excludes Dashboard and Recharts
+        run: bun run --cwd apps/web check:bundle
 
   workerd-load:
     if: inputs.workerd_load

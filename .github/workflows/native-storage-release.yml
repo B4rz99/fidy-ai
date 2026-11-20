@@ -40,6 +40,8 @@ on:
             plan-first-install,
             first-install,
             stage-hosts,
+            plan-fixture-repair,
+            resume-fixture-upload,
             plan-fixture-fallback,
             prepare-fixture-fallback,
             recover-fixture-fallback,
@@ -59,14 +61,14 @@ jobs:
   release:
     if: ${{ github.ref == 'refs/heads/trunk' && inputs.operation != 'publish-site' }}
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ (inputs.operation == 'fleet-pilot' || inputs.operation == 'ten-hosted' || inputs.operation == 'continue-ten-cleanup') && 110 || inputs.operation == 'continue-fleet-cleanup' && 55 || (inputs.operation == 'first-install' || inputs.operation == 'verify-erasure' || inputs.operation == 'continue-erasure' || inputs.operation == 'prepare-fixture-fallback' || inputs.operation == 'recover-fixture-fallback') && 90 || 30 }}
+    timeout-minutes: ${{ (inputs.operation == 'fleet-pilot' || inputs.operation == 'ten-hosted' || inputs.operation == 'continue-ten-cleanup') && 110 || inputs.operation == 'continue-fleet-cleanup' && 55 || (inputs.operation == 'first-install' || inputs.operation == 'verify-erasure' || inputs.operation == 'continue-erasure' || inputs.operation == 'resume-fixture-upload' || inputs.operation == 'prepare-fixture-fallback' || inputs.operation == 'recover-fixture-fallback') && 90 || 30 }}
     environment: production
     permissions:
       actions: read
       contents: read
     env:
       FIXTURE_RELEASE_OPERATION: ${{ inputs.operation }}
-      NATIVE_FIXTURE_BUILD: ${{ (inputs.operation == 'plan-fixture-fallback' || inputs.operation == 'prepare-fixture-fallback' || inputs.operation == 'recover-fixture-fallback') && 'fallback' || 'ordinary' }}
+      NATIVE_FIXTURE_BUILD: ${{ (inputs.operation == 'plan-fixture-fallback' || inputs.operation == 'plan-fixture-repair' || inputs.operation == 'resume-fixture-upload' || inputs.operation == 'prepare-fixture-fallback' || inputs.operation == 'recover-fixture-fallback') && 'fallback' || 'ordinary' }}
       NATIVE_FIXTURE_SIGNER_SHA256: ${{ inputs.transaction_fixture_signer && vars.NATIVE_FIXTURE_SIGNER_SHA256 || '' }}
       NATIVE_STORAGE_HOSTS: ${{ vars.NATIVE_STORAGE_HOSTS || 'acceptance' }}
       CLOUDFLARE_ACCESS_ISSUER: ${{ secrets.CLOUDFLARE_ACCESS_ISSUER }}
@@ -119,6 +121,7 @@ jobs:
       - name: Bind evidence to the protected revision
         run: |
           if [[ -n "$NATIVE_FIXTURE_SIGNER_SHA256" ]]; then
+            echo "FIXTURE_WEB_REVISION=$(jq -er .revision infra/cloudflare/native-fixture-upload.json)" >> "$GITHUB_ENV"
             echo "FIDY_NATIVE_FIXTURE_PROVIDER_REVISION=$(jq -er .revision infra/cloudflare/native-retained-provider.json)" >> "$GITHUB_ENV"
           fi
           echo "HOSTED_AI_MODEL=$(bun infra/cloudflare/scripts/print-approved-openai-model.ts)" >> "$GITHUB_ENV"
@@ -142,45 +145,50 @@ jobs:
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
         working-directory: infra/cloudflare
         run: bun native-storage-resources.ts first-install
+      - name: Authenticate the original interrupted upload before planning or applying its repair
+        if: inputs.operation == 'plan-fixture-repair' || inputs.operation == 'resume-fixture-upload'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/infra-performance/canonical-fixture/interrupted_upload.py
       - name: Capture the native stable pair
-        if: inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback' || inputs.operation == 'prepare-fixture-fallback' || inputs.operation == 'plan-fixture-fallback'
+        if: inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback' || inputs.operation == 'resume-fixture-upload' || inputs.operation == 'prepare-fixture-fallback' || inputs.operation == 'plan-fixture-fallback' || inputs.operation == 'plan-fixture-repair'
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts capture
       - name: Read the complete dormant resource plan without applying it
-        if: inputs.operation == 'plan-fixture-fallback'
+        if: inputs.operation == 'plan-fixture-fallback' || inputs.operation == 'plan-fixture-repair'
         working-directory: infra/cloudflare
         env:
           NATIVE_FIXTURE_SIGNING_KEY: ${{ secrets.NATIVE_FIXTURE_SIGNING_KEY }}
         run: bun native-storage-resources.ts plan-fixture-fallback
       - name: Save the verified read-only fallback inventory
-        if: inputs.operation == 'plan-fixture-fallback'
+        if: inputs.operation == 'plan-fixture-fallback' || inputs.operation == 'plan-fixture-repair'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: native-fixture-plan-${{ github.run_id }}
           path: ${{ runner.temp }}/native-fixture-plan.json
           if-no-files-found: error
       - name: Upload the verified native candidates
-        if: inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback' || inputs.operation == 'prepare-fixture-fallback'
+        if: inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback' || inputs.operation == 'resume-fixture-upload' || inputs.operation == 'prepare-fixture-fallback'
         env:
           NATIVE_FIXTURE_SIGNING_KEY: ${{ inputs.transaction_fixture_signer && secrets.NATIVE_FIXTURE_SIGNING_KEY || '' }}
         working-directory: infra/cloudflare
         run: bun native-storage-resources.ts upload
       - name: Stage the zero-traffic native candidates
-        if: inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback' || inputs.operation == 'prepare-fixture-fallback'
+        if: inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback' || inputs.operation == 'resume-fixture-upload' || inputs.operation == 'prepare-fixture-fallback'
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts stage
       - name: Persist and read back private observability on the installed application Workers
-        if: inputs.operation == 'first-install' || inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback' || inputs.operation == 'prepare-fixture-fallback'
+        if: inputs.operation == 'first-install' || inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback' || inputs.operation == 'resume-fixture-upload' || inputs.operation == 'prepare-fixture-fallback'
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts prepare-diagnostics
       - name: Qualify the closed recovery artifacts and their retained controls
-        if: inputs.operation == 'prepare-fixture-fallback'
+        if: inputs.operation == 'resume-fixture-upload' || inputs.operation == 'prepare-fixture-fallback'
         env:
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts seal-fallback
       - name: Seal dormant fallback stage before promotion
-        if: inputs.operation == 'prepare-fixture-fallback'
+        if: inputs.operation == 'resume-fixture-upload' || inputs.operation == 'prepare-fixture-fallback'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: native-fixture-fallback-${{ github.run_id }}
@@ -196,7 +204,7 @@ jobs:
           python3 scripts/infra-performance/canonical-fixture/fallback_stage.py \
             --artifact-id "$STAGE_ARTIFACT" --sha256 "$STAGE_SHA256" --out "$RUNNER_TEMP/native-fallback-stage.json"
       - name: Finish only the tested closed forward repair
-        if: inputs.operation == 'prepare-fixture-fallback' || inputs.operation == 'recover-fixture-fallback'
+        if: inputs.operation == 'resume-fixture-upload' || inputs.operation == 'prepare-fixture-fallback' || inputs.operation == 'recover-fixture-fallback'
         env:
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
         working-directory: infra/cloudflare
@@ -207,9 +215,9 @@ jobs:
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts promote
       - name: Build the expected browser artifact for independent verification
-        if: inputs.operation == 'verify' || inputs.operation == 'verify-erasure' || inputs.operation == 'continue-erasure' || inputs.operation == 'fleet-pilot' || inputs.operation == 'continue-fleet-cleanup' || inputs.operation == 'ten-hosted' || inputs.operation == 'continue-ten-cleanup' || inputs.operation == 'stage-hosts' || inputs.operation == 'recover-fixture-fallback'
+        if: inputs.operation == 'verify' || inputs.operation == 'verify-erasure' || inputs.operation == 'continue-erasure' || inputs.operation == 'fleet-pilot' || inputs.operation == 'continue-fleet-cleanup' || inputs.operation == 'ten-hosted' || inputs.operation == 'continue-ten-cleanup' || inputs.operation == 'stage-hosts' || inputs.operation == 'recover-fixture-fallback' || inputs.operation == 'resume-fixture-upload' || (inputs.transaction_fixture_signer && inputs.operation == 'rollout')
         env:
-          RELEASE_GIT_SHA: ${{ inputs.installed_revision || github.sha }}
+          RELEASE_GIT_SHA: ${{ env.FIXTURE_WEB_REVISION || inputs.installed_revision || github.sha }}
         working-directory: apps/web
         run: bun run build:production
       - name: Stage only canonical Access paths and vacant hostnames on the verified closed release
@@ -222,7 +230,7 @@ jobs:
           bun native-storage-release.ts attach-hosts
       - name: Verify the installed application and retained schema markers
         id: verify
-        if: inputs.operation != 'plan-fixture-fallback' && inputs.operation != 'plan-first-install' && inputs.operation != 'first-install' && inputs.operation != 'verify-erasure' && inputs.operation != 'continue-erasure' && inputs.operation != 'fleet-pilot' && inputs.operation != 'continue-fleet-cleanup' && inputs.operation != 'ten-hosted' && inputs.operation != 'continue-ten-cleanup'
+        if: inputs.operation != 'plan-fixture-fallback' && inputs.operation != 'plan-first-install' && inputs.operation != 'first-install' && inputs.operation != 'verify-erasure' && inputs.operation != 'continue-erasure' && inputs.operation != 'fleet-pilot' && inputs.operation != 'continue-fleet-cleanup' && inputs.operation != 'ten-hosted' && inputs.operation != 'continue-ten-cleanup' && inputs.operation != 'plan-fixture-repair'
         env:
           EXPECTED_INSTALLED_REVISION: ${{ inputs.installed_revision }}
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}

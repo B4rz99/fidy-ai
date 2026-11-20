@@ -304,6 +304,17 @@ from the same commit. Keep ordinary admission closed and the hosts set to accept
    The normal code-only rollback checks now compare the active builds with the previously serving
    dormant builds. Both original Users must still authenticate and read their financial history.
 
+When the pinned original upload succeeded and staging failed before either candidate served,
+use `plan-fixture-repair` on the repair commit with the signer enabled. The protected job
+authenticates the source run, archive, original deployments and financial control digest.
+Review the plan for reuse of the four previously created smoke resources. On that same
+revision, `resume-fixture-upload` captures the current stable pair and revalidates the
+installation before uploading replacement Core and Ingress versions and updating the existing
+Smoke executor to their revision. The Queue, Workflow and consumer keep their original identities.
+The sealed stage records the new Smoke version and deployment for the forward recovery checks. The
+one-off workflow admits only the immediate protected trunk successor of the original upload.
+The signed Web verification builds the retained Web revision to compare its actual serving assets.
+
 The original private fixture Worker owns the synthetic OIDC and payment identities. Current OAuth
 flows use fresh pairing state, nonce, PKCE and authorization codes against that retained provider.
 HTTP request proofs, technical smoke Queue and Workflow delivery, receipt signatures and background

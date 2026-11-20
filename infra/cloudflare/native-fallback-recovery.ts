@@ -15,6 +15,7 @@ export const FallbackStage = Schema.Struct({
   revision: Revision,
   stableRevision: Revision,
   release: releaseSchemas.staged,
+  smoke: Schema.Struct({ deploymentId: Version, versionId: Version }),
   provider: Schema.Struct({ revision: Revision, deploymentId: Version, versionId: Version }),
   namespaces: Schema.Struct({
     user: Namespace,

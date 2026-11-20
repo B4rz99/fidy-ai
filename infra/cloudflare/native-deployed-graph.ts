@@ -1,3 +1,4 @@
+import { resourceRevision } from "./native-fixture-signer";
 import retainedProvider from "./native-retained-provider.json" with { type: "json" };
 import { Effect, Schema } from "effect";
 import {
@@ -153,7 +154,10 @@ export const verifyDeployedVersion = (input: {
   // WorkerProvider adds these coordinates when uploading executable scripts, after the plan binding check.
   const runtime = {
     ALCHEMY_PHASE: "runtime",
-    ALCHEMY_WORKER_NAME: role === "Smoke" ? smokeName(revision) : installationNames[role],
+    ALCHEMY_WORKER_NAME:
+      role === "Smoke"
+        ? smokeName(resourceRevision({ revision, signed: input.fingerprint !== "" }))
+        : installationNames[role],
     ALCHEMY_STACK_NAME: nativeStack,
     ALCHEMY_STAGE: "production",
     ALCHEMY_CLOUDFLARE_ACCOUNT_ID: input.account,
@@ -167,7 +171,12 @@ export const verifyDeployedVersion = (input: {
     requireTarget(Schema.is(coordinate)(bindings[name]), name);
     delete bindings[name];
   }
-  requireDeployedRole({ role, revision, bindings, fingerprint: input.fingerprint });
+  requireDeployedRole({
+    role,
+    revision: resourceRevision({ revision, signed: input.fingerprint !== "" }),
+    bindings,
+    fingerprint: input.fingerprint,
+  });
 };
 const limit = 100;
 const buckets = Effect.fn(function* (read: Read) {

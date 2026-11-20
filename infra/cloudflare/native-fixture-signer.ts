@@ -1,3 +1,4 @@
+import fixtureUpload from "./native-fixture-upload.json" with { type: "json" };
 import retainedProvider from "./native-retained-provider.json" with { type: "json" };
 import { Config, Data, Effect, Redacted } from "effect";
 
@@ -18,6 +19,14 @@ export const receiptWorkerMain = ({
   fallback: boolean;
 }): string =>
   "../../apps/server/cloudflare/" + workerFiles[fallback ? "fallback" : "ordinary"][role] + ".ts";
+
+export const resourceRevision = ({
+  revision,
+  signed,
+}: {
+  revision: string;
+  signed: boolean;
+}): string => (signed ? fixtureUpload.revision : revision);
 
 export const expectedFixtureSigner = Config.String("NATIVE_FIXTURE_SIGNER_SHA256").pipe(
   Config.withDefault("")
@@ -76,11 +85,15 @@ export const fixtureSignerBindings = Effect.fn(function* (release: {
   };
 });
 
-export const fixtureArtifacts = Effect.gen(function* () {
+export const fixtureArtifacts = Effect.fn(function* (revision: string) {
   const retainProvider = (yield* expectedFixtureSigner) !== "";
   const fallback = (yield* fixtureBuild) === "fallback";
   if (fallback && !retainProvider) {
     return yield* Effect.die(Error("Dormant fixture requires the protected retained provider"));
   }
-  return { fallback, retainProvider };
+  return {
+    fallback,
+    retainProvider,
+    resourceRevision: resourceRevision({ revision, signed: retainProvider }),
+  };
 });

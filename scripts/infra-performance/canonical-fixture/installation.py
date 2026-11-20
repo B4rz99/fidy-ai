@@ -22,6 +22,7 @@ def validate_candidate(read, *, account, revision, versions, public_key):
         raise ValueError("Native acceptance host ownership or exposure differs")
     deployments = {}
     user_namespace = None
+    resource_revision = None
     for role, script in SCRIPTS.items():
         expected = versions[role]
         if str(UUID(expected)) != expected:
@@ -48,6 +49,15 @@ def validate_candidate(read, *, account, revision, versions, public_key):
             "RELEASE_GIT_SHA": revision, "BROWSER_ORIGIN": BROWSER,
         }
         if role == "core":
+            smoke = bindings.get("SMOKE_QUEUE_NAME", {})
+            generation = re.fullmatch(r"fidy-native-smoke-([0-9a-f]{40})", smoke.get("text", ""))
+            queue, workflow = bindings.get("SMOKE_QUEUE", {}), bindings.get("SMOKE_WORKFLOW", {})
+            if (generation is None or smoke.get("type") != "plain_text"
+                    or (queue.get("type"), queue.get("queue_name")) != ("queue", smoke["text"])
+                    or (workflow.get("type"), workflow.get("workflow_name"), workflow.get("script_name"),
+                        workflow.get("class_name")) != ("workflow", smoke["text"], smoke["text"], "ReleaseSmokeWorkflowV2")):
+                raise ValueError("Native technical smoke Queue and Workflow ownership differ")
+            resource_revision = generation.group(1)
             owner = bindings.get("USER_STORE", {})
             user_namespace = owner.get("namespace_id", "")
             if (owner.get("type") != "durable_object_namespace" or owner.get("class_name") != "UserStore"
@@ -65,7 +75,7 @@ def validate_candidate(read, *, account, revision, versions, public_key):
             if (bindings.get(name, {}).get("type"), bindings.get(name, {}).get("text")) != ("plain_text", value):
                 raise ValueError("Native candidate release, origin or signer fingerprint differs")
     return dict(revision=revision, versions=versions, signerSha256=fingerprint,
-                deployments=deployments, userNamespace=user_namespace)
+                deployments=deployments, userNamespace=user_namespace, resourceRevision=resource_revision)
 
 
 def validate_qualification(candidate, promotion, installation):
@@ -74,6 +84,7 @@ def validate_qualification(candidate, promotion, installation):
     snapshot = release["snapshot"]
     if (promotion["rollbackTested"] is not True or installation["admission"] != "closed"
             or installation["revision"] != candidate["revision"]
+            or installation["resourceRevision"] != candidate["resourceRevision"]
             or snapshot["revision"] != candidate["revision"]
             or installation["userNamespace"] != candidate["userNamespace"]
             or not re.fullmatch("[0-9a-f]{32}", candidate["userNamespace"])):

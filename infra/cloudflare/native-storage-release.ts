@@ -5,8 +5,10 @@ import {
   observeDormantPair,
   requireOriginalFallbackSource,
 } from "./native-fallback-probe";
+import { requireInterruptedUpload } from "./native-upload-recovery";
+import fixtureUpload from "./native-fixture-upload.json" with { type: "json" };
 import retainedProvider from "./native-retained-provider.json" with { type: "json" };
-import { expectedFixtureSigner, fixtureBuild } from "./native-fixture-signer";
+import { expectedFixtureSigner, fixtureBuild, resourceRevision } from "./native-fixture-signer";
 import { BunFileSystem } from "@effect/platform-bun";
 import type { ErasureProgress } from "./native-erasure-continuation";
 import type { ErasureObservation } from "./native-erasure";
@@ -17,7 +19,7 @@ import { isDeepStrictEqual } from "node:util";
 import { verifyIncumbentFence, verifyIncumbentMail } from "./native-incumbent-fence";
 import { readProviderList } from "./native-provider-list";
 import { verifyInstalledWebsite } from "./native-deployed-web";
-import { inspectDeployedEdge } from "./native-deployed-edge";
+import { inspectDeployedEdge, requireClosedIngressDomains } from "./native-deployed-edge";
 import { inspectNativeResources, verifyDeployedVersion } from "./native-deployed-graph";
 import type { NativeRole } from "./native-graph";
 import { continueAdmittedErasure } from "./native-erasure-continuation";
@@ -63,7 +65,12 @@ import {
   verifyCoreDefaultPlacement,
   verifyReleaseObservability,
 } from "./production-release";
-import { type ReleasePort, releaseController, releaseSchemas } from "./release-controller";
+import {
+  type Deployment,
+  type ReleasePort,
+  releaseController,
+  releaseSchemas,
+} from "./release-controller";
 import { RollbackReceipt, releaseRollback } from "./release-rollback";
 import {
   buildStorageRelease,
@@ -184,6 +191,61 @@ const verifyRetainedProvider = Effect.fn(function* (
   return retainedProvider;
 });
 
+const requireCapturedSupport = Effect.fn(function* (port: ReleasePort) {
+  for (const role of ["Smoke", "Web", "ForwardedEmail"] as const) {
+    const name =
+      role === "Smoke" ? "fidy-native-smoke-" + fixtureUpload.revision : installationNames[role];
+    const active = yield* port.current(name);
+    const expected = fixtureUpload.support[role];
+    if (
+      active.id !== expected.deploymentId ||
+      active.versions.length !== 1 ||
+      (yield* releaseController.servingVersion(active)) !== expected.versionId
+    ) {
+      return yield* new ReleaseFailure({ message: "Interrupted native auxiliary Worker changed" });
+    }
+  }
+});
+const verifyInterruptedUpload = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  { port, snapshot }: { port: ReleasePort; snapshot: typeof releaseSchemas.snapshot.Type }
+) {
+  const archived = yield* Schema.decodeUnknownEffect(releaseSchemas.snapshot)(
+    yield* readFile(env.file + ".source")
+  );
+  yield* Schema.decodeUnknownEffect(
+    Schema.Struct({ digest: Schema.Literal(fixtureUpload.controlsDigest) })
+  )(yield* readFile(env.file + ".source.controls"));
+  if (
+    snapshot.revision === fixtureUpload.revision ||
+    !isDeepStrictEqual(archived, { ...snapshot, revision: fixtureUpload.revision })
+  ) {
+    return yield* new ReleaseFailure({
+      message: "Interrupted native release differs from its protected source",
+    });
+  }
+  const saved = yield* nativeWorkerReceipts("completed");
+  if (
+    !Option.contains(saved.public.versionId, fixtureUpload.ingressVersion) ||
+    !Option.contains(saved.core.versionId, fixtureUpload.coreVersion)
+  ) {
+    return yield* new ReleaseFailure({ message: "Interrupted Alchemy upload receipts changed" });
+  }
+  const read = (name: string, id: string): Effect.Effect<unknown, Error> =>
+    releaseEvidence.readWorkerVersion(env, client, { name, id });
+  const versions = yield* Effect.all({
+    core: read(installationNames.Core, fixtureUpload.coreVersion),
+    ingress: read(installationNames.Ingress, fixtureUpload.ingressVersion),
+  });
+  yield* Effect.try({
+    try: () => requireInterruptedUpload(versions),
+    catch: () => new ReleaseFailure({ message: "Interrupted Worker upload metadata differs" }),
+  });
+  yield* requireCapturedSupport(port);
+  yield* inspectNativeResources(accountReader(env, client), fixtureUpload.revision, true);
+});
+
 const preflightSignedSource = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
@@ -197,8 +259,20 @@ const preflightSignedSource = Effect.fn(function* (
     core: snapshot.core.stableVersionId,
     proof: env.smokeProof,
   };
+  yield* requireClosedIngressDomains(accountReader(env, client));
+  const operation = yield* ReleaseConfig.String("FIXTURE_RELEASE_OPERATION");
+  if ((yield* expectedFixtureSigner) !== fixtureUpload.fingerprint) {
+    return yield* new ReleaseFailure({
+      message: "Closed fixture signer differs from its protected upload",
+    });
+  }
   if ((yield* fixtureBuild) === "fallback") {
     yield* Effect.try(() => requireOriginalFallbackSource(snapshot));
+    if (operation !== "plan-fixture-repair" && operation !== "resume-fixture-upload") {
+      return yield* new ReleaseFailure({ message: "Dormant repair requires the archived upload" });
+    }
+    yield* verifyInterruptedUpload(env, client, { port, snapshot });
+    if (operation === "plan-fixture-repair") return;
   } else {
     if (snapshot.stableRevision !== env.revision) {
       return yield* Effect.fail(
@@ -207,10 +281,10 @@ const preflightSignedSource = Effect.fn(function* (
     }
     yield* observeDormantPair(client, pair, true);
   }
-  if ((yield* ReleaseConfig.String("FIXTURE_RELEASE_OPERATION")) === "plan-fixture-fallback") {
-    return;
-  }
   const digest = yield* controlsDigest(pair, acceptanceSend(client));
+  if (digest !== fixtureUpload.controlsDigest) {
+    return yield* new ReleaseFailure({ message: "Original financial control identities changed" });
+  }
   yield* writeFile(env.file + ".controls", encodeJson({ digest }));
 });
 const verifyStorageUpload = Effect.fn(function* (
@@ -465,28 +539,47 @@ const verifySyntheticUsers = Effect.fn(function* (
   yield* response.pipe(Effect.retry({ times: 20, schedule: Schedule.spaced("500 millis") }));
   return { ...proof, callback: { ...proof.callback, workflowStatus: "complete" } };
 });
+const verifySupportIdentity = Effect.fn(function* (
+  role: NativeRole,
+  deployment: Deployment,
+  id: string
+) {
+  if (role === "Core" || role === "Ingress") return;
+  if (deployment.versions.length !== 1) {
+    return yield* Effect.fail(Error("Ambiguous auxiliary deployment"));
+  }
+  const expected = fixtureUpload.support[role];
+  const rightVersion =
+    role === "Smoke"
+      ? deployment.id !== expected.deploymentId && id !== expected.versionId
+      : deployment.id === expected.deploymentId && id === expected.versionId;
+  if (!rightVersion) return yield* Effect.fail(Error("Unexpected auxiliary Worker release"));
+});
 const verifyDeployedWorkers = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
-  port: ReleasePort
+  { port, roles }: { port: ReleasePort; roles: "all" | "support" }
 ) {
   const fingerprint = yield* expectedFixtureSigner;
+  const generation = resourceRevision({ revision: env.revision, signed: fingerprint !== "" });
   const workers: ReadonlyArray<readonly [NativeRole, string]> = [
     ["Ingress", installationNames.Ingress],
     ["Core", installationNames.Core],
     ["Web", installationNames.Web],
-    ["Smoke", "fidy-native-smoke-" + env.revision],
+    ["Smoke", "fidy-native-smoke-" + generation],
     ["ForwardedEmail", installationNames.ForwardedEmail],
   ];
   const verify = Effect.fn(function* ([role, name]: readonly [NativeRole, string]) {
     const deployment = yield* port.current(name);
     const id = yield* releaseController.servingVersion(deployment);
+    const auxiliary = role === "Web" || role === "ForwardedEmail";
+    if (fingerprint !== "") yield* verifySupportIdentity(role, deployment, id);
     const raw = yield* releaseEvidence.readWorkerVersion(env, client, { name, id });
     yield* Effect.try(() =>
       verifyDeployedVersion({
         role,
         account: env.account,
-        revision: env.revision,
+        revision: auxiliary ? generation : env.revision,
         versionId: id,
         raw,
         fingerprint,
@@ -500,7 +593,7 @@ const verifyDeployedWorkers = Effect.fn(function* (
     return { role, name, versionId: id, deploymentId: deployment.id };
   });
   return yield* Effect.forEach(
-    workers,
+    workers.filter(([role]) => roles === "all" || (role !== "Core" && role !== "Ingress")),
     (worker) =>
       verify(worker).pipe(
         Effect.mapError(
@@ -525,7 +618,9 @@ const verifyInstalledTopology = Effect.fn(function* (
     staging: boolean;
   }
 ) {
-  const workers = yield* verifyDeployedWorkers(env, client, input.port);
+  const signed = (yield* expectedFixtureSigner) !== "";
+  const generation = resourceRevision({ revision: env.revision, signed });
+  const workers = yield* verifyDeployedWorkers(env, client, { port: input.port, roles: "all" });
   if (
     workers.find((item) => item.role === "Ingress")?.versionId !== input.publicStable ||
     workers.find((item) => item.role === "Core")?.versionId !== input.coreStable
@@ -536,7 +631,7 @@ const verifyInstalledTopology = Effect.fn(function* (
   }
   const resources = yield* inspectNativeResources(
     accountReader(env, client),
-    env.revision,
+    generation,
     true
   ).pipe(
     Effect.mapError(
@@ -556,7 +651,7 @@ const verifyInstalledTopology = Effect.fn(function* (
   const website = yield* Effect.forEach(
     nativeHostPairs(input.staging ? "acceptance" : input.hosts),
     (pair) =>
-      verifyInstalledWebsite(client, env.revision, pair).pipe(
+      verifyInstalledWebsite(client, generation, pair).pipe(
         Effect.mapError(
           () =>
             new ReleaseFailure({
@@ -565,11 +660,10 @@ const verifyInstalledTopology = Effect.fn(function* (
         )
       )
   );
-  const provider =
-    (yield* expectedFixtureSigner) === ""
-      ? {}
-      : { retainedProvider: yield* verifyRetainedProvider(env, client, input.port) };
-  return { workers, resources, edge, website, ...provider };
+  const verification = { workers, resources, edge, website };
+  if (!signed) return verification;
+  const retained = yield* verifyRetainedProvider(env, client, input.port);
+  return { ...verification, resourceRevision: generation, retainedProvider: retained };
 });
 const firstInstallWorkers = Effect.fn(function* () {
   const receipts = yield* workersFromState("capture", nativeStack);
@@ -1186,6 +1280,14 @@ const storageCompatibility = Effect.fn(function* (
   yield* verifyTaxonomyOverlap(release.snapshot);
   const { ingress, core, descriptions } = yield* deployedStorage({ env, client, release });
   yield* requireClosedWorkers([ingress.stable, core.stable, ingress.candidate, core.candidate]);
+  if (
+    (yield* expectedFixtureSigner) !== "" &&
+    [ingress, core].some(
+      ({ stable, candidate }) => !isDeepStrictEqual(stable.exports, candidate.exports)
+    )
+  ) {
+    return yield* new ReleaseFailure({ message: "Closed fixture Worker export inventory differs" });
+  }
   const overlap = compatibleStoragePairs(descriptions);
   if (!overlap.forward) {
     return yield* new ReleaseFailure({
@@ -1224,6 +1326,16 @@ const confirmFallbackVersions = Effect.fn(function* (
     );
   }
 });
+const repairedSmoke = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  port: ReleasePort
+) {
+  const support = yield* verifyDeployedWorkers(env, client, { port, roles: "support" });
+  const smoke = support.find(({ role }) => role === "Smoke");
+  if (smoke === undefined) return yield* Effect.fail(Error("Missing repaired smoke executor"));
+  return { deploymentId: smoke.deploymentId, versionId: smoke.versionId };
+});
 const checkedFixtureStage = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
@@ -1237,6 +1349,7 @@ const checkedFixtureStage = Effect.fn(function* (
     env.revision !== stage.revision ||
     edge !== "acceptance" ||
     !isDeepStrictEqual(stage.provider, provider) ||
+    !isDeepStrictEqual(stage.smoke, yield* repairedSmoke(env, client, port)) ||
     (yield* expectedFixtureSigner) === "" ||
     (yield* fixtureBuild) !== "fallback"
   ) {
@@ -1262,7 +1375,7 @@ const checkedFixtureStage = Effect.fn(function* (
   });
   yield* confirmFallbackVersions(env, client, stage);
   yield* proveRecoveryCorePrivate(env, client, installationNames.Core);
-  yield* inspectNativeResources(accountReader(env, client), env.revision, true);
+  yield* inspectNativeResources(accountReader(env, client), fixtureUpload.revision, true);
   yield* inspectDeployedEdge(env, client, {
     installed: true,
     bindings: core.candidate.bindings,
@@ -1306,6 +1419,7 @@ const sealFallback = Effect.fn(function* (env: Config, client: HttpClient.HttpCl
     stableRevision: release.snapshot.stableRevision,
     release,
     provider: retainedProvider,
+    smoke: yield* repairedSmoke(env, client, releasePort({ env, client })),
     namespaces: fallbackNamespaces(descriptions.serving.namespaces),
     controlsDigest: controls.digest,
   });
@@ -1499,7 +1613,11 @@ const prepareDiagnostics = Effect.fn(function* (
   yield* nativeWorkerReceipts("completed");
   yield* configureReleaseObservability(
     env,
-    [...Object.values(installationNames), "fidy-native-smoke-" + env.revision],
+    [
+      ...Object.values(installationNames),
+      "fidy-native-smoke-" +
+        resourceRevision({ revision: env.revision, signed: (yield* expectedFixtureSigner) !== "" }),
+    ],
     client
   );
 });

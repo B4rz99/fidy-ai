@@ -74,6 +74,7 @@ it.effect.each([false, true])(
       { providers: Cloudflare.providers(), state: Alchemy.inMemoryState() },
       nativeApplication.pipe(Effect.provideService(ConfigProvider.ConfigProvider, configuration))
     );
+    const generation = enabled ? "aa447b8b781cdda48e021c1332f4377eae00f179" : revision;
     return evalStack(
       stack,
       (compiled) =>
@@ -98,7 +99,7 @@ it.effect.each([false, true])(
           }
           const bindings = Schema.Struct({ bindings: Schema.optional(NativeBindings) });
           for (const worker of ["Core", "Smoke"] as const) {
-            const id = worker === "Core" ? "Core" : "ReleaseSmoke-" + revision;
+            const id = worker === "Core" ? "Core" : "ReleaseSmoke-" + generation;
             const resource = Object.values(compiled.resources).find(
               (node) => node.LogicalId === id
             );
@@ -106,6 +107,9 @@ it.effect.each([false, true])(
             const rows = compiled.bindings[resource.FQN] ?? [];
             const observed = rows.flatMap(
               (row) => Schema.decodeUnknownSync(bindings)(row.data).bindings ?? []
+            );
+            expect(observed).toContainEqual(
+              expect.objectContaining({ name: "RELEASE_GIT_SHA", text: revision })
             );
             requireClosedBindings({ worker, bindings: observed, fingerprint });
             expect(observed.some((item) => item.name === "NATIVE_FIXTURE_SIGNING_KEY")).toBe(

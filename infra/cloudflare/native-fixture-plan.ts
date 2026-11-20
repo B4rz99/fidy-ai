@@ -1,6 +1,7 @@
 import type * as Alchemist from "alchemy/Alchemist";
 import { Schema } from "effect";
 import { type Plan, describePlan, describeResource } from "alchemy/Plan";
+import fixtureUpload from "./native-fixture-upload.json" with { type: "json" };
 import retainedProvider from "./native-retained-provider.json" with { type: "json" };
 
 export const nativePlanOptions = ({
@@ -25,40 +26,35 @@ const smokeResources = [
 ];
 const original = new Set(smokeResources.map((prefix) => prefix + retainedProvider.revision));
 
-type FixtureLifecycle = Readonly<{ revision: string; fallback: boolean }>;
 export const requireFixtureLifecycle = ({
   rows,
-  revision,
   fallback,
-}: FixtureLifecycle & { rows: ReturnType<typeof describePlan>["resources"] }): void => {
-  const creates = new Set(fallback ? smokeResources.map((prefix) => prefix + revision) : []);
+}: {
+  rows: ReturnType<typeof describePlan>["resources"];
+  fallback: boolean;
+}): void => {
   const retained = new Set(original);
-  const updates = new Set(
-    fallback ? ["Core", "Ingress", "ForwardedEmail", "Web", "Build"] : ["Core", "Ingress"]
-  );
-  const allowed = new Map<string, Set<string>>([
-    ["create", creates],
+  const candidates = new Set(["Core", "Ingress"]);
+  if (fallback) candidates.add("ReleaseSmoke-" + fixtureUpload.revision);
+  const changes = new Map<string, Set<string>>([
     ["delete", retained],
-    ["update", updates],
+    ["update", candidates],
   ]);
   for (const row of rows) {
     if (row.action === "noop") continue;
-    if (allowed.get(row.action)?.delete(row.logicalId) !== true) {
-      throw Error("Closed fixture lifecycle differs for " + row.logicalId);
-    }
+    if (changes.get(row.action)?.delete(row.logicalId) === true) continue;
+    throw Error("Closed fixture lifecycle differs for " + row.logicalId);
   }
-  if ([creates, retained].some((set) => set.size !== 0)) {
-    throw Error("Closed fixture requires its exact new and retained smoke generations");
+  if (retained.size !== 0 || candidates.size !== 0) {
+    throw Error(
+      "Closed fixture requires both Worker updates and its exact retained provider generation"
+    );
   }
 };
 
 /** A same-stack Worker.ref reads the retained Alchemy generation. Only a deferred delete may hold it. */
-export const verifyFixturePlan = ({
-  plan,
-  revision,
-  fallback,
-}: FixtureLifecycle & { plan: Plan }): void => {
-  requireFixtureLifecycle({ rows: describePlan(plan).resources, revision, fallback });
+export const verifyFixturePlan = ({ plan, fallback }: { plan: Plan; fallback: boolean }): void => {
+  requireFixtureLifecycle({ rows: describePlan(plan).resources, fallback });
   const originalId = "ReleaseSmoke-" + retainedProvider.revision;
   const [worker] = Object.values(plan.deletions).filter(
     (row) => row !== undefined && describeResource(row).logicalId === originalId

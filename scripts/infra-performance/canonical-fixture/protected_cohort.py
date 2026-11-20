@@ -5,9 +5,9 @@ import os
 import re
 import sys
 import time
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urlencode, urlsplit
 
-from cohort import Cohort
+from cohort import Cohort, MAX_USER_OBJECTS
 from cohort_runner import BrowserPort, collect_owned, commands
 from fixture import write
 from hosted import HERE, RECEIPT_PATH
@@ -22,6 +22,13 @@ from owner_transport import NATIVE_API, cloudflare, fetch
 fleet_path = HERE.parent / "deployed-fleet"
 sys.path.insert(0, str(fleet_path))
 from native_budget import CLEANUP_READS, CLEANUP_WRITES, DAY, check, observe, recovery_reservation
+
+
+FOREGROUND_SECONDS = 20 * 60
+IN_FLIGHT_GRACE = 90
+CENSUS_PAGE_SIZE = 100
+CLAIM_FIELDS = {"coordinates", "stage", "usageBefore", "foregroundUntil", "foregroundRun"}
+PREFLIGHT_FIELDS = {"lastUsage", "foregroundRequests", "lastDispatch"}
 
 
 def protected_runner():
@@ -78,28 +85,48 @@ class HostedPort(BrowserPort):
         super().__init__(command, directory)
         self.account, self.verify, self.store, self.marker, self.cloud = account, verify, store, marker, cloud
         self.owner = None
-        self.initial = None
         self.finished = None
         self.run = os.environ["GITHUB_RUN_ID"] + "/" + os.environ["GITHUB_RUN_ATTEMPT"]
 
     def marker_owner(self):
         return self.marker.read()[1]
 
+    def unoffered_claim(self, *, resume=False):
+        state = self.owner.state
+        deadline = state.get("foregroundUntil")
+        previous_run = state.get("foregroundRun")
+        if (state["stage"] != "claimed" or not CLAIM_FIELDS <= state.keys()
+                or state.keys() - CLAIM_FIELDS - PREFLIGHT_FIELDS
+                or type(deadline) is not int or deadline <= 0
+                or not isinstance(previous_run, str) or not previous_run
+                or ("foregroundRequests" in state) != ("lastDispatch" in state)):
+            raise ValueError("Custody does not prove signup was never offered")
+        if "lastDispatch" in state and (
+                type(state["lastDispatch"]) is not int or not 0 < state["lastDispatch"] < deadline
+                or type(state["foregroundRequests"]) is not int or not 0 < state["foregroundRequests"] <= 100):
+            raise ValueError("Invalid native preflight dispatch history")
+        if (resume and previous_run == self.run) or (
+                previous_run != self.run and time.time() < deadline + IN_FLIGHT_GRACE):
+            raise ValueError("Original cohort dispatch or its in-flight grace period is still active")
+        if self.marker_owner() is not None:
+            raise ValueError("Release already issued its one-use receipt")
+
     def guard(self, phase):
         self.verify()
+        if phase in ("begin", "resume"):
+            if phase == "resume":
+                self.unoffered_claim(resume=True)
+            initial = observe(cloudflare, self.account)
+            now = int(time.time())
+            check(initial, initial, "begin", now)
+            return dict(usageBefore=initial, foregroundUntil=now+FOREGROUND_SECONDS, foregroundRun=self.run)
         now = int(time.time())
-        if phase == "begin":
-            self.initial = observe(cloudflare, self.account)
-            check(self.initial, self.initial, phase, now)
-            return
         state = self.owner.state
-        initial = state.get("usageBefore", self.initial)
+        initial = state.get("usageBefore")
         if not initial:
             raise ValueError("Native account reservation missing")
-        if "foregroundUntil" not in state:
-            state.update(usageBefore=initial, foregroundUntil=now+20*60, foregroundRun=self.run)
         cleaning = phase in ("cleanup", "finish")
-        if cleaning and self.run != state["foregroundRun"] and now < state["foregroundUntil"] + 90:
+        if cleaning and self.run != state["foregroundRun"] and now < state["foregroundUntil"] + IN_FLIGHT_GRACE:
             raise ValueError("Original cohort dispatch or its in-flight grace period is still active")
         if not cleaning and (self.run != state["foregroundRun"] or now >= state["foregroundUntil"]
                              or state.get("cleanupRun")):
@@ -129,6 +156,8 @@ class HostedPort(BrowserPort):
             self.finished = current
         if cleaning:
             state.update(cleanupRun=self.run, cleanupUntil=int(time.time())+15*60)
+        elif time.time() >= state["foregroundUntil"]:
+            raise ValueError("Native foreground custody expired during observation")
         self.owner.save(state["stage"], lastUsage=current)
 
     def exchange(self, outgoing, transport=fetch):
@@ -160,13 +189,41 @@ class HostedPort(BrowserPort):
     def census(self):
         namespace = self.owner.coordinates["userNamespace"]
         root = "workers/durable_objects/namespaces/" + namespace + "/objects?"
-        response = self.cloud.request("GET", root+"limit=100")
-        rows = response["result"]
-        info = response.get("result_info") or {}
-        if (len(rows) >= 100 or info.get("cursor") or (info.get("cursors") or {}).get("after")
-                or len(set(row["id"] for row in rows)) != len(rows)):
-            raise ValueError("Physical User inventory exceeds the calibrated single-page bound")
-        return {row["id"]:row["hasStoredData"] for row in rows}
+        objects, seen = {}, set()
+        cursor = ""
+        for _ in range(MAX_USER_OBJECTS + 1):
+            params = {"limit": CENSUS_PAGE_SIZE}
+            if cursor:
+                params["cursor"] = cursor
+            response = self.cloud.request("GET", root + urlencode(params))
+            rows = response["result"]
+            if not isinstance(rows, list) or len(rows) > CENSUS_PAGE_SIZE:
+                raise ValueError("Invalid physical User inventory page")
+            for row in rows:
+                subject, stored = row["id"], row["hasStoredData"]
+                if not isinstance(subject, str) or not re.fullmatch("[a-f0-9]{64}", subject) or type(stored) is not bool:
+                    raise ValueError("Invalid physical User inventory row")
+                if subject in objects:
+                    raise ValueError("Duplicate physical User object")
+                objects[subject] = stored
+                if len(objects) > MAX_USER_OBJECTS:
+                    raise ValueError("Physical User inventory outside the calibrated envelope")
+            info = response.get("result_info", {})
+            if not isinstance(info, dict) or (info.get("cursors") is not None and not isinstance(info["cursors"], dict)):
+                raise ValueError("Invalid physical User inventory cursor")
+            legacy = info.get("cursor")
+            after = (info.get("cursors") or {}).get("after")
+            if any(value is not None and not isinstance(value, str) for value in (legacy, after)):
+                raise ValueError("Invalid physical User inventory cursor")
+            if legacy and after and legacy != after:
+                raise ValueError("Conflicting physical User inventory cursors")
+            cursor = after or legacy or ""
+            if not cursor and len(rows) < CENSUS_PAGE_SIZE:
+                return objects
+            if not cursor or cursor in seen:
+                raise ValueError("Incomplete physical User inventory")
+            seen.add(cursor)
+        raise ValueError("Physical User inventory exceeds the page budget")
 
 
 def run(args):
@@ -204,6 +261,11 @@ def run(args):
         owner = Cohort(store, coords, port)
         port.owner = owner
         if args.mode == "cleanup":
+            if owner.state and owner.state["stage"] == "claimed":
+                port.unoffered_claim()
+                write(args.out/"cleanup.json", dict(scope="hosted native cohort", status="signup-not-offered",
+                      retainedOneUseFence=False, custodyStage="claimed"))
+                return
             owner.cleanup()
             write(args.out/"cleanup.json", dict(scope="hosted native cohort", status=owner.state["stage"],
                   physicalState=owner.state.get("physicalState"), survivors=2,

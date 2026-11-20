@@ -3,6 +3,8 @@ import hashlib
 import re
 import time
 
+MAX_USER_OBJECTS = 36
+
 
 def identity(value):
     return hashlib.sha256(value.encode()).hexdigest()
@@ -33,7 +35,7 @@ class Cohort:
 
     def census(self):
         result = self.port.census()
-        if (len(result) > 36 or any(not re.fullmatch("[a-f0-9]{64}", key)
+        if (len(result) > MAX_USER_OBJECTS or any(not re.fullmatch("[a-f0-9]{64}", key)
                                      or type(stored) is not bool for key, stored in result.items())):
             raise ValueError("Native inventory outside the calibrated envelope")
         return result
@@ -53,18 +55,23 @@ class Cohort:
         raise ValueError("Fresh performance User storage unobserved")
 
     def enroll(self):
-        if self.state is not None:
+        if self.state is None:
+            reservation = self.port.guard("begin") or {}
+            self.state = dict(coordinates=self.coordinates)
+        elif self.state["stage"] == "claimed":
+            reservation = self.port.guard("resume")
+            if not reservation:
+                raise ValueError("Native cohort claim cannot be resumed")
+        else:
             raise ValueError("Native cohort already claimed")
-        self.port.guard("begin")
-        self.state = dict(coordinates=self.coordinates)
-        self.save("claimed")
+        self.save("claimed", **reservation)
         self.port.guard("preflight")
         if self.port.marker_owner() is not None:
             raise ValueError("Release already issued its one-use receipt")
         survivors = self.survivor_ids()
         self.port.before_signup()
         before = self.census()
-        if len(before) >= 36 or sum(before.values()) < 2:
+        if len(before) >= MAX_USER_OBJECTS or sum(before.values()) < 2:
             raise ValueError("Missing independently stored survivor Users")
         self.port.guard("signup")
         self.save("signup-offered", before=before, survivors=survivors)

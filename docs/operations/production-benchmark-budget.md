@@ -420,6 +420,13 @@ stays fenced. After UTC rollover only one separately metered cleanup reservation
 Its evidence marks the original accounting day incomplete. D1 infrastructure recovery remains
 the responsibility of the comparator owner's `cleanup` command above.
 
+If enrollment stops before signup was offered, cleanup can report the unoffered signup and
+absent receipt marker without changing custody or attempting erasure. After the original lease
+and in-flight grace expire, redispatch with the same prefix and release coordinates. The
+protected controller checks the unoffered state and marker, admits a fresh account reservation
+and conditionally renews the existing custody. The physical census follows Cloudflare cursors
+through the terminal page and refuses duplicates, repeated cursors or more than 36 objects.
+
 The candidate verifier checks the acceptance hostname, actual
 deployments, version bindings and signer fingerprint from the account. It uses the fixed
 performance-1 provider identity, retains the original bound Session, captures eight originals

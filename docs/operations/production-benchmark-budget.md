@@ -411,3 +411,39 @@ changes its binding inventory and fails that precondition. The ordinary first-in
 also requires an empty, explicitly named installation. Its fixed hostnames, stack and Worker
 names prevent it from acting as a second independent installation on the same account. Keep
 the incumbent release and its erasure/fleet qualifications in place while this remains true.
+
+### Run the ordinary mounted Transactions browser profile
+
+Select `browser` and `30` in the protected **Measure the closed native Transaction cohort**
+workflow. Use the same qualified release, original performance-1 provider identity, random prefix
+and recovery inputs as the HTTP cohort. This profile uses eight signed originals, one link and
+seven effective Transactions. The enrolled User has no unrelated Budget, RecurringPlan or pending
+NeedsReviewItem. The original WebSession captures the canonical User, creation time and TrialPeriod.
+The frozen comparator restores those facts before its genuine Login and verifies its source rows,
+migration ledger, foreign keys and projection against the unmounted database.
+
+A production-capable Colombia runner can be selected through the repository-controlled
+`FIDY_STORAGE_CO_RUNNER_LABEL` and `FIDY_STORAGE_CO_RUNNER_NAME` variables. Register only an
+isolated runner approved to handle the existing protected production job. The operator selects the
+runner independently of workflow inputs. If the label is unset, the workflow checks GitHub-hosted
+Ubuntu. Before enrollment or account writes, a clean Chromium process checks the public traces at
+both acceptance hosts. Both countries must be `CO`. The report records country, colo and WARP state
+without retaining IP addresses. The paired window checks both public traces again before measuring.
+
+One browser per installation stays mounted with its original WebSession. Each of the 30 alternating
+pairs refreshes the November 2026 Transactions history and loads the User profile. The disposable
+D1 Ingress serves the pinned, digest-verified web build through its private expiring key. The native
+web Worker serves its qualified build. The profile reports complete history HTTP body timing and
+interaction through the enabled, painted list. A notes-only Correction commits once. The second
+child of a subsequent two-child atomic batch uses the stale revision. A complete fresh history
+after each outcome verifies the exact original IDs, revisions, notes and untouched records.
+
+The protected owner reserves the entire single-use browser window before dispatch. Both variants
+enforce the calibrated method, query and request counts. The D1 meter reserves the exact User
+coordinator's native allowance for the Correction or batch before forwarding. Setup, Login,
+eight inspections, the browser window, both mutations, confirmation reads and the final Session
+Audit share one D1 quote under the 5,000-write experiment cap. An incomplete window keeps its
+reservation fenced. The original native cleanup procedure verifies physical erasure and both
+surviving Users. The workflow retains aggregate observations and the origin and cleanup records.
+The populated planning views, loaded 20-User case, repeated mutations and 400 ms profile run on
+workerd under their own declared workloads.

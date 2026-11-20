@@ -167,6 +167,11 @@ def run(args):
         serving_graph(cloudflare, account, revision, installed)
         return actual
 
+    if args.mode != "cleanup" and args.browser_workspace:
+        # The protected workflow writes this from real Chromium before touching cohort custody.
+        origin = json.loads((args.out/"origin.json").read_bytes())
+        if origin.get("colombianEgress") is not True or any(origin["origins"][name]["country"] != "CO" for name in ("api","browser")):
+            raise ValueError("Colombian browser egress has not been verified for both actual hosts")
     candidate = verify()
     os.environ["FIDY_NATIVE_FIXTURE_PROVIDER_REVISION"] = installed["retainedProvider"]["revision"]
     coords = dict(**candidate, account=account, prefix=prefix, archive=args.archive_sha256)

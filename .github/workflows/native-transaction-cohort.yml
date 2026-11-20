@@ -45,7 +45,8 @@ concurrency:
 jobs:
   cohort:
     if: github.ref == 'refs/heads/trunk' && github.ref_protected
-    runs-on: ubuntu-latest
+    # Only the repository owner chooses a trusted production-capable runner for this workflow.
+    runs-on: ${{ inputs.action == 'browser' && vars.FIDY_STORAGE_CO_RUNNER_LABEL || 'ubuntu-latest' }}
     environment: production
     timeout-minutes: 105
     env:
@@ -67,6 +68,21 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/bun-runtime
       - run: bash scripts/install-workspace.sh --ignore-scripts
+      - name: Verify trusted runner identity and Colombia browser egress before enrollment
+        if: inputs.action == 'browser'
+        env:
+          QUALIFIED_RUNNER_LABEL: ${{ vars.FIDY_STORAGE_CO_RUNNER_LABEL }}
+          QUALIFIED_RUNNER_NAME: ${{ vars.FIDY_STORAGE_CO_RUNNER_NAME }}
+          ACTUAL_RUNNER_NAME: ${{ runner.name }}
+        run: |
+          umask 077
+          if [[ -n "$QUALIFIED_RUNNER_LABEL" && ( -z "$QUALIFIED_RUNNER_NAME" || "$QUALIFIED_RUNNER_NAME" != "$ACTUAL_RUNNER_NAME" ) ]]; then
+            echo "Production runner identity differs from the approved Colombia origin."
+            exit 1
+          fi
+          install -d -m 700 "$RUNNER_TEMP/native-comparison"
+          export ASSESSMENT_CHROMIUM="$(command -v google-chrome)"
+          bun scripts/infra-performance/hosted-browser/origin.mjs "$RUNNER_TEMP/native-comparison/origin.json"
       - name: Prepare a private runner directory and verify the reviewed release policy
         run: |
           umask 077
@@ -166,6 +182,7 @@ jobs:
         with:
           name: closed-native-comparison-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
+            ${{ runner.temp }}/native-comparison/origin.json
             ${{ runner.temp }}/native-comparison/summary.json
             ${{ runner.temp }}/native-comparison/cleanup.json
             ${{ runner.temp }}/native-comparison/comparison/report.json

@@ -424,8 +424,8 @@ def main():
                 pairs=args.pairs,
                 packageSha256=args.manifest_sha256,
                 costedD1Batches=len(bundle.direct),
-                costedD1Requests=len(LOGIN) + len(bundle.inspections) + args.pairs,
-                batchReservationAndReconciliationPuts=2 * (len(bundle.direct) + len(LOGIN) + len(bundle.inspections) + args.pairs),
+                costedD1Requests=sum(bundle.counts.values()) if bundle.browser else len(LOGIN) + len(bundle.inspections) + args.pairs,
+                batchReservationAndReconciliationPuts=2 * (len(bundle.direct) + len(LOGIN) + len(bundle.inspections) + (1 if bundle.browser else args.pairs)),
                 nativeRevision=args.revision,
                 baseline=PIN,
             )

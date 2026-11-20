@@ -50,6 +50,7 @@ def run_window(owner, bundle, context, headers, report, save):
         path = out/"comparison.json"
         if path.is_file():
             report["browser"] = json.loads(path.read_bytes())
+            report["boundaries"] = report["browser"].get("boundaries",{})
             save()
         if result.returncode or not report.get("browser",{}).get("verified"):
             raise Refused("hosted_browser_window_incomplete")

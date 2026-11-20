@@ -158,4 +158,5 @@ jobs:
             ${{ runner.temp }}/ordinary-*.json
             ${{ runner.temp }}/full/paired.json
             ${{ runner.temp }}/full/summary.json
+            ${{ runner.temp }}/full/native-window-audit.json
             ${{ runner.temp }}/full/paired/comparison.json

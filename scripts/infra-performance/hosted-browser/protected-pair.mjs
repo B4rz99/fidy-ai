@@ -10,7 +10,24 @@ import {
 } from "../../../apps/server/cloudflare/release-isolation/contract";
 import { Effect } from "effect";
 import { runBrowser } from "./captured-profile.mjs";
+import { isColombianEgress, parseTrace } from "./origin.mjs";
 import { proveScopedCorrection } from "./scoped-correction.mjs";
+
+function stats(values) {
+  assert.equal(values.length, 30);
+  assert.ok(values.every((value) => Number.isFinite(value) && value >= 0));
+  const sorted = values.toSorted((a, b) => a - b);
+  const mean = values.reduce((a, b) => a + b, 0) / values.length;
+  return {
+    count: 30,
+    median: (sorted[14] + sorted[15]) / 2,
+    p95: sorted[28],
+    maximum: sorted[29],
+    standardDeviation: Math.sqrt(
+      values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length
+    ),
+  };
+}
 
 export async function comparePair(config, http, environment) {
   const dir = process.env.FIDY_DIAGNOSTIC_DIR;
@@ -169,30 +186,28 @@ export async function comparePair(config, http, environment) {
     slots[slot + 1].resolve();
   };
   const origin = async () => {
-    const response = await http(native.browser + "/cdn-cgi/trace", {
-      redirect: "error",
-      signal: AbortSignal.timeout(10000),
-    });
-    assert.equal(response.status, 200);
-    const trace = await response.text();
-    const country = /^loc=([A-Z]{2})$/mu.exec(trace)?.[1],
-      colo = /^colo=([A-Z]{3})$/mu.exec(trace)?.[1];
-    assert.ok(country && colo);
+    const hosts = {};
+    for (const [name, host] of Object.entries(native)) {
+      const response = await http(host + "/cdn-cgi/trace", {
+        redirect: "error",
+        signal: AbortSignal.timeout(10000),
+      });
+      assert.equal(response.status, 200);
+      hosts[name] = parseTrace(await response.text());
+    }
+    const colombianEgress = isColombianEgress(hosts);
+    if (environment === "deployed Cloudflare")
+      assert.ok(colombianEgress, "Colombia egress changed before measurement");
     const metadata = await (
       await http(native.browser + "/deployment-metadata.json", { redirect: "error" })
     ).json();
     assert.equal(metadata.gitRevision, config.native.web.revision);
     assert.equal(metadata.contractDigest, config.native.web.contractDigest);
-    return {
-      country,
-      colo,
-      colombianEgress: country === "CO",
-      nativeWebRevision: metadata.gitRevision,
-    };
+    return { hosts, colombianEgress, nativeWebRevision: metadata.gitRevision };
   };
   try {
     evidence.origin = await origin();
-    const stats = {};
+    const measured = { browser: {}, http: {}, bytes: {} };
     await Promise.all(
       ["d1", "do"].map((variant) =>
         runBrowser({
@@ -219,26 +234,29 @@ export async function comparePair(config, http, environment) {
         .map((e) => e.milliseconds);
       assert.equal(all.length, 30);
       assert.ok(all.every((n) => Number.isFinite(n) && n > 0));
-      all
-        .toSorted((a, b) => a - b)
-        .forEach((_, i, sorted) => {
-          if (i === 28)
-            stats[report.variant] = {
-              median: (sorted[14] + sorted[15]) / 2,
-              p95: sorted[28],
-              maximum: sorted[29],
-              count: 30,
-            };
-        });
+      const http = report.events.filter((event) => event.stage === "complete-http");
+      measured.browser[report.variant] = stats(all);
+      measured.http[report.variant] = stats(http.map((event) => event.milliseconds));
+      measured.bytes[report.variant] = stats(http.map((event) => event.bodyBytes));
       evidence.observations
         .filter((e) => e.variant === report.variant)
         .forEach((item, i) => {
           item.completed = true;
           item.milliseconds = all[i];
+          item.httpMs = http[i].milliseconds;
+          item.bodyBytes = http[i].bodyBytes;
         });
     }
-    evidence.stats = stats;
-    evidence.p95Ratio = stats.d1.p95 / stats.do.p95;
+    evidence.stats = measured;
+    evidence.boundaries = Object.fromEntries(
+      ["browser", "http"].map((kind) => {
+        const ratio = measured[kind].d1.p95 / measured[kind].do.p95;
+        return [
+          "ordinary.transactions.refresh." + kind,
+          { ...measured[kind], ratio, threshold: 1.8, status: ratio >= 1.8 ? "pass" : "fail" },
+        ];
+      })
+    );
     const mutation = {};
     for (const variant of ["d1", "do"]) {
       const invoke = forward(variant),

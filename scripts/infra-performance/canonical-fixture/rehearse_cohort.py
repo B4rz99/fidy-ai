@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import secrets
+import sqlite3
 import subprocess
 import time
 
@@ -78,6 +79,16 @@ def controller(directory, coords, path):
         yield port
 
 
+def native_accounts(directory, physical, session, user):
+    database, = directory.rglob(physical + ".sqlite")
+    with sqlite3.connect(database.resolve().as_uri() + "?mode=ro", uri=True) as db:
+        audit = dict((operation+"."+outcome, count) for operation,outcome,count in db.execute(
+            "SELECT operation,outcome,count(*) FROM audit_entries WHERE user_id=? AND session_id=? AND operation IS NOT NULL GROUP BY operation,outcome",
+            (user,session["binding"])))
+        units,receipts = db.execute("SELECT (SELECT coalesce(sum(units),0) FROM commercial_allowance_consumptions WHERE user_id=?1 AND allowance='canonical_call'),(SELECT count(*) FROM canonical_request_receipts WHERE user_id=?1)",(user,)).fetchone()
+        return {**audit,"canonicalUnits":units,"receipts":receipts}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", required=True, type=Path)
@@ -107,7 +118,21 @@ def main():
         import sys
         sys.path.insert(0,str(ROOT/"scripts/infra-performance/cells"))
         from rehearse_browser import paired
-        paired(out,proof,json.loads((directory/"native-session.json").read_bytes()),revision,coords["prefix"],args.d1,args.calibration)
+        session=json.loads((directory/"native-session.json").read_bytes())
+        user=json.loads((directory/"manifest.json").read_bytes())["workspace"]["profile"]["data"]["id"]
+        physical=json.loads(path.read_bytes())["physical"]
+        before=native_accounts(out/"workerd",physical,session,user)
+        try:
+            paired(out,proof,session,revision,coords["prefix"],args.d1,args.calibration)
+            after=native_accounts(out/"workerd",physical,session,user)
+            delta={k:after.get(k,0)-before.get(k,0) for k in after.keys()|before.keys()}
+            write(out/"native-window-audit.json",delta)
+            expected={"transactions.listTransactions.success":33,"transactions.updateTransaction.success":1,"transactions.updateTransaction.validation_failed":1,"canonicalUnits":0,"receipts":0}
+            if any(delta.get(k,0)!=v for k,v in expected.items()):
+                raise ValueError("Original native Session Audit or commercial accounting differs")
+        finally:
+            with controller(directory, coords, path) as port:
+                port.owner.cleanup()
     # New controller and new workerd process. The previous committed native databases and R2
     # marker survive the foreground runtime. Only custody and the original bound Session remain.
     with controller(directory, coords, path) as port:

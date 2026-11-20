@@ -27,9 +27,13 @@ const http = async (input, init = {}) => {
       redirect: "error",
     });
   }
+  if (
+    (url.origin === native.api || url.origin === native.browser) &&
+    url.pathname === "/cdn-cgi/trace"
+  )
+    return new Response("loc=ZZ\ncolo=LAB\n");
   if (url.origin === native.api) return Effect.runPromise(transport(runtime)(incoming));
   assert.equal(url.origin, native.browser);
-  if (url.pathname === "/cdn-cgi/trace") return new Response("loc=ZZ\ncolo=LAB\n");
   if (url.pathname === "/deployment-metadata.json")
     return Response.json({
       gitRevision: config.native.web.revision,

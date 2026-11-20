@@ -96,6 +96,9 @@ def serving_graph(read, account, revision, installed):
         if role in ("Core", "Ingress"):
             if recorded["versionId"] != installed["coreVersionId" if role == "Core" else "publicVersionId"]:
                 raise ValueError("Serving pair differs from the qualified application")
+        elif role == "Smoke":
+            if any(recorded[key] == upload["support"][role][key] for key in ("versionId", "deploymentId")):
+                raise ValueError("Technical smoke receiver did not deploy the repaired source")
         elif any(recorded[key] != upload["support"][role][key] for key in ("versionId", "deploymentId")):
             raise ValueError("Retained support Worker differs from the independently pinned deployment")
         deployments = read(f"accounts/{account}/workers/scripts/{name}/deployments")["deployments"]
@@ -106,10 +109,19 @@ def serving_graph(read, account, revision, installed):
             raise ValueError("A qualified native Worker deployment changed")
         if role in ("Smoke", "ForwardedEmail"):
             raw = read(f"accounts/{account}/workers/scripts/{name}/versions/{recorded['versionId']}")
-            sources = [row for row in raw["resources"]["bindings"] if row["name"] == "RELEASE_GIT_SHA"]
-            if (raw.get("id") != recorded["versionId"] or len(sources) != 1
-                    or (sources[0].get("type"), sources[0].get("text")) != ("plain_text", generation)):
+            rows = raw["resources"]["bindings"]
+            bindings = {row["name"]: row for row in rows}
+            source = bindings.get("RELEASE_GIT_SHA", {})
+            expected_source = revision if role == "Smoke" else generation
+            if (raw.get("id") != recorded["versionId"] or len(bindings) != len(rows)
+                    or (source.get("type"), source.get("text")) != ("plain_text", expected_source)):
                 raise ValueError("Installed support Worker has a different source revision")
+            if role == "Smoke":
+                queue, workflow = bindings.get("SMOKE_QUEUE_NAME", {}), bindings.get("SMOKE_WORKFLOW", {})
+                if ((queue.get("type"), queue.get("text")) != ("plain_text", name)
+                        or (workflow.get("type"), workflow.get("workflow_name"), workflow.get("class_name"),
+                            workflow.get("script_name", name)) != ("workflow", name, "ReleaseSmokeWorkflowV2", name)):
+                    raise ValueError("Repaired smoke receiver targets a different resource generation")
 
 
 def standard_buckets(read, account, installed):

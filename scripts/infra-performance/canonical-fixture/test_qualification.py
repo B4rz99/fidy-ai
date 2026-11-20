@@ -58,11 +58,15 @@ class RetainedResourceQualificationTests(unittest.TestCase):
                        deploymentId="20000000-0000-4000-8000-"+str(i).zfill(12))
             for i,(role,name) in enumerate(self.roles.items())}
         support = {r: {k:self.workers[r][k] for k in ("versionId","deploymentId")} for r in ("Smoke","ForwardedEmail","Web")}
+        # The repair uploads a new receiver to the existing Smoke Worker. Web and Email stay untouched.
+        support["Smoke"] = dict(versionId="30000000-0000-4000-8000-000000000001",
+                                deploymentId="40000000-0000-4000-8000-000000000001")
         self.pin = dict(revision=self.generation, support=support)
-        self.patch = patch("qualified_release.fixture_upload",return_value=self.pin, create=True)
+        self.patch = patch("qualified_release.fixture_upload",return_value=self.pin)
         self.patch.start()
         self.addCleanup(self.patch.stop)
-        self.sources = {name: self.source if role in ("Core","Ingress") else self.generation for role,name in self.roles.items()}
+        self.sources = {name: self.source if role in ("Core","Ingress","Smoke") else self.generation for role,name in self.roles.items()}
+        self.receiver_target = self.roles["Smoke"]
         self.active = {row["name"]:dict(id=row["deploymentId"],versions=[dict(version_id=row["versionId"],percentage=100)])
                        for row in self.workers.values()}
         self.active["fidy-native-smoke-"+self.provider["revision"]] = dict(id=self.provider["deploymentId"],
@@ -81,7 +85,11 @@ class RetainedResourceQualificationTests(unittest.TestCase):
         if kind == "deployments":
             return {"deployments":[self.active[script]]}
         self.assertEqual(kind, "versions")
-        return {"id":version[0], "resources":{"bindings":[dict(name="RELEASE_GIT_SHA",type="plain_text",text=self.sources[script])]}}
+        bindings = [dict(name="RELEASE_GIT_SHA",type="plain_text",text=self.sources[script])]
+        if script == self.roles["Smoke"]:
+            bindings += [dict(name="SMOKE_QUEUE_NAME",type="plain_text",text=script),
+                         dict(name="SMOKE_WORKFLOW",type="workflow",workflow_name=self.receiver_target,class_name="ReleaseSmokeWorkflowV2")]
+        return {"id": version[0], "resources": {"bindings": bindings}}
 
     def verify(self):
         from qualified_release import serving_graph
@@ -89,6 +97,9 @@ class RetainedResourceQualificationTests(unittest.TestCase):
 
     def test_qualifies_new_application_on_retained_generation_and_original_private_provider(self):
         self.verify()
+        self.receiver_target = "fidy-native-smoke-"+self.source
+        with self.assertRaisesRegex(ValueError, "receiver targets"):
+            self.verify()
 
     def test_substituting_resource_provider_asset_or_support_receipt_refuses_before_cleanup(self):
         for owner,field,bad in [
@@ -96,7 +107,7 @@ class RetainedResourceQualificationTests(unittest.TestCase):
             (self.installed,"revision",self.generation), (self.installed["website"][0],"revision",self.source),
             (self.installed["website"][0],"browser","https://other.invalid"),
             (self.installed,"retainedProvider",{**self.provider,"revision":self.generation}),
-            (self.sources,self.roles["Smoke"],self.source), (self.sources,self.roles["ForwardedEmail"],self.source),
+            (self.sources,self.roles["Smoke"],self.generation), (self.sources,self.roles["ForwardedEmail"],self.source),
             (self.workers["Web"],"versionId",self.workers["Smoke"]["versionId"]),
             (self.workers["Smoke"],"name","fidy-native-smoke-"+self.source),
             (self.workers["Core"],"versionId",self.workers["Ingress"]["versionId"]),
@@ -110,8 +121,17 @@ class RetainedResourceQualificationTests(unittest.TestCase):
                         self.verify()
                 finally:
                     owner[field]=original
-        # Matching a substituted deployment to a forged archive receipt still fails its independent pin.
+        # A served old receiver or its original deployment cannot qualify after source repair.
         worker=self.workers["Smoke"]
-        worker["deploymentId"]=self.active[worker["name"]]["id"]=self.workers["Web"]["deploymentId"]
+        for key,active,key_on_active in [("deploymentId",self.active[worker["name"]],"id"),
+                                         ("versionId",self.active[worker["name"]]["versions"][0],"version_id")]:
+            previous=worker[key]
+            worker[key]=active[key_on_active]=self.pin["support"]["Smoke"][key]
+            with self.subTest(key=key),self.assertRaises(ValueError):
+                self.verify()
+            worker[key]=active[key_on_active]=previous
+        # Matching a substituted Web deployment to a forged archive receipt still fails its independent pin.
+        worker=self.workers["Web"]
+        worker["deploymentId"]=self.active[worker["name"]]["id"]=self.workers["Smoke"]["deploymentId"]
         with self.assertRaises(ValueError):
             self.verify()

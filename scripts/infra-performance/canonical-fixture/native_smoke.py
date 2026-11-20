@@ -54,7 +54,7 @@ def run_smoke(owner, port, proof, web, out, env):
     try:
         before = native_snapshot(context, "before", deadline, env)
         result = subprocess.run(
-            ["bun", "scripts/infra-performance/hosted-browser/native-smoke.ts"], cwd=ROOT, env=env,
+            ["bun", "scripts/infra-performance/hosted-browser/native-smoke.mjs"], cwd=ROOT, env=env,
             text=True, timeout=max(1, min(180, deadline-time.time())),
             input=json.dumps(dict(
                 deadline=int(deadline*1000), maximumPreflights=maximum_preflights,

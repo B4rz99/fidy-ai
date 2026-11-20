@@ -11,18 +11,20 @@ import { runBrowser } from "./captured-profile.mjs";
 import { parseDeployment, parseNativeSmoke } from "./contracts";
 import { proveScopedCorrection } from "./scoped-correction.mjs";
 
-type Smoke = ReturnType<typeof parseNativeSmoke>;
+/** @typedef {ReturnType<typeof parseNativeSmoke>} Smoke */
 const origins = installedOrigins.acceptance;
 const requestTimeoutMs = 30_000;
 const success = 200;
 const mutationIntervalMs = 750;
 const allowedAsset = /^\/assets\/[a-zA-Z0-9_./-]+$/u;
 
-const scopeOpen = (deadline: number): void => {
+/** @param {number} deadline */
+const scopeOpen = (deadline) => {
   assert.ok(Date.now() < deadline, "Native smoke lease expired");
 };
 
-const exposedResponse = (reply: Response): Response => {
+/** @param {Response} reply */
+const exposedResponse = (reply) => {
   const headers = new Headers(reply.headers);
   for (const name of ["content-encoding", "content-length", acceptanceProofHeader]) {
     headers.delete(name);
@@ -30,7 +32,11 @@ const exposedResponse = (reply: Response): Response => {
   return new Response(reply.body, { status: reply.status, headers });
 };
 
-const signedRequest = async (config: Smoke, incoming: Request): Promise<Request> => {
+/**
+ * @param {Smoke} config
+ * @param {Request} incoming
+ */
+const signedRequest = async (config, incoming) => {
   const request = new Request(incoming);
   request.headers.set(
     acceptanceProofHeader,
@@ -52,19 +58,12 @@ const signedRequest = async (config: Smoke, incoming: Request): Promise<Request>
   return request;
 };
 
-const nativeTransport = ({
-  config,
-  http,
-}: {
-  config: Smoke;
-  http: typeof fetch;
-}): {
-  forward: (incoming: Request) => Promise<Response>;
-  verifyReservation: () => void;
-} => {
+/** @param {{config: Smoke, http: typeof fetch}} input */
+const nativeTransport = ({ config, http }) => {
   const remaining = new Map(Object.entries(config.allowed));
   let preflights = 0;
-  const forward = async (incoming: Request): Promise<Response> => {
+  /** @param {Request} incoming */
+  const forward = async (incoming) => {
     scopeOpen(config.deadline);
     const url = new URL(incoming.url);
     assert.equal(url.origin, origins.api);
@@ -101,15 +100,8 @@ const nativeTransport = ({
   };
 };
 
-const deployedWeb = async ({
-  config,
-  request,
-  http,
-}: {
-  config: Smoke;
-  request: Request;
-  http: typeof fetch;
-}): Promise<Response> => {
+/** @param {{config: Smoke, request: Request, http: typeof fetch}} input */
+const deployedWeb = async ({ config, request, http }) => {
   scopeOpen(config.deadline);
   const url = new URL(request.url);
   assert.equal(url.origin, origins.browser);
@@ -128,19 +120,8 @@ const deployedWeb = async ({
   );
 };
 
-export const runNativeSmoke = async ({
-  config,
-  http,
-}: {
-  config: Smoke;
-  http: typeof fetch;
-}): Promise<
-  Readonly<{
-    freshVisibleTransactions: true;
-    nativeWebRevision: string;
-    mutation: Awaited<ReturnType<typeof proveScopedCorrection>>;
-  }>
-> => {
+/** @param {{config: Smoke, http: typeof fetch}} input */
+export const runNativeSmoke = async ({ config, http }) => {
   assert.equal(config.native.web.api, origins.api);
   assert.equal(config.native.web.browser, origins.browser);
   assert.match(config.native.revision, /^[a-f0-9]{40}$/u);

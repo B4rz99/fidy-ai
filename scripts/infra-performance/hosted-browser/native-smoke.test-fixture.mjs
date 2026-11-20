@@ -7,9 +7,9 @@ import { transport } from "../canonical-fixture/bridge";
 import { closedRuntime } from "../canonical-fixture/closed-runtime.test-fixture";
 import { parseNativeSmoke } from "./contracts";
 import { nativeAccountingSnapshot } from "./native-accounting";
-import { runNativeSmoke } from "./native-smoke";
+import { runNativeSmoke } from "./native-smoke.mjs";
 
-const input: unknown = await Bun.stdin.json();
+const input = await Bun.stdin.json();
 assert.ok(
   typeof input === "object" &&
     input !== null &&
@@ -28,7 +28,7 @@ const runtime = await Effect.runPromise(
   )
 );
 const client = Object.assign(
-  async (input: Parameters<typeof fetch>[0], init?: RequestInit): Promise<Response> => {
+  async (input, init) => {
     const request = new Request(input, init);
     const url = new URL(request.url);
     if (url.origin === origins.api) return Effect.runPromise(transport(runtime)(request));
@@ -49,7 +49,7 @@ const client = Object.assign(
   },
   { preconnect: fetch.preconnect }
 );
-const witness = Effect.fn(function* (phase: "before" | "after") {
+const witness = Effect.fn(function* (phase) {
   return yield* nativeAccountingSnapshot({
     phase,
     capture: input.capture,

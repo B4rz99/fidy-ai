@@ -2,7 +2,6 @@ import { Effect, Schema } from "effect";
 import { HttpClient, HttpClientRequest } from "effect/http";
 import { accountingFixture } from "./native-fixture-signer";
 import { releaseEvidence } from "./production-release";
-import { ReleaseHttpLive } from "./release-http";
 
 const smoke = "fidy-native-smoke-" + accountingFixture.revision;
 const queueId = "6f6cc9f41841481dab998e691fc10e61";
@@ -48,4 +47,4 @@ export const confirmInterruptedSmokeConsumer = Effect.gen(function* () {
   });
   yield* Schema.decodeUnknownEffect(liveQueue)(yield* read(queueUrl));
   yield* Schema.decodeUnknownEffect(liveConsumer)(yield* read(queueUrl + "/consumers"));
-}).pipe(Effect.provide(ReleaseHttpLive));
+});

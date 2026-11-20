@@ -498,7 +498,7 @@ if (import.meta.main) {
   });
   const program = (
     process.argv[2] === "reconcile-accounting-consumer"
-      ? reconcileAccountingSmokeConsumer
+      ? reconcileAccountingSmokeConsumer.pipe(Effect.provide(ReleaseHttpLive))
       : ordinary
   ).pipe(Effect.provide(Alchemist.layer()), Effect.scoped);
   await Effect.runPromise(

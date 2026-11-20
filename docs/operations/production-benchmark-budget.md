@@ -8,6 +8,11 @@ that an authenticated GET can fail while `SELECT 1` and public health still succ
 A [Workers Paid upgrade](https://developers.cloudflare.com/workers/platform/pricing/)
 requires the account owner's approval of recurring charges; it is not an automatic recovery step.
 
+For the storage comparison, run one ordinary-network read profile and small mutation correctness
+checks on the eight-original-Transaction fixture. Charge the complete experiment, including setup
+and cleanup, against the 5,000-write D1 cap. Run repeated mutation timings and the 20-User
+offered-load comparison on workerd. [Storage acceptance criteria](https://github.com/B4rz99/fidy-ai/issues/2226)
+
 ## Before any hosted experiment
 
 1. Run the complete fixture locally with native workerd first. Count schema installation, seed

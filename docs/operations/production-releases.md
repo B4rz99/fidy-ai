@@ -73,7 +73,7 @@ Ordinary opening belongs to #2262. It requires signed-off native correctness, pr
 
 Use the incumbent's exact production release and resource IDs to prepare the retirement record. Record one row per resource with its owner, live bindings and producers, unresolved work, evidence still needed, proposed disposition and observation time. Mark the comparator resources separately until their evidence owner releases them. Preserve Alchemy state, credentials, unrelated resources, and the new installation and its retained Users. [Cutover decision](https://github.com/B4rz99/fidy-ai/issues/2205#issuecomment-6953536107)
 
-**Observe old samples, uploads and callbacks.** Rehearse the [inventory statement](../../scripts/retirement/legacy-inventory.sql) offline from a checkout with the frozen D1 commit available. The command below creates only an in-memory SQLite database, applies the pinned migrations and checks the output against synthetic records.
+**Observe old samples, uploads and callbacks.** Rehearse the [inventory statement](../../scripts/retirement/legacy-inventory.sql) offline with Python linked to SQLite 3.54.0 and a checkout containing the frozen D1 commit. The command below creates only an in-memory SQLite database, applies the pinned migrations and checks the output against synthetic records.
 
 ```sh
 python3 scripts/retirement/check-inventory.py

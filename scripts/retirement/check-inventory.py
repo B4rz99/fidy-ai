@@ -16,7 +16,11 @@ files = subprocess.check_output(
 ).splitlines()
 assert files and files[-1].endswith("0015_remove_price_notices.sql")
 for filename in files:
-    db.executescript(subprocess.check_output([*git, "show", f"{BASELINE}:{filename}"], text=True))
+    migration = subprocess.check_output([*git, "show", f"{BASELINE}:{filename}"], text=True)
+    try:
+        db.executescript(migration)
+    except sqlite3.DatabaseError as error:
+        raise RuntimeError(f"SQLite {sqlite3.sqlite_version} could not apply {filename}") from error
 
 
 def census():

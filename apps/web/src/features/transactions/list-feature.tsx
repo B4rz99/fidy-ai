@@ -736,6 +736,3 @@ TransactionListFeature.preloadData = ({
       );
     })
   );
-/** Entry code can overlap live access checks without loading this workspace on other routes. */
-TransactionListFeature.preload = (): Promise<void> =>
-  TransactionWorkspace.preload?.() ?? Promise.resolve();

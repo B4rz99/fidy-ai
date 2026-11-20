@@ -1,0 +1,23 @@
+name: Rehearse incumbent retirement inventory
+on:
+  push:
+    branches: [test/2263-retirement-inventory-proof]
+permissions:
+  contents: read
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/retirement
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: fb53d9e755c14393048dc945fc0b7f117730d872
+          path: baseline
+          persist-credentials: false
+          sparse-checkout: apps/server/cloudflare/migrations
+      - name: Observe populated, empty, over-limit and missing-schema outcomes
+        run: python3 scripts/retirement/check-inventory.py baseline

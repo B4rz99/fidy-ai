@@ -6,6 +6,7 @@ import {
   requireActiveSuccessorLifecycle,
   requireFixtureLifecycle,
   requireSameSuccessorPlan,
+  requireSmokeConsumerReconciliation,
   requireSuccessorLifecycle,
 } from "./native-fixture-plan";
 import { nativeResourceInventory } from "./native-graph";
@@ -159,5 +160,24 @@ it("keeps the successor smoke generation and every other resource unchanged for 
         revision,
       })
     ).toThrow();
+  }
+});
+
+it("permits reconciliation of the sole Smoke consumer only against unchanged upstream resources", () => {
+  const consumer = row("ReleaseSmokeConsumer-" + revision, "Cloudflare.Queues.Consumer", "create");
+  const queue = row("ReleaseSmokeQueue-" + revision, "Cloudflare.Queues.Queue", "noop");
+  const worker = row("ReleaseSmoke-" + revision, "Cloudflare.Worker", "noop");
+  const verify = (rows: readonly Row[]): string =>
+    requireSmokeConsumerReconciliation({ rows, revision });
+  expect(verify([consumer, queue, worker])).toBe("create");
+  expect(verify([{ ...consumer, action: "noop" }, queue, worker])).toBe("noop");
+  for (const rows of [
+    [consumer, queue],
+    [consumer, { ...queue, action: "update" }, worker],
+    [consumer, queue, worker, row("Core", "Cloudflare.Worker", "update")],
+    [consumer, queue, worker, consumer],
+    [{ ...consumer, action: "replace" }, queue, worker],
+  ] as const) {
+    expect(() => verify(rows)).toThrow();
   }
 });

@@ -38,12 +38,24 @@ const knownResources = new Map([
   ...nativeResourceInventory(retainedProvider.revision),
 ]);
 type ObservedResource = Pick<PlanRows[number], "logicalId" | "resourceType" | "action">;
-export const projectFixtureInventory = (rows: PlanRows): ReadonlyArray<ObservedResource> =>
+const projectInventory = (
+  rows: PlanRows,
+  inventory: ReadonlyMap<string, string>
+): ReadonlyArray<ObservedResource> =>
   rows.map(({ logicalId, resourceType, action }) =>
-    knownResources.has(logicalId) && knownResources.get(logicalId) === resourceType
+    inventory.get(logicalId) === resourceType
       ? { logicalId, resourceType, action }
       : { logicalId: "unrecognized", resourceType: "unrecognized", action }
   );
+export const projectFixtureInventory = (rows: PlanRows): ReadonlyArray<ObservedResource> =>
+  projectInventory(rows, knownResources);
+export const projectSuccessorInventory = ({
+  rows,
+  revision,
+}: {
+  rows: PlanRows;
+  revision: string;
+}): ReadonlyArray<ObservedResource> => projectInventory(rows, nativeResourceInventory(revision));
 
 export class FixturePlanRefused extends Data.TaggedError("FixturePlanRefused")<{
   reason:
@@ -213,3 +225,34 @@ export const requireSuccessorLifecycle = (input: SuccessorInventory): void =>
   requireSuccessorResourceChanges({ ...input, active: false });
 export const requireActiveSuccessorLifecycle = (input: SuccessorInventory): void =>
   requireSuccessorResourceChanges({ ...input, active: true });
+
+export const requireSmokeConsumerReconciliation = ({
+  rows,
+  revision,
+}: SuccessorInventory): "create" | "noop" => {
+  const inventory = nativeResourceInventory(revision);
+  const target = "ReleaseSmokeConsumer-" + revision;
+  const observed = new Set(rows.map((row) => row.logicalId));
+  if (
+    observed.size !== rows.length ||
+    rows.some((row) => inventory.get(row.logicalId) !== row.resourceType)
+  ) {
+    throw new FixturePlanRefused({ reason: "unexpected change" });
+  }
+  if (
+    ![target, "ReleaseSmoke-" + revision, "ReleaseSmokeQueue-" + revision].every((resource) =>
+      observed.has(resource)
+    )
+  ) {
+    throw new FixturePlanRefused({ reason: "missing required update or deferred deletion" });
+  }
+  const changes = rows.filter((row) => row.action !== "noop");
+  if (changes.length === 0) return "noop";
+  if (
+    changes.length === 1 &&
+    changes.every((row) => row.logicalId === target && row.action === "create")
+  ) {
+    return "create";
+  }
+  throw new FixturePlanRefused({ reason: "unexpected change" });
+};

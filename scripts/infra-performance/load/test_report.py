@@ -45,3 +45,35 @@ class OfferedLoadEvidence(unittest.TestCase):
         result = summarize(rows, 1, 30, fixture=False)
         self.assertFalse(result["fixtureVerified"])
         self.assertEqual(result["dispatchMs"]["status"], "fail")
+
+    def test_offered_history_requires_the_prescribed_cadence_for_every_user_and_block(self):
+        rows = []
+        for block, order in enumerate((("d1", "do"), ("do", "d1"))):
+            for position, variant in enumerate(order):
+                for sample in range(15):
+                    for user in range(20):
+                        scheduled = (2 * block + position) * 20_000 + sample * 1000 + user * 50
+                        latency = 8 if variant == "d1" else 2
+                        rows.append(dict(variant=variant, user=user, sample=sample + block * 15,
+                                         scheduled=scheduled, dispatched=scheduled + 1,
+                                         completedAt=scheduled + 1 + latency, status=200, ok=True,
+                                         dispatchMs=latency, scheduledMs=latency + 1,
+                                         bytes=100, digest="history"))
+        def report():
+            return summarize(rows, 20, 30, offered_history=True)
+        self.assertEqual(report()["scheduledMs"]["status"], "pass")
+        self.assertEqual(report()["do"]["dispatchDelayMs"]["p95"], 1)
+        # A row offered a second late can have fast timings but misses its User's declared slot.
+        row = rows[-1]
+        for key in ("scheduled", "dispatched", "completedAt"):
+            row[key] += 1000
+        self.assertEqual(report()["scheduledMs"]["status"], "fail")
+        self.assertFalse(report()["offeredScheduleVerified"])
+        for key in ("scheduled", "dispatched", "completedAt"):
+            row[key] -= 1000
+        # Dispatching the offer early would also defeat the scheduled-completion boundary.
+        row["dispatched"] -= 100
+        row["dispatchMs"] += 100
+        self.assertEqual(report()["scheduledMs"]["status"], "fail")
+        del row["scheduled"]
+        self.assertEqual(report()["scheduledMs"]["status"], "missing")

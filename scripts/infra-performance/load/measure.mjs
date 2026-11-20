@@ -436,7 +436,7 @@ await write("plan", {
   warmup:
     "one authenticated full-history warm-up for each User and variant; actual User/shared reconstruction unobserved",
   order:
-    "history: two 15-second blocks per variant, D1/DO then DO/D1, one offer/User/second at 50ms offsets; Correction and rollback: one-second interval between isolated pairs, alternate variant order in 30 pairs",
+    "history: two 15-second blocks per variant, D1/DO then DO/D1, one offer/User/second at (1000 / users) ms offsets; Correction and rollback: one-second interval between isolated pairs, alternate variant order in 30 pairs",
   boundaries:
     "host scheduled offer and actual dispatch to the last fully buffered Miniflare loopback response body; isolated Correction includes write and fresh history",
   fixture:

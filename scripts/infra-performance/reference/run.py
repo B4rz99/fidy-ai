@@ -236,7 +236,7 @@ def observation(path, env, destination, variant="d1"):
                 ["bun", str(HERE / "preview.mjs")], path / "apps/web", env, destination / "web.log"
             )
         )
-        prepare(api, front, int(env["REFERENCE_WEB_PORT"]))
+        prepare(api, front, int(env.get("REFERENCE_WEB_PORT", str(WEB_PORT[variant]))))
         seed = next(
             json.loads(line.removeprefix("ASSESSMENT_SEED "))
             for line in (destination / "api.log").read_text().splitlines()

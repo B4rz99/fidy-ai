@@ -1,6 +1,23 @@
+import retainedProvider from "./native-retained-provider.json" with { type: "json" };
 import { Config, Data, Effect, Redacted } from "effect";
 
 import { Hex } from "effect/encoding";
+
+export const fixtureBuild = Config.Literals(["ordinary", "fallback"], "NATIVE_FIXTURE_BUILD").pipe(
+  Config.withDefault("ordinary")
+);
+const workerFiles = {
+  ordinary: { Core: "core-worker", Ingress: "public-worker" },
+  fallback: { Core: "fixture-fallback-core", Ingress: "fixture-fallback-ingress" },
+};
+export const receiptWorkerMain = ({
+  role,
+  fallback,
+}: {
+  role: "Core" | "Ingress";
+  fallback: boolean;
+}): string =>
+  "../../apps/server/cloudflare/" + workerFiles[fallback ? "fallback" : "ordinary"][role] + ".ts";
 
 export const expectedFixtureSigner = Config.String("NATIVE_FIXTURE_SIGNER_SHA256").pipe(
   Config.withDefault("")
@@ -8,6 +25,7 @@ export const expectedFixtureSigner = Config.String("NATIVE_FIXTURE_SIGNER_SHA256
 
 type SignerBindings = Partial<
   Readonly<{
+    ACCEPTANCE_PROVIDER_REVISION: string;
     NATIVE_FIXTURE_SIGNING_KEY: Redacted.Redacted<string>;
     NATIVE_FIXTURE_SIGNER_SHA256: string;
   }>
@@ -51,5 +69,18 @@ export const fixtureSignerBindings = Effect.fn(function* (release: {
   if (actual !== fingerprint) {
     return yield* Effect.fail(Error("Candidate signing key fingerprint mismatch"));
   }
-  return { NATIVE_FIXTURE_SIGNING_KEY: secret, NATIVE_FIXTURE_SIGNER_SHA256: fingerprint };
+  return {
+    ACCEPTANCE_PROVIDER_REVISION: retainedProvider.revision,
+    NATIVE_FIXTURE_SIGNING_KEY: secret,
+    NATIVE_FIXTURE_SIGNER_SHA256: fingerprint,
+  };
+});
+
+export const fixtureArtifacts = Effect.gen(function* () {
+  const retainProvider = (yield* expectedFixtureSigner) !== "";
+  const fallback = (yield* fixtureBuild) === "fallback";
+  if (fallback && !retainProvider) {
+    return yield* Effect.die(Error("Dormant fixture requires the protected retained provider"));
+  }
+  return { fallback, retainProvider };
 });

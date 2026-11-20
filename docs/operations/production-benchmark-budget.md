@@ -266,15 +266,49 @@ their own protected observations.
 
 ### Obtain the closed native Transaction fixture receipt
 
+The eight-original Transaction history comparison covers that financial view only. The browser,
+Budget, Recurring and Needs Review comparisons require their own fixture parity and observations.
 The protected Transaction comparison requires a tracked receipt-capable native revision on the
-closed acceptance hosts. The release builder adds one Core signing secret and its public-key
-fingerprint only when the protected release explicitly selects `transaction_fixture_signer`.
+closed acceptance hosts. The release builder adds one Core signing secret, its public-key fingerprint and the verified
+closed provider revision when the protected release selects `transaction_fixture_signer`.
 The ordinary inventory keeps its original exact binding set. The candidate inventory requires
 `NATIVE_FIXTURE_SIGNING_KEY` as a Core secret and `NATIVE_FIXTURE_SIGNER_SHA256` as Core text
 with the expected SHA-256 of the public key's SPKI DER. The builder verifies this against the
 P-256 PKCS#8 private key. Configure the protected release secret as lowercase DER hex and pin
 the fingerprint independently. The comparator receives only the public SPKI DER hex as
 `FIDY_NATIVE_FIXTURE_PUBLIC_KEY` and the existing closed-request `SMOKE_PROOF`.
+
+Use the **Release native application** workflow on protected trunk to prepare both Worker builds
+from the same commit. Keep ordinary admission closed and the hosts set to acceptance.
+
+1. Select `plan-fixture-fallback` and enable `transaction_fixture_signer`. Review the resulting
+   `native-fixture-plan-<run-id>` against current account headroom. The plan expects one new
+   revision-scoped smoke Worker, Queue, Workflow and consumer. It identifies the original four
+   smoke resources in Alchemy's deferred deletions. Their physical resources remain in service.
+   The read-only operation records the proposed logical resource IDs and actions.
+2. On that same SHA, select `prepare-fixture-fallback` with the signer enabled. This forward
+   repair starts only from the recorded original deployment. The dormant UserStore runs without
+   access to the receipt key. Ordinary financial reads and current-release admission continue
+   through the real application. The runner checks the original private provider's exact deployment
+   and version, the five SQLite namespace IDs, an ordered digest of each original User ID and complete financial history, and the candidate
+   and mixed-pair smoke probes. It uploads `native-fixture-fallback-<run-id>` before moving traffic.
+   Retain the artifact ID and independently pin its GitHub archive SHA-256.
+3. If forward promotion is interrupted after that upload, select `recover-fixture-fallback`
+   with the same SHA, signer, stage artifact ID and pinned archive digest. The controller checks
+   the exact staged deployment or its single observed step to the dormant version. It refreshes
+   admission, provider, namespace, Worker and User evidence before completing the remaining
+   Core-first routing steps. An unrecognized deployment history requires inspection.
+4. With the dormant release verified, run `rollout` on the **same trunk SHA** with the signer enabled.
+   The active Ingress and Core are separate compiled artifacts. They reuse all four prepared smoke
+   resources, the original provider, the signer, the five SQLite namespaces and the closed hosts.
+   The normal code-only rollback checks now compare the active builds with the previously serving
+   dormant builds. Both original Users must still authenticate and read their financial history.
+
+The original private fixture Worker owns the synthetic OIDC and payment identities. Current OAuth
+flows use fresh pairing state, nonce, PKCE and authorization codes against that retained provider.
+HTTP request proofs, technical smoke Queue and Workflow delivery, receipt signatures and background
+leases remain bound to the current application revision. The initial forward repair's stage artifact
+and the final promoted rollout's qualification artifact serve different operations.
 
 Use the **Measure the closed native Transaction cohort** protected workflow on trunk. Provide a
 new random comparison prefix, the installed SHA, the two serving version UUIDs, and the artifact

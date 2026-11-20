@@ -1,3 +1,4 @@
+import retainedProvider from "./native-retained-provider.json" with { type: "json" };
 import { Effect, Schema } from "effect";
 import {
   type NativeBinding,
@@ -103,7 +104,9 @@ export const requireDeployedRole = (input: {
       requireTarget(binding.queue_name === prefix + queues[binding.name], binding.name);
     }
     if (binding.type === "workflow") requireWorkflowBinding(binding, role, revision);
-    if (binding.type === "service") requireService(binding, revision);
+    if (binding.type === "service") {
+      requireService(binding, input.fingerprint === "" ? revision : retainedProvider.revision);
+    }
     requireQueueName(binding, queues);
   }
 };

@@ -1,9 +1,11 @@
+import retainedProvider from "./native-retained-provider.json" with { type: "json" };
 import {
   type NativeBinding,
   NativeBindings,
   type NativeRole,
   requireRoleBindings,
 } from "./native-graph";
+import { receiptWorkerMain } from "./native-fixture-signer";
 import { installedOrigins } from "@fidy/server/browser-transport";
 import { type Plan, describeResource } from "alchemy/Plan";
 import * as Cloudflare from "alchemy/Cloudflare";
@@ -137,16 +139,40 @@ const requireSignerHost = (fingerprint: string, hosts: NativeHostMode): void => 
   }
 };
 const roles = ["Core", "Ingress", "ForwardedEmail", "Web"] as const;
+const requireFixtureMain = (
+  role: NativeRole,
+  props: unknown,
+  { fingerprint, fallback }: { fingerprint: string; fallback: boolean }
+): void => {
+  if (fingerprint !== "" && (role === "Core" || role === "Ingress")) {
+    Schema.decodeUnknownSync(
+      Schema.Struct({ main: Schema.Literal(receiptWorkerMain({ role, fallback })) })
+    )(props);
+  }
+};
+const requireFixtureService = (
+  role: NativeRole,
+  bindings: readonly NativeBinding[],
+  fingerprint: string
+): void => {
+  if (fingerprint === "" || (role !== "Ingress" && role !== "Core")) return;
+  const provider = bindings.find((binding) => binding.name === "RELEASE_FIXTURE");
+  if (provider?.service !== "fidy-native-smoke-" + retainedProvider.revision) {
+    throw Error("Resolved original provider target differs");
+  }
+};
 export const requireNativeBindings = ({
   plan,
   revision,
   hosts,
   fingerprint,
+  fallback,
 }: {
   plan: Plan;
   revision: string;
   hosts: NativeHostMode;
   fingerprint: string;
+  fallback: boolean;
 }): void => {
   requireSignerHost(fingerprint, hosts);
   const resources = Object.values(plan.resources);
@@ -156,9 +182,11 @@ export const requireNativeBindings = ({
     if (node === undefined) throw Error("Missing installed native Worker " + role);
     const props: unknown = node.action === "noop" ? node.state.props : node.props;
     requireInstallationWorker({ logicalId: role, props, revision, hosts });
+    requireFixtureMain(role, props, { fingerprint, fallback });
     const bindings = node.bindings.flatMap(
       (binding) => Schema.decodeUnknownSync(ProviderBindings)(binding.data).bindings ?? []
     );
+    requireFixtureService(role, bindings, fingerprint);
     requireSiteAsset(role, props, bindings);
     requireClosedBindings({ worker: role, bindings, fingerprint });
     if (role === "Core") requireNativeClasses(bindings);

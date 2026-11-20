@@ -166,6 +166,7 @@ def run(args):
         return actual
 
     candidate = verify()
+    os.environ["FIDY_NATIVE_FIXTURE_PROVIDER_REVISION"] = installed["retainedProvider"]["revision"]
     coords = dict(**candidate, account=account, prefix=prefix, archive=args.archive_sha256)
     cloud = Cloud(account,prefix)
     store = CustodyObject(account, cloud, native_revision=revision)

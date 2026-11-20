@@ -13,9 +13,19 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/bun-runtime
       - run: bash scripts/install-workspace.sh
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 8dd3b0d47d655868c1ab4f16b6145a06d99bd721
+          path: closed-baseline
+          persist-credentials: false
+      - run: bash scripts/install-workspace.sh --ignore-scripts
+        working-directory: closed-baseline
+      - name: Reopen the original two mounted Sessions after the release
+        if: always()
+        run: python3 scripts/infra-performance/canonical-fixture/rehearse_release_controls.py --out apps/server/test-results/closed-release-controls
       - name: Verify closed release signer inventories on the real plan
         working-directory: infra/cloudflare
-        run: bun run test native-application-plan.test.ts native-deployed-graph.test.ts
+        run: bun run test native-application-plan.test.ts native-deployed-graph.test.ts native-fixture-plan.test.ts native-fallback-recovery.test.ts
       - name: Require genuine signed capture and own-fixture proof
         if: always()
         run: |
@@ -44,5 +54,6 @@ jobs:
         with:
           name: closed-native-fixture-${{ github.run_id }}
           path: |
+            apps/server/test-results/closed-release-controls/summary.json
             apps/server/test-results/closed-native-fixture/summary.json
             apps/server/test-results/closed-native-cohort/summary.json

@@ -14,7 +14,8 @@ from hosted import HERE, ROOT, RECEIPT_PATH, private_file, verify_native_fixture
 @contextmanager
 def commands(revision, runtime="cohort-bridge.ts", exchange=None):
     env = {key: value for key, value in os.environ.items() if key in (
-        "PATH", "HOME", "TMPDIR", "SystemRoot", "SMOKE_PROOF", "TEST_FIXTURE_PRIVATE_KEY", "FIDY_REHEARSAL_STATE")}
+        "PATH", "HOME", "TMPDIR", "SystemRoot", "SMOKE_PROOF", "TEST_FIXTURE_PRIVATE_KEY", "FIDY_REHEARSAL_STATE",
+        "FIDY_REHEARSAL_BASELINE", "FIDY_REHEARSAL_FALLBACK", "FIDY_NATIVE_FIXTURE_PROVIDER_REVISION")}
     env["FIDY_NATIVE_REVISION"] = revision
     with subprocess.Popen(["bun", str(HERE / runtime)], cwd=ROOT, env=env, stdin=subprocess.PIPE,
                           stdout=subprocess.PIPE, text=True, bufsize=1) as child:

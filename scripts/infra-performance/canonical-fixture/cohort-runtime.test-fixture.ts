@@ -1,4 +1,9 @@
-import type { PerformanceMember } from "../../../apps/server/cloudflare/release-isolation/contract";
+import {
+  acceptanceProofHeader,
+  performanceAccountingMember,
+  type PerformanceMember,
+} from "../../../apps/server/cloudflare/release-isolation/contract";
+import { signAcceptanceRequest } from "../../../apps/server/cloudflare/release-isolation/operations";
 import { Database } from "bun:sqlite";
 import { Config, Context, DateTime, Effect, Layer, Option, Redacted, Schema } from "effect";
 import type { Miniflare } from "miniflare";
@@ -91,18 +96,39 @@ const requestSchema = Schema.Struct({
   method: Schema.Literals(["POST", "GET"]),
   body: Schema.NullOr(Schema.String),
 });
-const dispatch = Effect.fnUntraced(function* (runtime: Miniflare, value: unknown) {
+const dispatch = Effect.fnUntraced(function* (
+  runtime: Miniflare,
+  value: unknown,
+  witnessAuth?: { revision: string; secret: string }
+) {
   const req = yield* Schema.decodeUnknownEffect(requestSchema)(value);
   if (new URL(req.url).origin !== installedOrigins.acceptance.api) {
     return yield* Effect.fail(Error("Foreign rehearsal origin"));
   }
-  const response = yield* transport(runtime)(
-    new Request(req.url, {
-      method: req.method,
-      headers: req.headers,
-      ...(req.body === null ? {} : { body: req.body }),
-    })
-  );
+  const request = new Request(req.url, {
+    method: req.method,
+    headers: req.headers,
+    ...(req.body === null ? {} : { body: req.body }),
+  });
+  if (witnessAuth !== undefined) {
+    if (Option.isNone(performanceAccountingMember(request))) {
+      return yield* Effect.fail(Error("Unexpected accounting witness route"));
+    }
+    const proof = yield* signAcceptanceRequest({
+      request,
+      boundary: "ingress",
+      deadline: Date.now() + 30_000,
+      environment: {
+        RELEASE_GIT_SHA: witnessAuth.revision,
+        SMOKE_PROOF: witnessAuth.secret,
+        BROWSER_ORIGIN: installedOrigins.acceptance.browser,
+        RECOVERY_ISOLATION: "isolated",
+        NATIVE_STORAGE_ADMISSION: "closed",
+      },
+    });
+    request.headers.set(acceptanceProofHeader, proof);
+  }
+  const response = yield* transport(runtime)(request);
   return {
     status: response.status,
     headers: [...response.headers],
@@ -148,6 +174,7 @@ const run = Effect.gen(function* () {
         const action = item.action;
 
         if (action === "provider-request") return yield* dispatch(runtime, item.body);
+        if (action === "accounting-witness") return yield* dispatch(runtime, item.body, auth);
         if (["seed-survivors", "mount-original-sessions"].includes(action)) {
           const users = yield* establishSmokeUsers({
             revision: auth.revision,

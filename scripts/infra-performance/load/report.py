@@ -19,7 +19,7 @@ def stats(values):
     )
 
 
-def offered_schedule(rows, users, samples):
+def offered_schedule(rows, users, samples, native_only):
     """Check the 1 Hz per-User offers and completed, balanced blocks using the raw host clock."""
     stamps = ("scheduled", "dispatched", "completedAt")
     if any(not all(isinstance(r.get(k), (int, float)) and math.isfinite(r[k])
@@ -27,7 +27,8 @@ def offered_schedule(rows, users, samples):
         return None
     half = samples // 2
     previous_end = -math.inf
-    for block, order in enumerate((("d1", "do"), ("do", "d1"))):
+    blocks = (("do",), ("do",)) if native_only else (("d1", "do"), ("do", "d1"))
+    for block, order in enumerate(blocks):
         for variant in order:
             selected = [r for r in rows if r["variant"] == variant and r["sample"] // half == block]
             first = next((r for r in selected if r["user"] == 0 and r["sample"] == block * half), None)
@@ -51,7 +52,7 @@ def offered_schedule(rows, users, samples):
     return True
 
 
-def summarize(rows, users, samples, audit=True, fixture=True, offered_history=False):
+def summarize(rows, users, samples, audit=True, fixture=True, offered_history=False, native_only=False):
     expected = {(user, sample) for user in range(users) for sample in range(samples)}
     output, signatures = {}, {}
     complete = samples >= 30
@@ -66,6 +67,7 @@ def summarize(rows, users, samples, audit=True, fixture=True, offered_history=Fa
         delays = [r["dispatched"] - r["scheduled"] for r in selected
                   if r.get("dispatched") is not None and r.get("scheduled") is not None]
         output[variant] = dict(
+            sampleCountsComplete=samples >= 30 and keys == Counter(expected),
             dispatchDelayMs=stats(delays),
             offered=len(selected),
             expected=len(expected),
@@ -80,9 +82,13 @@ def summarize(rows, users, samples, audit=True, fixture=True, offered_history=Fa
     payloads_match = signatures["d1"] == signatures["do"] and set(signatures["d1"]) == expected
     output.update(pairedPayloadsMatch=payloads_match, auditMatches=audit, fixtureVerified=fixture, sampleCountsComplete=complete)
     schedule = True
+    workload_complete = output["do"]["sampleCountsComplete"] if native_only else complete
     if offered_history:
-        schedule = offered_schedule(rows, users, samples) if complete else None
+        schedule = offered_schedule(rows, users, samples, native_only) if workload_complete else None
         output["offeredScheduleVerified"] = schedule
+    if native_only:
+        output["nativeWorkload"] = ("missing" if not workload_complete or schedule is None else
+                                    "pass" if schedule and fixture and audit and all_successful else "fail")
     for key in ("dispatchMs", "scheduledMs"):
         d1, native = (output[variant][key] for variant in ("d1", "do"))
         ratio = d1["p95"] / native["p95"] if d1 and native and native["p95"] > 0 else None
@@ -101,10 +107,14 @@ if __name__ == "__main__":
     retention = directory / "retention.json"
     fixture = retention.exists() and json.loads(retention.read_text())["verified"] is True
     result = {
-        cell: summarize([row for row in rows if row["cell"] == cell], users, plan["samples"], audits.get(cell) is True, fixture, offered_history=cell == "history")
+        cell: summarize([row for row in rows if row["cell"] == cell], users, plan["samples"], audits.get(cell) is True, fixture, offered_history=cell == "history", native_only=plan["profile"] == "native-original")
         for cell, users in (("history", plan["users"]), ("correction", 1), ("rollback", 1))
     }
     (directory / "report.json").write_text(json.dumps(result, indent=2))
     for cell, report in result.items():
         print(cell, report["scheduledMs"], report["dispatchMs"])
+    if plan["profile"] == "native-original":
+        for cell, report in result.items():
+            print(cell, "native workload", report["nativeWorkload"])
+        sys.exit(0 if all(r["nativeWorkload"] == "pass" for r in result.values()) else 1)
     sys.exit(0 if all(r["scheduledMs"]["status"] == r["dispatchMs"]["status"] == "pass" for r in result.values()) else 1)

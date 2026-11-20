@@ -21,7 +21,7 @@ on:
       workerd_profile:
         description: User count and review population for the workerd load
         type: choice
-        options: [original, mixed-review, single, cpu]
+        options: [original, native-original, mixed-review, single, cpu]
         default: original
       workerd_load:
         description: Run 20 authenticated financial Users and 30 paired Corrections in workerd

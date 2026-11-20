@@ -77,3 +77,17 @@ class OfferedLoadEvidence(unittest.TestCase):
         self.assertEqual(report()["scheduledMs"]["status"], "fail")
         del row["scheduled"]
         self.assertEqual(report()["scheduledMs"]["status"], "missing")
+
+    def test_candidate_only_capacity_preserves_the_missing_original_comparator(self):
+        rows = [dict(variant="do", user=u, sample=s, scheduled=s * 1000 + u * 50,
+                     dispatched=s * 1000 + u * 50 + 1, completedAt=s * 1000 + u * 50 + 6,
+                     dispatchMs=5, scheduledMs=6, bytes=100, digest=str(u), status=200, ok=True)
+                for s in range(30) for u in range(20)]
+        def report(retained):
+            return summarize(rows, 20, 30, audit=True, fixture=retained,
+                             offered_history=True, native_only=True)
+        self.assertEqual(report(True)["nativeWorkload"], "pass")
+        self.assertEqual(report(True)["scheduledMs"], dict(ratio=None, status="missing"))
+        self.assertEqual(report(False)["nativeWorkload"], "fail")
+        rows.pop()
+        self.assertEqual(report(True)["nativeWorkload"], "missing")

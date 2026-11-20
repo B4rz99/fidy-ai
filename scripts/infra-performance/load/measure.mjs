@@ -14,7 +14,9 @@ import { inOrder, indices } from "./sequence.mjs";
 
 const [root, directory, size = "extreme", profile = "original"] = process.argv.slice(2);
 assert.ok(["extreme", "production"].includes(size));
-assert.ok(["original", "mixed-review", "single", "cpu"].includes(profile));
+assert.ok(["original", "native-original", "mixed-review", "single", "cpu"].includes(profile));
+const nativeOnly = profile === "native-original";
+assert.ok(!nativeOnly || size === "extreme", "Original native capacity requires the full fixture");
 const cohortSize = 20;
 const users = ["single", "cpu"].includes(profile) ? 1 : cohortSize,
   samples = 30;
@@ -31,6 +33,23 @@ const staleTarget = 5;
 const staleBatchTargets = [4, staleTarget],
   callIdOffset = 1000000;
 const history = "/transactions?limit=25";
+const fixtureCurrencies = ["COP", "USD", "EUR", "GBP", "JPY", "CAD", "AUD", "CHF"];
+const minuteMs = 60_000;
+const expectedHistoryRow = (user, position, currencyCount) => {
+  const ordinal = position === 0 ? 0 : position + 1;
+  const timestamp = new Date(Date.parse("2026-11-17T12:00:00Z") - ordinal * minuteMs).toISOString();
+  const category = ordinal % 3 === 0 ? 1 : (ordinal % 15) + 2;
+  return {
+    id: id(user, ordinal),
+    money: { amount: "1000", currency: fixtureCurrencies[ordinal % currencyCount] },
+    counterparty: "Evaluación " + ordinal,
+    direction: "outflow",
+    categoryId: "10000000-0000-4000-8000-" + String(category).padStart(suffixWidth, "0"),
+    occurredAt: timestamp,
+    createdAt: timestamp,
+    revision: 0,
+  };
+};
 const write = (name, data) =>
   Bun.write(resolve(directory, name + ".json"), JSON.stringify(data, null, 2));
 const record = (name, data) =>
@@ -131,11 +150,15 @@ const accountability = async (variant, subject) => {
   return counts;
 };
 const platformsFor = (native, d1) => ({
-  d1: {
-    runtime: d1.runtime,
-    subjects: [],
-    approve: (subject, pair) => d1.approve(subject.id, pair),
-  },
+  ...(d1
+    ? {
+        d1: {
+          runtime: d1.runtime,
+          subjects: [],
+          approve: (subject, pair) => d1.approve(subject.id, pair),
+        },
+      }
+    : {}),
   do: {
     runtime: native,
     subjects: [],
@@ -206,8 +229,10 @@ const warmUser = async (variant, platform, subject) => {
   subject.digest = hash(bytes);
   const length = size === "extreme" ? fullPage : smallPage;
   assert.deepEqual(
-    subject.initial.data.map((item) => item.id),
-    Array.from({ length }, (_, index) => id(subject.index, index === 0 ? 0 : index + 1))
+    subject.initial.data,
+    indices(length).map((position) =>
+      expectedHistoryRow(subject.index, position, subject.expectedCounts.currencies)
+    )
   );
   subject.before = await accountability(variant, subject);
 };
@@ -215,6 +240,7 @@ const warm = async (variants) => {
   await inOrder(Object.entries(variants), ([variant, platform]) =>
     inOrder(platform.subjects, (subject) => warmUser(variant, platform, subject))
   );
+  if (nativeOnly) return;
   for (const index of indices(users)) {
     assert.equal(
       variants.do.subjects[index].digest,
@@ -253,11 +279,13 @@ const offeredLoad = (variants) =>
       .entries()
       .toArray(),
     ([block, order]) =>
-      inOrder(order, (variant) =>
-        offerHistory(variants[variant], variant, {
-          block,
-          begin: performance.now() + secondMs / users,
-        })
+      inOrder(
+        order.filter((variant) => variant in variants),
+        (variant) =>
+          offerHistory(variants[variant], variant, {
+            block,
+            begin: performance.now() + secondMs / users,
+          })
       )
   );
 const verifyAudit = async (variants, cell, { reads, corrections, rejections = () => 0 }) => {
@@ -288,14 +316,18 @@ const pairedMutations = async (variants, journey) => {
   // Ordinary isolated mutations are separate from the offered read-load cell. Respect the live burst limit between pairs.
   return inOrder(indices(samples), async (sample) => {
     await delay(secondMs);
-    return inOrder(sample % 2 === 0 ? ["d1", "do"] : ["do", "d1"], (variant) => {
-      const platform = variants[variant],
-        index = sample % users;
-      return journey(
-        { runtime: platform.runtime, subject: platform.subjects[index] },
-        { variant, user: 0, financialUser: index, sample }
-      );
-    });
+    const order = sample % 2 === 0 ? ["d1", "do"] : ["do", "d1"];
+    return inOrder(
+      order.filter((variant) => variant in variants),
+      (variant) => {
+        const platform = variants[variant],
+          index = sample % users;
+        return journey(
+          { runtime: platform.runtime, subject: platform.subjects[index] },
+          { variant, user: 0, financialUser: index, sample }
+        );
+      }
+    );
   });
 };
 const correct = async ({ runtime, subject }, row) => {
@@ -435,17 +467,20 @@ await write("plan", {
     profile,
   warmup:
     "one authenticated full-history warm-up for each User and variant; actual User/shared reconstruction unobserved",
-  order:
-    "history: two 15-second blocks per variant, D1/DO then DO/D1, one offer/User/second at (1000 / users) ms offsets; Correction and rollback: one-second interval between isolated pairs, alternate variant order in 30 pairs",
+  order: nativeOnly
+    ? "two 15-second native blocks, one offer/User/second at 50ms offsets; one-second intervals between isolated native mutations"
+    : "history: two 15-second blocks per variant, D1/DO then DO/D1, one offer/User/second at (1000 / users) ms offsets; Correction and rollback: one-second interval between isolated pairs, alternate variant order in 30 pairs",
   boundaries:
     "host scheduled offer and actual dispatch to the last fully buffered Miniflare loopback response body; isolated Correction includes write and fresh history",
   fixture:
     "same 100k originals, 99k effective, eight Currencies, 100 plans x 100 revisions and 5k review per User on extreme; mixed-review uses 250 retained and 4750 expired per User",
-  criterion:
-    "nearest-rank p95 D1 / DO >= 1.8 at both measured boundaries; compare complete bodies and per-User audited read/write, accounting and receipt deltas",
+  criterion: nativeOnly
+    ? "native capacity requires all original fixture counts, read and mutation outcomes, per-User Audit and accounting; paired comparison remains missing"
+    : "nearest-rank p95 D1 / DO >= 1.8 at both measured boundaries; compare complete bodies and per-User audited read/write, accounting and receipt deltas",
 });
 const program = Effect.gen(function* () {
   const native = yield* makeBrowserRuntime;
+  if (nativeOnly) return yield* Effect.tryPromise(() => measure(native));
   const d1 = yield* Effect.acquireRelease(
     Effect.tryPromise(() => d1Platform(root)),
     (platform) => Effect.tryPromise(() => platform.runtime.dispose()).pipe(Effect.orDie)

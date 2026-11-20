@@ -203,6 +203,14 @@ try {
     Object.assign(views, await freshRecurring(input));
     if (checkpoint) await checkpoint("recurring");
   }
+  if (process.env.FIDY_ASSESSMENT === "extreme" && !readOnly) {
+    const count = 5000,
+      nextPage = 50;
+    const input = { page, api, browser: app, event };
+    process.stderr.write("REFERENCE_STAGE review-pending\n");
+    views["review.pending.browser"] = await freshPendingReview(input, count);
+    views["review.next.browser"] = await freshPendingReview(input, count, nextPage);
+  }
   process.stdout.write(
     JSON.stringify({
       views,

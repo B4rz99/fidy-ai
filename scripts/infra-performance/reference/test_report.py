@@ -18,9 +18,10 @@ class ReferenceReport(unittest.TestCase):
         self.assertEqual(report["read.browser"]["d1"]["completed"], 1)
         self.assertEqual(report["read.browser"]["status"], "missing")
 
-    def test_extreme_manifest_declares_only_the_transaction_journeys_it_runs(self):
+    def test_extreme_manifest_declares_transactions_and_both_pending_review_pages(self):
         plan = browser_workload("extreme")
-        self.assertEqual(plan["boundaries"], BOUNDARIES)
+        self.assertEqual(plan["boundaries"], BOUNDARIES + ["review.pending.browser", "review.next.browser"])
+        self.assertEqual(set(plan["boundaries"]), set(compare(1, self.rows(1), ["d1", "do"], full_size=True)))
         for key in ("additionalCalibrationSetup", "dashboardNormalization", "recurringHistory"):
             self.assertNotIn(key, plan)
         self.assertNotIn("Budget", plan["browserEnd"])

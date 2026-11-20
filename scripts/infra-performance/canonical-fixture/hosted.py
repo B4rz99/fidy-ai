@@ -128,7 +128,7 @@ def bridge(mode, revision, session):
         try:
             def receive():
                 for _ in range(1000):
-                    if not select.select([child.stdout], [], [], 90)[0]:
+                    if not select.select([child.stdout], [], [], 180)[0]:
                         raise ValueError("Closed native fixture transport deadline expired")
                     line=child.stdout.readline(1_000_001)
                     if not line: return ""

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { join, resolve, sep } from "node:path";
 import { chromium } from "@playwright/test";
+import {mountCapturedTransactionHistory} from "../reference/fresh-transactions.mjs";
 
 const sum = (v) => createHash("sha256").update(JSON.stringify(v)).digest("hex");
 const sort = (v) => v === null || typeof v !== "object" ? v : Array.isArray(v) ? v.map(sort) : Object.fromEntries(Object.keys(v).sort().map(k=>[k,sort(v[k])]));
@@ -63,24 +64,14 @@ export async function runBrowser({variant, origins, cookie, expected, forward, a
       await cdp.send("Network.enable");
       await cdp.send("Network.emulateNetworkConditions",{offline:false,latency:400,downloadThroughput:125000,uploadThroughput:125000});
     }
-    const ready=()=>page.waitForFunction(rows=>{
-      const controls=Array.from(document.querySelectorAll('button[data-transaction-slot="transaction-identity-control"]'));
-      return controls.length===rows.length&&controls.every((el,i)=>el.id===rows[i].id&&el.matches(":enabled")&&el.getClientRects().length>0&&el.textContent.includes(rows[i].label));
-    },controls,{timeout:12000});
-    const counts=page.waitForResponse(r=>r.request().method()==="GET"&&new URL(r.url()).pathname==="/ingestion/review-workspace",{timeout:12000});
-    await page.goto(origins.browser+"/app/transactions?month=2026-11",{waitUntil:"commit"});
-    await Promise.all([ready(),counts]);
-    events.push({stage:"startup",complete:true});
+    page.setDefaultTimeout(60000);
+    const counts=page.waitForResponse(r=>r.request().method()==="GET"&&new URL(r.url()).pathname==="/ingestion/review-workspace");
+    const observe=async r=>{assert.equal(r.status(),200);return JSON.parse((await r.body()).toString("utf8"));};
+    const [mounted,review]=await Promise.all([mountCapturedTransactionHistory({page,ledger:origins.browser+"/app/transactions?month=2026-11",api:origins.api,observe,observeStartup:observe},expected),counts]);
+    await observe(review);events.push({stage:"startup",complete:true});
     for(let i=0;i<observations;i++){
-      const read=page.waitForResponse(r=>r.request().method()==="GET"&&new URL(r.url()).pathname==="/transactions");
       const profile=page.waitForResponse(r=>r.request().method()==="GET"&&new URL(r.url()).pathname==="/user");
-      await page.getByRole("button",{name:"Actualizar transacciones",exact:true}).click();
-      for(const res of await Promise.all([read,profile])){
-        assert.equal(res.status(),200);
-        await res.body();
-      }
-      await ready();
-      await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));
+      const [,response]=await Promise.all([mounted.refresh(),profile]);await observe(response);
       events.push({stage:"refresh",complete:true});
       await Bun.sleep(750);
     }

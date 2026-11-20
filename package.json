@@ -68,7 +68,7 @@
     "@babel/traverse": "8.1.2",
     "@babel/types": "8.1.2",
     "@effect/platform-bun": "4.1.4",
-    "@effect/tsgo": "0.68.1",
+    "@effect/tsgo": "0.69.0",
     "@playwright/test": "1.65.0",
     "@shadcn/lint": "0.2.5",
     "@types/css-tree": "3.2.0",

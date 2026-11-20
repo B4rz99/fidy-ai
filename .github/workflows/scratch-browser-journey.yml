@@ -13,10 +13,6 @@ concurrency:
 
 jobs:
   compare:
-    strategy:
-      fail-fast: false
-      matrix:
-        product: [5b5efae4a6996760a7266c0fe7a8823db5349d34, dc66809f9354cc87394a08468e4860b99e8f10af]
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
@@ -40,8 +36,13 @@ jobs:
           sparse-checkout: apps/server/cloudflare
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ matrix.product }}
-          path: native-product
+          ref: 5b5efae4a6996760a7266c0fe7a8823db5349d34
+          path: native-before
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: dc66809f9354cc87394a08468e4860b99e8f10af
+          path: native-after
           persist-credentials: false
       - uses: ./.github/actions/bun-runtime
       - name: Prepare both frozen checkouts and the common browser
@@ -56,28 +57,23 @@ jobs:
           (cd baseline-d1 && bash scripts/install-workspace.sh --ignore-scripts)
           echo "ASSESSMENT_CHROMIUM=$(command -v google-chrome)" >> "$GITHUB_ENV"
           google-chrome --version
-      - name: Count radio option elements in the actual rendered native bundle
-        working-directory: native-product
+      - name: Prepare unmodified native products
         run: |
-          python3 - <<'PYCODE'
-          from pathlib import Path
-          p = Path("apps/web/src/ui/components/choice-dropdown.tsx")
-          s = p.read_text()
-          tag = "<DropdownMenuRadioItem key={option.value}"
-          assert s.count(tag) == 1
-          p.write_text(s.replace(tag, "<DropdownMenuRadioItem key={(window.__referenceChoiceOptions = (window.__referenceChoiceOptions ?? 0) + 1, option.value)}"))
-          PYCODE
-          git -c user.name='Local fixture' -c user.email=fixture@example.invalid commit -am 'Count radio option elements in the disposable diagnostic build'
-          bash scripts/install-workspace.sh --ignore-scripts
-      - name: Trace three small-fixture pairs
+          (cd native-before && bash scripts/install-workspace.sh --ignore-scripts)
+          (cd native-after && bash scripts/install-workspace.sh --ignore-scripts)
+      - name: Observe browser work on one runner in balanced order
         run: |
-          python3 scripts/infra-performance/reference/run.py --d1 baseline-d1 --do native-product \
-            --dataset small --network normal --pairs 3 --origin "GitHub-hosted Ubuntu loopback"
+          failed=0
+          for product in native-before native-after native-after native-before; do
+            python3 scripts/infra-performance/reference/run.py --d1 baseline-d1 --do "$product" \
+              --dataset small --network normal --pairs 4 --origin "GitHub-hosted Ubuntu loopback" || failed=1
+          done
+          exit "$failed"
       - name: Preserve reference evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: menu-observations-${{ matrix.product }}-${{ github.run_id }}
+          name: same-runner-menu-timing-${{ github.run_id }}
           path: |
             apps/web/test-results/reference/*/plan.json
             apps/web/test-results/reference/*/attempts.jsonl

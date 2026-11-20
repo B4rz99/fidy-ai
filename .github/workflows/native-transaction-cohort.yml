@@ -5,7 +5,7 @@ on:
     inputs:
       action:
         type: choice
-        options: [compare, cleanup]
+        options: [compare, browser, cleanup]
         required: true
       revision:
         description: Rollback-qualified deployed native SHA
@@ -59,6 +59,7 @@ jobs:
       RELEASE_ARTIFACT: ${{ inputs.release_artifact }}
       ARCHIVE_SHA256: ${{ inputs.archive_sha256 }}
       PAIRS: ${{ inputs.pairs }}
+      WORKLOAD: ${{ inputs.action }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -69,24 +70,25 @@ jobs:
       - name: Prepare a private runner directory and verify the reviewed release policy
         run: |
           umask 077
+          if [[ "$WORKLOAD" == browser && "$PAIRS" != 30 ]]; then exit 1; fi
           install -d -m 700 "$RUNNER_TEMP/native-comparison"
           echo "OUT=$RUNNER_TEMP/native-comparison" >> "$GITHUB_ENV"
           bun infra/cloudflare/verify-edge-policy.ts
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        if: inputs.action == 'compare'
+        if: inputs.action == 'compare' || inputs.action == 'browser'
         with:
           ref: fb53d9e755c14393048dc945fc0b7f117730d872
           path: baseline-d1
           persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        if: inputs.action == 'compare'
+        if: inputs.action == 'compare' || inputs.action == 'browser'
         with:
           ref: 972ecaa22bb58ab472de2e9458c76290c72aa09d
           path: baseline-fixtures
           persist-credentials: false
           sparse-checkout: apps/server/cloudflare
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        if: inputs.action == 'compare'
+        if: inputs.action == 'compare' || inputs.action == 'browser'
         with:
           ref: 15cfe773cd263b6a3d4e1b6e1b958f233cdde84f
           path: baseline-calibration
@@ -95,44 +97,59 @@ jobs:
             apps/server/scripts
             apps/server/cloudflare
       - name: Restore the frozen D1 fixture before native enrollment
-        if: inputs.action == 'compare'
+        if: inputs.action == 'compare' || inputs.action == 'browser'
         run: |
           export GIT_ALTERNATE_OBJECT_DIRECTORIES="$GITHUB_WORKSPACE/baseline-fixtures/.git/objects"
           git -C baseline-d1 restore --source=972ecaa22bb58ab472de2e9458c76290c72aa09d --worktree -- \
             apps/server/cloudflare/{browser-assessment.test-fixture,browser-acceptance-preview,browser-acceptance-seed}.ts
           (cd baseline-d1 && bash scripts/install-workspace.sh --ignore-scripts)
+      - name: Prepare the frozen browser assets and isolated Chromium
+        if: inputs.action == 'browser'
+        run: |
+          source scripts/infra-performance/hosted-browser/tls.sh
+          export D1_WEB_ASSETS="$OUT/frozen-web"
+          (cd baseline-d1/apps/web && VITE_API_ORIGIN=https://api.fidyapp.com bun ../../node_modules/vite/bin/vite.js build --mode production --outDir "$D1_WEB_ASSETS")
+          for key in BROWSER_TLS_CERT BROWSER_TLS_KEY BROWSER_TLS_PIN D1_WEB_ASSETS; do echo "$key=${!key}" >> "$GITHUB_ENV"; done
+          echo "ASSESSMENT_CHROMIUM=$(command -v google-chrome)" >> "$GITHUB_ENV"
+          echo "FIDY_DIAGNOSTIC_DIR=$OUT" >> "$GITHUB_ENV"
       - name: Admit the exact release and enroll its closed performance User
         id: collection
-        if: inputs.action == 'compare'
+        if: inputs.action == 'compare' || inputs.action == 'browser'
         env:
           GH_TOKEN: ${{ github.token }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           SMOKE_PROOF: ${{ secrets.NATIVE_STORAGE_SMOKE_PROOF }}
         run: |
-          python3 scripts/infra-performance/canonical-fixture/hosted.py hosted --out "$OUT" \
+          scope=()
+          if [[ "$WORKLOAD" == browser ]]; then scope=(--browser-workspace); fi
+          python3 scripts/infra-performance/canonical-fixture/hosted.py hosted "${scope[@]}" --out "$OUT" \
             --native-revision "$REVISION" --core-version "$CORE" --ingress-version "$INGRESS" \
             --resource-prefix "$RESOURCE_PREFIX" --release-artifact "$RELEASE_ARTIFACT" --archive-sha256 "$ARCHIVE_SHA256"
       - name: Verify the signed native originals and build the materialized D1 package
-        if: inputs.action == 'compare'
+        if: inputs.action == 'compare' || inputs.action == 'browser'
         env:
           FIDY_NATIVE_REVISION: ${{ inputs.revision }}
           FIDY_NATIVE_RESOURCE_PREFIX: ${{ inputs.prefix }}
           SMOKE_PROOF: ${{ secrets.NATIVE_STORAGE_SMOKE_PROOF }}
         run: |
           umask 077
-          python3 scripts/infra-performance/cells/prepare.py --d1 baseline-d1 --calibration baseline-calibration \
+          scope=()
+          if [[ "$WORKLOAD" == browser ]]; then scope=(--browser-workspace); fi
+          python3 scripts/infra-performance/cells/prepare.py "${scope[@]}" --d1 baseline-d1 --calibration baseline-calibration \
             --materialized --canonical-fixture "$OUT/fixture" --out "$OUT/package"
           echo "PACKAGE_SHA256=$(sha256sum "$OUT/package/manifest.json" | cut -d ' ' -f 1)" >> "$GITHUB_ENV"
       - name: Run the scoped comparator under its calibrated Free ceiling
-        if: inputs.action == 'compare'
+        if: inputs.action == 'compare' || inputs.action == 'browser'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           SMOKE_PROOF: ${{ secrets.NATIVE_STORAGE_SMOKE_PROOF }}
         run: |
-          python3 scripts/infra-performance/cells/owner.py run --out "$OUT/comparison" \
+          caps=(--maximum-reads 18194 --maximum-writes 4754)
+          if [[ "$WORKLOAD" == browser ]]; then caps=(--browser-workspace --maximum-reads 100000 --maximum-writes 5000); fi
+          python3 scripts/infra-performance/cells/owner.py run "${caps[@]}" --out "$OUT/comparison" \
             --prefix "$RESOURCE_PREFIX" --revision "$REVISION" --fixture "$OUT/fixture" \
             --bundle "$OUT/package" --manifest-sha256 "$PACKAGE_SHA256" --pairs "$PAIRS" \
-            --core-version "$CORE" --ingress-version "$INGRESS" --maximum-reads 18194 --maximum-writes 4754
+            --core-version "$CORE" --ingress-version "$INGRESS"
       - name: Dispose only the exact performance User and verify both established survivors
         if: always() && (inputs.action == 'cleanup' || steps.collection.outcome == 'success' || steps.collection.outcome == 'failure')
         env:

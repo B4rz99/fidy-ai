@@ -45,11 +45,13 @@ const admitted = async (request, env, paths) => {
 /**
  * @param {PinnedIngress} ingress Frozen application Ingress.
  * @param {ReadonlyArray<string>} inspectionIds Synthetic Transaction IDs verified at bundle time.
- * @param {string | null} mutationTarget One signed original for the scoped profile.
+ * @param {{mutationTarget:string|null, assets:Record<string,[string,string]>}} browser Bounded browser fixture and web bundle.
  */
-export const privateIngress = (ingress, inspectionIds = [], mutationTarget = null) => {
+export const privateIngress = (ingress, inspectionIds = [], browser = {mutationTarget:null,assets:{}}) => {
+  const {mutationTarget,assets} = browser;
   const paths = new Set([...fixed, ...inspectionIds.map((id) => "GET /transactions/" + id)]);
   if (mutationTarget && inspectionIds.includes(mutationTarget)) {
+    for (const path of Object.keys(assets)) paths.add("GET /_comparison_web/" + path);
     paths.add("PUT /transactions/" + mutationTarget);
     paths.add("POST /operations/atomic-batch");
     for (const path of browserReads) {
@@ -68,6 +70,21 @@ export const privateIngress = (ingress, inspectionIds = [], mutationTarget = nul
     async fetch(request, env) {
       if (!(await admitted(request, env, paths))) {
         return new Response(null, { status: 403 });
+      }
+      const path = new URL(request.url).pathname;
+      if (path.startsWith("/_comparison_web/")) {
+        const asset = assets[path.slice("/_comparison_web/".length)];
+        if (!asset) return new Response(null, { status: 403 });
+        const [type, bytes] = asset;
+        return new Response(Uint8Array.fromBase64(bytes), {
+          headers: {
+            "content-type": type,
+            "content-encoding": "gzip",
+            "cache-control": "private, no-store",
+            "x-fidy-comparison-worker": env.CF_VERSION_METADATA.id,
+          },
+          encodeBody: "manual",
+        });
       }
       born ??= crypto.randomUUID();
       const invocation = ++requests;

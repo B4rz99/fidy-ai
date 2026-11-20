@@ -1,5 +1,4 @@
 // Bundled only in the disposable comparator. The original frozen application owns all SQL.
-import { Schema } from "effect";
 import { AsyncLocalStorage } from "node:async_hooks";
 
 /** @import { Cost, CoreEnvironment, Database, Frame, MeterConfig, PinnedCore, PinnedCoordinator, Statement, StatementReply } from "./contracts.d.mts" */
@@ -162,17 +161,25 @@ const expectedChild = (request, parent) => {
     ? "POST /batch"
     : "";
 };
-const childRows = Schema.Struct({ rowsRead: Schema.Int, rowsWritten: Schema.Int });
-const childCost = Schema.decodeUnknownSync(
-  Schema.StructWithRest(childRows, [Schema.Record(Schema.String, Schema.Unknown)])
-);
-const childTraining = Schema.decodeUnknownSync(
-  Schema.Struct({
-    ...childRows.fields,
-    route: Schema.String,
-    calls: Schema.Array(Schema.Struct({ ...childRows.fields, key: Schema.String })),
-  })
-);
+/** @param {unknown} input Wire metadata. @returns {Record<string,unknown>} */
+const objectOf = (input) => {
+  if (input === null || typeof input !== "object" || Array.isArray(input)) stop();
+  return Object.fromEntries(Object.entries(input));
+};
+/** @param {Record<string,unknown>} record Worker response metadata. @returns {Cost} */
+const childCost = (record) => {
+  const { rowsRead, rowsWritten } = record;
+  if (typeof rowsRead !== "number" || typeof rowsWritten !== "number") return stop();
+  return { rowsRead, rowsWritten };
+};
+/** @param {unknown} item One native D1 statement observation. */
+const sqlCall = (item) => {
+  const raw = objectOf(item);
+  if (typeof raw.key !== "string") return stop();
+  const cost = childCost(raw);
+  checkChildCost(cost, null);
+  return { key: raw.key, ...cost };
+};
 /** @param {Cost} cost Child database result. @param {Cost|null} cap Pre-dispatch reservation. */
 const checkChildCost = (cost, cap) => {
   if (fields.some((field) => !count(cost[field]) || (cap && cost[field] > cap[field]))) stop();
@@ -180,12 +187,11 @@ const checkChildCost = (cost, cap) => {
 /** @param {Frame} frame Parent request. @param {string} child Metered child route. @param {Record<string,unknown> & Cost} cost Verified row totals. */
 const recordChildCalls = (frame, child, cost) => {
   if (!frame.training) return;
-  const details = childTraining(cost);
-  if (details.route !== child) stop();
+  if (cost.route !== child || !Array.isArray(cost.calls)) return stop();
   frame.calls.push({
     key: "coordinator:" + child,
     child,
-    calls: Array.from(details.calls),
+    calls: cost.calls.map(sqlCall),
     rowsRead: cost.rowsRead,
     rowsWritten: cost.rowsWritten,
   });
@@ -199,9 +205,10 @@ const measuredChild = async (frame, child, { config, forward }) => {
   frame.inflight++;
   try {
     const response = await forward();
-    const cost = childCost(JSON.parse(response.headers.get(receipt) ?? "null"));
+    const raw = objectOf(JSON.parse(response.headers.get(receipt) ?? "null"));
+    const cost = childCost(raw);
     checkChildCost(cost, cap);
-    recordChildCalls(frame, child, cost);
+    recordChildCalls(frame, child, { ...raw, ...cost });
     for (const field of fields) frame.used[field] += cost[field];
     return response;
   } catch {

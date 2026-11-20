@@ -24,6 +24,8 @@ export async function runBrowser({
   workspace,
   forward,
   afterRequest,
+  forwardWeb,
+  turn = async (_index, action) => action(),
   observations = 30,
   network = "ordinary",
 }) {
@@ -41,7 +43,9 @@ export async function runBrowser({
       join(dir, "ordinary-" + variant + ".json"),
       JSON.stringify({ variant, network, events, snapshots, assetsDelivered }, null, 2)
     );
-  const assets = resolve(process.env[variant === "d1" ? "D1_WEB_ASSETS" : "NATIVE_WEB_ASSETS"]);
+  const assets = forwardWeb
+    ? null
+    : resolve(process.env[variant === "d1" ? "D1_WEB_ASSETS" : "NATIVE_WEB_ASSETS"]);
   const web = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -50,6 +54,11 @@ export async function runBrowser({
       const u = new URL(request.url);
       if (request.method !== "GET" || u.origin !== origins.browser)
         return new Response(null, { status: 403 });
+      if (forwardWeb) {
+        const reply = await forwardWeb(request);
+        assetsDelivered.responses++;
+        return reply;
+      }
       const path = resolve(assets, "." + u.pathname);
       if (!path.startsWith(assets + sep)) return new Response(null, { status: 403 });
       const file = Bun.file(u.pathname === "/app/transactions" ? join(assets, "index.html") : path);
@@ -223,12 +232,14 @@ export async function runBrowser({
     await observe(review);
     events.push({ stage: "startup", complete: true, milliseconds: mounted.startupMs });
     for (let i = 0; i < observations; i++) {
-      const profile = page.waitForResponse(
-        (r) => r.request().method() === "GET" && new URL(r.url()).pathname === "/user"
-      );
-      const [milliseconds, response] = await Promise.all([mounted.refresh(), profile]);
-      await observe(response);
-      events.push({ stage: "refresh", complete: true, milliseconds });
+      await turn(i, async () => {
+        const profile = page.waitForResponse(
+          (r) => r.request().method() === "GET" && new URL(r.url()).pathname === "/user"
+        );
+        const [milliseconds, response] = await Promise.all([mounted.refresh(), profile]);
+        await observe(response);
+        events.push({ stage: "refresh", complete: true, milliseconds });
+      });
       await Bun.sleep(750);
     }
   } catch (err) {

@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -101,10 +102,15 @@ def main():
         'import {currentDisclosureFor} from "./apps/server/src/shell/consent/operations"; process.stdout.write(JSON.stringify(currentDisclosureFor()))'], cwd=root)
     (out / "disclosure.json").write_bytes(disclosure)
     (out / "private-ingress.mjs").write_bytes((HERE / "private-ingress.mjs").read_bytes())
+    if args.browser_workspace:
+        from browser_assets import pack
+        pack(Path(os.environ["D1_WEB_ASSETS"]), out)
+    assets_module = 'import assets from "./browser-assets.mjs";\n' if args.browser_workspace else "const assets = {};\n"
     (out / "ingress-entry.mjs").write_text(
+        assets_module +
         'import ingress from "./public-worker.mjs";\n'
         'import { privateIngress } from "./private-ingress.mjs";\n'
-        f'export default privateIngress(ingress, {json.dumps(inspection_ids)}, {json.dumps(mutation_target)});\n')
+        f'export default privateIngress(ingress, {json.dumps(inspection_ids)}, {{mutationTarget: {json.dumps(mutation_target)}, assets}});\n')
     (out / "core-entry.mjs").write_text(
         'import core, { UserTransactionCoordinator as Coordinator } from "./core-worker.mjs";\n'
         'import { meteredCore } from "./meter.mjs";\n'
@@ -132,7 +138,7 @@ def main():
     artifacts["bounded-ingress"] = hashlib.sha256((out / "bounded-ingress.mjs").read_bytes()).hexdigest()
     artifacts["limits"] = hashlib.sha256((out / "limits.json").read_bytes()).hexdigest()
     artifacts["probe"] = hashlib.sha256((out / "probe.json").read_bytes()).hexdigest()
-    for name in ("snapshot-proof", "expected", "disclosure"):
+    for name in ("snapshot-proof", "expected", "disclosure", "browser-assets"):
         path = out / (name + ".json")
         if path.is_file():
             artifacts[name] = hashlib.sha256(path.read_bytes()).hexdigest()

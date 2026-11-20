@@ -32,9 +32,11 @@ def protected_runner():
         raise ValueError("Closed protected native cohort dispatch required")
 
 
-def admitted_route(method, url, body, stage, cleaning):
+def admitted_route(method, url, body, stage, cleaning, browser=False):
     path = url.path + ("?" + url.query if url.query else "")
     if method == "GET":
+        if path == "/ingestion/review-workspace?limit=0&status=pending":
+            return browser and stage == "owned" and not cleaning
         if path in ("/user", "/web/session/binding", "/web/consent/authorization", "/transactions", "/transactions?limit=25"):
             return True
         if url.path == "/providers/google/callback":
@@ -123,7 +125,7 @@ class HostedPort(BrowserPort):
         state = self.owner.state
         now = int(time.time())
         clean = bool(state.get("cleanupRun"))
-        if not admitted_route(method, url, body, state["stage"], clean):
+        if not admitted_route(method, url, body, state["stage"], clean, state.get("workload")=="mounted-transactions-ordinary"):
             raise ValueError("HTTP route is outside the current native custody phase")
         deadline = state.get("cleanupUntil" if clean else "foregroundUntil", 0)
         if now >= deadline or state.get("cleanupRun" if clean else "foregroundRun") != self.run:
@@ -191,12 +193,14 @@ def run(args):
                   originalDaySettled="recoveryUsageBefore" not in owner.state))
         else:
             owner.enroll()
-            proof = collect_owned(owner, port)
+            proof = collect_owned(owner, port, browser=args.browser_workspace)
+            if args.browser_workspace:
+                write(args.out/"qualified-web.json", installed["website"][0])
             verify()
             write(args.out/"summary.json", dict(scope="hosted native fixture", originals=8,effective=7,**proof))
 
 
-def comparable_native_reads(account, candidate, proof, pairs):
+def comparable_native_reads(account, candidate, proof, pairs, *, browser=False):
     """Reserve each timed read before signing or starting either measured HTTP clock."""
     protected_runner()
     prefix, revision = proof["resourcePrefix"], proof["nativeRevision"]
@@ -209,18 +213,24 @@ def comparable_native_reads(account, candidate, proof, pairs):
             or state.get("cleanupRun") or coords.get("prefix") != prefix or coords.get("account") != account
             or any(coords.get(k) != v for k,v in candidate.items())
             or state.get("receiptDigest") != proof["nativeReceiptDigest"] or state.get("comparisonOffered") is not None
-            or pairs not in (1,30)):
+            or (state.get("workload")=="mounted-transactions-ordinary") != browser
+            or (browser and pairs != 30) or pairs not in (1,30)):
         raise ValueError("Comparison does not own this protected native receipt")
     reserved = 0
     def reserve():
         nonlocal version, reserved
         now = int(time.time())
-        if now >= state["foregroundUntil"] or reserved >= pairs:
+        if now >= state["foregroundUntil"] or reserved >= (1 if browser else pairs):
             raise ValueError("Native comparison allowance expired")
         current = observe(cloudflare, account)
         check(state["usageBefore"], current, "foreground", now)
         reserved += 1
         state.update(comparisonOffered=reserved, lastDispatch=now, lastUsage=current)
+        if browser:
+            # This one durable claim fences the entire finite window, including unresolved mutations.
+            # The runner rejects excess route counts and cannot resume an interrupted window.
+            state["browserReservation"] = dict(refreshes=30, correction=1, staleBatch=1,
+                authenticatedRequests=67, maximumPreflights=67, admission="one-use")
         version = store.replace(version,state)
         if time.time() >= state["foregroundUntil"]:
             raise ValueError("Native comparison lease expired before dispatch")

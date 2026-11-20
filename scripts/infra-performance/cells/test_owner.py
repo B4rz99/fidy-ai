@@ -288,7 +288,7 @@ class OwnerTests(unittest.TestCase):
                                   read_native_session=lambda *_:dict(cookie='private',binding='private'))
         installation = SimpleNamespace(validate_candidate=Mock(side_effect=ValueError('signer differs')))
         approved = '1ede059a-5ea9-448b-9ccd-72c6ac706e66'
-        bundle = SimpleNamespace(estimate=dict(rowsRead=3,rowsWritten=2),direct=[],inspections={})
+        bundle = SimpleNamespace(estimate=dict(rowsRead=3,rowsWritten=2),direct=[],inspections={},browser=False)
         size = SimpleNamespace(returncode=1,stdout='{"_tag":"NeedsAccountObservation"}')
         with TemporaryDirectory() as tmp:
             for index, (extra,reason) in enumerate([([], 'approved_native_worker_versions_required'),

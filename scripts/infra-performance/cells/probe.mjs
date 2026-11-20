@@ -427,6 +427,15 @@ try {
       cookie,
       expected: expected.history,
       workspace: expected.workspace,
+      forwardWeb: async (/** @type {Request} */ incoming) => {
+        const path = new URL(incoming.url).pathname;
+        const reply = await source(
+          "/_comparison_web/" + (path === "/app/transactions" ? "index.html" : path.slice(1))
+        );
+        if (reply.status !== success) return new Response(null, { status: reply.status });
+        assert.equal(reply.headers.get("x-fidy-comparison-worker"), ingressVersion);
+        return reply;
+      },
       forward: async (/** @type {Request} */ incoming) => {
         const url = new URL(incoming.url);
         const path = url.pathname + url.search;
@@ -497,6 +506,7 @@ try {
     Object.assign(metadata, {
       result: "passed",
       sqlBatches,
+      comparedInspections: inspections.length,
       routes,
       sessionAudit: audits[0].results,
       commercial: audits[1].results[0],

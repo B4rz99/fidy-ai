@@ -222,8 +222,6 @@ def main():
     parser.add_argument("--archive-sha256")
     parser.add_argument("--browser-workspace", action="store_true", help="Capture the original WebSession's User, TrialPeriod and pending Review count on workerd")
     args=parser.parse_args()
-    if args.browser_workspace and args.mode != "rehearse":
-        parser.error("Hosted browser collection requires a calibrated protected controller")
     os.umask(0o077)
     args.out.mkdir(mode=0o700,parents=True,exist_ok=True)
     if args.mode=="rehearse":

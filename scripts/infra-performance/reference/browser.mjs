@@ -128,8 +128,10 @@ try {
     );
     const installation = { api, headers: { ...origin, "fidy-session-binding": observed.binding } };
     await prepareReferenceDashboard(request, installation);
-    process.stderr.write("REFERENCE_STAGE recurring-fixture\n");
-    await prepareReferenceRecurring(request, installation);
+    if (!recordPhases) {
+      process.stderr.write("REFERENCE_STAGE recurring-fixture\n");
+      await prepareReferenceRecurring(request, installation);
+    }
   }
   const events = process.env.FIDY_REFERENCE_EVENTS;
   assert.ok(events, "Missing reference observation file");
@@ -212,19 +214,23 @@ try {
     });
     const views = {};
     if (process.env.FIDY_ASSESSMENT === "production" && !readOnly) {
-      process.stderr.write("REFERENCE_STAGE budgets-month\n");
       const input = { page, api, browser: app, event, recordPhases };
-      views["budgets.month.browser"] = await freshBudgetMonth(input);
-      await checkpoint?.("budgets");
-      process.stderr.write("REFERENCE_STAGE review-pending\n");
-      views["review.pending.browser"] = await freshPendingReview(input);
-      await checkpoint?.("needs-review");
+      if (!recordPhases) {
+        process.stderr.write("REFERENCE_STAGE budgets-month\n");
+        views["budgets.month.browser"] = await freshBudgetMonth(input);
+        await checkpoint?.("budgets");
+        process.stderr.write("REFERENCE_STAGE review-pending\n");
+        views["review.pending.browser"] = await freshPendingReview(input);
+        await checkpoint?.("needs-review");
+      }
       process.stderr.write("REFERENCE_STAGE dashboard-fresh\n");
       views["dashboard.fresh.browser"] = await freshDashboard(input);
       await checkpoint?.("dashboard");
-      process.stderr.write("REFERENCE_STAGE recurring-fresh\n");
-      Object.assign(views, await freshRecurring(input));
-      await checkpoint?.("recurring");
+      if (!recordPhases) {
+        process.stderr.write("REFERENCE_STAGE recurring-fresh\n");
+        Object.assign(views, await freshRecurring(input));
+        await checkpoint?.("recurring");
+      }
     }
     if (process.env.FIDY_ASSESSMENT === "extreme" && !readOnly) {
       const count = 5000,

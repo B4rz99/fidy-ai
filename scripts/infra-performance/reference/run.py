@@ -301,11 +301,13 @@ def minimum_ratio(network, boundary):
     return 1.8
 
 
-def compare(samples, rows, variants, *, network="normal", stress=False, calibration=False, read_only=False, full_size=False, recurring_only=False):
+def compare(samples, rows, variants, *, network="normal", stress=False, calibration=False, read_only=False, full_size=False, recurring_only=False, phase_only=False):
     result = {}
     keys = READ_ONLY_BOUNDARIES if read_only else BOUNDARIES + (CALIBRATION_VIEWS if calibration else FULL_SIZE_VIEWS if full_size else [])
     if recurring_only:
         keys = RECURRING_VIEWS
+    if phase_only:
+        keys = BOUNDARIES + ["dashboard.fresh.browser"]
     for key in keys:
         successful = [{row["pair"] for row in rows if row["variant"] == variant
                        and row["status"] == "ok" and key in row.get("timings", {})}
@@ -344,12 +346,20 @@ def compare(samples, rows, variants, *, network="normal", stress=False, calibrat
             cell["ratio"] = ratio
             status = "pass" if ratio >= threshold else "fail"
         result[key] = {"status": status, **cell}
-    if recurring_only or calibration and not read_only:
+    if recurring_only or calibration and not read_only and not phase_only:
         result["recurring.full.browser"] = {"status": "not-exposed", "reason": "The product requests view=compact. Complete revisions are verified on recurring.full.http."}
     return result
 
 
-def browser_workload(dataset, *, read_only=False, recurring_only=False):
+def browser_workload(dataset, *, read_only=False, recurring_only=False, phase_only=False):
+    if phase_only:
+        return {
+            "boundaries": BOUNDARIES + ["dashboard.fresh.browser"],
+            "browserStart": "Before the loaded Transactions Refresh or Dashboard navigation click. Retain the actual input event separately.",
+            "browserEnd": "Fresh history controls or a populated Dashboard, each through two animation frames.",
+            "additionalCalibrationSetup": "Four fixed Dashboard WidgetIds. A verified Correction precedes Dashboard.",
+            "dashboardNormalization": ["data.context.calculatedAt"],
+        }
     if recurring_only:
         return {
             "boundaries": RECURRING_VIEWS,
@@ -408,6 +418,10 @@ def main():
         parser.error("--pairs must be positive")
     if args.d1_browser_cost and args.candidate:
         parser.error("D1 cost observations run independently from timing comparisons")
+    phase_only = os.environ.get("FIDY_REFERENCE_PHASES") == "1"
+    if phase_only and (args.dataset != "production" or not args.candidate or args.transaction_read_only
+                       or args.full_recurring or args.d1_browser_cost):
+        parser.error("Browser phase diagnostics require the paired production fixture")
     if args.full_recurring and (args.dataset != "extreme" or not args.candidate or args.transaction_read_only or args.d1_browser_cost):
         parser.error("--full-recurring requires paired extreme fixtures and its own browser workload")
     paths = {"d1": args.d1.resolve()}
@@ -438,7 +452,7 @@ def main():
         "PLAYWRIGHT_TLS_KEY": str(key),
         "PLAYWRIGHT_TLS_CERT": str(cert),
     }
-    workload = browser_workload(args.dataset, read_only=args.transaction_read_only, recurring_only=args.full_recurring)
+    workload = browser_workload(args.dataset, read_only=args.transaction_read_only, recurring_only=args.full_recurring, phase_only=phase_only)
     plan = {
         "revisions": revisions,
         "installations": {k: str(v) for k, v in paths.items()},
@@ -450,7 +464,7 @@ def main():
         "offeredLoad": "one isolated User, sequential",
         "postSetupIdleMs": args.setup_idle_ms,
         "d1BrowserCost": args.d1_browser_cost,
-        "browserPhases": env.get("FIDY_REFERENCE_PHASES") == "1",
+        "browserPhases": phase_only,
 
         "dataset": args.dataset,
         **workload,
@@ -554,7 +568,7 @@ def main():
     finally:
         key.unlink(missing_ok=True)
         cert.unlink(missing_ok=True)
-        report = compare(args.pairs, rows, paths, network=args.network, stress=args.dataset == "breaking", calibration=args.dataset == "production", read_only=args.transaction_read_only, full_size=args.dataset == "extreme", recurring_only=args.full_recurring)
+        report = compare(args.pairs, rows, paths, network=args.network, stress=args.dataset == "breaking", calibration=args.dataset == "production", read_only=args.transaction_read_only, full_size=args.dataset == "extreme", recurring_only=args.full_recurring, phase_only=phase_only)
         (run / "report.json").write_text(json.dumps(report, indent=2))
     if any(row["status"] != "ok" for row in rows) or any(
         cell["status"] == "fail" for cell in report.values()

@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "94ff11f98d4b3fba11b2d992f2c5e3e29751d176c1c0431255dfaefc59d4c229";
+const expectedEdgePolicyDigest = "3e10670f8b2b1cb10ea7ec0f2b87581384e564e0ec7ef6937428944b01e4021c";
 const securityArtifacts = [
   ...(await Promise.all(
     [
@@ -33,6 +33,8 @@ const securityArtifacts = [
       "./native-fallback-probe.ts",
       "./native-fixture-plan.ts",
       "../../.github/workflows/native-fixture-successor-plan.yml",
+      "../../.github/workflows/native-fixture-workflow-recovery-plan.yml",
+      "./native-workflow-recovery-plan.ts",
       "../../scripts/infra-performance/canonical-fixture/successor_source.py",
       "../../scripts/infra-performance/canonical-fixture/successor_artifacts.py",
       "../../scripts/infra-performance/canonical-fixture/successor_partial.py",

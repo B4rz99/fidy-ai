@@ -1,6 +1,7 @@
 import { resourceFailureMessage } from "./resource-failure";
 import {
   FallbackStage,
+  RestoredDormantSource,
   archivedDormant,
   fromArchivedStage,
   matchesArchivedStage,
@@ -8,6 +9,8 @@ import {
   recoverFixtureFallback,
   requireDormantReplacementSource,
   requirePromotedDormantSource,
+  requireRestoredDormantSource,
+  resumePairingRollback,
   stageUploadedPair,
   verifyUnpromotedFallback,
 } from "./native-fallback-recovery";
@@ -361,6 +364,20 @@ const verifyDormantRollbackSource = Effect.fn(function* (
   if (Option.isSome(seal)) {
     yield* requireCapturedSupport(port, seal.value.smoke);
     yield* confirmFallbackVersions(env, client, seal.value.release);
+    const restored = yield* ReleaseConfig.Literal("true", "FIXTURE_RESTORED_ROLLBACK").pipe(
+      ReleaseConfig.option
+    );
+    if (Option.isSome(restored)) {
+      const source = yield* Schema.decodeUnknownEffect(RestoredDormantSource)(
+        yield* readFile(env.file + ".restored-source")
+      );
+      return yield* requireRestoredDormantSource({
+        port,
+        snapshot,
+        sealed: seal.value.release,
+        source,
+      });
+    }
   }
   yield* requirePromotedDormantSource(
     port,
@@ -752,6 +769,24 @@ const verifyDeployedWorkers = Effect.fn(function* (
     { concurrency: 3 }
   );
 });
+const inspectInstalledResources = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  generation: string
+) {
+  return yield* inspectNativeResources(accountReader(env, client), generation, true).pipe(
+    Effect.retry({ times: 2, schedule: Schedule.spaced("2 seconds") }),
+    Effect.tapCause((cause) =>
+      Effect.logError("Native data resource inventory failed: " + resourceFailureMessage(cause))
+    ),
+    Effect.mapError(
+      () =>
+        new ReleaseFailure({
+          message: "Native bucket, Queue or Workflow inventory differs after bounded reads",
+        })
+    )
+  );
+});
 const verifyInstalledTopology = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
@@ -775,15 +810,7 @@ const verifyInstalledTopology = Effect.fn(function* (
       message: "Application versions changed during verification",
     });
   }
-  const resources = yield* inspectNativeResources(
-    accountReader(env, client),
-    generation,
-    true
-  ).pipe(
-    Effect.mapError(
-      () => new ReleaseFailure({ message: "Native bucket, Queue or Workflow inventory differs" })
-    )
-  );
+  const resources = yield* inspectInstalledResources(env, client, generation);
   const edge = yield* inspectDeployedEdge(env, client, {
     installed: true,
     bindings: input.bindings,
@@ -987,14 +1014,15 @@ const installedConfig = Effect.fn(function* (verifier: Config) {
 const originalControlEvidence = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
-  versions: { core: string; ingress: string }
+  { core, ingress, routing }: { core: string; ingress: string; routing: "ordinary" | "pinned" }
 ) {
   const { digest } = yield* Schema.decodeUnknownEffect(
     Schema.Struct({ digest: SmokeIdentity.fields.contractDigest })
   )(yield* readFile(env.file + ".controls"));
   const observed = yield* controlsDigest(
-    { revision: env.revision, ...versions, proof: env.smokeProof },
-    acceptanceSend(client)
+    { revision: env.revision, core, ingress, proof: env.smokeProof },
+    acceptanceSend(client),
+    routing
   );
   if (observed !== digest) {
     return yield* new ReleaseFailure({ message: "Original financial control identities changed" });
@@ -1026,8 +1054,19 @@ const activeControlEvidence = Effect.fn(function* (
   return yield* originalControlEvidence(env, client, {
     ingress: installed.publicVersionId,
     core: installed.coreVersionId,
+    routing: "pinned",
   });
 });
+const installedSmokeFailure = (
+  failure: Effect.Error<ReturnType<typeof verifyNativeSmoke>>
+): ReleaseFailure =>
+  new ReleaseFailure({
+    message:
+      "Installed release smoke failed: " +
+      (Schema.isSchemaError(failure)
+        ? "Probe request did not match the owned schema"
+        : failure.reason),
+  });
 const verifyFirstInstall = Effect.fn(function* (
   verifier: Config,
   client: HttpClient.HttpClient,
@@ -1056,7 +1095,10 @@ const verifyFirstInstall = Effect.fn(function* (
     headers: { "x-fidy-smoke-proof": env.smokeProof },
     public: { ...identity, workerVersionId: installed.publicVersionId },
     core: { ...identity, workerVersionId: installed.coreVersionId },
-  }).pipe(Effect.provideService(HttpClient.HttpClient, client));
+  }).pipe(
+    Effect.provideService(HttpClient.HttpClient, client),
+    Effect.mapError(installedSmokeFailure)
+  );
   yield* Effect.logInfo("Verified release smoke against the installed Worker versions.");
   const synthetic = yield* Effect.forEach(nativeHostPairs(yield* hostMode), (pair) =>
     verifySyntheticUsers(env, client, {
@@ -1977,21 +2019,32 @@ const promoteClosed = Effect.fn(function* (
   );
 });
 
-const rollbackNative = Effect.fn(function* (
-  env: Config,
-  client: HttpClient.HttpClient,
-  port: ReleasePort
-) {
-  const { release, promoted } = yield* Schema.decodeUnknownEffect(
+const rollbackCheck =
+  (phase: string) =>
+  <A, E, R>(operation: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+    operation.pipe(
+      Effect.tapCause((cause) =>
+        Effect.logError("Rollback failed at " + phase + ": " + resourceFailureMessage(cause))
+      )
+    );
+const readRollbackReceipt = Effect.fn(function* (env: Config) {
+  return yield* Schema.decodeUnknownEffect(
     Schema.Struct({ ...RollbackReceipt.fields, rollbackTested: Schema.Literal(true) })
   )(yield* readFile(env.file + ".promoted"));
-  yield* releaseController.requireTrunk(port, release.snapshot.revision);
-  const eligible = yield* storageCompatibility({ env, client }, release, "rollback");
-  yield* releaseRollback.restore(releaseEvidence.rollbackPort(port, env, client), {
+});
+const verifyRestoredNative = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  {
+    port,
     release,
-    promoted,
-    compatible: eligible.rollback,
-  });
+    routing,
+  }: {
+    port: ReleasePort;
+    release: typeof RollbackReceipt.Type.release;
+    routing: "ordinary" | "pinned";
+  }
+) {
   const restored = yield* readStablePair(
     {
       port,
@@ -2000,7 +2053,7 @@ const rollbackNative = Effect.fn(function* (
       client,
     },
     origin
-  );
+  ).pipe(rollbackCheck("serving identities"));
   if (
     restored.publicStable !== release.snapshot.public.stableVersionId ||
     restored.coreStable !== release.snapshot.core.stableVersionId ||
@@ -2010,7 +2063,7 @@ const rollbackNative = Effect.fn(function* (
       message: "Restored version identity differs; inspect current traffic",
     });
   }
-  yield* requireClosedAdmission(client);
+  yield* requireClosedAdmission(client).pipe(rollbackCheck("closed admission"));
   if ((yield* expectedFixtureSigner) !== "") {
     const pair = {
       revision: restored.identity.stableRevision,
@@ -2019,9 +2072,12 @@ const rollbackNative = Effect.fn(function* (
       proof: env.smokeProof,
     };
     yield* observeDormantPair(client, pair, true).pipe(
-      Effect.retry({ times: 12, schedule: Schedule.spaced("25 seconds") })
+      Effect.retry({ times: 12, schedule: Schedule.spaced("25 seconds") }),
+      rollbackCheck("restored Durable Object markers")
     );
-    yield* originalControlEvidence(env, client, pair);
+    yield* originalControlEvidence(env, client, { ...pair, routing }).pipe(
+      rollbackCheck("retained financial controls")
+    );
   }
 
   yield* writeFile(
@@ -2033,6 +2089,115 @@ const rollbackNative = Effect.fn(function* (
       admission: "closed",
     })
   );
+});
+
+const rollbackNative = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  port: ReturnType<typeof releasePort>
+) {
+  const receipt = yield* readRollbackReceipt(env).pipe(rollbackCheck("promotion receipt"));
+  yield* releaseController
+    .requireTrunk(port, receipt.release.snapshot.revision)
+    .pipe(rollbackCheck("protected source"));
+  const eligible = yield* storageCompatibility({ env, client }, receipt.release, "rollback").pipe(
+    rollbackCheck("compatibility")
+  );
+  yield* releaseRollback
+    .restore(releaseEvidence.rollbackPort(port, env, client), {
+      ...receipt,
+      compatible: eligible.rollback,
+    })
+    .pipe(rollbackCheck("guarded Ingress and Core restoration"));
+  yield* verifyRestoredNative(env, client, { port, release: receipt.release, routing: "pinned" });
+});
+const verifyRestoredPairing = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  {
+    port,
+    release,
+    positions,
+  }: {
+    port: ReleasePort;
+    release: typeof RollbackReceipt.Type.release;
+    positions: typeof RollbackReceipt.Type.promoted;
+  }
+) {
+  const { descriptions } = yield* deployedStorage({ env, client, release }).pipe(
+    rollbackCheck("sealed storage description")
+  );
+  yield* verifyInstalledMarkers({
+    env,
+    client,
+    pair: {
+      publicStable: release.snapshot.public.stableVersionId,
+      coreStable: release.snapshot.core.stableVersionId,
+    },
+    storage: descriptions.serving,
+  }).pipe(rollbackCheck("ordinary schema markers"));
+  yield* verifyRestoredNative(env, client, { port, release, routing: "ordinary" });
+  for (const role of ["core", "public"] as const) {
+    yield* releaseController
+      .requireCapturedWorker(port, {
+        ...release.snapshot[role],
+        deploymentId: positions[`${role}DeploymentId`],
+      })
+      .pipe(rollbackCheck("restored " + role + " deployment identity"));
+  }
+  yield* writeFile(env.file + ".restored-deployments", encodeJson(positions));
+});
+const resumeNativeRollback = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  port: ReturnType<typeof releasePort>
+) {
+  yield* ReleaseConfig.Literal("resume-pairing-rollback", "FIXTURE_RELEASE_OPERATION");
+  const seal = yield* pairingSeal().pipe(rollbackCheck("protected dormant seal"));
+  if (
+    Option.isNone(seal) ||
+    Option.isNone(yield* fixtureVerifier) ||
+    (yield* fixtureBuild) !== "fallback"
+  ) {
+    return yield* new ReleaseFailure({
+      message: "Partial rollback requires the protected dormant seal",
+    });
+  }
+  const receipt = yield* readRollbackReceipt(env).pipe(rollbackCheck("archived promotion receipt"));
+  const position = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({ ingressDeploymentId: SmokeIdentity.fields.workerVersionId })
+  )(yield* readFile(env.file + ".rollback-position")).pipe(
+    rollbackCheck("recorded Ingress position")
+  );
+  yield* requireClosedAdmission(client).pipe(rollbackCheck("closed admission"));
+  yield* requireClosedIngressDomains(accountReader(env, client)).pipe(
+    rollbackCheck("closed ingress domains")
+  );
+  yield* verifyRetainedProvider(env, client, port).pipe(rollbackCheck("retained provider"));
+  yield* requireCapturedSupport(port, seal.value.smoke).pipe(
+    rollbackCheck("sealed support Workers")
+  );
+  const eligible = yield* storageCompatibility({ env, client }, receipt.release, "rollback").pipe(
+    rollbackCheck("compatibility")
+  );
+  if (!eligible.rollback) {
+    return yield* new ReleaseFailure({
+      message: "Sealed Core rollback compatibility no longer holds",
+    });
+  }
+  const core = yield* resumePairingRollback({
+    port: releaseEvidence.rollbackPort(port, env, client),
+    receipt,
+    ingressDeploymentId: position.ingressDeploymentId,
+  }).pipe(rollbackCheck("exact intermediate assignments and Core restoration"));
+  yield* verifyRestoredPairing(env, client, {
+    port,
+    release: receipt.release,
+    positions: {
+      coreDeploymentId: core.id,
+      publicDeploymentId: position.ingressDeploymentId,
+    },
+  });
 });
 
 const prepareDiagnostics = Effect.fn(function* (
@@ -2335,6 +2500,7 @@ const tenCommand =
     tenFleet(env, client, { port, action });
 const commands = {
   "resume-pairing-stage": resumePairingStage,
+  "resume-pairing-rollback": resumeNativeRollback,
   "seal-fallback": sealFallback,
   "reseal-fallback": resealFallback,
   "diagnose-pairing": diagnosePairing,
@@ -2362,6 +2528,7 @@ if (import.meta.main) {
     const command = yield* Schema.decodeUnknownEffect(
       Schema.Literals([
         "resume-pairing-stage",
+        "resume-pairing-rollback",
         "seal-fallback",
         "reseal-fallback",
         "diagnose-pairing",

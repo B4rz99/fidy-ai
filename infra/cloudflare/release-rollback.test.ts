@@ -1,4 +1,4 @@
-import { Effect, Option } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { describe, expect, it } from "vitest";
 import { type Deployment, type StagedRelease } from "./release-controller";
 import { type RollbackPort, releaseRollback } from "./release-rollback";
@@ -41,6 +41,8 @@ type Fixture = Readonly<{
   block(name: string): void;
   unavailable(): void;
   raceCoreAfterPublic(): void;
+  stalePublicAfterWrite(): void;
+  undecodablePublicReceipt(): void;
 }>;
 const fixture = (): Fixture => {
   const deployments = new Map<string, Deployment>([
@@ -54,16 +56,31 @@ const fixture = (): Fixture => {
     ],
   ]);
   const writes: string[] = [];
+  const previous = new Map<string, Option.Option<Deployment>>();
   let blocked = Option.none<string>();
   let available = true;
   let raceCore = false;
+  let delayPublic = false;
+  let invalidPublicReceipt = false;
+  let reportedPublic = Option.none<Deployment>();
   const port: RollbackPort = {
     trunk: (): Effect.Effect<string, Error> => Effect.succeed(release.snapshot.revision),
     current: (name: string): Effect.Effect<Deployment, Error> =>
       Effect.gen(function* () {
+        if (name === publicName && Option.isSome(reportedPublic)) {
+          const last = reportedPublic.value;
+          reportedPublic = Option.none();
+          return last;
+        }
         const observed = deployments.get(name);
         if (observed === undefined) return yield* Effect.fail(Error("missing Worker"));
         return structuredClone(observed);
+      }),
+    recentDeployments: (name): Effect.Effect<readonly Deployment[], Error> =>
+      Effect.gen(function* () {
+        const current = yield* port.current(name);
+        const prior = Option.flatten(Option.fromUndefinedOr(previous.get(name)));
+        return [current, ...Option.toArray(prior)];
       }),
     deploy: (name: string, versions: Deployment["versions"]): Effect.Effect<Deployment, Error> =>
       Effect.gen(function* () {
@@ -73,12 +90,20 @@ const fixture = (): Fixture => {
           id: `${String(writes.length).padStart(8, "0")}-9999-4999-8999-999999999999`,
           versions: [...versions],
         };
+        const observed = Option.fromUndefinedOr(deployments.get(name));
+        previous.set(name, observed);
+        if (name === publicName && delayPublic) {
+          reportedPublic = observed;
+        }
         deployments.set(name, next);
         if (name === publicName && raceCore) {
           deployments.set(coreName, {
             id: "99999999-9999-4999-8999-999999999999",
             versions: [{ id: candidateCore, percentage: 100 }],
           });
+        }
+        if (name === publicName && invalidPublicReceipt) {
+          yield* Schema.decodeUnknownEffect(Schema.Literal("expected"))("unexpected");
         }
         return next;
       }),
@@ -98,6 +123,12 @@ const fixture = (): Fixture => {
     raceCoreAfterPublic: (): void => {
       raceCore = true;
     },
+    stalePublicAfterWrite: (): void => {
+      delayPublic = true;
+    },
+    undecodablePublicReceipt: (): void => {
+      invalidPublicReceipt = true;
+    },
   };
 };
 
@@ -114,6 +145,40 @@ describe("post-promotion code rollback", () => {
         expect((yield* setup.port.current(coreName)).versions).toEqual([
           { id: stableCore, percentage: 100 },
         ]);
+      })
+    ));
+
+  it("reads through the last promoted assignment after an accepted restoration without rewriting", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const setup = fixture();
+        setup.stalePublicAfterWrite();
+        yield* releaseRollback.restore(setup.port, { release, promoted, compatible: true });
+        expect(setup.writes).toEqual([publicName, coreName]);
+      })
+    ));
+
+  it("confirms an undecodable write receipt only from the exact authenticated predecessor", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const setup = fixture();
+        setup.undecodablePublicReceipt();
+        yield* releaseRollback.restore(setup.port, { release, promoted, compatible: true });
+        expect(setup.writes).toEqual([publicName, coreName]);
+
+        const incomplete = fixture();
+        incomplete.undecodablePublicReceipt();
+        const port: RollbackPort = {
+          ...incomplete.port,
+          recentDeployments: (name) =>
+            incomplete.port.recentDeployments(name).pipe(Effect.map((rows) => rows.slice(0, 1))),
+        };
+        expect(
+          yield* releaseRollback
+            .restore(port, { release, promoted, compatible: true })
+            .pipe(Effect.isFailure)
+        ).toBe(true);
+        expect(incomplete.writes).toEqual([publicName]);
       })
     ));
 

@@ -57,3 +57,58 @@ jobs:
             apps/server/test-results/closed-release-controls/summary.json
             apps/server/test-results/closed-native-fixture/summary.json
             apps/server/test-results/closed-native-cohort/summary.json
+
+  calibration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+      - uses: ./.github/actions/bun-install
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: fb53d9e755c14393048dc945fc0b7f117730d872
+          path: baseline-d1
+          persist-credentials: false
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: 15cfe773cd263b6a3d4e1b6e1b958f233cdde84f
+          path: baseline-calibration
+          sparse-checkout: apps/server
+          persist-credentials: false
+      - name: Rehearse the mounted ordinary Transactions profile
+        run: |
+          set -eu
+          (cd baseline-d1 && bash scripts/install-workspace.sh --ignore-scripts)
+          export NATIVE_WEB_ASSETS="$RUNNER_TEMP/native-web" D1_WEB_ASSETS="$RUNNER_TEMP/d1-web"
+          (cd apps/web && VITE_API_ORIGIN=installed bun ../../node_modules/vite/bin/vite.js build --mode production --outDir "$NATIVE_WEB_ASSETS")
+          (cd baseline-d1/apps/web && VITE_API_ORIGIN=https://api.fidyapp.com bun ../../node_modules/vite/bin/vite.js build --mode production --outDir "$D1_WEB_ASSETS")
+      - name: Rehearse both protected browser owners and physical disposal
+        run: |
+          source scripts/infra-performance/hosted-browser/tls.sh
+          export ASSESSMENT_CHROMIUM="$(command -v google-chrome)"
+          export NATIVE_WEB_ASSETS="$RUNNER_TEMP/native-web" D1_WEB_ASSETS="$RUNNER_TEMP/d1-web"
+          python3 scripts/infra-performance/canonical-fixture/rehearse_cohort.py --out "$RUNNER_TEMP/full" \
+            --d1 baseline-d1 --calibration baseline-calibration
+      - name: Retain the verified workload and D1 cost
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: closed-browser-calibration-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/full/package/snapshot-proof.json
+            ${{ runner.temp }}/full/package/probe.json
+            ${{ runner.temp }}/full/paired/ordinary-*.json
+            ${{ runner.temp }}/full/paired.json
+            ${{ runner.temp }}/full/summary.json
+            ${{ runner.temp }}/full/native-window-audit.json
+            ${{ runner.temp }}/full/paired/comparison.json

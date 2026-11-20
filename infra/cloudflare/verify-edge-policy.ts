@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "cc6a72e93b68a2b6deb41727449fd5a49db3bae3af0c1168b13f3fe46d2bf5ce";
+const expectedEdgePolicyDigest = "197ef71718cb5a6b0709ded065ae63c55fbcd871f26eb08ed3638f7792949046";
 const securityArtifacts = [
   ...(await Promise.all(
     [
@@ -76,8 +76,8 @@ const securityArtifacts = [
       "../../scripts/infra-performance/cells/browser_window.py",
       "../../scripts/infra-performance/cells/browser_assets.py",
       "../../scripts/infra-performance/d1-budget.ts",
-      "../../scripts/infra-performance/hosted-browser/contracts.ts",
       "../../scripts/infra-performance/hosted-browser/origin.mjs",
+      "../../scripts/infra-performance/hosted-browser/contracts.ts",
       "../../scripts/infra-performance/hosted-browser/captured-profile.mjs",
       "../../scripts/infra-performance/hosted-browser/protected-pair.mjs",
       "../../scripts/infra-performance/hosted-browser/scoped-correction.mjs",
@@ -93,6 +93,7 @@ const securityArtifacts = [
       "./native-recovery-identity.ts",
       "./resource-failure.ts",
       "./native-release-smoke.ts",
+      "./release-rollback.ts",
     ].map((path) => Bun.file(new URL(path, import.meta.url)).text())
   )),
   await Bun.file(

@@ -4,7 +4,7 @@ import { appendFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { BunFileSystem } from "@effect/platform-bun";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { makeBrowserRuntimeWithLogs, prepareBrowserUser } from "../../dev-browser-api";
 import { signedChat } from "../../../apps/server/cloudflare/signed-whatsapp.test-fixture";
 import { financialFixtureCounts, seed } from "../reference/native-seed";
@@ -13,7 +13,51 @@ import { baseline, d1Platform, origin } from "./d1.mjs";
 import { correlateWorkerSpans } from "./trace.mjs";
 import { inOrder, indices } from "./sequence.mjs";
 
+/** @import {Miniflare} from "miniflare" */
+/** @import {Caller, Call, Counts, D1, Journey, Mutation, Offer, Pair, Platform, Platforms, RequestOptions, SpanCall, Subject} from "./contracts.d.mts" */
+const pairProof = Schema.decodeUnknownSync(
+  Schema.Struct({
+    pairingId: Schema.NonEmptyString,
+    privateVerifier: Schema.NonEmptyString,
+    publicCode: Schema.NonEmptyString,
+  })
+);
+const bindingProof = Schema.decodeUnknownSync(Schema.Struct({ binding: Schema.NonEmptyString }));
+const page = Schema.decodeUnknownSync(
+  Schema.StructWithRest(
+    Schema.Struct({
+      data: Schema.Array(
+        Schema.StructWithRest(
+          Schema.Struct({
+            id: Schema.String,
+            counterparty: Schema.String,
+            revision: Schema.Int,
+          }),
+          [Schema.Record(Schema.String, Schema.Unknown)]
+        )
+      ),
+      next: Schema.Unknown,
+    }),
+    [Schema.Record(Schema.String, Schema.Unknown)]
+  )
+);
+const correctedRecord = Schema.decodeUnknownSync(
+  Schema.Struct({ data: Schema.Struct({ id: Schema.String, revision: Schema.Int }) })
+);
+const batchError = Schema.decodeUnknownSync(
+  Schema.Struct({
+    error: Schema.Struct({
+      failedCallIndex: Schema.Int,
+      operation: Schema.String,
+      code: Schema.String,
+    }),
+  })
+);
+const numericCounts = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Int));
+const json = Schema.decodeSync(Schema.fromJsonString(Schema.Unknown));
+
 const [root, directory, size = "extreme", profile = "original"] = process.argv.slice(2);
+assert.ok(root && directory);
 assert.ok(["extreme", "production"].includes(size));
 assert.ok(["original", "native-original", "mixed-review", "single", "cpu"].includes(profile));
 const nativeOnly = profile === "native-original";
@@ -35,11 +79,17 @@ const staleBatchTargets = [4, staleTarget],
   callIdOffset = 1000000;
 const history = "/transactions?limit=25";
 const fixtureCurrencies = ["COP", "USD", "EUR", "GBP", "JPY", "CAD", "AUD", "CHF"];
-const minuteMs = 60_000;
+const minuteMs = 60_000,
+  categoryCycle = 15;
+/**
+ * @param {number} user Financial User ordinal.
+ * @param {number} position Visible page position.
+ * @param {number} currencyCount Verified fixture currency count.
+ */
 const expectedHistoryRow = (user, position, currencyCount) => {
   const ordinal = position === 0 ? 0 : position + 1;
   const timestamp = new Date(Date.parse("2026-11-17T12:00:00Z") - ordinal * minuteMs).toISOString();
-  const category = ordinal % 3 === 0 ? 1 : (ordinal % 15) + 2;
+  const category = ordinal % 3 === 0 ? 1 : (ordinal % categoryCycle) + 2;
   return {
     id: id(user, ordinal),
     money: { amount: "1000", currency: fixtureCurrencies[ordinal % currencyCount] },
@@ -51,19 +101,41 @@ const expectedHistoryRow = (user, position, currencyCount) => {
     revision: 0,
   };
 };
+/**
+ * @param {string} name Artifact or source name.
+ * @param {unknown} data Evidence to persist.
+ */
 const write = (name, data) =>
   Bun.write(resolve(directory, name + ".json"), JSON.stringify(data, null, 2));
+/**
+ * @param {string} name Artifact or source name.
+ * @param {unknown} data Evidence to persist.
+ */
 const record = (name, data) =>
   appendFileSync(resolve(directory, name + ".jsonl"), JSON.stringify(data) + "\n");
+/**
+ * @param {Uint8Array} bytes Complete response body.
+ */
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
+/**
+ * @param {number} index Financial User ordinal.
+ * @param {number} ordinal Transaction ordinal.
+ */
 const id = (index, ordinal) =>
   "81000000-0000-4000-80" +
   index.toString(hexRadix).padStart(2, "0") +
   "-" +
   String(ordinal).padStart(suffixWidth, "0");
 const run = Effect.runPromise;
+/** @type {{d1:string[],do:string[]} & Record<string,string[]>} */
 const spanLogs = { d1: [], do: [] };
+/** @type {Record<string, SpanCall[]>} */
 const spanCalls = { d1: [], do: [] };
+/**
+ * @param {Caller} input Calling runtime and authenticated User.
+ * @param {string} path Canonical request path.
+ * @param {RequestOptions} options HTTP request options.
+ */
 const execute = ({ runtime, subject }, path, options = {}) =>
   runtime.dispatchFetch("https://api.fidyapp.com" + path, {
     ...options,
@@ -75,11 +147,15 @@ const execute = ({ runtime, subject }, path, options = {}) =>
       ...options.headers,
     },
   });
+/**
+ * @param {Platform} platform Financial runtime under test.
+ * @param {Subject} subject Financial User fixture.
+ */
 const authenticate = async (platform, subject) => {
   const { runtime } = platform;
   const start = await execute({ runtime, subject }, "/web/pairings", { method: "POST" });
   assert.equal(start.status, success, "Browser Login pairing");
-  const pair = await start.json();
+  const pair = pairProof(await start.json());
   await platform.approve(subject, pair);
   const redeem = await execute({ runtime, subject }, "/web/pairings/redeem", {
     method: "POST",
@@ -88,21 +164,29 @@ const authenticate = async (platform, subject) => {
   });
   assert.equal(redeem.status, success, "Browser Login redemption");
   const cookie = redeem.headers.get("set-cookie")?.split(";")[0];
-  assert.ok(cookie?.startsWith("__Host-fidy_session="));
+  assert.ok(cookie);
+  assert.ok(cookie.startsWith("__Host-fidy_session="));
   const response = await execute({ runtime, subject }, "/web/session/binding", {
     headers: { cookie },
   });
   assert.equal(response.status, success, "Browser Session binding");
-  const { binding } = await response.json();
+  const { binding } = bindingProof(await response.json());
   assert.ok(binding);
   subject.headers = { cookie, "fidy-session-binding": binding };
 };
+/**
+ * @param {Caller} input Calling runtime and authenticated User.
+ * @param {{row: Offer, scheduled:number}} offer Scheduled host offer.
+ * @param {(call: Call)=>Promise<void>} journey Observable request journey.
+ */
 const observe = async ({ runtime, subject }, { row, scheduled }, journey) => {
-  let dispatched;
+  const timing = { dispatched: Number.NaN };
+  /** @type {{status:number; bytes: Uint8Array; end:number; trace:string|null}[]} */
   const responses = [];
   try {
+    /** @type {Call} */
     const call = async (path, options) => {
-      dispatched ??= performance.now();
+      if (Number.isNaN(timing.dispatched)) timing.dispatched = performance.now();
       const result = await execute({ runtime, subject }, path, options);
       const bytes = new Uint8Array(await result.arrayBuffer());
       const end = performance.now();
@@ -112,13 +196,16 @@ const observe = async ({ runtime, subject }, { row, scheduled }, journey) => {
         end,
         trace: result.headers.get("fidy-trace-id"),
       });
-      return { status: result.status, body: JSON.parse(new TextDecoder().decode(bytes)) };
+      return { status: result.status, body: json(new TextDecoder().decode(bytes)) };
     };
     await journey(call);
-    const end = responses.at(-1).end;
+    const last = responses.at(-1);
+    assert.ok(last);
+    const dispatched = timing.dispatched;
+    const end = last.end;
     Object.assign(row, {
       ok: true,
-      status: responses.at(-1).status,
+      status: last.status,
       bytes: responses.reduce((total, reply) => total + reply.bytes.length, 0),
       digest: responses.map((reply) => hash(reply.bytes)).join("."),
       dispatchMs: end - dispatched,
@@ -131,25 +218,31 @@ const observe = async ({ runtime, subject }, { row, scheduled }, journey) => {
     Object.assign(row, {
       ok: false,
       status: responses.at(-1)?.status,
-      error: error.name,
+      error: error instanceof Error ? error.name : "UnknownError",
       scheduled,
-      dispatched,
+      dispatched: Number.isNaN(timing.dispatched) ? undefined : timing.dispatched,
       completedAt: performance.now(),
     });
   }
-  row.responses = responses.map(({ status, bytes, end }) => ({
+  const outcomes = responses.map(({ status, bytes, end }) => ({
     status,
     bytes: bytes.length,
     completedAt: end,
   }));
-  record("attempts", row);
-  spanCalls[row.variant].push({
+  record("attempts", { ...row, responses: outcomes });
+  const calls = spanCalls[row.variant];
+  assert.ok(calls);
+  calls.push({
     cell: row.cell,
     user: row.user,
     sample: row.sample,
     traces: responses.map((reply) => reply.trace),
   });
 };
+/**
+ * @param {string} variant D1 or native runtime.
+ * @param {Subject} subject Financial User fixture.
+ */
 const accountability = async (variant, subject) => {
   const receipt = variant === "do" ? "canonical_request_receipts" : "canonical_request_replays";
   const [counts] = await subject.owner.exec(
@@ -162,8 +255,13 @@ const accountability = async (variant, subject) => {
     (SELECT count(*) FROM ${receipt} WHERE user_id=?1) AS receipts`,
     subject.id
   );
-  return counts;
+  return numericCounts(counts);
 };
+/**
+ * @param {Miniflare} native Native workerd runtime.
+ * @param {D1 | undefined} d1 Frozen D1 runtime.
+ * @returns {Platforms}
+ */
 const platformsFor = (native, d1) => ({
   ...(d1
     ? {
@@ -189,17 +287,31 @@ const platformsFor = (native, d1) => ({
     },
   },
 });
+/**
+ * @param {D1 | undefined} d1 Frozen D1 runtime.
+ */
+const platformOwner = (d1) => {
+  assert.ok(d1);
+  return d1.owner;
+};
+/**
+ * @param {{native:Miniflare,d1:D1 | undefined,variants:Platforms}} context Paired fixture runtimes.
+ * @param {number} index Financial User ordinal.
+ */
 const prepareFixture = async ({ native, d1, variants }, index) => {
   const user = "24000000-0000-4000-8000-" + String(firstUser + index).padStart(suffixWidth, "0");
   const caller = "CO.Load" + index;
   await inOrder(Object.entries(variants), async ([variant, platform]) => {
     process.stdout.write(`Preparing ${variant} User ${index + 1} of ${users}\n`);
     if (variant === "do") await run(prepareBrowserUser(native, user, caller));
-    else await d1.prepare(user, caller);
+    else {
+      assert.ok(d1);
+      await d1.prepare(user, caller);
+    }
     const owner =
       variant === "do"
         ? await native.unsafeGetDurableObjectStorage("core", "UserStore", { name: user })
-        : d1.owner;
+        : platformOwner(d1);
     const state = await run(
       seed(owner, size, {
         subject: user,
@@ -212,16 +324,26 @@ const prepareFixture = async ({ native, d1, variants }, index) => {
       "SELECT count(*) AS retained FROM ingestion_review_items WHERE user_id=? AND evidence_state='retained'",
       user
     );
+    const retainedReview = numericCounts(review).retained;
+    assert.ok(typeof retainedReview === "number");
     assert.equal(
-      review.retained,
+      retainedReview,
       profile === "mixed-review" ? Math.floor(state.review / cohortSize) : state.review
     );
-    record("fixtures", { variant, user, index, ...state, retainedReview: review.retained });
+    record("fixtures", {
+      variant,
+      user,
+      index,
+      ...state,
+      retainedReview,
+    });
     platform.subjects.push({
       id: user,
       index,
       caller,
       owner,
+      state: { kind: "seeded" },
+      headers: {},
       expectedCounts: {
         transactions: state.transactions,
         currencies: state.currencies,
@@ -230,41 +352,75 @@ const prepareFixture = async ({ native, d1, variants }, index) => {
         plans: state.plans,
         revisions: state.revisions,
         review: state.review,
-        retainedReview: review.retained,
+        retainedReview,
       },
     });
   });
 };
+/**
+ * @param {string} variant D1 or native runtime.
+ * @param {Platform} platform Financial runtime under test.
+ * @param {Subject} subject Financial User fixture.
+ */
 const warmUser = async (variant, platform, subject) => {
   await authenticate(platform, subject);
   const warm = await execute({ runtime: platform.runtime, subject }, history);
   assert.equal(warm.status, success, "Authenticated warm-up");
   const bytes = new Uint8Array(await warm.arrayBuffer());
-  subject.initial = JSON.parse(new TextDecoder().decode(bytes));
-  subject.digest = hash(bytes);
+  const initial = page(json(new TextDecoder().decode(bytes)));
   const length = size === "extreme" ? fullPage : smallPage;
   assert.deepEqual(
-    subject.initial.data,
+    initial.data,
     indices(length).map((position) =>
       expectedHistoryRow(subject.index, position, subject.expectedCounts.currencies)
     )
   );
-  subject.before = await accountability(variant, subject);
+  subject.state = {
+    kind: "warm",
+    initial,
+    digest: hash(bytes),
+    before: await accountability(variant, subject),
+  };
 };
+/**
+ * @param {Subject} subject Prepared financial fixture.
+ */
+const warmState = (subject) => {
+  assert.equal(subject.state.kind, "warm");
+  return subject.state;
+};
+/**
+ * @param {Platform} platform Financial runtime.
+ * @param {number} index Fixture ordinal.
+ */
+const subjectAt = (platform, index) => {
+  const subject = platform.subjects[index];
+  assert.ok(subject);
+  return subject;
+};
+/**
+ * @param {Platforms} variants Configured financial runtimes.
+ */
 const warm = async (variants) => {
   await inOrder(Object.entries(variants), ([variant, platform]) =>
     inOrder(platform.subjects, (subject) => warmUser(variant, platform, subject))
   );
   if (nativeOnly) return;
+  assert.ok(variants.do && variants.d1);
   for (const index of indices(users)) {
     assert.equal(
-      variants.do.subjects[index].digest,
-      variants.d1.subjects[index].digest,
+      warmState(subjectAt(variants.do, index)).digest,
+      warmState(subjectAt(variants.d1, index)).digest,
       "Complete warm-up payload equivalence"
     );
   }
 };
 // Two equally long open-loop blocks per variant. AB then BA reverses order without co-scheduling rival runtimes.
+/**
+ * @param {Platform} platform Financial runtime under test.
+ * @param {string} variant D1 or native runtime.
+ * @param {{block:number;begin:number}} schedule Declared block start and ordinal.
+ */
 const offerHistory = async (platform, variant, { block, begin }) => {
   const pending = indices(samples / 2).flatMap((round) =>
     platform.subjects.map(async (subject) => {
@@ -279,12 +435,15 @@ const offerHistory = async (platform, variant, { block, begin }) => {
       await observe({ runtime: platform.runtime, subject }, { row, scheduled }, async (call) => {
         const reply = await call(history);
         assert.equal(reply.status, success);
-        assert.deepEqual(reply.body, subject.initial);
+        assert.deepEqual(reply.body, warmState(subject).initial);
       });
     })
   );
   await Promise.all(pending);
 };
+/**
+ * @param {Platforms} variants Runtimes selected for the workload.
+ */
 const offeredLoad = (variants) =>
   inOrder(
     [
@@ -296,20 +455,34 @@ const offeredLoad = (variants) =>
     ([block, order]) =>
       inOrder(
         order.filter((variant) => variant in variants),
-        (variant) =>
-          offerHistory(variants[variant], variant, {
+        (variant) => {
+          const platform = variants[variant];
+          assert.ok(platform);
+          return offerHistory(platform, variant, {
             block,
             begin: performance.now() + secondMs / users,
-          })
+          });
+        }
       )
   );
-const verifyAudit = async (variants, cell, { reads, corrections, rejections = () => 0 }) => {
+/**
+ * @param {Platforms} variants Runtimes selected for the workload.
+ * @param {string} cell Measurement cell name.
+ * @param {Counts} expected Expected per-User accountability deltas.
+ */
+const verifyAudit = async (variants, cell, { reads, corrections, rejections }) => {
   let ok = true;
   await inOrder(Object.entries(variants), ([variant, platform]) =>
     inOrder(platform.subjects, async (subject) => {
       const after = await accountability(variant, subject);
+      const before = warmState(subject).before;
+      assert.ok(before);
       const delta = Object.fromEntries(
-        Object.keys(after).map((key) => [key, after[key] - subject.before[key]])
+        Object.entries(after).map(([key, value]) => {
+          const prior = before[key];
+          assert.ok(typeof prior === "number");
+          return [key, value - prior];
+        })
       );
       const expected = {
         reads: reads(subject.index),
@@ -320,13 +493,17 @@ const verifyAudit = async (variants, cell, { reads, corrections, rejections = ()
         receipts: 0,
       };
       record("accountability", { variant, user: subject.index, cell, delta, expected });
-      ok &&= Object.keys(expected).every((key) => delta[key] === expected[key]);
-      subject.before = after;
+      ok &&= Object.entries(expected).every(([key, value]) => delta[key] === value);
+      warmState(subject).before = after;
     })
   );
   return ok;
 };
 // Mutations alternate D1-first and DO-first. Each pair starts with the same confirmed target revision on both variants.
+/**
+ * @param {Platforms} variants Runtimes selected for the workload.
+ * @param {Journey} journey Observable request journey.
+ */
 const pairedMutations = async (variants, journey) => {
   // Ordinary isolated mutations are separate from the offered read-load cell. Respect the live burst limit between pairs.
   return inOrder(indices(samples), async (sample) => {
@@ -337,24 +514,29 @@ const pairedMutations = async (variants, journey) => {
       (variant) => {
         const platform = variants[variant],
           index = sample % users;
+        assert.ok(platform);
         return journey(
-          { runtime: platform.runtime, subject: platform.subjects[index] },
+          { runtime: platform.runtime, subject: subjectAt(platform, index) },
           { variant, user: 0, financialUser: index, sample }
         );
       }
     );
   });
 };
+/** @type {Journey} */
 const correct = async ({ runtime, subject }, row) => {
   const ordinal = 2;
   const target = id(subject.index, ordinal);
-  const initial = subject.initial.data.find((item) => item.id === target);
+  const original = warmState(subject).initial;
+  assert.ok(original);
+  const initial = original.data.find((item) => item.id === target);
+  assert.ok(initial);
   const revision = Math.floor(row.sample / users);
   const changes = { counterparty: "Referencia corregida " + revision };
   const corrected = { ...initial, ...changes, revision: revision + 1 };
   const expected = {
-    ...subject.initial,
-    data: subject.initial.data.map((item) => (item.id === target ? corrected : item)),
+    ...warmState(subject).initial,
+    data: original.data.map((item) => (item.id === target ? corrected : item)),
   };
   await observe(
     { runtime, subject },
@@ -367,16 +549,18 @@ const correct = async ({ runtime, subject }, row) => {
         body: JSON.stringify({ expectedRevision: revision, changes }),
       });
       assert.equal(save.status, success);
-      assert.equal(save.body.data.id, target);
-      assert.equal(save.body.data.revision, revision + 1);
+      const changed = correctedRecord(save.body);
+      assert.equal(changed.data.id, target);
+      assert.equal(changed.data.revision, revision + 1);
       const fresh = await call(history);
       assert.equal(fresh.status, success);
       assert.deepEqual(fresh.body, expected);
-      subject.initial = expected;
+      warmState(subject).initial = expected;
     }
   );
 };
 // A valid first child and a stale second child must leave both Transactions unchanged.
+/** @type {Journey} */
 const rollback = async ({ runtime, subject }, row) => {
   const { sample, financialUser: index } = row;
   const calls = staleBatchTargets.map((ordinal, child) => ({
@@ -397,20 +581,24 @@ const rollback = async ({ runtime, subject }, row) => {
         body: JSON.stringify({ calls }),
       });
       assert.equal(refused.status, badRequest);
-      assert.equal(refused.body.error.failedCallIndex, 1);
-      assert.equal(refused.body.error.operation, "transactions.updateTransaction");
-      assert.equal(refused.body.error.code, "validation_failed");
+      const refusal = batchError(refused.body);
+      assert.equal(refusal.error.failedCallIndex, 1);
+      assert.equal(refusal.error.operation, "transactions.updateTransaction");
+      assert.equal(refusal.error.code, "validation_failed");
       const fresh = await call(history);
       assert.equal(fresh.status, success);
-      assert.deepEqual(fresh.body, subject.initial);
+      assert.deepEqual(fresh.body, warmState(subject).initial);
     }
   );
 };
+/**
+ * @param {Platforms} variants Runtimes selected for the workload.
+ */
 const retainedFixtures = async (variants) => {
   let verified = true;
   await inOrder(Object.entries(variants), ([variant, platform]) =>
     inOrder(platform.subjects, async (subject) => {
-      const counts = await run(financialFixtureCounts(subject.owner, subject.id));
+      const counts = numericCounts(await run(financialFixtureCounts(subject.owner, subject.id)));
       const correct = Object.entries(subject.expectedCounts).every(
         ([key, value]) => counts[key] === value
       );
@@ -426,6 +614,10 @@ const retainedFixtures = async (variants) => {
   );
   await write("retention", { verified });
 };
+/**
+ * @param {Miniflare} native Native workerd runtime.
+ * @param {D1} [d1] Frozen D1 runtime.
+ */
 const measure = async (native, d1) => {
   const variants = platformsFor(native, d1);
   await inOrder(indices(users), (index) => prepareFixture({ native, d1, variants }, index));
@@ -435,10 +627,11 @@ const measure = async (native, d1) => {
     await profileHistory(
       native,
       async () => {
-        const subject = variants.do.subjects[0];
+        assert.ok(variants.do);
+        const subject = subjectAt(variants.do, 0);
         const response = await execute({ runtime: native, subject }, history);
         assert.equal(response.status, success);
-        assert.equal(hash(new Uint8Array(await response.arrayBuffer())), subject.digest);
+        assert.equal(hash(new Uint8Array(await response.arrayBuffer())), warmState(subject).digest);
       },
       write
     );
@@ -449,13 +642,18 @@ const measure = async (native, d1) => {
   audits.history = await verifyAudit(variants, "history", {
     reads: () => samples,
     corrections: () => 0,
+    rejections: () => 0,
   });
   await write("audit", audits);
+  /**
+   * @param {number} index Financial User ordinal.
+   */
   const perUser = (index) => Math.floor((samples - 1 - index) / users) + 1;
   await pairedMutations(variants, correct);
   audits.correction = await verifyAudit(variants, "correction", {
     reads: perUser,
     corrections: perUser,
+    rejections: () => 0,
   });
   await write("audit", audits);
   await pairedMutations(variants, rollback);
@@ -467,7 +665,10 @@ const measure = async (native, d1) => {
   await write("audit", audits);
   await retainedFixtures(variants);
   for (const variant of Object.keys(variants)) {
-    for (const row of correlateWorkerSpans(spanLogs[variant], spanCalls[variant])) {
+    const logs = spanLogs[variant],
+      calls = spanCalls[variant];
+    assert.ok(logs && calls);
+    for (const row of correlateWorkerSpans(logs, calls)) {
       record("worker-spans", { variant, ...row });
     }
   }

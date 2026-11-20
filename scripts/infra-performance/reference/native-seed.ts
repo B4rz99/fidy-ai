@@ -2,7 +2,11 @@ import { type Cause, Effect, Schema } from "effect";
 import { listLaunchCategories } from "../../../apps/server/src/core/categories/operations";
 import type { Miniflare } from "miniflare";
 
-type Owner = Pick<Awaited<ReturnType<Miniflare["unsafeGetDurableObjectStorage"]>>, "exec">;
+type NativeOwner = Awaited<ReturnType<Miniflare["unsafeGetDurableObjectStorage"]>>;
+export type FinancialFixtureOwner = {
+  exec: (...args: Parameters<NativeOwner["exec"]>) => Promise<Record<string, unknown>[]>;
+};
+type Owner = FinancialFixtureOwner;
 export const subject = "24000000-0000-4000-8000-000000000481";
 const epoch = Date.parse("2026-11-17T12:00:00Z");
 const currencies = ["COP", "USD", "EUR", "GBP", "JPY", "CAD", "AUD", "CHF"];
@@ -223,7 +227,11 @@ export const financialFixtureCounts = Effect.fn(function* (db: Owner, user: stri
   );
   return counts;
 });
-export const seed = Effect.fn(function* (db: Owner, dataset: string, config = defaultUser) {
+export const seed = Effect.fn(function* (
+  db: Owner,
+  dataset: string,
+  config: typeof defaultUser = defaultUser
+) {
   const { subject: user, index, d1 } = config;
   if (!Number.isInteger(index) || index < 0 || index >= maxUsers) {
     return yield* Effect.die("Invalid fixture User index");

@@ -8,12 +8,17 @@ import { inOrder, indices } from "./sequence.mjs";
 
 export const baseline = "fb53d9e755c14393048dc945fc0b7f117730d872";
 export const origin = "https://127.0.0.1:4173";
-const text = (value) => ({ type: "text", value });
-const coordinator = {
+/** @import {MiniflareWorkerConfig} from "miniflare" */
+/** @import {Database, Owner, Pair} from "./contracts.d.mts" */
+/**
+ * @param {string} value Worker text binding.
+ */
+const text = (value) => /** @type {const} */ ({ type: "text", value });
+const coordinator = /** @type {const} */ ({
   type: "durable-object",
   worker: "core",
   exportName: "UserTransactionCoordinator",
-};
+});
 
 const sha256Width = 64,
   migrationBatchSize = 15,
@@ -23,13 +28,20 @@ const shared = {
   RELEASE_GIT_SHA: text(baseline),
   CONTRACT_DIGEST: text("a".repeat(sha256Width)),
 };
+/**
+ * *
+ * @param {string} root Frozen D1 checkout directory.
+ * @param {{name:string,entry:string,env:MiniflareWorkerConfig["env"],exports?:MiniflareWorkerConfig["exports"]}} config Worker binding and module configuration.
+ * @returns {Promise<{config: MiniflareWorkerConfig}>}
+ */
 const worker = async (root, { name, entry, env, exports = {} }) => {
   const build = await Bun.build({
     entrypoints: [resolve(root, "apps/server/cloudflare/" + entry + ".ts")],
     target: "browser",
     external: ["cloudflare:workers", "node:*"],
   });
-  assert.ok(build.success, "Frozen Worker failed to bundle");
+  const entrypoint = build.outputs[0];
+  assert.ok(entrypoint && build.success, "Frozen Worker failed to bundle");
   return {
     config: {
       type: "worker",
@@ -41,12 +53,16 @@ const worker = async (root, { name, entry, env, exports = {} }) => {
       manifest: {
         mainModule: "index.mjs",
         modules: {
-          "index.mjs": { type: "esm", contents: await build.outputs[0].text() },
+          "index.mjs": { type: "esm", contents: await entrypoint.text() },
         },
       },
     },
   };
 };
+/**
+ * @param {string} root Frozen D1 checkout directory.
+ * @param {string[]} logs Production structured log messages.
+ */
 const runtimeFor = async (root, logs) =>
   new Miniflare({
     handleStructuredLogs: (log) => {
@@ -81,6 +97,10 @@ const runtimeFor = async (root, logs) =>
     ],
   });
 
+/**
+ * @param {Database} db Disposable D1 database.
+ * @param {string} root Frozen D1 checkout directory.
+ */
 const migrate = async (db, root) => {
   const dir = resolve(root, "apps/server/cloudflare/migrations");
   const names = (await readdir(dir)).filter((name) => name.endsWith(".sql")).sort();
@@ -97,11 +117,9 @@ const migrate = async (db, root) => {
     });
   });
 };
-const prepareStorage = async (runtime, root) => {
-  const db = await runtime.getD1Database("DB", "core");
-  await migrate(db, root);
-  await (await runtime.getR2Bucket("ERASURE_BUCKET", "core")).put("recovery/generation", "initial");
-  const disclosure = execFileSync(
+/** @param {string} root Immutable D1 checkout. */
+const disclosureFor = (root) =>
+  execFileSync(
     process.execPath,
     [
       "-e",
@@ -109,7 +127,21 @@ const prepareStorage = async (runtime, root) => {
     ],
     { cwd: root, encoding: "utf8" }
   );
+/**
+ * @param {Miniflare} runtime Worker runtime under test.
+ * @param {string} root Frozen D1 checkout directory.
+ */
+const prepareStorage = async (runtime, root) => {
+  const db = await runtime.getD1Database("DB", "core");
+  await migrate(db, root);
+  await (await runtime.getR2Bucket("ERASURE_BUCKET", "core")).put("recovery/generation", "initial");
+  const disclosure = disclosureFor(root);
+  /** @type {Owner} */
   const owner = {
+    /**
+     * @param {string} sql Fixture statement.
+     * @param {...import("@cloudflare/workers-types").SqlStorageValue} params SQLite parameters.
+     */
     exec: async (sql, ...params) =>
       (
         await db
@@ -121,6 +153,10 @@ const prepareStorage = async (runtime, root) => {
   return {
     runtime,
     owner,
+    /**
+     * @param {string} subject Financial User fixture.
+     * @param {string} caller Synthetic WhatsApp identity.
+     */
     async prepare(subject, caller) {
       const now = Date.now();
       await owner.exec(
@@ -141,6 +177,10 @@ const prepareStorage = async (runtime, root) => {
         now
       );
     },
+    /**
+     * @param {string} subject Financial User fixture.
+     * @param {Pair} pair Browser Login pairing.
+     */
     async approve(subject, pair) {
       await owner.exec(
         "UPDATE browser_login_pairings SET approval_portfolio_id='portfolio', approval_message_id=?, approval_user_id=? WHERE id=? AND state='pending_approval' AND approval_message_id IS NULL",
@@ -151,7 +191,14 @@ const prepareStorage = async (runtime, root) => {
     },
   };
 };
+/**
+ * @param {string} root Frozen D1 checkout directory.
+ * @param {string[]} logs Production structured log messages.
+ */
 export const d1Platform = async (root, logs) => {
+  /**
+   * @param {...string} args Git command arguments.
+   */
   const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
   assert.equal(git("rev-parse", "HEAD"), baseline);
   assert.equal(git("diff", "HEAD", "--name-only"), "");

@@ -1,4 +1,5 @@
 import { DashboardSpendingPresentation } from "./chart-renderer";
+import { SpendingChart } from "./spending-chart";
 import { dashboardResizePreview } from "./resize-presentation";
 import { PendingRead } from "@/ui/components/pending-read";
 import { Link, lazyRouteComponent } from "@tanstack/react-router";
@@ -52,8 +53,6 @@ import {
 import { type PlacementLayout } from "./placement-preview";
 
 import { periodLabel } from "./period-presentation";
-
-const SpendingChart = lazyRouteComponent(() => import("./spending-chart"), "SpendingChart");
 
 const DashboardDragHandle = lazyRouteComponent(
   () => import("./drag-adapter"),
@@ -257,11 +256,7 @@ const RenderWidget = ({
   if ("buckets" in result) {
     content = Option.match(ChartPresentation, {
       onSome: (render) => render({ data: result, locale: context.locale }),
-      onNone: () => (
-        <Suspense fallback={<PendingRead label="Cargando gráfico" />}>
-          <SpendingChart data={result} locale={context.locale} />
-        </Suspense>
-      ),
+      onNone: () => <SpendingChart data={result} locale={context.locale} />,
     });
   } else if ("availability" in result) {
     content =
@@ -1038,6 +1033,3 @@ DashboardViewComponent.preloadInteractions = (): Promise<void> =>
     DashboardDragProvider.preload?.(),
     DashboardDropZone.preload?.(),
   ]).then(() => undefined);
-
-DashboardViewComponent.preloadPresentation = (): Promise<void> =>
-  Promise.resolve(SpendingChart.preload?.()).then(() => undefined);

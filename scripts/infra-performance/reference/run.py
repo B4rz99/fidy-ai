@@ -236,7 +236,7 @@ def observation(path, env, destination, variant="d1"):
                 ["bun", str(HERE / "preview.mjs")], path / "apps/web", env, destination / "web.log"
             )
         )
-        prepare(api, front, WEB_PORT[variant])
+        prepare(api, front, int(env["REFERENCE_WEB_PORT"]))
         seed = next(
             json.loads(line.removeprefix("ASSESSMENT_SEED "))
             for line in (destination / "api.log").read_text().splitlines()
@@ -422,7 +422,10 @@ def main():
     if args.candidate:
         paths["do"] = args.candidate.resolve()
     revisions = {v: revision(path, v) for v, path in paths.items()}
-    for port in (port for v in paths for port in range(WEB_PORT[v], WEB_PORT[v] + 3)):
+    web_ports = dict(WEB_PORT)
+    if args.review_workerd_d1:
+        web_ports["d1"] = web_ports["do"]
+    for port in sorted({port for v in paths for port in range(web_ports[v], web_ports[v] + 3)}):
         with socket.socket() as sock:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             sock.bind(("127.0.0.1", port))
@@ -521,7 +524,7 @@ def main():
                         "playwright-dist",
                     ],
                     cwd=path / "apps/web",
-                    env={**env, "VITE_API_ORIGIN": f"https://127.0.0.1:{WEB_PORT[variant] + 1}"},
+                    env={**env, "VITE_API_ORIGIN": f"https://127.0.0.1:{web_ports[variant] + 1}"},
                     stdout=log,
                     stderr=log,
                     check=True,
@@ -535,7 +538,7 @@ def main():
                 journal.touch()
                 row = {"variant": variant, "pair": pair, "status": "ok"}
                 try:
-                    env_for_variant = {**env, "REFERENCE_WEB_PORT": str(WEB_PORT[variant])}
+                    env_for_variant = {**env, "REFERENCE_WEB_PORT": str(web_ports[variant])}
                     row.update(observation(paths[variant], env_for_variant, destination, variant))
                 except (OSError, ValueError, RuntimeError, StopIteration, subprocess.SubprocessError) as exc:
                     diagnostics = {

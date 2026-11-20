@@ -9,7 +9,7 @@ import { forward } from "../../dev-browser-api";
 import { d1Platform } from "../load/d1.mjs";
 import { seed, subject } from "./native-seed";
 
-const frozenWebPort = 4183;
+const frozenWebPort = 4173;
 const offset = Number(Bun.env.REFERENCE_WEB_PORT);
 const apiPort = offset + 1;
 const operatorPort = offset + 2;

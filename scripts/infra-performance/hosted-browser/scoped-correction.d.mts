@@ -1,5 +1,5 @@
 export type CapturedHistory = Readonly<{
-  data: ReadonlyArray<Readonly<{ id: string; counterparty: string | null; revision: number }>>;
+  data: ReadonlyArray<Readonly<{ id: string; counterparty?: string | null; revision: number }>>;
 }>;
 
 export function proveScopedCorrection(

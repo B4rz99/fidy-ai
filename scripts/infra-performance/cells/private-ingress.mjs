@@ -42,17 +42,10 @@ const admitted = async (request, env, paths) => {
     await hash(request.headers.get("x-fidy-comparison-key") ?? "")
   );
 };
-/**
- * @param {PinnedIngress} ingress Frozen application Ingress.
- * @param {ReadonlyArray<string>} inspectionIds Synthetic Transaction IDs verified at bundle time.
- * @param {{mutationTarget:string|null, assets:Record<string,[string,string]>}} browser Bounded browser fixture and web bundle.
+/** @param {ReadonlyArray<string>} inspectionIds Signed original IDs.
+ * @param {{mutationTarget:string|null, assets:Record<string,[string,string]>}} browser Browser fixture and assets.
  */
-export const privateIngress = (
-  ingress,
-  inspectionIds = [],
-  browser = { mutationTarget: null, assets: {} }
-) => {
-  const { mutationTarget, assets } = browser;
+const allowedRoutes = (inspectionIds, { mutationTarget, assets }) => {
   const paths = new Set([...fixed, ...inspectionIds.map((id) => "GET /transactions/" + id)]);
   if (mutationTarget && inspectionIds.includes(mutationTarget)) {
     for (const path of Object.keys(assets)) paths.add("GET /_comparison_web/" + path);
@@ -63,6 +56,20 @@ export const privateIngress = (
       paths.add("OPTIONS " + path);
     }
   }
+  return paths;
+};
+/**
+ * @param {PinnedIngress} ingress Frozen application Ingress.
+ * @param {ReadonlyArray<string>} inspectionIds Synthetic Transaction IDs verified at bundle time.
+ * @param {{mutationTarget:string|null, assets:Record<string,[string,string]>}} browser Bounded browser fixture and web bundle.
+ */
+export const privateIngress = (
+  ingress,
+  inspectionIds = [],
+  browser = { mutationTarget: null, assets: {} }
+) => {
+  const { assets } = browser;
+  const paths = allowedRoutes(inspectionIds, browser);
   /** @type {string | undefined} */
   let born;
   let requests = 0;

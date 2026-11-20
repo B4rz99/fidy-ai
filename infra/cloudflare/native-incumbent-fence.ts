@@ -35,11 +35,17 @@ const assertNoWriter = Effect.fn(function* (read: ProviderRead, id: string) {
   )(yield* read(path + "/subdomain"));
 });
 
-export const verifyIncumbentFence = Effect.fn(function* (read: ProviderRead) {
+export const verifyIncumbentFence = Effect.fn(function* (
+  read: ProviderRead,
+  options: Readonly<{ partialRetirement?: boolean }> = {}
+) {
   const scripts = (yield* pages(read, "workers/scripts", worker)).filter((item) =>
     incumbent(item.id)
   );
-  if (!scripts.some((item) => item.id.startsWith("fidycloudflare-core-"))) {
+  if (
+    options.partialRetirement !== true &&
+    !scripts.some((item) => item.id.startsWith("fidycloudflare-core-"))
+  ) {
     return yield* Effect.fail(Error("Incumbent Core inventory is missing"));
   }
   yield* Effect.forEach(scripts, (item) => assertNoWriter(read, item.id), {
@@ -48,7 +54,8 @@ export const verifyIncumbentFence = Effect.fn(function* (read: ProviderRead) {
   });
   const queues = (yield* pages(read, "queues", queue)).filter((item) => incumbent(item.queue_name));
   if (
-    !queues.some((item) => item.queue_name.startsWith("fidycloudflare-asyncdeadletters-")) ||
+    (options.partialRetirement !== true &&
+      !queues.some((item) => item.queue_name.startsWith("fidycloudflare-asyncdeadletters-"))) ||
     queues.some((item) => item.settings?.delivery_paused !== true)
   ) {
     return yield* Effect.fail(Error("Incumbent queues and dead letters must have paused delivery"));
@@ -89,15 +96,19 @@ const emailRule = Schema.Struct({
     })
   ),
 });
-const deliversToIncumbent = (rule: typeof emailRule.Type): boolean =>
+const deliversToIncumbent = (rule: typeof emailRule.Type, nativeClosed: boolean): boolean =>
   rule.enabled &&
   rule.actions.some(
     (action) =>
       action.type === "worker" &&
       (action.value === undefined ||
-        action.value.some((id) => incumbent(id) || id === "fidy-native-email"))
+        action.value.some((id) => incumbent(id) || (nativeClosed && id === "fidy-native-email")))
   );
-export const verifyIncumbentMail = Effect.fn(function* (account: ProviderRead, zone: ProviderRead) {
+export const verifyIncumbentMail = Effect.fn(function* (
+  account: ProviderRead,
+  zone: ProviderRead,
+  options: Readonly<{ nativeClosed?: boolean }> = {}
+) {
   const path = "email/routing/rules";
   const catchAll = yield* Schema.decodeUnknownEffect(Schema.Struct({ success, result: emailRule }))(
     yield* zone(path + "/catch_all")
@@ -107,7 +118,7 @@ export const verifyIncumbentMail = Effect.fn(function* (account: ProviderRead, z
     ...(yield* pages(zone, path, emailRule)),
     catchAll.result,
   ];
-  if (rules.some(deliversToIncumbent)) {
+  if (rules.some((rule) => deliversToIncumbent(rule, options.nativeClosed !== false))) {
     return yield* Effect.fail(Error("Email delivery to the fenced application is enabled"));
   }
 });

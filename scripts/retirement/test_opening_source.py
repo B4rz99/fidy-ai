@@ -2,7 +2,7 @@ from copy import deepcopy
 import unittest
 
 from disposition import HOSTS, NATIVE_WORKERS
-from opening_source import opening_coordinates, verify_activity
+from opening_source import ACCEPTED_RECOVERY, opening_coordinates, verify_activity
 from provider import Refused
 
 
@@ -28,8 +28,8 @@ class CanonicalProof(unittest.TestCase):
                        "coreVersion": coordinates["workers"]["fidy-native-storage-core"]["version"],
                        "userNamespace": f"{2:032x}",
                        "proof": {"kind": "new-userstore", "digest": "b" * 64}},
-            "recovery": {"owner": "Maintenance", "outcome": "recovered",
-                         "namespace": f"{4:032x}", "digest": "c" * 64},
+            "recovery": {**ACCEPTED_RECOVERY, "namespace": f"{4:032x}"},
+            "background": {"watchdogCompleted": True, "canaryCompleted": True, "digest": "c" * 64},
         }
 
     def test_closed_release_cannot_authorize_disposal(self):
@@ -43,7 +43,10 @@ class CanonicalProof(unittest.TestCase):
                                     ("signup", "origin", "https://storage-acceptance.fidyapp.com"),
                                     ("signup", "userNamespace", f"{1:032x}"),
                                     ("recovery", "owner", "Pricing"),
-                                    ("recovery", "outcome", "offered")):
+                                    ("recovery", "outcome", "offered"),
+                                    ("recovery", "revision", "5" * 40),
+                                    ("background", "watchdogCompleted", False),
+                                    ("background", "canaryCompleted", False)):
             changed = deepcopy(self.activity)
             changed[group][field] = value
             with self.assertRaises(Refused):

@@ -41,6 +41,15 @@ def authenticated_opening(artifact, archive_sha):
 
 ACTIVITY_ARCHIVE = "native-canonical-signup-verified-"
 ACTIVITY_FILE = "native-verification.json.canonical-activity"
+ACCEPTED_RECOVERY = {
+    "owner": "Maintenance",
+    "outcome": "recovered",
+    "kind": "accepted-workerd",
+    "artifactId": "14596469892",
+    "runId": "44662489274",
+    "revision": "b992abd28797606fa74fb0c7a4fda91bf13dc5a4",
+    "digest": "6e62f659994e237a7787ea326cda069e101344bc2b40960489a93ccaf348f5e0",
+}
 
 
 def verify_activity(receipt, opening, opening_archive, opening_sha):
@@ -59,9 +68,12 @@ def verify_activity(receipt, opening, opening_archive, opening_sha):
     proof = signup["proof"]
     require(proof["kind"] in {"new-userstore", "provider-completion"} and SHA.fullmatch(proof["digest"]),
             "Ordinary signup witness is missing")
-    require(recovery["outcome"] == "recovered" and recovery["namespace"] in opening["namespaces"] and
-            opening["namespaces"][recovery["namespace"]] == recovery["owner"] and
-            SHA.fullmatch(recovery["digest"]), "Actual native recovery witness is missing")
+    background = receipt["background"]
+    require(background["watchdogCompleted"] is True and background["canaryCompleted"] is True and
+            SHA.fullmatch(background["digest"]), "Live watchdog traversal or native canary evidence is missing")
+    require({key: recovery.get(key) for key in ACCEPTED_RECOVERY} == ACCEPTED_RECOVERY and
+            opening["namespaces"].get(recovery["namespace"]) == "Maintenance",
+            "Accepted native recovery archive differs")
 
 
 def authenticated_activity(artifact, archive_sha, opening, opening_archive, opening_sha):

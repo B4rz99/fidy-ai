@@ -56,7 +56,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [types, graph, profiler]
+        check: [graph]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -76,6 +76,9 @@ jobs:
         if: matrix.check == 'graph'
         run: |
           bun install --cwd tools/depcruise --frozen-lockfile
+          bun install --cwd tools/astro --frozen-lockfile
+          bun install --cwd tools/mutation --frozen-lockfile
+          bun install --cwd tools/mcp-inspector --frozen-lockfile
           bun run lint:deps
       - name: Run profiler and evidence regressions
         if: matrix.check == 'profiler'

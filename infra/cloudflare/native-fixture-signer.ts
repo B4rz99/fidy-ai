@@ -18,6 +18,7 @@ export const accountingFixture = {
   revision: "de04a192c3836be0efb488b170a7b93b9f98f28f",
   contractDigest: "7a998d31ff69335d7c90bef16407af1a772cf00aab9e44e23d6c2c357857618f",
 } as const;
+export const stagedAccountingRevision = "c85cb1574464a8d00223f80c48a83f55efd61958";
 export const nativeSmokeMain = "../../apps/server/cloudflare/release-smoke-worker.ts";
 const accountingRolloutEnabled = Config.Boolean("FIXTURE_ACCOUNTING_ROLLOUT").pipe(
   Config.withDefault(false)
@@ -115,9 +116,22 @@ const requireAccountingRollout = Effect.fn(function* (revision: string) {
   yield* Config.Literal("refs/heads/trunk", "GITHUB_REF");
   yield* Config.Literal("B4rz99/fidy-ai", "GITHUB_REPOSITORY");
   const verifier = yield* Config.String("GITHUB_SHA");
+  const resuming = yield* Config.Literals(
+    ["true", "false"],
+    "FIXTURE_ACCOUNTING_CONTINUATION"
+  ).pipe(Config.withDefault("false"));
+  if (resuming === "true") {
+    yield* Config.Literal(
+      "B4rz99/fidy-ai/.github/workflows/native-fixture-successor-plan.yml@refs/heads/trunk",
+      "GITHUB_WORKFLOW_REF"
+    );
+    yield* Config.Literal(verifier, "FIXTURE_STAGED_VERIFIER_SHA");
+    yield* Config.Literal("1", "GITHUB_RUN_ATTEMPT");
+  }
+  const application = resuming === "true" ? stagedAccountingRevision : verifier;
   if (
     !/^[a-f0-9]{40}$/u.test(verifier) ||
-    revision !== verifier ||
+    revision !== application ||
     revision === accountingFixture.revision
   ) {
     return yield* Effect.die(

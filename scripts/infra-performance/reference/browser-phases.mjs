@@ -1,4 +1,6 @@
 const timingNames = new Set([
+  "review-forward-start",
+  "review-forward-end",
   "review-ingress-start",
   "review-ingress-end",
   "review-core-start",

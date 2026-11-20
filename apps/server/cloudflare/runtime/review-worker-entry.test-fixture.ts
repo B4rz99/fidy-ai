@@ -9,6 +9,10 @@ export const withReviewWorkerTiming = (
   worker: "ingress" | "core"
 ): WorkerManifest => {
   const mainModule = "review-timing.mjs";
+  const outsideBoundary =
+    worker === "ingress"
+      ? `request.headers.get("origin") !== ${JSON.stringify(browserOrigins.acceptance)}`
+      : 'url.origin !== "https://core.internal"';
   return {
     ...manifest,
     mainModule,
@@ -22,11 +26,11 @@ export const withReviewWorkerTiming = (
           export default {
             ...entry,
             async fetch(request, environment, context) {
-              const path = new URL(request.url).pathname;
+              const url = new URL(request.url);
               if (
                 request.method !== "GET" ||
-                request.headers.get("origin") !== ${JSON.stringify(browserOrigins.acceptance)} ||
-                !["/ingestion/review-workspace", "/ingestion/review-workspace/context"].includes(path)
+                ${outsideBoundary} ||
+                !["/ingestion/review-workspace", "/ingestion/review-workspace/context"].includes(url.pathname)
               ) {
                 return entry.fetch(request, environment, context);
               }

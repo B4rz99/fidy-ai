@@ -18,11 +18,20 @@ const account = "CO.ReviewReference";
 
 const publicResponse = Effect.fn(function* (runtime: Miniflare, request: Request) {
   let started = performance.now();
+  let entered = Date.now();
   const reply = yield* forward(runtime, request, () => {
+    entered = Date.now();
     started = performance.now();
   });
   if (isReviewTraceRequest(request)) {
-    return appendReviewTrace(reply, Option.some({ "review-workerd": performance.now() - started }));
+    return appendReviewTrace(
+      reply,
+      Option.some({
+        "review-workerd": performance.now() - started,
+        "review-forward-start": entered,
+        "review-forward-end": Date.now(),
+      })
+    );
   }
   if (!new URL(request.url).pathname.startsWith("/transactions")) return reply;
   const bytes = yield* Effect.tryPromise(() => reply.arrayBuffer());

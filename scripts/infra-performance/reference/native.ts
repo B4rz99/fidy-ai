@@ -16,12 +16,18 @@ const traceReviewResponse = Effect.fn(function* (runtime: Miniflare, request: Re
   const headers = new Headers(request.headers);
   headers.set(reviewTraceHeader, "1");
   let started = performance.now();
+  let entered = Date.now();
   const response = yield* forward(runtime, new Request(request, { headers }), () => {
+    entered = Date.now();
     started = performance.now();
   });
   return appendReviewTrace(
     response,
-    Option.some({ "review-workerd": performance.now() - started })
+    Option.some({
+      "review-workerd": performance.now() - started,
+      "review-forward-start": entered,
+      "review-forward-end": Date.now(),
+    })
   );
 });
 const timedResponse = Effect.fn(function* (

@@ -1,5 +1,6 @@
 import { Effect } from "effect";
-import { expect, it } from "vitest";
+import { expect } from "vitest";
+import { it } from "@effect/vitest";
 import type { Deployment } from "./release-controller";
 import {
   type FallbackRepairPort,
@@ -97,81 +98,99 @@ const harness = (): {
 };
 const verify = (): Effect.Effect<void, Error> => Effect.void;
 
-it("finishes the exact staged dormant pair and verifies a repeated recovery without redeploying", async () => {
-  const { port, writes } = harness();
-  const phases: string[] = [];
-  const check = (_stage: FallbackStage, phase: "before" | "after"): Effect.Effect<void> =>
-    Effect.sync(() => {
-      phases.push(phase);
-    });
-  const expected = { coreDeploymentId: uuid(9), publicDeploymentId: uuid(10) };
-  await expect(Effect.runPromise(recoverFixtureFallback(port, stage, check))).resolves.toEqual(
-    expected
-  );
-  await expect(Effect.runPromise(recoverFixtureFallback(port, stage, check))).resolves.toEqual(
-    expected
-  );
-  expect(writes).toEqual([core, ingress]);
-  expect(phases).toEqual(["before", "after", "before", "after"]);
-});
+it.effect("finishes the exact staged dormant pair and verifies a repeat without redeploying", () =>
+  Effect.gen(function* () {
+    const { port, writes } = harness();
+    const phases: string[] = [];
+    const check = (_stage: FallbackStage, phase: "before" | "after"): Effect.Effect<void> =>
+      Effect.sync(() => {
+        phases.push(phase);
+      });
+    const expected = { coreDeploymentId: uuid(9), publicDeploymentId: uuid(10) };
+    expect(yield* recoverFixtureFallback(port, stage, check)).toEqual(expected);
+    expect(yield* recoverFixtureFallback(port, stage, check)).toEqual(expected);
+    expect(writes).toEqual([core, ingress]);
+    expect(phases).toEqual(["before", "after", "before", "after"]);
+  })
+);
 
-it("after an interrupted Core promotion advances only the staged Ingress", async () => {
-  const { port, writes, deployments } = harness();
-  deployments(core).unshift({ id: uuid(9), versions: [{ id: uuid(7), percentage: 100 }] });
-  await Effect.runPromise(recoverFixtureFallback(port, stage, verify));
-  expect(writes).toEqual([ingress]);
-});
+it.effect("after an interrupted Core promotion advances only the staged Ingress", () =>
+  Effect.gen(function* () {
+    const { port, writes, deployments } = harness();
+    deployments(core).unshift({ id: uuid(9), versions: [{ id: uuid(7), percentage: 100 }] });
+    yield* recoverFixtureFallback(port, stage, verify);
+    expect(writes).toEqual([ingress]);
+  })
+);
 
-it("refuses an intervening deployment even if the expected Core version is serving again", async () => {
-  const { port, writes, deployments } = harness();
-  deployments(core).unshift(
-    { id: uuid(9), versions: [{ id: uuid(7), percentage: 100 }] },
-    { id: uuid(20), versions: [{ id: uuid(21), percentage: 100 }] }
-  );
-  await expect(Effect.runPromise(recoverFixtureFallback(port, stage, verify))).rejects.toThrow();
-  expect(writes).toEqual([]);
-});
+it.effect(
+  "refuses an intervening deployment even if the expected Core version is serving again",
+  () =>
+    Effect.gen(function* () {
+      const { port, writes, deployments } = harness();
+      deployments(core).unshift(
+        { id: uuid(9), versions: [{ id: uuid(7), percentage: 100 }] },
+        { id: uuid(20), versions: [{ id: uuid(21), percentage: 100 }] }
+      );
+      expect((yield* Effect.flip(recoverFixtureFallback(port, stage, verify))).message).toContain(
+        "archived dormant stage"
+      );
+      expect(writes).toEqual([]);
+    })
+);
 
-it("refuses an Ingress-first state and a closed verification failure before any write", async () => {
-  const { port, writes, deployments } = harness();
-  await expect(
-    Effect.runPromise(recoverFixtureFallback(port, stage, () => Effect.fail(Error("unqualified"))))
-  ).rejects.toThrow("unqualified");
-  deployments(ingress).unshift({ id: uuid(10), versions: [{ id: uuid(8), percentage: 100 }] });
-  await expect(Effect.runPromise(recoverFixtureFallback(port, stage, verify))).rejects.toThrow();
-  expect(writes).toEqual([]);
-});
+it.effect("refuses an Ingress-first state and a closed verification failure before any write", () =>
+  Effect.gen(function* () {
+    const { port, writes, deployments } = harness();
+    const denied = (): Effect.Effect<void, Error> => Effect.fail(Error("unqualified"));
+    expect((yield* Effect.flip(recoverFixtureFallback(port, stage, denied))).message).toBe(
+      "unqualified"
+    );
+    deployments(ingress).unshift({ id: uuid(10), versions: [{ id: uuid(8), percentage: 100 }] });
+    expect((yield* Effect.flip(recoverFixtureFallback(port, stage, verify))).message).toContain(
+      "before its Core"
+    );
+    expect(writes).toEqual([]);
+  })
+);
 
-it("refuses a superseded revision, foreign Worker or namespace alias before promotion", async () => {
-  const { port, writes } = harness();
-  await expect(
-    Effect.runPromise(
-      recoverFixtureFallback(
-        { ...port, trunk: () => Effect.succeed("f".repeat(40)) },
-        stage,
-        verify
-      )
-    )
-  ).rejects.toThrow();
-  const other = { ...stage.release.snapshot.core, name: "another-core" };
-  const foreign = {
-    ...stage,
-    release: { ...stage.release, snapshot: { ...stage.release.snapshot, core: other } },
-  };
-  await expect(Effect.runPromise(recoverFixtureFallback(port, foreign, verify))).rejects.toThrow();
-  const alias = { ...stage, namespaces: { ...stage.namespaces, user: stage.namespaces.directory } };
-  await expect(Effect.runPromise(recoverFixtureFallback(port, alias, verify))).rejects.toThrow();
-  expect(writes).toEqual([]);
-});
+it.effect(
+  "refuses superseded revisions, foreign Workers and namespace aliases before promotion",
+  () =>
+    Effect.gen(function* () {
+      const { port, writes } = harness();
+      const stale: FallbackRepairPort = { ...port, trunk: () => Effect.succeed("f".repeat(40)) };
+      expect((yield* Effect.flip(recoverFixtureFallback(stale, stage, verify))).message).toContain(
+        "superseded"
+      );
+      const other = { ...stage.release.snapshot.core, name: "another-core" };
+      const foreign = {
+        ...stage,
+        release: { ...stage.release, snapshot: { ...stage.release.snapshot, core: other } },
+      };
+      const alias = {
+        ...stage,
+        namespaces: { ...stage.namespaces, user: stage.namespaces.directory },
+      };
+      for (const invalid of [foreign, alias]) {
+        expect(
+          (yield* Effect.flip(recoverFixtureFallback(port, invalid, verify))).message
+        ).toContain("Inconsistent");
+      }
+      expect(writes).toEqual([]);
+    })
+);
 
-it("requires the same deployment IDs after the closed preflight", async () => {
-  const { port, writes, deployments } = harness();
-  const raced = (): Effect.Effect<void> =>
-    Effect.sync(() => {
-      deployments(core).unshift({ id: uuid(9), versions: [{ id: uuid(7), percentage: 100 }] });
-    });
-  await expect(Effect.runPromise(recoverFixtureFallback(port, stage, raced))).rejects.toThrow(
-    "changed during verification"
-  );
-  expect(writes).toEqual([]);
-});
+it.effect("requires the same deployment IDs after the closed preflight", () =>
+  Effect.gen(function* () {
+    const { port, writes, deployments } = harness();
+    const raced = (): Effect.Effect<void> =>
+      Effect.sync(() => {
+        deployments(core).unshift({ id: uuid(9), versions: [{ id: uuid(7), percentage: 100 }] });
+      });
+    expect((yield* Effect.flip(recoverFixtureFallback(port, stage, raced))).message).toContain(
+      "changed during verification"
+    );
+    expect(writes).toEqual([]);
+  })
+);

@@ -18,10 +18,11 @@ export const recordPressure = async (request, response, from, select) => {
   else if (!paths.has(operation)) return response;
   if (operation === "/web/session/binding" && url.searchParams.has("context")) operation += "/context";
   const completed = performance.now();
-  const sample = await select(snapshot, fixture, Date.now());
+  const inspect = response.status === 429 || (operation === "/recurring-plans/edits" && request.method === "POST");
+  const sample = inspect ? await select(snapshot, fixture, Date.now()) : undefined;
   appendFileSync(process.env.REFERENCE_PRESSURE_FILE, JSON.stringify({
     operation, method: request.method, status: response.status, from, completed,
-    aheadMs: Number(sample.aheadMs), leases: Number(sample.leases),
+    ...(sample ? { aheadMs: Number(sample.aheadMs), leases: Number(sample.leases) } : {}),
   }) + "\n");
   return response;
 };

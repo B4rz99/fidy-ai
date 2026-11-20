@@ -324,7 +324,7 @@ def main():
         "installations": {k: str(v) for k, v in paths.items()},
         "scope": "clock and User request pressure diagnostic only; no adoption ratio",
         "cohort": os.environ["REFERENCE_PRESSURE_COHORT"],
-        "instrumentation": "One post-response SELECT, including after refusals. Ahead is bucket virtual milliseconds beyond the sampled clock; threshold is 900. Cap is 2 live leases. Non-transaction latency includes diagnostic inspection.",
+        "instrumentation": "One post-response SELECT only at the final setup edit and each 429; other responses record fixed labels and timings only. Ahead is bucket virtual milliseconds beyond the sampled clock; threshold is 900. Cap is 2 live leases. Non-transaction latency includes diagnostic inspection.",
         "setup": "original setup sequence" if os.environ["REFERENCE_PRESSURE_COHORT"] == "consecutive" else "100 ms before each of eight Dashboard fixture edits; 1100 ms after all calibration before startup; original interactions and timing boundaries thereafter",
         "origin": args.origin,
         "host": platform.platform(),

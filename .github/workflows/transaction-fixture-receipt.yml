@@ -32,11 +32,14 @@ jobs:
           python3 -m unittest discover -s scripts/infra-performance/canonical-fixture
           python3 scripts/infra-performance/canonical-fixture/direct_bridge_check.py
           python3 scripts/infra-performance/canonical-fixture/hosted.py rehearse --out apps/server/test-results/closed-native-fixture
+          python3 scripts/infra-performance/canonical-fixture/hosted.py rehearse --second-member --out apps/server/test-results/closed-native-fixture-second-member
       - name: Check comparator inventory completeness and scoped recovery
         if: always()
         run: python3 -m unittest discover -s scripts/infra-performance/cells
       - name: Reopen native custody and prove physical disposal on fresh workerd
-        run: python3 scripts/infra-performance/canonical-fixture/rehearse_cohort.py --out apps/server/test-results/closed-native-cohort
+        run: |
+          python3 scripts/infra-performance/canonical-fixture/rehearse_cohort.py --out apps/server/test-results/closed-native-cohort
+          python3 scripts/infra-performance/canonical-fixture/rehearse_cohort.py --second-member --out apps/server/test-results/closed-native-cohort-second-member
       - name: Check receipt policy code
         if: always()
         run: |
@@ -60,6 +63,8 @@ jobs:
             apps/server/test-results/closed-release-controls/summary.json
             apps/server/test-results/closed-native-fixture/summary.json
             apps/server/test-results/closed-native-cohort/summary.json
+            apps/server/test-results/closed-native-fixture-second-member/summary.json
+            apps/server/test-results/closed-native-cohort-second-member/summary.json
 
   calibration:
     runs-on: ubuntu-latest

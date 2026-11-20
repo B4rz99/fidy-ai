@@ -72,8 +72,9 @@ class LocalPort(BrowserPort):
 @contextmanager
 def controller(directory, coords, path):
     revision = coords["revision"]
-    with commands(revision, "cohort-runtime.test-fixture.ts") as runtime, commands(
-            revision, exchange=lambda req: port.exchange(req)) as command:
+    member = coords.get("fixtureMember", "performance-1")
+    with commands(revision, "cohort-runtime.test-fixture.ts", member=member) as runtime, commands(
+            revision, exchange=lambda req: port.exchange(req), member=member) as command:
         port = LocalPort(command, directory)
         port.runtime = runtime
         port.run = "disposable-workerd"
@@ -108,6 +109,7 @@ def main():
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--d1",type=Path)
     parser.add_argument("--calibration",type=Path)
+    parser.add_argument("--second-member", action="store_true")
     args = parser.parse_args()
     if bool(args.d1) != bool(args.calibration):
         parser.error("The paired browser requires both frozen checkouts")
@@ -118,6 +120,8 @@ def main():
     directory.mkdir(mode=0o700)
     revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     coords = dict(revision=revision, prefix="fidy-2259-" + secrets.token_hex(6))
+    if args.second_member:
+        coords["fixtureMember"] = "performance-2"
     os.environ["SMOKE_PROOF"] = secrets.token_hex(32)
     os.environ["FIDY_REHEARSAL_STATE"] = str(out / "workerd")
     key = "const k=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify']);process.stdout.write(JSON.stringify([Buffer.from(await crypto.subtle.exportKey('pkcs8',k.privateKey)).toString('hex'),Buffer.from(await crypto.subtle.exportKey('spki',k.publicKey)).toString('hex')]))"
@@ -152,7 +156,7 @@ def main():
     with controller(directory, coords, path) as port:
         resumed = port.owner
         resumed.cleanup()
-        write(out / "summary.json", dict(scope="disposable workerd", nativeRevision=revision,
+        write(out / "summary.json", dict(scope="disposable workerd", nativeRevision=revision, member=proof["member"],
               receiptDigest=proof["nativeReceiptDigest"], stage=resumed.state["stage"],
               survivors=2, freshProcess=True, protectedRelay=True,
               foregroundRequests=resumed.state["foregroundRequests"], cleanupRequests=resumed.state["cleanupRequests"], originalSessionDenied=True,

@@ -10,7 +10,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 from cohort import Cohort, MAX_USER_OBJECTS
 from cohort_runner import BrowserPort, collect_owned, commands
 from fixture import write
-from hosted import HERE, RECEIPT_PATH
+from hosted import HERE, RECEIPT_PATHS
 from installation import validate_candidate, validate_qualification
 from qualified_release import artifact, serving_graph
 
@@ -56,7 +56,7 @@ def checked_browser_origin(path, now):
         raise ValueError("Missing fresh Cloudflare country and colo from both acceptance hosts")
 
 
-def admitted_route(method, url, body, stage, cleaning, browser=False):
+def admitted_route(method, url, body, stage, cleaning, browser=False, *, member="performance-1"):
     path = url.path + ("?" + url.query if url.query else "")
     if method == "GET":
         if path == "/ingestion/review-workspace?limit=0&status=pending":
@@ -77,7 +77,7 @@ def admitted_route(method, url, body, stage, cleaning, browser=False):
             return stage == "erasure-offered" and json.loads(body) == {"confirm": True}
         return path == "/internal/release-smoke?acceptance=work"
     return ((stage == "owned" and path in ("/operations/atomic-batch", "/transactions/link"))
-            or (stage == "receipt-offered" and path == RECEIPT_PATH))
+            or (stage == "receipt-offered" and path == RECEIPT_PATHS[member]))
 
 
 class HostedPort(BrowserPort):
@@ -171,7 +171,9 @@ class HostedPort(BrowserPort):
         state = self.owner.state
         now = int(time.time())
         clean = bool(state.get("cleanupRun"))
-        if not admitted_route(method, url, body, state["stage"], clean, state.get("workload")=="mounted-transactions-ordinary"):
+        member = self.owner.coordinates.get("fixtureMember", "performance-1")
+        if not admitted_route(method, url, body, state["stage"], clean,
+                              state.get("workload") == "mounted-transactions-ordinary", member=member):
             raise ValueError("HTTP route is outside the current native custody phase")
         deadline = state.get("cleanupUntil" if clean else "foregroundUntil", 0)
         if now >= deadline or state.get("cleanupRun" if clean else "foregroundRun") != self.run:
@@ -248,15 +250,16 @@ def run(args):
     os.environ["FIDY_NATIVE_FIXTURE_PROVIDER_REVISION"] = installed["retainedProvider"]["revision"]
     coords = dict(**candidate, account=account, prefix=prefix, archive=args.archive_sha256)
     cloud = Cloud(account,prefix)
-    store = CustodyObject(account, cloud, native_revision=revision)
-    marker = CustodyObject(account, cloud, native_revision=revision, receipt_marker=True)
+    member = candidate.get("fixtureMember", "performance-1")
+    store = CustodyObject(account, cloud, native_revision=revision, member=member)
+    marker = CustodyObject(account, cloud, native_revision=revision, member=member, receipt_marker=True)
     directory = args.out / "fixture"
     if args.out.is_symlink() or args.out.stat().st_mode & 0o077 or directory.is_symlink():
         raise ValueError("Native collection requires a private runner directory")
     directory.mkdir(mode=0o700, exist_ok=True)
     if directory.stat().st_mode & 0o077:
         raise ValueError("Native fixture directory is not private")
-    with commands(revision, exchange=lambda req: port.exchange(req)) as command:
+    with commands(revision, exchange=lambda req: port.exchange(req), member=member) as command:
         port = HostedPort(command, directory, account=account, verify=verify, store=store, marker=marker, cloud=cloud)
         owner = Cohort(store, coords, port)
         port.owner = owner
@@ -270,6 +273,7 @@ def run(args):
             write(args.out/"cleanup.json", dict(scope="hosted native cohort", status=owner.state["stage"],
                   physicalState=owner.state.get("physicalState"), survivors=2,
                   retainedOneUseFence=owner.state.get("receiptMarkerRetained"),
+                  **({"fixtureMember": member} if member != "performance-1" else {}),
                   usageBefore=owner.state.get("usageBefore"), final=owner.state.get("lastUsage"),
                   recoveryUsageBefore=owner.state.get("recoveryUsageBefore"),
                   originalDaySettled="recoveryUsageBefore" not in owner.state))
@@ -286,8 +290,11 @@ def comparable_native_reads(account, candidate, proof, pairs, *, browser=False):
     """Reserve each timed read before signing or starting either measured HTTP clock."""
     protected_runner()
     prefix, revision = proof["resourcePrefix"], proof["nativeRevision"]
+    member = candidate.get("fixtureMember", "performance-1")
+    if proof["member"] != member:
+        raise ValueError("Comparison receipt belongs to another native fixture member")
     cloud = Cloud(account, prefix)
-    store = CustodyObject(account, cloud, native_revision=revision)
+    store = CustodyObject(account, cloud, native_revision=revision, member=member)
     version, state = store.read()
     run = os.environ["GITHUB_RUN_ID"] + "/" + os.environ["GITHUB_RUN_ATTEMPT"]
     coords = state["coordinates"] if state else {}

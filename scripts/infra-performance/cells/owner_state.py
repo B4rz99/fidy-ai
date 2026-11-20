@@ -37,15 +37,17 @@ def custody_credentials(account, key, parent_id, token, *, read_only=False):
 
 
 class CustodyObject:
-    def __init__(self, account, cloud, *, native_revision=None, receipt_marker=False):
+    def __init__(self, account, cloud, *, native_revision=None, receipt_marker=False, member="performance-1"):
         if not re.fullmatch("[a-f0-9]{32}", account):
             raise Refused("missing_account_binding")
         self.key = f"protected-storage/account/{account}/d1-ledger.json"
+        if member not in ("performance-1", "performance-2") or (native_revision is None and member != "performance-1"):
+            raise Refused("invalid_native_fixture_member")
         if native_revision is not None:
             if not re.fullmatch("[0-9a-f]{40}", native_revision):
                 raise Refused("invalid_native_custody_revision")
-            self.key = (f"_release-smoke/{native_revision}/acceptance/transactions/performance-1" if receipt_marker
-                        else f"protected-storage/account/{account}/performance-1/{native_revision}.json")
+            self.key = (f"_release-smoke/{native_revision}/acceptance/transactions/{member}" if receipt_marker
+                        else f"protected-storage/account/{account}/{member}/{native_revision}.json")
         elif receipt_marker:
             raise Refused("invalid_native_custody_revision")
         self.read_only = receipt_marker

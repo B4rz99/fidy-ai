@@ -78,13 +78,17 @@ def artifact(account_revision, artifact_id, expected_digest, get=actions_get, gi
             return json.loads(archive.read(items[0]))
         promotion = document("native-release.json.promoted")
         installed = document("native-verification.json")
+        member = installed.get("fixtureMember")
+        if "fixtureMember" in installed and (member != "performance-2" or account_revision == APPLICATION):
+            raise ValueError("Unexpected approved native fixture member")
         if account_revision != APPLICATION:
             # Reauthenticate the dormant rollback target from the independent seal accepted by this rollout.
             from pairing_stage import sealed_pair, requires_restored_source, restored_source, OWNERS
             seal = document("native-release.json.seal")
             stage, predecessor = sealed_pair(source, seal["artifactId"], seal["sha256"], get, git)
             smoke, = [worker for worker in installed["workers"] if worker["role"] == "Smoke"]
-            if (stage["revision"] != account_revision or installed["fixtureControlsDigest"] != stage["controlsDigest"]
+            if (stage["revision"] != account_revision or stage.get("fixtureMember") != member
+                    or installed["fixtureControlsDigest"] != stage["controlsDigest"]
                     or installed["retainedProvider"] != stage["provider"]
                     or installed["namespaces"] != [stage["namespaces"][role] for role in OWNERS]
                     or installed["userNamespace"] != stage["namespaces"]["user"]

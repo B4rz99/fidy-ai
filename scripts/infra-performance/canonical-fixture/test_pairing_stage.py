@@ -52,7 +52,7 @@ class PairingStage(TestCase):
     def test_only_a_successfully_sealed_replacement_of_the_original_pair_can_be_recovered(self):
         self.assertEqual(self.authenticate(), (self.stage, self.prior))
         for obj, mutation in ((self.stage, {"revision":APPLICATION}), (self.stage, {"controlsDigest":"7"*64}),
-                (self.stage, {"provider":{}}), (self.snapshot["core"], {"deploymentId":str(UUID(int=56))}),
+                (self.stage, {"provider":{}}), (self.stage, {"fixtureMember":"performance-2"}), (self.snapshot["core"], {"deploymentId":str(UUID(int=56))}),
                 (self.stage["release"], {"publicVersionId":STAGED_IDS["publicVersionId"]}),
                 (self.stage["namespaces"], {"user":self.stage["namespaces"]["erasure"]})):
             with self.subTest(mutation=mutation), patch.dict(obj, mutation), self.assertRaises(ValueError):
@@ -88,6 +88,8 @@ class PairingStage(TestCase):
                 return result
         self.assertEqual(collect(), (promotion, installed))
         for obj, mutation in ((promotion, {"rollbackTested":False}), (release["snapshot"]["core"], {"stableVersionId":"other"}),
+                (installed, {"fixtureMember":"performance-2"}),
+                (installed, {"fixtureMember":None}),
                 (installed, {"namespaces":list(reversed(installed["namespaces"]))}), (installed, {"fixtureControlsDigest":"8"*64}),
                 (installed["workers"][0], {"versionId":str(UUID(int=99))})):
             with self.subTest(mutation=mutation), patch.dict(obj, mutation), self.assertRaises(ValueError):

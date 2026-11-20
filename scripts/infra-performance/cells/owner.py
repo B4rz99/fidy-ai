@@ -361,6 +361,73 @@ def native_installation(account, revision, versions):
         raise Refused("native_installation_does_not_match_approved_candidate") from None
 
 
+def verified_comparator(args, report):
+    if args.action == "preflight" and not all((args.fixture, args.bundle, args.revision, args.manifest_sha256)):
+        raise Refused("missing_comparator_preflight_package")
+    sys.path.insert(0, str(HERE.parent / "canonical-fixture"))
+    try:
+        from hosted import verify_native_fixture, read_native_session
+    except ModuleNotFoundError as error:
+        if error.name != "hosted":
+            raise
+        raise Refused("protected_native_receipt_verifier_missing") from None
+
+    proof = verify_native_fixture(
+        args.fixture, revision=args.revision, resource_prefix=args.prefix, member=None
+    )
+    if (
+        proof["member"] not in ("performance-1", "performance-2")
+        or proof["resourcePrefix"] != args.prefix
+        or proof["nativeRevision"] != args.revision
+    ):
+        raise Refused("wrong_native_fixture_scope")
+    bundle = MaterializedBundle(args.bundle, args.manifest_sha256, proof, args.pairs)
+    if args.browser_workspace != bundle.browser:
+        raise Refused("wrong_requested_workload")
+    if bundle.browser:
+        native_manifest = json.loads((args.fixture/"manifest.json").read_bytes())
+        if (bundle.expected != {k:native_manifest[k] for k in ("history","inspections","workspace")}
+            or bundle.user["id"] != native_manifest["workspace"]["profile"]["data"]["id"]):
+            raise Refused("foreign_browser_workspace")
+    session = read_native_session(args.fixture)
+    if not all(session.get(k) for k in ("cookie", "binding")):
+        raise Refused("missing_native_session")
+    report.update(
+        maximum=bundle.estimate,
+        pairs=args.pairs,
+        packageSha256=args.manifest_sha256,
+        costedD1Batches=len(bundle.direct),
+        costedD1Requests=sum(bundle.counts.values()) if bundle.browser else len(LOGIN) + len(bundle.inspections) + args.pairs,
+        batchReservationAndReconciliationPuts=2 * (len(bundle.direct) + len(LOGIN) + len(bundle.inspections) + (1 if bundle.browser else args.pairs)),
+        baseline=PIN,
+    )
+    report["rehearsalRevision" if args.action == "preflight" else "nativeRevision"] = args.revision
+    size = subprocess.run(
+        ["bun", "scripts/infra-performance/d1-budget.ts", "--estimate-only"],
+        cwd=ROOT,
+        input=json.dumps(bundle.estimate),
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    if size.returncode != 1 or json.loads(size.stdout) != {
+        "_tag": "NeedsAccountObservation"
+    }:
+        raise Refused("experiment_too_large_or_invalid")
+    return bundle, proof, session
+
+
+def require_approved_cost(args, bundle):
+    if args.maximum_reads is None or bundle.estimate["rowsRead"] > args.maximum_reads:
+        raise Refused("outside_approved_cost_proposal")
+
+
+def available_cost(owner, account, estimate):
+    observation = usage(account)
+    day = observation["utcDate"]
+    return admit(ROOT, account, observation, owner.full_estimate(estimate, day)), day
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("preflight", "propose", "run", "cleanup"))
@@ -392,81 +459,36 @@ def main():
     save()
     try:
         if args.action in ("propose", "run"):
-            sys.path.insert(0, str(HERE.parent / "canonical-fixture"))
-            try:
-                from hosted import private_file, verify_native_fixture, read_native_session
-            except ModuleNotFoundError as error:
-                if error.name != "hosted":
-                    raise
-                raise Refused("protected_native_receipt_verifier_missing") from None
-
-            proof = verify_native_fixture(
-                args.fixture, revision=args.revision, resource_prefix=args.prefix, member=None
-            )
-            if (
-                proof["member"] not in ("performance-1", "performance-2")
-                or proof["resourcePrefix"] != args.prefix
-                or proof["nativeRevision"] != args.revision
-            ):
-                raise Refused("wrong_native_fixture_scope")
-            bundle = MaterializedBundle(args.bundle, args.manifest_sha256, proof, args.pairs)
-            if args.browser_workspace != bundle.browser:
-                raise Refused("wrong_requested_workload")
-            if bundle.browser:
-                native_manifest = json.loads((args.fixture/"manifest.json").read_bytes())
-                if (bundle.expected != {k:native_manifest[k] for k in ("history","inspections","workspace")}
-                    or bundle.user["id"] != native_manifest["workspace"]["profile"]["data"]["id"]):
-                    raise Refused("foreign_browser_workspace")
-            session = read_native_session(args.fixture)
-            if not all(session.get(k) for k in ("cookie", "binding")):
-                raise Refused("missing_native_session")
-            report.update(
-                maximum=bundle.estimate,
-                pairs=args.pairs,
-                packageSha256=args.manifest_sha256,
-                costedD1Batches=len(bundle.direct),
-                costedD1Requests=sum(bundle.counts.values()) if bundle.browser else len(LOGIN) + len(bundle.inspections) + args.pairs,
-                batchReservationAndReconciliationPuts=2 * (len(bundle.direct) + len(LOGIN) + len(bundle.inspections) + (1 if bundle.browser else args.pairs)),
-                nativeRevision=args.revision,
-                baseline=PIN,
-            )
-            size = subprocess.run(
-                ["bun", "scripts/infra-performance/d1-budget.ts", "--estimate-only"],
-                cwd=ROOT,
-                input=json.dumps(bundle.estimate),
-                capture_output=True,
-                text=True,
-                timeout=15,
-            )
-            if size.returncode != 1 or json.loads(size.stdout) != {
-                "_tag": "NeedsAccountObservation"
-            }:
-                raise Refused("experiment_too_large_or_invalid")
+            bundle, proof, session = verified_comparator(args, report)
             if args.action == "propose":
                 report["status"] = "verified cost proposal"
                 return 0
-            if args.maximum_reads is None or bundle.estimate["rowsRead"] > args.maximum_reads:
-                raise Refused("outside_approved_cost_proposal")
+            require_approved_cost(args, bundle)
             approved_native = approved_versions(args.core_version, args.ingress_version)
         account = os.environ["CLOUDFLARE_ACCOUNT_ID"]
         if args.action == "run":
             report["nativeCandidate"] = native_installation(account, args.revision, approved_native)
+            from hosted import private_file
             from protected_cohort import comparable_native_reads, checked_browser_origin
             if bundle.browser:
                 checked_browser_origin(args.fixture.parent/"origin-before-d1.json",time.time())
             reserve_native = comparable_native_reads(account, report["nativeCandidate"], proof, args.pairs, browser=bundle.browser)
         cloud = Cloud(account, args.prefix)
-        owner = AccountExperiment(CustodyObject(account, cloud), account)
+        owner = AccountExperiment(
+            CustodyObject(account, cloud, read_only=args.action == "preflight"), account
+        )
         if args.action == "preflight":
             owner.require_unclaimed(args.prefix)
             require_empty_inventory(cloud)
+            bundle, _, _ = verified_comparator(args, report)
+            require_approved_cost(args, bundle)
+            decision, day = available_cost(owner, account, bundle.estimate)
+            report.update(preflight=dict(day=day, decision=decision, applied=False))
         elif args.action == "cleanup":
             report["cleanup"] = cleanup_evidence(owner, cloud, resumed=True)
         else:
             read = None if bundle.browser else native_read(session, args.revision, reserve_native)
-            observation = usage(account)
-            observed_day = observation["utcDate"]
-            decision = admit(ROOT, account, observation, owner.full_estimate(bundle.estimate, observed_day))
+            decision, observed_day = available_cost(owner, account, bundle.estimate)
             owner.begin(args.prefix, decision, observed_day)
             try:
                 prepare_inventory(owner, cloud)

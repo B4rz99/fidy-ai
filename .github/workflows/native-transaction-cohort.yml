@@ -60,6 +60,7 @@ jobs:
       ARCHIVE_SHA256: ${{ inputs.archive_sha256 }}
       PAIRS: ${{ inputs.pairs }}
       WORKLOAD: ${{ inputs.action }}
+      COMPARATOR_MAXIMUM_READS: ${{ inputs.action == 'browser' && '100000' || '18194' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -112,13 +113,37 @@ jobs:
           for key in BROWSER_TLS_CERT BROWSER_TLS_KEY BROWSER_TLS_PIN D1_WEB_ASSETS; do echo "$key=${!key}" >> "$GITHUB_ENV"; done
           echo "ASSESSMENT_CHROMIUM=$(command -v google-chrome)" >> "$GITHUB_ENV"
           echo "FIDY_DIAGNOSTIC_DIR=$OUT" >> "$GITHUB_ENV"
-      - name: Check the comparator ledger and complete provider inventory before enrollment
+      - name: Rehearse the frozen comparator package before enrollment
+        if: inputs.action == 'compare' || inputs.action == 'browser'
+        run: |
+          umask 077
+          scope=()
+          if [[ "$WORKLOAD" == browser ]]; then scope=(--browser-workspace); fi
+          rehearsal="$OUT/comparator-rehearsal"
+          python3 scripts/infra-performance/canonical-fixture/hosted.py rehearse --second-member \
+            "${scope[@]}" --resource-prefix "$RESOURCE_PREFIX" --out "$rehearsal"
+          verifier="$rehearsal/rehearsal-verifier.json"
+          SMOKE_PROOF="$(jq -er .SMOKE_PROOF "$verifier")" \
+          FIDY_NATIVE_FIXTURE_PUBLIC_KEY="$(jq -er .FIDY_NATIVE_FIXTURE_PUBLIC_KEY "$verifier")" \
+          python3 scripts/infra-performance/cells/prepare.py "${scope[@]}" --d1 baseline-d1 \
+            --calibration baseline-calibration --materialized --canonical-fixture "$rehearsal/fixture" \
+            --out "$rehearsal/package"
+      - name: Check the comparator ledger, provider inventory and live headroom before enrollment
         if: inputs.action == 'compare' || inputs.action == 'browser'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
+          scope=()
+          if [[ "$WORKLOAD" == browser ]]; then scope=(--browser-workspace); fi
+          rehearsal="$OUT/comparator-rehearsal"
+          verifier="$rehearsal/rehearsal-verifier.json"
+          SMOKE_PROOF="$(jq -er .SMOKE_PROOF "$verifier")" \
+          FIDY_NATIVE_FIXTURE_PUBLIC_KEY="$(jq -er .FIDY_NATIVE_FIXTURE_PUBLIC_KEY "$verifier")" \
           python3 scripts/infra-performance/cells/owner.py preflight \
-            --prefix "$RESOURCE_PREFIX" --out "$OUT/comparator-preflight"
+            "${scope[@]}" --prefix "$RESOURCE_PREFIX" --out "$OUT/comparator-preflight" \
+            --revision "$GITHUB_SHA" --fixture "$rehearsal/fixture" --bundle "$rehearsal/package" \
+            --manifest-sha256 "$(sha256sum "$rehearsal/package/manifest.json" | cut -d ' ' -f 1)" \
+            --maximum-reads "$COMPARATOR_MAXIMUM_READS" --pairs "$PAIRS"
       - name: Record Cloudflare country and colo before enrollment
         if: inputs.action == 'browser'
         run: bun scripts/infra-performance/hosted-browser/origin.mjs "$OUT/origin-before-enrollment.json"
@@ -159,10 +184,8 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           SMOKE_PROOF: ${{ secrets.NATIVE_STORAGE_SMOKE_PROOF }}
         run: |
-          caps=(--maximum-reads 18194)
-          if [[ "$WORKLOAD" == browser ]]; then
-            caps=(--browser-workspace --maximum-reads 100000)
-          fi
+          caps=(--maximum-reads "$COMPARATOR_MAXIMUM_READS")
+          if [[ "$WORKLOAD" == browser ]]; then caps+=(--browser-workspace); fi
           python3 scripts/infra-performance/cells/owner.py run "${caps[@]}" --out "$OUT/comparison" \
             --prefix "$RESOURCE_PREFIX" --revision "$REVISION" --fixture "$OUT/fixture" \
             --bundle "$OUT/package" --manifest-sha256 "$PACKAGE_SHA256" --pairs "$PAIRS" \

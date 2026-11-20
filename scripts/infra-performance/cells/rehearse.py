@@ -32,7 +32,8 @@ class LocalSubject:
         self.api = f"https://127.0.0.1:{port + 1}"
         self.origin = f"https://127.0.0.1:{port}"
         self.operator = f"http://127.0.0.1:{port + 2}"
-        self.client = urllib.request.build_opener(NoRedirect(), urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()),
+        self.jar = http.cookiejar.CookieJar()
+        self.client = urllib.request.build_opener(NoRedirect(), urllib.request.HTTPCookieProcessor(self.jar),
                                                  urllib.request.HTTPSHandler(context=tls), urllib.request.ProxyHandler({}))
         self.binding = None
 
@@ -102,19 +103,46 @@ def survey_read(subject, path, *, meter):
     row = dict(status=status, bytes=len(body), sha256=hashlib.sha256(body).hexdigest())
     if meter:
         after = json.loads(subject.control("/browser-cost"))
-        keys = ("rowsRead", "rowsWritten")
-        if any(type(observed.get(key)) is not int for observed in (before, after) for key in keys):
-            raise ValueError("D1 row counters unavailable for cost survey")
-        row["cost"] = {key: after[key] - before[key] for key in keys}
-        if min(row["cost"].values()) < 0:
-            raise ValueError("D1 row counters regressed during cost survey")
+        row["cost"] = cost_delta(before, after)
+    if path == READS["dashboard.fresh"] and status == 200:
+        value = json.loads(body)
+        context = value["data"]["context"]
+        if not isinstance(context["calculatedAt"], str):
+            raise ValueError("Dashboard calculation time missing")
+        context["calculatedAt"] = "observation-time"
+        row["comparableSha256"] = hashlib.sha256(json.dumps(value, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
     return row
 
 
+def cost_delta(before, after):
+    keys = ("rowsRead", "rowsWritten")
+    if any(type(observed.get(key)) is not int for observed in (before, after) for key in keys):
+        raise ValueError("D1 row counters unavailable for cost survey")
+    delta = {key: after[key] - before[key] for key in keys}
+    if min(delta.values()) < 0:
+        raise ValueError("D1 row counters regressed during cost survey")
+    return delta
+
+
+def prepare_survey(subject):
+    request = urllib.request.Request(subject.api + "/web/session/binding")
+    subject.jar.add_cookie_header(request)
+    credentials = dict(origin=subject.origin, binding=subject.binding, cookie=request.get_header("Cookie"))
+    # Only the synthetic loopback credentials enter this short-lived child via stdin.
+    subprocess.run(["bun", str(HERE / "survey-setup.mjs")], cwd=reference.ROOT,
+                   input=json.dumps(credentials).encode(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+
+
 def survey_costs(subjects, dest):
-    report = dict(scope="Local fixed-ID fixture; request cost and raw body digests only.",
+    report = dict(scope="Local fixed-ID fixture with four configured Widgets and five Recurring revisions.",
+                  dashboardNormalization=["data.context.calculatedAt"],
                   requestsPerShape=2, paths=READS, attempts=[])
     write(dest, report)
+    before = json.loads(subjects["d1"].control("/browser-cost"))
+    prepare_survey(subjects["d1"])
+    report["d1WorkspaceSetup"] = cost_delta(before, json.loads(subjects["d1"].control("/browser-cost")))
+    write(dest, report)
+    prepare_survey(subjects["do"])
     for order in [("d1", "do"), ("do", "d1")]:
         for operation, path in READS.items():
             started = time.monotonic()

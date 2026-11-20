@@ -1,6 +1,7 @@
 """Exercise the comparison through the pinned D1 and native DO ingress with real WebSessions."""
 import argparse
 from contextlib import ExitStack
+import hashlib
 import http.cookiejar
 import json
 import os
@@ -93,6 +94,38 @@ def write(path, value):
     path.write_text(json.dumps(value, indent=2) + "\n")
 
 
+def survey_read(subject, path, *, meter):
+    """Read one complete response. Counter observations surround only its authenticated request."""
+    if meter:
+        before = json.loads(subject.control("/browser-cost"))
+    status, _, body = subject.canonical(path)
+    row = dict(status=status, bytes=len(body), sha256=hashlib.sha256(body).hexdigest())
+    if meter:
+        after = json.loads(subject.control("/browser-cost"))
+        keys = ("rowsRead", "rowsWritten")
+        if any(type(observed.get(key)) is not int for observed in (before, after) for key in keys):
+            raise ValueError("D1 row counters unavailable for cost survey")
+        row["cost"] = {key: after[key] - before[key] for key in keys}
+        if min(row["cost"].values()) < 0:
+            raise ValueError("D1 row counters regressed during cost survey")
+    return row
+
+
+def survey_costs(subjects, dest):
+    report = dict(scope="Local fixed-ID fixture; request cost and raw body digests only.",
+                  requestsPerShape=2, paths=READS, attempts=[])
+    write(dest, report)
+    for order in [("d1", "do"), ("do", "d1")]:
+        for operation, path in READS.items():
+            started = time.monotonic()
+            for variant in order:
+                row = survey_read(subjects[variant], path, meter=variant == "d1")
+                report["attempts"].append(dict(operation=operation, variant=variant, **row))
+                write(dest, report)
+            # One isolated request per variant per second permits admission between shapes.
+            time.sleep(max(0, 1 - (time.monotonic() - started)))
+
+
 def compare_fixture(root, baseline, dest, scratch):
     verify = {"d1": reference.revision(baseline, "d1"), "do": reference.revision(root, "do")}
     certificate = scratch / "tls.crt"
@@ -150,6 +183,7 @@ def compare_fixture(root, baseline, dest, scratch):
             if row["accountability"] != dict(reads=1, corrections=0, units=0, receipts=0):
                 row["ok"] = False
             write(dest / "attempts.json", rows)
+        survey_costs(subjects, dest / "read-shape-costs.json")
         for variant, subject in subjects.items():
             status, _, _ = subject.canonical("/transactions/81000000-0000-4000-8000-000000000002/source-attestations")
             coverage[variant] = {"sourceAttestationsHttpStatus": status}

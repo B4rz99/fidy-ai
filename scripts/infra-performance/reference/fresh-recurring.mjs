@@ -134,7 +134,7 @@ const verify = (value, { selected, prior, full, fullSize }) => {
  * @param {number[]} selected Expected visible plans.
  */
 const usable = async (page, period, selected) => {
-  await page.waitForFunction(
+  const matched = await page.waitForFunction(
     ({ period, names, total }) => {
       const date = period + "-01";
       const shortDate = new Intl.DateTimeFormat("es-CO", {
@@ -151,7 +151,7 @@ const usable = async (page, period, selected) => {
           row.getClientRects().length > 0 &&
           (row.getAttribute("aria-label")?.includes(date) ?? row.textContent.includes(shortDate))
       );
-      return (
+      const ready =
         (total === names.length ||
           rows[0]
             ?.closest("section")
@@ -162,12 +162,13 @@ const usable = async (page, period, selected) => {
           (name, index) =>
             rows[index].getAttribute("aria-label")?.startsWith(name + " " + date + " ") ??
             [...rows[index].querySelectorAll("*")].some((part) => part.textContent === name)
-        )
-      );
+        );
+      return ready && performance.timeOrigin + performance.now();
     },
     { period, names: selected.slice(0, pageSize).map(planName), total: selected.length }
   );
   await painted(page);
+  return matched;
 };
 /**
  * Verify every remaining page of a full 100-row result after freezing the first usable page timing.
@@ -228,20 +229,55 @@ export const responseEvidence = async (input, journey, reply) => {
 };
 /**
  * @param {Workspace} input Installed origins and evidence sink.
- * @param {{journey:string,query:Record<string,string>, action:()=>Promise<void>, ready:()=>Promise<void>,selected:number[],prior:string,fullSize?:boolean}} cell Predeclared visible interaction.
+ * @param {{journey:string,query:Record<string,string>, action:()=>Promise<void>, ready:()=>Promise<void | Awaited<ReturnType<typeof usable>>>,selected:number[],prior:string,fullSize?:boolean}} cell Predeclared visible interaction.
  */
 const measure = async (input, cell) => {
   const response = responseFor(input, route, cell.query);
+  const phases = cell.journey === "recurring.selective.browser";
+  if (phases) {
+    await input.page.evaluate(() => {
+      const record = (event) => {
+        if (
+          !(event.target instanceof Element) ||
+          !event.target.closest('[data-recurring-slot="filters"] button[type="submit"]')
+        )
+          return;
+        performance.mark("reference-recurring-selective-click");
+        document.removeEventListener("click", record, true);
+      };
+      document.addEventListener("click", record, true);
+    });
+  }
   input.event({ type: "offered", journey: cell.journey });
   const start = performance.now();
   await cell.action();
   const reply = await response;
   const wire = cell.fullSize ? responseEvidence(input, cell.journey, reply) : undefined;
   if (!reply.ok()) await wire;
-  const [milliseconds, observed] = await Promise.all([
-    cell.ready().then(() => performance.now() - start),
+  const [{ milliseconds, ready }, observed] = await Promise.all([
+    cell.ready().then((ready) => ({ milliseconds: performance.now() - start, ready })),
     wire,
   ]);
+  if (phases && ready) {
+    const timing = reply.request().timing();
+    const found = await ready.jsonValue();
+    const click = await input.page.evaluate(() => {
+      const mark = performance.getEntriesByName("reference-recurring-selective-click").at(-1);
+      return mark && performance.timeOrigin + mark.startTime;
+    });
+    assert.ok(found && click);
+    const startEpoch = performance.timeOrigin + start;
+    input.event({
+      type: "recurring-phases",
+      journey: cell.journey,
+      offerToClick: click - startEpoch,
+      clickToDispatch: timing.startTime - click,
+      dispatchToHeaders: timing.responseStart,
+      headersToBody: timing.responseEnd - timing.responseStart,
+      bodyToReady: found - timing.startTime - timing.responseEnd,
+      readyToPaint: startEpoch + milliseconds - found,
+    });
+  }
   const { value, http: consumedHttp } = await consumed(reply);
   const http = observed ?? consumedHttp;
   verify(value, cell);
@@ -281,6 +317,16 @@ const fullHistory = async (input, authority, fullSize = false) => {
   verify(value, { selected: fullSize ? allPlans : [0, 1], prior: "2026-10", full: true, fullSize });
   assert.ok(http.httpMs > 0);
   const result = { milliseconds: http.httpMs, http };
+  const timing = reply.request().timing();
+  const sizes = await reply.request().sizes();
+  event({
+    type: "recurring-phases",
+    journey,
+    dispatchToHeaders: timing.responseStart,
+    headersToBody: timing.responseEnd - timing.responseStart,
+    wireBodyBytes: sizes.responseBodySize,
+    encoding: (await reply.headerValue("content-encoding")) ?? "identity",
+  });
   event({ type: "completed", journey, ...result });
   return result;
 };

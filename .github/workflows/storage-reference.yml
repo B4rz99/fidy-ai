@@ -88,19 +88,17 @@ jobs:
           (cd baseline-d1 && bash scripts/install-workspace.sh --ignore-scripts)
           echo "ASSESSMENT_CHROMIUM=$(command -v google-chrome)" >> "$GITHUB_ENV"
           google-chrome --version
-      - name: Verify one equivalent pair before collecting timings
+      - name: Verify the browser evidence observers
         run: |
           bun scripts/infra-performance/reference/native-review-pressure.test.mjs
           bun apps/web/scripts/check-transaction-panel.ts
           bun scripts/infra-performance/reference/review-failure.test.mjs
           bun scripts/infra-performance/reference/recurring-response.test.mjs
           python3 -m unittest discover -s scripts/infra-performance/reference
-          python3 scripts/infra-performance/reference/run.py --d1 baseline-d1 --do . \
-            --dataset "$DATASET" --network "$NETWORK" --setup-idle-ms "$SETUP_IDLE_MS" ${READ_ONLY_FLAG:+"$READ_ONLY_FLAG"} ${RECURRING_FLAG:+"$RECURRING_FLAG"} --pairs 1 --origin "GitHub-hosted Ubuntu loopback"
-      - name: Measure 30 alternating pairs
+      - name: Record two diagnostic Recurring phase pairs
         run: |
           python3 scripts/infra-performance/reference/run.py --d1 baseline-d1 --do . \
-            --dataset "$DATASET" --network "$NETWORK" --setup-idle-ms "$SETUP_IDLE_MS" ${READ_ONLY_FLAG:+"$READ_ONLY_FLAG"} ${RECURRING_FLAG:+"$RECURRING_FLAG"} --pairs 30 --origin "GitHub-hosted Ubuntu loopback"
+            --dataset "$DATASET" --network "$NETWORK" --setup-idle-ms "$SETUP_IDLE_MS" ${READ_ONLY_FLAG:+"$READ_ONLY_FLAG"} ${RECURRING_FLAG:+"$RECURRING_FLAG"} --pairs 2 --origin "GitHub-hosted Ubuntu loopback"
       - name: Preserve reference evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

@@ -15,6 +15,48 @@ LINK = """INSERT INTO transaction_reconciliation_decisions(user_id,first_transac
 VALUES(?,?,?,'linked',?,?)"""
 
 
+def bind_workspace_user(plan, workspace):
+    profile = workspace["profile"]["data"]
+    subject = uuid(profile["id"])
+    created = instant(profile["createdAt"])
+    started, ends = (instant(profile["trialPeriod"][k]) for k in ("startedAt", "endsAt"))
+    if (profile["serviceMarket"], profile["locale"], profile["timeZone"]) != ("CO", "es-CO", "America/Bogota") or ends - started != 604800000:
+        raise ValueError("Invalid canonical browser profile")
+    original = "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?,'CO','es-CO','America/Bogota',0)"
+    statements = [stmt for batch in plan["batches"] for stmt in batch["batch"]]
+    insert, = [stmt for stmt in statements if stmt["sql"] == original and stmt["params"] == [SUBJECT]]
+    for stmt in statements:
+        stmt["params"] = [subject if value == SUBJECT else value for value in stmt["params"]]
+    insert.update(sql=original[:-2] + "?)", params=[subject, created])
+    return dict(id=subject, startedAtMs=started, endsAtMs=ends)
+
+
+def scoped_transaction_plan(plan, workspace):
+    if workspace["review"]["data"]["pendingCount"] != 0:
+        raise ValueError("Scoped Transactions browser requires an empty unrelated Review workspace")
+    # Only remove the explicitly named fixtures belonging to other financial views.
+    omitted = {"budgets", "user_documents", "recurring_plans", "recurring_plan_revisions",
+               "statement_staging_objects", "statement_submissions", "ingestion_review_items"}
+    seen = set()
+    selected = []
+    for batch in plan["batches"]:
+        kept = []
+        for statement in batch["batch"]:
+            tokens = statement["sql"].split(maxsplit=3)
+            table = tokens[2].split("(")[0] if tokens[:2] == ["INSERT", "INTO"] else ""
+            if table in omitted and statement["params"]:
+                seen.add(table)
+            else:
+                kept.append(statement)
+        if kept:
+            selected.append({**batch, "batch": kept})
+    if seen != omitted:
+        raise ValueError("Frozen preparation no longer matches the enrolled User's empty workspace")
+    plan["batches"] = selected
+    plan["verified"] = {**plan["verified"], "plans": 0, "revisions": 0, "review": 0}
+    plan["workload"] = "mounted-transactions-ordinary"
+
+
 def materialize(plan_file, directory):
     report = json.loads((directory / "manifest.json").read_text())
     coordinates = {}
@@ -62,5 +104,10 @@ def materialize(plan_file, directory):
     for modified in [capture, pair]:
         modified.pop("reads", None)
         modified.pop("writes", None)
+    if "workspace" in report:
+        if not coordinates:
+            raise ValueError("Browser profile requires the original Session and signed manifest")
+        scoped_transaction_plan(plan, report["workspace"])
+        plan["browserUser"] = bind_workspace_user(plan, report["workspace"])
     plan_file.write_text(json.dumps(plan, separators=(",", ":")))
     return report

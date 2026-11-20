@@ -52,7 +52,11 @@ type Action = (item: Item) => Effect.Effect<unknown, Error>;
 const unavailable: Local = () => Effect.fail(new CohortTransportError());
 const fixturePath = (method: string, path: string): boolean =>
   method === "GET"
-    ? path === "/transactions?limit=25" || /^\/transactions\/[a-f0-9-]{36}$/u.test(path)
+    ? [
+        "/user",
+        "/transactions?limit=25",
+        "/ingestion/review-workspace?limit=0&status=pending",
+      ].includes(path) || /^\/transactions\/[a-f0-9-]{36}$/u.test(path)
     : ["/operations/atomic-batch", "/transactions/link", performanceReceiptPath].includes(path);
 const headersOf = Effect.fnUntraced(function* (item: Item) {
   if (item.cookie === undefined || item.binding === undefined) {

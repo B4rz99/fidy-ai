@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -19,7 +20,10 @@ def main():
     parser.add_argument("--canonical-fixture", type=Path, help="Originals and actual private provenance from the disposable native rehearsal")
     parser.add_argument("--snapshot", action="store_true", help="Reconstruct and check the final empty D1 schema against frozen migration replay")
     parser.add_argument("--materialized", action="store_true", help="Import the complete private pre-Login canonical fixture and verify its full state")
+    parser.add_argument("--browser-workspace", action="store_true", help="Prepare the signed eight-original Transactions browser profile")
     args = parser.parse_args()
+    if args.browser_workspace and not args.materialized:
+        parser.error("--browser-workspace requires --materialized")
     if args.materialized and (not args.canonical_fixture or args.snapshot):
         parser.error("--materialized needs --canonical-fixture and selects its own snapshot mode")
     root, source, out = (p.resolve() for p in (args.d1, args.calibration, args.out))
@@ -57,12 +61,19 @@ def main():
             else:
                 path.write_bytes(original)
     inspection_ids = []
+    mutation_target = None
+    mutation_subject = ""
     if args.canonical_fixture:
         sys.path.insert(0, str(HERE.parent / "canonical-fixture"))
         from mirror import materialize
         observed = materialize(out / "plan.json", args.canonical_fixture)
+        if args.browser_workspace != ("workspace" in observed):
+            raise ValueError("Signed workspace and requested comparator workload differ")
         inspection_ids = sorted(observed["inspections"])
-        (out / "expected.json").write_text(json.dumps({"history": observed["history"], "inspections": observed["inspections"]}, ensure_ascii=False))
+        if args.browser_workspace:
+            mutation_subject = observed["workspace"]["profile"]["data"]["id"]
+            mutation_target, = [r["id"] for r in observed["history"]["data"] if r["counterparty"] == "Evaluación 2"]
+        (out / "expected.json").write_text(json.dumps({"history": observed["history"], "inspections": observed["inspections"], **({"workspace": observed["workspace"]} if args.browser_workspace else {})}, ensure_ascii=False))
     if args.snapshot or args.materialized:
         # Use the same package and migration registry as the frozen Alchemy D1 provider.
         # Only the executor is directed to the private local workerd binding.
@@ -83,7 +94,7 @@ def main():
             + 'await Effect.runPromise(applyAlchemyFormat({executor,records,table:ALCHEMY_DEFAULT_TABLE}));\n'
             + 'await import(' + path_literal(HERE / "snapshot.mjs") + ');\n')
         (out / "snapshot-proof.json").write_text(json.dumps({"stage":"replay-frozen-alchemy","baseline":PIN}))
-        subprocess.run(["bun", str(entry), str(out), "materialized" if args.materialized else "empty"], cwd=root, check=True)
+        subprocess.run(["bun", str(entry), str(out), "materialized" if args.materialized else "empty", "browser" if args.browser_workspace else "original"], cwd=root, check=True)
 
     artifacts["plan"] = hashlib.sha256((out / "plan.json").read_bytes()).hexdigest()
     (out / "manifest.json").write_text(json.dumps(dict(baseline=PIN, calibration=CALIBRATION, sha256=artifacts), indent=2))
@@ -91,15 +102,20 @@ def main():
         'import {currentDisclosureFor} from "./apps/server/src/shell/consent/operations"; process.stdout.write(JSON.stringify(currentDisclosureFor()))'], cwd=root)
     (out / "disclosure.json").write_bytes(disclosure)
     (out / "private-ingress.mjs").write_bytes((HERE / "private-ingress.mjs").read_bytes())
+    if args.browser_workspace:
+        from browser_assets import pack
+        pack(Path(os.environ["D1_WEB_ASSETS"]), out)
+    assets_module = 'import assets from "./browser-assets.mjs";\n' if args.browser_workspace else "const assets = {};\n"
     (out / "ingress-entry.mjs").write_text(
+        assets_module +
         'import ingress from "./public-worker.mjs";\n'
         'import { privateIngress } from "./private-ingress.mjs";\n'
-        f'export default privateIngress(ingress, {json.dumps(inspection_ids)});\n')
+        f'export default privateIngress(ingress, {json.dumps(inspection_ids)}, {{mutationTarget: {json.dumps(mutation_target)}, assets}});\n')
     (out / "core-entry.mjs").write_text(
         'import core, { UserTransactionCoordinator as Coordinator } from "./core-worker.mjs";\n'
         'import { meteredCore } from "./meter.mjs";\n'
         'import { training, limits } from "./configured-limits.mjs";\n'
-        'const { worker, UserTransactionCoordinator } = meteredCore(core, Coordinator, { training, limits });\n'
+        f'const {{ worker, UserTransactionCoordinator }} = meteredCore(core, Coordinator, {{ training, limits, mutationSubject: {json.dumps(mutation_subject)} }});\n'
         'export { worker as default, UserTransactionCoordinator };\n')
     subprocess.run(["bun", "build", "ingress-entry.mjs", "--target=browser", "--external=cloudflare:workers", "--external=node:*",
                     "--outfile", "bounded-ingress.mjs"], cwd=out, check=True)
@@ -108,7 +124,7 @@ def main():
     for mode in ("train", "refuse", "bounded"):
         limits = {} if mode == "train" else json.loads((out / "limits.json").read_text())
         if mode == "refuse":
-            limits["GET /transactions?limit=25"]["maximum"] = {"rowsRead": 0, "rowsWritten": 0}
+            limits["GET /web/session/binding?context=transactions" if args.browser_workspace else "GET /transactions?limit=25"]["maximum"] = {"rowsRead": 0, "rowsWritten": 0}
         (out / "configured-limits.mjs").write_text("export const training = " + json.dumps(mode == "train")
                                                  + "; export const limits = " + json.dumps(limits) + ";")
         subprocess.run(["bun", "build", "core-entry.mjs", "--target=browser", "--external=cloudflare:workers", "--external=node:*",
@@ -122,7 +138,7 @@ def main():
     artifacts["bounded-ingress"] = hashlib.sha256((out / "bounded-ingress.mjs").read_bytes()).hexdigest()
     artifacts["limits"] = hashlib.sha256((out / "limits.json").read_bytes()).hexdigest()
     artifacts["probe"] = hashlib.sha256((out / "probe.json").read_bytes()).hexdigest()
-    for name in ("snapshot-proof", "expected", "disclosure"):
+    for name in ("snapshot-proof", "expected", "disclosure", "browser-assets"):
         path = out / (name + ".json")
         if path.is_file():
             artifacts[name] = hashlib.sha256(path.read_bytes()).hexdigest()

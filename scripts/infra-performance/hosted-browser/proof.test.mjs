@@ -1,5 +1,6 @@
 // Runner-only test of the actual HTTPS boundary, including browser-generated CORS preflight.
 import assert from "node:assert/strict";
+import { isColombianEgress, parseTrace } from "./origin.mjs";
 import { Effect } from "effect";
 import { installedOrigins } from "../../../apps/server/src/shell/browser-transport/contract";
 import { acceptanceRequestAdmitted } from "../../../apps/server/cloudflare/release-isolation/operations";
@@ -175,3 +176,9 @@ try {
   await proxy.stop(true);
   await web.stop(true);
 }
+
+const routedInBogota = parseTrace("loc=US\ncolo=BOG\nwarp=on\n");
+const colombian = parseTrace("loc=CO\ncolo=BOG\nwarp=off\n");
+assert.equal(isColombianEgress({ api: colombian, browser: routedInBogota }), false);
+assert.equal(isColombianEgress({ api: routedInBogota, browser: colombian }), false);
+assert.equal(isColombianEgress({ api: colombian, browser: colombian }), true);

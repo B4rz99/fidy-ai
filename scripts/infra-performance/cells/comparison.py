@@ -9,6 +9,7 @@ import time
 
 # The reduced shared-account fixture in #2268 is intentionally distinct from the small/full fixtures.
 FIXTURE = dict(transactions=8, currencies=2, effectiveTransactions=7, links=1, plans=2, revisions=4, review=4)
+BROWSER_FIXTURE = {**FIXTURE, "plans":0, "revisions":0, "review":0}
 READS = {
     "transactions.page": "/transactions?limit=25",
     "transactions.maximum": "/transactions?limit=100",

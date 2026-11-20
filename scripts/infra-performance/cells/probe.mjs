@@ -12,12 +12,26 @@ const rowReceipt = Schema.decodeUnknownSync(
   Schema.Struct({
     ...Rows.fields,
     route: Schema.optional(Schema.String),
-    calls: Schema.optional(Schema.Array(Schema.Struct({ ...Rows.fields, key: Schema.String }))),
+    calls: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          ...Rows.fields,
+          key: Schema.String,
+          child: Schema.optional(Schema.String),
+          calls: Schema.optional(
+            Schema.Array(Schema.Struct({ ...Rows.fields, key: Schema.String }))
+          ),
+        })
+      )
+    ),
   })
 );
 const calibration = Schema.decodeUnknownSync(
   Schema.Struct({
     baseline: Schema.String,
+    browserUser: Schema.optional(
+      Schema.Struct({ id: Schema.String, startedAtMs: Schema.Int, endsAtMs: Schema.Int })
+    ),
     verified: Schema.Record(Schema.String, Schema.Int),
     batches: Schema.Array(
       Schema.Struct({
@@ -44,7 +58,7 @@ const history = Schema.decodeUnknownSync(
 );
 
 const shaWidth = 64;
-const setupLifetimeMs = 180000;
+const setupLifetimeMs = 600000;
 const trialMs = 604800000;
 const secondMs = 1000;
 const sampleCount = 30;
@@ -99,13 +113,16 @@ const expected = (await expectation.exists())
   ? Schema.decodeUnknownSync(
       Schema.Struct({
         history: Schema.Unknown,
+        workspace: Schema.optional(
+          Schema.Struct({ profile: Schema.Unknown, review: Schema.Unknown })
+        ),
         inspections: Schema.Record(Schema.String, Schema.Unknown),
       })
     )(await expectation.json())
   : undefined;
 const inspections = Object.entries(expected?.inspections ?? {});
-const subject = "24000000-0000-4000-8000-000000000481";
 const plan = calibration(await Bun.file(resolve(output, "plan.json")).json());
+const subject = plan.browserUser?.id ?? "24000000-0000-4000-8000-000000000481";
 /**
  * @param {string} value Text binding.
  * @returns {{type:"text",value:string}}
@@ -212,7 +229,12 @@ const learn = (route, calls) => {
   const previous = estimates[route] ?? { maximum: empty(), statements: {} };
   const statements = { ...previous.statements };
   for (const entry of calls) {
-    statements[entry.key] = maximumOf(statements[entry.key] ?? empty(), headroom(entry));
+    if ("child" in entry && "calls" in entry) {
+      learn(entry.child, entry.calls);
+      statements[entry.key] = estimates[entry.child].maximum;
+    } else {
+      statements[entry.key] = maximumOf(statements[entry.key] ?? empty(), headroom(entry));
+    }
   }
   const maximum = calls.reduce((total, entry) => add(total, statements[entry.key]), empty());
   estimates[route] = { maximum: maximumOf(previous.maximum, maximum), statements };
@@ -311,7 +333,14 @@ try {
         .prepare(
           "UPDATE users SET whatsapp_portfolio_id=?,whatsapp_bsuid=?,whatsapp_verified_at_ms=?,trial_started_at_ms=?,trial_ends_at_ms=? WHERE id=?"
         )
-        .bind("acceptance-portfolio", "CO.Reference", now, now, now + trialMs, subject),
+        .bind(
+          "acceptance-portfolio",
+          "CO.Reference",
+          now,
+          plan.browserUser?.startedAtMs ?? now,
+          plan.browserUser?.endsAtMs ?? now + trialMs,
+          subject
+        ),
       db
         .prepare(
           "INSERT INTO consent_history(record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,?,?,?,?,?)"
@@ -363,9 +392,12 @@ try {
     throw interruption;
   }
   if (refuse) {
-    const denied = await source("/transactions?limit=25", {
-      headers: { cookie, "Fidy-Session-Binding": binding },
-    });
+    const denied = await source(
+      plan.browserUser ? "/web/session/binding?context=transactions" : "/transactions?limit=25",
+      {
+        headers: { cookie, "Fidy-Session-Binding": binding },
+      }
+    );
     const unavailable = 503;
     assert.equal(denied.status, unavailable, "a zero native ceiling must refuse before Audit");
     assert.equal(denied.headers.get("x-fidy-comparison-cost"), null);
@@ -377,6 +409,115 @@ try {
       .first("total");
     assert.equal(noRead, 0);
     metadata.result = "zero ceiling refused authenticated work";
+  } else if (plan.browserUser) {
+    assert.ok(expected?.workspace);
+    const headers = { cookie, "Fidy-Session-Binding": binding };
+    await eachInOrder(inspections, async ([id, detail]) => {
+      await Bun.sleep(secondMs);
+      const reply = await request("/transactions/" + id, { headers });
+      assert.equal(reply.status, success);
+      assert.deepEqual(await reply.json(), detail);
+    });
+    const { runBrowser } = await import("../hosted-browser/captured-profile.mjs");
+    /** @type {Record<string,number>} */
+    const routes = {};
+    await runBrowser({
+      variant: "d1",
+      origins: { browser: origin, api: "https://api.fidyapp.com" },
+      cookie,
+      expected: expected.history,
+      workspace: expected.workspace,
+      forwardWeb: async (/** @type {Request} */ incoming) => {
+        const path = new URL(incoming.url).pathname;
+        const reply = await source(
+          "/_comparison_web/" + (path === "/app/transactions" ? "index.html" : path.slice(1))
+        );
+        if (reply.status !== success) return new Response(null, { status: reply.status });
+        assert.equal(reply.headers.get("x-fidy-comparison-worker"), ingressVersion);
+        return reply;
+      },
+      forward: async (/** @type {Request} */ incoming) => {
+        const url = new URL(incoming.url);
+        const path = url.pathname + url.search;
+        const options = { method: incoming.method, headers: Object.fromEntries(incoming.headers) };
+        if (incoming.method === "OPTIONS") {
+          const reply = await source(path, options);
+          const noContent = 204;
+          assert.equal(reply.status, noContent);
+          return reply;
+        }
+        const route = incoming.method + " " + path;
+        routes[route] = (routes[route] ?? 0) + 1;
+        return request(path, options);
+      },
+    });
+    assert.equal(routes["GET /user"], sampleCount);
+    assert.equal(
+      routes[
+        "GET /transactions?limit=25&from=2026-11-01T05%3A00%3A00.000Z&to=2026-12-01T05%3A00%3A00.000Z"
+      ],
+      sampleCount
+    );
+    assert.equal(routes["GET /ingestion/review-workspace?limit=0&status=pending"], 1);
+    const { proveScopedCorrection } = await import("../hosted-browser/scoped-correction.mjs");
+    metadata.mutation = await proveScopedCorrection(
+      expected.history,
+      async (method, path, body) => {
+        await Bun.sleep(secondMs);
+        return request(path, {
+          method,
+          headers: { ...headers, "content-type": "application/json" },
+          ...(body ? { body: JSON.stringify(body) } : {}),
+        });
+      }
+    );
+    const audits = await db.batch([
+      db
+        .prepare(
+          "SELECT operation,outcome,count(*) AS n FROM audit_entries WHERE user_id=? AND session_id=? GROUP BY operation,outcome ORDER BY operation,outcome"
+        )
+        .bind(subject, binding),
+      db
+        .prepare(
+          "SELECT (SELECT coalesce(sum(units),0) FROM commercial_allowance_consumptions WHERE user_id=?1 AND allowance='canonical_call') AS units,(SELECT count(*) FROM canonical_request_replays WHERE user_id=?1 AND state='completed') AS receipts"
+        )
+        .bind(subject),
+    ]);
+    account("audit", audits);
+    const auditRows = Schema.decodeUnknownSync(
+      Schema.Array(
+        Schema.Struct({
+          operation: Schema.NullOr(Schema.String),
+          outcome: Schema.NullOr(Schema.String),
+          n: Schema.Int,
+        })
+      )
+    )(audits[0].results);
+    /** @param {string} operation Canonical operation. */
+    const count = (operation) =>
+      auditRows.find((row) => row.operation === operation && row.outcome === "success")?.n;
+    assert.equal(count("transactions.listTransactions"), sampleCount + 1 + 2);
+    assert.equal(count("transactions.getTransaction"), fixtureOriginalCount);
+    assert.equal(count("transactions.updateTransaction"), 1);
+    assert.deepEqual(audits[1].results, [{ units: 0, receipts: 0 }]);
+    const limits = training
+      ? estimates
+      : routeBounds(await Bun.file(resolve(output, "limits.json")).json());
+    Object.assign(metadata, {
+      result: "passed",
+      sqlBatches,
+      comparedInspections: inspections.length,
+      routes,
+      sessionAudit: audits[0].results,
+      commercial: audits[1].results[0],
+      fullEstimate: [
+        ...sqlBatches.map((batch) => batch.maximum),
+        ...requests.map((entry) => limits[entry.route].maximum),
+      ].reduce(add, empty()),
+    });
+    if (training) {
+      await Bun.write(resolve(output, "limits.json"), JSON.stringify(estimates, null, 2));
+    }
   } else {
     /** @type {string | undefined} */
     let responseSha256;

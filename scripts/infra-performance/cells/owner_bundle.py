@@ -1,5 +1,6 @@
 """The complete admitted sequence comes from the protected frozen-package rehearsal."""
 
+from collections import Counter
 import hashlib
 import json
 import re
@@ -7,6 +8,7 @@ from pathlib import Path
 
 from budget import KEYS, Refused, counts
 from comparison import FIXTURE
+import browser_window
 from prepare import PIN, CALIBRATION
 
 LOGIN = ("POST /web/pairings", "POST /web/pairings/redeem", "GET /web/session/binding")
@@ -41,12 +43,19 @@ class MaterializedBundle:
         self.disclosure = checked("disclosure").decode()
         self.probe = json.loads(checked("probe"))
         plan, snapshot = json.loads(checked("plan")), json.loads(checked("snapshot-proof"))
+        self.browser = plan.get("workload") == browser_window.WORKLOAD
+        self.fixture = browser_window.FIXTURE if self.browser else FIXTURE
+        self.user = plan.get("browserUser")
+        if self.browser:
+            if snapshot.get("workload") != browser_window.WORKLOAD or pairs != 30 or not self.user:
+                raise Refused("incomplete_browser_fixture")
+            self.assets = json.loads(checked("browser-assets"))
         if (
             plan["baseline"] != PIN
-            or plan["verified"] != FIXTURE
+            or plan["verified"] != self.fixture
             or self.probe["result"] != "passed"
             or self.probe["comparedInspections"] != 8
-            or self.probe["auditReads"] != 30
+            or (not self.browser and self.probe["auditReads"] != 30)
             or snapshot["scope"] != "complete pre-Login fixture"
             or snapshot["stage"] != "equivalent"
             or snapshot["snapshot"] != plan["schemaSnapshot"]
@@ -70,6 +79,18 @@ class MaterializedBundle:
         self.direct = [counts(g["maximum"]) for g in ledger]
         routes = [*LOGIN, *["GET /transactions/" + i for i in self.inspections], HISTORY]
         limits = json.loads(checked("limits"))
+        if self.browser:
+            allowed = browser_window.route_counts(self.expected)
+            self.counts = Counter([*LOGIN, *["GET /transactions/"+i for i in self.inspections]]) + allowed
+            if set(limits) != set(self.counts) | {"POST /call","POST /batch"}:
+                raise Refused("unexpected_browser_worker_permissions")
+            if self.counts != Counter(row["route"] for row in self.probe["requests"]):
+                raise Refused("incomplete_browser_request_reservations")
+            self.http = {r:counts(limits[r]["maximum"]) for r in self.counts}
+            self.estimate = counts({k:sum(c[k] for c in self.direct) + sum(n*self.http[r][k] for r,n in self.counts.items()) for k in KEYS})
+            if self.estimate != self.probe["fullEstimate"]:
+                raise Refused("invalid_complete_browser_estimate")
+            return
         if set(limits) != set(routes):
             raise Refused("incomplete_request_bounds")
         self.http = {r: counts(limits[r]["maximum"]) for r in routes}

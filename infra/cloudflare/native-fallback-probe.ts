@@ -171,8 +171,15 @@ export const observePairingStart = Effect.fn(function* (
     : status;
 });
 
-const controlResponse = Effect.fn(function* (operation: string, response: Response) {
-  if (response.status < clientError) return response;
+const isIsolationResponse = (request: Request, response: Response): boolean =>
+  response.status === serviceUnavailableStatus &&
+  request.method === "GET" &&
+  request.url === installedOrigins.acceptance.api + "/transactions" &&
+  !request.headers.has(acceptanceProofHeader);
+const controlResponse = Effect.fn(function* (request: Request, response: Response) {
+  // The login control owns the exact 503 assertion on its unsigned read.
+  if (response.status < clientError || isIsolationResponse(request, response)) return response;
+  const operation = controlRequests.get(new URL(request.url).pathname) ?? "control identity";
   const error =
     operation === "pairing start" &&
     response.status === serviceUnavailableStatus &&
@@ -197,8 +204,7 @@ export const controlsDigest = Effect.fn(function* (
     proof: Redacted.make(pair.proof),
     send: (request) => {
       for (const [name, value] of Object.entries(route)) request.headers.set(name, value);
-      const operation = controlRequests.get(new URL(request.url).pathname) ?? "control identity";
-      return send(request).pipe(Effect.flatMap((response) => controlResponse(operation, response)));
+      return send(request).pipe(Effect.flatMap((response) => controlResponse(request, response)));
     },
   });
   if (controls.length !== 2 || new Set(controls.map((control) => control.id)).size !== 2) {

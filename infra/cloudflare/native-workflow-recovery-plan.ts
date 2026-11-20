@@ -84,6 +84,14 @@ const metadataMatches = (node: Node): boolean => {
     isDeepStrictEqual(new Set(state.downstream), new Set(node.downstream))
   );
 };
+const ReviewedAction = Schema.Literals(["create", "update", "noop", "replace", "adopted"]);
+const resourceLabel = (node: Node): string => {
+  const action = Option.getOrElse(
+    Schema.decodeUnknownOption(ReviewedAction)(node.action),
+    () => "unknown action"
+  );
+  return " [" + node.resource.LogicalId + ", " + action + "]";
+};
 
 const requireScopedNodes = (plan: WorkflowPlan): ReadonlySet<string> => {
   const selected = plan.selectedFqns;
@@ -106,25 +114,31 @@ const requireScopedNodes = (plan: WorkflowPlan): ReadonlySet<string> => {
 const requireNoopResource = (node: Node): void => {
   if (node.action !== "noop" || !metadataMatches(node)) {
     throw new WorkflowRecoveryRefused({
-      message: "Workflow recovery would change an upstream resource or its state metadata",
+      message:
+        "Workflow recovery would change an upstream resource or its state metadata" +
+        resourceLabel(node),
     });
   }
   if (node.resource.LogicalId === hostId && !Schema.is(SmokeAttributes)(node.state?.attr)) {
-    throw new WorkflowRecoveryRefused({ message: "Workflow recovery targets another Smoke host" });
+    throw new WorkflowRecoveryRefused({
+      message: "Workflow recovery targets another Smoke host" + resourceLabel(node),
+    });
   }
 };
 
 const requireResourceState = (fqn: string, node: Node): void => {
   if (node.state?.fqn !== fqn) {
     throw new WorkflowRecoveryRefused({
-      message: "Workflow recovery scope changed its state identity",
+      message: "Workflow recovery scope changed its state identity" + resourceLabel(node),
     });
   }
   if (node.resource.LogicalId !== workflowId) {
     return requireNoopResource(node);
   }
   if (!workflowNodeIsInterrupted(node)) {
-    throw new WorkflowRecoveryRefused({ message: "Missing exact interrupted Workflow state" });
+    throw new WorkflowRecoveryRefused({
+      message: "Missing exact interrupted Workflow state" + resourceLabel(node),
+    });
   }
 };
 

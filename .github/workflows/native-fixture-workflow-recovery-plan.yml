@@ -59,6 +59,10 @@ jobs:
           ref: de04a192c3836be0efb488b170a7b93b9f98f28f
           path: interrupted
           persist-credentials: false
+      - name: Match verifier and original provider dependencies
+        run: |
+          cmp bun.lock interrupted/bun.lock
+          git diff --quiet "$RELEASE_GIT_SHA" "$GITHUB_SHA" -- patches
       - run: bash scripts/install-workspace.sh --ignore-scripts
         working-directory: interrupted
       - uses: ./.github/actions/configure-alchemy-cloudflare-profile

@@ -7,13 +7,25 @@ on:
         description: Read the scoped inventory or prepare the independently approved dormant successor
         type: choice
         default: plan
-        options: [plan, stage]
+        options: [plan, stage, recover, rollout]
         required: true
       plan_artifact:
         description: Successful protected plan artifact ID from the exact current trunk commit
         type: string
       plan_sha256:
         description: Independently approved SHA-256 digest of that GitHub archive
+        type: string
+      seal_artifact:
+        description: Successful protected zero-traffic successor seal artifact ID
+        type: string
+      seal_sha256:
+        description: Independently approved SHA-256 digest of the successor seal archive
+        type: string
+      recovery_artifact:
+        description: Verified dormant successor recovery artifact ID
+        type: string
+      recovery_sha256:
+        description: Independently approved SHA-256 digest of the dormant recovery archive
         type: string
 
 permissions:
@@ -31,13 +43,18 @@ jobs:
     environment: production
     timeout-minutes: 60
     env:
-      FIXTURE_RELEASE_OPERATION: ${{ inputs.operation == 'stage' && 'stage-fixture-successor' || 'plan-fixture-successor' }}
+      FIXTURE_RELEASE_OPERATION: ${{ format('{0}-fixture-successor', inputs.operation) }}
       APPROVED_PLAN_ARTIFACT: ${{ inputs.plan_artifact }}
       APPROVED_PLAN_DIGEST: ${{ inputs.plan_sha256 }}
+      SUCCESSOR_SEAL_ARTIFACT: ${{ inputs.seal_artifact }}
+      SUCCESSOR_SEAL_DIGEST: ${{ inputs.seal_sha256 }}
+      SUCCESSOR_RECOVERY_ARTIFACT: ${{ inputs.recovery_artifact }}
+      SUCCESSOR_RECOVERY_DIGEST: ${{ inputs.recovery_sha256 }}
       NATIVE_STORAGE_ADMISSION: ${{ vars.NATIVE_STORAGE_ADMISSION }}
       NATIVE_STORAGE_HOSTS: ${{ vars.NATIVE_STORAGE_HOSTS || 'acceptance' }}
       RELEASE_GIT_SHA: ${{ github.sha }}
       RELEASE_ATTEMPT_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+      RELEASE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}
       ALCHEMY_PROFILE: ci
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -67,14 +84,30 @@ jobs:
           else
             [[ -z "$APPROVED_PLAN_ARTIFACT" && -z "$APPROVED_PLAN_DIGEST" ]]
           fi
+          if [[ "$FIXTURE_RELEASE_OPERATION" == recover-fixture-successor || "$FIXTURE_RELEASE_OPERATION" == rollout-fixture-successor ]]; then
+            [[ "$SUCCESSOR_SEAL_ARTIFACT" =~ ^[1-9][0-9]{0,19}$ && "$SUCCESSOR_SEAL_DIGEST" =~ ^[a-f0-9]{64}$ ]]
+          else
+            [[ -z "$SUCCESSOR_SEAL_ARTIFACT" && -z "$SUCCESSOR_SEAL_DIGEST" ]]
+          fi
+          if [[ "$FIXTURE_RELEASE_OPERATION" == rollout-fixture-successor ]]; then
+            [[ "$SUCCESSOR_RECOVERY_ARTIFACT" =~ ^[1-9][0-9]{0,19}$ && "$SUCCESSOR_RECOVERY_DIGEST" =~ ^[a-f0-9]{64}$ ]]
+          else
+            [[ -z "$SUCCESSOR_RECOVERY_ARTIFACT" && -z "$SUCCESSOR_RECOVERY_DIGEST" ]]
+          fi
       - uses: ./.github/actions/bun-runtime
       - run: bash scripts/install-workspace.sh --ignore-scripts
       - name: Check the reviewed edge policy
         run: bun infra/cloudflare/verify-edge-policy.ts
       - name: Authenticate the original release, receipt, and exact erasure
+        if: inputs.operation == 'plan' || inputs.operation == 'stage'
         run: |
           umask 077
           python3 scripts/infra-performance/canonical-fixture/successor_source.py
+      - name: Authenticate same-SHA successor seals
+        if: inputs.operation == 'recover' || inputs.operation == 'rollout'
+        run: |
+          umask 077
+          python3 scripts/infra-performance/canonical-fixture/successor_artifacts.py
       - uses: ./.github/actions/configure-alchemy-cloudflare-profile
       - name: Bind the protected plan to the reviewed revision
         run: |
@@ -135,4 +168,84 @@ jobs:
             ${{ runner.temp }}/native-release.json
             ${{ runner.temp }}/native-release.json.controls
             ${{ runner.temp }}/native-release.json.uploads
+          if-no-files-found: ignore
+      - name: Restore the sealed successor dormant pair
+        if: inputs.operation == 'recover'
+        working-directory: infra/cloudflare
+        env:
+          CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
+        run: bun native-storage-release.ts recover-successor
+      - name: Save the verified dormant recovery
+        if: inputs.operation == 'recover'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-fixture-successor-recovered-${{ github.run_id }}
+          path: ${{ runner.temp }}/native-fixture-successor-recovered.json
+          if-no-files-found: error
+      - name: Rebuild the original retained Web assets for verification
+        if: inputs.operation == 'rollout'
+        run: |
+          web_revision=$(jq -er .revision infra/cloudflare/native-fixture-upload.json)
+          web_digest=$(jq -er .retainedWebContractDigest "$RUNNER_TEMP/fixture-successor-source.json")
+          git worktree add --detach "$RUNNER_TEMP/retained-web" "$web_revision"
+          (
+            cd "$RUNNER_TEMP/retained-web"
+            bash scripts/install-workspace.sh --ignore-scripts
+            cd apps/web
+            RELEASE_GIT_SHA="$web_revision" CONTRACT_DIGEST="$web_digest" bun run build:production
+          )
+          mkdir -p apps/web/dist
+          cp -R "$RUNNER_TEMP/retained-web/apps/web/dist/." apps/web/dist
+          echo "FIXTURE_WEB_CONTRACT_DIGEST=$web_digest" >> "$GITHUB_ENV"
+      - name: Capture the verified successor dormant rollback position
+        if: inputs.operation == 'rollout'
+        working-directory: infra/cloudflare
+        run: bun native-storage-release.ts capture-successor-rollout
+      - name: Upload the reviewed active successor pair
+        if: inputs.operation == 'rollout'
+        working-directory: infra/cloudflare
+        env:
+          NATIVE_FIXTURE_SIGNING_KEY: ${{ secrets.NATIVE_FIXTURE_SIGNING_KEY }}
+        run: bun native-storage-resources.ts rollout-fixture-successor
+      - name: Stage the active successor pair at zero traffic
+        if: inputs.operation == 'rollout'
+        working-directory: infra/cloudflare
+        run: bun native-storage-release.ts stage-successor-rollout
+      - name: Verify and promote the active successor with its tested return pair
+        id: promote_successor
+        if: inputs.operation == 'rollout'
+        working-directory: infra/cloudflare
+        run: bun native-storage-release.ts promote-successor
+      - name: Verify the installed successor and retained controls
+        id: verify_successor
+        if: inputs.operation == 'rollout'
+        working-directory: infra/cloudflare
+        env:
+          CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
+        run: bun native-storage-release.ts verify
+      - name: Restore the sealed dormant pair after failed verification
+        if: failure() && inputs.operation == 'rollout' && steps.promote_successor.outcome == 'success' && steps.verify_successor.outcome == 'failure'
+        working-directory: infra/cloudflare
+        run: bun native-storage-release.ts rollback
+      - name: Save the active successor release
+        if: inputs.operation == 'rollout'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-fixture-successor-active-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/native-release.json.promoted
+            ${{ runner.temp }}/native-verification.json
+            ${{ runner.temp }}/fixture-successor-seal-reference.json
+            ${{ runner.temp }}/fixture-successor-recovery-reference.json
+          if-no-files-found: error
+      - name: Retain successor active rollout diagnostics
+        if: always() && inputs.operation == 'rollout'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-fixture-successor-rollout-diagnostics-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/native-release.json
+            ${{ runner.temp }}/native-release.json.uploads
+            ${{ runner.temp }}/native-release.json.promoted
+            ${{ runner.temp }}/native-release.json.restored
           if-no-files-found: ignore

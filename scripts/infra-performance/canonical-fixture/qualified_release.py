@@ -67,6 +67,14 @@ ROLLOUT_STEPS = {
 def artifact(account_revision, artifact_id, expected_digest, get=actions_get, git=git_read):
     if not re.fullmatch("[a-f0-9]{40}", account_revision):
         raise ValueError("Unexpected signed application revision")
+    if not re.fullmatch("[1-9][0-9]{0,19}", artifact_id or ""):
+        raise ValueError("Invalid protected artifact ID")
+    meta = json.loads(get("artifacts/" + artifact_id))
+    if meta["name"].startswith("native-fixture-successor-active-"):
+        from successor_artifacts import active_successor
+        if git("merge-base", account_revision, git("rev-parse", "HEAD")) != account_revision:
+            raise ValueError("Protected successor release came from a different lineage")
+        return active_successor(account_revision, {"artifactId":artifact_id, "sha256":expected_digest}, get)
     source = archive_verifier(artifact_id, git("rev-parse", "HEAD"), get, git, account_revision)
     run, data = protected_archive(source, artifact_id, expected_digest,
                                   prefix="native-storage-release-", conclusions={"success"}, get=get)
@@ -125,7 +133,9 @@ def fixture_upload():
 
 def serving_graph(read, account, revision, installed):
     upload = fixture_upload()
-    generation = upload["revision"]
+    support = upload["revision"]
+    successor = installed.get("fixtureMember") == "performance-2"
+    generation = revision if successor else support
     if (installed.get("revision") != revision or installed.get("resourceRevision") != generation
             or not re.fullmatch("[0-9a-f]{40}", generation)):
         raise ValueError("Qualified application source or retained resource generation differs")
@@ -135,7 +145,7 @@ def serving_graph(read, account, revision, installed):
     website = websites[0]
     if (website.get("browser") != "https://storage-web-acceptance.fidyapp.com"
             or website.get("api") != "https://storage-acceptance.fidyapp.com"
-            or website.get("revision") != generation or not website.get("entryAssets")):
+            or website.get("revision") != support or not website.get("entryAssets")):
         raise ValueError("Acceptance website does not serve the retained build")
     controls = installed.get("fixtureControlsDigest", "")
     if not re.fullmatch("[0-9a-f]{64}", controls) or controls != upload["controlsDigest"]:
@@ -178,7 +188,7 @@ def serving_graph(read, account, revision, installed):
             rows = raw["resources"]["bindings"]
             bindings = {row["name"]: row for row in rows}
             source = bindings.get("RELEASE_GIT_SHA", {})
-            expected_source = revision if role == "Smoke" else generation
+            expected_source = revision if role == "Smoke" else support
             if (raw.get("id") != recorded["versionId"] or len(bindings) != len(rows)
                     or (source.get("type"), source.get("text")) != ("plain_text", expected_source)):
                 raise ValueError("Installed support Worker has a different source revision")

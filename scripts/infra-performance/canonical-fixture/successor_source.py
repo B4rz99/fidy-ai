@@ -169,6 +169,7 @@ def main():
                   stableCoreDeployment=actual["deployments"]["core"], stableIngressVersion=actual["versions"]["ingress"],
                   stableIngressDeployment=actual["deployments"]["ingress"],
                   oldSmokeVersionId=smoke["versionId"], oldSmokeDeploymentId=smoke["deploymentId"],
+                  retainedWebContractDigest=installed["website"][0]["contractDigest"],
                   namespaces=installed["namespaces"])
     directory = Path(env["RUNNER_TEMP"])
     if sys.argv[1:] == ["recheck"] and operation == "stage-fixture-successor":

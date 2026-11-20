@@ -100,6 +100,19 @@ class RetainedResourceQualificationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "receiver targets"):
             self.verify()
 
+    def test_successor_uses_its_sealed_smoke_and_keeps_the_original_web_and_email_generation(self):
+        old_smoke = self.roles["Smoke"]
+        smoke = "fidy-native-smoke-" + self.source
+        self.roles["Smoke"] = self.receiver_target = smoke
+        self.workers["Smoke"]["name"] = smoke
+        self.sources[smoke] = self.sources.pop(old_smoke)
+        self.active[smoke] = self.active.pop(old_smoke)
+        self.installed.update(fixtureMember="performance-2", resourceRevision=self.source)
+        self.verify()
+        self.installed["website"][0]["revision"] = self.source
+        with self.assertRaises(ValueError):
+            self.verify()
+
     def test_substituting_resource_provider_asset_or_support_receipt_refuses_before_cleanup(self):
         for owner,field,bad in [
             (self.installed,"fixtureControlsDigest","f"*64), (self.installed,"resourceRevision",self.source), (self.installed,"resourceRevision",self.provider["revision"]),

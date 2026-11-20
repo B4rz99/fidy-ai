@@ -484,6 +484,20 @@ probes, the job publishes a `native-fixture-successor-stage-<run-id>` seal. A fa
 leave uploaded versions or zero-traffic assignments. Inspect the retained diagnostics before
 considering any recovery.
 
+Use `recover` on the same protected trunk commit with the independently verified stage
+artifact ID and archive digest. The job authenticates the exact stage, including its reviewed
+read-only plan. It checks both zero-traffic assignments and the original controls before moving
+the dormant Core and Ingress to 100%. It verifies the dormant application through ordinary
+traffic and publishes `native-fixture-successor-recovered-<run-id>`.
+
+Use `rollout` on that same commit with the independently verified stage and recovery artifact
+IDs and digests. The active build updates only Core and Ingress with the sealed bindings,
+namespace IDs and technical smoke generation. The original retained browser build is rebuilt
+separately for installed verification. The protected rollout uses the existing candidate,
+mixed, and code-only rollback probes. If installed verification fails after promotion, it uses
+the tested same-SHA dormant return pair. A successful installed run publishes
+`native-fixture-successor-active-<run-id>` for the closed Transaction cohort workflow.
+
 ### Run the ordinary mounted Transactions browser profile
 
 Select `browser` and `30` in the protected **Measure the closed native Transaction cohort**

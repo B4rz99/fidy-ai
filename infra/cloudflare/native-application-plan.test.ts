@@ -46,11 +46,13 @@ const rehearsalKey = Effect.gen(function* () {
   };
 });
 const testSigner = await Effect.runPromise(rehearsalKey);
-it.effect.each(["unsigned", "original", "successor"] as const)(
+it.effect.each(["unsigned", "original", "successor-dormant", "successor-active"] as const)(
   "declares exactly the requested Core and smoke bindings before resources exist (%s)",
   (mode) => {
     const enabled = mode !== "unsigned";
-    const successorPlan = mode === "successor";
+    const successorPlan = mode.startsWith("successor-");
+    const operation =
+      mode === "successor-active" ? "rollout-fixture-successor" : "plan-fixture-successor";
     const revision = "1".repeat(40);
     const fingerprint = enabled ? testSigner.fingerprint : "";
     const configuration = ConfigProvider.fromUnknown({
@@ -60,7 +62,7 @@ it.effect.each(["unsigned", "original", "successor"] as const)(
             NATIVE_FIXTURE_SIGNING_KEY: testSigner.secret,
           }
         : {}),
-      ...(successorPlan ? { FIXTURE_RELEASE_OPERATION: "plan-fixture-successor" } : {}),
+      ...(successorPlan ? { FIXTURE_RELEASE_OPERATION: operation } : {}),
       NATIVE_STORAGE_ADMISSION: "closed",
       RELEASE_GIT_SHA: revision,
       CONTRACT_DIGEST: "2".repeat(64),

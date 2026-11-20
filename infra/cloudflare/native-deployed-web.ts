@@ -40,7 +40,10 @@ export const verifyInstalledWebsite = Effect.fn(function* (
   revision: string,
   origins: (typeof installedOrigins)[keyof typeof installedOrigins] = installedOrigins.acceptance
 ) {
-  const verified = yield* Config.String("CONTRACT_DIGEST");
+  const operation = yield* Config.String("FIXTURE_RELEASE_OPERATION").pipe(Config.withDefault(""));
+  const verified = yield* Config.String(
+    operation === "rollout-fixture-successor" ? "FIXTURE_WEB_CONTRACT_DIGEST" : "CONTRACT_DIGEST"
+  );
   const local = (path: string): Effect.Effect<string, Error> =>
     Effect.tryPromise(() => Bun.file(new URL(path, bundle)).text());
   const compare = Effect.fn(function* (path: string, localPath: string) {

@@ -107,6 +107,7 @@ export const SuccessorSource = Schema.Struct({
   stableIngressDeployment: Schema.NonEmptyString,
   oldSmokeVersionId: Schema.NonEmptyString,
   oldSmokeDeploymentId: Schema.NonEmptyString,
+  retainedWebContractDigest: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u)),
   namespaces: Schema.Array(Schema.String),
 });
 export const successorPlanSelection = (revision: string): ReadonlyArray<string> => [
@@ -115,17 +116,20 @@ export const successorPlanSelection = (revision: string): ReadonlyArray<string> 
   ...smokeResources.map((prefix) => prefix + revision),
 ];
 
-export const requireSuccessorLifecycle = ({
+const requireSuccessorResourceChanges = ({
   rows,
   revision,
+  active,
 }: {
   rows: PlanRows;
   revision: string;
+  active: boolean;
 }): void => {
   const inventory = nativeResourceInventory(revision);
+  const smokeAction = active ? "noop" : "create";
   const expected = new Map(
     successorPlanSelection(revision).map(
-      (id) => [id, id === "Core" || id === "Ingress" ? "update" : "create"] as const
+      (id) => [id, id === "Core" || id === "Ingress" ? "update" : smokeAction] as const
     )
   );
   const observed = new Set<string>();
@@ -164,3 +168,9 @@ export const requireSameSuccessorPlan = ({
     throw new FixturePlanRefused({ reason: "successor differs from reviewed plan" });
   }
 };
+
+type SuccessorInventory = { rows: PlanRows; revision: string };
+export const requireSuccessorLifecycle = (input: SuccessorInventory): void =>
+  requireSuccessorResourceChanges({ ...input, active: false });
+export const requireActiveSuccessorLifecycle = (input: SuccessorInventory): void =>
+  requireSuccessorResourceChanges({ ...input, active: true });

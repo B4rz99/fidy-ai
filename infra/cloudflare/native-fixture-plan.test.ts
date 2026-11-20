@@ -3,6 +3,7 @@ import { expect, it } from "vitest";
 import {
   nativePlanOptions,
   projectFixtureInventory,
+  requireActiveSuccessorLifecycle,
   requireFixtureLifecycle,
   requireSameSuccessorPlan,
   requireSuccessorLifecycle,
@@ -137,5 +138,26 @@ it("allows the same plan in provider order and rejects changes before any upload
     { ...plan, resources: [...plan.resources, row("Web", "Cloudflare.Worker", "update")] },
   ]) {
     expect(() => requireSameSuccessorPlan({ approved: plan, observed: changed })).toThrow();
+  }
+});
+
+it("keeps the successor smoke generation and every other resource unchanged for the active pair", () => {
+  const existing = creation.map((entry) => ({ ...entry, action: "noop" as const }));
+  const active = [
+    ...existing,
+    row("Core", "Cloudflare.Worker", "update"),
+    row("Ingress", "Cloudflare.Worker", "update"),
+  ];
+  expect(() => requireActiveSuccessorLifecycle({ rows: active, revision })).not.toThrow();
+  expect(() => requireActiveSuccessorLifecycle({ rows: active.slice(1), revision })).toThrow();
+  for (const unexpected of creation) {
+    expect(() =>
+      requireActiveSuccessorLifecycle({
+        rows: active.map((entry) =>
+          entry.logicalId === unexpected.logicalId ? unexpected : entry
+        ),
+        revision,
+      })
+    ).toThrow();
   }
 });

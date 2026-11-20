@@ -7,10 +7,12 @@ import { Hex } from "effect/encoding";
 export const fixtureBuild = Config.Literals(["ordinary", "fallback"], "NATIVE_FIXTURE_BUILD").pipe(
   Config.withDefault("ordinary")
 );
-export const fixtureSuccessorPlan = Effect.gen(function* () {
-  const operation = yield* Config.String("FIXTURE_RELEASE_OPERATION").pipe(Config.withDefault(""));
-  return operation === "plan-fixture-successor" || operation === "stage-fixture-successor";
-});
+const successorOperations: ReadonlySet<string> = new Set([
+  "plan-fixture-successor",
+  "stage-fixture-successor",
+  "recover-fixture-successor",
+  "rollout-fixture-successor",
+]);
 const workerFiles = {
   ordinary: { Core: "core-worker", Ingress: "public-worker" },
   fallback: { Core: "fixture-fallback-core", Ingress: "fixture-fallback-ingress" },
@@ -94,13 +96,16 @@ export const fixtureSignerBindings = Effect.fn(function* (release: {
 
 export const fixtureArtifacts = Effect.fn(function* (revision: string) {
   const retainProvider = (yield* expectedFixtureSigner) !== "";
-  const fallback = (yield* fixtureBuild) === "fallback";
-  const successorPlan = yield* fixtureSuccessorPlan;
+  const operation = yield* Config.String("FIXTURE_RELEASE_OPERATION").pipe(Config.withDefault(""));
+  const successorPlan = successorOperations.has(operation);
+  const fallback = successorPlan
+    ? operation !== "rollout-fixture-successor"
+    : (yield* fixtureBuild) === "fallback";
   if ((fallback || successorPlan) && !retainProvider) {
     return yield* Effect.die(Error("Dormant fixture requires the protected retained provider"));
   }
   return {
-    fallback: fallback || successorPlan,
+    fallback,
     retainProvider,
     successorPlan,
     resourceRevision: successorPlan

@@ -1,10 +1,36 @@
+from datetime import datetime, timezone
+import json
+from pathlib import Path
+from tempfile import TemporaryDirectory
 import time
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from protected_cohort import HostedPort
+from protected_cohort import HostedPort, checked_browser_origin
 from owner_transport import NATIVE_API
+
+
+class BrowserOriginTests(unittest.TestCase):
+    def test_fresh_evidence_accepts_different_countries_and_colos(self):
+        now = time.time()
+        report = {
+            "observedAt": datetime.fromtimestamp(now, timezone.utc).isoformat(),
+            "origins": {
+                "api": {"country": "US", "colo": "IAD"},
+                "browser": {"country": "CA", "colo": "YYZ"},
+            },
+        }
+        with TemporaryDirectory() as directory:
+            evidence = Path(directory) / "origin.json"
+            evidence.write_text(json.dumps(report))
+            checked_browser_origin(evidence, now)
+            with self.assertRaises(ValueError):
+                checked_browser_origin(evidence, now + 121)
+            report["origins"]["browser"].pop("colo")
+            evidence.write_text(json.dumps(report))
+            with self.assertRaises(ValueError):
+                checked_browser_origin(evidence, now)
 
 
 class HostedTransportTests(unittest.TestCase):

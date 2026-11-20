@@ -85,8 +85,8 @@ claim. Record errors and throttling separately; refusing work cannot manufacture
 
 Use local tests for repeatable diagnosis and the existing deployed web application and Cloudflare
 dashboard for live evidence. A separate deployed test environment is not a prerequisite. Local
-emulation alone does not establish deployed latency. Browser journey evidence should represent
-Colombia; record the actual measurement origin rather than assuming it. Backend timing covers
+emulation alone does not establish deployed latency. Record the Cloudflare-observed country and
+colo for both the browser and API hosts with deployed browser journey evidence. Backend timing covers
 the complete server path, including internal transport, queueing and cold startup, rather than
 only the final handler. Establish which boundaries existing telemetry actually observes before
 claiming the target passes. Workload-envelope results require representative controlled fixtures;

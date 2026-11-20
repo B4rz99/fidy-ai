@@ -459,13 +459,11 @@ NeedsReviewItem. The original WebSession captures the canonical User, creation t
 The frozen comparator restores those facts before its genuine Login and verifies its source rows,
 migration ledger, foreign keys and projection against the unmounted database.
 
-A production-capable Colombia runner can be selected through the repository-controlled
-`FIDY_STORAGE_CO_RUNNER_LABEL` and `FIDY_STORAGE_CO_RUNNER_NAME` variables. Register only an
-isolated runner approved to handle the existing protected production job. The operator selects the
-runner independently of workflow inputs. If the label is unset, the workflow checks GitHub-hosted
-Ubuntu. Before enrollment or account writes, a clean Chromium process checks the public traces at
-both acceptance hosts. Both countries must be `CO`. The report records country, colo and WARP state
-without retaining IP addresses. The paired window checks both public traces again before measuring.
+The protected workflow uses GitHub-hosted Ubuntu. Before native enrollment and before preparing
+the D1 comparator, a clean Chromium process records the Cloudflare-observed country, colo and
+WARP state of both acceptance hosts. The paired window records both public traces again through
+its HTTP transport before measurement. The retained reports include the observation timestamps
+and omit IP addresses.
 
 One browser per installation stays mounted with its original WebSession. Each of the 30 alternating
 pairs refreshes the November 2026 Transactions history and loads the User profile. The disposable

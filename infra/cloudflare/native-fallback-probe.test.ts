@@ -1,7 +1,12 @@
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
-import { Effect } from "effect";
-import { controlsDigest } from "./native-fallback-probe";
+import { Clock, Context, Effect, Layer } from "effect";
+import { FetchHttpClient, HttpClient } from "effect/http";
+import { acceptanceSend } from "./native-storage-release";
+import { ReleaseHttpLive } from "./release-http";
+import { controlsDigest, observePairingStart } from "./native-fallback-probe";
+import { acceptanceRequestAdmitted } from "../../apps/server/cloudflare/release-isolation/operations";
+import { installedOrigins } from "@fidy/server/browser-transport";
 import { releaseFailureMessage } from "./production-release";
 
 it.effect(
@@ -31,4 +36,69 @@ it.effect(
         );
       }
     })
+);
+
+it.live(
+  "compares the ordinary protected pairing request with a separately authenticated empty POST",
+  () =>
+    Effect.gen(function* () {
+      const pair = {
+        revision: "b".repeat(40),
+        proof: "0".repeat(64),
+        core: "11111111-1111-4111-8111-111111111111",
+        ingress: "22222222-2222-4222-8222-222222222222",
+      };
+      const wire = Effect.fn(function* (request: Request) {
+        const { api, browser } = installedOrigins.acceptance;
+        expect(request.url).toBe(api + "/web/pairings");
+        expect(request.method).toBe("POST");
+        expect(request.redirect).toBe("manual");
+        expect(
+          yield* acceptanceRequestAdmitted({
+            boundary: "ingress",
+            request,
+            now: yield* Clock.currentTimeMillis,
+            environment: {
+              BROWSER_ORIGIN: browser,
+              NATIVE_STORAGE_ADMISSION: "closed",
+              RECOVERY_ISOLATION: "isolated",
+              RELEASE_GIT_SHA: pair.revision,
+              SMOKE_PROOF: pair.proof,
+            },
+          })
+        ).toBe(true);
+        const headers = new Headers(request.headers);
+        headers.delete("x-fidy-acceptance-proof");
+        headers.delete("traceparent");
+        headers.delete("b3");
+        return {
+          headers: Object.fromEntries(headers),
+          body: request.body === null ? null : yield* Effect.tryPromise(() => request.text()),
+        };
+      });
+      const calls: Array<Effect.Success<ReturnType<typeof wire>>> = [];
+      const client = Context.get(yield* Layer.build(ReleaseHttpLive), HttpClient.HttpClient);
+      const run = Effect.runPromiseWith(yield* Effect.context<never>());
+      const receive: typeof fetch = Object.assign(
+        (
+          input: Parameters<typeof fetch>[0],
+          init?: Parameters<typeof fetch>[1]
+        ): Promise<Response> =>
+          run(wire(new Request(input, init))).then((received) => {
+            calls.push(received);
+            return new Response("private response", { status: 503 });
+          }),
+        { preconnect: globalThis.fetch.preconnect }
+      );
+      const send = (request: Request): ReturnType<ReturnType<typeof acceptanceSend>> =>
+        acceptanceSend(client)(request).pipe(Effect.provideService(FetchHttpClient.Fetch, receive));
+      yield* controlsDigest(pair, send).pipe(Effect.ignore);
+      for (const body of ["json", "empty"] as const) {
+        expect(yield* observePairingStart(pair, body, send)).toBe("HTTP 503");
+      }
+      expect(calls).toHaveLength(3);
+      expect(calls[0]?.body).toBe("{}");
+      expect(calls[1]).toEqual(calls[0]);
+      expect(calls[2]).toEqual({ ...calls[0], body: null });
+    }).pipe(Effect.scoped)
 );

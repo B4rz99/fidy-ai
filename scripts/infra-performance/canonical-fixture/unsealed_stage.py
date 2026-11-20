@@ -55,7 +55,7 @@ RESEAL_STEPS = {
 def verify_dispatch(env, git=git_read):
     verifier = env.get("GITHUB_SHA", "")
     operation = env.get("FIXTURE_RELEASE_OPERATION")
-    builds = {"reseal-fixture-fallback":"fallback", "recover-fixture-fallback":"fallback",
+    builds = {"diagnose-fixture-pairing":"fallback", "reseal-fixture-fallback":"fallback", "recover-fixture-fallback":"fallback",
               "rollout":"ordinary", "verify":"ordinary"}
     if (env.get("GITHUB_ACTIONS") != "true" or env.get("GITHUB_REPOSITORY") != REPO
             or env.get("GITHUB_WORKFLOW_REF") != f"{REPO}/.github/workflows/native-storage-release.yml@refs/heads/trunk"
@@ -114,8 +114,8 @@ def main():
             env.write(f"RELEASE_GIT_SHA={APPLICATION}\n")
             env.write(f"FIXTURE_STAGED_VERIFIER_SHA={os.environ['GITHUB_SHA']}\n")
         return
-    if os.environ["FIXTURE_RELEASE_OPERATION"] != "reseal-fixture-fallback":
-        raise ValueError("Only the separate qualification operation may restore the unsealed stage")
+    if os.environ["FIXTURE_RELEASE_OPERATION"] not in {"reseal-fixture-fallback", "diagnose-fixture-pairing"}:
+        raise ValueError("Only the separate diagnostic and qualification operations may restore the unsealed stage")
     staged, controls = staged_documents()
     for name, value in [("native-release.json", staged), ("native-release.json.controls", controls)]:
         with os.fdopen(os.open(Path(os.environ["RUNNER_TEMP"]) / name, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600), "w") as file:

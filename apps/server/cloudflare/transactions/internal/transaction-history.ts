@@ -72,7 +72,10 @@ const Row = Schema.Struct({
 });
 const decodeStoredRow = Schema.decodeUnknownOption(Row);
 const decodeStoredFields = Schema.decodeOption(TransactionOutput);
-const encodeHistoryRows = Schema.encodeSync(Schema.Array(TransactionOutput));
+const decodeStoredRows = Schema.decodeUnknownOption(Schema.Array(Row));
+const HistoryRows = Schema.Array(TransactionOutput);
+const decodeHistoryRows = Schema.decodeOption(HistoryRows);
+const encodeHistoryRows = Schema.encodeSync(HistoryRows);
 const encodeHistoryLinks = Schema.encodeSync(TransactionListResponse.fields.next);
 const Query = TransactionQueryValues.mapFields((fields) => ({
   limit: Schema.OptionFromOptionalKey(fields.limit),
@@ -558,11 +561,11 @@ const decodedHistoryPage = (
   selection: Pick<Selection, "request" | "search">,
   query: typeof Query.Type
 ): Option.Option<typeof TransactionListResponse.Type> => {
-  const decoded = rows.results.map(decodeTransactionRow);
-  if (decoded.some(Option.isNone)) {
-    return Option.none();
-  }
-  const transactions = decoded.flatMap((item) => (Option.isSome(item) ? [item.value] : []));
+  const stored = decodeStoredRows(rows.results);
+  if (Option.isNone(stored)) return Option.none();
+  const decoded = decodeHistoryRows(stored.value.map(storedFields));
+  if (Option.isNone(decoded)) return Option.none();
+  const transactions = decoded.value;
   const size = Option.getOrElse(query.limit, () => pageSize);
   const visible = transactions.slice(0, size);
   const last = visible.at(-1);

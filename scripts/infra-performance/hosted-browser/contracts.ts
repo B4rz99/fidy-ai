@@ -49,7 +49,7 @@ const event = Schema.StructWithRest(
   Schema.Struct({
     stage: Schema.optional(Schema.String),
     complete: Schema.optional(Schema.Boolean),
-    milliseconds: Schema.optional(Schema.Number),
+    milliseconds: Schema.optional(Schema.Finite),
     bodyBytes: Schema.optional(Schema.Int),
     status: Schema.optional(Schema.Int),
     failed: Schema.optional(Schema.String),
@@ -61,21 +61,24 @@ export const parseConfig = (input: unknown): PairConfig => {
   Schema.asserts(config, input);
   return input;
 };
-export const parseCost = Schema.decodeUnknownSync(Schema.fromJsonString(cost));
-export const parseDeployment = Schema.decodeUnknownSync(
+const decodeInput = <Codec extends Schema.ConstraintDecoder<unknown>>(
+  schema: Codec
+): ((input: unknown) => Codec["Type"]) => Schema.decodeUnknownSync(schema);
+export const parseCost = decodeInput(Schema.fromJsonString(cost));
+export const parseDeployment = decodeInput(
   Schema.Struct({ gitRevision: Schema.String, contractDigest: Schema.String })
 );
-export const parseReport = Schema.decodeUnknownSync(
+export const parseReport = decodeInput(
   Schema.Struct({
     variant: Schema.Literals(["d1", "do"]),
     snapshots: extras,
     events: Schema.Array(event),
   })
 );
-export const parseAck = Schema.decodeUnknownSync(
+export const parseAck = decodeInput(
   Schema.Struct({ data: Schema.Struct({ id: Schema.String, revision: Schema.Int }) })
 );
-export const parseRefusal = Schema.decodeUnknownSync(
+export const parseRefusal = decodeInput(
   Schema.Struct({
     error: Schema.Struct({
       failedCallIndex: Schema.Int,

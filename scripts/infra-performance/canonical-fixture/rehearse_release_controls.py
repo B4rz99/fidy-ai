@@ -42,22 +42,25 @@ def main():
         os.environ["FIDY_REHEARSAL_BASELINE"] = "true"
         with commands(baseline, "cohort-runtime.test-fixture.ts") as runtime:
             sessions = runtime("mount-original-sessions")
+            original_ids = runtime("survivors")
             original = observations(runtime, sessions)
             inventory = runtime("census")
             if len(sessions) != 2 or any(row["status"] != 200 for row in original):
                 raise ValueError("Original deployed-source workerd controls unavailable")
         os.environ["FIDY_REHEARSAL_BASELINE"] = "false"
+        os.environ["FIDY_NATIVE_FIXTURE_PROVIDER_REVISION"] = baseline
         with commands(candidate, "cohort-runtime.test-fixture.ts") as runtime:
             advanced = observations(runtime, sessions)
+            resumed_identity = runtime("survivors") == original_ids
             same_inventory = inventory == runtime("census")
         os.environ["FIDY_REHEARSAL_BASELINE"] = "true"
         with commands(baseline, "cohort-runtime.test-fixture.ts") as runtime:
             restored = observations(runtime, sessions)
             restored_inventory = inventory == runtime("census")
-        passed = advanced == restored == original and same_inventory and restored_inventory
+        passed = advanced == restored == original and same_inventory and restored_inventory and resumed_identity
         write(out/"summary.json", dict(baseline=baseline, candidate=candidate,
               scope="disposable workerd; original two bound Sessions", original=original,
-              advanced=advanced, restored=restored, samePhysicalInventory=same_inventory,
+              advanced=advanced, restored=restored, freshLoginsMatched=resumed_identity, samePhysicalInventory=same_inventory,
               restoredPhysicalInventory=restored_inventory, passed=passed))
         if not passed:
             raise ValueError("The original bound financial reads did not survive the release")

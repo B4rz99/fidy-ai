@@ -20,6 +20,9 @@ jobs:
           persist-credentials: false
       - run: bash scripts/install-workspace.sh --ignore-scripts
         working-directory: closed-baseline
+      - name: Reopen the original two mounted Sessions after the release
+        if: always()
+        run: python3 scripts/infra-performance/canonical-fixture/rehearse_release_controls.py --out apps/server/test-results/closed-release-controls
       - name: Verify closed release signer inventories on the real plan
         working-directory: infra/cloudflare
         run: bun run test native-application-plan.test.ts native-deployed-graph.test.ts
@@ -45,9 +48,6 @@ jobs:
           bun x tsc --build
           bun run --cwd apps/server typecheck
           bun run --cwd apps/server lint:deps
-      - name: Reopen the original two mounted Sessions after the release
-        if: always()
-        run: python3 scripts/infra-performance/canonical-fixture/rehearse_release_controls.py --out apps/server/test-results/closed-release-controls
       - name: Keep only aggregate result
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

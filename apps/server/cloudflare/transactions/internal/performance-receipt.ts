@@ -1,4 +1,4 @@
-import { ReceiptRequest } from "../../release-isolation/contract";
+import { ReceiptRequest, acceptanceProviderRevision } from "../../release-isolation/contract";
 import { Clock, Effect, Option, Schema } from "effect";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Hex } from "effect/encoding";
@@ -173,7 +173,11 @@ export const ownPerformanceReceipt = Effect.fn(function* (
   if (Option.isNone(command)) return denied();
   const user = yield* boundUser(request, owns);
   if (Option.isNone(user)) return denied();
-  const evidence = yield* readEvidence(user.value, environment.RELEASE_GIT_SHA, binding);
+  const evidence = yield* readEvidence(
+    user.value,
+    acceptanceProviderRevision(environment),
+    binding
+  );
   if (Option.isNone(evidence)) return denied();
   const digest = yield* Effect.tryPromise(() =>
     crypto.subtle.digest("SHA-256", new TextEncoder().encode(binding))

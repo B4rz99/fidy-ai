@@ -14,6 +14,7 @@ import {
   type NativeAcceptanceSettings,
   acceptanceApiHeader,
   acceptanceLifetimeMs,
+  acceptanceProviderRevision,
   acceptanceReceiptKind,
   acceptanceWindowQuery,
 } from "./contract";
@@ -230,7 +231,7 @@ export const fixtureChargeReceipt = Effect.fn(function* (
   ) {
     return isolatedResponse();
   }
-  const revision = settings.RELEASE_GIT_SHA ?? "",
+  const revision = acceptanceProviderRevision(settings),
     params = new URL(request.url).searchParams;
   const subject = `fidy-acceptance-${revision}-${params.get("cohort")}-${params.get("ordinal")}`;
   if (!acceptanceSubject({ revision, issuer: "https://accounts.google.com", subject })) {

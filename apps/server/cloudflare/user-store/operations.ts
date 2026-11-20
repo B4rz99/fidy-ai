@@ -1,3 +1,4 @@
+import { acceptanceProviderRevision } from "../release-isolation/contract";
 import { auditRetentionSchema } from "../audit/contract";
 import { acceptanceSubject } from "../release-isolation/operations";
 import type { NativeAcceptanceSettings } from "../release-isolation/contract";
@@ -1351,7 +1352,7 @@ export const observeUserRegistration = Effect.fn(function* (
           typeof credential.issuer === "string" &&
           typeof credential.subject === "string" &&
           acceptanceSubject({
-            revision: settings.RELEASE_GIT_SHA ?? "",
+            revision: acceptanceProviderRevision(settings),
             issuer: credential.issuer,
             subject: credential.subject,
           })

@@ -22,8 +22,13 @@ export type NativeAcceptanceSettings = Partial<
     NATIVE_STORAGE_ADMISSION: string;
     RECOVERY_ISOLATION: string;
     RELEASE_GIT_SHA: string;
+    ACCEPTANCE_PROVIDER_REVISION: string;
   }>
 >;
+
+/** The closed provider owns its subjects and secrets for the lifetime of its installation. */
+export const acceptanceProviderRevision = (settings: NativeAcceptanceSettings): string =>
+  settings.ACCEPTANCE_PROVIDER_REVISION ?? settings.RELEASE_GIT_SHA ?? "";
 
 export type AcceptanceWindowBindings = NativeAcceptanceSettings &
   Partial<Readonly<{ SMOKE_BUCKET: Pick<R2Bucket, "get" | "put"> }>>;

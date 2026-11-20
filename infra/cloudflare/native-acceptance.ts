@@ -15,7 +15,17 @@ import {
   pricePublicationPath,
   refundSupportBasePath,
 } from "../../apps/server/cloudflare/subscription/contract";
-import { Clock, DateTime, Duration, Effect, Option, Redacted, Schedule, Schema } from "effect";
+import {
+  Clock,
+  Config,
+  DateTime,
+  Duration,
+  Effect,
+  Option,
+  Redacted,
+  Schedule,
+  Schema,
+} from "effect";
 import { installedOrigins } from "@fidy/server/browser-transport";
 import { ProcessingAuthorization } from "../../apps/server/src/shell/processing-consent/contract";
 import { webSignupDisclosure } from "../../apps/server/src/shell/consent/operations";
@@ -26,6 +36,9 @@ import {
 } from "../../apps/server/cloudflare/release-isolation/contract";
 import { acceptancePaymentToken } from "../../apps/server/cloudflare/release-fixture/contract";
 import { issueAcceptanceProviderCode } from "../../apps/server/cloudflare/release-fixture/operations";
+
+const configuredProviderRevision = (revision: string): Config.Config<string> =>
+  Config.String("FIDY_NATIVE_FIXTURE_PROVIDER_REVISION").pipe(Config.withDefault(revision));
 
 type Inputs = {
   revision: string;
@@ -165,9 +178,10 @@ const verifyProvider = Effect.fn(function* (
     auth = new URL(
       (yield* result(start, Schema.Struct({ authorizationUrl: Schema.String }))).authorizationUrl
     );
-  const subject = `fidy-acceptance-${input.revision}-${member}`;
+  const generation = yield* configuredProviderRevision(input.revision);
+  const subject = `fidy-acceptance-${generation}-${member}`;
   const key = new Bun.CryptoHasher("sha256", Redacted.value(input.proof))
-    .update(input.revision + "/oidc-code")
+    .update(generation + "/oidc-code")
     .digest("hex");
   if (auth.searchParams.get("redirect_uri") !== input.origins.api + "/providers/google/callback") {
     return yield* Effect.fail(Error("Protected signup selected another callback origin"));
@@ -311,7 +325,7 @@ const deliverCallback = Effect.fn(function* (
     secret =
       "test_events_" +
       new Bun.CryptoHasher("sha256", Redacted.value(input.proof))
-        .update(input.revision + "/wompi-events")
+        .update((yield* configuredProviderRevision(input.revision)) + "/wompi-events")
         .digest("hex");
   const checksum = new Bun.CryptoHasher("sha256")
     .update(saved.id + "APPROVED" + stamp + secret)

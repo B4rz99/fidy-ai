@@ -26,7 +26,9 @@ export async function runBrowser({variant, origins, cookie, expected, forward, a
     if(url.origin!==origins.api||request.headers.get("origin")!==origins.browser||!["GET","OPTIONS"].includes(request.method)||
        !["/web/session/binding","/ingestion/review-workspace","/transactions","/user"].includes(url.pathname))return new Response(null,{status:403});
     const key=request.method+" "+url.pathname+url.search;
-    const response=await forward(request);
+    const headersOut=new Headers(request.headers);
+    for(const name of ["host","connection","content-length","accept-encoding","transfer-encoding"])headersOut.delete(name);
+    const response=await forward(new Request(request.url,{headers:headersOut,method:request.method}));
     const ev={route:key,status:response.status, origin:response.headers.get("access-control-allow-origin"),credentials:response.headers.get("access-control-allow-credentials"),hasCookie:request.headers.has("cookie"), hasBinding:request.headers.has("fidy-session-binding")};
     events.push(ev);
     const bytes=await response.arrayBuffer();

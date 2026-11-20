@@ -6,11 +6,12 @@ import * as Provider from "alchemy/Provider";
 import { isResolved } from "alchemy/Diff";
 import { Resource } from "alchemy/Resource";
 import { evalStack } from "alchemy/Stack";
-import { InMemoryService, State } from "alchemy/State";
+import { InMemoryService, State, type StateStoreError } from "alchemy/State";
 import { it } from "@effect/vitest";
 import { BunServices } from "@effect/platform-bun";
 import { Data, Effect, Exit, FileSystem, Layer } from "effect";
 import { afterAll, beforeAll, expect, vi } from "vitest";
+import { applySuccessorPlan } from "./native-fixture-plan";
 
 let profileDirectory = "";
 beforeAll(() =>
@@ -42,11 +43,12 @@ type FixtureResource = Resource<
 const FixtureResource = Resource<FixtureResource>("RetirementFixture.Resource");
 class ResourceStillUsed extends Data.TaggedError("ResourceStillUsed")<{}> {}
 
-const fixture = Effect.sync(() => {
+const fixture = Effect.gen(function* () {
   let refuseDeletion = false;
   const cloud = new Map<string, FixtureResource["Attributes"]>();
   const calls: string[] = [];
-  const state = Layer.succeed(State, InMemoryService());
+  const savedState = yield* InMemoryService();
+  const state = Layer.succeed(State, Effect.succeed(savedState));
   const providers = Provider.succeed(FixtureResource, {
     diff: ({ olds, news }) =>
       Effect.succeed(
@@ -80,10 +82,13 @@ const fixture = Effect.sync(() => {
     mode:
       | "defer"
       | "only"
+      | "successor"
       | { deletions: "defer" | "only"; replacement: "create-first" | "delete-first" }
+      | { deletions: "successor"; beforeApply: Effect.Effect<unknown, StateStoreError> }
   ) {
     const deletions = typeof mode === "string" ? mode : mode.deletions;
-    const replacement = typeof mode === "string" ? "update" : mode.replacement;
+    const replacement =
+      typeof mode === "string" || mode.deletions === "successor" ? "update" : mode.replacement;
     return yield* evalStack(
       Alchemy.Stack(
         "RetirementFixture",
@@ -100,6 +105,13 @@ const fixture = Effect.sync(() => {
         })
       ),
       Effect.fn(function* (stack) {
+        if (deletions === "successor") {
+          const plan = yield* Plan.make(stack, { include: ["Core"] });
+          if (typeof mode !== "string" && mode.deletions === "successor") {
+            yield* mode.beforeApply;
+          }
+          return yield* applySuccessorPlan(plan).pipe(Effect.provide(stack.services));
+        }
         const plan = yield* Plan.make(stack);
         return yield* Apply.apply(plan, { deletions }).pipe(Effect.provide(stack.services));
       }),
@@ -110,11 +122,56 @@ const fixture = Effect.sync(() => {
     cloud,
     calls,
     deploy,
+    savedState,
     refuseDeletion: (refuse: boolean): void => {
       refuseDeletion = refuse;
     },
   };
 });
+
+it.effect("applies the scoped successor while keeping the excluded Queue", () =>
+  Effect.gen(function* () {
+    const { cloud, calls, deploy } = yield* fixture;
+    yield* deploy(true, "1", "defer");
+    const before = calls.length;
+    yield* deploy(false, "2", "successor");
+    expect(calls.slice(before)).toEqual(["reconcile:Core"]);
+    expect(new Set([...cloud.values()].map(({ identity }) => identity.split(":")[0]))).toEqual(
+      new Set(["Core", "OnboardingQueue"])
+    );
+  }).pipe(Effect.provide(Alchemist.layer()))
+);
+
+it.effect("refuses a prior generation saved after the scoped plan was captured", () =>
+  Effect.gen(function* () {
+    const { cloud, calls, deploy, savedState } = yield* fixture;
+    const key = { stack: "RetirementFixture", stage: "production", fqn: "Core" };
+    yield* deploy(true, "1", "defer");
+    const baseline = yield* savedState.get(key);
+    if (baseline === undefined) return yield* Effect.fail(Error("Missing baseline state"));
+    yield* deploy(true, "2", { deletions: "defer", replacement: "create-first" });
+    const pending = yield* savedState.get(key);
+    if (pending?.status !== "replaced") {
+      return yield* Effect.fail(Error("Missing prior generation"));
+    }
+
+    yield* savedState.set({ ...key, value: baseline });
+    const before = [...calls];
+    const retained = [...cloud.values()];
+    const refusal = yield* Effect.flip(
+      deploy(false, "3", {
+        deletions: "successor",
+        beforeApply: savedState.set({ ...key, value: pending }),
+      })
+    );
+    expect(refusal).toMatchObject({
+      _tag: "FixturePlanRefused",
+      reason: "successor scope has a pending replacement",
+    });
+    expect(calls).toEqual(before);
+    expect([...cloud.values()]).toEqual(retained);
+  }).pipe(Effect.provide(Alchemist.layer()))
+);
 
 it.effect(
   "keeps the serving Core's Queue tracked through upload, then retires without redeploying",
@@ -145,6 +202,9 @@ it.effect(
         deletions: "defer",
         replacement: "create-first",
       });
+      if (baseline === undefined || candidate === undefined) {
+        return yield* Effect.fail(Error("Missing full deployment output"));
+      }
       expect(cloud.get(baseline.identity)).toEqual(baseline);
       expect(cloud.get(candidate.identity)).toEqual(candidate);
       expect(calls.filter((call) => call.startsWith("delete:"))).toEqual([]);

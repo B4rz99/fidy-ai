@@ -1,7 +1,11 @@
 import { isDeepStrictEqual } from "node:util";
 import type * as Alchemist from "alchemy/Alchemist";
-import { Data, Schema } from "effect";
+import * as Apply from "alchemy/Apply";
+import { Data, Effect, Schema } from "effect";
 import { type Plan, describePlan, describeResource } from "alchemy/Plan";
+import { Stack } from "alchemy/Stack";
+import { Stage } from "alchemy/Stage";
+import { State } from "alchemy/State";
 import { nativeResourceInventory } from "./native-graph";
 import fixtureUpload from "./native-fixture-upload.json" with { type: "json" };
 import retainedProvider from "./native-retained-provider.json" with { type: "json" };
@@ -47,8 +51,43 @@ export class FixturePlanRefused extends Data.TaggedError("FixturePlanRefused")<{
     | "missing required update or deferred deletion"
     | "missing deferred original Worker"
     | "original Worker state or name differs"
-    | "successor differs from reviewed plan";
+    | "successor differs from reviewed plan"
+    | "successor plan is not a scoped upload"
+    | "successor scope has a pending replacement";
 }> {}
+
+export const applySuccessorPlan = Effect.fn("applySuccessorPlan")(function* <Output>(
+  plan: Plan<Output>
+) {
+  const selected = plan.selectedFqns;
+  if (
+    selected === undefined ||
+    selected.size === 0 ||
+    plan.destroy === true ||
+    [plan.deletions, plan.actions, plan.actionDeletions].some(
+      (rows) => Object.keys(rows).length !== 0
+    ) ||
+    Object.entries(plan.resources).some(
+      ([fqn, node]) =>
+        !selected.has(fqn) ||
+        node.action === "replace" ||
+        node.state?.status === "replaced" ||
+        (node.renamedFrom?.length ?? 0) !== 0
+    )
+  ) {
+    return yield* new FixturePlanRefused({ reason: "successor plan is not a scoped upload" });
+  }
+  const state = yield* yield* State;
+  const stack = (yield* Stack).name;
+  const stage = yield* Stage;
+  const saved = yield* Effect.forEach(selected, (fqn) => state.get({ stack, stage, fqn }), {
+    concurrency: 8,
+  });
+  if (saved.some((row) => row?.status === "replacing" || row?.status === "replaced")) {
+    return yield* new FixturePlanRefused({ reason: "successor scope has a pending replacement" });
+  }
+  return yield* Apply.apply(plan);
+});
 export const requireFixtureLifecycle = ({
   rows,
   fallback,

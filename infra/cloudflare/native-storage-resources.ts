@@ -1,5 +1,6 @@
 import {
   SuccessorSource,
+  applySuccessorPlan,
   nativePlanOptions,
   projectFixtureInventory,
   requireActiveSuccessorLifecycle,
@@ -347,7 +348,7 @@ const planFixtureSuccessor = Effect.fn(function* (action: SuccessorAction) {
     })(yield* releaseEvidence.readFile(directory + "/fixture-successor-approved.json"));
     yield* Effect.try(() => requireSameSuccessorPlan({ approved, observed: observedPlan }));
   }
-  yield* Apply.apply(snapshot.native, { deletions: "defer" }).pipe(
+  yield* applySuccessorPlan(snapshot.native).pipe(
     Effect.provide(snapshot.session.context),
     Effect.uninterruptible,
     nativeResourceStage("provider apply")

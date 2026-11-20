@@ -135,6 +135,14 @@ class ReferenceReport(unittest.TestCase):
             row["timings"][key] = 190 if row["variant"] == "d1" else 110
         self.assertEqual(compare(30, rows, ["d1", "do"], calibration=True)[key]["status"], "fail")
 
+    def test_full_recurring_has_only_its_five_declared_product_cases(self):
+        names = {"recurring.month.browser", "recurring.previous.browser", "recurring.selective.browser",
+                 "recurring.no-match.browser", "recurring.full.http"}
+        manifest = browser_workload("extreme", recurring_only=True)
+        self.assertEqual(set(manifest["boundaries"]), names)
+        self.assertEqual(set(compare(1, [], ["d1", "do"], recurring_only=True)), names | {"recurring.full.browser"})
+        self.assertEqual(compare(1, [], ["d1", "do"], recurring_only=True)["recurring.full.browser"]["status"], "not-exposed")
+
     def test_partial_pair_keeps_completed_offered_and_unreached_views_separate(self):
         from run import observed_work
         with tempfile.TemporaryDirectory() as directory:

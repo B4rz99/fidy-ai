@@ -66,7 +66,7 @@ const routeStable = Effect.fn(function* (
   { stableId, previous }: { stableId: string; previous: Traffic }
 ) {
   const reported = yield* port.deploy(name, [{ id: stableId, percentage: 100 }]).pipe(
-    Effect.map(Option.some),
+    Effect.asSome,
     Effect.catchIf(Schema.isSchemaError, () =>
       Effect.logInfo(
         "Rollback write response could not be decoded; checking history for " + name

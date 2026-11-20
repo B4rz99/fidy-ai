@@ -7,7 +7,6 @@ export const freeD1BenchmarkLimits = {
   reservedReads: 2_500_000,
   reservedWrites: 50_000,
   experimentReads: 100_000,
-  experimentWrites: 5_000,
   observationAgeMs: 60_000,
 } as const;
 
@@ -73,8 +72,7 @@ const validateObservation = ({
 };
 
 const exceedsExperimentLimit = (estimate: typeof BudgetEstimate.Type): boolean =>
-  estimate.rowsRead > freeD1BenchmarkLimits.experimentReads ||
-  estimate.rowsWritten > freeD1BenchmarkLimits.experimentWrites;
+  estimate.rowsRead > freeD1BenchmarkLimits.experimentReads;
 
 /** A size check cannot admit a hosted experiment without fresh account-wide usage. */
 const estimateOnly = (

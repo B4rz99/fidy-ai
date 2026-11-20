@@ -46,21 +46,26 @@ class Sandbox:
         self.prefix = "fidy-2259-aabbccddeeff"
         self.storage = scratch / "inventory"
         self.storage.mkdir()
-        self.process = subprocess.Popen(
-            ["bun", str(HERE / "probe.mjs"), str(path), "owner-pipe"],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            text=True,
-            env={"HOME": str(scratch), "TMPDIR": str(scratch), "PATH": os.environ["PATH"]},
-            cwd=ROOT,
-        )
+        # Browser requests run while the controller is idle. Workerd telemetry must have its
+        # own sink, independent of the control replies that are read only between requests.
+        read_fd, write_fd = os.pipe()
+        with os.fdopen(write_fd, "wb") as control:
+            self.process = subprocess.Popen(
+                ["bun", str(HERE / "probe.mjs"), str(path), "owner-pipe"],
+                stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, text=True,
+                pass_fds=(control.fileno(),),
+                env={"HOME": str(scratch), "TMPDIR": str(scratch), "PATH": os.environ["PATH"],
+                     "FIDY_OWNER_REPLY_FD": str(control.fileno())},
+                cwd=ROOT,
+            )
+        self.replies = os.fdopen(read_fd)
         self.entry = self.receive()
 
     def receive(self):
-        for line in self.process.stdout:
-            if line.startswith("FIDY_OWNER_PIPE "):
-                return json.loads(line.removeprefix("FIDY_OWNER_PIPE "))
-        raise RuntimeError("Workerd owner transport closed")
+        line = self.replies.readline()
+        if not line:
+            raise RuntimeError("Workerd owner transport closed")
+        return json.loads(line)
 
     def command(self, payload):
         self.process.stdin.write(json.dumps(payload) + "\n")

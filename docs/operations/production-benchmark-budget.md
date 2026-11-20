@@ -8,6 +8,11 @@ that an authenticated GET can fail while `SELECT 1` and public health still succ
 A [Workers Paid upgrade](https://developers.cloudflare.com/workers/platform/pricing/)
 requires the account owner's approval of recurring charges; it is not an automatic recovery step.
 
+For the storage comparison, run one ordinary-network read profile and small mutation correctness
+checks on the eight-original-Transaction fixture. Charge the complete experiment, including setup
+and cleanup, against current D1 account headroom. Run repeated mutation timings and the 20-User
+offered-load comparison on workerd. [Storage acceptance criteria](https://github.com/B4rz99/fidy-ai/issues/2226)
+
 ## Before any hosted experiment
 
 1. Run the complete fixture locally with native workerd first. Count schema installation, seed
@@ -17,7 +22,8 @@ requires the account owner's approval of recurring charges; it is not an automat
    may lag; the counters do not reserve capacity against concurrent production work.
 3. Evaluate `scripts/infra-performance/d1-budget.ts` with the observation and full experiment
    estimate as JSON on stdin. It uses its own clock. Unknown, foreign, stale, future or previous-day
-   observations refuse. Maximum experiment: 100,000 rows read and 5,000 written. Preserve at least
+   observations refuse. Limit each experiment to 100,000 rows read. Admit writes against current
+   account usage and the complete measured workload. Preserve at least
    2,500,000 reads and 50,000 writes for production. A refusal stops provisioning.
 4. Serialize experiments sharing an account. Carry the admitted ceiling into the runner. Before
    every bounded batch or burst, check its conservative maximum against remaining experiment
@@ -159,13 +165,13 @@ args=(--prefix "$RESOURCE_PREFIX" --revision "$NATIVE_REVISION" --fixture "$PRIV
       --bundle "$VERIFIED_D1_BUNDLE" --manifest-sha256 "$TRUSTED_MANIFEST_SHA256" --pairs 30)
 python3 "$owner" propose "${args[@]}" --out "$PRIVATE_OUTPUT/proposal"
 python3 "$owner" run "${args[@]}" --core-version "$APPROVED_NATIVE_CORE_VERSION" \
-  --ingress-version "$APPROVED_NATIVE_INGRESS_VERSION" --maximum-reads "$APPROVED_READS" --maximum-writes "$APPROVED_WRITES" \
+  --ingress-version "$APPROVED_NATIVE_INGRESS_VERSION" --maximum-reads "$APPROVED_READS" \
   --out "$PRIVATE_OUTPUT/attempt"
 ```
 
 `propose` verifies the native binding, complete final-schema import, frozen package and ceilings
-for every SQL batch, Login, inspection, history read and final Audit check. Use the returned read
-and write maximums when approving the run. `run` obtains current account-wide D1 GraphQL analytics,
+for every SQL batch, Login, inspection, history read and final Audit check. Pass the approved read ceiling and pin the package that contains
+the measured write reservation. `run` obtains current account-wide D1 GraphQL analytics,
 adds previously accounted same-day experiment work and evaluates the repository's Free policy.
 Before taking custody, it independently reads the current native installation and authenticates
 the approved Core and Ingress version UUIDs, closed authority, source revision and exact signer
@@ -380,8 +386,8 @@ The rollout must contain its tested rollback receipt and full native verificatio
 those records with the live deployment identities of all five Workers, the closed host, the Core
 signer fingerprint and UserStore namespace. It uses the existing protected smoke proof and
 `FIDY_NATIVE_FIXTURE_PUBLIC_KEY` public environment variable. Select one or thirty isolated pairs.
-The workflow builds the frozen comparator on the private runner and checks the independently
-calibrated ceiling of 18,194 D1 rows read and 4,754 written.
+The workflow builds the frozen comparator on the private runner, checks the 18,194-row read
+ceiling for the isolated history cohort and reserves the measured writes against account headroom.
 
 The native owner shares the production-deployment concurrency group. Before enrolling, it
 requires two existing smoke User logins, a refused login for the unused performance subject,
@@ -442,3 +448,39 @@ changes its binding inventory and fails that precondition. The ordinary first-in
 also requires an empty, explicitly named installation. Its fixed hostnames, stack and Worker
 names prevent it from acting as a second independent installation on the same account. Keep
 the incumbent release and its erasure/fleet qualifications in place while this remains true.
+
+### Run the ordinary mounted Transactions browser profile
+
+Select `browser` and `30` in the protected **Measure the closed native Transaction cohort**
+workflow. Use the same qualified release, original performance-1 provider identity, random prefix
+and recovery inputs as the HTTP cohort. This profile uses eight signed originals, one link and
+seven effective Transactions. The enrolled User has no unrelated Budget, RecurringPlan or pending
+NeedsReviewItem. The original WebSession captures the canonical User, creation time and TrialPeriod.
+The frozen comparator restores those facts before its genuine Login and verifies its source rows,
+migration ledger, foreign keys and projection against the unmounted database.
+
+A production-capable Colombia runner can be selected through the repository-controlled
+`FIDY_STORAGE_CO_RUNNER_LABEL` and `FIDY_STORAGE_CO_RUNNER_NAME` variables. Register only an
+isolated runner approved to handle the existing protected production job. The operator selects the
+runner independently of workflow inputs. If the label is unset, the workflow checks GitHub-hosted
+Ubuntu. Before enrollment or account writes, a clean Chromium process checks the public traces at
+both acceptance hosts. Both countries must be `CO`. The report records country, colo and WARP state
+without retaining IP addresses. The paired window checks both public traces again before measuring.
+
+One browser per installation stays mounted with its original WebSession. Each of the 30 alternating
+pairs refreshes the November 2026 Transactions history and loads the User profile. The disposable
+D1 Ingress serves the pinned, digest-verified web build through its private expiring key. The native
+web Worker serves its qualified build. The profile reports complete history HTTP body timing and
+interaction through the enabled, painted list. A notes-only Correction commits once. The second
+child of a subsequent two-child atomic batch uses the stale revision. A complete fresh history
+after each outcome verifies the exact original IDs, revisions, notes and untouched records.
+
+The protected owner reserves the entire single-use browser window before dispatch. Both variants
+enforce the calibrated method, query and request counts. The D1 meter reserves the exact User
+coordinator's native allowance for the Correction or batch before forwarding. Setup, Login,
+eight inspections, the browser window, both mutations, confirmation reads and the final Session
+Audit share one measured D1 reservation against current account headroom. An incomplete window keeps its
+reservation fenced. The original native cleanup procedure verifies physical erasure and both
+surviving Users. The workflow retains aggregate observations and the origin and cleanup records.
+The populated planning views, loaded 20-User case, repeated mutations and 400 ms profile run on
+workerd under their own declared workloads.

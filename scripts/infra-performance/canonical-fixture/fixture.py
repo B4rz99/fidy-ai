@@ -83,7 +83,7 @@ def digest(value):
                                      separators=(",", ":")).encode()).hexdigest()
 
 
-def prepare(call, directory, revision, member):
+def prepare(call, directory, revision, member, *, browser_workspace=False):
     if not re.fullmatch(r"[0-9a-f]{40}", revision) or member not in ("performance-1", "performance-2"):
         raise ValueError("Only the closed performance cohort is eligible")
     with serialized(directory):
@@ -167,6 +167,11 @@ def prepare(call, directory, revision, member):
                       visible=visible["id"], suppressed=hidden["id"], history=page,
                       counts=dict(originals=8, effective=7, links=1, manuallyCaptured=8, linkedOriginalsWithObservedManualKind=2),
                       sourceAttestationIds="unobserved by the deployed canonical inspection")
+        if browser_workspace:
+            record["workspace"] = {
+                "profile": call("GET", "/user", None),
+                "review": call("GET", "/ingestion/review-workspace?limit=0&status=pending", None),
+            }
         existing = directory / "manifest.json"
         if existing.exists() and json.loads(existing.read_text()) != record:
             raise ValueError("Existing fixture evidence changed")

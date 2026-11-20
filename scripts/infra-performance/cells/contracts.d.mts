@@ -1,8 +1,10 @@
 export type Cost = { rowsRead: number; rowsWritten: number };
-export type Call = Cost & { key: string };
+export type SqlCall = Cost & { key: string };
+export type Call = SqlCall | (SqlCall & { child: string; calls: SqlCall[] });
 export type Bounds = { maximum: Cost; statements: Record<string, Cost> };
 export type Limits = Record<string, Bounds>;
 export type Frame = {
+  route: string;
   zeroOnly: boolean;
   training: boolean;
   closed: boolean;
@@ -47,7 +49,7 @@ export type IngressEnvironment = {
   EXPERIMENT_KEY: string;
   CF_VERSION_METADATA: { id: string };
 };
-export type MeterConfig = { training: boolean; limits: Limits };
+export type MeterConfig = { training: boolean; limits: Limits; mutationSubject: string };
 export type PinnedCore = {
   fetch(request: Request, env: CoreEnvironment, execution: unknown): Promise<Response>;
 };

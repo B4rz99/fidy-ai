@@ -12,11 +12,17 @@ import {
   acceptanceProofHeader,
   performanceReceiptPath,
 } from "../../../apps/server/cloudflare/release-isolation/contract";
+import { TransactionListResponse } from "../../../apps/server/src/shell/transactions/contract";
 import { openPerformanceBrowser } from "../../../infra/cloudflare/native-acceptance";
 
 const api = installedOrigins.acceptance;
 const minimumSecret = 32;
+const caseIntervalMs = 1000;
 const session = Schema.Struct({ cookie: Schema.String, binding: Schema.String });
+const mountedManifest = Schema.Struct({
+  history: Schema.toEncoded(Schema.toCodecJson(TransactionListResponse)),
+  workspace: Schema.Struct({ profile: Schema.Json, review: Schema.Json }),
+});
 const command = Schema.Struct({
   path: Schema.String,
   method: Schema.Literals(["POST", "GET"]),
@@ -131,7 +137,11 @@ const start = Effect.fnUntraced(function* (service: Client) {
 });
 const allowed = (item: Command): boolean =>
   item.method === "GET"
-    ? item.path === "/transactions?limit=25" || /^\/transactions\/[a-f0-9-]{36}$/u.test(item.path)
+    ? [
+        "/user",
+        "/ingestion/review-workspace?limit=0&status=pending",
+        "/transactions?limit=25",
+      ].includes(item.path) || /^\/transactions\/[a-f0-9-]{36}$/u.test(item.path)
     : ["/operations/atomic-batch", "/transactions/link", performanceReceiptPath].includes(
         item.path
       );
@@ -160,16 +170,110 @@ const authority = Effect.gen(function* () {
   }
   return { secret, revision };
 });
+const nativeMeters = Effect.fnUntraced(function* (runtime: Miniflare) {
+  const read = Effect.fnUntraced(function* (name: string, path: string) {
+    const worker = yield* io(() => runtime.getWorker(name));
+    const response = yield* io(() => worker.fetch("https://offline.invalid/" + path));
+    const counters: unknown = yield* io(() => response.json());
+    return counters;
+  });
+  const sql = yield* read("core", "native-row-counts");
+  const counters = yield* Effect.forEach(
+    ["core", "ingress", "closed-provider"],
+    (name) => read(name, "r2-counts").pipe(Effect.map((value) => [name, value] as const)),
+    { concurrency: 3 }
+  );
+  return { sql, r2: Object.fromEntries(counters) };
+});
+
+const signedForward = Effect.fnUntraced(function* (runtime: Miniflare) {
+  const environment = environmentOf(yield* authority);
+  const send = transport(runtime);
+  return Effect.fnUntraced(function* (request: Request) {
+    request.headers.set(
+      acceptanceProofHeader,
+      yield* signAcceptanceRequest({
+        request,
+        boundary: "ingress",
+        environment,
+        deadline: (yield* Clock.currentTimeMillis) + acceptanceLifetimeMs,
+      })
+    );
+    return yield* send(request);
+  });
+});
+
+const runMountedWorkspace = Effect.fnUntraced(function* (runtime: Miniflare, active: Session) {
+  const { runBrowser } = yield* io(() => import("../hosted-browser/captured-profile.mjs"));
+  const directory = yield* Config.String("FIDY_DIAGNOSTIC_DIR");
+  const manifest: unknown = yield* io(() =>
+    Bun.file(directory + "/native/fixture/manifest.json").json()
+  );
+  if (!Schema.is(mountedManifest)(manifest)) return yield* new FixtureTransportError();
+  const run = Effect.runPromiseWith(yield* Effect.context());
+  const forward = yield* signedForward(runtime);
+  const before = yield* nativeMeters(runtime);
+  yield* io(() =>
+    runBrowser({
+      variant: "do",
+      origins: api,
+      cookie: active.cookie,
+      expected: manifest.history,
+      workspace: manifest.workspace,
+      forward: (request) => run(forward(request)),
+    })
+  );
+  const afterReads = yield* nativeMeters(runtime);
+  const { proveScopedCorrection } = yield* io(
+    () => import("../hosted-browser/scoped-correction.mjs")
+  );
+  const mutate = Effect.fnUntraced(function* (method: string, path: string, body?: unknown) {
+    yield* Effect.sleep(caseIntervalMs);
+    return yield* forward(
+      new Request(api.api + path, {
+        method,
+        headers: {
+          origin: api.browser,
+          ...sessionHeaders(active),
+          "content-type": "application/json",
+        },
+        ...(body === undefined
+          ? {}
+          : { body: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(body) }),
+      })
+    );
+  });
+  const mutation = yield* io(() =>
+    proveScopedCorrection(manifest.history, (method, path, body) => run(mutate(method, path, body)))
+  );
+  const afterMutations = yield* nativeMeters(runtime);
+  yield* io(() =>
+    Bun.write(directory + "/ordinary-native-mutation.json", JSON.stringify(mutation))
+  );
+  yield* io(() =>
+    Bun.write(
+      directory + "/ordinary-native-accounting.json",
+      JSON.stringify({
+        before,
+        afterReads,
+        afterMutations,
+      })
+    )
+  );
+  offer({ status: 200 });
+});
 export const serveFixture = Effect.fn(function* (runtime: Miniflare) {
   const service = client(yield* authority, transport(runtime));
   const active = yield* start(service);
   offer(active);
   const lines = createInterface({ input: process.stdin, terminal: false });
   yield* Stream.fromAsyncIterable(lines, () => new FixtureTransportError()).pipe(
-    Stream.runForEach((line) =>
-      Schema.decodeEffect(Schema.fromJsonString(command))(line).pipe(
-        Effect.flatMap((item) => execute(item, active, service))
-      )
+    Stream.runForEach(
+      Effect.fnUntraced(function* (line) {
+        const item = yield* Schema.decodeEffect(Schema.fromJsonString(command))(line);
+        if (item.control === "mounted-workspace") yield* runMountedWorkspace(runtime, active);
+        else yield* execute(item, active, service);
+      })
     ),
     Effect.ensuring(Effect.sync(() => lines.close()))
   );

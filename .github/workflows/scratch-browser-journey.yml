@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: 289a268f8077aacca47bba9c2c3f46d3d5c9331a
+          ref: 8dbe48eea374c2afb61240eac93494fe4cc5a7a6
           persist-credentials: false
           sparse-checkout: |
             /*
@@ -22,7 +22,7 @@ jobs:
         run: |
           bun run --cwd apps/web typecheck
           bun run --cwd apps/web test -- src/ui/components/choice-dropdown.test.ts src/features/recurring/feature.test.ts src/features/transactions/corrections.test.ts src/transport/workspace-query.test.ts
-          ASSESSMENT_CHROMIUM="$(command -v google-chrome)" bun scripts/infra-performance/reference/transaction-panel.test.mjs
+          ASSESSMENT_CHROMIUM="$(command -v google-chrome)" bun apps/web/scripts/check-transaction-panel.ts
       - name: Check product files with type-aware and UI lint
         run: |
           bun install --cwd tools/astro --frozen-lockfile
@@ -31,5 +31,5 @@ jobs:
           bun install --cwd tools/depcruise --frozen-lockfile
           bun run --cwd apps/docs sync
           files=(apps/web/src/ui/components/choice-dropdown{.test.ts,.tsx} apps/web/src/features/{transactions,recurring}/inline-category.tsx apps/web/src/ui/{workspace-reference,pattern-reference}.tsx)
-          bun x --no-install oxlint --deny-warnings --config .oxlintrc.json --type-aware --threads=1 "${files[@]}" scripts/infra-performance/reference/transaction-panel.test.mjs
+          bun x --no-install oxlint --deny-warnings --config .oxlintrc.json --type-aware --threads=1 "${files[@]}" apps/web/scripts/check-transaction-panel.ts
           bun x --no-install oxlint --deny-warnings --config .oxlintrc.ui.json "${files[@]}"

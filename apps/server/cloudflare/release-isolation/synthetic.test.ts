@@ -152,8 +152,9 @@ it("binds each closed Core request to the browser and provider callbacks selecte
     })
   ));
 
-it("hands Core a replayable request with the identical authenticated bytes from a streamed POST", () =>
-  Effect.runPromise(
+it("hands Core a replayable request with the identical authenticated bytes from a streamed POST", () => {
+  const abort = new AbortController();
+  return Effect.runPromise(
     Effect.gen(function* () {
       const environment = {
         SMOKE_PROOF: "a".repeat(48),
@@ -178,7 +179,6 @@ it("hands Core a replayable request with the identical authenticated bytes from 
           request: new Request(url, { method: "POST", headers, body: bytes }),
         })
       );
-      const abort = new AbortController();
       const incoming = new Request(url, {
         method: "POST",
         headers,
@@ -207,4 +207,5 @@ it("hands Core a replayable request with the identical authenticated bytes from 
       abort.abort();
       expect(admission.request.signal.aborted).toBe(true);
     })
-  ));
+  );
+});

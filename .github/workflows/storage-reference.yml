@@ -36,7 +36,7 @@ on:
         type: boolean
         default: false
       review_phases:
-        description: Run 12 diagnostic pairs with Needs Review request and usability phases on extreme
+        description: Run a paired Needs Review DOM probe on the extreme fixture
         type: boolean
         default: false
       setup_idle_ms:
@@ -59,7 +59,6 @@ jobs:
     timeout-minutes: 90
     env:
       FIDY_REFERENCE_REVIEW_PHASES: ${{ inputs.review_phases && '1' || '0' }}
-      REFERENCE_PAIRS: ${{ inputs.review_phases && 12 || 30 }}
       DATASET: ${{ inputs.dataset || 'production' }}
       NETWORK: ${{ inputs.network || 'normal' }}
       RECURRING_FLAG: ${{ inputs.full_recurring && '--full-recurring' || '' }}
@@ -103,10 +102,11 @@ jobs:
           python3 -m unittest discover -s scripts/infra-performance/reference
           python3 scripts/infra-performance/reference/run.py --d1 baseline-d1 --do . \
             --dataset "$DATASET" --network "$NETWORK" --setup-idle-ms "$SETUP_IDLE_MS" ${READ_ONLY_FLAG:+"$READ_ONLY_FLAG"} ${RECURRING_FLAG:+"$RECURRING_FLAG"} --pairs 1 --origin "GitHub-hosted Ubuntu loopback"
-      - name: Measure alternating pairs
+      - name: Measure 30 alternating pairs
+        if: ${{ !inputs.review_phases }}
         run: |
           python3 scripts/infra-performance/reference/run.py --d1 baseline-d1 --do . \
-            --dataset "$DATASET" --network "$NETWORK" --setup-idle-ms "$SETUP_IDLE_MS" ${READ_ONLY_FLAG:+"$READ_ONLY_FLAG"} ${RECURRING_FLAG:+"$RECURRING_FLAG"} --pairs "$REFERENCE_PAIRS" --origin "GitHub-hosted Ubuntu loopback"
+            --dataset "$DATASET" --network "$NETWORK" --setup-idle-ms "$SETUP_IDLE_MS" ${READ_ONLY_FLAG:+"$READ_ONLY_FLAG"} ${RECURRING_FLAG:+"$RECURRING_FLAG"} --pairs 30 --origin "GitHub-hosted Ubuntu loopback"
       - name: Summarize Needs Review phases
         if: ${{ always() && inputs.review_phases }}
         run: |

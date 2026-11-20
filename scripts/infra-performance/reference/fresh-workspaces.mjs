@@ -297,20 +297,78 @@ const failReview = async (reply, reviewResponse, { event, journey }) => {
   );
   throw new Error(`Needs Review ${reviewResponse} failed with HTTP ${httpStatus}`);
 };
-/** @param {Workspace} input Installed application and evidence sink. @param {number} count Complete fixture size. @param {number} offset Requested page offset. */
+/** @param {Workspace} input @param {number} count Complete fixture size. */
+const openReviewHistory = async (input, count) => {
+  const { page, browser } = input;
+  const [historical] = await Promise.all([
+    responseFor(input, inbox, { status: "history", limit: null, offset: null }),
+    page.goto(browser + "/app/needs-review?status=history", { waitUntil: "commit" }),
+  ]);
+  const unselected = reviewPage((await consumeSuccess(historical)).value).data;
+  assert.equal(unselected.total, 0);
+  assert.equal(unselected.pendingCount, count);
+  assert.deepEqual(unselected.items, []);
+  await page.getByRole("button", { name: "Historial", pressed: true, exact: true }).waitFor();
+};
+/**
+ * @param {Page} page Mounted browser page.
+ * @param {ReturnType<typeof reviewRows>} expected Ordered fresh items.
+ */
+const observeReviewControlChanges = async (page, expected) => {
+  const predicate = await page.evaluateHandle(`(${readyReviewControls.toString()})`);
+  const observation = await page.evaluateHandle(
+    ({ predicate, expected }) => {
+      let firstReady;
+      const watcher = new MutationObserver(() => {
+        const at = predicate(expected);
+        if (at === false) return;
+        firstReady = at;
+        watcher.disconnect();
+      });
+      watcher.observe(document.body, {
+        subtree: true,
+        childList: true,
+        characterData: true,
+        attributes: true,
+        attributeFilter: ["hidden", "disabled", "aria-disabled", "aria-label", "aria-checked"],
+      });
+      return {
+        stop: () => {
+          watcher.disconnect();
+          return firstReady;
+        },
+      };
+    },
+    { predicate, expected }
+  );
+  await predicate.dispose();
+  return observation;
+};
+/**
+ * @param {Workspace} input Mounted view and diagnostic sink.
+ * @param {{control: import("@playwright/test").Locator, expected: ReturnType<typeof reviewRows>, journey: string}} boundary Selected control, fresh rows and fixed journey label.
+ */
+const observeReviewPhases = async ({ page, event }, { control, expected, journey }) => {
+  if (process.env.FIDY_REFERENCE_REVIEW_PHASES !== "1") return undefined;
+  const record = await trackBrowserClick(control);
+  const observation = await observeReviewControlChanges(page, expected);
+  /**
+   * @param {BrowserResponse} reply Complete summary response.
+   * @param {number} paintedAt Browser time at the paint checkpoint.
+   * @param {import("@playwright/test").JSHandle<number | false>} readiness Existing benchmark's readiness result.
+   */
+  return async (reply, paintedAt, readiness) => {
+    const firstReady = await observation.evaluate(({ stop }) => stop());
+    await observation.dispose();
+    const readyCheckpoint = await readiness.jsonValue();
+    const readyAt = firstReady ?? (readyCheckpoint || undefined);
+    event({ type: "phases", journey, ...(await record(reply, paintedAt, readyAt)) });
+  };
+};
+/** @param {Workspace} input @param {number} count Complete fixture size. @param {number} offset Requested page offset. */
 const measurePendingReview = async (input, count, offset) => {
-  const { page, browser, event } = input;
-  if (offset === 0) {
-    const [historical] = await Promise.all([
-      responseFor(input, inbox, { status: "history", limit: null, offset: null }),
-      page.goto(browser + "/app/needs-review?status=history", { waitUntil: "commit" }),
-    ]);
-    const unselected = reviewPage((await consumeSuccess(historical)).value).data;
-    assert.equal(unselected.total, 0);
-    assert.equal(unselected.pendingCount, count);
-    assert.deepEqual(unselected.items, []);
-    await page.getByRole("button", { name: "Historial", pressed: true, exact: true }).waitFor();
-  }
+  const { page, event } = input;
+  if (offset === 0) await openReviewHistory(input, count);
   const query = { status: "pending", limit: null, offset: offset ? String(offset) : null };
   const workspace = responseFor(input, inbox, query);
   const source = responseFor(input, inbox + "/context", query);
@@ -319,29 +377,17 @@ const measurePendingReview = async (input, count, offset) => {
     : page.getByRole("button", { name: /^Pendientes/u });
   const expected = reviewRows(count, offset);
   const journey = offset ? "review.next.browser" : reviewJourney;
-  const recordPhases =
-    process.env.FIDY_REFERENCE_REVIEW_PHASES === "1" ? await trackBrowserClick(control) : undefined;
-  const firstReady = recordPhases ? page.waitForFunction(readyReviewControls, expected) : undefined;
-  // Keep the early read from producing an unhandled timeout if the measured journey fails.
-  firstReady?.catch(() => undefined);
+  const recordPhases = await observeReviewPhases(input, { control, expected, journey });
   event({ type: "offered", journey });
   const start = performance.now();
   const [reply, context] = await Promise.all([workspace, source, control.click()]);
-  await page.waitForFunction(readyReviewControls, expected);
+  const readiness = await page.waitForFunction(readyReviewControls, expected);
   const paintedAt = await painted(page);
   const milliseconds = performance.now() - start;
   const [summary, original] = await Promise.all([consumeSuccess(reply), consumeSuccess(context)]);
   verifyPending(summary.value, original.value, { count, expected });
-  if (recordPhases && firstReady) {
-    const ready = await firstReady;
-    const readyAt = await ready.jsonValue();
-    await ready.dispose();
-    event({
-      type: "phases",
-      journey,
-      ...(await recordPhases(reply, paintedAt, readyAt || undefined)),
-    });
-  }
+  await recordPhases?.(reply, paintedAt, readiness);
+  await readiness.dispose();
   return { milliseconds, http: summary.http, context: original.http };
 };
 

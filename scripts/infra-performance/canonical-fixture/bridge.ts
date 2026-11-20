@@ -210,6 +210,7 @@ const runMountedWorkspace = Effect.fnUntraced(function* (runtime: Miniflare, act
     Bun.file(directory + "/native/fixture/manifest.json").json()
   );
   if (!Schema.is(mountedManifest)(manifest)) return yield* new FixtureTransportError();
+  const run = Effect.runPromiseWith(yield* Effect.context());
   const forward = yield* signedForward(runtime);
   const before = yield* nativeMeters(runtime);
   yield* io(() =>
@@ -219,7 +220,7 @@ const runMountedWorkspace = Effect.fnUntraced(function* (runtime: Miniflare, act
       cookie: active.cookie,
       expected: manifest.history,
       workspace: manifest.workspace,
-      forward: (request) => Effect.runPromise(forward(request)),
+      forward: (request) => run(forward(request)),
     })
   );
   const afterReads = yield* nativeMeters(runtime);
@@ -236,14 +237,14 @@ const runMountedWorkspace = Effect.fnUntraced(function* (runtime: Miniflare, act
           ...sessionHeaders(active),
           "content-type": "application/json",
         },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        ...(body === undefined
+          ? {}
+          : { body: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(body) }),
       })
     );
   });
   const mutation = yield* io(() =>
-    proveScopedCorrection(manifest.history, (method, path, body) =>
-      Effect.runPromise(mutate(method, path, body))
-    )
+    proveScopedCorrection(manifest.history, (method, path, body) => run(mutate(method, path, body)))
   );
   const afterMutations = yield* nativeMeters(runtime);
   yield* io(() =>
@@ -267,13 +268,12 @@ export const serveFixture = Effect.fn(function* (runtime: Miniflare) {
   offer(active);
   const lines = createInterface({ input: process.stdin, terminal: false });
   yield* Stream.fromAsyncIterable(lines, () => new FixtureTransportError()).pipe(
-    Stream.runForEach((line) =>
-      Schema.decodeEffect(Schema.fromJsonString(command))(line).pipe(
-        Effect.flatMap((item) => {
-          if (item.control !== "mounted-workspace") return execute(item, active, service);
-          return runMountedWorkspace(runtime, active);
-        })
-      )
+    Stream.runForEach(
+      Effect.fnUntraced(function* (line) {
+        const item = yield* Schema.decodeEffect(Schema.fromJsonString(command))(line);
+        if (item.control === "mounted-workspace") yield* runMountedWorkspace(runtime, active);
+        else yield* execute(item, active, service);
+      })
     ),
     Effect.ensuring(Effect.sync(() => lines.close()))
   );

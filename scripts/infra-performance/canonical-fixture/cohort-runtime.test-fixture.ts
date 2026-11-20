@@ -20,13 +20,12 @@ const readObject = Effect.fnUntraced(function* (runtime: Miniflare, directory: s
   yield* native(() =>
     runtime.unsafeEvictDurableObject("core", "UserStore", { id }).catch((error: unknown) => {
       if (
-        !(
-          error instanceof Error &&
-          error.message === "Cannot evict Durable Object: it is not currently running."
-        )
+        error instanceof Error &&
+        error.message === "Cannot evict Durable Object: it is not currently running."
       ) {
-        throw error;
+        return;
       }
+      throw error;
     })
   );
   const files = yield* native(() =>

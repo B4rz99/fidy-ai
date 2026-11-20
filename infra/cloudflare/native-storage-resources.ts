@@ -3,6 +3,7 @@ import {
   applySuccessorPlan,
   nativePlanOptions,
   projectFixtureInventory,
+  projectSuccessorInventory,
   requireActiveSuccessorLifecycle,
   requireSameSuccessorPlan,
   requireSuccessorLifecycle,
@@ -25,7 +26,7 @@ import {
   diagnoseSuccessorApply,
 } from "./native-plan-diagnostics";
 import { firstInstallEdge } from "./native-storage-release";
-import { nativeResourceInventory, requireNativeResourcePlan } from "./native-graph";
+import { requireNativeResourcePlan } from "./native-graph";
 import { type Plan, describePlan, describeResource } from "alchemy/Plan";
 import { Config, Effect, Option, Schema } from "effect";
 import { HttpClient, HttpClientRequest } from "effect/http";
@@ -385,7 +386,7 @@ const inspectAccountingSuccessor = Effect.gen(function* () {
       applied: false,
       scoped: snapshot.native.selectedFqns !== undefined,
       stackActions: observed.actions.length,
-      resources: projectFixtureInventory(observed.resources, nativeResourceInventory(generation)),
+      resources: projectSuccessorInventory({ rows: observed.resources, revision: generation }),
     })
   );
 });

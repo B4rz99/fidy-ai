@@ -14,7 +14,11 @@ import { productionTopology } from "../../apps/server/cloudflare/runtime/contrac
 import { requireHostPlan, stagedAccessApplications } from "./native-host-plan";
 import * as Alchemist from "alchemy/Alchemist";
 import * as Apply from "alchemy/Apply";
-import { diagnoseFreshTarget, diagnoseNativePlan } from "./native-plan-diagnostics";
+import {
+  diagnoseFreshTarget,
+  diagnoseNativePlan,
+  diagnoseSuccessorApply,
+} from "./native-plan-diagnostics";
 import { firstInstallEdge } from "./native-storage-release";
 import { requireNativeResourcePlan } from "./native-graph";
 import { type Plan, describePlan, describeResource } from "alchemy/Plan";
@@ -349,9 +353,9 @@ const planFixtureSuccessor = Effect.fn(function* (action: SuccessorAction) {
     yield* Effect.try(() => requireSameSuccessorPlan({ approved, observed: observedPlan }));
   }
   yield* applySuccessorPlan(snapshot.native).pipe(
+    diagnoseSuccessorApply(revision),
     Effect.provide(snapshot.session.context),
-    Effect.uninterruptible,
-    nativeResourceStage("provider apply")
+    Effect.uninterruptible
   );
 });
 

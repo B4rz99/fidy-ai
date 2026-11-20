@@ -3,7 +3,11 @@ import { Effect } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { it, layer } from "@effect/vitest";
 import { expect } from "vitest";
-import { diagnoseFreshTarget, diagnoseNativePlan } from "./native-plan-diagnostics";
+import {
+  diagnoseFreshTarget,
+  diagnoseNativePlan,
+  diagnoseSuccessorApply,
+} from "./native-plan-diagnostics";
 import { nativeResourceFailureMessage } from "./resource-failure";
 
 const revision = "1".repeat(40);
@@ -117,6 +121,42 @@ layer(FetchHttpClient.layer)("closed installation target", (suite) => {
         );
         expect(failure).toContain("Worker Build triggers 403");
         expect(failure).not.toContain("private");
+      })
+  );
+});
+
+layer(FetchHttpClient.layer)("scoped successor upload", (suite) => {
+  suite.effect(
+    "reports the exact Workflow and Ingress upload statuses without request details",
+    () =>
+      Effect.gen(function* () {
+        const account = "https://api.cloudflare.com/client/v4/accounts/private-account";
+        const failure = yield* Effect.gen(function* () {
+          yield* HttpClient.post(account + "/workers/scripts/fidy-native-storage-ingress/versions");
+          yield* HttpClient.put(
+            account + "/workflows/fidy-native-smoke-" + revision + "?secret=private"
+          );
+          yield* HttpClient.put(account + "/workflows/private-unreviewed-name");
+          return yield* Effect.fail(Error("private-provider-message"));
+        }).pipe(
+          diagnoseSuccessorApply(revision),
+          Effect.provideService(
+            FetchHttpClient.Fetch,
+            Object.assign(
+              (input: URL | Request | string) =>
+                Promise.resolve(
+                  new Response("private-response", {
+                    status: String(input).includes("/workflows/") ? 422 : 200,
+                  })
+                ),
+              { preconnect: fetch.preconnect }
+            )
+          ),
+          Effect.matchCause({ onFailure: nativeResourceFailureMessage, onSuccess: () => "" })
+        );
+        expect(failure).toContain("Observed writes [Ingress version 200, Smoke Workflow 422].");
+        expect(failure).not.toContain("private");
+        expect(failure).not.toContain(revision);
       })
   );
 });

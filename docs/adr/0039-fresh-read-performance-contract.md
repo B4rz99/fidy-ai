@@ -118,3 +118,6 @@ all-or-nothing outcome. The initial bounded window does not resume after interru
 Keep durable custody and the original session for the separate recovery path. Measure
 account-wide resource use, including concurrent work and analytics lag. Keep the reserve
 until a later metrics bucket covers completion. The preflight cannot reserve provider capacity.
+
+For R2 headroom, reconcile adaptive totals with grouped estimates conservatively. Only
+`GetObject` is excluded from the Class A estimate.

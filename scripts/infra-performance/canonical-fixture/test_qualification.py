@@ -61,7 +61,7 @@ class RetainedResourceQualificationTests(unittest.TestCase):
         # The repair uploads a new receiver to the existing Smoke Worker. Web and Email stay untouched.
         support["Smoke"] = dict(versionId="30000000-0000-4000-8000-000000000001",
                                 deploymentId="40000000-0000-4000-8000-000000000001")
-        self.pin = dict(revision=self.generation, support=support)
+        self.pin = dict(revision=self.generation, support=support, controlsDigest="a"*64)
         self.patch = patch("qualified_release.fixture_upload",return_value=self.pin)
         self.patch.start()
         self.addCleanup(self.patch.stop)
@@ -103,7 +103,7 @@ class RetainedResourceQualificationTests(unittest.TestCase):
 
     def test_substituting_resource_provider_asset_or_support_receipt_refuses_before_cleanup(self):
         for owner,field,bad in [
-            (self.installed,"resourceRevision",self.source), (self.installed,"resourceRevision",self.provider["revision"]),
+            (self.installed,"fixtureControlsDigest","f"*64), (self.installed,"resourceRevision",self.source), (self.installed,"resourceRevision",self.provider["revision"]),
             (self.installed,"revision",self.generation), (self.installed["website"][0],"revision",self.source),
             (self.installed["website"][0],"browser","https://other.invalid"),
             (self.installed,"retainedProvider",{**self.provider,"revision":self.generation}),

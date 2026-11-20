@@ -72,8 +72,9 @@ def serving_graph(read, account, revision, installed):
             or website.get("api") != "https://storage-acceptance.fidyapp.com"
             or website.get("revision") != generation or not website.get("entryAssets")):
         raise ValueError("Acceptance website does not serve the retained build")
-    if not re.fullmatch("[0-9a-f]{64}", installed.get("fixtureControlsDigest", "")):
-        raise ValueError("Protected release has no retained financial control evidence")
+    controls = installed.get("fixtureControlsDigest", "")
+    if not re.fullmatch("[0-9a-f]{64}", controls) or controls != upload["controlsDigest"]:
+        raise ValueError("Protected release differs from pinned retained financial control evidence")
     recorded_provider = installed["retainedProvider"]
     pin = retained_provider()
     if recorded_provider != pin:

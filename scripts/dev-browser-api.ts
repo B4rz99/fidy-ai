@@ -13,7 +13,11 @@ const caller = "CO.Recurring";
 const recurringUser = "24000000-0000-4000-8000-000000000401";
 const origin = "https://127.0.0.1:4174";
 const operator = "http://127.0.0.1:4175";
-export const prepareBrowserUser = Effect.fn(function* (runtime: Miniflare, subject: string) {
+export const prepareBrowserUser = Effect.fn(function* (
+  runtime: Miniflare,
+  subject: string,
+  identity = caller
+) {
   const user = yield* native(() => runtime.getDurableObjectNamespace("USER_STORE", "core"));
   const directory = yield* native(() => runtime.getDurableObjectNamespace("DIRECTORY", "core"));
   const ready = yield* native(() => directory.getByName("directory-v1").fetch(storeReadinessUrl));
@@ -31,7 +35,7 @@ export const prepareBrowserUser = Effect.fn(function* (runtime: Miniflare, subje
       "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) VALUES(?,'CO','es-CO','America/Bogota',?,'portfolio',?,?)",
       subject,
       now,
-      caller,
+      identity,
       now - secondMs
     )
   );
@@ -45,7 +49,7 @@ export const prepareBrowserUser = Effect.fn(function* (runtime: Miniflare, subje
   yield* native(() =>
     routes.exec(
       "INSERT INTO whatsapp_routes(portfolio,bsuid,user_id,attempt_id,established) VALUES('portfolio',?,?,'dev-browser',1)",
-      caller,
+      identity,
       subject
     )
   );

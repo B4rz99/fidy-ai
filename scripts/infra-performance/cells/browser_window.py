@@ -38,7 +38,7 @@ def native_snapshot(context, phase, deadline, env):
     return json.loads(result.stdout)
 
 
-def native_delta(before, after):
+def native_delta(before, after, *, refreshes=30):
     def groups(snapshot):
         entries = snapshot["groups"]
         counts = {(operation, outcome): count for operation, outcome, count in entries}
@@ -51,17 +51,18 @@ def native_delta(before, after):
     delta.subtract(first)
     delta = {key: count for key, count in delta.items() if count}
     accounting = {key: after[key] - before[key] for key in ("canonicalUnits", "receipts")}
-    if delta != NATIVE_EXPECTED or accounting != {"canonicalUnits": 0, "receipts": 0}:
+    expected = {**NATIVE_EXPECTED, ("transactions.listTransactions", "success"): refreshes + 3}
+    if delta != expected or accounting != {"canonicalUnits": 0, "receipts": 0}:
         raise Refused("native_session_audit_or_commercial_state_mismatch")
     return {"verified": True, "audit": [[*key, count] for key, count in sorted(delta.items())], **accounting}
 
 
 
-def route_counts(expected):
+def route_counts(expected, *, refreshes=30):
     target, = [row["id"] for row in expected["history"]["data"] if row["counterparty"] == "Evaluación 2"]
     return Counter({"GET /web/session/binding?context=transactions":1, "GET /web/session/binding":1,
                     "GET /ingestion/review-workspace?limit=0&status=pending":1,
-                    "GET "+MONTH:30, "GET /user":30, "GET /transactions?limit=25":2,
+                    "GET "+MONTH:refreshes, "GET /user":refreshes, "GET /transactions?limit=25":2,
                     "PUT /transactions/"+target:1,"POST /operations/atomic-batch":1})
 
 

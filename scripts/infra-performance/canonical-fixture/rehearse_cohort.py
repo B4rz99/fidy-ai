@@ -15,8 +15,10 @@ import time
 from cohort import Cohort
 from cohort_runner import BrowserPort, collect_owned, commands
 from fixture import digest, write
-from hosted import ROOT
+from hosted import ROOT, private_file
 from protected_cohort import HostedPort
+from browser_window import native_delta, route_counts
+from native_smoke import reserve_smoke
 
 
 class LocalCustody:
@@ -102,15 +104,46 @@ def session_accounts(db, session, user):
     return {**audit,"canonicalUnits":units,"receipts":receipts}
 
 
+def rehearse_native_smoke(directory, path, coords, proof, out):
+    manifest = private_file(directory, "manifest.json")
+    expected = {key: manifest[key] for key in ("history", "workspace")}
+    allowed = route_counts(expected, refreshes=1)
+    with controller(directory, coords, path) as port:
+        deadline, maximum_preflights = reserve_smoke(port.owner, port, proof, allowed)
+    revision = coords["revision"]
+    config = dict(
+        deadline=int(min(deadline, time.time() + 180) * 1000),
+        maximumPreflights=maximum_preflights, expected=expected, allowed=allowed,
+        native=dict(revision=revision, session=private_file(directory, "native-session.json"), web=dict(
+            api="https://storage-acceptance.fidyapp.com", browser="https://storage-web-acceptance.fidyapp.com",
+            revision=revision, contractDigest="a" * 64,
+        )),
+    )
+    result = subprocess.run(
+        ["bun", "scripts/infra-performance/hosted-browser/native-smoke.test-fixture.ts"],
+        cwd=ROOT, timeout=180, text=True, stdout=subprocess.PIPE, check=True,
+        env={**os.environ, "FIDY_DIAGNOSTIC_DIR": str(out)},
+        input=json.dumps(dict(config=config, capture=private_file(directory, "native-receipt.json"),
+                              captureDigest=proof["nativeReceiptDigest"])),
+    )
+    observed = json.loads(result.stdout)
+    verified = native_delta(observed["before"], observed["after"], refreshes=1)
+    write(out / "native-correctness.json", dict(scope="native-only disposable workerd",
+          **observed["smoke"], nativeAccounting=verified))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--d1",type=Path)
     parser.add_argument("--calibration",type=Path)
     parser.add_argument("--second-member", action="store_true")
+    parser.add_argument("--native-smoke", action="store_true")
     args = parser.parse_args()
     if bool(args.d1) != bool(args.calibration):
         parser.error("The paired browser requires both frozen checkouts")
+    if args.native_smoke and (args.d1 or not args.second_member):
+        parser.error("Native-only smoke needs the second member and no comparator")
     out = args.out.resolve()
     os.umask(0o077)
     out.mkdir(parents=True, exist_ok=False)
@@ -129,7 +162,13 @@ def main():
     with controller(directory, coords, path) as port:
         port.runtime("seed-survivors")
         port.owner.enroll()
-        proof = collect_owned(port.owner, port, browser=bool(args.d1))
+        proof = collect_owned(port.owner, port, browser=bool(args.d1) or args.native_smoke)
+    if args.native_smoke:
+        try:
+            rehearse_native_smoke(directory, path, coords, proof, out)
+        finally:
+            with controller(directory, coords, path) as port:
+                port.owner.cleanup()
     if args.d1:
         import sys
         sys.path.insert(0,str(ROOT/"scripts/infra-performance/cells"))

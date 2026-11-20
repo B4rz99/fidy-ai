@@ -245,6 +245,10 @@ def run(args):
         if installed.get("nativeAccountingWitness") is not True:
             raise ValueError("Hosted browser requires the qualified native accounting witness")
         checked_browser_origin(args.out/"origin-before-enrollment.json",time.time())
+    smoke_env = None
+    if args.native_smoke:
+        from native_smoke import smoke_environment
+        smoke_env = smoke_environment()
     candidate = verify()
     os.environ["FIDY_NATIVE_FIXTURE_PROVIDER_REVISION"] = installed["retainedProvider"]["revision"]
     coords = dict(**candidate, account=account, prefix=prefix, archive=args.archive_sha256)
@@ -290,7 +294,16 @@ def run(args):
             if args.browser_workspace:
                 write(args.out/"qualified-web.json", installed["website"][0])
             verify()
-            write(args.out/"summary.json", dict(scope="hosted native fixture", originals=8,effective=7,**proof))
+            summary = dict(scope="hosted native fixture", originals=8, effective=7, **proof)
+            if smoke_env is not None:
+                summary["releaseSource"] = dict(artifactId=args.release_artifact, sha256=args.archive_sha256,
+                                                versions=candidate["versions"], deployments=candidate["deployments"])
+            write(args.out/"summary.json", summary)
+            if smoke_env is not None:
+                from native_smoke import run_smoke
+                observation = run_smoke(owner, port, proof, installed["website"][0], args.out, smoke_env)
+                verify()
+                write(args.out/"native-correctness.json", observation)
 
 
 def comparable_native_reads(account, candidate, proof, pairs, *, browser=False):

@@ -86,8 +86,7 @@ const boundedBody = (request: Request): Effect.Effect<Option.Option<Uint8Array>,
       Effect.sync(() => {
         try {
           reader.cancel().catch(() => undefined);
-        } catch {
-        }
+        } catch {}
       }).pipe(
         Effect.ensuring(
           Effect.try({ try: () => reader.releaseLock(), catch: () => undefined }).pipe(

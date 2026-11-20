@@ -57,7 +57,6 @@ export const findGovernor = (
     );
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
 
-
 const prepareQuestionIntent = (
   input: Readonly<{ db: D1Database; userId: UserId; proof: OwnedStatement }>
 ): D1PreparedStatement => {

@@ -123,7 +123,6 @@ export const projectEmailRow = ({
   });
 };
 
-
 const loadStatementItems = ({
   database,
   userId,

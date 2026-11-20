@@ -1,7 +1,6 @@
 import { createRequire } from "node:module";
 import { AstroCheck } from "@astrojs/language-server";
 
-
 const require = createRequire(import.meta.url);
 const target = process.argv[2] ?? "../../apps/site";
 const root = Bun.fileURLToPath(new URL(target, import.meta.url));

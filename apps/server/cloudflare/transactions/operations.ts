@@ -150,7 +150,6 @@ export const prepareFactRevisionProjection = (
 export const browseTransactions: typeof ownerBrowseTransactions = (...args) =>
   ownerBrowseTransactions(...args);
 
-
 export const readScopedPrivacyPage: typeof readPrivacyPage = (...args) => readPrivacyPage(...args);
 export const readUserHistory: typeof readLocalHistory = (...args) => readLocalHistory(...args);
 
@@ -186,7 +185,6 @@ export const prepareUnlink: typeof ownerPrepareUnlink = (...args) => ownerPrepar
 
 export const findTransactionValue: typeof ownerFindTransactionValue = (...args) =>
   ownerFindTransactionValue(...args);
-
 
 export const prepareStatementCapture: typeof ownerPrepareStatementCapture = (input) =>
   ownerPrepareStatementCapture(input);

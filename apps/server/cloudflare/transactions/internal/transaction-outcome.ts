@@ -135,7 +135,6 @@ export const refusedTransactionMutation = ({
 }>): CanonicalMutationPreparation =>
   refusedPreparation(transactionRefusal({ db, subject, operation, refusal, current }));
 
-
 const findDeletedTransactionValue = ({
   db,
   userId,

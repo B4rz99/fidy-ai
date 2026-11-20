@@ -1,7 +1,12 @@
 import { ReleaseFailure } from "./production-release";
-import { Effect, Option, Redacted, Schema, Stream } from "effect";
+import { Clock, Effect, Option, Redacted, Schema, Stream } from "effect";
 import { type HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 import { installedOrigins } from "@fidy/server/browser-transport";
+import { signAcceptanceRequest } from "../../apps/server/cloudflare/release-isolation/operations";
+import {
+  acceptanceLifetimeMs,
+  acceptanceProofHeader,
+} from "../../apps/server/cloudflare/release-isolation/contract";
 import { SmokeIdentity } from "../../apps/server/cloudflare/runtime/release-smoke/contract";
 import {
   SharedStoreMarkers,
@@ -83,6 +88,7 @@ export const observeDormantPair = Effect.fn(function* (
   }
 });
 
+const serviceUnavailableStatus = 503;
 const controlRequests = new Map([
   ["/web/pairings", "pairing start"],
   ["/web/providers/google/start", "provider start"],
@@ -124,12 +130,52 @@ const matchesCanonicalUnavailable = Effect.fn(function* (response: Response) {
   );
   return Option.isSome(read) && offset === canonicalUnavailable.length;
 });
+/** Observe the ordinary pairing start or a bodyless probe without retaining the one-time response. */
+export const observePairingStart = Effect.fn(function* (
+  pair: Coordinates,
+  body: "json" | "empty",
+  send: Parameters<typeof retainedFinancialControls>[0]["send"]
+) {
+  const { api, browser } = installedOrigins.acceptance;
+  const request = new Request(api + "/web/pairings", {
+    method: "POST",
+    redirect: "manual",
+    headers: { "content-type": "application/json", origin: browser, ...fallbackHeaders(pair) },
+    body: body === "json" ? "{}" : null,
+  });
+  const signature = yield* signAcceptanceRequest({
+    request,
+    boundary: "ingress",
+    deadline: (yield* Clock.currentTimeMillis) + acceptanceLifetimeMs,
+    environment: {
+      BROWSER_ORIGIN: browser,
+      RECOVERY_ISOLATION: "isolated",
+      NATIVE_STORAGE_ADMISSION: "closed",
+      RELEASE_GIT_SHA: pair.revision,
+      SMOKE_PROOF: pair.proof,
+    },
+  });
+  request.headers.set(acceptanceProofHeader, signature);
+  const response = yield* send(request);
+  const status = "HTTP " + response.status;
+  if (
+    response.status === serviceUnavailableStatus &&
+    (yield* matchesCanonicalUnavailable(response))
+  ) {
+    return status + ", canonical admission unavailable";
+  }
+  const stream = response.body;
+  if (stream !== null && !response.bodyUsed) yield* Effect.tryPromise(() => stream.cancel());
+  return response.headers.get("x-fidy-recovery-isolation") === "isolated"
+    ? status + ", isolated admission"
+    : status;
+});
+
 const controlResponse = Effect.fn(function* (operation: string, response: Response) {
   if (response.status < clientError) return response;
-  const unavailable = 503;
   const error =
     operation === "pairing start" &&
-    response.status === unavailable &&
+    response.status === serviceUnavailableStatus &&
     (yield* matchesCanonicalUnavailable(response))
       ? ", canonical admission unavailable"
       : "";

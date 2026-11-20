@@ -77,7 +77,7 @@ class UnsealedStage(unittest.TestCase):
 
     def test_app_source_is_bound_only_for_the_exact_closed_signed_operations(self):
         for operation, build in (("rollout", "ordinary"), ("verify", "ordinary"), ("reseal-fixture-fallback", "fallback"),
-                                 ("recover-fixture-fallback", "fallback")):
+                                 ("recover-fixture-fallback", "fallback"), ("diagnose-fixture-pairing", "fallback")):
             stage.verify_dispatch({**self.env, "FIXTURE_RELEASE_OPERATION": operation, "NATIVE_FIXTURE_BUILD": build}, self.git)
         for field, value in (("GITHUB_WORKFLOW_REF", "unrelated.yml"), ("GITHUB_RUN_ATTEMPT", "2"), ("NATIVE_FIXTURE_BUILD", "ordinary"), ("GITHUB_SHA", "f"*40),
                 ("GITHUB_REF_PROTECTED", "false"), ("GITHUB_REF", "refs/heads/scratch"), ("NATIVE_STORAGE_HOSTS", "canonical"),

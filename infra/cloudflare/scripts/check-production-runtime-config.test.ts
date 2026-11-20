@@ -193,6 +193,18 @@ describe("Production runtime configuration gate", () => {
       "Requalify the archived zero-traffic pair without moving traffic",
       "Seal dormant fallback stage before promotion",
     ]);
+    const diagnosis = steps.filter((step) =>
+      step
+        .split("\n")
+        .find((line) => line.startsWith("        if:"))
+        ?.includes("inputs.operation == 'diagnose-fixture-pairing'")
+    );
+    expect(diagnosis.map((step) => step.split("\n")[0])).toEqual([
+      "Bind the protected verifier to the staged application source",
+      "Authenticate the unsealed zero-traffic pair",
+      "Compare pairing requests on the archived zero-traffic pair",
+    ]);
+    expect(diagnosis.at(-1)).toContain("bun native-storage-release.ts diagnose-pairing");
     expect(source).toContain("unsealed_stage.py source");
     expect(restore).toContain("unsealed_stage.py restore");
     expect(qualify).toContain("bun native-storage-release.ts reseal-fallback");
@@ -202,6 +214,7 @@ describe("Production runtime configuration gate", () => {
       "Verify the installed application and retained schema markers"
     );
     expect(installed).toContain("inputs.operation != 'reseal-fixture-fallback'");
+    expect(installed).toContain("inputs.operation != 'diagnose-fixture-pairing'");
     for (const step of steps.filter((item) => item.includes("run: bun native-storage-"))) {
       expect(step).toContain("        if:");
     }

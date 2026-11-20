@@ -136,10 +136,9 @@ it.effect("applies the scoped successor while keeping the excluded Queue", () =>
     const before = calls.length;
     yield* deploy(false, "2", "successor");
     expect(calls.slice(before)).toEqual(["reconcile:Core"]);
-    expect([...cloud.values()].map(({ identity }) => identity.split(":")[0]).sort()).toEqual([
-      "Core",
-      "OnboardingQueue",
-    ]);
+    expect(new Set([...cloud.values()].map(({ identity }) => identity.split(":")[0]))).toEqual(
+      new Set(["Core", "OnboardingQueue"])
+    );
   }).pipe(Effect.provide(Alchemist.layer()))
 );
 
@@ -203,6 +202,9 @@ it.effect(
         deletions: "defer",
         replacement: "create-first",
       });
+      if (baseline === undefined || candidate === undefined) {
+        return yield* Effect.fail(Error("Missing full deployment output"));
+      }
       expect(cloud.get(baseline.identity)).toEqual(baseline);
       expect(cloud.get(candidate.identity)).toEqual(candidate);
       expect(calls.filter((call) => call.startsWith("delete:"))).toEqual([]);

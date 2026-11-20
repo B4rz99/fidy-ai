@@ -63,7 +63,7 @@ export const applySuccessorPlan = Effect.fn("applySuccessorPlan")(function* <Out
   if (
     selected === undefined ||
     selected.size === 0 ||
-    plan.destroy ||
+    plan.destroy === true ||
     [plan.deletions, plan.actions, plan.actionDeletions].some(
       (rows) => Object.keys(rows).length !== 0
     ) ||
@@ -77,8 +77,6 @@ export const applySuccessorPlan = Effect.fn("applySuccessorPlan")(function* <Out
   ) {
     return yield* new FixturePlanRefused({ reason: "successor plan is not a scoped upload" });
   }
-  // Alchemy defers cleanup only on complete plans. Scoped Apply still drains
-  // old generations, so verify the selected rows have no pending replacements.
   const state = yield* yield* State;
   const stack = (yield* Stack).name;
   const stage = yield* Stage;

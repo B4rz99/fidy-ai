@@ -10,7 +10,7 @@ import { Schema } from "effect";
 /** @typedef {{batch: Query[], reads:number,writes:number}} Batch */
 /** @typedef {{name:string,type:string,tbl_name:string,sql:string|null}} Definition */
 /** @typedef {{name:string, read:Query, inserts:string[], identities:string[], rowCount:number, dependencies:string[]}} Table */
-const emptyBatchSize = 15;
+const emptyBatchSize = 45;
 const Rows = Schema.Array(Schema.Record(Schema.String, Schema.Json));
 const encodedRows = Schema.decodeUnknownSync(Rows);
 const QueryShape = Schema.Struct({ sql: Schema.String, params: Schema.Array(Schema.Json) });

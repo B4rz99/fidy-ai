@@ -203,6 +203,7 @@ def rehearse(revision, prefix, out):
             write(directory/"native-receipt.json",result["data"])
             if mode=="rehearse" and send("POST",RECEIPT_PATH,request)["status"]//100==2:
                 raise ValueError("Native owner reissued a single-use receipt")
+            send("GET","/transactions?limit=25",None,"local-browser")
         bindings=verify_native_fixture(directory,revision=revision,resource_prefix=prefix)
         state["receipt"]="verified";write(marker,state)
         return bindings

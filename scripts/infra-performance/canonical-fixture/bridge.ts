@@ -168,7 +168,37 @@ export const serveFixture = Effect.fn(function* (runtime: Miniflare) {
   yield* Stream.fromAsyncIterable(lines, () => new FixtureTransportError()).pipe(
     Stream.runForEach((line) =>
       Schema.decodeEffect(Schema.fromJsonString(command))(line).pipe(
-        Effect.flatMap((item) => execute(item, active, service))
+        Effect.flatMap((item) =>
+          item.control === "local-browser"
+            ? io(async () => {
+                const { runBrowser } = await import("../hosted-browser/signed-feasibility.mjs");
+                const manifest = await Bun.file(
+                  process.env.FIDY_DIAGNOSTIC_DIR + "/native/fixture/manifest.json"
+                ).json();
+                await runBrowser({
+                  variant: "do",
+                  origins: api,
+                  cookie: active.cookie,
+                  expected: manifest.history,
+                  forward: async (request: Request) => {
+                    request.headers.set(
+                      acceptanceProofHeader,
+                      await Effect.runPromise(
+                        signAcceptanceRequest({
+                          request,
+                          boundary: "ingress",
+                          environment: environmentOf(await Effect.runPromise(authority)),
+                          deadline: Date.now() + acceptanceLifetimeMs,
+                        })
+                      )
+                    );
+                    return Effect.runPromise(transport(runtime)(request));
+                  },
+                });
+                offer({ status: 200 });
+              })
+            : execute(item, active, service)
+        )
       )
     ),
     Effect.ensuring(Effect.sync(() => lines.close()))

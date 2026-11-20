@@ -28,7 +28,9 @@ const admitted = async (request, env, paths) => {
   ) {
     return false;
   }
-  if (!paths.has(request.method + " " + url.pathname + url.search)) return false;
+  const localBrowser = url.hostname === "127.0.0.1" && ["OPTIONS","GET"].includes(request.method) &&
+    ["/web/session/binding","/ingestion/review-workspace","/transactions","/user"].includes(url.pathname);
+  if (!localBrowser && !paths.has(request.method + " " + url.pathname + url.search)) return false;
   return timingSafeEqual(
     await hash(env.EXPERIMENT_KEY),
     await hash(request.headers.get("x-fidy-comparison-key") ?? "")

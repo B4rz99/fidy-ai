@@ -44,47 +44,43 @@ jobs:
             !/.repos/
           sparse-checkout-cone-mode: false
       - uses: ./.github/actions/bun-install
-      - name: Verify Chromium signs the actual preflight and WebSession request
-        run: |
-          source scripts/infra-performance/hosted-browser/tls.sh
-          export ASSESSMENT_CHROMIUM="$(command -v google-chrome)"
-          bun scripts/infra-performance/hosted-browser/proof.test.mjs
-
-  native:
-    needs: transport
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/trunk'
-    runs-on: ubuntu-latest
-    environment: production
-    timeout-minutes: 20
-    concurrency:
-      group: production-deployment
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: fb53d9e755c14393048dc945fc0b7f117730d872
+          path: baseline-d1
           persist-credentials: false
-          sparse-checkout: |
-            /*
-            !/.repos/
-          sparse-checkout-cone-mode: false
-      - uses: ./.github/actions/bun-runtime
-      - run: bash scripts/install-workspace.sh --ignore-scripts
-      - name: Measure the selected fresh view on the native acceptance alias
-        env:
-          BROWSER_RELEASE_REVISION: ${{ inputs.revision }}
-          BROWSER_VIEW: ${{ inputs.view }}
-          BROWSER_NETWORK: ${{ inputs.network }}
-          NATIVE_STORAGE_ADMISSION: ${{ vars.NATIVE_STORAGE_ADMISSION }}
-          SMOKE_PROOF: ${{ secrets.NATIVE_STORAGE_SMOKE_PROOF }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 15cfe773cd263b6a3d4e1b6e1b958f233cdde84f
+          path: baseline-calibration
+          sparse-checkout: apps/server
+          persist-credentials: false
+      - name: Exercise the real signed fixture on the two product clients
         run: |
+          set -eu
           source scripts/infra-performance/hosted-browser/tls.sh
           export ASSESSMENT_CHROMIUM="$(command -v google-chrome)"
-          bun scripts/infra-performance/hosted-browser/native.mjs
-      - name: Retain observed and partial browser evidence
+          export FIDY_DIAGNOSTIC_DIR="$RUNNER_TEMP/paired-browser"
+          export D1_WEB_ASSETS="$FIDY_DIAGNOSTIC_DIR/web-d1" NATIVE_WEB_ASSETS="$FIDY_DIAGNOSTIC_DIR/web-do"
+          mkdir -m 700 "$FIDY_DIAGNOSTIC_DIR"
+          (cd baseline-d1 && bash scripts/install-workspace.sh --ignore-scripts)
+          (cd apps/web && VITE_API_ORIGIN=installed bun ../../node_modules/vite/bin/vite.js build --mode production --outDir "$NATIVE_WEB_ASSETS")
+          (cd baseline-d1/apps/web && VITE_API_ORIGIN=https://api.fidyapp.com bun ../../node_modules/vite/bin/vite.js build --mode production --outDir "$D1_WEB_ASSETS")
+          python3 scripts/infra-performance/canonical-fixture/hosted.py rehearse --out "$FIDY_DIAGNOSTIC_DIR/native"
+          python3 - <<'PYCODE'
+          import os, subprocess, json
+          from pathlib import Path
+          folder=Path(os.environ["FIDY_DIAGNOSTIC_DIR"])
+          env={**os.environ,**json.loads((folder/"native/rehearsal-verifier.json").read_text())}
+          subprocess.run(["python3","scripts/infra-performance/cells/prepare.py","--d1","baseline-d1","--calibration","baseline-calibration","--canonical-fixture",str(folder/"native/fixture"),"--materialized","--out",str(folder/"d1-bundle")],env=env,check=True)
+          PYCODE
+      - name: Preserve counters, metadata and view digests
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: closed-browser-${{ github.run_id }}-${{ github.run_attempt }}
-          path: apps/web/test-results/hosted-browser/attempts.jsonl
-          if-no-files-found: error
-          retention-days: 7
+          name: signed-browser-read-feasibility-${{ github.run_id }}
+          path: |
+            ${{runner.temp}}/paired-browser/do.json
+            ${{runner.temp}}/paired-browser/d1.json
+            ${{runner.temp}}/paired-browser/native/summary.json
+            ${{runner.temp}}/paired-browser/d1-bundle/probe.json

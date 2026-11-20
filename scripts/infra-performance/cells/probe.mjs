@@ -348,6 +348,16 @@ try {
   assert.equal(handshake.status, success);
   const { binding } = session(await handshake.json());
   assert.ok(binding);
+  if(training) {
+    const {runBrowser}=await import("../hosted-browser/signed-feasibility.mjs");
+    await runBrowser({variant:"d1",origins:{browser:origin,api:"https://api.fidyapp.com"},cookie,expected:expected.history,
+      forward:async r=>{const u=new URL(r.url);return source(u.pathname+u.search,{method:r.method,headers:Object.fromEntries(r.headers)})},
+      afterRequest:(key,response,ev)=>{
+        const raw=response.headers.get("x-fidy-comparison-cost");
+        if(raw){const cost=rowReceipt(JSON.parse(raw)); learn(key,cost.calls); Object.assign(ev,{actual:cost.rowsWritten,maximum:estimates[key].maximum.rowsWritten,nativeCalls:cost.calls.length});}
+      }
+    });
+  }
   if (interrupted) {
     assert.ok(expected && inspections.length === fixtureOriginalCount);
     const reply = await request("/transactions?limit=25", {

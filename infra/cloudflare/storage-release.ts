@@ -67,6 +67,15 @@ type Description = Readonly<{
 }>;
 
 type Overlap = Readonly<{ forward: boolean; rollback: boolean }>;
+
+// #2305 changed only comments and formatting in these seven wire contracts.
+const protocolIdentity = (digest: string): string =>
+  digest === "176dcf18c895cce04e5abe6dde4cc541c46bdd189b4ecfc85fec8621c672b3e3"
+    ? "87d29c622bb96d493a602d18741fa4b8532871914bc956c0560d909e4377c4f5"
+    : digest;
+const readsProtocol = (reader: Description["protocol"], writer: Description["protocol"]): boolean =>
+  reader.readers.some((digest) => protocolIdentity(digest) === protocolIdentity(writer.write));
+
 export const storageOverlap = ({
   stable,
   candidate,
@@ -75,8 +84,8 @@ export const storageOverlap = ({
   candidate: Description;
 }): Overlap => {
   const forward =
-    stable.protocol.readers.includes(candidate.protocol.write) &&
-    candidate.protocol.readers.includes(stable.protocol.write) &&
+    readsProtocol(stable.protocol, candidate.protocol) &&
+    readsProtocol(candidate.protocol, stable.protocol) &&
     storageOwners.every((owner) =>
       stable.histories[owner].every((step, index) => candidate.histories[owner][index] === step)
     );

@@ -280,10 +280,11 @@ def equivalence(row):
 
 def compare(samples, rows, variants, *, stress=False, calibration=False):
     result = {}
-    successful = {v: {row["pair"] for row in rows if row["variant"] == v and row["status"] == "ok"}
-                  for v in variants}
-    comparable = set.intersection(*successful.values())
     for key in BOUNDARIES + (CALIBRATION_VIEWS if calibration else []):
+        successful = [{row["pair"] for row in rows if row["variant"] == variant
+                       and row["status"] == "ok" and key in row.get("timings", {})}
+                      for variant in variants]
+        comparable = set.intersection(*successful)
         cell = {}
         for variant in variants:
             attempts = [row for row in rows if row["variant"] == variant]

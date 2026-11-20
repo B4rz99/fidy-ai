@@ -144,6 +144,16 @@ class ReferenceReport(unittest.TestCase):
             self.assertEqual((counts["planned"], counts["offered"], counts["completed"],
                               counts["comparable"]), (1, offered, completed, 0))
 
+    def test_archived_success_leaves_an_unmeasured_cell_missing(self):
+        key = "recurring.no-match.browser"
+        rows = self.rows(30)
+        for row in rows:
+            del row["timings"][key]
+        cell = compare(30, rows, ["d1", "do"], calibration=True)[key]
+        self.assertEqual(cell["status"], "missing")
+        self.assertIsNone(cell["d1"]["offered"])
+        self.assertEqual(cell["d1"]["comparable"], 0)
+
     def test_every_boundary_requires_the_minimum_paired_count(self):
         summary = compare(29, self.rows(29), ["d1", "do"])
         self.assertEqual(summary["read.http"]["status"], "missing")

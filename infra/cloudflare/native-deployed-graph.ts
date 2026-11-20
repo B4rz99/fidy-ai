@@ -156,7 +156,7 @@ export const verifyDeployedVersion = (input: {
     ALCHEMY_PHASE: "runtime",
     ALCHEMY_WORKER_NAME:
       role === "Smoke"
-        ? smokeName(resourceRevision(revision, input.fingerprint !== ""))
+        ? smokeName(resourceRevision({ revision, signed: input.fingerprint !== "" }))
         : installationNames[role],
     ALCHEMY_STACK_NAME: nativeStack,
     ALCHEMY_STAGE: "production",
@@ -173,7 +173,7 @@ export const verifyDeployedVersion = (input: {
   }
   requireDeployedRole({
     role,
-    revision: resourceRevision(revision, input.fingerprint !== ""),
+    revision: resourceRevision({ revision, signed: input.fingerprint !== "" }),
     bindings,
     fingerprint: input.fingerprint,
   });

@@ -14,7 +14,7 @@ const row = (logicalId: string, resourceType: string, action: Row["action"]): Ro
   bindings: [],
 });
 const validate = (rows: readonly Row[], fallback = false): void =>
-  requireFixtureLifecycle(rows, fallback);
+  requireFixtureLifecycle({ rows, fallback });
 const retained = [...nativeResourceInventory(provider.revision)]
   .filter(([id]) => id.includes(provider.revision))
   .map(([id, type]) => row(id, type, "delete"));

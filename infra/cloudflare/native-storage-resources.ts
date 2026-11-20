@@ -84,11 +84,11 @@ const verifyResourcePlan = Effect.fn(function* ({
     const fingerprint = yield* expectedFixtureSigner;
     const fallback = (yield* fixtureBuild) === "fallback";
     if (fingerprint !== "") {
-      yield* Effect.try(() => verifyFixturePlan(plan, fallback)).pipe(
+      yield* Effect.try(() => verifyFixturePlan({ plan, fallback })).pipe(
         nativeResourceStage("resource inventory")
       );
     }
-    const generation = resourceRevision(revision, fingerprint !== "");
+    const generation = resourceRevision({ revision, signed: fingerprint !== "" });
     yield* Effect.sync(() =>
       requireNativeBindings({ plan, revision: generation, hosts, fingerprint, fallback })
     ).pipe(nativeResourceStage("Worker bindings"));

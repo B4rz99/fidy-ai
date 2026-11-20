@@ -561,7 +561,7 @@ const verifyDeployedWorkers = Effect.fn(function* (
   { port, roles }: { port: ReleasePort; roles: "all" | "support" }
 ) {
   const fingerprint = yield* expectedFixtureSigner;
-  const generation = resourceRevision(env.revision, fingerprint !== "");
+  const generation = resourceRevision({ revision: env.revision, signed: fingerprint !== "" });
   const workers: ReadonlyArray<readonly [NativeRole, string]> = [
     ["Ingress", installationNames.Ingress],
     ["Core", installationNames.Core],
@@ -619,7 +619,7 @@ const verifyInstalledTopology = Effect.fn(function* (
   }
 ) {
   const signed = (yield* expectedFixtureSigner) !== "";
-  const generation = resourceRevision(env.revision, signed);
+  const generation = resourceRevision({ revision: env.revision, signed });
   const workers = yield* verifyDeployedWorkers(env, client, { port: input.port, roles: "all" });
   if (
     workers.find((item) => item.role === "Ingress")?.versionId !== input.publicStable ||
@@ -1615,7 +1615,8 @@ const prepareDiagnostics = Effect.fn(function* (
     env,
     [
       ...Object.values(installationNames),
-      "fidy-native-smoke-" + resourceRevision(env.revision, (yield* expectedFixtureSigner) !== ""),
+      "fidy-native-smoke-" +
+        resourceRevision({ revision: env.revision, signed: (yield* expectedFixtureSigner) !== "" }),
     ],
     client
   );

@@ -355,9 +355,29 @@ For a successful `stage-pairing-repair` or `resume-pairing-stage`, record the se
 Pass these as `installed_revision`, `fallback_artifact`, and `fallback_sha256` with the signer
 enabled for `recover-fixture-fallback`. After that recovery succeeds, supply the same three
 inputs for `rollout`. The verifier may advance on protected trunk only through the reviewed
-verifier files. Both Worker builds identify the staged application SHA. The rollout checks
-the live dormant deployment history, its namespaces, support Workers and retained financial
-controls before upload. Its evidence identifies the independent seal used for the rollback pair.
+verifier files. Both Worker builds identify the staged application SHA.
+
+The dormant recovery step checks the sealed versions and retained financial controls around
+the Core-first promotion. Its fallback receipt records the exact serving deployments. The
+surrounding job also runs installed verification through normal traffic. Keep any failed
+installed smoke result with the fallback receipt when investigating a completed promotion.
+
+Before uploading the ordinary active pair, the signed rollout checks the live dormant
+deployment history, its namespaces, support Workers and retained financial controls. Promotion
+requires version-pinned storage and release smoke checks on the candidate pair, the mixed pair,
+and the compatible return pair. The final installed check exercises release smoke through normal
+traffic, verifies the synthetic Users, and rechecks both retained financial controls. The rollout
+evidence identifies the independent seal used for the rollback pair.
+
+If the pinned post-promotion rollback stopped after restoring Ingress, use
+`resume-pairing-rollback` with the same seal inputs and signer. The operation authenticates the
+failed rollout receipt and checks the exact intermediate deployment histories before restoring
+the remaining Core. It verifies both restored versions, the ordinary serving schema markers,
+and both retained financial histories before publishing restoration evidence.
+The next signed `rollout` uses that restoration archive along with the original seal. It checks
+both restored deployments and the complete sequence of staging, promotion and restoration above
+the sealed dormant pair before uploading the active candidates. The cohort workflow authenticates
+the same restoration when qualifying the active rollout.
 
 Use the **Measure the closed native Transaction cohort** protected workflow on trunk. Provide a
 new random comparison prefix, the installed SHA, the two serving version UUIDs, and the artifact

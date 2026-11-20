@@ -7,7 +7,10 @@ import {
   acceptanceLifetimeMs,
   acceptanceProofHeader,
 } from "../../apps/server/cloudflare/release-isolation/contract";
-import { SmokeIdentity } from "../../apps/server/cloudflare/runtime/release-smoke/contract";
+import {
+  SmokeIdentity,
+  smokeProofHeader,
+} from "../../apps/server/cloudflare/runtime/release-smoke/contract";
 import {
   SharedStoreMarkers,
   compatibilityQuery,
@@ -195,9 +198,10 @@ const controlResponse = Effect.fn(function* (request: Request, response: Respons
 });
 export const controlsDigest = Effect.fn(function* (
   pair: Coordinates,
-  send: Parameters<typeof retainedFinancialControls>[0]["send"]
+  send: Parameters<typeof retainedFinancialControls>[0]["send"],
+  routing: "ordinary" | "pinned" = "pinned"
 ) {
-  const route = fallbackHeaders(pair);
+  const route = routing === "ordinary" ? { [smokeProofHeader]: pair.proof } : fallbackHeaders(pair);
   const controls = yield* retainedFinancialControls({
     revision: pair.revision,
     origins: installedOrigins.acceptance,

@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "7bd104fa3b8bf8ecfaad87ec1d56cd2136dc01a5768245298085ec6a877e2318";
+const expectedEdgePolicyDigest = "c4c866f42497ca9d5773f147ec91d5745b01295cceaeb56430d01adc18b0618c";
 const securityArtifacts = [
   ...(await Promise.all(
     [
@@ -93,6 +93,7 @@ const securityArtifacts = [
       "./native-recovery-identity.ts",
       "./resource-failure.ts",
       "./native-release-smoke.ts",
+      "./release-rollback.ts",
     ].map((path) => Bun.file(new URL(path, import.meta.url)).text())
   )),
   await Bun.file(

@@ -11,6 +11,8 @@ import {
   recoverFixtureFallback,
   requireDormantReplacementSource,
   requirePromotedDormantSource,
+  requireRestoredDormantSource,
+  resumePairingRollback,
   stageUploadedPair,
   verifyUnpromotedFallback,
 } from "./native-fallback-recovery";
@@ -105,6 +107,95 @@ const harness = (): {
   return { port, deployments, writes };
 };
 const verify = (): Effect.Effect<void, Error> => Effect.void;
+
+it.effect("requires the exact five deployment entries after a verified dormant restoration", () =>
+  Effect.gen(function* () {
+    const { port, deployments, writes } = harness();
+    const release = {
+      snapshot: { ...stage.release.snapshot, stableRevision: revision },
+      coreVersionId: uuid(21),
+      publicVersionId: uuid(22),
+      coreDeploymentId: uuid(23),
+      publicDeploymentId: uuid(24),
+    };
+    const promoted = { coreDeploymentId: uuid(25), publicDeploymentId: uuid(26) };
+    const restored = { coreDeploymentId: uuid(27), publicDeploymentId: uuid(28) };
+    const snapshot = { ...release.snapshot };
+    for (const [role, name] of [
+      ["core", core],
+      ["public", ingress],
+    ] as const) {
+      const deployment = `${role}DeploymentId` as const;
+      const version = `${role}VersionId` as const;
+      const stableId = stage.release[version];
+      release.snapshot[role] = {
+        name,
+        deploymentId: uuid(role === "core" ? 29 : 30),
+        stableVersionId: stableId,
+      };
+      snapshot[role] = { ...release.snapshot[role], deploymentId: restored[deployment] };
+      deployments(name).unshift(
+        { id: restored[deployment], versions: [{ id: stableId, percentage: 100 }] },
+        { id: promoted[deployment], versions: [{ id: release[version], percentage: 100 }] },
+        {
+          id: release[deployment],
+          versions: [
+            { id: stableId, percentage: 100 },
+            { id: release[version], percentage: 0 },
+          ],
+        },
+        { id: release.snapshot[role].deploymentId, versions: [{ id: stableId, percentage: 100 }] }
+      );
+    }
+    const source = { receipt: { release, promoted }, restored };
+    const check = requireRestoredDormantSource({ port, snapshot, sealed: stage.release, source });
+    yield* check;
+    deployments(core).splice(2, 1);
+    expect(yield* check.pipe(Effect.isFailure)).toBe(true);
+    expect(writes).toEqual([]);
+  })
+);
+
+it.effect(
+  "resumes only the exact Ingress-first partial rollback and recognizes a completed Core",
+  () =>
+    Effect.gen(function* () {
+      const { port, deployments, writes } = harness();
+      const promoted = { coreDeploymentId: uuid(21), publicDeploymentId: uuid(22) };
+      const ingressDeploymentId = uuid(23);
+      for (const [role, name] of [
+        ["core", core],
+        ["public", ingress],
+      ] as const) {
+        deployments(name).unshift({
+          id: promoted[`${role}DeploymentId`],
+          versions: [{ id: stage.release[`${role}VersionId`], percentage: 100 }],
+        });
+      }
+      const restoredIngress = {
+        id: ingressDeploymentId,
+        versions: [{ id: stage.release.snapshot.public.stableVersionId, percentage: 100 }],
+      };
+      deployments(ingress).unshift(restoredIngress);
+      const input = {
+        port: { ...port, deployable: (): Effect.Effect<boolean> => Effect.succeed(true) },
+        receipt: { release: stage.release, promoted },
+        ingressDeploymentId,
+      };
+      expect(
+        yield* resumePairingRollback({ ...input, ingressDeploymentId: uuid(24) }).pipe(
+          Effect.isFailure
+        )
+      ).toBe(true);
+      expect(writes).toEqual([]);
+      const restored = yield* resumePairingRollback(input);
+      expect(restored.versions).toEqual([
+        { id: stage.release.snapshot.core.stableVersionId, percentage: 100 },
+      ]);
+      expect(yield* resumePairingRollback(input)).toEqual(restored);
+      expect(writes).toEqual([core]);
+    })
+);
 
 it.effect("finishes the exact staged dormant pair and verifies a repeat without redeploying", () =>
   Effect.gen(function* () {

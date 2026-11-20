@@ -59,11 +59,14 @@ const json = Schema.decodeSync(Schema.fromJsonString(Schema.Unknown));
 const [root, directory, size = "extreme", profile = "original"] = process.argv.slice(2);
 assert.ok(root && directory);
 assert.ok(["extreme", "production"].includes(size));
-assert.ok(["original", "native-original", "mixed-review", "single", "cpu"].includes(profile));
+assert.ok(
+  ["original", "native-original", "mixed-review", "single", "two-tabs", "cpu"].includes(profile)
+);
+const twoTabs = profile === "two-tabs";
 const nativeOnly = profile === "native-original";
 assert.ok(!nativeOnly || size === "extreme", "Original native capacity requires the full fixture");
 const cohortSize = 20;
-const users = ["single", "cpu"].includes(profile) ? 1 : cohortSize,
+const users = ["single", "two-tabs", "cpu"].includes(profile) ? 1 : cohortSize,
   samples = 30;
 const success = 200,
   badRequest = 400,
@@ -181,18 +184,20 @@ const authenticate = async (platform, subject) => {
  */
 const observe = async ({ runtime, subject }, { row, scheduled }, journey) => {
   const timing = { dispatched: Number.NaN };
-  /** @type {{status:number; bytes: Uint8Array; end:number; trace:string|null}[]} */
+  /** @type {{status:number; bytes: Uint8Array; dispatched?:number; end:number; trace:string|null}[]} */
   const responses = [];
   try {
     /** @type {Call} */
     const call = async (path, options) => {
-      if (Number.isNaN(timing.dispatched)) timing.dispatched = performance.now();
+      const dispatched = twoTabs ? performance.now() : undefined;
+      if (Number.isNaN(timing.dispatched)) timing.dispatched = dispatched ?? performance.now();
       const result = await execute({ runtime, subject }, path, options);
       const bytes = new Uint8Array(await result.arrayBuffer());
       const end = performance.now();
       responses.push({
         status: result.status,
         bytes,
+        dispatched,
         end,
         trace: result.headers.get("fidy-trace-id"),
       });
@@ -217,16 +222,19 @@ const observe = async ({ runtime, subject }, { row, scheduled }, journey) => {
   } catch (error) {
     Object.assign(row, {
       ok: false,
-      status: responses.at(-1)?.status,
+      status: twoTabs
+        ? responses.find((reply) => reply.status !== success)?.status
+        : responses.at(-1)?.status,
       error: error instanceof Error ? error.name : "UnknownError",
       scheduled,
       dispatched: Number.isNaN(timing.dispatched) ? undefined : timing.dispatched,
       completedAt: performance.now(),
     });
   }
-  const outcomes = responses.map(({ status, bytes, end }) => ({
+  const outcomes = responses.map(({ status, bytes, dispatched, end }) => ({
     status,
     bytes: bytes.length,
+    dispatched,
     completedAt: end,
   }));
   record("attempts", { ...row, responses: outcomes });
@@ -433,9 +441,17 @@ const offerHistory = async (platform, variant, { block, begin }) => {
         sample: block * (samples / 2) + round,
       };
       await observe({ runtime: platform.runtime, subject }, { row, scheduled }, async (call) => {
-        const reply = await call(history);
-        assert.equal(reply.status, success);
-        assert.deepEqual(reply.body, warmState(subject).initial);
+        const readHistory = async () => {
+          const reply = await call(history);
+          assert.equal(reply.status, success);
+          assert.deepEqual(reply.body, warmState(subject).initial);
+        };
+        if (twoTabs) {
+          const pair = await Promise.allSettled([readHistory(), readHistory()]);
+          for (const result of pair) {
+            if (result.status === "rejected") throw result.reason;
+          }
+        } else await readHistory();
       });
     })
   );
@@ -615,6 +631,30 @@ const retainedFixtures = async (variants) => {
   await write("retention", { verified });
 };
 /**
+ * @param {Platforms} variants Runtimes selected for the workload.
+ * @param {Record<string, boolean>} audits Verified Audit by timing cell.
+ */
+const measureMutations = async (variants, audits) => {
+  /**
+   * @param {number} index Financial User ordinal.
+   */
+  const perUser = (index) => Math.floor((samples - 1 - index) / users) + 1;
+  await pairedMutations(variants, correct);
+  audits.correction = await verifyAudit(variants, "correction", {
+    reads: perUser,
+    corrections: perUser,
+    rejections: () => 0,
+  });
+  await write("audit", audits);
+  await pairedMutations(variants, rollback);
+  audits.rollback = await verifyAudit(variants, "rollback", {
+    reads: perUser,
+    corrections: () => 0,
+    rejections: perUser,
+  });
+  await write("audit", audits);
+};
+/**
  * @param {Miniflare} native Native workerd runtime.
  * @param {D1} [d1] Frozen D1 runtime.
  */
@@ -640,29 +680,12 @@ const measure = async (native, d1) => {
   const audits = {};
   await offeredLoad(variants);
   audits.history = await verifyAudit(variants, "history", {
-    reads: () => samples,
+    reads: () => samples * (twoTabs ? 2 : 1),
     corrections: () => 0,
     rejections: () => 0,
   });
   await write("audit", audits);
-  /**
-   * @param {number} index Financial User ordinal.
-   */
-  const perUser = (index) => Math.floor((samples - 1 - index) / users) + 1;
-  await pairedMutations(variants, correct);
-  audits.correction = await verifyAudit(variants, "correction", {
-    reads: perUser,
-    corrections: perUser,
-    rejections: () => 0,
-  });
-  await write("audit", audits);
-  await pairedMutations(variants, rollback);
-  audits.rollback = await verifyAudit(variants, "rollback", {
-    reads: perUser,
-    corrections: () => 0,
-    rejections: perUser,
-  });
-  await write("audit", audits);
+  if (!twoTabs) await measureMutations(variants, audits);
   await retainedFixtures(variants);
   for (const variant of Object.keys(variants)) {
     const logs = spanLogs[variant],
@@ -672,6 +695,15 @@ const measure = async (native, d1) => {
       record("worker-spans", { variant, ...row });
     }
   }
+};
+const plannedOrder = () => {
+  if (twoTabs) {
+    return "two concurrent history reads on one mounted WebSession each second; two 15-second blocks per variant, D1/DO then DO/D1";
+  }
+  if (nativeOnly) {
+    return "two 15-second native blocks, one offer/User/second at 50ms offsets; one-second intervals between isolated native mutations";
+  }
+  return "history: two 15-second blocks per variant, D1/DO then DO/D1, one offer/User/second at (1000 / users) ms offsets; Correction and rollback: one-second interval between isolated pairs, alternate variant order in 30 pairs";
 };
 await write("plan", {
   baseline,
@@ -688,11 +720,11 @@ await write("plan", {
     profile,
   warmup:
     "one authenticated full-history warm-up for each User and variant; actual User/shared reconstruction unobserved",
-  order: nativeOnly
-    ? "two 15-second native blocks, one offer/User/second at 50ms offsets; one-second intervals between isolated native mutations"
-    : "history: two 15-second blocks per variant, D1/DO then DO/D1, one offer/User/second at (1000 / users) ms offsets; Correction and rollback: one-second interval between isolated pairs, alternate variant order in 30 pairs",
-  boundaries:
-    "host scheduled offer and actual dispatch to the last fully buffered Miniflare loopback response body; isolated Correction includes write and fresh history",
+  sameSessionConcurrency: twoTabs ? 2 : 1,
+  order: plannedOrder(),
+  boundaries: twoTabs
+    ? "host scheduled offer and actual first dispatch through both complete responses; retain per-read dispatch and completion and verify overlap"
+    : "host scheduled offer and actual dispatch to the last fully buffered Miniflare loopback response body; isolated Correction includes write and fresh history",
   fixture:
     "same 100k originals, 99k effective, eight Currencies, 100 plans x 100 revisions and 5k review per User on extreme; mixed-review uses 250 retained and 4750 expired per User",
   criterion: nativeOnly

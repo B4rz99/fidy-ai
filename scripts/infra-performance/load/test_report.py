@@ -1,6 +1,6 @@
 import unittest
 
-from report import summarize
+from report import summarize, two_tab_evidence
 
 
 class OfferedLoadEvidence(unittest.TestCase):
@@ -105,3 +105,27 @@ class OfferedLoadEvidence(unittest.TestCase):
         self.assertEqual(report["dispatchTail"]["eligible"], 2)
         self.assertEqual(report["dispatchTail"]["matched"], 1)
         self.assertEqual(report["dispatchTail"]["coreMs"]["p95"], 27)
+
+
+    def test_same_session_requires_both_calls_to_be_in_flight_together(self):
+        rows = [
+            dict(variant=variant, user=0, sample=sample, ok=True,
+                 dispatchMs=latency, scheduledMs=latency, bytes=100, digest="both histories",
+                 dispatched=100, completedAt=100 + latency, responses=[
+                     dict(status=200, dispatched=100, completedAt=100 + latency - 1),
+                     dict(status=200, dispatched=101, completedAt=100 + latency),
+                 ])
+            for sample in range(30) for variant, latency in (("d1", 12), ("do", 4))
+        ]
+        def report():
+            result = summarize(rows, 1, 30)
+            two_tab_evidence(result, rows, 30)
+            return result
+        result = report()
+        self.assertTrue(result["sameSessionOverlap"]["verified"])
+        self.assertEqual(result["sameSessionOverlap"]["do"]["readDispatchMs"]["p95"], 3)
+        # Correct, fast responses alone cannot establish that the calls overlapped.
+        rows[-1]["responses"][1]["dispatched"] = 103
+        result = report()
+        self.assertEqual(result["sameSessionOverlap"]["do"]["overlappingPairs"], 29)
+        self.assertEqual(result["dispatchMs"]["status"], "fail")

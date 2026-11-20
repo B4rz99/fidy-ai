@@ -15,7 +15,7 @@ from cohort import Cohort, MAX_USER_OBJECTS
 
 class BrowserOriginTests(unittest.TestCase):
     def test_fresh_evidence_accepts_different_countries_and_colos(self):
-        now = time.time()
+        now = 1_795_107_000.125
         report = {
             "observedAt": datetime.fromtimestamp(now, timezone.utc).isoformat(),
             "origins": {

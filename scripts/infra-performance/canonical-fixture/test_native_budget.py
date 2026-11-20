@@ -39,6 +39,7 @@ class NativeBudgetTests(unittest.TestCase):
     def test_r2_shared_account_requires_storage_and_operations_headroom(self):
         now, account = 1795107000, "a"*32
         row = dict(accountTag=account, total=[dict(sum=dict(requests=100))], today=[dict(sum=dict(requests=30))],
+                   classA=[dict(sum=dict(requests=0))],
                    byAction=[dict(dimensions=dict(actionType="GetObject"),sum=dict(requests=100))],
                    latest=[dict(dimensions=dict(datetime=iso(now)))],
                    storage=[dict(dimensions=dict(bucketName="fidy-native-release-smoke"),
@@ -53,7 +54,8 @@ class NativeBudgetTests(unittest.TestCase):
         observed = sample(mixed)
         self.assertEqual(observed["upperBoundClassA"], 100_010)
         r2_room(observed, R2_OPERATIONS, 1_048_576)
-        for invalid in (groups[:2], [*groups, groups[0]], [action("GetObject", -1)]):
+        for invalid in ([], [*groups, groups[0]], [action("GetObject", -1)],
+                        [action(str(i), 1) for i in range(100)]):
             with self.assertRaises(ValueError):
                 sample({**mixed, "byAction": invalid})
         with self.assertRaises(ValueError):
@@ -62,13 +64,54 @@ class NativeBudgetTests(unittest.TestCase):
             r2_room({**observed, "upperBoundClassA": 1_000_000}, R2_OPERATIONS, 1_048_576)
         for field, value in [
             ("accountTag", "b"*32), ("storage", []), ("total", []),
-            ("total", [dict(sum=dict(requests=MAX_R2_OPERATIONS-R2_OPERATIONS+1))]),
+            ("classA", [dict(sum=dict(requests=MAX_R2_OPERATIONS-R2_OPERATIONS+1))]),
             ("latest", [dict(dimensions=dict(datetime=iso(now-601)))]),
             ("storage",[dict(dimensions=dict(bucketName="fidy-native-release-smoke"),
                              max=dict(payloadSize=10_000_000_000,metadataSize=0))]),
         ]:
             with self.subTest(field=field), self.assertRaises(ValueError):
                 r2_room(sample({**row,field:value}), R2_OPERATIONS, 1_048_576)
+
+    def test_r2_sampling_disagreement_keeps_higher_bound_for_each_class(self):
+        now, account = 1795107000, "a" * 32
+        row = dict(
+            accountTag=account, total=[{"sum": {"requests": 1_789_541}}],
+            classA=[{"sum": {"requests": 148_892}}], today=[{"sum": {"requests": 100}}],
+            byAction=[
+                {"dimensions": {"actionType": "GetObject"}, "sum": {"requests": 1_650_000}},
+                {"dimensions": {"actionType": "ListObjects"}, "sum": {"requests": 148_890}},
+            ],
+            latest=[{"dimensions": {"datetime": iso(now)}}],
+            storage=[{"dimensions": {"bucketName": "fidy-native-release-smoke"},
+                      "max": {"payloadSize": 1, "metadataSize": 2}}],
+        )
+        def query(path, payload):
+            self.assertEqual(path, "graphql")
+            self.assertIn(
+                'classA:r2OperationsAdaptiveGroups(limit:1,filter:{datetime_geq:$start,'
+                'datetime_leq:$end,actionType_neq:"GetObject"}){sum{requests}}',
+                payload["query"],
+            )
+            return {"viewer": {"accounts": [row]}}
+
+        sample = r2_usage(query, account, now)
+        self.assertEqual(sample["upperBoundClassA"], 148_892)
+        self.assertEqual(sample["requests"], 1_798_890)
+        r2_room(sample, R2_OPERATIONS, 1_048_576)
+
+        row.update(total=[{"sum": {"requests": 1_900_000}}], classA=[{"sum": {"requests": 140_000}}])
+        sample = r2_usage(query, account, now)
+        self.assertEqual(sample["upperBoundClassA"], 148_890)
+        self.assertEqual(sample["requests"], 1_900_000)
+
+        del row["classA"]
+        with self.assertRaisesRegex(ValueError, "Missing R2 operation aggregate"):
+            r2_usage(query, account, now)
+        for invalid in (None, [], [{"sum": {}}], [{"sum": {"requests": True}}],
+                        [{"sum": {"requests": -1}}], [{}, {}]):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                row["classA"] = invalid
+                r2_usage(query, account, now)
 
     def test_next_day_cleanup_can_reserve_only_its_bounded_recovery_work(self):
         from native_budget import recovery_reservation

@@ -1099,7 +1099,6 @@ const submit = ({
       : unavailable();
   });
 
-/** Owner-private browser workflow; time, provider work and commit settlement share its caller fiber. */
 export const paymentEnrollmentWork = ({
   request,
   environment,
@@ -1173,7 +1172,6 @@ export const paymentEnrollmentWork = ({
     });
   });
 
-/** Exact-origin fresh-session direct browser boundary; provider identity never leaves Core. */
 export const handlePaymentEnrollment = (
   input: Readonly<{
     request: Request;

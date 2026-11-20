@@ -18,7 +18,7 @@ const limits = {
     shared: { count: 10_000, units: 40_960_000 },
   },
 } as const;
-/** Caller holds the short local transaction. An admitted attempt remains spent on policy or provider failure. */
+
 export const chargeProvider = Effect.fn(function* (
   input: typeof ProviderSpend.Type,
   scope: "user" | "shared",

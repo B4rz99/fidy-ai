@@ -62,3 +62,15 @@ leap-day clamps. Renewal execution advances by one period from the paid boundary
 collection is late. Support correction uses Fidy attempt identities and a closed reason
 vocabulary. A card void addresses the whole charge. An ambiguous submission remains pending and
 continues to reserve its amount. Sandbox treatment is provisional evidence.
+
+Claim an outbound charge before provider I/O. A crash between the claim and POST is already
+ambiguous. Wompi transaction id hints from a signed callback still require an independent
+bounded lookup and exact captured terms. A missing response id cannot authorize another POST.
+One verified finalized approval settles the attempt; unresolved provider transactions stay
+pending, and all-negative evidence waits until the provider retry window closes.
+
+Refund and void execution starts from separately Access-authorized support and same-User
+resource reservation. Durable claims prevent duplicate POST even when Workflow publication
+is missed or repeated. Refund correction remains Sandbox-only under both stored and current
+configuration. Read-only verification can reconcile card voids. Retain pending Money while a
+refund has no verified terminal evidence. [Refund reconciliation follow-up](https://github.com/B4rz99/fidy-ai/issues/2311).

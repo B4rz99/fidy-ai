@@ -36,7 +36,7 @@ const codeFields = (input: AuthCode): string =>
     input.challenge,
     String(input.deadline),
   ].join(".");
-/** Only the protected driver receives the signing key; a browser carries the single provider code and real PKCE state. */
+
 export const issueAcceptanceProviderCode = Effect.fn(function* (input: AuthCode, secret: string) {
   const fields = codeFields(input);
   return fields + "." + (yield* fixtureMac(secret, fields));

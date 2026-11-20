@@ -69,7 +69,6 @@ const policies = ResourceAdmissionPolicies.make([
   },
 ]);
 
-/** One installed upload inventory for all credential/channel admission paths. */
 export const statementUploadAuthority = ({
   db,
   current,
@@ -83,7 +82,7 @@ const charge = (policyKey: string, scopeKey: string): ResourceAdmissionCharges[n
   scopeKey: ResourceAdmissionScopeKey.make(scopeKey),
   units: oneUnit,
 });
-/** Attempts remain charged on refusal; work and the caller-owned proof commit together. */
+
 export const admitStatementUpload = ({
   db,
   userId,

@@ -4,10 +4,10 @@ import { operationCatalog } from "../../src/shell/api";
 import { Option } from "effect";
 
 const routes = operationCatalog.operations;
-/** A public Worker path exists only when the assembled canonical HttpApi declares it. */
+
 export const canonicalRoute = (path: string): boolean =>
   routes.some((operation) => matchesRouteTemplate({ template: operation.route, path }));
-/** Allowed verbs for a declared path (including any parameter), empty for unknown paths. */
+
 export const canonicalMethods = (path: string): ReadonlyArray<string> =>
   Array.from(
     new Set(
@@ -17,7 +17,6 @@ export const canonicalMethods = (path: string): ReadonlyArray<string> =>
     )
   );
 
-/** Select a declared operation only when verb and path template match; otherwise None. */
 export const canonicalOperation = ({
   method,
   path,

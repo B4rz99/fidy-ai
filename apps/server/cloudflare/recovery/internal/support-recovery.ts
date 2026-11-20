@@ -95,7 +95,6 @@ const currentClaims = (claims: Option.Option<typeof Claims.Type>, now: number): 
   claims.value.exp - claims.value.iat <= maximumAssertionLifetimeSeconds &&
   claims.value.exp - now <= maximumAssertionLifetimeSeconds;
 
-/** Origin-side Access JWT validation, including signed issuer, audience and short lived identity. */
 const verifySupportAccess = ({
   assertion,
   issuer,
@@ -120,7 +119,6 @@ const verifySupportAccess = ({
         issuer,
         audience,
         algorithms: ["RS256"],
-        // Jose reads this after key retrieval and signature verification, not at request entry.
         get currentDate(): Date {
           return DateTime.toDateUtc(DateTime.makeUnsafe(clock.currentTimeMillisUnsafe()));
         },
@@ -273,8 +271,6 @@ const waitFor = <A>(run: () => Promise<A>): Effect.Effect<A, SupportBoundaryFail
     },
   });
 
-/** The one case-decision boundary: stable User resolution, credential consumption, pairing approval
- * and case events commit in one D1 batch. No public reference can resolve a User alone. */
 export const handleSupportProof = ({
   request,
   admit,

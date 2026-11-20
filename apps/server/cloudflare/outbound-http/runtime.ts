@@ -8,7 +8,6 @@ const resetContentStatus = 205;
 const notModifiedStatus = 304;
 const noBodyStatuses = new Set([noContentStatus, resetContentStatus, notModifiedStatus]);
 
-/** Native cancellation can remain pending after the local reader is no longer owned. */
 const ownResponseBody = (response: Response, signal: Option.Option<AbortSignal>): Response => {
   if (response.body === null) return response;
   const reader: ReadableStreamDefaultReader<unknown> = response.body.getReader();
@@ -75,7 +74,6 @@ const ownedNativeFetch = (native: typeof fetch): typeof fetch =>
     { preconnect: native.preconnect }
   );
 
-/** Resolve the caller's native transport for every request while retaining local body ownership. */
 export const OutboundHttpLive = HttpClient.layerMergedContext(
   Effect.map(HttpClient.HttpClient, (client) =>
     HttpClient.transformResponse(client, (response) =>
@@ -92,7 +90,6 @@ export const OutboundHttpLive = HttpClient.layerMergedContext(
   )
 ).pipe(Layer.provide(FetchHttpClient.layer));
 
-/** Only this composition selects the installed provider transport before capturing its telemetry. */
 export const installedProviderFetch = (
   observation: Parameters<typeof captureObservedProviderFetch>[1]
 ): Effect.Effect<typeof fetch> =>

@@ -350,7 +350,6 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           enrollmentId: next.enrollmentId,
           paymentRequestId: "22480000-0000-4000-8000-000000000005",
         };
-        // A lost reply from Pricing leaves its receipt durable while local continuation cannot advance.
         yield* owner.exec(
           "CREATE TRIGGER discard_registration BEFORE UPDATE OF terms ON billing_admissions WHEN OLD.terms IS NULL BEGIN SELECT RAISE(ABORT,'lost_price_reply'); END"
         );

@@ -44,7 +44,6 @@ const unauthorizedStatus = 401;
 const forbiddenStatus = 403;
 const unprocessableEntityStatus = 422;
 
-/** Wompi processed the request and refused it; no transaction was created under the reference. */
 const definitiveRefusalStatuses: ReadonlySet<number> = new Set([
   badRequestStatus,
   unauthorizedStatus,
@@ -162,7 +161,6 @@ const makeFindTransaction = (
     Effect.mapError(() => new WompiTransactionLookupFailed())
   );
 
-/** Construct the policy-bearing billing client for a Cloudflare Workflow Activity. */
 export const makeWompiBillingClient = (
   input: Readonly<{ outboundHttp: OutboundHttpService; environment: WompiEnvironment }>
 ): WompiBillingClientService =>

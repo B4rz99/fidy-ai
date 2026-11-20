@@ -60,7 +60,6 @@ const statementStagingObjectEntropyBytes = 32;
 const millisecondsPerHour = 3_600_000;
 const encodeRetentionIds = Schema.encodeSync(Schema.fromJsonString(Schema.Array(Schema.String)));
 
-/** Safe response vocabulary and metadata-only audit classification for statement publication. */
 export type StatementPublicationRefusal = Readonly<{
   readonly code: ErrorCode;
   readonly auditOutcome: "not_found" | "validation_failed" | "resource_limit";
@@ -74,26 +73,14 @@ const workerSecureRandom = SecureRandom.make((size) =>
 );
 const workerDigest = Effect.runSync(Digest.Digest.pipe(Effect.provide(Digest.layerWebCrypto)));
 
-/**
- * The staging adapter refused a request or reference. Reasons are closed and safe: they never
- * carry statement bytes, a filename, a digest spelling, or platform detail.
- */
 export class StatementStagingFailed extends Data.TaggedError("StatementStagingFailed")<{
   readonly reason: StatementStagingFailureReason;
 }> {}
 
-/** The outcome is unconfirmed. Reservations or object writes may already exist; a consumed Request cannot be replayed. */
 export class StatementStagingUnavailable extends Data.TaggedError("StatementStagingUnavailable")<{
   readonly reason: "authority_unavailable";
 }> {}
 
-/**
- * One owner-prepared canonical statement publication, ready to join a caller-owned D1 unit. The
- * statements create the authoritative submission, reserve the Free backfill, promote the staged
- * material, record the metadata-only success Audit, publish the bounded extraction outbox identity,
- * and end with the caller's own accountability writes. `replayed` selects the replay accountability
- * writes an exact idempotent replay commits instead.
- */
 export type PreparedStatementPublication = Readonly<{
   readonly attempt: PublicationAttempt;
   readonly operation: CanonicalOperationId;
@@ -107,7 +94,6 @@ export type StatementStagingSweep = Readonly<{
   readonly objectsDeleted: number;
 }>;
 
-/** One bounded retention result: queued submissions failed with their material queued for cleanup. */
 export type ExpiredStatementSubmissions = Readonly<{
   readonly submissionsFailed: number;
 }>;
@@ -128,50 +114,33 @@ export type StoredStatementSubmission = Readonly<{
   readonly abandonedRows: number;
 }>;
 
-/**
- * Bounded, User-scoped statement byte staging in private R2. Every operation receives an explicit
- * `userId` and constrains it in SQL; a staging id grants nothing on its own. Staging never creates
- * a StatementSubmission; canonical mutation preparation verifies the stored object before publication.
- */
 export type StatementStagingService = Readonly<{
-  /** Buffers one request under an actual-byte bound, then hashes and stages it without publication authority. */
   readonly stageStatementBytes: (input: {
     readonly userId: string;
     readonly request: Request;
   }) => Effect.Effect<StagedStatementBytes, StatementStagingFailed | StatementStagingUnavailable>;
-  /** Reads bounded staged bytes only for the owning User; statement extraction is the caller. */
   readonly readOwnedStagedBytes: (input: {
     readonly userId: string;
     readonly stagingId: StatementStagingId;
   }) => Effect.Effect<Uint8Array, StatementStagingFailed | StatementStagingUnavailable>;
-  /** Reads one owned submission's stored lifecycle for the canonical projection. */
   readonly readOwnedStatementSubmission: (input: {
     readonly userId: string;
     readonly submissionId: string;
   }) => Effect.Effect<Option.Option<StoredStatementSubmission>, StatementStagingUnavailable>;
-  /**
-   * Fails at most one bounded page of queued submissions past their retention bound, releases any
-   * Free-backfill reservation they held, and queues their published material for the next staging
-   * sweep. It never deletes the authoritative row.
-   */
   readonly expireStatementSubmissions: Effect.Effect<
     ExpiredStatementSubmissions,
     StatementStagingUnavailable
   >;
 
-  /** Reclaims one bounded page of expired objects, retaining metadata referenced by submissions. */
   readonly sweepExpiredStatementStaging: Effect.Effect<
     StatementStagingSweep,
     StatementStagingUnavailable
   >;
 }>;
 
-/** Trusted Worker-owned dependencies installed into one staging service. */
 export type StatementStagingConfig = Readonly<{
   readonly database: D1Database;
-  /** Private R2 binding; this module maps the binding's `null` absence into `Option` internally. */
   readonly bucket: R2Bucket;
-  /** Worker clock seam. Request callers cannot choose decision time. */
   readonly nowEpochMs: () => number;
 }>;
 
@@ -189,7 +158,6 @@ type StagingRow = typeof StagingRow.Type;
 const SubmissionRow = Schema.Struct({ id: Schema.String, staging_id: Schema.String });
 type SubmissionRow = typeof SubmissionRow.Type;
 
-/** One owned submission's stored lifecycle, read as the public projection's exact fields. */
 const StoredSubmissionRow = Schema.Struct({
   accepted_rows: Schema.OptionFromNullOr(Schema.Int),
   completed_at_ms: Schema.OptionFromNullOr(Schema.DateTimeUtcFromMillis),
@@ -206,7 +174,6 @@ const StoredSubmissionRow = Schema.Struct({
   submitted_at_ms: Schema.DateTimeUtcFromMillis,
 });
 
-/** Bounded publication-admission facts read in one D1 statement under the same binding. */
 const AdmissionStateRow = Schema.Struct({
   outstanding: Schema.Int,
   recent: Schema.Int,
@@ -228,7 +195,6 @@ const unavailable = (): StatementStagingUnavailable =>
 const failed = (reason: StatementStagingFailureReason): StatementStagingFailed =>
   new StatementStagingFailed({ reason });
 
-/** One platform call whose failure is classified as an unavailable decision, never a refusal. */
 const platformUnavailable = <A>(
   run: () => PromiseLike<A>
 ): Effect.Effect<A, StatementStagingUnavailable> =>
@@ -241,8 +207,6 @@ const isSafeEpoch = (value: number): boolean => Number.isSafeInteger(value) && v
 
 const newId = (): string => Effect.runSync(workerSecureRandom.uuidV4().pipe(Effect.orDie));
 
-/** Worker-generated random identity for one ingested statement record: a submission, audit, or
- * admission grant. It is never derived from User input, a digest, or a locator. */
 export const newIngestionId = (): string => newId();
 
 const randomObjectKey = (userId: UserId): string => {
@@ -260,16 +224,11 @@ const digestUnavailable = (
     Effect.catchDefect(() => Effect.fail(unavailable()))
   );
 
-/**
- * Runs one D1 statement to settlement. D1 exposes no cancellation API, so shielding the promise
- * keeps an interrupted caller from detaching a still-running write from its durable outcome.
- */
 const settleStatement = (
   statement: D1PreparedStatement
 ): Effect.Effect<D1Result<unknown>, StatementStagingUnavailable> =>
   Effect.uninterruptible(platformUnavailable(() => statement.run()));
 
-/** Runs one returning D1 query to settlement, for statements whose rows are the answer. */
 const settleAll = (
   statement: D1PreparedStatement
 ): Effect.Effect<D1Result<unknown>, StatementStagingUnavailable> =>
@@ -281,7 +240,6 @@ const settleBatch = (
 ): Effect.Effect<ReadonlyArray<D1Result<unknown>>, StatementStagingUnavailable> =>
   Effect.uninterruptible(platformUnavailable(() => database.batch([...statements])));
 
-/** Finds one staging row for its owner only; another User's id is indistinguishable from a missing one. */
 const findOwnedStagingRow = (
   database: D1Database,
   userId: string,
@@ -330,8 +288,6 @@ const findSubmissionByKey = (
     )
   );
 
-/** Marks one abandoned upload's row deleting before any object delete, so the bounded sweep can
- * always find the object again from durable state. */
 const markStagingDeleting = (
   database: D1Database,
   input: Readonly<{ stagingId: string; userId: string; objectKey: string }>
@@ -346,7 +302,6 @@ const markStagingDeleting = (
       .bind(input.stagingId, input.userId, input.objectKey)
   ).pipe(Effect.flatMap((result) => (result.meta.changes === 1 ? Effect.void : unavailable())));
 
-/** Removes one sweepable staging row only after its object is gone. */
 const removeDeletingStagingRow = (database: D1Database, stagingId: string): Effect.Effect<void> =>
   settleStatement(
     database
@@ -368,8 +323,6 @@ const submissionByKey = (
 ): Effect.Effect<Option.Option<SubmissionRow>, StatementStagingUnavailable> =>
   findSubmissionByKey(config.database, userId, idempotencyKey);
 
-/** Delete one staged object. A failed delete is a real failure: the caller keeps the durable
- * `deleting` row, so the bounded sweep retries instead of leaking an unreachable object. */
 const removeObject = (
   bucket: R2Bucket,
   userId: string,
@@ -487,8 +440,6 @@ const markStagingAvailable = (
       .bind(stagingId)
   ).pipe(Effect.map((result) => result.meta.changes === 1));
 
-/** Reclaims one failed upload in sweep order: durable `deleting` row, object, then row. A failed
- * object delete leaves the row behind for the bounded sweep instead of an unreachable object. */
 const discardStagedUpload = (
   config: StatementStagingConfig,
   input: Readonly<{ stagingId: string; objectKey: string; userId: string }>
@@ -574,11 +525,6 @@ const stageStatementBytes = (
     }).pipe(Effect.mapError(() => unavailable()));
   });
 
-/**
- * A row that cannot be read at all, or a readable one with `None`. Pending and deleting material is
- * never readable; published material stays readable past staging expiry because the submission owns
- * its retention, so this intentionally differs from publication's `conflict` for published rows.
- */
 const readRefusal = (
   row: StagingRow,
   nowEpochMs: number
@@ -592,10 +538,6 @@ const readRefusal = (
   return Option.none();
 };
 
-/**
- * Verifies the stored object's actual size and checksum without reading it, or returns the refusal.
- * The read path checks here first, so a substituted or oversized object is never buffered.
- */
 const headStagedObject = (
   config: StatementStagingConfig,
   row: StagingRow
@@ -650,7 +592,6 @@ const readOwnedStagedBytes = (
     return bytes;
   });
 
-/** Reads this User's submission and rolling-window admission pressure in one bounded statement. */
 const readAdmissionState = (
   config: StatementStagingConfig,
   input: Readonly<{ userId: string; nowEpochMs: number }>
@@ -680,7 +621,6 @@ const readAdmissionState = (
   ).pipe(Effect.map((value) => Schema.decodeUnknownOption(AdmissionStateRow)(value)));
 };
 
-/** The closed refusal for exhausted submission pressure or a spent Free backfill, or `None`. */
 const admissionRefusal = (
   state: AdmissionStateRow
 ): Option.Option<StatementStagingFailureReason> => {
@@ -696,7 +636,6 @@ const admissionRefusal = (
   return Option.none();
 };
 
-/** One publication unit's identity and decision instant, shared by its statements and classifiers. */
 type PublicationAttempt = Readonly<{
   readonly userId: string;
   readonly idempotencyKey: string;
@@ -704,11 +643,6 @@ type PublicationAttempt = Readonly<{
   readonly nowEpochMs: number;
 }>;
 
-/**
- * The authoritative submission insert: every live precondition (ownership, availability, expiry,
- * sniffed format, idempotency, submission pressure, and the Free backfill) is re-checked inside the
- * one statement that creates authority, so a racing change can never admit a second submission.
- */
 const submissionInsertStatement = (
   config: StatementStagingConfig,
   input: PublicationAttempt &
@@ -770,9 +704,6 @@ const submissionInsertStatement = (
   });
 };
 
-/** Metadata-only audit for one canonical read by its live session caller. The stable subject,
- * operation, outcome, and time are recorded; the submission body never enters the audit. A found
- * and an absent submission share this one row shape. PAT callers are audited in `pat_audit`. */
 export const statementSubmissionReadAudit = ({
   authority,
   current,
@@ -803,8 +734,6 @@ const refusalAuditOutcome = (
 ): "resource_limit" | "validation_failed" =>
   outcome === "resource_limit" ? "resource_limit" : "validation_failed";
 
-/** Metadata-only refusal audit for one canonical submission refusal by its live session caller, so
- * a refused call stays attributable without recording any submitted material. */
 const statementSubmissionRefusalAudit = ({
   authority,
   current,
@@ -828,9 +757,6 @@ const statementSubmissionRefusalAudit = ({
     afterOwnerWrite: false,
   });
 
-/** Metadata-only audit for one canonical submission replay by its live session caller: the stored
- * submission is returned unchanged, so the replay stays attributable without new authoritative
- * state. Its live-authority guard also refuses a credential revoked after dispatch. */
 const statementSubmissionReplayAudit = ({
   authority,
   current,
@@ -852,7 +778,6 @@ const statementSubmissionReplayAudit = ({
     afterOwnerWrite: false,
   });
 
-/** Guard-chained publication writes require a completion assertion after caller accountability in the same D1 batch. They retain only an extraction identity and perform no provider work. */
 const publicationAccountabilityStatements = (
   config: StatementStagingConfig,
   input: PublicationAttempt & Readonly<{ submissionId: string; auditId: string }>
@@ -900,11 +825,6 @@ const publicationAccountabilityStatements = (
   ];
 };
 
-/**
- * The closed refusal for a row that cannot publish right now, or `None` when it can. Both the
- * non-committing precondition and the post-rollback classifier use it, so one staged state can never
- * map to two different reasons.
- */
 const classifyStagedRow = (
   row: StagingRow,
   nowEpochMs: number
@@ -924,12 +844,6 @@ export const statementConflictMessage =
 export const stagedMaterialMessage =
   "The staged statement material is unavailable; upload the file again.";
 
-/**
- * Every closed publication refusal as the bounded canonical failure the calling agent reads and the
- * metadata-only audit outcome it records. None carries statement content, a filename, a digest, or
- * platform detail, and the same code, message, and audit outcome answer a batch child. A missing or
- * foreign staged record is answered and recorded as `validation_failed`, never as `not_found`.
- */
 const statementPublicationRefusals: Record<
   StatementStagingFailureReason,
   StatementPublicationRefusal
@@ -977,7 +891,6 @@ const statementPublicationRefusals: Record<
   },
 };
 
-/** The canonical child-refusal contract for one closed publication refusal reason. */
 export const statementRefusal = (
   reason: StatementStagingFailureReason
 ): StatementPublicationRefusal => statementPublicationRefusals[reason];
@@ -996,7 +909,6 @@ const submissionBase = (stored: StoredStatementSubmission): SubmissionBase => ({
   submittedAt: stored.submittedAt,
 });
 
-/** A failed submission can only project when it kept its timestamps and its closed failure reason. */
 const failedProjection = (
   base: SubmissionBase,
   stored: StoredStatementSubmission
@@ -1036,7 +948,6 @@ const decisionAccounting = (
   ...(stored.abandonedRows > 0 ? { abandonedRows: stored.abandonedRows } : {}),
 });
 
-/** A completed submission can only project when its row accounting conserves input rows. */
 const completedProjection = (
   base: SubmissionBase,
   stored: StoredStatementSubmission
@@ -1070,7 +981,6 @@ const completedProjection = (
   });
 };
 
-/** Rebuilds retained lifecycle fields; None signals corrupt state, never a missing submission. */
 export const submissionProjection = (
   stored: StoredStatementSubmission
 ): Option.Option<StatementSubmission> => {
@@ -1091,13 +1001,6 @@ export const submissionProjection = (
   }));
 };
 
-/**
- * The non-committing resolution of one staged reference: a ready publication, an exact
- * same-material replay, a closed refusal, or an unavailable authority. Ownership, the caller's
- * reference size and digest, availability, expiry, format, idempotency, submission pressure, the
- * Free backfill, and the stored object's actual size and checksum are verified here, so an
- * authoritative submission can never cite missing or mismatched bytes.
- */
 export type StatementPublicationPreparation =
   | Readonly<{
       _tag: "Prepared";
@@ -1106,11 +1009,6 @@ export type StatementPublicationPreparation =
   | Readonly<{ _tag: "Refused"; readonly reason: StatementStagingFailureReason }>
   | Readonly<{ _tag: "Unavailable" }>;
 
-/**
- * Credential-specific accountability that must commit inside one published statement unit: a PAT's
- * accepted AuditLogEntry and activity update, chained after the publication's own outbox identity.
- * A session publication writes its own success audit in the unit, so its list is empty.
- */
 const statementPublicationAccountability = ({
   authority,
   current,
@@ -1144,12 +1042,6 @@ const statementPublicationAccountability = ({
     : [];
 };
 
-/**
- * Credential-specific accountability a replayed statement call must commit instead of publishing
- * again: a PAT's accepted AuditLogEntry and activity update, or a session caller's one replay audit
- * row. Every statement is live-authority guarded, so a credential revoked after dispatch refuses
- * the replay rather than returning stored state.
- */
 const statementReplayAccountability = ({
   authority,
   current,
@@ -1183,11 +1075,6 @@ const statementReplayAccountability = ({
     : [statementSubmissionReplayAudit({ authority, current, database, id: newId() })];
 };
 
-/**
- * One existing submission as the exact replay this call must commit instead of publishing again.
- * The replay's live-authority-guarded accountability is what makes an idempotent retry and a lost
- * same-material race attributable; neither re-runs a child decision nor changes authoritative state.
- */
 const replayPublication = (
   config: StatementStagingConfig,
   input: Readonly<{
@@ -1208,11 +1095,6 @@ const replayPublication = (
   submissionId: input.submissionId,
 });
 
-/**
- * The authoritative publication one admitted staged row commits: the submission, its promotion,
- * the Free-backfill reservation, the metadata-only success Audit, and the bounded extraction
- * outbox identity, ending in the caller's own credential accountability.
- */
 const readyPublication = (
   config: StatementStagingConfig,
   input: Readonly<{
@@ -1247,7 +1129,6 @@ const readyPublication = (
   submissionId: input.submissionId,
 });
 
-/** One key that already names a submission: its exact replay, or the conflict of other material. */
 const existingPublication = (
   config: StatementStagingConfig,
   input: Readonly<{
@@ -1274,12 +1155,6 @@ type PublicationPremise =
   | Readonly<{ _tag: "Refused"; reason: StatementStagingFailureReason }>
   | Readonly<{ _tag: "Unavailable" }>;
 
-/**
- * The premise every classification of one owned staged row shares: its own state and the User's
- * admission pressure, as a closed refusal, an unreadable admission, or `Holds` when the row still
- * admits publication. The object check stays with the caller: only a preparation that will commit
- * needs the staged bytes to be present, while a post-abort classification must not depend on R2.
- */
 const premiseDecision = (
   config: StatementStagingConfig,
   input: Readonly<{ attempt: PublicationAttempt; row: StagingRow }>
@@ -1303,7 +1178,6 @@ const premiseDecision = (
       : ({ _tag: "Holds" } as const);
   });
 
-/** The non-committing premise of one admitted staged row: ready, a closed refusal, or unreadable. */
 const publicationPremise = (
   config: StatementStagingConfig,
   input: Readonly<{ attempt: PublicationAttempt; row: StagingRow }>
@@ -1317,14 +1191,6 @@ const publicationPremise = (
       : ({ _tag: "Ready" } as const);
   });
 
-/**
- * Resolve one owner-held staged reference into a non-committing publication preparation a caller
- * composes into its own D1 unit, or a closed refusal. It verifies ownership, the reference's actual
- * size and digest, availability, expiry, format, idempotency, submission pressure, the Free
- * backfill, and the stored object's own size and checksum before a new submission can publish.
- * A same-material idempotent replay returns the existing submission without rechecking its
- * retained R2 object; replay creates no new submission or outbox identity.
- */
 type StagedPublicationInput = Readonly<{
   readonly authority: TransactionAuthority;
   readonly current: number;
@@ -1382,12 +1248,6 @@ export const prepareStagedStatementPublication: {
   })
 );
 
-/**
- * Records one refused canonical statement call's metadata-only AuditLogEntry under the exact
- * authority the caller presented: a PAT's rejected `pat_audit` row, or a session caller's bounded
- * `ingestion_publication_audit` refusal. A refusal whose audit cannot commit for a dead credential or
- * an unavailable authority is classified instead of answered.
- */
 const statementRefusalEvidence = (
   input: Readonly<{
     authority: TransactionAuthority;
@@ -1443,11 +1303,6 @@ type LostPublication =
   | Readonly<{ _tag: "Unavailable" }>
   | Readonly<{ _tag: "Unattributable" }>;
 
-/**
- * Classifies a publication whose conditional D1 unit lost: a concurrent call that published the
- * same material under the same key is an exact replay, a premise that moved outside the unit is a
- * closed refusal, and a defect is unavailable rather than an invented refusal.
- */
 const classifyLostPublication = (
   config: StatementStagingConfig,
   input: Readonly<{ attempt: PublicationAttempt }>
@@ -1469,7 +1324,6 @@ const classifyLostPublication = (
     return decision._tag === "Holds" ? ({ _tag: "Unattributable" } as const) : decision;
   });
 
-/** Whether an aborted, previously fresh publication now has the exact same-key material committed. */
 export const lostStatementReplay: {
   (
     publication: PreparedStatementPublication
@@ -1487,7 +1341,6 @@ export const lostStatementReplay: {
       )
 );
 
-/** A changed publication premise that the durable state proves caused an aborted unit. */
 export const statementAbortRefusal: {
   (
     publication: PreparedStatementPublication

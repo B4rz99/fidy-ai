@@ -10,12 +10,10 @@ import {
   TelemetryTraceId,
 } from "../../../src/shell/observability/contract";
 
-/** Runtime release metadata from which a Worker constructs a bounded telemetry descriptor. */
 export type WorkerTelemetryEnvironment = {
   readonly RELEASE_GIT_SHA: string;
 };
 
-/** Trusted service-binding propagation; public ingress strips caller copies. */
 export const workerInternalTraceHeader = "x-fidy-traceparent";
 
 const TraceCoordinates = {
@@ -24,7 +22,6 @@ const TraceCoordinates = {
   parentSpanId: Schema.optionalKey(TelemetrySpanId),
 } as const;
 
-/** Closed native log events; no request content, broad errors, or runtime bindings are accepted. */
 export const WorkerTelemetryEvent = Schema.Union([
   Schema.Struct({
     event: Schema.Literal("span"),
@@ -51,13 +48,11 @@ export const WorkerTelemetryEvent = Schema.Union([
 ]);
 export type WorkerTelemetryEvent = typeof WorkerTelemetryEvent.Type;
 
-/** Optional untrusted continuation at a native Worker or Promise boundary. */
 export const WorkerTraceContinuation = Schema.Struct({
   parent: Schema.optionalKey(Schema.Unknown),
 });
 export type WorkerTraceContinuation = typeof WorkerTraceContinuation.Type;
 
-/** The only optional metadata attached by an observed durable publisher. */
 export const WorkerTraceProjection = Schema.Struct({
   traceContext: Schema.optionalKey(DurableTraceContext),
 });

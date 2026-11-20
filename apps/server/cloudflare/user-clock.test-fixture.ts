@@ -3,7 +3,6 @@ import { UserStore as ProductionUserStore } from "./core-worker";
 export { default } from "./core-worker";
 export * from "./core-worker";
 
-/** The test supplies the invocation time for this request only. */
 export class UserStore extends ProductionUserStore {
   override fetch(request: Request): Promise<Response> {
     if (

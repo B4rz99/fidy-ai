@@ -31,7 +31,7 @@ const checkCandidate = Effect.fn(function* (request: Request, owns: (id: string)
     yield* sql`SELECT 1 FROM backup_recovery_credentials WHERE user_id=${input.user_id} AND code_digest=unhex(${input.digest}) AND consumed_at_ms IS NULL AND revision=${input.revision} AND NOT EXISTS(SELECT 1 FROM erasure_requests)`;
   return found.length === 1 ? new Response(null, { status: 204 }) : refused();
 });
-/** The recovery credential, operator case and ordered pairing approval change in one User transaction. */
+
 export const localSupportApproval = Effect.fn(function* (
   request: Request,
   owns: (user: string) => boolean,

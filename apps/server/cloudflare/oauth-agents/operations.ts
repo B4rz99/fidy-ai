@@ -35,7 +35,6 @@ import { oauthResponse } from "./internal/response";
 import { queryCallerSnapshot } from "./internal/query-caller";
 import { mcpCallerSnapshot } from "./internal/mcp-caller";
 
-/** Owns one token exchange from the original, unconsumed Request through no-store delivery. Never retry issuance or infer rollback from a lost response. */
 export const token = (
   input: Readonly<{
     request: Request;
@@ -56,13 +55,11 @@ export const token = (
     );
   });
 
-/** Resolve live query capabilities and derived tier without publishing OAuth storage or changing accounting. Canonical owners still recheck authority in protected work. */
 export const resolveOAuthQueryCaller: typeof queryCallerSnapshot = (input) =>
   queryCallerSnapshot(input);
-/** Current native protocol admission; canonical execution retains its independent live rechecks. */
+
 export const resolveOAuthMcpCaller: typeof mcpCallerSnapshot = (input) => mcpCallerSnapshot(input);
 
-/** Commits a still-live first-party decision under the original User coordinator. Cancelled or expired queued decisions cannot revoke later; a started atomic unit settles even if its response is lost. */
 export const executeOAuthRevocation = (
   input: Readonly<{ db: D1Database; admission: OAuthRevocationAdmission; signal: AbortSignal }>
 ): Effect.Effect<Response> =>
@@ -82,7 +79,7 @@ export const executeOAuthRevocation = (
       Effect.succeed(oauthResponse({ body: { error: "temporarily_unavailable" }, status: 503 }))
     )
   );
-/** Rotates under the original User coordinator without extending the grant. Recognized replay revokes the entire family, including a concurrent winner; delivery loss requires new browser approval. */
+
 export const executeOAuthRefresh = (
   input: Readonly<{ db: D1Database; admission: OAuthRefreshAdmission; signal: AbortSignal }>
 ): Effect.Effect<Response> =>
@@ -113,7 +110,6 @@ export const executeOAuthRefresh = (
     return oauthResponse({ body: issuance.body, status: 200 });
   }).pipe(Effect.catchCause(() => Effect.succeed(invalidGrant())));
 
-/** Resolve admission facts only; protected work rechecks the same OAuth authority in its D1 unit. */
 export const authenticateOAuth = (
   input: Readonly<{ request: Request; db: D1Database; current: number }>
 ): Effect.Effect<Option.Option<Readonly<{ subject: OAuthCaller; scopes: PATScopes }>>> =>

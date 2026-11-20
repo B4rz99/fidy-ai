@@ -2,7 +2,6 @@ import { Schema } from "effect";
 
 const SampleSize = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 8 }));
 
-/** Prepare only bounded metadata for the existing operational Work observer. */
 export const pendingBillingWork = (
   input: Readonly<{
     db: D1Database;

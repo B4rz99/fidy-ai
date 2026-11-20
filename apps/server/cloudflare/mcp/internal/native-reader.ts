@@ -1,6 +1,5 @@
 import { Option } from "effect";
 
-/** SDK disposal joins native cancellation before releasing its resident lease and reader. */
 export const leaseNativeReader = ({
   reader,
   releaseLease,

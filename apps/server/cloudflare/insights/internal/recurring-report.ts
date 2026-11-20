@@ -10,7 +10,6 @@ import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { InsightUnavailable } from "../contract";
 import { ReportJson } from "./recurring-models";
 
-/** Read financial content together with its original owning occurrence, independently of message text. */
 export const recurringReportQuery = (
   input: Readonly<{ userId: string; id: InsightEventId }>
 ): OwnedStatement => ({

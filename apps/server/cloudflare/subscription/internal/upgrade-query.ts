@@ -25,7 +25,6 @@ const refused = (): Response =>
     { status: 401 }
   );
 
-/** Recovery guidance is guarded and audited but has no commercial consumption. */
 export const queryUpgrade = (
   input: Extract<SubscriptionQueryInput, { operation: "subscription.getUpgradeUrl" }>
 ): Effect.Effect<Response> =>

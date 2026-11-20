@@ -46,3 +46,8 @@ therefore receives the owned refusal and cannot fall through to canonical author
 requires exact browser origin and a fresh cookie-backed WebSession. Prepared submission is
 bounded before provider work. A cleared failed payment source may be replaced only when the
 Subscription and unresolved collection guards permit it.
+
+Bind each authorized payment action to the same browser-generated request id. The owner uses it
+with the authenticated User to derive one BillingAttempt identity. Enroll only after the exact
+fresh WebSession, Consent and submitted choices win the atomic claim. A later provider response
+cannot revive a Pricing admission that has already been cancelled.

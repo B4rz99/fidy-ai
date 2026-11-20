@@ -90,7 +90,6 @@ const readSubmission = (work: StatementDecisionWork): Effect.Effect<Response> =>
     });
   }).pipe(Effect.orElseSucceed(unavailableStatement));
 
-/** The ordinary canonical queries, scoped to the verified upload conversation and attributed first. */
 export const readHeldStatementQuery = ({
   operation,
   work,

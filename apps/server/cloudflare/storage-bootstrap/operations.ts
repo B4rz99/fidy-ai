@@ -6,7 +6,6 @@ import { erasureRegistryName } from "../erasure/contract";
 import { releaseProbeName, storeReadinessUrl } from "../runtime/sqlite/contract";
 import { type SharedBindings, SharedStoreMarkers } from "./contract";
 
-/** Fixed private objects only. Native construction performs each owner's transaction and seed. */
 export const initializeSharedStores = Effect.fn(function* (bindings: SharedBindings) {
   const read = Effect.fn(function* (binding: SharedBindings[keyof SharedBindings], name: string) {
     if (binding === undefined) return yield* Effect.fail(Error("Missing shared store"));
@@ -29,7 +28,6 @@ export const initializeSharedStores = Effect.fn(function* (bindings: SharedBindi
   return yield* Schema.decodeUnknownEffect(SharedStoreMarkers)(markers);
 });
 
-/** Run only on the reserved release object. A prior interrupted probe can be safely repeated. */
 export const verifyReleaseTransaction = (storage: DurableObjectStorage): Response => {
   const { sql } = storage;
   const rollback = new Error("Expected release probe rollback");

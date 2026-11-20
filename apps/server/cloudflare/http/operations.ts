@@ -64,8 +64,7 @@ const releaseReader = (reader: ReadableStreamDefaultReader<unknown>): Effect.Eff
   Effect.sync(() => {
     try {
       reader.cancel().catch(() => undefined);
-    } catch {
-    }
+    } catch {}
   }).pipe(Effect.ensuring(releaseLock(reader)));
 
 const readNextChunk = (

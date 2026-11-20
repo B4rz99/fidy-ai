@@ -156,7 +156,6 @@ export const readDocument = ({
     Effect.mapError(() => new RecurringPlanningUnavailable())
   );
 
-/** Live caller and the complete ledger share the same source snapshot. */
 export const readAuthorizedDocument = ({
   db,
   subject,

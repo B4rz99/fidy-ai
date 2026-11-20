@@ -25,7 +25,6 @@ import { boundedJsonBody } from "../../http/operations";
 import { SmokeWork, smokeExecutionId, smokeLifetimeMs, smokeMarkerKey } from "./internal/protocol";
 import { SmokeBindingFailed, platform } from "./internal/platform";
 
-/** The runner must compare observed Worker identities with its upload receipts, never trust a 2xx alone. */
 export const verifySmokeIdentity = ({
   expected,
   observed,
@@ -202,7 +201,6 @@ const getProbe = Effect.fn(function* (request: Request, environment: SmokeEnviro
         })
       ).then((instance) => instance.status()),
   }).pipe(Effect.result);
-  // Absent or unreadable execution can never pass; the independent CI poll budget expires.
   if (lookup._tag === "Failure") return responseFor(environment, "pending", completedStatus);
   const state = lookup.success;
   if (state.status === "errored" || state.status === "terminated") return fail("probe_state");
@@ -220,7 +218,6 @@ const getProbe = Effect.fn(function* (request: Request, environment: SmokeEnviro
   return responseFor(environment, "passed", completedStatus);
 });
 
-/** Private, reserved-only protocol: it never receives a User identity or arbitrary resource key. */
 export const handleSmoke = ({
   request,
   environment,
@@ -280,7 +277,6 @@ const receiveMessage = Effect.fn(function* (
   message.ack();
 });
 
-/** Only the dedicated Queue may hand off synthetic work to this Workflow. */
 export const receiveSmoke = ({
   batch,
   environment,
@@ -297,7 +293,6 @@ export const receiveSmoke = ({
     })
   );
 
-/** Preserve the native smoke binding readiness gate before exercising synthetic work. */
 export const smokeReady = (environment: Partial<SmokeBindings>): environment is SmokeBindings =>
   environment.SMOKE_LIMITER !== undefined &&
   environment.SMOKE_BUCKET !== undefined &&

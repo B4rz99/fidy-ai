@@ -118,7 +118,6 @@ export const authenticate = ({
       .then((row) => decodeSessionLookup({ lookup: lookup.value, row }));
   });
 
-/** The lookup and legal receipt observe one live credential in the same native read. */
 export const observeEntry = (
   input: Omit<WebSessionAuthentication, "freshness">
 ): Effect.Effect<
@@ -144,7 +143,7 @@ export const observeEntry = (
       status: value,
     }));
   });
-/** Credential-only preparation for bootstrap and privacy status; withdrawn Consent stays readable. */
+
 export const prepareBrowserSessionLookup = (
   input: Readonly<{ request: Request; current: number; mounted: boolean }>
 ): Promise<Option.Option<BoundWebSessionLookup>> => {
@@ -156,7 +155,6 @@ export const prepareBrowserSessionLookup = (
   return prepareSessionLookup({ ...input, binding, freshness: "live", requireConsent: false });
 };
 
-/** Preserve signed-out entry while refusing a live cookie paired with another mounted identity. */
 export const prepareBrowserEntryLookup = (
   input: Readonly<{ request: Request; current: number }>
 ): Promise<

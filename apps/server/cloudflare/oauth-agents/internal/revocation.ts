@@ -66,7 +66,7 @@ const commitRevocation = (input: RevocationPlan): Effect.Effect<unknown, Bootstr
     ])
   ).pipe(Effect.uninterruptible);
 };
-/** Rechecks browser authority, ownership and bounded selection with append-only evidence in one atomic D1 unit. A racing refresh can commit first, but every generation becomes unusable after this unit. */
+
 export const revokeConnections = (
   admitted: RevocationInput
 ): Effect.Effect<Response, BootstrapUnavailable> =>

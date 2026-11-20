@@ -1,7 +1,6 @@
 import type { ExternalEventBindings } from "../directory/contract";
 import type { ProactivityDeliveryWork } from "../insights/contract";
 
-/** Queue composition receives only native handoff bindings. */
 import type { BillingWorkRouting } from "../subscription/contract";
 
 export type CoreQueueEnvironment = BillingWorkRouting &
@@ -25,7 +24,6 @@ export type CoreQueueEnvironment = BillingWorkRouting &
     }>
   >;
 
-/** Native redelivery preserves owner validation and acknowledgment; handoff is not completion. */
 export type CoreQueueHandler = (
   batch: MessageBatch<unknown>,
   environment: CoreQueueEnvironment

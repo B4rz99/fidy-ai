@@ -17,7 +17,6 @@ import { Transaction } from "../../src/core/transactions/contract";
 const fromPromise = <A>(run: () => PromiseLike<A>): Effect.Effect<A> =>
   Effect.tryPromise(() => Promise.resolve(run())).pipe(Effect.orDie);
 
-// Capture schedules recurring evaluation. Earlier admission cleanup and receipt deadlines then take precedence.
 const verifyCaptureWake = Effect.fn(function* (
   db: Effect.Success<typeof nativeTransactionJourney>
 ) {
@@ -104,7 +103,6 @@ const historicalPatternJourney = Effect.gen(function* () {
       )
     );
   const evaluateDue = Effect.fn(function* () {
-    // Move the last completed evaluation beyond its weekly discovery deadline.
     yield* fromPromise(() =>
       db.exec(
         "UPDATE recurring_evaluation_records SET evaluated_at_ms=0 WHERE kind='progress' AND phase='complete'"
@@ -115,7 +113,6 @@ const historicalPatternJourney = Effect.gen(function* () {
         "UPDATE transaction_projection_state SET first_captured_at_ms=0 WHERE fact_revision IS NOT NULL"
       )
     );
-    // Drive the production watchdog and wait for the asynchronous User alarm to commit each checkpoint.
     yield* TestClock.withLive(
       Effect.gen(function* () {
         expect((yield* fromPromise(() => db.checkWork(alice.user))).status).toBe(204);

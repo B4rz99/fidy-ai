@@ -78,7 +78,6 @@ const deliveryAction = (
     onSome: (queued) => prepareQueuedWeeklyConsentAction({ ...input, queued, statement }),
   });
 
-/** Prepare authenticated routing in the caller's atomic inbound/decision unit, under its exact current association. */
 export const prepareInsightRecipient = (
   input: Readonly<{
     db: D1Database;
@@ -138,7 +137,7 @@ export const findQueuedInsightRecipient = (
   input: Readonly<{ db: D1Database; userId: UserId; queued: OwnedStatement }>
 ): Effect.Effect<Option.Option<InsightRecipient>, InsightDeliveryFailure> =>
   readRecipient({ ...input, queuedAdmission: Option.some(input.queued) });
-/** Freeze the exact complete prepared body before claiming any provider call. */
+
 export const stageInsightDelivery = (
   input: InsightWhatsAppStage
 ): Effect.Effect<boolean, InsightDeliveryFailure> =>
@@ -206,7 +205,6 @@ const claimSend = (
   ).pipe(Effect.map((result) => result.meta.changes === 1));
 };
 
-/** No blind retry: a started, accepted or ambiguous claim can only be reconciled. */
 const registerDelivery = Effect.fn(function* (
   input: InsightWhatsAppStart & NativeDeliveryOwner,
   row: typeof Claim.Type
@@ -299,7 +297,7 @@ export const recordInsightSend = (
         .run()
     );
   });
-/** The ingress must authenticate raw provider bytes before this private coordinator admission. */
+
 export const reconcileInsightStatus = (
   input: Readonly<{ db: D1Database; admission: WhatsAppStatusAdmission }>
 ): Effect.Effect<InsightWhatsAppReconciliation, InsightDeliveryFailure> =>
@@ -342,7 +340,7 @@ export const reconcileInsightStatus = (
       ? { _tag: "VerifiedDelivery", userId: status.userId, insightEventId: row.insight_event_id }
       : { _tag: "Recorded" };
   });
-/** Metadata-only correlation lookup cannot establish financial or User authority. */
+
 export const findInsightDeliveryUser = (
   input: Readonly<{
     db: D1Database;
@@ -365,7 +363,7 @@ export const findInsightDeliveryUser = (
           (yield* Schema.decodeUnknownEffect(Schema.Struct({ user_id: UserId }))(row)).user_id
         );
   });
-/** Metadata remains reconcilable after expiry/revocation; exact visible text requires current processing Consent. */
+
 export const readInsightDeliveryEvidence = (
   input: Readonly<{ db: D1Database; userId: UserId; insightEventId: InsightEventId; now: number }>
 ): Effect.Effect<Option.Option<InsightVerifiedDeliveryEvidence>, InsightDeliveryFailure> =>
@@ -445,23 +443,16 @@ const expireInsightClaims = (
   ).pipe(Effect.asVoid);
 };
 
-/** Clear expired bodies from at most 64 started sends and 64 never-started sends for one User;
- * retain one-shot correlation evidence.
- */
 export const expireInsightChannelEvidence = (
   input: Readonly<{ db: D1Database; userId: UserId; now: number }>
 ): Effect.Effect<void, Cause.UnknownError> =>
   expireInsightClaims({ ...input, userId: Option.some(input.userId) });
 
-/** Clear expired bodies from at most 64 started sends and 64 never-started sends across Users,
- * including those without a Hosted Agent Session; retain one-shot correlation evidence.
- */
 export const sweepInsightChannelEvidence = (
   input: Readonly<{ db: D1Database; now: number }>
 ): Effect.Effect<void, InsightDeliveryFailure> =>
   expireInsightClaims({ ...input, userId: Option.none() });
 
-/** Identity-bound attention metadata, independent of model and processing availability; no report content is released. */
 export const weeklySummaryReplyQuery = (proof: WhatsAppTurnAdmission): OwnedStatement => {
   const association = whatsAppIdentityQuery({
     userId: proof.userId,
@@ -491,7 +482,6 @@ export const weeklySummaryReplyQuery = (proof: WhatsAppTurnAdmission): OwnedStat
   };
 };
 
-/** Live same-association delivery evidence for one referenced message. The caller must separately guard its own data read. */
 export const contextualInsightQuery = (
   input: Pick<WhatsAppTurnAdmission, "userId" | "portfolioId" | "bsuid" | "replyToMessageId">
 ): Option.Option<OwnedStatement> => {
@@ -519,7 +509,6 @@ export const contextualInsightQuery = (
   );
 };
 
-/** Complete exact visible-text row for the Agent's atomic copy, guarded by current purpose and channel retention. Published columns are user_id, insight_event_id, delivered_at_ms and text. */
 export const insightVerifiedTranscriptQuery = (
   input: Readonly<{ userId: UserId; insightEventId: InsightEventId; now: number }>
 ): OwnedStatement =>
@@ -532,7 +521,6 @@ export const insightVerifiedTranscriptQuery = (
     },
   });
 
-/** Owner proof for atomic Insights/Agent settlement; it contains no visible text in the published query. */
 export const insightVerifiedDeliveryQuery = (
   input: Readonly<{ userId: UserId; insightEventId: InsightEventId }>
 ): OwnedStatement => ({

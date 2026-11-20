@@ -30,7 +30,6 @@ import {
   receiveNativeStatementExtraction,
 } from "../../ingestion/runtime";
 
-/** Retain a native rejection privately; the runtime unwraps it after closed telemetry observation. */
 export class QueueDeliveryUnavailable extends Data.TaggedError("QueueDeliveryUnavailable")<{
   readonly original: unknown;
 }> {}
@@ -119,7 +118,6 @@ const observeWorkflowMessage = <E>(
     });
   });
 
-// Handoff lookups may overlap; the Workflows and User coordinator retain execution authority.
 const statementHandoffConcurrency = 8;
 
 const receiveWorkflowBatch = <E>(
@@ -327,7 +325,7 @@ const selectQueue = (input: QueueInput): Effect.Effect<void, QueueDeliveryUnavai
     ? receiveCallbackBatch(input)
     : receiveWorkQueue(input);
 };
-/** Preserve native Queue selection order inside the telemetry-owned Effect; payload validation and acknowledgment stay owner-held. */
+
 export const dispatchCoreQueue = (
   input: QueueInput
 ): Effect.Effect<void, QueueDeliveryUnavailable> =>

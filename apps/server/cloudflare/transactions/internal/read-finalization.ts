@@ -4,7 +4,6 @@ import { TransactionBoundaryFailure } from "../../canonical-work/contract";
 
 const maximumFinalizationStatements = 8;
 
-/** Only a complete final snapshot may commit its prepared Audit, standing and lease release. */
 export const readFinalizedSnapshot = ({
   db,
   statements,

@@ -315,7 +315,6 @@ const rejectInvalidDigestIdentifier = (work: Work): Effect.Effect<Response, Caus
     });
   });
 
-/** Exact report read and credential/accountability guards commit together; opaque ids never authorize access. */
 export const readHeldRecurringDigestReport = (
   input: Work & Readonly<{ id: string }>
 ): Effect.Effect<Response> =>

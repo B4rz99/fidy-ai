@@ -51,3 +51,9 @@ Read activity advances from the live query proof. A mutation advances activity o
 exact successful canonical Audit row in the same atomic unit. Historical ownership can support
 activity attribution but never authorizes work. Anonymous pairing cleanup preserves approved
 User-bound grants, and poll/backoff records cannot alter grant authority.
+
+Use a direct SHA-256 verifier for uniformly random high-entropy bearer material. Compare
+length-checked verifiers with constant work. Directory uses only the public short id to route
+a native call, and the User owner decides full bearer and capability inside protected work.
+A scope-free resolution supports classification only. Final assertions roll back a skipped
+evidence or Audit guard before a PAT transition can commit.

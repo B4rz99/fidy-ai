@@ -116,3 +116,8 @@ before committing the whole unit. Hold coordination until a started D1 unit sett
 the caller is interrupted. An ordinary abort is distinct from a proved rejection and can only
 be retried through the explicitly proved same-material publication-race path. Reprepare once
 and keep each attempt's response projection separate.
+
+Memory capacity counts the complete retained aggregate in stable recall order using compact
+LF-separated JSON. Count the final state of the protected unit, including earlier batch
+children. A capacity regression computes the expected byte metric independently of the
+production projection. Unreadable storage cannot become a proved missing child.

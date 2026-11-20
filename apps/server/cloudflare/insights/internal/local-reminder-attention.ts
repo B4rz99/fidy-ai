@@ -15,7 +15,7 @@ const timestampSlop = 999;
 const dayMs = 86400000,
   questionAt = 3;
 const json = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown));
-/** Advance only on the first verified delivery of an occurrence for the same active grant. */
+
 export const countDeliveredReminder = Effect.fn(function* (user: string, id: string, at: number) {
   const sql = yield* SqliteClient;
   const [held] =
@@ -51,7 +51,7 @@ export const countDeliveredReminder = Effect.fn(function* (user: string, id: str
   yield* sql`INSERT INTO reminder_disclosures(id,user_id,portfolio,bsuid,endpoint,request_message,created_ms,expires_ms,attempt_ms,correlation,disclosure,body,digest,grant_id,kind) VALUES(${question},${user},${row.portfolio},${row.bsuid},${row.endpoint},${"question:" + id},${at},${at + dayMs},${at},${newId()},${yield* Schema.encodeEffect(Schema.fromJsonString(DisclosureSnapshot))(disclosure)},${body},${digest},${row.grant_id},${row.kind})`;
   yield* sql`UPDATE reminder_attention SET question_id=${question} WHERE grant_id=${row.grant_id} AND unanswered=3`;
 });
-/** Only a verified contextual response to a delivered occurrence from this episode resets attention. */
+
 export const recordReminderReply = Effect.fn(function* (event: WhatsAppTurnAdmission) {
   if (Option.isNone(event.replyToMessageId)) return;
   const sql = yield* SqliteClient,

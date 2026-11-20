@@ -284,3 +284,17 @@ resource, client, expiry and exact scope at execution, including queued work.
 Use the canonical allowance and retry codecs at the MCP boundary. Carry private admission
 outside the canonical arguments. Filter inaccessible operation alternatives and their argument
 hints at every envelope depth before publishing the schema.
+
+The native MCP response's residency lease lasts through body consumption or joined SDK
+cancellation. Defer disposal until the handler callback exits to avoid waiting on its own
+scope. Release the financial ticket before waiting for native shutdown. Mask only the
+ingress handoff. Every actual protocol request and tool rechecks the installed same-User
+connection and retains its own cancellation. Keyed and legacy confirmation continuations
+supply no separate caller authority.
+
+Rotating a refresh proof cannot extend the underlying grant. Recognized replay revokes its
+whole family, including a concurrent winner. A lost one-time token response requires new
+browser approval. A queued browser terminal decision must still be live before it starts.
+The original native confirmation binds ordered prepared effects, observed owner revisions
+and scopes. Consume it with all writes and Audit in one attempt or roll everything back.
+The continuation proves neither human presence nor receipt of the result.

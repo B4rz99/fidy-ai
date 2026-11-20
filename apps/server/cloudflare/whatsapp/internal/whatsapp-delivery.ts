@@ -63,7 +63,6 @@ const recipientParams = (evidence: AuthenticatedHostedStatus): ReadonlyArray<unk
   Option.getOrNull(evidence.recipientUserId),
 ];
 
-/** Reserve before any network call; the unique Turn row prevents a second visible send. */
 export const stageWhatsAppDelivery = ({
   db,
   userId,
@@ -95,7 +94,6 @@ export const stageWhatsAppDelivery = ({
     return saved.meta.changes === 1 ? Option.some(token) : Option.none();
   });
 
-/** Claim the irreversible provider boundary only when the same verified window remains open. */
 export const startWhatsAppSend = ({
   db,
   userId,
@@ -153,7 +151,6 @@ export const startWhatsAppSend = ({
     return saved.meta.changes === 1;
   });
 
-/** Refuse a prepared reply without ever claiming the provider boundary. */
 export const rejectUnstartedWhatsAppDelivery = ({
   db,
   userId,
@@ -183,7 +180,6 @@ export const rejectUnstartedWhatsAppDelivery = ({
     return saved.meta.changes === 1;
   });
 
-/** Send acceptance never means delivery; ambiguous outcomes are not automatically resent. */
 export const recordWhatsAppSend = ({
   db,
   userId,
@@ -296,8 +292,6 @@ const retainWhatsAppStatus = ({
   ).pipe(Effect.asVoid);
 };
 
-/** Only a previously authenticated Kapso projection may enter this module. Signed statuses are
- * retained as immutable metadata even when a late event cannot change a terminal Turn. */
 export const recordWhatsAppStatus = ({
   db,
   userId,
@@ -360,7 +354,6 @@ const admittedStatusEvidence = (admission: WhatsAppStatusAdmission): Authenticat
   outcome: admission.outcome,
 });
 
-/** Reconcile the signed status through the User coordinator; only delivered proof promotes text. */
 export const reconcileWhatsAppStatus = ({
   db,
   admission,
@@ -535,7 +528,7 @@ type HostedReplyWork<E> = Readonly<{
   send: HostedReplySender<E>;
   scheduleRecovery: (dueAtMs: number) => Promise<void>;
 }>;
-/** Own the complete hosted provider boundary; Agent still owns terminal Turn settlement. */
+
 export const submitHostedReply = <E>({
   callbackOwner,
   db,

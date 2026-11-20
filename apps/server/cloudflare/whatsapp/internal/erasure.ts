@@ -1,6 +1,5 @@
 import type { ErasureProjection } from "../../erasure-store/contract";
 
-/** Keep exact logical permits while sharing the delivery storage mechanics. */
 const recordProjection = ({
   id,
   kind,

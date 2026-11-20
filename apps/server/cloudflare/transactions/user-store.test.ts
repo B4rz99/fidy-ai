@@ -91,7 +91,6 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       const create = yield* nativeUserPlatform;
       const runtime = yield* create();
       const owner = yield* seed(runtime, alice);
-      // Interrupt local acknowledgement after the registry commits.
       yield* owner.exec(
         "CREATE TRIGGER lose_ack BEFORE UPDATE OF lifetime_registered ON users BEGIN SELECT RAISE(ABORT,'lost'); END"
       );
@@ -700,7 +699,6 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             const capture = yield* patCapture(runtime, bearer, key);
             expect(capture.status).toBe(201);
             const standing = capture.headers.get("fidy-canonical-remaining");
-            // The client loses the body. Observe its committed bytes only through the native receipt.
             const receipt = yield* owner.exec(
               "SELECT body,accepted_at_ms FROM canonical_request_receipts"
             );

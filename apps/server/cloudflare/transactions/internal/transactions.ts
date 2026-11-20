@@ -55,7 +55,6 @@ type Capture = Readonly<{
   current: number;
 }>;
 
-/** Resolve current browser authority before entering the User coordinator; work rechecks it at commit. */
 export const transactionSession = ({
   request,
   db,
@@ -64,7 +63,6 @@ export const transactionSession = ({
   Option.Option<TransactionSubject>
 > => authenticateCanonicalWebSession({ request, db, current });
 
-/** Decode bounded canonical input before dispatching a mutation to the User coordinator. */
 export const transactionInput = (
   request: Request
 ): Effect.Effect<Option.Option<typeof Input.Type>> =>
@@ -197,7 +195,6 @@ const captureUserContext = (
     Effect.mapError(boundaryFailure)
   );
 
-/** Category ownership resolves explicit choice, User instructions and the direction fallback. */
 const resolveCaptureCategory = ({
   db,
   subject,
@@ -241,7 +238,6 @@ const refusedCapture = ({
     current,
   });
 
-/** The guarded writes and canonical outcome for one admitted capture. */
 const captureMutation = ({
   db,
   subject,
@@ -283,11 +279,6 @@ const captureMutation = ({
   };
 };
 
-/**
- * Decide one canonical Transaction capture against live caller authority, User context, and the
- * Category taxonomy. The returned statements are guard-chained writes; the caller's D1 unit
- * commits them or none of them.
- */
 export const prepareCapture = ({
   db,
   subject,

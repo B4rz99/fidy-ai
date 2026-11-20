@@ -150,7 +150,6 @@ export const browseReviewPageContext = ({
     Effect.orElseSucceed(transactionUnavailable)
   );
 
-
 export const contextSql = (filter: string): string => `WITH page AS MATERIALIZED (
         SELECT id,user_id,expires_at_ms FROM (
           ${reviewRelation}

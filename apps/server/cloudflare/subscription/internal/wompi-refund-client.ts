@@ -92,7 +92,7 @@ const parseVoid = (
     ),
     Effect.orElseSucceed(Option.none)
   );
-/** One claimed mutation only. Unknown/malformed responses cannot authorize release or settlement. */
+
 export const submitCorrection = ({
   http,
   input,
@@ -118,7 +118,7 @@ export const submitCorrection = ({
       ? parseRefund(response.body, input)
       : parseVoid(response.body, input);
   }).pipe(Effect.timeout("14 seconds"), Effect.orElseSucceed(Option.none));
-/** Voids can be reconciled through the documented transaction lookup, never by disabling a source. */
+
 export const verifyCardVoid = ({
   http,
   input,

@@ -5,7 +5,7 @@ import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { expireQueuedDelivery } from "./proactivity-delivery-work";
 
 type Delivery = Readonly<{ userId: UserId; work: ProactivityDeliveryWork; now: number }>;
-/** Metadata is bounded to one native identity, never provider or transport claims. */
+
 const deliveryMetadataQuery = (input: Delivery): OwnedStatement => ({
   sql: "SELECT user_id,state,expires_at_ms,content_available FROM proactivity_delivery_metadata WHERE user_id=? AND kind=? AND delivery_id=?",
   params: [
@@ -15,7 +15,6 @@ const deliveryMetadataQuery = (input: Delivery): OwnedStatement => ({
   ],
 });
 
-/** Exact unfinished, unexpired admission; never a recurring schedule or Workflow payload. */
 export const queuedDeliveryQuery = (input: Delivery): OwnedStatement => {
   const metadata = deliveryMetadataQuery(input);
   return {
@@ -24,7 +23,6 @@ export const queuedDeliveryQuery = (input: Delivery): OwnedStatement => {
   };
 };
 
-/** Finish expiry and replay from metadata without reopening personal content. */
 export const continueQueuedDelivery = (
   input: Delivery & Readonly<{ db: D1Database }>
 ): Effect.Effect<boolean, InsightUnavailable> =>

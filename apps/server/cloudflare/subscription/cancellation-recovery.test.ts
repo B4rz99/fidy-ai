@@ -185,7 +185,6 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         yield* request("seed");
         yield* request("accept");
         yield* request("poison");
-        // Simulate the initial alarm delivery and the platform's six native retries through the same owner check.
         for (let attempt = 0; attempt < 7; attempt++) {
           expect(yield* request("native-retry")).toMatchObject({ failedFamilies: 1, attempted: 0 });
         }

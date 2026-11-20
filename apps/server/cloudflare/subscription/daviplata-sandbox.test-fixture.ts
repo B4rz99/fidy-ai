@@ -4,7 +4,6 @@ import { UnknownJsonString } from "../../src/shell/schema-codecs/contract";
 import type { OutboundHttpResponse } from "../../src/shell/outbound-http/contract";
 import type { OutboundHttpService } from "../../src/shell/outbound-http/operations";
 
-/** Live proof failures contain no provider payload, identity, URL, token or underlying cause. */
 export class DaviplataSandboxProofFailure extends Data.TaggedError("DaviplataSandboxProofFailure")<{
   readonly stage:
     | "configuration"
@@ -28,7 +27,6 @@ export class DaviplataSandboxProofFailure extends Data.TaggedError("DaviplataSan
     | "unexpected";
 }> {}
 
-/** Require explicit, reviewed Sandbox destinations before even tokenizing synthetic data. */
 export const requireDaviplataSandboxPolicy = Effect.fnUntraced(function* (
   input: Readonly<{
     environment: string;
@@ -55,7 +53,6 @@ export const requireDaviplataSandboxPolicy = Effect.fnUntraced(function* (
   return policy;
 });
 
-/** Bind the prepared server intent to the same reviewed proof destinations without displaying it. */
 export const requireDaviplataSandboxEnrollment = Effect.fnUntraced(function* (
   input: Readonly<{ enrollment: PaymentEnrollment; policy: DaviplataOtpPolicy }>
 ) {
@@ -170,7 +167,6 @@ const verifyDestinations = (
     : Effect.fail(new DaviplataSandboxProofFailure({ stage: "destinations" }));
 };
 
-/** One tokenization/send/confirm sequence; never resend a one-use bearer or retry an ambiguous POST. */
 export const authorizeDaviplataSandbox = Effect.fnUntraced(function* (
   input: Readonly<{
     outbound: OutboundHttpService;

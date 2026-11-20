@@ -523,3 +523,24 @@ proves settlement. Absence cannot settle an ambiguous issued create. Erasure swe
 canonical User prefix in bounded continuations even when inventory rows are missing. An
 independent sealed marker proves the original drain across restore and keeps old attempts from
 becoming new external instructions. Native registry publication uses [the Durable Object storage synchronization boundary](https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/#sync).
+
+### Maintenance and uncertain transport
+
+Advance the bounded watchdog range before remote I/O so restart neither repeats undiscovered
+work from the same claim nor reports it as returned. Freeze this tick's upper key and rotate
+fixed-owner and User priority when cleanup stalls. Deadline and body cancellation share one
+budget and a slot stays owned until cleanup settles. Flush progress before forcing a reset
+of an incarnation that cannot release its transport. Retire an erasure fence only after all
+original registration windows elapsed and retirement was acknowledged.
+
+Private object mutation is correlated by User namespace, exact owner reservation and
+placeholder ETag. Check live reservation after the placeholder settles. Deleting its
+placeholder fences a late payload. A control sweep preserves a replacement that won before
+the fence and cannot proceed after an ambiguous fence acknowledgment. It cannot settle an
+unknown owner writer.
+
+Register the User lifetime outside its transaction before activation. A cold physically empty
+UserStore could reflect interrupted purge. Resolve its independent erasure case before
+allocating the schema again. Preserve versioned schema prefixes and retained original retry
+deadlines through migrations. Observe unresolved claims separately from scheduled work.
+An original writer's last check does not establish when its claim began.

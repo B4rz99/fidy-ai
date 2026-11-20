@@ -39,7 +39,7 @@ export const findGovernor = (
           )(raw)).standing_json
         );
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
-/** A single verified message is counted at most once; questions never count as reminders. */
+
 export const prepareDelivery = (
   input: Scope & Readonly<{ id: string }>
 ): ReadonlyArray<D1PreparedStatement> => {
@@ -78,7 +78,7 @@ export const prepareDelivery = (
       ),
   ];
 };
-/** Ordinary replies reset only the episode and captured grant they actually answer. */
+
 export const prepareReply = (
   input: Scope & Readonly<{ proof: WhatsAppTurnAdmission }>
 ): D1PreparedStatement => {

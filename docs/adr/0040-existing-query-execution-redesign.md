@@ -384,3 +384,13 @@ final batches and no owner replay. Preserve bearer precedence and credential-spe
 Finally measure complete deployed cold and active cohorts separately, all supported ordinary query
 shapes, fresh response and fresh financial paint under the agreed network profile and workload.
 Batch targets and local measurements are not a promise that p95 is already at or below 150 ms.
+
+Read complete aggregate ranges under a single financial revision. Bound raw rows and
+related range or reference selections independently. When action and final accounting
+span snapshots, a changed revision or proof withholds the complete answer. Receipt,
+Audit and lease settlement belong to the last protected snapshot. Construct final expiry
+checks at its decision instant because hashing the browser cookie can yield.
+
+An explicit Titular financial access page reauthenticates the browser and commits its
+Audit within the local snapshot. It does not require renewed Processing Consent or
+commercial access. The bounded pagination cursor carries only same-User position.

@@ -46,7 +46,6 @@ const recoveryProbeAllowed = (request: Request, environment: Environment): boole
   );
 };
 
-/** Both HTTP boundaries deny ordinary admission while recovery routing propagates. */
 export const recoveryIsolationResponse = ({
   request,
   environment,
@@ -60,11 +59,9 @@ export const recoveryIsolationResponse = ({
   return Option.some(isolatedResponse());
 };
 
-/** The protected runner signs an exact browser or client request; Ingress separately signs its transformed private request. */
 export const signAcceptanceRequest: typeof signRequest = (input) => signRequest(input);
 export const acceptanceRequestAdmitted: typeof verifyRequest = (input) => verifyRequest(input);
 
-/** Ingress selects the browser pair from its TLS endpoint; Core reads only the value the scoped private request signs. */
 export const closedHostEnvironment = <
   Environment extends NativeAcceptanceSettings & { BROWSER_ORIGIN: string },
 >({
@@ -152,7 +149,7 @@ const syntheticSubject =
   /^fidy-acceptance-([a-f0-9]{40})-(smoke|erasure|performance|fleet)-([1-9][0-9]{0,3})$/u;
 const fixtureConsumerIssuer =
   "https://login.microsoftonline.com/9188040d-6c67-4c5b-b112-36a304b66dad/v2.0";
-/** The verified provider registration carries the bounded synthetic identity through normal authorization. */
+
 export const acceptanceSubject = ({
   revision,
   issuer,
@@ -192,7 +189,7 @@ export const renewAcceptanceWindow = Effect.fn(function* (
   yield* Effect.tryPromise(() => bucket.put(windowKey(revision), body));
   return Response.json(data, { headers: { "cache-control": "no-store" } });
 });
-/** Normal release execution remains unchanged. A private runner must renew a closed test's short window before background work can advance. */
+
 const validMarker = (value: typeof Window.Type, revision: string, now: number): boolean =>
   value.revision === revision &&
   value.deadline > now &&
@@ -232,7 +229,7 @@ const receipt = Schema.Struct({
   ),
   finalizedAt: Schema.String,
 });
-/** Return the immutable charge coordinates for this synthetic provider account after its POST reply was lost. */
+
 export const fixtureChargeReceipt = Effect.fn(function* (
   request: Request,
   settings: AcceptanceWindowBindings & Partial<Readonly<{ SMOKE_PROOF: string }>>

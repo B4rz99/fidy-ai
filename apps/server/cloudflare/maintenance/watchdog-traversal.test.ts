@@ -133,7 +133,6 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           user(0),
           user(258)
         );
-        // Advance the persisted minute gate instead of sleeping a minute on each side of the restart.
         yield* fixture.exec("UPDATE watchdog_progress SET minute=minute-1");
         expect(yield* fixture.tick(scheduled + 60000)).toBe(204);
         expect((yield* fixture.ledger).names.slice(3)).toEqual([user(257), user(258)]);
@@ -189,8 +188,6 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           "WITH RECURSIVE ids(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM ids WHERE i<1000) INSERT INTO lifetime_registry(user_id) SELECT printf('22530000-0000-4000-8000-%012d',i) FROM ids"
         );
         const start = yield* Clock.currentTimeMillis;
-        // Each abort destroys the old incarnation and all outstanding transport. Inspect the
-        // durable contiguous admitted range after every actual workerd reset. Time is simulated.
         for (let minute = 0; minute < 10; minute++) {
           yield* fixture.exec("UPDATE watchdog_progress SET minute=minute-1");
           const result = yield* Effect.exit(fixture.tick(start + minute * 60000));

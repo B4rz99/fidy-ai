@@ -58,7 +58,6 @@ export class Maintenance extends DurableObject<MaintenanceEnvironment> {
           Effect.tap((halt) =>
             reportWatchdog(halt, request.headers.get("fidy-native-inspection") === "1")
           ),
-          // Flush progress before a forced reset, inside the same tick deadline.
           Effect.tap(() =>
             this.pending.size > 0 ? Effect.tryPromise(() => this.ctx.storage.sync()) : Effect.void
           ),
@@ -70,7 +69,6 @@ export class Maintenance extends DurableObject<MaintenanceEnvironment> {
         () => new Response(null, { status: 503 })
       )
       .finally(() => {
-        // A transport ignoring cancellation can keep this incarnation resident indefinitely.
         if (this.pending.size > 0) this.ctx.abort("watchdog probe cleanup unavailable");
         this.sweeping = false;
       });

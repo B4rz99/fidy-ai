@@ -26,3 +26,15 @@ depending on a provider or model. An older requested prompt cannot bypass a late
 A replacement offer needs native proof that its predecessor was both undisclosed and
 definitively rejected. Persist the authenticated exact delivery before enabling choices.
 Commit the chosen category evidence and matching schedule update together.
+
+The occurrence's immutable report, original expiry and captured schedule/Consent remain stable
+through replay. Workflow history carries only owner identities and wake-up instants. Discovery
+rotates even when a due User cannot be processed. Keep the original resource reservation and
+one-shot channel claim. A later schedule cannot create work after withdrawal or re-enable an
+earlier backlog.
+
+Only verified same-User delivery can settle linked events. The ordered native batch couples
+the exact first-delivery count to the governor update and Agent's Transcript effect. Delivered
+cannot regress read or dismissed state. Questions do not count as reminders. A contextual
+reply resets only the episode and grant it answers. The pause mention belongs to a later
+admitted User request, and only visible delivery of its fixed text consumes it.

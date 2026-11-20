@@ -97,7 +97,6 @@ const presentSubscription = ({
   );
 };
 
-/** Commit one bounded query and its metadata-only AuditLogEntry under the same live User authority. */
 export const executeProtectedSubscriptionQuery = (input: QueryInput): Effect.Effect<Response> =>
   Effect.gen(function* () {
     const current = yield* Clock.currentTimeMillis;

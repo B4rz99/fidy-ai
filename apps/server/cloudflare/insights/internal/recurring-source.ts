@@ -133,7 +133,6 @@ export const stageSource = (
     return page;
   });
 
-/** A complete guarded cutoff permanently excludes earlier-day backlog in one bounded owner write. */
 export const consumeEarlierDays = (
   work: Readonly<{ input: Scope; checkpoint: string; instruction: typeof InstructionRow.Type }>
 ): Effect.Effect<void, InsightUnavailable> =>

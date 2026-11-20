@@ -3,7 +3,7 @@ import { Clock, Effect } from "effect";
 
 const userWindowMilliseconds = 60_000;
 const userLimit = 60;
-/** The User object owns a single rolling window across every source and every OAuthConnection. */
+
 export const admitUserOAuth = Effect.gen(function* () {
   const sql = yield* SqliteClient;
   const current = yield* Clock.currentTimeMillis;

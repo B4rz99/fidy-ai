@@ -181,7 +181,6 @@ export const verifiedOutcome = Effect.fn(function* (
   return settlement;
 });
 
-/** A provider id is a lookup hint only: provider GET and the full captured snapshot authorize evidence. */
 const reconcileBillingTransaction = (
   input: Readonly<{
     db: D1Database;
@@ -334,7 +333,6 @@ export const collectBillingTransaction = (
     if (captured.wompi_environment !== environment.WOMPI_ENVIRONMENT) return yield* failure();
     const client = yield* billingClient(environment, wompiHttp);
     const amount = yield* billingAmount(captured);
-    // Claim BEFORE outbound I/O: a crash between this write and POST is ambiguous, never retried blindly.
     const now = yield* Clock.currentTimeMillis;
     const claimed = yield* claimCollection({ environment, captured, attemptId, now });
     if (!claimed) return;
@@ -348,8 +346,6 @@ export const collectBillingTransaction = (
         method: captured.method,
       })
     );
-    // Wompi documents charge lookup by provider id, not by reference. Without a response id,
-    // retain ambiguity until a signed callback supplies a lookup hint; NEVER repeat the POST.
     if (Result.isFailure(created)) {
       if (created.failure.certainty === "rejected") {
         yield* rejectCollection(environment.DB, attemptId, now);

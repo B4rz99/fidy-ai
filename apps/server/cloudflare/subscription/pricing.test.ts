@@ -310,7 +310,6 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         };
         const registered = yield* request("register", first);
         expect(registered).toEqual({ status: 200, body: { ...first, price } });
-        // Publication remains available when this installation cannot route outcome recovery.
         expect(yield* check).toEqual({ status: 503, repaired: null });
         expect((yield* request("publish", next)).status).toBe(200);
         yield* restart;

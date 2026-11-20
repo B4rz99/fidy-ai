@@ -11,7 +11,7 @@ import { offerWindowOpen, recoverableOfferRequests } from "./proactivity-offers"
 import { summariesDue } from "./cadence";
 
 const maximumGenerationUsers = 16;
-/** Bounded identities only; discovery does not read content or grant execution authority. */
+
 export const discoverProactivityUsers = (
   input: Readonly<{ db: D1Database; now: DateTime.Utc }>
 ): Effect.Effect<ReadonlyArray<UserId>, InsightUnavailable> =>
@@ -68,7 +68,7 @@ export const discoverProactivityUsers = (
     ]).flat();
     return [...new Set(balanced)].slice(0, maximumGenerationUsers);
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
-/** Rotate attempted work even when processing authority or coordination is unavailable. */
+
 export const noteProactivityEvaluation = (
   input: Readonly<{ db: D1Database; userId: UserId; now: DateTime.Utc }>
 ): Effect.Effect<void, InsightUnavailable> =>

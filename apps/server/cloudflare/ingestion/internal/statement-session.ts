@@ -1,9 +1,5 @@
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 
-/** Copy Agent's verified lifecycle projection inside the very same admission or terminal unit.
- * The source exposes only session_id, user_id, expires_at_ms. It grants no publication authority.
- * Crossing a deadline or changing sessions closes hosted routing; the inbox retains its independent evidence deadline.
- */
 export const prepareStatementSessionActivity = ({
   db,
   userId,

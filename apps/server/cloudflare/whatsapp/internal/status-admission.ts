@@ -40,9 +40,6 @@ const policies = ResourceAdmissionPolicies.make([
   },
 ]);
 
-/** Admit after signature verification, before provider I/O. Each of the three lifecycle statuses
- * has one read per endpoint/message/minute; all paths share 500 reads/hour. Failures remain charged.
- */
 export const makeStatusLookupAdmission =
   (database: D1Database): WhatsAppStatusLookupAdmission =>
   (request) =>

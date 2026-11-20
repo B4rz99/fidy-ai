@@ -11,7 +11,6 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     () =>
       Effect.gen(function* () {
         const db = yield* makeNativeTransactionJourney(undefined, nativePurgePlatform);
-        // Keep the deadline ahead of workerd's wall clock so only the requested alarm can expire the case.
         let leapYear = DateTime.getPartUtc(yield* DateTime.now, "year");
         while (DateTime.getPartUtc(DateTime.makeUnsafe(Date.UTC(leapYear, 1, 29)), "day") !== 29) {
           leapYear++;

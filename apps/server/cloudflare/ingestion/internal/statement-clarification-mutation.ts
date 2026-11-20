@@ -584,12 +584,10 @@ const prepareAbandonment = (
     } satisfies CanonicalMutationPreparation;
   }).pipe(Effect.orElseSucceed(failedPreparation));
 
-/** Held cancellation retains the original conversation authority and confirmation contract. */
 export const prepareHeldStatementAbandonment = (
   work: StatementDecisionWork
 ): Effect.Effect<CanonicalMutationPreparation> => prepareAbandonment(work, false);
 
-/** Canonical credential cancellation adapter; no nested commit or borrowed channel authority. */
 export const prepareStatementAbandonment = (
   work: CanonicalPreparationWork
 ): Effect.Effect<CanonicalMutationPreparation> =>

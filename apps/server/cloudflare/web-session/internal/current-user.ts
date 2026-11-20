@@ -4,7 +4,6 @@ import { prepareBrowserSessionLookup } from "./authentication";
 import { prepareBrowserMetadata } from "./metadata";
 import { json, noSession, unavailable } from "./support";
 
-/** Exact cookie, renewal, canonical metadata, taxonomy and identity Audit share one transaction. */
 export const currentUser = ({
   request,
   db,

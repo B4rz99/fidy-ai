@@ -49,19 +49,16 @@ import { queryUpgrade } from "./internal/upgrade-query";
 import { pendingBillingWork } from "./internal/operational-observation";
 import { executeProtectedSubscriptionQuery as observe } from "./internal/subscription-queries";
 
-/** Accept support intent atomically, reserving exact Money and versioned execution work. */
 export const startRefund = (
   call: RefundStartCall
 ): Effect.Effect<RefundAttempt, RefundStartFailure> => acceptRefund(call);
-/** Read a User-scoped correction without exposing provider or operator evidence. */
+
 export const getRefund = (call: RefundReadCall): Effect.Effect<RefundAttempt, RefundStartFailure> =>
   observeRefund(call);
 
-/** Closed support routing is intentionally outside canonical/PAT/model write capabilities. */
 export const refundSupportRoute = (path: string): boolean =>
   path === refundSupportBasePath || refundSupportReadPath.test(path);
 
-/** The User coordinator rechecks scope and the live support admission before committing intent. */
 export const executeRefundSupportAdmission = (
   input: Readonly<{
     db: D1Database;
@@ -85,16 +82,11 @@ export const executeRefundSupportAdmission = (
   });
 };
 
-/** Observe one User's safe billing-derived standing with live credential and Audit checks at commit. */
 export const executeProtectedSubscriptionQuery = (
   input: SubscriptionQueryInput
 ): Effect.Effect<Response> =>
   input.operation === "subscription.getUpgradeUrl" ? queryUpgrade(input) : observe(input);
 
-/**
- * Observe the oldest at-most-eight pending BillingAttempt identities and creation times for private
- * operational health. The id/created/deadline projection contains no User or financial payload.
- */
 export const prepareBillingWorkObservation = (
   input: Readonly<{
     db: D1Database;
@@ -102,7 +94,6 @@ export const prepareBillingWorkObservation = (
   }>
 ): D1PreparedStatement => pendingBillingWork(input);
 
-/** Admit an automatic renewal under explicit same-User coordination and live billing authority. */
 export const executeSubscriptionRenewalAdmission = (
   input: Readonly<{
     db: D1Database;
@@ -122,11 +113,10 @@ export const executeSubscriptionRenewalAdmission = (
   );
 };
 
-/** Prepare an idempotent same-User cancellation with its collection fence and accountability. */
 export const prepareSubscriptionCancellation = (
   work: CanonicalPreparationWork
 ): Effect.Effect<CanonicalMutationPreparation> => prepareCancellation(work);
-/** Closed refusal for absent paid standing under the caller's current authority. */
+
 export const subscriptionCancellationRefusal = (
   work: CanonicalPreparationWork
 ): CanonicalMutationRefusal => cancellationRefusal(work);
@@ -140,7 +130,6 @@ export const retainSubscriptionCancellation: typeof retainCancellation = (input)
 export const offerDueSourceCancellations: typeof dispatchLocalCancellations = (input) =>
   dispatchLocalCancellations(input);
 
-/** The canonical mutation kernel owns admission, live authority, accounting, Audit and the final receipt. */
 export const cancelLocalSubscription = Effect.fnUntraced(function* (
   input: Parameters<typeof retainCancellation>[0]
 ) {

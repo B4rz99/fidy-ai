@@ -11,7 +11,6 @@ import type {
   XlsxCellEvidence,
 } from "../../../src/core/ingestion/contract";
 
-// D1's limit is decimal bytes and covers the encoded table record, not evidence alone.
 const maximumRowBytes = 2_000_000;
 const overBudget = maximumRowBytes + 1;
 const uuidBytes = 36;
@@ -132,7 +131,6 @@ const evidenceBytes = (
         ["cells", arrayBytes(evidence.cells, (cell) => cellBytes(cell, size), maximum)],
       ]);
 
-/** Measures heading JSON before allocation; overflow is above the heading admission ceiling. */
 export const materializedHeaderBytes = (headers: ReadonlyArray<string>): number =>
   arrayBytes(
     headers,
@@ -140,7 +138,6 @@ export const materializedHeaderBytes = (headers: ReadonlyArray<string>): number 
     maximumMaterializedHeaderBytes
   );
 
-/** Measures bounded derived JSON before encoding, including repeated evidence and escape expansion. Oversized input returns above the admission ceiling. */
 export const materializedStatementBytes = (rows: ReadonlyArray<ParsedStatementRow>): number => {
   const sizes = new Map<string, number>();
   const size = (value: string): number => {
@@ -194,18 +191,9 @@ const recordBytes = (values: ReadonlyArray<StoredValue>): number => {
   return headerBytes + values.reduce((sum, value) => sum + value.bytes, 0);
 };
 
-/**
- * Decides whether a prospective pending review record fits D1's 2,000,000-byte complete-record
- * limit before evidence serialization. Supply validated row evidence and the exact stored context:
- * generated review IDs must be UUIDs, known_money must remain NULL, and timestamps must be integer
- * epoch milliseconds. A false result requires terminal resource-limit settlement before encoding
- * or writing this row. Admission covers this record only, not the containing submission.
- */
 export const statementReviewAdmission = (
   context: ReviewContext
 ): ((row: NeedsReviewStatementRow) => boolean) => {
-  // Reuse only byte counts within this check; every repeated reference is still charged.
-  // No encoded evidence or cross-User state survives the caller-owned invocation.
   const sizes = new Map<string, number>();
   const size = (value: string): number => {
     const existing = sizes.get(value);
@@ -246,7 +234,6 @@ export const statementReviewAdmission = (
         { bytes: 0, serial: 0 },
         textValue(issues),
         ...afterIssues,
-        // D1 trims the trailing NULL (covered natively); retained JSON adds its serial header.
         ...Option.toArray(row.suggestions).map((draft) =>
           text(Schema.encodeSync(Schema.fromJsonString(ReviewDraft))(draft))
         ),

@@ -98,7 +98,7 @@ const batchCallId = (suffix: number): AtomicBatchCallId =>
   Schema.decodeSync(AtomicBatchCallId)(
     `20000000-0000-4000-8000-${String(suffix).padStart(12, "0")}`
   );
-/** The selected correction facts one test submits, with only the changed facts supplied. */
+
 const TestCorrectionPayload = Schema.Struct({
   expectedRevision: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   changes: Schema.Struct({
@@ -672,7 +672,6 @@ it("rolls back the whole group when one selected row stops accepting its correct
     }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
-/** One manual capture submitted through the public ingress exactly as a client sends it. */
 const postTransaction = (index: number, body: object): Request =>
   new Request("https://api.fidyapp.com/transactions", {
     method: "POST",

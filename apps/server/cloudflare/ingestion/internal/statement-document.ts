@@ -29,7 +29,6 @@ import {
 } from "../../resource-admission/contract";
 import { releaseOutstandingResource } from "../../resource-admission/operations";
 
-/** Compose verified attachment identity with admission; the supplied source is Agent-owned proof. */
 export const prepareStatementDocumentAdmission = ({
   db,
   source,
@@ -71,13 +70,12 @@ const findDocument = ({
         .first(),
     catch: unavailable,
   }).pipe(Effect.map(Schema.decodeUnknownOption(Document)));
-/** Reveal only the media identity of this live admitted Turn; never a URL or private R2 locator. */
+
 export const readHeldStatementDocument = (
   input: Readonly<{ db: D1Database; caller: HostedCanonicalCaller }>
 ): Effect.Effect<Option.Option<WhatsAppMediaId>, StatementStagingUnavailable> =>
   findDocument(input).pipe(Effect.map(Option.map(({ media_id }) => media_id)));
 
-/** A retry reuses a verified private reference without another provider download. */
 export const readHeldStatementDocumentReference = (
   input: Readonly<{ db: D1Database; caller: HostedCanonicalCaller }>
 ): Effect.Effect<Option.Option<StagedStatementBytes>, StatementStagingUnavailable> =>
@@ -121,7 +119,6 @@ const retireDocumentUpload = ({
     )
   );
 
-/** Retire a recovered upload's outstanding lease without another download or budget charge. */
 export const releaseHeldStatementDocumentUpload = ({
   db,
   caller,
@@ -135,7 +132,6 @@ export const releaseHeldStatementDocumentUpload = ({
     yield* retireDocumentUpload({ db, caller, grantId: document.value.upload_grant_id.value });
   });
 
-/** Recover only this Turn's publication, under its still-live origin; a retry cannot publish again. */
 export const readHeldStatementDocumentSubmission = ({
   db,
   caller,
@@ -157,10 +153,6 @@ export const readHeldStatementDocumentSubmission = ({
     Effect.map(Option.map(({ id }) => id))
   );
 
-/** Admission precedes media metadata/download and staging. Every new download charges an attempt
- * and work; recovery of a retained reference never enters this bracket. A lost Worker holds only
- * the installed bounded outstanding lease, not an unlimited reusable download capability.
- */
 export const withHeldStatementDocumentUpload = <A, E, R>({
   db,
   caller,
@@ -208,7 +200,6 @@ const liveDocument = (document: typeof Document.Type, grantId: string, current: 
   Option.contains(document.upload_grant_id, grantId) &&
   Option.exists(document.upload_expires_at_ms, (expires) => expires > current);
 
-/** Snapshot bounded verified bytes at invocation and stage only under this Pending upload's admitted, unexpired grant. */
 export const stageHeldStatementDocument = (
   input: HeldDocumentUpload
 ): ReturnType<ReturnType<typeof StatementStaging.make>["stageStatementBytes"]> => {

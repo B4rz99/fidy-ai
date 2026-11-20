@@ -10,3 +10,10 @@ Ordinary provider transport refuses redirects. Anonymous CLI release metadata ad
 reviewed HTTPS redirects. OIDC protocol credentials stay in POST bodies, Access key selection is
 bound to configured team identity, and synthetic bank proof requests require the reviewed
 Sandbox policy. Production cannot use that policy.
+
+Public ingress transfers streamed bodies when the next owner must be able to cancel them.
+Cloning such a body would leave an unread tee branch. The other forwarding path clones the
+Request before replacing URL and headers to preserve platform stream options. Validate native
+MCP public coordinates before private forwarding removes them. Operator Access tokens must
+have the exact application audience, even though generic signature verification accepts
+audience membership.

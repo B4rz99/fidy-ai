@@ -110,7 +110,6 @@ export const PairingRow = Schema.Struct({
 });
 export type PairingRow = typeof PairingRow.Type;
 
-/** Reclaim unapproved anonymous metadata; never remove approved User-bound grant evidence. */
 export const sweepExpiredPATPairings = (db: D1Database): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
     const current = yield* Clock.currentTimeMillis;
@@ -178,7 +177,7 @@ const reservePairing = (
     );
     return committed[2]?.meta.changes === 1;
   });
-/** Bound anonymous creation before allocating a new pairing or storing its digest. */
+
 export const startPATPairing = ({
   request,
   db,
@@ -240,7 +239,6 @@ const admitReview = (
     ])
   ).pipe(Effect.map((results) => results[1]?.meta.changes === 1));
 
-/** Inspect a public code only for an authenticated browser User, with bounded guessing. */
 export const inspectPATPairing = ({
   request,
   db,
@@ -334,7 +332,7 @@ const commitApproval = (
     );
     return committed.every((item) => item.meta.changes === 1);
   });
-/** Approve one reviewed immutable grant and append its exact User-bound disclosure atomically. */
+
 export const approvePATPairing = ({
   request,
   db,

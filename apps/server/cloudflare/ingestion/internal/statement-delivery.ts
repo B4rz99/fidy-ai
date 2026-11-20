@@ -51,7 +51,6 @@ const attempt = <A>(run: () => PromiseLike<A>): Effect.Effect<A, StatementDelive
 export const isStatementExtractionWork = (body: unknown): boolean =>
   Option.isSome(Schema.decodeUnknownOption(Work)(body));
 
-/** Reoffers a bounded page of unsettled D1 intents. Failed handoffs leave their identity selectable. */
 export const dispatchStatementExtraction = (
   environment: Readonly<{
     DB: D1Database;
@@ -139,7 +138,6 @@ const handoffStatements = (input: {
     }
   }).pipe(Effect.withSpan("ingestion.statementReceive"));
 
-/** The original User rechecks pending work before each attempt and owns terminal reconciliation. */
 export const receiveNativeStatementExtraction = (input: {
   environment: {
     USER_STORE: StatementCoordinator;
@@ -207,9 +205,6 @@ export const receiveStatementExtraction = (input: {
     });
   });
 
-/** Direct handoff accelerates the committed outbox; an unavailable create/get falls back to the
- * same Queue identity. Both paths use the receiver's current eligibility and stable Workflow id.
- */
 const offerStatementExtraction = (
   environment: Readonly<{
     DB: D1Database;
@@ -233,7 +228,6 @@ const offerStatementExtraction = (
     yield* attempt(() => environment.STATEMENT_EXTRACTION_QUEUE.send(body));
   });
 
-/** One private coordinator target; the Workflow never stores bytes, row facts, or credentials. */
 type StatementCoordinator = Readonly<{
   getByName: (name: string) => Pick<Fetcher, "fetch">;
 }>;
@@ -260,10 +254,6 @@ const workflowState = (
     );
   });
 
-/** Reconcile failed or completed Workflow instances whose final report activity also exhausted.
- * The authoritative submission remains nonterminal until its own User coordinator settles it.
- * A bounded rotating scan prevents an active Workflow from hiding a later errored one.
- */
 export const reconcileStatementExtraction = (
   input: Readonly<{
     DB: D1Database;
@@ -352,7 +342,6 @@ const coordinatedStatementStep = (
     })
   );
 
-/** Runs an identity-only activity under the User's coordination boundary. */
 export const runStatementExtractionWorkflow = (
   input: Readonly<{
     payload: unknown;

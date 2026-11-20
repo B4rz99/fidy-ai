@@ -6,7 +6,6 @@ export class WorkflowEntrypoint<Environment, _Parameters> {
   }
 }
 
-/** Native Worker entrypoint construction for import-only test composition. */
 export class WorkerEntrypoint<Environment> {
   readonly env: Environment;
   constructor(_context: unknown, environment: Environment) {
@@ -17,7 +16,6 @@ export class WorkerEntrypoint<Environment> {
   }
 }
 
-/** Import-only class identity for Workers bundled into host-side tests. */
 export class DurableObject<Environment> {
   protected readonly ctx: DurableObjectState;
   protected readonly env: Environment;

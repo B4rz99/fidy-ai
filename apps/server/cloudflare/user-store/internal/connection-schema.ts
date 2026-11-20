@@ -1,4 +1,3 @@
-/** Connection lifecycle constraints remain with the owning User. */
 const history = [
   `CREATE TABLE connection_attempts (
   id TEXT PRIMARY KEY NOT NULL,

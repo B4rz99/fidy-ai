@@ -139,7 +139,6 @@ const execute = (
   Effect.gen(function* () {
     const { environment } = input;
     const work = yield* Schema.decodeUnknownEffect(RefundWork)(input.payload);
-    // Both the charge snapshot and the current key/environment must stay Sandbox. No boolean enables real money.
     if (
       environment.WOMPI_ENVIRONMENT !== "sandbox" ||
       !environment.WOMPI_PRIVATE_KEY.startsWith("prv_test_")
@@ -169,7 +168,6 @@ const execute = (
     } else if (captured.kind === "card-void") {
       yield* settle(environment.DB, captured.id, yield* verifyCardVoid({ http, input: captured }));
     } else {
-      // A refund lookup/webhook/retry contract is not yet established. Never invent a safe retry.
       yield* settle(environment.DB, captured.id, Option.none());
     }
   });
@@ -188,7 +186,6 @@ export const runRefundWorkflow = (
     )
   );
 
-/** A missed or duplicated publication is recoverable; the durable claim, not Workflow history, prevents another POST. */
 export const dispatchRefunds = (
   input: RefundDispatchInput
 ): Effect.Effect<void, Cause.UnknownError | Schema.SchemaError> =>
@@ -224,7 +221,7 @@ export const dispatchRefunds = (
       );
     }
   });
-/** Only documented card-transaction GETs are retried; uncertain Refund V2 mutations await a confirmed lookup contract. */
+
 export const dispatchVoidVerification = (
   input: RefundDispatchInput
 ): Effect.Effect<void, Cause.UnknownError | Schema.SchemaError> =>

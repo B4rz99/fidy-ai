@@ -70,7 +70,6 @@ const activeSource = `SELECT r.user_id FROM forwarded_email_receipts r
   AND r.outcome IS NULL`;
 const active = `EXISTS (${activeSource})`;
 
-
 const structuralTags = ["table", "tr", "td", "p", "span", "div"] as const;
 export const anonymizeStructure = (html: string): string => {
   const counts: Record<(typeof structuralTags)[number], number> = {

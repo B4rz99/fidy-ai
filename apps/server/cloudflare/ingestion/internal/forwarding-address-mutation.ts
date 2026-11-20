@@ -17,7 +17,6 @@ import {
   type GuardRefusalWork,
 } from "../../canonical-operations/contract";
 
-
 const forwardingAddressGuardRefusal = ({
   db,
   subject,

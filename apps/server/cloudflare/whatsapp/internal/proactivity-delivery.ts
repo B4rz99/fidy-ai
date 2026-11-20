@@ -321,13 +321,11 @@ export const findDeliveryUser = (
         );
   }).pipe(Effect.mapError(() => new WhatsAppUnavailable()));
 
-/** Metadata-only no-resend identities for bounded expiry/recovery; a begun send remains begun regardless of provider outcome. */
 export const startedDeliveryQuery = (): OwnedStatement => ({
   sql: "SELECT user_id,delivery_id FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS proactivity_whatsapp_claims WHERE send_started_at_ms IS NOT NULL",
   params: [],
 });
 
-/** Definitive failure evidence for one captured delivery; unknown/accepted sends never authorize a replacement question. */
 export const rejectedDeliveryQuery = (
   input: Readonly<{ userId: UserId; id: string }>
 ): OwnedStatement => ({
@@ -348,7 +346,7 @@ export const transcriptQuery = (
     params: [...base.params, retentionMs, input.now],
   };
 };
-/** A qualified question control is bound to exact verified visible delivery, current association and retained channel evidence. */
+
 export const controlQuery = (
   input: Readonly<{ proof: WhatsAppTurnAdmission; id: string; now: number }>
 ): OwnedStatement => {

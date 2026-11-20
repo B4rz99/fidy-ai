@@ -143,7 +143,7 @@ const submit = (
     );
     return yield* routeOwner(input.environment, body.value.userId, encoded);
   }).pipe(Effect.orElseSucceed(() => refundFailureResponse("unavailable")));
-/** Authentication is reverified at Core even when Access/ingress has already checked the assertion. */
+
 export const handleRefundSupport = (
   input: Readonly<{
     request: Request;

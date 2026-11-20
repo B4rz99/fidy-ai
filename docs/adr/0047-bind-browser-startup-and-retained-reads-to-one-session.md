@@ -48,3 +48,9 @@ reread. Transaction corrections use the inspected revision but may recover from 
 history read owned by the mounted editor. The ledger yields only initial offscreen work. Filter
 changes and new authoritative revisions render without delay, and a commit ref fills an initial
 viewport estimate before paint.
+
+Bootstrap observes the live entry binding and credential-only legal receipt in one snapshot.
+A signed-out entry remains available when no cookie resolves. A live cookie paired with another
+mounted identity is refused. Security controls use exact live or fresh proof even after
+withdrawal. Renewal cannot extend the immutable hard deadline. Once submitted, revocation,
+renewal and Audit own their outcome through settlement.

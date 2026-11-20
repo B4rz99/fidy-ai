@@ -112,3 +112,27 @@ D1 migration execution disables retries because a failed response can follow a c
 change. Metadata calls outside that executor keep their existing retry policies. When the
 Cloudflare HTTP fallback class lacks provider data, retain only a numeric native error code
 so refusal classification can use it without retaining provider payloads.
+
+Closed installed-release verification uses a private synthetic provider for the installation's
+lifetime. The protected runner and Ingress sign separate exact request boundaries. Core forwards
+the bytes whose digest it authenticated. The runner owns its signing key and renews the short
+background-work window. The closed topology has no path to live product providers; configured
+human Access still uses its real issuer.
+
+Resource admission uses installed policy and decision time. Attempt pressure can be spent
+despite later work refusal. The work reservation, required owner transition and explicit
+completion assertion commit atomically. Outstanding capacity releases with the matching
+completion. D1 settlement keeps ownership through interruption. Anonymous and shared scope
+usage stays subject-free. Hosted usage retains original UTC day accounting even after Turns
+expire. A malformed counter cannot become a lower observed consumption.
+
+Platform canaries require evidence from the real Queue consumer and a completed native Workflow
+step. Publication, handoff or a 2xx alone cannot pass readiness. The protected smoke runner
+compares the observed release identity to the exact upload receipt. Smoke verifies fixed
+synthetic bindings and carries no User, provider or ordinary ingress authority. Bound and
+observe sampled owner work independently from platform Queue depth; missing measurements
+never become healthy zeroes.
+
+The Cloudflare adapter shard estimates seed longest-first packing from the recorded native
+Linux run at revision `3d21108`. The assignment still includes every discovered file once.
+[Seed timing run](https://github.com/B4rz99/fidy-ai/actions/runs/44432264215).

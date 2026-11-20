@@ -9,7 +9,6 @@ const maximumGlobalMinute = 20;
 const maximumGlobalHour = 100;
 const AdmissionResult = Schema.Struct({ meta: Schema.Struct({ changes: Schema.Int }) });
 
-/** Count every admitted verified invocation before decoding; denied traffic retains no proof or body. */
 export const admitOperator = ({
   db,
   operator,

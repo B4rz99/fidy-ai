@@ -31,7 +31,6 @@ import {
 import { Clock, Data, Effect, Logger, Option, Schema } from "effect";
 import { dual } from "effect/Function";
 
-/** Constructs active Worker spans around closed synchronous export boundaries. */
 export const makeWorkerTelemetry = (
   sink:
     | ((record: TelemetryWorkRecord) => void)
@@ -46,7 +45,6 @@ export const makeWorkerTelemetry = (
     )
   );
 
-/** Cloudflare-native metadata-only structured logging for production Worker entrypoints. */
 export const cloudflareWorkerTelemetry = makeWorkerTelemetry({
   exportWork: (record) => {
     const write = record.outcome === "failed" ? Effect.logError : Effect.log;
@@ -249,7 +247,6 @@ type WorkerExecution = WorkerTraceContinuation &
       | "worker.email.scheduled";
   }>;
 
-/** Observes a durable or Email Worker invocation without changing its Effect exit or payload. */
 const observeWorkerExecutionWork = <E, R>(
   work: Effect.Effect<void, E, R>,
   observation: WorkerExecution
@@ -271,7 +268,6 @@ const observeWorkerExecutionWork = <E, R>(
 
 const ReleaseBinding = Schema.Struct({ RELEASE_GIT_SHA: Schema.String });
 
-/** Reads only the release binding from a platform environment; never exports another binding. */
 export const workerRelease = (environment: unknown): WorkerTelemetryEnvironment => ({
   RELEASE_GIT_SHA: Option.match(Schema.decodeUnknownOption(ReleaseBinding)(environment), {
     onNone: () => "",
@@ -283,7 +279,6 @@ class ObservedPromiseFailure extends Data.TaggedError("ObservedPromiseFailure")<
   readonly original: unknown;
 }> {}
 
-/** Gives a native Cloudflare Promise one closed Work record, preserving its exact resolution/rejection. */
 const observeNativePromise = <A>(
   work: () => Promise<A>,
   observation: WorkerTraceContinuation &
@@ -386,14 +381,12 @@ const observeResponsePromise = (
     projectSuccess: projectResponse,
   });
 
-/** Projects a coordinator HTTP result separately from durable invocation success. */
 const observeWorkerResponseWork = (
   work: () => Promise<Response>,
   observation: WorkerExecution
 ): Promise<Response> =>
   observeResponsePromise(work, { ...observation, provider: "cloudflare-workers" });
 
-/** Observes a direct OpenAI invocation without reading inference request or response content. */
 const observeModelRunWork = (
   work: () => Promise<Response>,
   observation: WorkerTraceContinuation &
@@ -405,7 +398,6 @@ const observeModelRunWork = (
     provider: "openai",
   });
 
-/** Supplies only closed provider response metadata beneath Outbound HTTP's request policy. */
 const observeProviderFetchWork = (
   fetcher: typeof globalThis.fetch,
   observation: Readonly<{
@@ -475,10 +467,6 @@ export const observeWorkerExecution: {
   <E, R>(work: Effect.Effect<void, E, R>, observation: WorkerExecution): Effect.Effect<void, E, R>;
 } = dual(2, observeWorkerExecutionWork);
 
-/**
- * Gives one Worker invocation one owning Work span. Invalid release configuration is represented by
- * the bounded `unknown` release rather than disabling observation or changing authoritative Work.
- */
 export const observeWorkerRequest: {
   (
     observation: WorkerObservation
@@ -491,7 +479,6 @@ export const observeWorkerRequest: {
 
 const WorkTraceEnvelope = Schema.Struct({ traceContext: Schema.optionalKey(Schema.Unknown) });
 
-/** Captures only correlation metadata from the current application fiber for durable publication. */
 export const captureWorkTrace: Effect.Effect<WorkerTraceProjection> = Effect.flatMap(
   Effect.serviceOption(Telemetry),
   (service) =>
@@ -507,7 +494,6 @@ export const captureWorkTrace: Effect.Effect<WorkerTraceProjection> = Effect.fla
     })
 );
 
-/** Extracts untrusted correlation independently; invalid metadata never rejects durable domain work. */
 export const workTraceParent = (payload: unknown): unknown => {
   try {
     return Option.match(Schema.decodeUnknownOption(WorkTraceEnvelope)(payload), {
@@ -519,7 +505,6 @@ export const workTraceParent = (payload: unknown): unknown => {
   }
 };
 
-/** Captures the active parent before handing the fetch function to a native Promise HTTP client. */
 export const captureObservedProviderFetch: {
   (
     observation: WorkerTraceContinuation &
@@ -554,7 +539,6 @@ export const captureObservedProviderFetch: {
     )
 );
 
-/** Projects untrusted context independently so invalid diagnostics never reject domain work. */
 const projectWorkTrace = (payload: unknown): Effect.Effect<WorkerTraceProjection> =>
   Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
@@ -581,7 +565,6 @@ const projectWorkTrace = (payload: unknown): Effect.Effect<WorkerTraceProjection
     );
   });
 
-/** Removes raw diagnostic metadata before a decoded domain payload crosses a durable boundary. */
 export const sanitizeWorkTrace = <A extends object>(payload: A): Effect.Effect<A> =>
   Effect.map(projectWorkTrace(payload), (projection) => {
     const domain = { ...payload };
@@ -589,7 +572,6 @@ export const sanitizeWorkTrace = <A extends object>(payload: A): Effect.Effect<A
     return Object.assign(domain, projection);
   });
 
-/** Emits only fresh, strictly decoded private propagation from a durable envelope. */
 export const workTraceHeaders = (
   payload: unknown
 ): Effect.Effect<Readonly<Partial<Record<typeof workerInternalTraceHeader, string>>>> =>
@@ -599,5 +581,4 @@ export const workTraceHeaders = (
       : { [workerInternalTraceHeader]: encodeTraceParent(projection.traceContext) }
   );
 
-/** Captures only current private trace propagation for a trusted service binding call. */
 export const captureTraceHeaders = Effect.flatMap(captureWorkTrace, workTraceHeaders);

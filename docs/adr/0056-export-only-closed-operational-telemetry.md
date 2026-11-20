@@ -12,3 +12,9 @@ future and expired continuation data starts a safe root. In-process children alr
 live parent and need no age check. The service owns terminal span completion and contains
 adapter failures so diagnostics cannot change the wrapped operation's outcome. Final SDK
 hooks rebuild and validate the approved event and span shapes before export.
+
+Ingress strips client-supplied propagation before any trusted service-binding transfer.
+Invalid transport correlation is discarded independently of the domain payload and cannot
+reject its work. In-process refusal-burst observation is deliberately lossy on restart and
+across distributed traffic. Each observer uses closed aggregate metadata and no stored
+subject presence. A native Promise retains its original resolution or rejection.

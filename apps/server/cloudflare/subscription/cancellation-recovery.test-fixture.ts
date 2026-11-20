@@ -208,7 +208,6 @@ const exerciseProvider = Effect.fnUntraced(function* (path: string) {
 });
 
 const exerciseDispatch = Effect.fnUntraced(function* (path: string, storage: DurableObjectStorage) {
-  // The platform consumes the scheduled alarm when it starts a delivery.
   if (path !== "/dispatch") yield* Effect.tryPromise(() => storage.deleteAlarm());
   const offered: unknown[] = [];
   const result = yield* offerDueSourceCancellations({

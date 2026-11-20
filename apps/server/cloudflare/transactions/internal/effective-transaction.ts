@@ -1,12 +1,10 @@
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 
-/** Exposes the effective_transaction relation. Bind the explicit User id before any other query parameters. */
 export type EffectiveTransactionRelation = Readonly<{
   sql: string;
   bindings: ReadonlyArray<string>;
 }>;
 
-/** Publish the sole effective Transaction policy to a User-scoped D1 query. */
 const relationFor = (
   userSql: string,
   bindings: ReadonlyArray<string>
@@ -23,7 +21,6 @@ const relationFor = (
   bindings: [...bindings, ...bindings],
 });
 
-/** Publish the sole effective Transaction policy to an explicit User-scoped D1 query. */
 export const effectiveTransactionRelation = (userId: string): EffectiveTransactionRelation =>
   relationFor("?", [userId]);
 
@@ -53,13 +50,6 @@ const ordinaryPresentation = [
   )
   .join(", ");
 
-/**
- * Read effective History from the complete current projection, or the authoritative source while
- * that projection is absent or being repaired. Readiness and facts share the caller's SQL snapshot.
- * Filters and ordering must apply to these effective facts, never to retained pair members.
- * The caller supplies reviewed static SQL with an explicit User predicate, corresponding bound
- * values and a bounded positive page limit. Request values never become SQL fragments.
- */
 const historyPage = ({
   userSql,
   userBindings,
@@ -80,8 +70,6 @@ const historyPage = ({
     : ordinaryPresentation;
   const relation = relationFor(userSql, userBindings);
   const ordered = `ORDER BY occurred_at_ms DESC, created_at_ms DESC, id DESC LIMIT ${limit}`;
-  // SQLite compound ORDER BY keys must be result columns. Canonical row decoding omits these
-  // numeric keys: https://www.sqlite.org/lang_select.html#orderby
   return {
     sql: `WITH ${prefix.sql}readiness AS MATERIALIZED (SELECT EXISTS (
         SELECT 1 FROM transaction_projection_state
@@ -108,7 +96,7 @@ const historyPage = ({
     ],
   };
 };
-/** Read a bounded effective page for the caller's explicit User. */
+
 export const effectiveHistoryPage = ({
   userId,
   ...filters
@@ -121,9 +109,6 @@ export const effectiveHistoryPage = ({
     prefix: { sql: "", params: [] },
   });
 
-/** The caller supplies an owner-prepared, at-most-one-row live selection with a userId column.
- * Keep its bound proof in one CTE; every projection and repair path selects that same User.
- */
 export const selectedEffectiveHistoryPage = ({
   userSelection,
   ...filters

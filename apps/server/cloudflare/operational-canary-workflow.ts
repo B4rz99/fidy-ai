@@ -10,7 +10,6 @@ import {
   workerRelease,
 } from "./runtime/telemetry/operations";
 
-/** Private identity-free platform probe; a completed native step, not instance creation, proves execution. */
 export class OperationalCanaryWorkflowV1 extends WorkflowEntrypoint<
   WorkerTelemetryEnvironment,
   unknown

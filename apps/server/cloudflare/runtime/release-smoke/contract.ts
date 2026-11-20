@@ -8,7 +8,6 @@ export const smokeVersionHeader = "cloudflare-workers-version-overrides";
 export const smokeProofHeader = "x-fidy-smoke-proof";
 const smokeSecretPattern = /^[0-9a-f]{64}$/u;
 
-/** A separate, randomly provisioned deployment-runner credential, never a User or provider grant. */
 export const smokeProofAccepted = ({
   request,
   secret,
@@ -25,11 +24,11 @@ export const smokeProofAccepted = ({
 export const smokeFailureHeader = "x-fidy-smoke-failure";
 export const smokeIdentityHeader = "x-fidy-smoke-identity";
 export const smokeCoreVersionHeader = "x-fidy-smoke-core-version";
-/** Reserved invalid release revision: diagnostic POSTs always stop before admission. */
+
 export const smokeDiagnosticRevision = "0000000000000000000000000000000000000000";
-/** Equality bits for Core version, revision, and digest; no observed values cross this boundary. */
+
 export const SmokeIdentityEquality = Schema.String.check(Schema.isPattern(/^[01]{3}$/u));
-/** Only closed stages cross the proof-admitted smoke boundary, never foreign error text. */
+
 export const SmokeFailureStage = Schema.Literals([
   "bancolombia_configuration",
   "bancolombia_signing",
@@ -92,7 +91,6 @@ export const SmokeCompletion = Schema.Struct({
 });
 export type SmokeCompletion = typeof SmokeCompletion.Type;
 
-/** Private release verification bindings; optional bank verification grants no User authority. */
 export type SmokeEnvironment = BancolombiaSandboxEnvironment &
   SharedBindings &
   Readonly<{
@@ -112,7 +110,6 @@ export type SmokeEnvironment = BancolombiaSandboxEnvironment &
   }> &
   Partial<Readonly<{ RESEND_API_KEY: string; WOMPI_EVENT_SECRET: string }>>;
 
-/** The native bindings the existing readiness gate requires before any synthetic smoke path. */
 export type SmokeBindings = Pick<
   SmokeEnvironment,
   | "SMOKE_LIMITER"
@@ -124,10 +121,8 @@ export type SmokeBindings = Pick<
   | "CF_VERSION_METADATA"
 >;
 
-/** Synthetic Queue handoff has no provider, model, or User-data authority. */
 export type SmokeQueueEnvironment = Pick<SmokeEnvironment, "SMOKE_QUEUE_NAME" | "SMOKE_WORKFLOW">;
 
-/** Separate, release-owned executor: no User, provider, or public ingress authority. */
 export type SmokeExecutorEnvironment = Pick<
   SmokeEnvironment,
   | "SMOKE_BUCKET"

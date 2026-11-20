@@ -135,7 +135,7 @@ export const answerRegistration = Effect.fn(function* (
 export const billingWake = Effect.fn(function* (storage: DurableObjectStorage) {
   return yield* withStoreCapacity("required")(inspectBillingAlarm(storage));
 });
-/** Construct the native provider transport at the Subscription composition boundary. */
+
 export const wompiOutboundHttp = (
   environment: WompiBindings
 ): Effect.Effect<ReturnType<typeof makeWompiOutboundHttp>> =>
@@ -161,24 +161,21 @@ const refundWorkFailure = (error: unknown): RefundWorkFailure =>
     reason: Schema.isSchemaError(error) ? "invalid-work" : "unavailable",
   });
 
-/** Publish bounded versioned correction identities from their atomic acceptance outbox. */
 export const dispatchRefunds = (
   input: RefundDispatchInput
 ): Effect.Effect<void, RefundWorkFailure> =>
   dispatchCorrections(input).pipe(Effect.mapError(refundWorkFailure));
-/** Handoff keeps acknowledgment and duplicate execution behavior within the Subscription owner. */
+
 export const receiveRefunds = (input: RefundReceiveInput): Effect.Effect<void, RefundWorkFailure> =>
   receiveCorrections(input).pipe(Effect.mapError(refundWorkFailure));
-/** Classify correction work without interpreting payment/provider data as authority. */
+
 export const isRefundWork = (body: unknown): boolean => recognizesRefund(body);
 
-/** Reconcile only claimed card voids through bounded read-only transaction lookups. */
 export const dispatchVoidVerification = (
   input: RefundDispatchInput
 ): Effect.Effect<void, RefundWorkFailure> =>
   dispatchVerification(input).pipe(Effect.mapError(refundWorkFailure));
 
-/** Construct bounded signing-key transport for origin-verified billing support. */
 export const handleRefundSupport = (
   input: Readonly<{ request: Request; environment: RefundSupportEnvironment }>
 ): Promise<Response> =>
@@ -205,7 +202,6 @@ export const handleRefundSupport = (
     { signal: input.request.signal }
   );
 
-/** Execute one versioned correction with a durable no-retry submission claim. */
 export const runRefundWorkflow = (input: RefundWorkflowExecution): Promise<void> =>
   Effect.runPromise(
     Effect.tryPromise({
@@ -249,7 +245,6 @@ export class BillingRefundWorkflowV1 extends WorkflowEntrypoint<
   }
 }
 
-/** Offer durable billing intent to the private Queue; missed offers remain recoverable. */
 export const dispatchBillingCollection = (
   input: Readonly<
     { DB: D1Database; BILLING_COLLECTION_QUEUE: BillingQueuePublisher } & {
@@ -257,7 +252,7 @@ export const dispatchBillingCollection = (
     }
   >
 ): Effect.Effect<void, BillingCollectionFailure> => dispatch(input);
-/** Hand identity-only Queue work to its deterministic Workflow without repeating a charge. */
+
 export const receiveBillingCollection = (
   input: Readonly<{
     environment: BillingWorkRouting &
@@ -268,20 +263,20 @@ export const receiveBillingCollection = (
     batch: Readonly<{ messages: ReadonlyArray<{ body: unknown; ack: () => void }> }>;
   }>
 ): Effect.Effect<void, BillingCollectionFailure> => receive(input);
-/** Retain only authentic Wompi event hints; settlement still requires verified provider lookup. */
+
 export const receiveWompiBillingEvent = (
   input: Readonly<{
     request: Request;
     environment: WompiEventEnvironment;
   }>
 ): Effect.Effect<Response> => acceptEvent(input);
-/** Start bounded reconciliation of retained unresolved billing identities. */
+
 export const reconcileBillingCandidates = (
   input: Readonly<{ DB: D1Database; BILLING_COLLECTION_WORKFLOW: BillingObservationWorkflow }>
 ): Effect.Effect<void, BillingCollectionFailure> => reconcile(input);
-/** Classify the bounded versioned billing Queue identity without granting billing authority. */
+
 export const isBillingCollectionWork = (body: unknown): boolean => recognizesWork(body);
-/** Retire expired admission counts without changing enrollment or billing evidence. */
+
 export const sweepExpiredEnrollmentAdmission = (
   input: Readonly<{ db: D1Database; now: number }>
 ): Effect.Effect<void, Cause.UnknownError> => sweep(input);
@@ -316,7 +311,6 @@ export class BillingCollectionWorkflowV1 extends WorkflowEntrypoint<
   }
 }
 
-/** Execute one versioned billing Workflow through its bounded, no-retry activity seam. */
 export const runBillingCollectionWorkflow = (
   input: Readonly<{
     environment: Omit<BillingRuntime, "DB">;
@@ -334,17 +328,14 @@ export const runBillingCollectionWorkflow = (
     wompiHttp: wompiOutboundHttp,
   });
 
-/** Fresh-session browser enrollment; provider references and transient authorization stay private. */
 export const handlePaymentEnrollment = (
   input: Readonly<{ request: Request; environment: EnrollmentEnvironment }>
 ): Promise<Response> => enroll({ ...input, wompiHttp: wompiOutboundHttp });
 
-/** Offer bounded due Subscription renewals to their original User coordinator; D1 owns eligibility and history. */
 export const dispatchSubscriptionRenewals = (
   input: SubscriptionRenewalDispatchInput
 ): Effect.Effect<void, BillingCollectionFailure> => dispatchRenewals(input);
 
-/** Recover retained DaviPlata cancellation intent through bounded identity-only offers. */
 export const dispatchSubscriptionCancellations = (
   input: SubscriptionCancellationDispatchInput
 ): Effect.Effect<void, BillingCollectionFailure> => dispatchCancellations(input);
@@ -352,7 +343,6 @@ export const dispatchSubscriptionCancellations = (
 export const makeSubscriptionErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
   erasureProjections.map((projection) => makeErasureStore({ db, projection }));
 
-/** Private pricing namespace, selected by a stable name. Only Core holds this binding. */
 export class Pricing {
   private readonly version: string;
   private readonly state: DurableObjectState;
@@ -453,7 +443,6 @@ export class Pricing {
   }
 }
 
-/** Construct the bounded Access signing-key transport for private Price publication. */
 export const handlePricePublication = (
   input: Readonly<{ request: Request; environment: PricingEnvironment }>
 ): Effect.Effect<Response, never, HttpClient.HttpClient> =>
@@ -471,7 +460,7 @@ const cancellationBody = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 1024,
   deadlineMilliseconds: 5000,
 });
-/** Only the private User owner receives these calls. The destination checks the object and retained work identity. */
+
 export const handleSourceCancellationWork = Effect.fnUntraced(function* (
   input: Readonly<{
     request: Request;

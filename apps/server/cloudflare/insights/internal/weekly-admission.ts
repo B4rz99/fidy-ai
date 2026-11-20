@@ -60,9 +60,6 @@ const policies = ResourceAdmissionPolicies.make([
   },
 ]);
 
-/** Provider-spend and stable-User pressure are authority, never commercial Free allowances.
- * Each send conservatively reserves the full 4096-byte template ceiling before its one-shot claim.
- */
 export const admitWeeklyResource = (
   input: Readonly<{
     db: D1Database;

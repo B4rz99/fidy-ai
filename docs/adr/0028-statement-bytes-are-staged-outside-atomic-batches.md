@@ -143,3 +143,30 @@ Agent Session and message. An exact retry cannot extend a deadline or restore ex
 One native unit composes publication, capacity, accountability and visible review. Original
 media and unpublished work expire after thirty days; metadata-only accountability may be
 retained for one year.
+
+### Publication, derived material and durable accounting
+
+Recheck actual object size and checksum before buffering or publishing. A published reference
+may be readable after the staging expiry, subject to the submission's own deadline. Failed
+upload cleanup persists its deleting row before touching R2 and removes the row only after
+the object is gone. Keep the outcome of an interrupted D1 write attached to its durable
+settlement.
+
+Canonical publication creates the submission, promotes its stage, reserves any Free backfill,
+records the exact credential's accountability and publishes the extraction identity atomically.
+Recheck all mutable premises in the insert. The same material and request identity recover a
+stored result with live replay accountability. Different material conflicts. Post-rollback
+classification must use proven retained state and cannot depend on reading R2. A missing or
+foreign staging reference has the same validation failure.
+
+Reserve source work before expensive reads. Ambiguous reservation acknowledgment consumes a
+slot. Reuse only complete derived material admitted under current parser policy and its
+original source deadline. Advance the durable row cursor through sequential bounded commits.
+Each row's result and evidence commit together. Terminal failure keeps prior row accounting,
+releases its pending entitlement and cannot regress a completed submission.
+
+Size review material before serialization against the complete D1/SQLite record overhead,
+including headers, repeated references and escaped text. Request-local byte counts can be
+reused while each occurrence is charged. Metadata reads never load the raw row, and filtering
+precedes pagination. A verified origin session is required to continue the hosted clarification.
+The inbox can retain its independently expiring review material after that session closes.

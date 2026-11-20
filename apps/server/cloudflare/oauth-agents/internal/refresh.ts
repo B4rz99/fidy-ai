@@ -64,7 +64,7 @@ type ForwardInput = Readonly<{
   coordinator: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
   admitUser: (userId: string) => Effect.Effect<void, BootstrapUnavailable>;
 }>;
-/** Resolves only a coordination hint; no raw credential leaves the token boundary. */
+
 export const forwardRefresh = (
   input: ForwardInput
 ): Effect.Effect<

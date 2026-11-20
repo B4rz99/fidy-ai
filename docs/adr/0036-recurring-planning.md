@@ -37,3 +37,7 @@ Browser and authorized agents share canonical capabilities and revision conflict
 and bounded effective-fact reads can refuse further work rather than claim incomplete totals or
 allocate ambiguous facts. These limits must remain visible; they must never truncate a complete
 monthly result silently. This scoped addition extends planning without amending ADR 0032's detector.
+
+A coordinated plan edit materializes the effective completed occurrences before its
+revision-checked update. Incomplete reads cannot establish a safe allocation boundary.
+A new competing plan or a backdated schedule change cannot rewrite completed history.

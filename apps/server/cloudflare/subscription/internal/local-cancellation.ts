@@ -19,7 +19,6 @@ const Cancelled = Schema.Struct({
   next_offer_at_ms: Schema.NullOr(Schema.Int),
 });
 
-/** Called inside the canonical User mutation transaction after live admission; alarm and intent participate in that transaction. */
 export const retainCancellation = Effect.fnUntraced(function* (
   input: Readonly<{
     userId: string;
@@ -83,7 +82,6 @@ export const repairCancellationAlarm = Effect.fnUntraced(function* (storage: Dur
   return false;
 });
 
-/** Claim a bounded due page and durably schedule the next one before attempting any Queue handoff. */
 export const dispatchCancellations = Effect.fnUntraced(function* (
   input: Readonly<{
     current: number;
@@ -132,7 +130,6 @@ const Claim = Schema.Struct({
   verification_count: Schema.Int,
 });
 
-/** A claimed external send survives reply loss. Later attempts only verify the retained source. */
 export const observeCancellation = Effect.fnUntraced(function* (
   input: Readonly<{
     work: typeof LocalSourceCancellationWork.Type;

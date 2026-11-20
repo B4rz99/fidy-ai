@@ -6,7 +6,7 @@ import {
   registerLifetimeUrl,
   registrationAcceptedStatus,
 } from "../../maintenance/contract";
-/** Register outside the User transaction, before committing activation or accepting work. */
+
 export const registerUserLifetime = Effect.fn(function* (
   maintenance: Pick<DurableObjectNamespace, "getByName">,
   userId: UserId

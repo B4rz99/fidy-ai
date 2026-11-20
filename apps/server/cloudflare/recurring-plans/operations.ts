@@ -82,12 +82,10 @@ const recurringFinalization = ({
       )
     : Option.none();
 
-/** Prepare the existing browser observation without an independent storage submission. */
 export const prepareBoundRecurringWorkspace: (request: Request) => CanonicalBrowserRead = (
   request
 ) => prepareBoundWorkspace(request);
 
-/** Observational canonical read. Only credential use and metadata Audit are written. */
 export const browseRecurringPlans = ({
   db,
   subject,
@@ -149,7 +147,6 @@ export const browseRecurringPlans = ({
     });
   }).pipe(Effect.orElseSucceed(() => transactionUnavailable()));
 
-/** Prepare, never commit, a revision-bound User mutation inside the existing canonical unit. */
 export const prepareRecurringEdit = ({
   work,
   command,
@@ -236,7 +233,6 @@ export const recurringRefusal = (work: RecurringAuditWork): CanonicalMutationRef
     ),
 });
 
-/** Describe an owned, revision-bound lifecycle decision without exposing storage identities. */
 export const describeRecurringLifecycle = ({
   db,
   userId,

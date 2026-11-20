@@ -123,8 +123,7 @@ export const projectEmailRow = ({
   });
 };
 
-// Never transfer or decode purpose-bound evidence for this metadata-only read. A review row
-// can hold nearly 2 MB; applying the page limit after loading it would amplify a small query.
+
 const loadStatementItems = ({
   database,
   userId,
@@ -214,7 +213,6 @@ export const reviewPage = (url: URL): Option.Option<typeof ReviewPage.Type> =>
     status: url.searchParams.get("status"),
   });
 
-/** Filter before slicing so settled rows cannot trap a pending clarification page. */
 export const selectReviewPage = ({
   items,
   page,
@@ -226,7 +224,6 @@ export const selectReviewPage = ({
     .filter(({ status }) => Option.isNone(page.status) || Option.contains(page.status, status))
     .slice(page.offset, page.offset + page.limit);
 
-/** A canonical User-scoped read of persisted, independently expiring review outcomes. */
 export const listNeedsReviewItems = (
   input: Readonly<{
     database: D1Database;
@@ -257,7 +254,6 @@ export const listNeedsReviewItems = (
     });
   });
 
-/** One canonical review query; transport adapters supply already checked authority and paging. */
 export const readCanonicalReviewPage = (
   input: Readonly<{
     database: D1Database;

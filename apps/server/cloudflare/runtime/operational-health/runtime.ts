@@ -16,12 +16,6 @@ const observedRefusal = (boundary: CoreRejectionBoundary, status: number): boole
   return boundary === "mcp" && status >= badRequestStatus && status < serverErrorStatus;
 };
 
-/**
- * Records concentrated refusal bursts without retaining request metadata. One observer belongs to
- * one Core HTTP assembly or MCP residency. It is deliberately lossy across restarts and
- * distributed traffic. Each detected burst emits closed platform metadata independently of D1;
- * no counter or presence row is retained.
- */
 export const makeCoreRejectionObserver = (): ((
   input: Readonly<{
     status: number;

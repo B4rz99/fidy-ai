@@ -30,7 +30,7 @@ type CollectionQueue = Readonly<{
   send: (work: typeof LocalBillingCollection.Type) => Promise<unknown>;
 }>;
 type CollectionWorkflow = BillingObservationWorkflow;
-/** Identify this Queue payload without interpreting any provider data as authority. */
+
 export const isBillingCollectionWork = (body: unknown): boolean =>
   Option.isSome(
     Schema.decodeUnknownOption(
@@ -85,7 +85,6 @@ const publishBillingEntry = (
     return true;
   });
 
-/** Offer bounded, secret-free work identities. D1 intent remains authoritative on Queue failure. */
 export const dispatchBillingCollection = (
   environment: Readonly<{ DB: D1Database; BILLING_COLLECTION_QUEUE: CollectionQueue }> & {
     readonly identity: Option.Option<string>;
@@ -137,7 +136,6 @@ const receiveCancellation = (
         work,
       });
 
-/** Duplicated Queue messages converge on one deterministic Workflow instance. */
 export const receiveBillingCollection = (
   input: Readonly<{
     environment: BillingWorkRouting &
@@ -167,7 +165,7 @@ const configuredEventEnvironment = (
     env.WOMPI_EVENT_SECRET.startsWith(scope === "sandbox" ? "test_events_" : "prod_events_")
   );
 };
-/** A valid signed event persists only a bounded transaction-id hint, then independently verifies provider evidence. */
+
 export const receiveWompiBillingEvent = (
   input: Readonly<{
     request: Request;
@@ -208,7 +206,7 @@ type BillingWorkflowExecution = Readonly<{
   sleep: (name: string, duration: number) => Promise<void>;
   wompiHttp: WompiTransportFactory;
 }>;
-/** Only a versioned identity enters Workflow state. The named Activity owns the one armed POST. */
+
 export const runBillingCollectionWorkflow = (input: BillingWorkflowExecution): Promise<void> => {
   const event = Schema.decodeUnknownOption(WompiBillingEvent)(input.payload);
   if (Option.isSome(event)) {

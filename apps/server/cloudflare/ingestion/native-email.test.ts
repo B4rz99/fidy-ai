@@ -190,7 +190,6 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const second = yield* emailRecipient(first.runtime, bob);
         const directory = first.owner.directory;
         const expiry = first.owner.now + 86400000;
-        // Fill the two independent budgets up to their last slot.
         yield* native(() =>
           directory.exec(
             "WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<?) INSERT INTO email_capacity_slots SELECT i,1,'fixture-'||i,?,CASE WHEN i<? THEN 'outstanding' ELSE 'retained' END FROM n",
@@ -239,7 +238,6 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           );
         expect(ready).toEqual([{ capacity_settled: 1, outcome: "needs-review" }]);
         expect((yield* refused.send(false, refused.mime + "new")).status).toBe(422);
-        // The retained ceiling still holds after processing freed the outstanding slot.
         yield* native(() =>
           directory.exec(
             "UPDATE email_capacity_slots SET expires_at_ms=0 WHERE slot=?",

@@ -32,8 +32,6 @@ const decode = Effect.fn(function* (request: Request) {
   );
 });
 
-/** A cold, physically empty User can be an interrupted or completed purge.
- * Read the independent case before allocating another schema for that name. */
 export const keepErasedStoreEmpty = Effect.fn(function* (
   userName: Option.Option<string>,
   registry: DurableObjectNamespace

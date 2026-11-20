@@ -48,13 +48,6 @@ const transactionStatement = (
   };
 };
 
-/**
- * Prepare one statement Transaction and its captured historical SourceAttestation. The caller
- * holds the User coordinator and commits both writes with its unique record outcome and assertion
- * in the same D1 batch. Preparation performs no effects; each write rechecks the source owner's
- * complete eligibility query for this explicit User. Category assignment and admission Consent
- * remain with the caller. Retained evidence never substitutes current User preferences.
- */
 export const prepareStatementCapture = (
   input: StatementCaptureInput
 ): ReadonlyArray<D1PreparedStatement> => {
@@ -112,14 +105,6 @@ const prepareEmailAction = (
       prepareQueuedConsentAction({ db: input.db, userId: input.userId, queued, statement }),
   });
 
-/**
- * Prepare one notification-email Transaction and its immutable evidence for the caller's outcome
- * batch under the User coordinator. Both writes recheck same-User source eligibility at commit.
- * Without queuedAdmission they require current Consent; continuation instead rechecks the caller's
- * exact unfinished, unexpired native queue item and historical Consent. The caller must prove its
- * admission under active Consent. Evidence retains its captured revision; malformed evidence fails
- * before any write. Category assignment remains the caller's decision.
- */
 export const prepareNotificationEmailCapture = (
   input: NotificationEmailCaptureInput
 ): Effect.Effect<ReadonlyArray<D1PreparedStatement>, Schema.SchemaError> =>
@@ -162,7 +147,6 @@ export const prepareNotificationEmailCapture = (
     ];
   });
 
-/** A review decision is manual capture; its source context and all User-supplied facts stay explicit. */
 export const prepareReviewedCapture = (
   input: ReviewedCaptureInput
 ): ReadonlyArray<D1PreparedStatement> => {

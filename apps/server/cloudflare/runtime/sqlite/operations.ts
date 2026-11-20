@@ -132,7 +132,6 @@ const tryStep = Effect.fnUntraced(function* ({
 }: Readonly<{ history: StoreHistory; step: StoreMigration; digest: string; release: string }>) {
   const sql = yield* SqliteClient;
   const now = yield* Clock.currentTimeMillis;
-  // A lost reply or crash cannot move the next attempt earlier than a full activation plus its delay.
   const claim =
     yield* sql.withTransaction(sql`INSERT INTO store_migration_attempts(version,release,attempts,retry_at_ms,terminal)
     VALUES(${step.version},${release},1,${now + activationLimitMs + firstRetryMs},0)
@@ -174,7 +173,7 @@ const reportMigrationFailure = Effect.fnUntraced(function* (
     attempts: attempt?.attempts ?? null,
   });
 });
-/** A constructor owns this gate. Reconstructing an object always checks the full retained prefix. */
+
 export const openSqliteStore = Effect.fnUntraced(
   function* (history: StoreHistory, release: string) {
     if (
@@ -227,7 +226,7 @@ const reportAlarm = Effect.fnUntraced(function* ({
   }
 });
 const completedOwnerCheck = 204;
-/** Attach only native schema/capacity evidence to a successful watchdog probe. */
+
 export const observeStoreCheck =
   ({
     storage,
@@ -294,7 +293,7 @@ const makeCapacity = (
   });
   return { measure, observe };
 };
-/** The owner resolves exact retained work and authority inside this transaction before asking to admit new growth. */
+
 export const withStoreAdmission = <Value, Failure, Requirements>(
   run: (
     admitGrowth: Effect.Effect<void, StoreCapacityUnavailable>
@@ -330,7 +329,7 @@ export const withStoreAdmission = <Value, Failure, Requirements>(
       )
       .pipe(Effect.tap(() => capacity.observe.pipe(Effect.ignore)));
   });
-/** A read's required Audit and any bounded continuation keep their existing authority at the growth threshold. */
+
 export const withStoreCapacity =
   (admission: "growth" | "required") =>
   <Value, Failure, Requirements>(
@@ -378,7 +377,6 @@ export const storeReadiness = Effect.fn(function* ({
   return Response.json({ workerVersionId: release, history: markers.map((row) => row.checksum) });
 });
 
-/** Use the owner's existing native transaction. Another family's earlier scheduled alarm is preserved. */
 export const preserveStoreAlarm = Effect.fnUntraced(function* (
   storage: DurableObjectStorage,
   instant: number

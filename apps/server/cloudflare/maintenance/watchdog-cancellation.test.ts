@@ -38,7 +38,6 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           runtime.unsafeGetDurableObjectStorage("core", "Maintenance", { name: maintenanceName })
         );
         for (const delivery of [1, 2]) {
-          // Only the minute admission advances. Both request deadlines and aborts use wall time.
           yield* native(() => registry.exec("UPDATE watchdog_progress SET minute=-1"));
           const tick = yield* native(() =>
             maintenance.fetch(watchdogUrl, {

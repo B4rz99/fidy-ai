@@ -68,7 +68,6 @@ type Change = Readonly<{
   updated: StoredTransaction;
 }>;
 
-/** Decode a bounded correction without treating omitted facts as explicit decisions. */
 export const correctionInput = (
   request: Request
 ): Effect.Effect<Option.Option<typeof Input.Type>> =>
@@ -335,11 +334,6 @@ const preparedCorrection = ({
   };
 };
 
-/**
- * Decide one canonical Transaction correction against live caller authority and the revision the
- * caller observed. The returned statements are guard-chained writes; the caller's D1 unit commits
- * them or none of them.
- */
 export const prepareCorrection = (
   correction: Correction & { current: number }
 ): Effect.Effect<CanonicalMutationPreparation> =>

@@ -4,7 +4,7 @@ import type { OperationalSignal, QueueKind } from "../contract";
 type WorkflowStatusBinding = Readonly<{
   get: (id: string) => Promise<{ status: () => Promise<unknown> }>;
 }>;
-/** Private bindings used only for bounded metadata inspection, never replay or provider calls. */
+
 const Status = Schema.Struct({
   status: Schema.Literals([
     "queued",

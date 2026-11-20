@@ -104,7 +104,7 @@ type Issuance = Readonly<{
   shortId: string;
   bearer: string;
 }>;
-/** Insert a grant, its exact disclosure and metadata-only audit as one D1 unit. */
+
 const commitIssuance = (
   db: D1Database,
   issue: Issuance
@@ -218,7 +218,6 @@ const failedIssuance = (
       : unavailable();
   });
 
-/** Issue one manually reviewed User-owned bearer; failed or repeated ids never reveal it again. */
 export const createManualPAT = ({
   request,
   db,

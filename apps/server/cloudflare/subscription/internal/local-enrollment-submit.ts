@@ -96,7 +96,6 @@ const close = Effect.fn(function* (reg: Registration, reason: string) {
         yield* sql`UPDATE payment_enrollments SET state=${reason === "expired" ? "expired" : "refused"},reason=${reason},next_lookup_ms=NULL WHERE id=${id}`;
       }
       if (reason === "provider-declined") {
-        // The provider can answer after Pricing has already cancelled this commercial admission.
         yield* sql`UPDATE payment_enrollments SET source_creation='settled',state=CASE WHEN state='creating' THEN 'refused' ELSE state END,reason=coalesce(reason,${reason}),next_lookup_ms=NULL WHERE id=${id} AND user_id=${reg.userId} AND source_creation='issued' AND EXISTS(SELECT 1 FROM billing_admissions WHERE operation_id=${reg.operationId} AND subject_id=${id} AND outcome='cancelled')`;
       }
       const [saved] =

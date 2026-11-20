@@ -34,7 +34,6 @@ import { generateBudgetAlerts } from "./budget-generation";
 import { readConsentStatus } from "../../consent/operations";
 import { reconcileBudgetThresholds } from "../../budgets/operations";
 
-/** Category generation runs inside the existing User coordinator, without provider effects or financial backlog replay. */
 export const generateProactivity = (
   input: Readonly<{
     db: D1Database;
@@ -100,7 +99,7 @@ type ProactivityExecution = Readonly<{
   work: Extract<ProactivityActivity, { kind: "proactivity-delivery" }>;
   sender: ProactivityTemplateSender;
 }>;
-/** Frozen report content is claimed once under current purpose, recipient and resource authority. */
+
 export const deliverProactivity = (
   input: ProactivityExecution
 ): Effect.Effect<ProactivityActivityResult, InsightUnavailable> =>

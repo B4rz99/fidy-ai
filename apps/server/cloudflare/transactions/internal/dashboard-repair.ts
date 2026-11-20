@@ -174,7 +174,6 @@ const rebuildPage = (db: D1Database, userId: string, state: typeof State.Type): 
     .then(() => undefined);
 };
 
-/** Repair one User's projection in bounded pages; views stay unavailable until guarded cutover. */
 export const repairDashboardProjection = ({
   db,
   userId,
@@ -223,7 +222,6 @@ export const repairDashboardProjection = ({
     );
   }).pipe(Effect.mapError(() => new ProjectionRepairFailed()));
 
-/** Advance at most four incomplete Users once per private scheduled tick. */
 export const repairDashboardProjections = (
   db: D1Database
 ): Effect.Effect<void, ProjectionRepairFailed> =>

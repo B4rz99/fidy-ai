@@ -1,4 +1,3 @@
-/** The approved bytes and attribution stay in the User until the publication is settled. */
 export const sampleSchema = (): ReadonlyArray<string> => [
   `CREATE INDEX ingest_sample_expiry ON ingest_sample_candidates(expires_at_ms,id)`,
   `CREATE TABLE ingest_sample_previews(candidate_id TEXT PRIMARY KEY REFERENCES ingest_sample_candidates(id) ON DELETE CASCADE,revision INTEGER NOT NULL,digest TEXT NOT NULL,issuer TEXT NOT NULL,operator TEXT NOT NULL,previewed_at_ms INTEGER NOT NULL) STRICT`,

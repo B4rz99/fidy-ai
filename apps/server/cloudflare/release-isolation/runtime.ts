@@ -33,7 +33,7 @@ const pinnedKeys = (request: Request, issuer: string): boolean =>
   /^https:\/\/[a-z0-9-]+\.cloudflareaccess\.com$/u.test(issuer) &&
   request.method === "GET" &&
   request.url === issuer + "/cdn-cgi/access/certs";
-/** A closed installation has no network path to a product provider. Human Access keys still come only from the configured real issuer. */
+
 export const fetchForInstalledRelease = ({
   transport,
   bindings = env,

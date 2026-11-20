@@ -171,7 +171,7 @@ const prepareCapture = Effect.fn(function* (
     }),
   });
 });
-/** Compose the movement, provenance and history read model in the caller's protected SQLite transaction. */
+
 export const prepareLocalCapture = Effect.fnUntraced(function* (
   input: CreateTransactionInput,
   userId: UserId,

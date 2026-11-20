@@ -75,7 +75,6 @@ const refresh = Effect.fn(function* (
   expected: number
 ) {
   const sql = yield* SqliteClient;
-  // An in-progress rebuild must restart if a previously visited member changes.
   const [state] = yield* sql`UPDATE transaction_projection_state SET
     fact_revision=fact_revision+1,
     repair_revision=repair_revision+CASE WHEN readiness='ready' THEN 0 ELSE 1 END,
@@ -307,7 +306,7 @@ export const reconcileLocalTransactions = Effect.fnUntraced(function* (
 ) {
   return yield* prepareLocalPair(input, user, current).pipe(Effect.flatMap(commitLocalWrite));
 });
-/** Removing visibility retains source evidence and updates the financial projections together. */
+
 export const prepareLocalDeletion = Effect.fn(function* (
   id: string,
   user: UserId,

@@ -27,7 +27,6 @@ export class UserStore extends ProductionUserStore {
         sql.exec("SELECT 1 FROM sqlite_schema WHERE name='lose_session_commit_ack'").toArray()
           .length > 0
       ) {
-        // Report a lost transaction acknowledgement only after the real session is durable.
         const transaction = storage.transaction.bind(storage);
         storage.transaction = <Value>(
           callback: (txn: DurableObjectTransaction) => Promise<Value>
@@ -58,7 +57,6 @@ export class UserStore extends ProductionUserStore {
         const { deadline } = sql
           .exec<{ deadline: number }>("SELECT expires_at_ms AS deadline FROM login_email_proofs")
           .one();
-        // This isolated test Worker observes the real digest finishing at the original deadline.
         const originalNow = Date.now;
         const originalDigest = crypto.subtle.digest.bind(crypto.subtle);
         let current = deadline - 1;

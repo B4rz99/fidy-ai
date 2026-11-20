@@ -95,7 +95,6 @@ export const expireQueuedDelivery = (
     Effect.mapError(() => new InsightUnavailable())
   );
 
-/** Metadata-only cleanup selects at most one shared batch and rechecks each deadline/send proof at commit. */
 export const expireDeliveryWork = (
   input: Readonly<{ db: D1Database; now: number }>
 ): Effect.Effect<void, InsightUnavailable> =>
@@ -125,7 +124,7 @@ export const expireDeliveryWork = (
       ])
     );
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
-/** Persist a cumulative restart budget under the existing User coordinator; terminalization cannot authorize or repeat a provider send. */
+
 export const recoverDeliveryWork = (
   input: Readonly<{ db: D1Database; userId: UserId; work: ProactivityDeliveryWork; now: number }>
 ): Effect.Effect<boolean, InsightUnavailable> =>

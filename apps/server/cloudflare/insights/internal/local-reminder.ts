@@ -214,7 +214,6 @@ export const processReminder = Effect.fn(function* (input: {
   if (Option.isSome(candidate) && owns(candidate.value.user_id)) {
     const sql = yield* SqliteClient;
     const original = candidate.value;
-    // Persist retry pressure before the shared request, including a lost allowance reply.
     yield* sql`UPDATE reminder_schedules SET retry_at_ms=${now + secondOfferMs} WHERE user_id=${original.user_id} AND revision=${original.snapshot_json.version} AND next_at_ms<=${now}`;
     if (
       yield* reserveSharedProviderSpend(environment.DIRECTORY, {

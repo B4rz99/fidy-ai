@@ -6,7 +6,6 @@ import { receiveSmoke } from "./runtime/release-smoke/operations";
 
 export { ReleaseSmokeWorkflowV2 } from "./runtime/release-smoke/runtime";
 
-/** Revision-owned private smoke executor and closed provider transport. */
 export default {
   fetch: (
     request: Request,

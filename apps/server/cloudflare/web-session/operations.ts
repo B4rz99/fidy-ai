@@ -30,7 +30,6 @@ import {
   sessionSetCookie as nativeSessionSetCookie,
 } from "./internal/credentials";
 
-/** Digest the one cookie and decode its mounted binding before entering the local transaction. */
 export const readBoundWebSessionProof = (
   request: Request
 ): Promise<Option.Option<{ binding: WebSessionId; digest: Uint8Array }>> => {
@@ -54,10 +53,10 @@ const lookupBoundProof = (input: BoundProof, requireConsent: boolean): BoundWebS
     freshness: "live",
     requireConsent,
   });
-/** Apply current processing Consent to an exact mounted credential. */
+
 export const boundSessionLookup = (input: BoundProof): BoundWebSessionLookup =>
   lookupBoundProof(input, true);
-/** Account security controls remain usable with withdrawn processing Consent. */
+
 export const boundSecuritySessionLookup = (input: BoundProof): BoundWebSessionLookup =>
   lookupBoundProof(input, false);
 
@@ -68,29 +67,19 @@ export const prepareBoundCanonicalWebSession = (
     Option.map((proof) => boundSessionLookup({ ...proof, current: input.current }))
   );
 
-/** Decode only the row returned by the exact prepared lookup; later work must recheck authority. */
 export const resolveBoundCanonicalWebSession = (
   input: Readonly<{ lookup: BoundWebSessionLookup; row: unknown }>
 ): Option.Option<AuthenticatedWebSession> => decodeSessionLookup(input);
 
-/** Compose the exact mounted credential and Consent lookup into its caller's single native read. */
 export const boundCanonicalWebSessionAuthority = (
   lookup: BoundWebSessionLookup
 ): WebSessionAuthority => lookup.authority;
 
-/**
- * Authenticate one browser cookie against authoritative expiry, revocation and optional freshness.
- * Duplicate or malformed credentials fail closed. Resolution neither renews the session nor grants
- * reusable authority; protected work must recheck the returned proof in its own atomic unit.
- */
 export const authenticateWebSession = (
   input: WebSessionAuthentication
 ): Promise<Option.Option<AuthenticatedWebSession>> =>
   authenticate({ ...input, requireConsent: false, binding: Option.none() });
 
-/** Discover the cookie's subject and verify its expected binding in one live lookup.
- * Protected work still rechecks credential authority in its own atomic unit.
- */
 export const authenticateBoundWebSession = (
   input: WebSessionAuthentication
 ): Promise<Option.Option<AuthenticatedWebSession>> => {
@@ -102,35 +91,20 @@ export const authenticateBoundWebSession = (
     : authenticate({ ...input, requireConsent: false, binding });
 };
 
-/**
- * Revoke only the presented credential at the caller's Clock and expire its browser cookie;
- * absence is indistinguishable. Cancellation waits for an already-started revocation to settle.
- */
 export const logoutWebSession = (input: WebSessionRequest): Effect.Effect<Response, void> =>
   logout(input);
 
-/**
- * Consume one approved, unexpired BrowserLoginPairing and issue a fresh independent bearer once.
- * The BrowserLogin owner supplies exact-proof consumption and its bound User projection. Those
- * operations and issuance commit together; replay cannot reissue credentials or change ownership.
- */
 export const establishWebSession = (
   input: WebSessionEstablishment
 ): Effect.Effect<Response, void> => completePairing(input);
 
-/**
- * Renew live browser use within immutable hard expiry at the caller's Clock and return the
- * canonical User projection. Cancellation settles a started renewal or Audit but stops later work.
- */
 export const currentWebSessionUser = (input: WebSessionRequest): Effect.Effect<Response> =>
   currentUser(input);
 
-/** Recheck the exact credential and active Consent inside the metadata/Audit native unit. */
 export const readCurrentWebSessionMetadata = (
   input: Parameters<typeof readMetadata>[0]
 ): ReturnType<typeof readMetadata> => readMetadata(input);
 
-/** Resolve one live or fresh browser session for account-security composition. */
 export const browserSession = (
   input: WebSessionRequest & Readonly<{ input: Readonly<{ current: number; fresh: boolean }> }>
 ): Promise<Option.Option<FreshSessionSubject>> =>
@@ -151,36 +125,29 @@ const inputWithFreshness = (
   freshness: input.input.fresh ? "fresh" : "live",
 });
 
-/** Recheck browser freshness at account-security admission; commit-time guards remain required. */
 export const freshBrowserSession = (
   input: WebSessionRequest & Readonly<{ current: number }>
 ): Promise<Option.Option<FreshSessionSubject>> =>
   browserSession({ ...input, input: { current: input.current, fresh: true } });
 
-/** Resolve canonical browser authority while observing current Consent in the same read. */
 export const authenticateCanonicalWebSession = (
   input: WebSessionRequest & Readonly<{ current: number }>
 ): Promise<Option.Option<AuthenticatedWebSession>> =>
   authenticate({ ...input, freshness: "live", requireConsent: true, binding: Option.none() });
 
-/** Check browser lifetime binding at private HTTP ingress; correlation never replaces the cookie. */
 export const browserSessionBindingResponse = (
   input: WebSessionRequest
 ): Effect.Effect<Option.Option<Response>> => bindingResponse(input);
 
-/** Observe a document entry without renewing it; protected metadata rechecks this exact proof. */
 export const readWebSessionEntry = (
   input: Parameters<typeof observeEntry>[0]
 ): ReturnType<typeof observeEntry> => observeEntry(input);
 
-/** Compose canonical browser metadata in bootstrap or profile's native transaction. */
 export const prepareBrowserMetadata: typeof prepareMetadata = (input) => prepareMetadata(input);
 
-/** Exact credential-only preparation for bootstrap and privacy observations. */
 export const prepareBrowserSessionLookup: typeof prepareBrowserLookup = (input) =>
   prepareBrowserLookup(input);
 
-/** Prepare exact entry binding and credential-only signed-out classification in one snapshot. */
 export const prepareBrowserEntryLookup: typeof prepareEntryLookup = (input) =>
   prepareEntryLookup(input);
 

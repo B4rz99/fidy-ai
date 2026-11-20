@@ -11,7 +11,7 @@ const RetainedLifetime = Schema.Struct({
   grantExpiresAt: Schema.DateTimeUtcFromMillis,
   pro: Schema.Literals([0, 1]),
 });
-/** Resolve current MCP admission and real retained expiry through the OAuth owner's live guard. */
+
 export const mcpCallerSnapshot = (
   input: Readonly<{ db: D1Database; subject: OAuthCaller; current: number }>
 ): Effect.Effect<Option.Option<OAuthMcpCallerFacts>, OAuthMcpCallerUnavailable> =>

@@ -173,7 +173,6 @@ const executeScheduledSummary = (
     });
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
 
-/** Construct approved senders only at the native composition publication. */
 export const executeProactivityWork = (
   input: Readonly<{
     environment: ProactivityEnvironment;
@@ -341,7 +340,6 @@ const publishProactivityWork = (
     );
   });
 
-/** Maintenance discovers only bounded identities. All generation and delivery run in the User coordinator; failures never skip unrelated cleanup or publication. */
 export const advanceProactivityWork = (
   environment: ProactivityBackgroundEnvironment
 ): Effect.Effect<void, InsightUnavailable> =>
@@ -365,7 +363,6 @@ export const advanceProactivityWork = (
     Effect.withSpan("insights.weekly.dispatch")
   );
 
-/** Queue contents are untrusted hints; Workflow identity deduplication never replaces User-owned guards. */
 export const startProactivityWorkflow = (
   input: Readonly<{
     body: unknown;
@@ -399,7 +396,6 @@ export const startProactivityWorkflow = (
     }
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
 
-/** Per-message acknowledgment follows durable Workflow handoff; failures remain eligible for bounded native retries. */
 export const receiveProactivityWork = (
   input: Readonly<{
     messages: ReadonlyArray<Pick<Message<unknown>, "body" | "ack" | "retry">>;
@@ -467,7 +463,6 @@ const runProactivityWorkflow = ({
     )
   );
 
-/** Native Workflow persists identities and wake-up instants only; every wake rechecks live User authority. */
 export class ProactivityDeliveryWorkflow extends WorkflowEntrypoint<
   Pick<UserStoreBindings, "USER_STORE">,
   ProactivityDeliveryWork

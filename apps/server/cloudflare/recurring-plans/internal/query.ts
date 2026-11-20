@@ -134,7 +134,6 @@ export const automaticProjection = ({
   now,
 }: ProjectionWork): Effect.Effect<AutomaticProjection> =>
   Effect.gen(function* () {
-    // No automatic matching candidate can exist without a retained plan.
     if (document.plans.length === 0) {
       return { document, complete: true, unambiguous: true, matches: [] };
     }
@@ -211,7 +210,6 @@ const matchCandidates = ({
   return pairs;
 };
 
-/** Reuse date conversion only within this projection; never retain live facts between reads. */
 export const automaticMatches = (
   input: Parameters<typeof matchCandidates>[0]
 ): ReturnType<typeof uniqueRecurringMatches> => uniqueRecurringMatches(matchCandidates(input));

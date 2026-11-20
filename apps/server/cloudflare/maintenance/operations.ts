@@ -17,11 +17,6 @@ import type { StoreHistory } from "../runtime/sqlite/contract";
 import { Cause, Clock, Effect, Exit, Option, Schema } from "effect";
 import { activityDue } from "./internal/cadence";
 
-/**
- * Attempt independent activities in order and report a closed failure only after the last one.
- * Interruption stops the schedule and preserves owner cleanup rather than becoming a work failure.
- * Each owner still decides eligibility and retention; successful scheduling grants no authority.
- */
 export const executeSchedule = <E>(
   activities: ReadonlyArray<ScheduledActivity<E>>
 ): Effect.Effect<void, ScheduledWorkFailed> =>
@@ -50,7 +45,6 @@ export const executeDueSchedule = <E>(
     )
   );
 
-/** Immutable Maintenance migrations. */
 export const maintenanceStoreHistory: StoreHistory = {
   owner: "maintenance",
   steps: [
@@ -102,8 +96,7 @@ export const maintenanceStoreHistory: StoreHistory = {
 };
 
 const conflictStatus = 409;
-// A delayed register can reach Maintenance only within this window. Erasure may discard the
-// retired fence after this and the other original windows have closed and retirement is acknowledged.
+
 const maximumRegistrationAgeMs = 60_000;
 
 const acknowledgement = (matched: boolean): Response =>

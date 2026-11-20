@@ -293,7 +293,6 @@ export const prepareLocalErasureRegistry = <Requirements>(
 ): Effect.Effect<void, ErasureUnavailable, Requirements> =>
   initializeRegistryStorage({ ...input, mode: "LocalStartup" });
 
-
 const localClasses = [
   "transactions",
   "memory",

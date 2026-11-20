@@ -53,7 +53,6 @@ const recoveredDeliverySubject = (
   bsuid: delivery.bsuid,
 });
 
-/** Once a provider call might have begun, interruption is no longer an honest delivery outcome. */
 export const recoverWhatsAppDelivery = ({
   db,
   userId,
@@ -165,7 +164,6 @@ const expiredChannelOutbox = `UPDATE hosted_turns AS hosted_whatsapp_outbox SET 
   SELECT o.rowid FROM channel_retention_turns AS t CROSS JOIN (SELECT rowid,id AS turn_id,user_id,dispatch_offered_at_ms AS offered_at_ms,dispatch_created_at_ms AS created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL AND dispatch_created_at_ms IS NOT NULL) AS o
   WHERE o.user_id=t.user_id AND o.turn_id=t.id LIMIT 100)`;
 
-/** Expire only terminal channel evidence older than the approved thirty-day retention, for one explicit User. */
 export const expireWhatsAppEvidence = ({
   db,
   userId,
@@ -226,12 +224,12 @@ export const expireWhatsAppEvidence = ({
       }),
     ])
   ).pipe(Effect.asVoid);
-/** Permit Interrupted only while this same Pending hosted_turns row has no begun channel send. */
+
 export const whatsAppInterruptionGuard =
   (): string => `AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS d
           WHERE d.turn_id = hosted_turns.id AND d.user_id = hosted_turns.user_id
             AND d.send_started_at_ms IS NOT NULL)`;
-/** Require verified visible delivery before this same hosted_turns row can become Completed. */
+
 export const whatsAppCompletionGuard = (
   status: string
 ): Readonly<{ sql: string; bindings: ReadonlyArray<string> }> => ({
@@ -243,12 +241,12 @@ export const whatsAppCompletionGuard = (
             AND d.state = 'delivered'))`,
   bindings: [status, status],
 });
-/** Same-User proposal times for bounded abandoned-Turn recovery; never a delivery receipt. */
+
 export const whatsAppProposalTimes = (userId: UserId): OwnedStatement => ({
   sql: "SELECT turn_id AS turnId, proposed_at_ms AS proposedAtMs FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS hosted_whatsapp_delivery WHERE user_id = ?",
   params: [userId],
 });
-/** Compose removal of one Turn's queued identity with the owner's terminal or interruption unit. */
+
 export const prepareWhatsAppWorkCleanup = ({
   db,
   userId,
@@ -276,6 +274,5 @@ export const prepareWhatsAppWorkCleanup = ({
         )
         .bind(turnId, userId);
 
-/** Bounded sweep ordering for its enclosing hosted_turns alias t; the caller keeps its due predicates and limit. */
 export const whatsAppRecoveryPriority = (): string =>
   `COALESCE((SELECT created_at_ms FROM (SELECT rowid,id AS turn_id,user_id,dispatch_offered_at_ms AS offered_at_ms,dispatch_created_at_ms AS created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL AND dispatch_created_at_ms IS NOT NULL) AS hosted_whatsapp_outbox WHERE turn_id = t.id AND user_id = t.user_id), t.started_at_ms)`;

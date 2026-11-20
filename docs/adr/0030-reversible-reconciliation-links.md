@@ -53,3 +53,14 @@ An explicit authorized link still requires equal exact Money, Currency and direc
 decision resolves timing ambiguity. A field decision includes intentionally clearing Counterparty
 or notes, so automatic fact selection cannot replace that absence with an older value. The
 inspection surface reads the effective Transaction and its retained originals in one snapshot.
+
+Filter, order and page the effective relation. During projection repair, retained source
+history can supply the effective view only when readiness and facts are read together.
+Reuse the same User proof on every path. Expose compound ordering keys to SQLite while
+dropping them from canonical row decoding. Browser literal search folds the supported
+Spanish capitals explicitly because SQLite's ordinary lowercase function handles ASCII.
+
+Group correction fences the complete selected revision and fails atomically on a missing
+or stale member. Accepted deletion removes visibility while preserving retained provenance
+and updating derived projections. Treat an indexed intra-unit revision repeat as attributable.
+An arbitrary premise changed only inside a rolled-back unit can remain unobservable.

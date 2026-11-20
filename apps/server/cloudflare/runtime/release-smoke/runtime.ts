@@ -9,7 +9,6 @@ import {
   workerRelease,
 } from "../telemetry/operations";
 
-/** Native execution output is the completion receipt; only immutable release metadata is retained. */
 export class ReleaseSmokeWorkflowV2 extends WorkflowEntrypoint<SmokeExecutorEnvironment, unknown> {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<SmokeCompletion> {
     const environment = this.env;

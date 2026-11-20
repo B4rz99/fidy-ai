@@ -53,22 +53,18 @@ import { sweepExpiredUploadAdmission as sweepUploadAdmission } from "./internal/
 import { sweepMedia } from "./internal/media-retention";
 import { expireStatementReviewEvidence as expireReview } from "./internal/statement-review-retention";
 
-/** Bounded inactive-User cleanup of expired media locators, held capacity and aged accountability. */
 export const sweepMediaSubmissions: typeof sweepMedia = (input) => sweepMedia(input);
 
-/** Reoffer committed extraction identities directly to their Workflow, with Queue fallback. */
 export const dispatchStatementExtraction = (
   input: StatementDispatchBindings
 ): Effect.Effect<void, StatementDeliveryUnavailable> =>
   dispatchStatements({ ...input, userId: Option.none() });
 
-/** A User's durable alarm discovers only that User's retained publication intents. */
 export const dispatchUserStatementExtraction = (
   input: StatementDispatchBindings & Readonly<{ userId: UserId }>
 ): Effect.Effect<void, StatementDeliveryUnavailable> =>
   dispatchStatements({ ...input, userId: Option.some(input.userId) });
 
-/** Recover one bound User's unfinished work; either ordinary phase failure still permits the other phase. */
 export const recoverUserStatementExtraction = (
   input: StatementDispatchBindings &
     Readonly<{
@@ -98,28 +94,27 @@ export const recoverUserStatementExtraction = (
     if (Exit.isFailure(reconciliation)) return yield* Effect.failCause(reconciliation.cause);
   });
 
-/** Supply a coordinator-owned durable wake-up; absent or failed wake-ups retain cron recovery. */
 export const withStatementPublicationWake: typeof withPublicationWake = (schedule) =>
   withPublicationWake(schedule);
-/** Decode Queue work and check current owner state before handing the stable identity to its Workflow. */
+
 export const receiveStatementExtraction: typeof receiveStatements = (input) =>
   receiveStatements(input);
 export const receiveNativeStatementExtraction: typeof receiveOwnedStatements = (input) =>
   receiveOwnedStatements(input);
-/** Settle stalled extraction under its existing User coordinator, retaining visible partial accounting. */
+
 export const reconcileStatementExtraction: typeof reconcileStatements = (input) =>
   reconcileStatements(input);
-/** Execute the existing bounded, versioned activities without retaining financial content in history. */
+
 export const executeStatementExtraction: typeof runStatementExtractionWorkflow = (input) =>
   runStatementExtractionWorkflow(input);
-/** Select the statement protocol without treating a Queue identity as authority. */
+
 export const isStatementExtractionWork = (body: unknown): boolean => recognizesStatement(body);
-/** Route decoded receipt identity to its User coordinator; failed handoff remains retryable. */
+
 export const receiveForwardedEmailWork: typeof receiveEmailWork = (input) =>
   receiveEmailWork(input);
-/** Select the forwarded-email protocol without granting permission to read its material. */
+
 export const isForwardedEmailWork = (body: unknown): boolean => recognizesEmail(body);
-/** Build only bounded retention activities; raw R2 reads and staging repositories remain private. */
+
 export const statementRetention = (
   input: Readonly<{ database: D1Database; bucket: R2Bucket; nowEpochMs: () => number }>
 ): Readonly<{
@@ -141,7 +136,6 @@ export const statementRetention = (
 
 type StatementCoordinator = Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
 
-/** Cloudflare stores only the bounded work identity and the named activity outcome. */
 export class StatementExtractionWorkflowV1 extends WorkflowEntrypoint<
   Readonly<{ USER_STORE: StatementCoordinator }>,
   unknown
@@ -164,9 +158,6 @@ export class StatementExtractionWorkflowV1 extends WorkflowEntrypoint<
   }
 }
 
-/** Retained receipt/storage protocol with bounded bytes and Consent checks. This does not
- * verify an institution; native production delivery remains refused at the Email Worker boundary.
- */
 export const receiveForwardedEmail = ({
   message,
   environment,
@@ -176,11 +167,9 @@ export const receiveForwardedEmail = ({
 }>): ReturnType<typeof acceptPrivateEmail> =>
   acceptPrivateEmail(message, environment).pipe(Effect.withSpan("forwarded-email.receive"));
 
-/** Remove only expired Ingestion upload-admission records; live spend and other owners remain intact. now is the decision instant in Unix epoch milliseconds. */
 export const sweepExpiredUploadAdmission: typeof sweepUploadAdmission = (input) =>
   sweepUploadAdmission(input);
 
-/** Clear expired personal review evidence while retaining classification and conserved accounting. */
 export const expireStatementReviewEvidence: typeof expireReview = (input) => expireReview(input);
 
 export const sweepReviewDrafts = (

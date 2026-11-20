@@ -56,7 +56,6 @@ type TextInbound = WebhookInbound &
     };
   }>;
 
-/** Bound the actual streamed raw bytes, not the untrusted Content-Length claim. */
 const boundedBody = (request: Request): Effect.Effect<Option.Option<Uint8Array>, void> => {
   const stream = request.body;
   if (stream === null) return Effect.succeedSome(new Uint8Array());
@@ -88,7 +87,6 @@ const boundedBody = (request: Request): Effect.Effect<Option.Option<Uint8Array>,
         try {
           reader.cancel().catch(() => undefined);
         } catch {
-          // Foreign cancellation must not prevent releasing the owned reader lock.
         }
       }).pipe(
         Effect.ensuring(
@@ -304,7 +302,6 @@ const handleInbound = (
       })
     );
     if (Exit.isFailure(decoded)) return yield* routeIdentityChange(base, environment);
-    // Never partially settle a buffered retry delivery or re-admit stale signed events.
     if (decoded.value.events.length !== 1) return answer(HTTP_UNPROCESSABLE);
     if (
       DateTime.toEpochMillis(decoded.value.events[0].occurredAt) + maxInitiatingEventAgeMs <=
@@ -325,7 +322,6 @@ const handleInbound = (
     if (input.event.content._tag === "Document") {
       return yield* routeDocument(environment, input, input.event.content.mediaId);
     }
-    // Only typed text may operate the pre-User Consent and credential control surface.
     if (input.event.content._tag !== "Text") {
       const hosted = yield* routeHostedInbound(environment, input);
       return Option.isSome(hosted) ? hosted.value : answer(HTTP_UNPROCESSABLE);
@@ -425,11 +421,9 @@ const workerDigest = Effect.runSync(Digest.Digest.pipe(Effect.provide(Digest.lay
 const answer = (status: number): Response =>
   new Response(null, { status, headers: { "cache-control": "no-store" } });
 
-/** Keep foreign I/O failures distinct from an absent result; the ingress maps them to 503. */
 const attempt = <A>(run: () => Promise<A>): Effect.Effect<A, void> =>
   Effect.tryPromise({ try: run, catch: () => undefined });
 
-/** One authenticated, bounded provider ingress. No decision can bypass provider delivery proof. */
 export const receiveIngress =
   (environment: Environment): ((request: Request) => Effect.Effect<Response>) =>
   (request) =>

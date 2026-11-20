@@ -65,11 +65,7 @@ const Failure = Schema.Struct({
 });
 const serialized = (value: unknown): string =>
   Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))(value);
-/**
- * Independent restatement of the retained-capacity metric: the UTF-8 byte length of the LF-joined
- * `{id,text}` JSON projections the Memory owner bounds. Written from that specification rather than
- * by calling the production projection it is meant to check.
- */
+
 const retainedAggregateBytes = (memories: ReadonlyArray<Memory>): number =>
   new TextEncoder().encode(
     memories.map(({ id, text }) => `{"id":"${id}","text":"${text}"}`).join("\n")

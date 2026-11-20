@@ -9,7 +9,7 @@ import { webSessionIdleRenewalCandidate } from "../../../src/core/web-session/op
 import { attempt, uuid } from "./support";
 
 type Input = Readonly<{ db: D1Database; subject: AuthenticatedWebSession }>;
-/** The same prepared observation also serves callers that already resolved their exact subject. */
+
 export const readMetadata = (
   input: Input
 ): Effect.Effect<Option.Option<typeof CurrentUserMetadata.Type>, void> =>
@@ -34,7 +34,6 @@ export const readMetadata = (
     return yield* prepared.decode(rows);
   });
 
-/** Prepare the same metadata observation before resolving the exact cookie's User. */
 export const prepareBrowserMetadata = ({
   db,
   lookup,

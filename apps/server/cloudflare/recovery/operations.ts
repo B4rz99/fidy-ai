@@ -37,11 +37,6 @@ import {
   sampleRecoveryCode as nativeSampleRecoveryCode,
 } from "./internal/material";
 
-/**
- * Generate emergency proof for this verified new User, disclosing it only after the caller's
- * complete enrollment unit commits. Only its digest enters storage; send the returned code once
- * in the immediate no-store enrollment response, never to logs, durable work or another owner.
- */
 export const issueInitialBackupRecoveryCode = ({
   db,
   userId,
@@ -62,15 +57,9 @@ export const issueInitialBackupRecoveryCode = ({
     .then(() => code);
 };
 
-/** Replace the exact User's emergency proof under current fresh-session authority, disclosed once. */
 export const rotateBackupRecoveryCode = (input: RecoveryRequest): Promise<Response> =>
   rotate(input);
 
-/**
- * Verify the operator and consume an unused code in the exact pending pairing's atomic tracked
- * decision. The code's existing User cannot be substituted; approval never creates a User,
- * changes WhatsAppIdentity or creates a session without the browser's independent verifier.
- */
 export const handleSupportRecovery = (
   input: SupportRecoveryRequest
 ): Effect.Effect<Response, never, HttpClient.HttpClient> =>
@@ -82,7 +71,6 @@ export const handleSupportRecovery = (
     return yield* handleSupport({ ...input, http });
   });
 
-/** Retained case evidence keeps its referenced pairing even when the browser never redeems it. */
 export const retainedRecoveryPairingsQuery = (): OwnedStatement => ({
   sql: "SELECT pairing_id AS pairingId FROM support_recovery_cases",
   params: [],
@@ -94,7 +82,7 @@ export const sampleRecoveryCode: typeof nativeSampleRecoveryCode = (...args) =>
   nativeSampleRecoveryCode(...args);
 
 const limitedStatus = 429;
-/** Core verifies the dedicated Access assertion before any support admission or User lookup. */
+
 export const nativeSupportRecovery = Effect.fn(function* (input: {
   request: Request;
   config: SupportAccessConfiguration;

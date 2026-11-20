@@ -22,7 +22,7 @@ const okStatus = 200;
 const admissionWindowMs = 60_000;
 const maximumSweepRows = 500;
 const retainedAttemptMilliseconds = 86_400_000;
-/** Removes expired provider protocol state after one day; durable credentials and Consent remain owned by their records. */
+
 export const sweepProviderAuthentication = ({
   db,
   current,
@@ -94,7 +94,7 @@ const sendInvitation = Effect.fn(function* (
   }
   return new Response(null, { status: 200 });
 });
-/** Send only after the Directory atomically admits the exact authenticated chat and claims its invitation. */
+
 export const routeNativeInvitation = Effect.fn(
   function* (environment: WhatsAppIngressEnvironment, inbound: WhatsAppAuthenticatedInbound) {
     const { event } = inbound;

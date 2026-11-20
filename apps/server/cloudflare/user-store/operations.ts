@@ -22,7 +22,6 @@ import { UserId } from "../../src/core/identity/contract";
 
 import type { StoreHistory } from "../runtime/sqlite/contract";
 
-/** Initial User-store schema. Schema creation grants no identity, credential or Consent. */
 const sourceTable = `CREATE TABLE source_attestations (
  id TEXT PRIMARY KEY NOT NULL, user_id TEXT NOT NULL, transaction_id TEXT NOT NULL,
  kind TEXT NOT NULL CHECK(kind IN ('manual','statement-line','notification-email')),
@@ -315,7 +314,6 @@ SELECT user_id,id,amount,currency,direction,counterparty,category_id,notes,occur
 ) STRICT`,
 ] as const;
 
-/** User schema v2. Existing references were written under the one Colombian launch revision. */
 const categoryTaxonomyMigration = [
   `ALTER TABLE transactions ADD COLUMN category_revision TEXT NOT NULL DEFAULT 'co-1'`,
   `ALTER TABLE transaction_projection_leaf ADD COLUMN category_revision TEXT NOT NULL DEFAULT 'co-1'`,
@@ -431,7 +429,6 @@ SELECT user_id,id,amount,currency,direction,counterparty,category_id,notes,occur
   ) STRICT`,
 ] as const;
 
-/** Immutable User-store step extending the existing Subscription standing tables for cancellation. */
 const sourceCancellationSchema = [
   "ALTER TABLE payment_sources ADD COLUMN method TEXT CHECK(method IN ('card','nequi','daviplata'))",
   "ALTER TABLE payment_sources ADD COLUMN wompi_source_id INTEGER CHECK(wompi_source_id>0)",
@@ -492,7 +489,6 @@ const canonicalCaptureMigration = [
   `CREATE INDEX canonical_receipt_expiry ON canonical_request_receipts(accepted_at_ms)`,
 ] as const;
 
-/** Broaden the safe result allowlist without changing the schema history or any original retry window. */
 const cancellationReceiptMigration = [
   `CREATE TRIGGER retained_source_identity BEFORE UPDATE OF id,subscription_id,method,wompi_source_id,wompi_environment ON payment_sources
     WHEN EXISTS (SELECT 1 FROM subscription_cancellations WHERE payment_source_id=OLD.id)
@@ -586,7 +582,6 @@ WHEN (SELECT COUNT(*) FROM budgets WHERE user_id = NEW.user_id) >= 128
 BEGIN SELECT RAISE(ABORT, 'budget_capacity_limit'); END`,
 ] as const;
 
-/** Per-User financial contributions and exact base-ten rollups, installed together with their initial facts. */
 const dashboardSchema = [
   `ALTER TABLE canonical_request_receipts RENAME TO receipts_before_dashboard`,
   `CREATE TABLE canonical_request_receipts (
@@ -871,7 +866,6 @@ const connectionReceipts = [
   `CREATE INDEX canonical_receipt_expiry ON canonical_request_receipts(accepted_at_ms)`,
 ] as const;
 
-/** Preserve the original adjustment record while installing sandbox refund intent, claims and verified settlement. */
 const refundSchema: ReadonlyArray<string> = [
   `ALTER TABLE refund_attempts ADD COLUMN intent_json TEXT CHECK(intent_json IS NULL OR json_valid(intent_json))`,
   `ALTER TABLE refund_attempts ADD COLUMN user_id TEXT GENERATED ALWAYS AS (json_extract(intent_json,'$.userId')) VIRTUAL REFERENCES users(id)`,
@@ -1294,7 +1288,6 @@ export const userStoreHistory: StoreHistory = {
   ],
 };
 
-/** Complete each bounded family independently; a failed check remains distinguishable from an empty page. */
 type RecoveryFamily<E, R> = Effect.Effect<Readonly<{ attempted: number; failed: number }>, E, R>;
 export const recoverUserWork = <E, R>(
   jobs:
@@ -1336,7 +1329,6 @@ export const recoverUserWork = <E, R>(
     })
   );
 
-/** An empty store has no work. Its reserved bootstrap registers independently before creating the User. */
 export const observeUserRegistration = Effect.fn(function* (
   maintenance: Pick<DurableObjectNamespace, "getByName">,
   owns: (id: string) => boolean,
@@ -1377,6 +1369,5 @@ export const observeUserRegistration = Effect.fn(function* (
   return confirmed.length === 1 ? ("registered" as const) : ("unavailable" as const);
 });
 
-/** Register a reserved lifetime before any enrollment can activate locally. */
 export const registerUserLifetime: typeof registerReservedLifetime = (maintenance, userId) =>
   registerReservedLifetime(maintenance, userId);

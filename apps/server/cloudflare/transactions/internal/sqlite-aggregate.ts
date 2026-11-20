@@ -56,7 +56,6 @@ const aggregateRow = Effect.fn(function* (
   });
 });
 
-/** Read the same effective relation as history in bounded pages inside the caller's native snapshot. */
 export const readLocalTransactionAggregate = Effect.fn(function* (
   user: UserId,
   from: number,

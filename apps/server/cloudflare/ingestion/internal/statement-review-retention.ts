@@ -3,7 +3,6 @@ import { StatementProcessingUnavailable } from "../contract";
 
 export const maximumRetainedReviewEvidence = 5_000;
 
-/** Expire raw review material while retaining the item, classification and accounting. */
 export const expireStatementReviewEvidence = ({
   DB,
 }: Readonly<{ DB: D1Database }>): Effect.Effect<void, StatementProcessingUnavailable> =>

@@ -132,7 +132,6 @@ const preparedDeletion = ({
   };
 };
 
-/** Prepare permanent visibility removal with revision, live authority, and unlinked-original guards. */
 export const prepareDeletion = ({
   db,
   subject,

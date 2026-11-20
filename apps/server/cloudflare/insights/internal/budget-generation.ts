@@ -121,7 +121,7 @@ const commitGroup = (
     );
     yield* Effect.tryPromise(() => input.db.batch(statements));
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
-/** Freeze published detection facts once; even an ineligible crossing retains its InsightEvents. */
+
 export const generateBudgetAlerts = (input: Scope): Effect.Effect<void, InsightUnavailable> =>
   Effect.gen(function* () {
     const groups = yield* readBudgetCrossingGroups(input);

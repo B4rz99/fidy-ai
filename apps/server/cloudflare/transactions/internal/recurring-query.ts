@@ -175,7 +175,6 @@ export const revisionProjection = ({
     )
     .bind(...statement.params);
 
-/** The enclosing UserStore transaction guards live Consent and keeps this revision stable. */
 export const localFactSnapshot = Effect.fn(function* (user: UserId) {
   const sql = yield* SqliteClient;
   const [row] =

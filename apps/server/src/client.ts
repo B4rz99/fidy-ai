@@ -1,8 +1,3 @@
-/**
- * Browser-safe view of the server-owned canonical surface. The `@fidy/server/client`
- * package export points here; callers derive their own client adapter, such as AtomHttpApi.Service,
- * from this one `FidyApi` value and provide the returned client authorization layer.
- */
 export {
   makeTokenAuthorizationClientLive,
   TokenAuthorizationClientAnonymousLive,

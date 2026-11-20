@@ -38,7 +38,6 @@ import type { PATMetadataQuery } from "../contract";
 
 export { createManualPAT } from "./pat-manual";
 
-/** Decode the browser transport only; listing below owns the live proof, snapshot and Audit. */
 export const listPATs = (
   input: Readonly<{ request: Request; db: D1Database }>
 ): Effect.Effect<Response, Cause.UnknownError> =>
@@ -51,7 +50,6 @@ export const listPATs = (
     return yield* listPATsForCaller({ db: input.db, subject: subject.value });
   });
 
-/** List only active, same-User safe metadata while rechecking the exact caller proof in D1. */
 export const listPATsForCaller = ({ db, subject }: PATMetadataQuery): Effect.Effect<Response> =>
   Effect.gen(function* () {
     if ("patId" in subject) return unauthorized();
@@ -106,7 +104,6 @@ const revokedPATResponse = (
     return record.value.revoked_at_ms === null ? unavailable() : canonical({ shortId });
   });
 
-/** Idempotently revoke one owned PAT; foreign and unknown ids are indistinguishable. */
 export const revokePAT = ({
   request,
   db,
@@ -148,7 +145,6 @@ export const revokePAT = ({
     );
   });
 
-/** Revoke all active grants and close every unclaimed approval under one WebSession check. */
 export const revokeAllPATs = ({
   request,
   db,

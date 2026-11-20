@@ -63,7 +63,6 @@ const contractReferencePolicy = ({
     : Option.none();
 };
 
-// SchemaRepresentation's foreign policy uses undefined for inline candidates, not JSON null.
 const openApiReferencePolicy = ({
   ast,
   identifier,

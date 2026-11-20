@@ -173,7 +173,6 @@ const acceptedAudit = ({
   return db.prepare(auditStatement.sql).bind(...auditStatement.params);
 };
 
-/** The guarded writes one accepted Memory mutation commits, in order, before its assertion. */
 const acceptedStatements = ({
   db,
   subject,
@@ -199,11 +198,6 @@ const acceptedStatements = ({
   return [mutation, acceptedAudit({ db, subject, operation, current })];
 };
 
-/**
- * Decide one canonical `memory.remember` against live caller authority and the complete aggregate
- * capacity. The returned statements are guard-chained writes; the caller's
- * D1 unit commits them or none of them.
- */
 export const prepareRemember = ({
   db,
   subject,
@@ -260,7 +254,6 @@ export const prepareRemember = ({
     } as const;
   }).pipe(Effect.orElseSucceed(failedPreparation));
 
-/** The guarded replacement write and its success AuditLogEntry for one admitted revision. */
 const reviseMutation = ({
   db,
   subject,
@@ -302,10 +295,6 @@ const reviseMutation = ({
   };
 };
 
-/**
- * Decide one canonical `memory.revise`: the addressed Memory must be current and the resulting
- * complete aggregate must fit the same capacity. The unit commits the replacement or nothing.
- */
 export const prepareRevise = ({
   db,
   subject,
@@ -364,10 +353,6 @@ export const prepareRevise = ({
     } as const;
   }).pipe(Effect.orElseSucceed(failedPreparation));
 
-/**
- * Decide one canonical `memory.forget`. An absent or foreign identifier changes no row, so the
- * owner assertion aborts the unit and the caller is classified rather than told which case it was.
- */
 export const prepareForget = ({
   db,
   subject,
@@ -424,7 +409,6 @@ export const prepareForget = ({
     } as const;
   }).pipe(Effect.orElseSucceed(failedPreparation));
 
-/** Record one refused Memory mutation the Worker decided before dispatching protected work. */
 export const rejectMemoryMutation = ({
   db,
   subject,
@@ -529,7 +513,6 @@ const recallStatements = ({
   return [statement, browserRecallAudit({ db, subject, current })];
 };
 
-/** Classify a recall unit whose read or live-authority audit row did not commit. */
 const recallRefused = ({
   db,
   subject,
@@ -543,7 +526,6 @@ const recallRefused = ({
     return live ? memoryUnavailable() : yield* refusedCredentialResponse({ db, subject });
   });
 
-/** The projection rows one committed recall unit returned, or None when its audit did not commit. */
 const recallRows = (
   committed: ReadonlyArray<D1Result>,
   subject: QueryCaller
@@ -555,7 +537,6 @@ const recallRows = (
     : Option.some(rows.results);
 };
 
-/** Read every current Memory of the caller and account for it in the same D1 unit. */
 export const recallMemories = ({
   db,
   subject,
@@ -594,12 +575,6 @@ export const recallMemories = ({
     );
   }).pipe(Effect.orElseSucceed(memoryUnavailable));
 
-/**
- * Load only current Memory prose for one explicitly authorized hosted context. The supplied live
- * authority must project semantic userId; it is correlated again to the requested User. A borrowed
- * subject returns no prose and a malformed aggregate is unavailable, never partially decoded.
- * Admission owns the Consent timing for the Turn; this read grants no new model or tool authority.
- */
 export const readMemoryContext = (
   input: Readonly<{
     db: D1Database;
@@ -611,7 +586,6 @@ export const readMemoryContext = (
     Effect.map(Option.map((memories) => memories.map(({ text }) => ({ text }))))
   );
 
-/** Prepare metadata-only refusal evidence for an invalid canonical Memory input. */
 export const invalidMemoryInput = (
   input: Readonly<{
     db: D1Database;

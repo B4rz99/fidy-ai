@@ -18,7 +18,7 @@ import { chargeLocalProvider } from "../../resource-admission/operations";
 import { newId } from "../../secret-material/operations";
 
 type Work = typeof DeliverySend.Type;
-/** Atomically consumed with the channel's irreversible send claim, after the shared spend grant. */
+
 export const claimPurpose = Effect.fn(function* (
   work: Work,
   enabled: { category: boolean; weekly: boolean }

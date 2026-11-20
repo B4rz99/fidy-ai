@@ -2,7 +2,7 @@ import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Clock, Effect } from "effect";
 
 const uncertaintyLimit = 33;
-/** Indexed oldest samples count unresolved claims separately from scheduled work. Counts saturate at 33. */
+
 export const inspectUncertainty = Effect.gen(function* () {
   const sql = yield* SqliteClient;
   const now = yield* Clock.currentTimeMillis;
@@ -12,7 +12,6 @@ export const inspectUncertainty = Effect.gen(function* () {
     UNION ALL SELECT 'billing',count(*),min(collection_sent_at_ms) FROM (SELECT collection_sent_at_ms FROM billing_attempts WHERE collection_state='sent' AND status='pending' ORDER BY collection_sent_at_ms LIMIT 33)
     UNION ALL SELECT 'whatsapp',count(*),min(started_ms) FROM (SELECT started_ms FROM whatsapp_deliveries WHERE state IN ('sending','accepted','ambiguous') ORDER BY started_ms LIMIT 33)
 `;
-  // Original writers retain the last check, which cannot establish the age of their claim.
   const writers =
     yield* sql`SELECT 'sample' family,count(*) samples,min(decided_at_ms) oldest FROM (SELECT d.decided_at_ms FROM (SELECT sample_id FROM ingest_sample_reservations LIMIT 33) r JOIN ingest_sample_decisions d ON d.sample_id=r.sample_id)
     UNION ALL SELECT 'original-write',count(*),NULL FROM (SELECT nonce FROM original_writers LIMIT 33)`;

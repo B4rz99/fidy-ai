@@ -26,7 +26,6 @@ export type NativeAcceptanceSettings = Partial<
   }>
 >;
 
-/** The closed provider owns its subjects and secrets for the lifetime of its installation. */
 export const acceptanceProviderRevision = (settings: NativeAcceptanceSettings): string =>
   settings.ACCEPTANCE_PROVIDER_REVISION ?? settings.RELEASE_GIT_SHA ?? "";
 

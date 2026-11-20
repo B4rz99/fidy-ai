@@ -224,13 +224,6 @@ const decodeFirstChunk = <A>({
     }));
   });
 
-/**
- * Read lists, exact ranges and owner facts under current Consent and one fact revision.
- * Wider groups stay within a raw-row budget; larger working sets keep four-range chunks.
- * Each group repeats the owner proof; a changed revision withholds the whole read.
- * Revision disagreement aborts a later native unit, including its final accounting. The caller
- * supplies no reusable authority; read assembly does not require a User coordinator turn.
- */
 export const readDashboardTransactions = <A>(
   input: DashboardTransactionRead<A>
 ): Effect.Effect<Option.Option<DashboardTransactionSnapshot<A>>> =>

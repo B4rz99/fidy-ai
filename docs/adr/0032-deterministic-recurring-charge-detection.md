@@ -47,3 +47,8 @@ The detector is inexpensive, testable without infrastructure and replaceable beh
 - [ADR 0026: Cloudflare-native production replatform](0026-cloudflare-native-production-replatform.md)
 - [ADR 0031: Published owner interfaces](0031-published-owner-interfaces-and-visible-internals.md)
 - [Server architecture](../../apps/server/ARCHITECTURE.md)
+
+A confirmation traversal is pinned to one complete evaluation and fact revision. It keeps
+explicit invalidations and legacy exclusions and restarts when the cutoff changes.
+Discovery is bounded and carries identities only. Earlier admission and receipt deadlines
+can take precedence over evaluation at the User alarm.

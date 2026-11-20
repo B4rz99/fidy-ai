@@ -9,7 +9,6 @@ const maximumGrantIdLength = 128;
 const maximumPolicyKeyLength = 128;
 const maximumScopeKeyLength = 256;
 
-/** Stable identity of one versioned resource-admission policy. */
 export const ResourceAdmissionPolicyKey = Schema.NonEmptyString.check(
   Schema.isMaxLength(maximumPolicyKeyLength)
 )
@@ -17,7 +16,6 @@ export const ResourceAdmissionPolicyKey = Schema.NonEmptyString.check(
   .annotate({ identifier: "ResourceAdmissionPolicyKey" });
 export type ResourceAdmissionPolicyKey = typeof ResourceAdmissionPolicyKey.Type;
 
-/** Bounded coordination key for one policy scope; it is never authorization evidence. */
 export const ResourceAdmissionScopeKey = Schema.NonEmptyString.check(
   Schema.isMaxLength(maximumScopeKeyLength)
 )
@@ -25,7 +23,6 @@ export const ResourceAdmissionScopeKey = Schema.NonEmptyString.check(
   .annotate({ identifier: "ResourceAdmissionScopeKey" });
 export type ResourceAdmissionScopeKey = typeof ResourceAdmissionScopeKey.Type;
 
-/** Caller-generated identity of one exact atomic admission attempt. */
 export const ResourceAdmissionGrantId = Schema.NonEmptyString.check(
   Schema.isMaxLength(maximumGrantIdLength)
 )
@@ -48,13 +45,11 @@ export const ResourceAdmissionDurationMs = Schema.Int.check(Schema.isGreaterThan
   .annotate({ identifier: "ResourceAdmissionDurationMs" });
 export type ResourceAdmissionDurationMs = typeof ResourceAdmissionDurationMs.Type;
 
-/** Non-negative safe integer UTC epoch millisecond owned by the Worker clock. */
 export const ResourceAdmissionEpochMs = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
   .pipe(Schema.brand("ResourceAdmissionEpochMs"))
   .annotate({ identifier: "ResourceAdmissionEpochMs" });
 export type ResourceAdmissionEpochMs = typeof ResourceAdmissionEpochMs.Type;
 
-/** Cloudflare authority dimension for security and resource controls, not commercial allowances. */
 export const ResourceAdmissionDimension = Schema.Literals([
   "stable_user",
   "source",
@@ -80,7 +75,6 @@ const CalendarWindowPolicy = Schema.Struct({
   key: ResourceAdmissionPolicyKey,
   kind: Schema.Literal("calendar_window"),
   limit: ResourceAdmissionLimit,
-  /** Fixed UTC epoch used to align deterministic calendar boundaries. */
   originEpochMs: ResourceAdmissionEpochMs,
 });
 
@@ -88,12 +82,10 @@ const OutstandingPolicy = Schema.Struct({
   dimension: Schema.Literal("outstanding_work"),
   key: ResourceAdmissionPolicyKey,
   kind: Schema.Literal("outstanding"),
-  /** Safety lease after which abandoned work stops occupying capacity. */
   leaseMs: ResourceAdmissionDurationMs,
   limit: ResourceAdmissionLimit,
 });
 
-/** Immutable policy installed when the private Cloudflare Worker assembles its D1 authority. */
 export const ResourceAdmissionPolicy = Schema.Union([
   RollingWindowPolicy,
   CalendarWindowPolicy,
@@ -107,14 +99,12 @@ const uniquePolicyKeys = Schema.makeFilter<ReadonlyArray<ResourceAdmissionPolicy
     : "Expected unique resource-admission policy keys"
 );
 
-/** Non-empty, bounded policy inventory with one definition for each versioned policy key. */
 export const ResourceAdmissionPolicies = Schema.NonEmptyArray(ResourceAdmissionPolicy)
   .check(Schema.isMaxLength(maximumPolicies), uniquePolicyKeys)
   .pipe(Schema.brand("ResourceAdmissionPolicies"))
   .annotate({ identifier: "ResourceAdmissionPolicies" });
 export type ResourceAdmissionPolicies = typeof ResourceAdmissionPolicies.Type;
 
-/** One use of an installed policy. Callers cannot choose its dimension, limit, or time window. */
 export const ResourceAdmissionCharge = Schema.Struct({
   policyKey: ResourceAdmissionPolicyKey,
   scopeKey: ResourceAdmissionScopeKey,
@@ -129,35 +119,27 @@ const uniqueChargePolicyKeys = Schema.makeFilter<ReadonlyArray<ResourceAdmission
       : "Expected at most one resource-admission charge per policy"
 );
 
-/** Non-empty, bounded set of distinct policy charges in one atomic admission attempt. */
 export const ResourceAdmissionCharges = Schema.NonEmptyArray(ResourceAdmissionCharge)
   .check(Schema.isMaxLength(maximumCharges), uniqueChargePolicyKeys)
   .pipe(Schema.brand("ResourceAdmissionCharges"))
   .annotate({ identifier: "ResourceAdmissionCharges" });
 export type ResourceAdmissionCharges = typeof ResourceAdmissionCharges.Type;
 
-/** A security/resource control refused work before an expensive or persistent effect began. */
 export class ResourceAdmissionRefused extends Data.TaggedError("ResourceAdmissionRefused")<{
   readonly reason: "resource_limit";
 }> {}
 
-/** The Cloudflare admission authority could not make a trustworthy decision. */
 export class ResourceAdmissionUnavailable extends Data.TaggedError("ResourceAdmissionUnavailable")<{
   readonly reason: "authority_unavailable";
 }> {}
 
-/** Durable identity returned after every claim and caller-owned statement commits atomically. */
 export type ResourceAdmissionGrant = Readonly<{
   readonly grantId: ResourceAdmissionGrantId;
 }>;
 
-/** Only caller-owned statement results, in request order, after admission commits atomically. */
 export type ResourceAdmissionResult = ResourceAdmissionGrant &
   Readonly<{ results: ReadonlyArray<D1Result> }>;
 
-/** Prepared admission never spends capacity until all statements commit in the owner's batch.
- * Keep every statement together, on the configured binding, without provider I/O in between.
- */
 export type PreparedResourceAdmission = ResourceAdmissionGrant &
   Readonly<{
     statements: ReadonlyArray<D1PreparedStatement>;
@@ -168,56 +150,31 @@ export type ResourceAdmissionTransition = Readonly<{
   grantId: ResourceAdmissionGrantId;
 }>;
 
-/** Complete atomic admission attempt assembled by the internal Worker adapter. */
 export type ResourceAdmissionRequest = ResourceAdmissionTransition &
   Readonly<{
-    /**
-     * D1 statements that must commit with admission, such as a proof/replay record or bounded outbox
-     * publication. They execute after the grant exists and roll the complete admission back on error.
-     * A conditional required owner write must assert its changed-row count in the same batch;
-     * a zero-row write alone does not fail admission. Grant identity proves accounting, not authority.
-     */
     readonly statements: ReadonlyArray<D1PreparedStatement>;
   }>;
 
-/**
- * One bounded attempt before an expensive work claim. The attempt is charged even when work is
- * refused; neither its grant nor its units can be reused for a retry. Work still commits atomically
- * with its own proof/replay and publication statements. Callers check replay before this interface.
- */
 export type ResourceAdmissionAttempt = Readonly<{
   readonly attempt: ResourceAdmissionRequest;
   readonly work: ResourceAdmissionRequest;
 }>;
 
-/** Atomic completion transition for a previously admitted outstanding-work grant. */
 export type ReleaseOutstandingWorkRequest = Readonly<{
   readonly grantId: ResourceAdmissionGrantId;
-  /** D1 statements whose state transition releases the outstanding work. */
   readonly statements: ReadonlyArray<D1PreparedStatement>;
 }>;
 
-/** Trusted Worker-owned dependencies and immutable policy installed into one authority. */
 export type ResourceAdmissionAuthorityConfig = Readonly<{
-  /** Private Core D1 binding; the authority never falls back to process-local usage state. */
   readonly database: D1Database;
-  /** Cloudflare Worker-owned policy inventory; process memory never stores usage or grants. */
   readonly policies: ResourceAdmissionPolicies;
-  /** Worker clock seam. Request callers cannot select decision time. */
   readonly nowEpochMs: () => ResourceAdmissionEpochMs;
 }>;
 
-/** Explicit ownership for migrated charges; anonymous and global scopes have no fabricated User.
- * A WebSession owner must be resolved to the same User inside the admitting operation.
- */
 export type ResourceAdmissionEventOwner =
   | Readonly<{ kind: "user"; userId: UserId }>
   | Readonly<{ kind: "web_session"; userId: UserId; sessionId: WebSessionId }>;
 
-/** Closed counter transitions for #1432, #1433 and #1435. Their owner supplies proof and charge
- * eligibility in the same atomic commit. No caller can select a limit, duration or algorithm.
- * Anchored resets use the original start <= cutoff; calendar accounting retains each UTC day.
- */
 export type ResourceAdmissionCounterTransition =
   | Readonly<{
       kind: "email_pairing_user";
@@ -231,7 +188,6 @@ export type ResourceAdmissionCounterTransition =
     }>
   | Readonly<{
       kind: "pat_pairing_source";
-      /** Original 32-byte keyed source digest, never the raw source address. */
       sourceDigest: Uint8Array;
     }>
   | Readonly<{
@@ -246,11 +202,6 @@ export type EmailCounterKind = Extract<
   }
 >["kind"];
 
-/** Email eligibility yields zero or one user_id under the owner's exact proof guard.
- * PAT source eligibility yields zero or one row under the global pairing-capacity guard.
- * Hosted compaction eligibility yields the same live User's active session owner.
- * Zero rows spend no capacity. Execute this statement in that owner's atomic commit.
- */
 export type ResourceCounterRequest = Readonly<{
   db: D1Database;
   subject: OwnedStatement;

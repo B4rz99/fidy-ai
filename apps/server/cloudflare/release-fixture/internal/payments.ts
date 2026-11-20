@@ -149,8 +149,6 @@ const transact = Effect.fn(function* (request: Request, env: AcceptanceProviderE
     finalizedAt: retained.value.finalized_at,
   });
 
-  // The provider accepted the charge; its POST response is lost. Only the signed
-  // callback supplies this transaction id to the application.
   return new Response(null, { status: 503 });
 });
 const providerRead = Effect.fn(function* (path: string, env: AcceptanceProviderEnvironment) {

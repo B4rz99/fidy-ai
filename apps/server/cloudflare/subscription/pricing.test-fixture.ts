@@ -5,7 +5,6 @@ const restrictAt = 0.8;
 const unavailable = 503;
 const unexpected = 500;
 
-/** Interrupt the native transaction at its final statement, or discard its committed response. */
 export class PricingFixture extends Pricing {
   private readonly storage: DurableObjectStorage;
   private readonly ceilingBytes: number;

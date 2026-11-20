@@ -13,7 +13,11 @@ const row = Schema.StructWithRest(
   [extras]
 );
 const history = Schema.StructWithRest(Schema.Struct({ data: Schema.Array(row) }), [extras]);
-export const parseHistory = Schema.decodeUnknownSync(history);
+// The proof hashes the original captured JSON, including its field order.
+export const parseHistory = (input: unknown): typeof history.Type => {
+  Schema.asserts(history, input);
+  return input;
+};
 const config = Schema.Struct({
   deadline: Schema.Int,
   d1: Schema.Struct({
@@ -53,7 +57,10 @@ const event = Schema.StructWithRest(
   }),
   [extras]
 );
-export const parseConfig = Schema.decodeUnknownSync(config);
+export const parseConfig = (input: unknown): PairConfig => {
+  Schema.asserts(config, input);
+  return input;
+};
 export const parseCost = Schema.decodeUnknownSync(Schema.fromJsonString(cost));
 export const parseDeployment = Schema.decodeUnknownSync(
   Schema.Struct({ gitRevision: Schema.String, contractDigest: Schema.String })

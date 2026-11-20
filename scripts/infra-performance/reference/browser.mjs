@@ -186,7 +186,9 @@ try {
         Schema.decodeSync(Schema.fromJsonString(Schema.Unknown))(await reply.text()),
       beforeRefresh: evidence,
       checkpoint,
-      phases: recordPhases ? (row) => event({ type: "phases", journey: journeys.refresh, ...row }) : undefined,
+      phases: recordPhases
+        ? (row) => event({ type: "phases", journey: journeys.refresh, ...row })
+        : undefined,
       offered: (stage) => event({ type: "offered", journey: journeys[stage] }),
       completed: (stage, milliseconds) =>
         event({ type: "completed", journey: journeys[stage], milliseconds }),

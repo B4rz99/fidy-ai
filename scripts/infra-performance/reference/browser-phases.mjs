@@ -9,6 +9,7 @@ const timingNames = new Set([
   "canonical-sql",
   "recovery-r2",
   "recovery-d1",
+  "recovery-sql",
   "dashboard-source",
   "dashboard-projection",
   "dashboard-audit",
@@ -89,11 +90,13 @@ export const trackBrowserClick = async (control) => {
               else if (url.origin === location.origin && /\.(?:js|css)$/u.test(url.pathname)) {
                 role = "script-or-style";
               } else return [];
-              return [{
-                role,
-                startAfterClickMs: entry.startTime - clickAt,
-                endAfterClickMs: entry.responseEnd - clickAt,
-              }];
+              return [
+                {
+                  role,
+                  startAfterClickMs: entry.startTime - clickAt,
+                  endAfterClickMs: entry.responseEnd - clickAt,
+                },
+              ];
             }),
           };
         },

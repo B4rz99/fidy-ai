@@ -244,6 +244,9 @@ export const freshDashboard = async (input) => {
     },
   };
   event({ type: "completed", journey, ...result });
-  if (recordPhases) event({ type: "phases", journey, ...await recordPhases(reply, paintedAt) });
+  if (recordPhases) {
+    const phases = await recordPhases(reply, paintedAt);
+    event({ type: "phases", journey, ...phases });
+  }
   return result;
 };

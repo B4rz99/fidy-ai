@@ -142,7 +142,10 @@ const ready = async ({ page, calibration, captured }, label) => {
     );
   }, expected);
   return page.evaluate(
-    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(performance.now()))))
+    () =>
+      new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve(performance.now())))
+      )
   );
 };
 /**

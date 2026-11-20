@@ -71,7 +71,10 @@ export const responseFor = ({ page, api }, path, query) =>
 /** @param {Page} page Mounted browser page. */
 export const painted = (page) =>
   page.evaluate(
-    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(performance.now()))))
+    () =>
+      new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve(performance.now())))
+      )
   );
 /** @param {number} ordinal Fixture record ordinal. */
 const digits = (ordinal) => String(ordinal).padStart(width, "0");

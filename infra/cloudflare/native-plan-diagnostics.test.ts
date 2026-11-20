@@ -146,7 +146,8 @@ layer(FetchHttpClient.layer)("scoped successor upload", (suite) => {
               (input: URL | Request | string) =>
                 Promise.resolve(
                   new Response("private-response", {
-                    status: String(input).includes("/workflows/") ? 422 : 200,
+                    status:
+                      input instanceof URL && input.pathname.includes("/workflows/") ? 422 : 200,
                   })
                 ),
               { preconnect: fetch.preconnect }

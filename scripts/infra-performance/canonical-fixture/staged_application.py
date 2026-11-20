@@ -24,6 +24,8 @@ VERIFIER_FILES = {
     "infra/cloudflare/scripts/check-production-runtime-config.test.ts",
     "infra/cloudflare/verify-edge-policy.ts",
     "scripts/infra-performance/canonical-fixture/fallback_stage.py",
+    "scripts/infra-performance/canonical-fixture/pairing_stage.py",
+    "scripts/infra-performance/canonical-fixture/test_pairing_stage.py",
     "scripts/infra-performance/canonical-fixture/qualified_release.py",
     "scripts/infra-performance/canonical-fixture/staged_application.py",
     "scripts/infra-performance/canonical-fixture/test_fallback_stage.py",
@@ -36,10 +38,10 @@ def git_read(*args):
     return subprocess.check_output(["git", *args]).decode().removesuffix("\n")
 
 
-def verify_tree(revision, git):
-    if not re.fullmatch("[a-f0-9]{40}", revision) or git("merge-base", APPLICATION, revision) != APPLICATION:
+def verify_tree(revision, git, application=APPLICATION):
+    if not re.fullmatch("[a-f0-9]{40}", revision) or git("merge-base", application, revision) != application:
         raise ValueError("Staged application is not the ancestor of this verifier")
-    changed = set(git("diff", "--name-only", "--no-renames", "-z", APPLICATION, revision, "--").split("\0")) - {""}
+    changed = set(git("diff", "--name-only", "--no-renames", "-z", application, revision, "--").split("\0")) - {""}
     if not changed <= VERIFIER_FILES:
         raise ValueError("Verifier changed a staged Worker, Web, binding or dependency source")
 

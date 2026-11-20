@@ -96,6 +96,8 @@ jobs:
           EXPECTED_INSTALLED_REVISION: ${{ inputs.installed_revision }}
           RELEASE_OPERATION: ${{ inputs.operation }}
           FIXTURE_SIGNER_REQUESTED: ${{ inputs.transaction_fixture_signer }}
+          STAGE_ARTIFACT: ${{ inputs.fallback_artifact }}
+          STAGE_SHA256: ${{ inputs.fallback_sha256 }}
         run: |
           test "$NATIVE_STORAGE_ADMISSION" = closed
           if [[ "$NATIVE_FIXTURE_BUILD" == fallback ]]; then
@@ -111,12 +113,14 @@ jobs:
           if [[ "$RELEASE_OPERATION" == fleet-pilot || "$RELEASE_OPERATION" == continue-fleet-cleanup || "$RELEASE_OPERATION" == ten-hosted || "$RELEASE_OPERATION" == continue-ten-cleanup ]]; then
             echo "FLEET_PILOT_STARTED_AT=$(date -u +%s)" >> "$GITHUB_ENV"
           fi
-          if [[ "$FIXTURE_SIGNER_REQUESTED" == true && -n "$EXPECTED_INSTALLED_REVISION" ]]; then
-            [[ "$EXPECTED_INSTALLED_REVISION" == b85bfb06ab573259c250231623b77b0f65e2ae5c ]]
-          fi
           if [[ -n "$EXPECTED_INSTALLED_REVISION" ]]; then
-            [[ "$RELEASE_OPERATION" == verify || "$RELEASE_OPERATION" == verify-erasure || "$RELEASE_OPERATION" == continue-erasure || "$RELEASE_OPERATION" == fleet-pilot || "$RELEASE_OPERATION" == continue-fleet-cleanup || "$RELEASE_OPERATION" == ten-hosted || "$RELEASE_OPERATION" == continue-ten-cleanup ]]
             [[ "$EXPECTED_INSTALLED_REVISION" =~ ^[0-9a-f]{40}$ ]]
+            if [[ "$FIXTURE_SIGNER_REQUESTED" == true && "$EXPECTED_INSTALLED_REVISION" != b85bfb06ab573259c250231623b77b0f65e2ae5c ]]; then
+              [[ "$RELEASE_OPERATION" == recover-fixture-fallback || "$RELEASE_OPERATION" == rollout || "$RELEASE_OPERATION" == verify ]]
+              [[ "$STAGE_ARTIFACT" =~ ^[1-9][0-9]{0,19}$ && "$STAGE_SHA256" =~ ^[0-9a-f]{64}$ ]]
+            else
+              [[ "$RELEASE_OPERATION" == verify || "$RELEASE_OPERATION" == verify-erasure || "$RELEASE_OPERATION" == continue-erasure || "$RELEASE_OPERATION" == fleet-pilot || "$RELEASE_OPERATION" == continue-fleet-cleanup || "$RELEASE_OPERATION" == ten-hosted || "$RELEASE_OPERATION" == continue-ten-cleanup ]]
+            fi
           fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -126,7 +130,15 @@ jobs:
         if: inputs.transaction_fixture_signer && (inputs.operation == 'reseal-fixture-fallback' || inputs.operation == 'diagnose-fixture-pairing' || inputs.operation == 'recover-fixture-fallback' || inputs.operation == 'rollout' || inputs.operation == 'verify')
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 scripts/infra-performance/canonical-fixture/unsealed_stage.py source
+          EXPECTED_INSTALLED_REVISION: ${{ inputs.installed_revision }}
+          STAGE_ARTIFACT: ${{ inputs.fallback_artifact }}
+          STAGE_SHA256: ${{ inputs.fallback_sha256 }}
+        run: |
+          if [[ -n "$EXPECTED_INSTALLED_REVISION" && "$EXPECTED_INSTALLED_REVISION" != b85bfb06ab573259c250231623b77b0f65e2ae5c ]]; then
+            python3 scripts/infra-performance/canonical-fixture/pairing_stage.py
+          else
+            python3 scripts/infra-performance/canonical-fixture/unsealed_stage.py source
+          fi
       - uses: ./.github/actions/bun-runtime
       - run: bash scripts/install-workspace.sh --ignore-scripts
       - uses: ./.github/actions/configure-alchemy-cloudflare-profile
@@ -236,7 +248,7 @@ jobs:
           path: ${{ runner.temp }}/native-fallback-stage.json
           if-no-files-found: error
       - name: Authenticate the interrupted dormant stage
-        if: inputs.operation == 'recover-fixture-fallback'
+        if: inputs.operation == 'recover-fixture-fallback' && !env.FIXTURE_PAIRING_APPLICATION
         env:
           GH_TOKEN: ${{ github.token }}
           STAGE_ARTIFACT: ${{ inputs.fallback_artifact }}

@@ -10,7 +10,7 @@ import { BudgetThresholdEvaluation } from "../budgets/contract";
 import {
   backgroundWorkAllowed,
   closedHostEnvironment,
-  isPerformanceReceipt,
+  isPerformanceEvidence,
 } from "../release-isolation/operations";
 import type { AcceptanceWindowBindings } from "../release-isolation/contract";
 import {
@@ -227,7 +227,7 @@ import { canonicalOperation } from "../routing/operations";
 import {
   dispatchLocalTransaction,
   isLocalTransactionOperation,
-  ownPerformanceReceipt,
+  ownPerformanceEvidence,
   readScopedPrivacyPage,
 } from "../transactions/operations";
 import {
@@ -907,11 +907,11 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     command: string,
     owns: (id: string) => boolean
   ): Option.Option<Promise<Response>> {
-    if (isPerformanceReceipt(request)) {
+    if (isPerformanceEvidence(request)) {
       const environment = this.browserEnvironment(request);
       return Option.some(
         this.runtime.runPromise(
-          ownPerformanceReceipt(
+          ownPerformanceEvidence(
             request,
             { ...environment, RELEASE_GIT_SHA: environment.RELEASE_GIT_SHA ?? "" },
             owns

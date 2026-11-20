@@ -33,8 +33,8 @@ import {
   fixtureChargeReceipt,
   isAcceptanceReceipt,
   isAcceptanceWindow,
-  isPerformanceReceipt,
-  receiptAdmitted,
+  isPerformanceEvidence,
+  performanceEvidenceAdmitted,
   releaseAdmission,
   renewAcceptanceWindow,
 } from "../release-isolation/operations";
@@ -76,7 +76,7 @@ const sharedReadiness = Effect.fn(function* (request: Request, environment: Core
   );
 });
 const performanceProbe = Effect.fn(function* (request: Request, environment: CoreHttpEnvironment) {
-  const valid = yield* receiptAdmitted({
+  const valid = yield* performanceEvidenceAdmitted({
     request,
     environment,
     boundary: "core",
@@ -93,7 +93,7 @@ const readinessPath = (request: Request, url: URL): boolean =>
   isStorageBootstrap(request) ||
   (request.method === "GET" && url.pathname === smokePath && url.search === "?readiness=1");
 const storageProbe = Effect.fn(function* (request: Request, environment: CoreHttpEnvironment) {
-  if (isPerformanceReceipt(request)) return yield* performanceProbe(request, environment);
+  if (isPerformanceEvidence(request)) return yield* performanceProbe(request, environment);
   const url = new URL(request.url);
   if (
     environment.RECOVERY_ISOLATION === "isolated" &&

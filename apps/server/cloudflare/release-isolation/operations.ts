@@ -1,8 +1,10 @@
 import {
-  receiptAdmitted as admitsReceipt,
-  isPerformanceReceipt as matchesPerformanceReceipt,
+  performanceEvidenceAdmitted as admitsPerformanceEvidence,
+  isPerformanceEvidence as matchesPerformanceEvidence,
   openTransactionReceipt as openReceipt,
   sealTransactionReceipt as sealReceipt,
+  signPerformanceAccounting as signAccounting,
+  verifyIssuedCapture as verifyCapture,
 } from "./internal/performance-receipt";
 import { installedOrigins } from "../../src/shell/browser-transport/contract";
 import { browserOrigins } from "../runtime/contract";
@@ -258,8 +260,13 @@ export const fixtureChargeReceipt = Effect.fn(function* (
   return Response.json(data, { headers: { "cache-control": "no-store" } });
 });
 
-export const isPerformanceReceipt: typeof matchesPerformanceReceipt = (request) =>
-  matchesPerformanceReceipt(request);
-export const receiptAdmitted: typeof admitsReceipt = (input) => admitsReceipt(input);
+export const isPerformanceEvidence: typeof matchesPerformanceEvidence = (request) =>
+  matchesPerformanceEvidence(request);
+export const performanceEvidenceAdmitted: typeof admitsPerformanceEvidence = (input) =>
+  admitsPerformanceEvidence(input);
 export const sealTransactionReceipt: typeof sealReceipt = (input) => sealReceipt(input);
 export const openTransactionReceipt: typeof openReceipt = (input) => openReceipt(input);
+
+export const signPerformanceAccounting: typeof signAccounting = (...args) =>
+  signAccounting(...args);
+export const verifyIssuedCapture: typeof verifyCapture = (...args) => verifyCapture(...args);

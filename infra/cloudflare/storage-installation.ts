@@ -4,6 +4,7 @@ import {
   type NativeRole,
   requireRoleBindings,
 } from "./native-graph";
+import { receiptWorkerMain } from "./native-fixture-signer";
 import { installedOrigins } from "@fidy/server/browser-transport";
 import { type Plan, describeResource } from "alchemy/Plan";
 import * as Cloudflare from "alchemy/Cloudflare";
@@ -137,16 +138,29 @@ const requireSignerHost = (fingerprint: string, hosts: NativeHostMode): void => 
   }
 };
 const roles = ["Core", "Ingress", "ForwardedEmail", "Web"] as const;
+const requireFixtureMain = (
+  role: NativeRole,
+  props: unknown,
+  { fingerprint, fallback }: { fingerprint: string; fallback: boolean }
+): void => {
+  if (fingerprint !== "" && (role === "Core" || role === "Ingress")) {
+    Schema.decodeUnknownSync(
+      Schema.Struct({ main: Schema.Literal(receiptWorkerMain(role, fallback)) })
+    )(props);
+  }
+};
 export const requireNativeBindings = ({
   plan,
   revision,
   hosts,
   fingerprint,
+  fallback,
 }: {
   plan: Plan;
   revision: string;
   hosts: NativeHostMode;
   fingerprint: string;
+  fallback: boolean;
 }): void => {
   requireSignerHost(fingerprint, hosts);
   const resources = Object.values(plan.resources);
@@ -156,6 +170,7 @@ export const requireNativeBindings = ({
     if (node === undefined) throw Error("Missing installed native Worker " + role);
     const props: unknown = node.action === "noop" ? node.state.props : node.props;
     requireInstallationWorker({ logicalId: role, props, revision, hosts });
+    requireFixtureMain(role, props, { fingerprint, fallback });
     const bindings = node.bindings.flatMap(
       (binding) => Schema.decodeUnknownSync(ProviderBindings)(binding.data).bindings ?? []
     );

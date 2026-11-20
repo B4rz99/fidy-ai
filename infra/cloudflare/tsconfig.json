@@ -13,7 +13,7 @@
       "~/*": ["../../apps/server/src/*"]
     }
   },
-  "include": ["*.ts"],
+  "include": ["*.ts", "native-retained-provider.json"],
   "exclude": ["node_modules"],
   "references": [{ "path": "../../apps/server" }]
 }

@@ -3,6 +3,16 @@ import { Config, Data, Effect, Redacted } from "effect";
 
 import { Hex } from "effect/encoding";
 
+export const fixtureBuild = Config.Literals(["ordinary", "fallback"], "NATIVE_FIXTURE_BUILD").pipe(
+  Config.withDefault("ordinary")
+);
+const workerFiles = {
+  ordinary: { Core: "core-worker", Ingress: "public-worker" },
+  fallback: { Core: "fixture-fallback-core", Ingress: "fixture-fallback-ingress" },
+};
+export const receiptWorkerMain = (role: "Core" | "Ingress", fallback: boolean): string =>
+  "../../apps/server/cloudflare/" + workerFiles[fallback ? "fallback" : "ordinary"][role] + ".ts";
+
 export const expectedFixtureSigner = Config.String("NATIVE_FIXTURE_SIGNER_SHA256").pipe(
   Config.withDefault("")
 );
@@ -58,4 +68,13 @@ export const fixtureSignerBindings = Effect.fn(function* (release: {
     NATIVE_FIXTURE_SIGNING_KEY: secret,
     NATIVE_FIXTURE_SIGNER_SHA256: fingerprint,
   };
+});
+
+export const fixtureArtifacts = Effect.gen(function* () {
+  const retainProvider = (yield* expectedFixtureSigner) !== "";
+  const fallback = (yield* fixtureBuild) === "fallback";
+  if (fallback && !retainProvider) {
+    return yield* Effect.die(Error("Dormant fixture requires the protected retained provider"));
+  }
+  return { fallback, retainProvider };
 });

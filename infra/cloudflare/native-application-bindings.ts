@@ -1,5 +1,5 @@
 import retainedProvider from "./native-retained-provider.json" with { type: "json" };
-import { expectedFixtureSigner } from "./native-fixture-signer";
+import { fixtureArtifacts } from "./native-fixture-signer";
 import { Hex } from "effect/encoding";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { type Output, map } from "alchemy/Output";
@@ -57,7 +57,7 @@ export const nativeReleaseContext = Effect.fn(function* (development: boolean, s
   );
   const closed = admission === "closed",
     origin = pairedOrigin(closed, hosts);
-  const retainProvider = (yield* expectedFixtureSigner) !== "";
+  const artifacts = yield* fixtureArtifacts;
   const fixtureSecret = (
     name: string,
     prefix = "",
@@ -79,7 +79,7 @@ export const nativeReleaseContext = Effect.fn(function* (development: boolean, s
     CF_VERSION_METADATA: Cloudflare.Workers.VersionMetadata(),
     SMOKE_PROOF: proof,
   };
-  return { release, development, closed, hosts, origin, shared, fixtureSecret, retainProvider };
+  return { release, development, closed, hosts, origin, shared, fixtureSecret, ...artifacts };
 });
 export type NativeRelease = Effect.Success<ReturnType<typeof nativeReleaseContext>>;
 

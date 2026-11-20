@@ -6,6 +6,7 @@ from pathlib import Path
 import secrets
 import subprocess
 import tempfile
+import time
 
 from cohort_runner import BrowserPort, commands
 from fixture import digest, prepare, write
@@ -34,9 +35,10 @@ def qualify_fallback(revision, out, storage):
         session = BrowserPort.session(runtime("register"))
         write(directory/"native-session.json", session)
         def call(method, path, body):
+            time.sleep(.7)
             result = runtime("canonical", method=method, path=path, body=body, **session)
             if result["status"] // 100 != 2:
-                raise ValueError("Ordinary financial route failed in the recovery artifact")
+                raise ValueError(f"Ordinary financial request failed in the recovery artifact (HTTP {result['status']})")
             return result["data"]
         manifest = prepare(call, directory, revision, "performance-1")
         offering = dict(resourcePrefix=prefix, nativeManifestDigest=digest(manifest))

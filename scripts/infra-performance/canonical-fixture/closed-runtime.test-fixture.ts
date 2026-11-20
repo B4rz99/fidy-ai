@@ -65,6 +65,7 @@ const sharedBindings = (
 });
 const fixtureGeneration = Effect.fnUntraced(function* (revision: string) {
   const baseline = yield* Config.Boolean("FIDY_REHEARSAL_BASELINE").pipe(Config.withDefault(false));
+  const fallback = yield* Config.Boolean("FIDY_REHEARSAL_FALLBACK").pipe(Config.withDefault(false));
   const entry = (name: string): string =>
     (baseline ? "../../../closed-baseline/apps/server/cloudflare/" : "./") + name + ".ts";
   const providerRevision = yield* Config.String("FIDY_NATIVE_FIXTURE_PROVIDER_REVISION").pipe(
@@ -74,14 +75,21 @@ const fixtureGeneration = Effect.fnUntraced(function* (revision: string) {
     providerRevision === revision
       ? entry("release-smoke-worker")
       : "../../../closed-baseline/apps/server/cloudflare/release-smoke-worker.ts";
-  return { baseline, entry, providerEntry, providerRevision };
+  return {
+    baseline,
+    ingressEntry: entry(fallback ? "fixture-fallback-ingress" : "public-worker"),
+    coreEntry: entry(fallback ? "fixture-fallback-core" : "core-worker"),
+    providerEntry,
+    providerRevision,
+  };
 });
 export const closedRuntime = Effect.fnUntraced(function* (
   { revision, secret }: { revision: string; secret: string },
   directory: string = ""
 ) {
   const privateKey = Redacted.value(yield* Config.Redacted("TEST_FIXTURE_PRIVATE_KEY"));
-  const { baseline, entry, providerEntry, providerRevision } = yield* fixtureGeneration(revision);
+  const { baseline, ingressEntry, coreEntry, providerEntry, providerRevision } =
+    yield* fixtureGeneration(revision);
   const shared = {
     ...sharedBindings(revision, secret),
     ...(providerRevision === revision
@@ -92,14 +100,14 @@ export const closedRuntime = Effect.fnUntraced(function* (
     ...(directory === "" ? {} : { resourcePersistencePath: directory }),
     handleStructuredLogs: (): void => undefined,
     workers: yield* Effect.all([
-      worker("ingress", entry("public-worker"), {
+      worker("ingress", ingressEntry, {
         env: {
           ...shared,
           CORE: { type: "worker", worker: "core" },
           PAT_ADMISSION_KEY: text(deriveSecret(secret, revision, "pat-admission")),
         },
       }),
-      worker("core", entry("core-worker"), {
+      worker("core", coreEntry, {
         env: {
           ...shared,
           ...nativeOwnerBindings,

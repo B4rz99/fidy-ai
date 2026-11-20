@@ -1,5 +1,5 @@
 import retainedProvider from "./native-retained-provider.json" with { type: "json" };
-import { fixtureSignerBindings } from "./native-fixture-signer";
+import { fixtureSignerBindings, receiptWorkerMain } from "./native-fixture-signer";
 import { marketingSite } from "./marketing-site";
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
@@ -109,7 +109,7 @@ const coreWorker = Effect.fn(function* ({
     ...workerPolicy,
     compatibility: apiCompatibility,
     name: installationNames.Core,
-    main: "../../apps/server/cloudflare/core-worker.ts",
+    main: receiptWorkerMain("Core", release.fallback),
     version: candidate(release),
     crons: ["* * * * *"],
     dev: { host: "127.0.0.1", port: productionTopology.core.localPort, strictPort: true },
@@ -188,7 +188,7 @@ export const nativeApplication = Effect.gen(function* () {
     ...workerPolicy,
     compatibility: apiCompatibility,
     name: installationNames.Ingress,
-    main: "../../apps/server/cloudflare/public-worker.ts",
+    main: receiptWorkerMain("Ingress", release.fallback),
     version: candidate(release),
     dev: { host: "127.0.0.1", port: productionTopology.ingress.localPort, strictPort: true },
     domain: network(release, nativeIngressHost, productionTopology.ingress.hostname),

@@ -155,7 +155,7 @@ def usage():
     return Usage(now, int(stamp.timestamp()), totals["sum"]["rowsRead"], totals["sum"]["rowsWritten"])
 
 
-def sample(phase, installed, finished_ms=None):
+def sample(phase, installed, *args):
     if (os.environ.get("GITHUB_REF") != "refs/heads/trunk"
             or os.environ.get("GITHUB_EVENT_NAME") != "workflow_dispatch"
             or os.environ.get("NATIVE_STORAGE_ADMISSION") != "closed"
@@ -165,6 +165,10 @@ def sample(phase, installed, finished_ms=None):
             or installed != (os.environ.get("EXPECTED_INSTALLED_REVISION") or os.environ["GITHUB_SHA"])):
         raise ValueError("Closed protected dispatch at the exact source revision required")
     revisions = {"revision": installed, "verifierRevision": os.environ["GITHUB_SHA"]}
+    if phase.startswith("ten-"):
+        from ten import sample_ten
+        return sample_ten(phase, revisions, args)
+    finished_ms, = args or (None,)
     directory = Path(os.environ["RUNNER_TEMP"])
     journal = directory / "native-fleet-meter.jsonl"
     continued = phase in ("resume", "renew-cleanup", "settle", "archived-logs", "refusal")
@@ -238,7 +242,7 @@ if __name__ == "__main__":
         sample(*sys.argv[1:])
     except Exception as exc:
         phase = sys.argv[1] if len(sys.argv) > 1 else None
-        if "RUNNER_TEMP" in os.environ and phase in ("begin", "signup", "check", "cleanup", "logs", "finish", "probe-logs", "resume", "renew-cleanup", "settle", "archived-logs", "refusal"):
+        if phase and "RUNNER_TEMP" in os.environ and (phase.startswith("ten-") or phase in ("begin", "signup", "check", "cleanup", "logs", "finish", "probe-logs", "resume", "renew-cleanup", "settle", "archived-logs", "refusal")):
             with (Path(os.environ["RUNNER_TEMP"]) / "native-fleet-refusal.jsonl").open("a") as out:
                 print(json.dumps({"phase": phase, "error": type(exc).__name__}), file=out)
         sys.exit("Fleet pilot meter unavailable (" + type(exc).__name__ + ")")

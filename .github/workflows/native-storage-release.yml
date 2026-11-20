@@ -7,6 +7,10 @@ on:
         description: Optional installed commit for installed verification after verifier-only changes
         required: false
         type: string
+      fleet_source_run:
+        description: Original protected ten-User trial run ID for cleanup
+        required: false
+        type: string
       operation:
         description: Operate the isolated SQLite installation
         required: true
@@ -17,6 +21,8 @@ on:
             verify-erasure,
             continue-erasure,
             fleet-pilot,
+            ten-hosted,
+            continue-ten-cleanup,
             continue-fleet-cleanup,
             plan-first-install,
             first-install,
@@ -37,7 +43,7 @@ jobs:
   release:
     if: ${{ github.ref == 'refs/heads/trunk' && inputs.operation != 'publish-site' }}
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ inputs.operation == 'fleet-pilot' && 110 || inputs.operation == 'continue-fleet-cleanup' && 55 || (inputs.operation == 'first-install' || inputs.operation == 'verify-erasure' || inputs.operation == 'continue-erasure') && 90 || 30 }}
+    timeout-minutes: ${{ (inputs.operation == 'fleet-pilot' || inputs.operation == 'ten-hosted' || inputs.operation == 'continue-ten-cleanup') && 110 || inputs.operation == 'continue-fleet-cleanup' && 55 || (inputs.operation == 'first-install' || inputs.operation == 'verify-erasure' || inputs.operation == 'continue-erasure') && 90 || 30 }}
     environment: production
     permissions:
       actions: read
@@ -66,11 +72,14 @@ jobs:
           RELEASE_OPERATION: ${{ inputs.operation }}
         run: |
           test "$NATIVE_STORAGE_ADMISSION" = closed
-          if [[ "$RELEASE_OPERATION" == fleet-pilot || "$RELEASE_OPERATION" == continue-fleet-cleanup ]]; then
+          if [[ "$RELEASE_OPERATION" == ten-hosted ]]; then
+            test "$GITHUB_RUN_ATTEMPT" = 1
+          fi
+          if [[ "$RELEASE_OPERATION" == fleet-pilot || "$RELEASE_OPERATION" == continue-fleet-cleanup || "$RELEASE_OPERATION" == ten-hosted || "$RELEASE_OPERATION" == continue-ten-cleanup ]]; then
             echo "FLEET_PILOT_STARTED_AT=$(date -u +%s)" >> "$GITHUB_ENV"
           fi
           if [[ -n "$EXPECTED_INSTALLED_REVISION" ]]; then
-            [[ "$RELEASE_OPERATION" == verify || "$RELEASE_OPERATION" == verify-erasure || "$RELEASE_OPERATION" == continue-erasure || "$RELEASE_OPERATION" == fleet-pilot || "$RELEASE_OPERATION" == continue-fleet-cleanup ]]
+            [[ "$RELEASE_OPERATION" == verify || "$RELEASE_OPERATION" == verify-erasure || "$RELEASE_OPERATION" == continue-erasure || "$RELEASE_OPERATION" == fleet-pilot || "$RELEASE_OPERATION" == continue-fleet-cleanup || "$RELEASE_OPERATION" == ten-hosted || "$RELEASE_OPERATION" == continue-ten-cleanup ]]
             [[ "$EXPECTED_INSTALLED_REVISION" =~ ^[0-9a-f]{40}$ ]]
           fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -118,7 +127,7 @@ jobs:
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts promote
       - name: Build the expected browser artifact for independent verification
-        if: inputs.operation == 'verify' || inputs.operation == 'verify-erasure' || inputs.operation == 'continue-erasure' || inputs.operation == 'fleet-pilot' || inputs.operation == 'continue-fleet-cleanup' || inputs.operation == 'stage-hosts'
+        if: inputs.operation == 'verify' || inputs.operation == 'verify-erasure' || inputs.operation == 'continue-erasure' || inputs.operation == 'fleet-pilot' || inputs.operation == 'continue-fleet-cleanup' || inputs.operation == 'ten-hosted' || inputs.operation == 'continue-ten-cleanup' || inputs.operation == 'stage-hosts'
         env:
           RELEASE_GIT_SHA: ${{ inputs.installed_revision || github.sha }}
         working-directory: apps/web
@@ -133,7 +142,7 @@ jobs:
           bun native-storage-release.ts attach-hosts
       - name: Verify the installed application and retained schema markers
         id: verify
-        if: inputs.operation != 'plan-first-install' && inputs.operation != 'first-install' && inputs.operation != 'verify-erasure' && inputs.operation != 'continue-erasure' && inputs.operation != 'fleet-pilot' && inputs.operation != 'continue-fleet-cleanup'
+        if: inputs.operation != 'plan-first-install' && inputs.operation != 'first-install' && inputs.operation != 'verify-erasure' && inputs.operation != 'continue-erasure' && inputs.operation != 'fleet-pilot' && inputs.operation != 'continue-fleet-cleanup' && inputs.operation != 'ten-hosted' && inputs.operation != 'continue-ten-cleanup'
         env:
           EXPECTED_INSTALLED_REVISION: ${{ inputs.installed_revision }}
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
@@ -236,6 +245,43 @@ jobs:
         if: success() && inputs.operation == 'rehearse-rollback'
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts rollback
+      - name: Prepare the ten-User fleet admission
+        if: inputs.operation == 'ten-hosted'
+        env:
+          EXPECTED_INSTALLED_REVISION: ${{ inputs.installed_revision }}
+          CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
+        working-directory: infra/cloudflare
+        run: bun native-storage-release.ts ten-prepare
+      - name: Seal the protected pre-enrollment baseline and meter
+        if: inputs.operation == 'ten-hosted'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-ten-admission-${{ github.run_id }}
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/native-verification.json.fleet
+            ${{ runner.temp }}/native-fleet-meter.jsonl
+      - name: Measure ten hosted fleet Users
+        if: inputs.operation == 'ten-hosted'
+        env:
+          EXPECTED_INSTALLED_REVISION: ${{ inputs.installed_revision }}
+          CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
+        working-directory: infra/cloudflare
+        run: bun native-storage-release.ts ten-hosted
+      - name: Authenticate the interrupted ten-User trial
+        if: inputs.operation == 'continue-ten-cleanup'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FLEET_SOURCE_RUN: ${{ inputs.fleet_source_run }}
+        run: bash scripts/infra-performance/deployed-fleet/ten-source.sh
+      - name: Complete the original ten-User cleanup
+        if: inputs.operation == 'continue-ten-cleanup'
+        env:
+          EXPECTED_INSTALLED_REVISION: ${{ inputs.installed_revision }}
+          FLEET_SOURCE_RUN: ${{ inputs.fleet_source_run }}
+          CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
+        working-directory: infra/cloudflare
+        run: bun native-storage-release.ts continue-ten-cleanup
       - name: Retain native release evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

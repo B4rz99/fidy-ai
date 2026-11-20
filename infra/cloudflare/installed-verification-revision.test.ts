@@ -73,10 +73,22 @@ it.effect(
         verificationRevision(trunk, installed, (args) =>
           Effect.succeed(args.includes("diff") ? path + "\0" : "")
         );
-      expect(yield* changed("scripts/infra-performance/deployed-fleet/pilot.py")).toBe(installed);
+      for (const path of [
+        "scripts/infra-performance/deployed-fleet/pilot.py",
+        "scripts/infra-performance/deployed-fleet/ten.py",
+        "scripts/infra-performance/deployed-fleet/ten-source.sh",
+        "infra/cloudflare/native-ten-fleet.ts",
+        "infra/cloudflare/native-ten-release.ts",
+        "docs/adr/0041-per-user-durable-object-storage-direction.md",
+      ]) {
+        expect(yield* changed(path)).toBe(installed);
+      }
       for (const path of [
         "apps/server/cloudflare/maintenance/runtime.ts",
         "scripts/infra-performance/deployed-fleet/other.py",
+        "infra/cloudflare/native-ten-runtime.ts",
+        "docs/adr/0000-unreviewed.md",
+        "apps/server/package.json",
       ]) {
         expect(Result.isFailure(yield* Effect.result(changed(path)))).toBe(true);
       }

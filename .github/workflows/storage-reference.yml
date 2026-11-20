@@ -27,6 +27,10 @@ on:
         description: Run 20 authenticated financial Users and 30 paired Corrections in workerd
         type: boolean
         default: false
+      browser_phases:
+        description: Capture click, request, response and paint phases for Transactions and Dashboard
+        type: boolean
+        default: false
       transaction_read_only:
         description: Measure mounted Transactions startup and fresh history only
         type: boolean
@@ -54,6 +58,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
+      FIDY_REFERENCE_PHASES: ${{ inputs.browser_phases && '1' || '0' }}
       DATASET: ${{ inputs.dataset || 'production' }}
       NETWORK: ${{ inputs.network || 'normal' }}
       RECURRING_FLAG: ${{ inputs.full_recurring && '--full-recurring' || '' }}

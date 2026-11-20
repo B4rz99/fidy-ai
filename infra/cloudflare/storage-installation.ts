@@ -4,6 +4,7 @@ import {
   NativeBindings,
   type NativeRole,
   requireRoleBindings,
+  requireSuccessorCoreBindings,
 } from "./native-graph";
 import { receiptWorkerMain } from "./native-fixture-signer";
 import { installedOrigins } from "@fidy/server/browser-transport";
@@ -159,22 +160,42 @@ const requireFixtureService = (
     throw Error("Resolved original provider target differs");
   }
 };
-export const requireNativeBindings = ({
-  plan,
-  revision,
-  hosts,
-  fingerprint,
-  fallback,
-}: {
+type NativePlanBindings = {
   plan: Plan;
   revision: string;
   hosts: NativeHostMode;
   fingerprint: string;
   fallback: boolean;
+};
+const requirePlannedRoleBindings = ({
+  role,
+  bindings,
+  fingerprint,
+  successorPlan,
+}: {
+  role: NativeRole;
+  bindings: ReadonlyArray<NativeBinding>;
+  fingerprint: string;
+  successorPlan: boolean;
 }): void => {
+  if (successorPlan && role === "Core") {
+    requireSuccessorCoreBindings({ bindings, fingerprint });
+  } else requireClosedBindings({ worker: role, bindings, fingerprint });
+};
+const requirePlannedBindings = ({
+  plan,
+  revision,
+  hosts,
+  fingerprint,
+  fallback,
+  successorPlan,
+}: NativePlanBindings & { successorPlan: boolean }): void => {
   requireSignerHost(fingerprint, hosts);
   const resources = Object.values(plan.resources);
-  for (const role of [...roles, "Smoke"] as const) {
+  const verifiedRoles = successorPlan
+    ? (["Core", "Ingress", "Smoke"] as const)
+    : ([...roles, "Smoke"] as const);
+  for (const role of verifiedRoles) {
     const logicalId = role === "Smoke" ? "ReleaseSmoke-" + revision : role;
     const node = resources.find((item) => describeResource(item).logicalId === logicalId);
     if (node === undefined) throw Error("Missing installed native Worker " + role);
@@ -186,10 +207,16 @@ export const requireNativeBindings = ({
     );
     requireFixtureService(role, bindings, fingerprint);
     requireSiteAsset(role, props, bindings);
-    requireClosedBindings({ worker: role, bindings, fingerprint });
+    requirePlannedRoleBindings({ role, bindings, fingerprint, successorPlan });
     if (role === "Core") requireNativeClasses(bindings);
   }
 };
+export const requireNativeBindings = (input: NativePlanBindings): void =>
+  requirePlannedBindings({ ...input, successorPlan: false });
+export const requireSuccessorPlanBindings = (
+  input: Omit<NativePlanBindings, "hosts" | "fallback">
+): void =>
+  requirePlannedBindings({ ...input, hosts: "acceptance", fallback: true, successorPlan: true });
 const requireNativeClasses = (bindings: ReadonlyArray<NativeBinding>): void => {
   const classes = bindings.filter((binding) => binding.type === "durable_object_namespace");
   const verified = Object.entries(namespaceClasses).every(([name, expected]) =>

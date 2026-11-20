@@ -7,10 +7,11 @@ import {
   signAcceptanceRequest,
 } from "../../../apps/server/cloudflare/release-isolation/operations";
 import {
+  type PerformanceMember,
   SealedTransactionReceipt,
   acceptanceLifetimeMs,
   acceptanceProofHeader,
-  performanceReceiptPath,
+  performanceReceiptPaths,
 } from "../../../apps/server/cloudflare/release-isolation/contract";
 import { TransactionListResponse } from "../../../apps/server/src/shell/transactions/contract";
 import { openPerformanceBrowser } from "../../../infra/cloudflare/native-acceptance";
@@ -125,9 +126,9 @@ const client = (auth: Auth, send: Transport): Client => {
   return { request, login, bind };
 };
 
-const start = Effect.fnUntraced(function* (service: Client) {
+const start = Effect.fnUntraced(function* (service: Client, member: PerformanceMember) {
   const retained = yield* Config.String("FIDY_BOUND_SESSION_FILE").pipe(Config.withDefault(""));
-  if (retained === "") return yield* service.bind(yield* service.login("performance-1"));
+  if (retained === "") return yield* service.bind(yield* service.login(member));
   const previous = yield* Schema.decodeUnknownEffect(session)(
     yield* io(() => Bun.file(retained).json())
   );
@@ -142,14 +143,22 @@ const allowed = (item: Command): boolean =>
         "/ingestion/review-workspace?limit=0&status=pending",
         "/transactions?limit=25",
       ].includes(item.path) || /^\/transactions\/[a-f0-9-]{36}$/u.test(item.path)
-    : ["/operations/atomic-batch", "/transactions/link", performanceReceiptPath].includes(
-        item.path
-      );
-const execute = Effect.fnUntraced(function* (item: Command, active: Session, service: Client) {
+    : [
+        "/operations/atomic-batch",
+        "/transactions/link",
+        ...Object.values(performanceReceiptPaths),
+      ].includes(item.path);
+const execute = Effect.fnUntraced(function* (
+  item: Command,
+  service: Client,
+  { active, member }: { active: Session; member: PerformanceMember }
+) {
   if (!allowed(item)) return yield* new FixtureTransportError();
   const mounted =
     item.control === "foreign-session"
-      ? yield* service.bind(yield* service.login("performance-2"))
+      ? yield* service.bind(
+          yield* service.login(member === "performance-1" ? "performance-2" : "performance-1")
+        )
       : active;
   const headers = sessionHeaders(mounted);
   if (item.control === "wrong-binding") {
@@ -262,9 +271,18 @@ const runMountedWorkspace = Effect.fnUntraced(function* (runtime: Miniflare, act
   );
   offer({ status: 200 });
 });
-export const serveFixture = Effect.fn(function* (runtime: Miniflare) {
-  const service = client(yield* authority, transport(runtime));
-  const active = yield* start(service);
+const emptyReceiptMarkers = Effect.fnUntraced(function* (runtime: Miniflare, revision: string) {
+  const bucket = yield* io(() => runtime.getR2Bucket("SMOKE_BUCKET", "core"));
+  const root = "_release-smoke/" + revision + "/acceptance/transactions/";
+  const observed = yield* Effect.forEach(Object.keys(performanceReceiptPaths), (member) =>
+    io(() => bucket.head(root + member))
+  );
+  return observed.every((object) => object === null);
+});
+export const serveFixture = Effect.fn(function* (runtime: Miniflare, member: PerformanceMember) {
+  const auth = yield* authority;
+  const service = client(auth, transport(runtime));
+  const active = yield* start(service, member);
   offer(active);
   const lines = createInterface({ input: process.stdin, terminal: false });
   yield* Stream.fromAsyncIterable(lines, () => new FixtureTransportError()).pipe(
@@ -272,7 +290,9 @@ export const serveFixture = Effect.fn(function* (runtime: Miniflare) {
       Effect.fnUntraced(function* (line) {
         const item = yield* Schema.decodeEffect(Schema.fromJsonString(command))(line);
         if (item.control === "mounted-workspace") yield* runMountedWorkspace(runtime, active);
-        else yield* execute(item, active, service);
+        else if (item.control === "receipt-markers") {
+          offer({ clear: yield* emptyReceiptMarkers(runtime, auth.revision) });
+        } else yield* execute(item, service, { active, member });
       })
     ),
     Effect.ensuring(Effect.sync(() => lines.close()))

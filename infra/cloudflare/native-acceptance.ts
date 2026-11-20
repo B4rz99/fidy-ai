@@ -1,3 +1,4 @@
+import type { PerformanceMember } from "../../apps/server/cloudflare/release-isolation/contract";
 import type { FleetOrdinal } from "./native-ten-fleet";
 import type { FleetPilotBrowser } from "./native-fleet-pilot";
 import {
@@ -507,7 +508,7 @@ const completionOutcome = Effect.fn(function* (completion: Response) {
 });
 const refusedPairing = Effect.fn(function* (
   input: Inputs,
-  member: "erasure-1" | "performance-1" | FleetSubject,
+  member: "erasure-1" | PerformanceMember | FleetSubject,
   record: ErasureProgress
 ) {
   const privateLogin = {
@@ -576,9 +577,11 @@ type CohortBrowser = {
   renew: () => Effect.Effect<void, Error>;
   call: Driver["call"];
 };
-export const performanceCohortBrowser = (
-  input: Omit<Inputs, "erasure" | "origins">
-): CohortBrowser => {
+export const performanceCohortBrowser = ({
+  member,
+  ...input
+}: Omit<Inputs, "erasure" | "origins"> &
+  Readonly<{ member: PerformanceMember }>): CohortBrowser => {
   const closed = {
     ...input,
     origins: installedOrigins.acceptance,
@@ -586,14 +589,14 @@ export const performanceCohortBrowser = (
   };
   const { call, post } = runner(closed);
   const open = Effect.fn(function* (intent: "signup" | "login") {
-    const user = yield* boot(closed, "performance-1", intent);
+    const user = yield* boot(closed, member, intent);
     return { id: yield* identity(call, user), outcome: user.outcome, headers: user.headers };
   });
   return {
     open,
     survivors: admittedErasureLogins({ ...input, origins: installedOrigins.acceptance }).logins,
     beforeSignup: Effect.fn(function* () {
-      const { proof } = yield* verifyProvider(closed, "performance-1", "login");
+      const { proof } = yield* verifyProvider(closed, member, "login");
       const response = yield* validStatus(
         yield* post("/web/providers/google/complete", proof),
         invalid
@@ -608,7 +611,7 @@ export const performanceCohortBrowser = (
         Effect.flatMap((reply) => consume(reply, unauthorized))
       ),
     refused: () =>
-      refusedPairing(closed, "performance-1", () => Effect.void).pipe(
+      refusedPairing(closed, member, () => Effect.void).pipe(
         Effect.flatMap((pending) => pending.finish)
       ),
     renew: () => renewWork(closed),

@@ -1,6 +1,6 @@
 import hashlib
 import unittest
-from installation import BROWSER, HOST, SCRIPTS, validate_candidate
+from installation import BROWSER, HOST, SCRIPTS, validate_candidate, validate_qualification
 
 
 class ClosedNativeCandidateTests(unittest.TestCase):
@@ -34,7 +34,38 @@ class ClosedNativeCandidateTests(unittest.TestCase):
             return {"id":versions[role],"resources":{"bindings":extra+[{"name":k,"type":"plain_text","text":v} for k,v in fields.items()]}}
         args=dict(account="c"*32,revision=revision,versions=versions,public_key=pub)
         self.assertEqual(validate_candidate(inspect,**args)["signerSha256"],fingerprint)
-        self.assertEqual(validate_candidate(inspect,**args)["resourceRevision"],generation)
+        legacy = validate_candidate(inspect, **args)
+        self.assertEqual(legacy["resourceRevision"], generation)
+        self.assertNotIn("fixtureMember", legacy)
+        def with_binding(role, kind, member):
+            def read(path):
+                data = inspect(path)
+                if "/versions/" in path and SCRIPTS[role] in path:
+                    data["resources"]["bindings"].append(
+                        {"name":"NATIVE_FIXTURE_MEMBER","type":kind,"text":member})
+                return data
+            return read
+        selected = validate_candidate(with_binding("core", "plain_text", "performance-2"), **args)
+        self.assertEqual(selected["fixtureMember"], "performance-2")
+        for role, kind, member in (("core", "plain_text", "performance-3"),
+                                   ("core", "plain_text", "performance-1"),
+                                   ("core", "secret_text", "performance-2"),
+                                   ("ingress", "plain_text", "performance-2")):
+            with self.subTest(role=role, kind=kind, member=member), self.assertRaises(ValueError):
+                validate_candidate(with_binding(role, kind, member), **args)
+        snapshot = {"revision":revision, "core":{"name":SCRIPTS["core"]}, "public":{"name":SCRIPTS["ingress"]}}
+        promotion = {"rollbackTested":True, "release":{"snapshot":snapshot,
+                     "coreVersionId":versions["core"], "publicVersionId":versions["ingress"]},
+                     "promoted":{"coreDeploymentId":versions["core"],"publicDeploymentId":versions["ingress"]}}
+        installation = {**promotion["release"], "revision":revision, "admission":"closed",
+                        "resourceRevision":generation, "userNamespace":"e"*32}
+        validate_qualification(legacy, promotion, installation)
+        with self.assertRaises(ValueError):
+            validate_qualification(selected, promotion, installation)
+        installation["fixtureMember"] = "performance-2"
+        validate_qualification(selected, promotion, installation)
+        with self.assertRaises(ValueError):
+            validate_qualification(legacy, promotion, installation)
         for name, field in [("SMOKE_WORKFLOW","script_name"),("SMOKE_WORKFLOW","workflow_name"),
                             ("SMOKE_WORKFLOW","class_name"),("SMOKE_QUEUE","queue_name"),("SMOKE_QUEUE_NAME","text")]:
             def switched(path):

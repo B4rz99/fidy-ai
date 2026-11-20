@@ -7,6 +7,10 @@ import { Hex } from "effect/encoding";
 export const fixtureBuild = Config.Literals(["ordinary", "fallback"], "NATIVE_FIXTURE_BUILD").pipe(
   Config.withDefault("ordinary")
 );
+export const fixtureSuccessorPlan = Effect.gen(function* () {
+  const operation = yield* Config.String("FIXTURE_RELEASE_OPERATION").pipe(Config.withDefault(""));
+  return operation === "plan-fixture-successor";
+});
 const workerFiles = {
   ordinary: { Core: "core-worker", Ingress: "public-worker" },
   fallback: { Core: "fixture-fallback-core", Ingress: "fixture-fallback-ingress" },
@@ -35,6 +39,7 @@ export const expectedFixtureSigner = Config.String("NATIVE_FIXTURE_SIGNER_SHA256
 type SignerBindings = Partial<
   Readonly<{
     ACCEPTANCE_PROVIDER_REVISION: string;
+    NATIVE_FIXTURE_MEMBER: "performance-2";
     NATIVE_FIXTURE_SIGNING_KEY: Redacted.Redacted<string>;
     NATIVE_FIXTURE_SIGNER_SHA256: string;
   }>
@@ -61,6 +66,7 @@ const publicFingerprint = Effect.fnUntraced(function* (value: string) {
 export const fixtureSignerBindings = Effect.fn(function* (release: {
   closed: boolean;
   hosts: string;
+  successorPlan: boolean;
 }) {
   const fingerprint = yield* expectedFixtureSigner;
   const secret = yield* Config.Redacted("NATIVE_FIXTURE_SIGNING_KEY").pipe(
@@ -80,6 +86,7 @@ export const fixtureSignerBindings = Effect.fn(function* (release: {
   }
   return {
     ACCEPTANCE_PROVIDER_REVISION: retainedProvider.revision,
+    ...(release.successorPlan ? { NATIVE_FIXTURE_MEMBER: "performance-2" as const } : {}),
     NATIVE_FIXTURE_SIGNING_KEY: secret,
     NATIVE_FIXTURE_SIGNER_SHA256: fingerprint,
   };
@@ -88,12 +95,17 @@ export const fixtureSignerBindings = Effect.fn(function* (release: {
 export const fixtureArtifacts = Effect.fn(function* (revision: string) {
   const retainProvider = (yield* expectedFixtureSigner) !== "";
   const fallback = (yield* fixtureBuild) === "fallback";
-  if (fallback && !retainProvider) {
+  const successorPlan = yield* fixtureSuccessorPlan;
+  if ((fallback || successorPlan) && !retainProvider) {
     return yield* Effect.die(Error("Dormant fixture requires the protected retained provider"));
   }
   return {
-    fallback,
+    fallback: fallback || successorPlan,
     retainProvider,
-    resourceRevision: resourceRevision({ revision, signed: retainProvider }),
+    successorPlan,
+    resourceRevision: successorPlan
+      ? revision
+      : resourceRevision({ revision, signed: retainProvider }),
+    supportRevision: resourceRevision({ revision, signed: retainProvider }),
   };
 });

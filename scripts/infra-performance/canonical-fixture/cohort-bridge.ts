@@ -1,7 +1,10 @@
 import { createInterface } from "node:readline/promises";
 import { Config, Data, Effect, Redacted, Schema } from "effect";
 import { performanceCohortBrowser } from "../../../infra/cloudflare/native-acceptance";
-import { performanceReceiptPath } from "../../../apps/server/cloudflare/release-isolation/contract";
+import {
+  type PerformanceMember,
+  performanceReceiptPaths,
+} from "../../../apps/server/cloudflare/release-isolation/contract";
 import { installedOrigins } from "../../../apps/server/src/shell/browser-transport/contract";
 
 type Transport = Parameters<typeof performanceCohortBrowser>[0]["send"];
@@ -50,25 +53,31 @@ type Item = CohortCommand;
 type Local = (item: Item) => Effect.Effect<unknown, Error>;
 type Action = (item: Item) => Effect.Effect<unknown, Error>;
 const unavailable: Local = () => Effect.fail(new CohortTransportError());
-const fixturePath = (method: string, path: string): boolean =>
+const fixturePath = (method: string, path: string, member: PerformanceMember): boolean =>
   method === "GET"
     ? [
         "/user",
         "/transactions?limit=25",
         "/ingestion/review-workspace?limit=0&status=pending",
       ].includes(path) || /^\/transactions\/[a-f0-9-]{36}$/u.test(path)
-    : ["/operations/atomic-batch", "/transactions/link", performanceReceiptPath].includes(path);
+    : ["/operations/atomic-batch", "/transactions/link", performanceReceiptPaths[member]].includes(
+        path
+      );
 const headersOf = Effect.fnUntraced(function* (item: Item) {
   if (item.cookie === undefined || item.binding === undefined) {
     return yield* new CohortTransportError();
   }
   return { cookie: item.cookie, "fidy-session-binding": item.binding };
 });
-const canonical = Effect.fnUntraced(function* (port: Browser, item: Item) {
+const canonical = Effect.fnUntraced(function* (
+  port: Browser,
+  item: Item,
+  member: PerformanceMember
+) {
   if (
     item.method === undefined ||
     item.path === undefined ||
-    !fixturePath(item.method, item.path)
+    !fixturePath(item.method, item.path, member)
   ) {
     return yield* new CohortTransportError();
   }
@@ -85,7 +94,7 @@ const canonical = Effect.fnUntraced(function* (port: Browser, item: Item) {
   });
   return { status: reply.status, data: reply.ok ? yield* io(() => reply.json()) : null };
 });
-const dispatch = (port: Browser, local: Local): Action => {
+const dispatch = (port: Browser, local: Local, member: PerformanceMember): Action => {
   const actions: Readonly<Record<string, Action>> = {
     login: () => port.open("login"),
     "cleanup-login": () => port.open("login").pipe(Effect.orElseSucceed(() => null)),
@@ -96,7 +105,7 @@ const dispatch = (port: Browser, local: Local): Action => {
     refused: () => port.refused(),
     erase: (item) => headersOf(item).pipe(Effect.flatMap(port.erase)),
     denied: (item) => headersOf(item).pipe(Effect.flatMap(port.denied), Effect.as(true)),
-    canonical: (item) => canonical(port, item),
+    canonical: (item) => canonical(port, item, member),
   };
   return (item) =>
     Object.hasOwn(actions, item.action)
@@ -110,10 +119,14 @@ export const cohortAuthority = Effect.gen(function* () {
   if (secret.length < minimumSecret || !/^[a-f0-9]{40}$/u.test(revision)) {
     return yield* new CohortTransportError();
   }
-  return { revision, secret };
+  const member = yield* Config.Literals(
+    ["performance-1", "performance-2"],
+    "FIDY_BOUND_FIXTURE_MEMBER"
+  ).pipe(Config.withDefault("performance-1"));
+  return { revision, secret, member };
 });
 export const serveCohort = Effect.fn(function* (
-  auth: { revision: string; secret: string },
+  auth: { revision: string; secret: string; member: PerformanceMember },
   network: (read: Read) => Transport = relay,
   local: Local = unavailable
 ) {
@@ -126,8 +139,10 @@ export const serveCohort = Effect.fn(function* (
       revision: auth.revision,
       proof: Redacted.make(auth.secret),
       send: network(read),
+      member: auth.member,
     }),
-    local
+    local,
+    auth.member
   );
   yield* Effect.gen(function* () {
     const line = yield* io(read);

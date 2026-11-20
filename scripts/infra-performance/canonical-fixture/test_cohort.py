@@ -67,7 +67,8 @@ class CohortTests(unittest.TestCase):
         coordinates = dict(prefix="fidy-2259-0123456789ab", revision="b"*40, resourceRevision="a"*40)
         Cohort(store, coordinates, port).enroll()
         for changed in [dict(revision=coordinates["resourceRevision"]),
-                        dict(resourceRevision=coordinates["revision"])]:
+                        dict(resourceRevision=coordinates["revision"]),
+                        dict(fixtureMember="performance-2")]:
             with self.subTest(changed=changed), self.assertRaisesRegex(ValueError,"Foreign native cohort"):
                 Cohort(store, {**coordinates, **changed}, port).cleanup()
         self.assertNotIn("erase", port.operations)

@@ -1,18 +1,16 @@
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { Hex } from "effect/encoding";
 import { installedOrigins } from "../../../src/shell/browser-transport/contract";
 import type { AcceptanceEnvironment, Coordinates, SealedTransactionReceipt } from "../contract";
 import {
   AcceptanceProofUnavailable,
   acceptanceApiHeader,
-  performanceReceiptPath,
+  performanceReceiptMember,
 } from "../contract";
 import { verifyRequest } from "./request-proof";
 
-export const isPerformanceReceipt = (request: Request): boolean => {
-  const url = new URL(request.url);
-  return request.method === "POST" && url.pathname + url.search === performanceReceiptPath;
-};
+export const isPerformanceReceipt = (request: Request): boolean =>
+  Option.isSome(performanceReceiptMember(request));
 
 const boundHeader = (request: Request): boolean =>
   !request.headers.has("authorization") &&

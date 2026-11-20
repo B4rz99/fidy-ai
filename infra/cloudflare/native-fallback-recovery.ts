@@ -95,6 +95,33 @@ const matchesOriginalStage = (observed: Deployment, role: Role): boolean =>
   observed.versions.some(
     (row) => row.id === archivedDormant.original[role] && row.percentage === 100
   );
+/** A replacement may supersede only the identified failed zero-traffic versions. */
+export const requireDormantReplacementSource = Effect.fn(function* (
+  port: FallbackRepairPort,
+  snapshot: Release["snapshot"]
+) {
+  yield* releaseController.requireTrunk(port, snapshot.revision);
+  for (const role of ["core", "public"] as const) {
+    const captured = snapshot[role];
+    const [active] = yield* port.recentDeployments(captured.name);
+    if (
+      active === undefined ||
+      !matchesOriginalStage(active, role) ||
+      captured.deploymentId !== active.id ||
+      captured.stableVersionId !== archivedDormant.original[role]
+    ) {
+      return yield* Effect.fail(
+        Error("Closed replacement source differs from the archived deployment")
+      );
+    }
+  }
+});
+export const fromArchivedStage = (source: Release["snapshot"]): boolean =>
+  source.core.deploymentId === archivedDormant.coreDeploymentId &&
+  source.public.deploymentId === archivedDormant.publicDeploymentId &&
+  source.core.stableVersionId === archivedDormant.original.core &&
+  source.public.stableVersionId === archivedDormant.original.public;
+
 export const requirePromotedDormantSource = Effect.fn(function* (
   port: StageReader,
   snapshot: Release["snapshot"]
@@ -126,10 +153,12 @@ const requireUnpromotedHistory = Effect.fn(function* (port: StageReader, release
     if (
       active === undefined ||
       !matchesStage(active, release, role) ||
-      !isDeepStrictEqual(original, {
-        id: snapshot.deploymentId,
-        versions: [{ id: snapshot.stableVersionId, percentage: 100 }],
-      })
+      (fromArchivedStage(release.snapshot)
+        ? original === undefined || !matchesOriginalStage(original, role)
+        : !isDeepStrictEqual(original, {
+            id: snapshot.deploymentId,
+            versions: [{ id: snapshot.stableVersionId, percentage: 100 }],
+          }))
     ) {
       return yield* Effect.fail(Error("Staged pair or original deployment history differs"));
     }

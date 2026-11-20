@@ -1,4 +1,5 @@
 """Retain the original provider, two financial Users and their public logins across owner versions."""
+from collections import Counter
 import os
 from pathlib import Path
 import secrets
@@ -48,17 +49,24 @@ def main():
         for placement in ("old-old", "old-new", "new-old", "new-new"):
             state = Path(temp)/placement
             shutil.copytree(original_state,state)
-            os.environ.update(FIDY_REHEARSAL_STATE=str(state),FIDY_REHEARSAL_SPLIT_OWNERS=placement)
+            trace = Path(temp)/f"{placement}.txt"
+            os.environ.update(FIDY_REHEARSAL_STATE=str(state),FIDY_REHEARSAL_SPLIT_OWNERS=placement,
+                              FIDY_REHEARSAL_SELECTOR_LOG=str(trace))
             with commands(REPAIR,RUNTIME) as runtime:
                 mounted = observations(runtime,sessions) == histories
                 matched = runtime("streamed-controls") == expected
-                outcomes[placement] = dict(originalMountedHistories=mounted, retainedLoginAndHistories=matched)
+                boundary = dict(Counter(trace.read_text().splitlines())) if trace.exists() else {}
+                outcomes[placement] = dict(originalMountedHistories=mounted, retainedLoginAndHistories=matched,
+                    selectorBoundary=boundary, selectedCore=boundary.get("FIDY_VERSION_BOUNDARY core complete selected")==2,
+                    ordinaryDirectory=boundary.get("FIDY_VERSION_BOUNDARY directory complete ordinary")==2
+                    and boundary.get("FIDY_VERSION_BOUNDARY directory inspect ordinary",0)>=2
+                    and not any("directory" in name and "selected" in name for name in boundary))
             print(placement,outcomes[placement],flush=True)
-        if not all(all(row.values()) for row in outcomes.values()):
-            raise ValueError("A retained financial login or history failed")
         out = ROOT/"apps/server/test-results/provider-completion"
         out.mkdir(parents=True,exist_ok=True)
-        write(out/"report.json",dict(baseline=BASELINE,candidate=REPAIR,users=len(expected),ownerOrder=["Directory","UserStore"],outcomes=outcomes))
+        write(out/"report.json",dict(baseline=BASELINE,candidate=REPAIR,candidateCoreSource=subprocess.check_output(["git","rev-parse","HEAD"],cwd=ROOT,text=True).strip(),users=len(expected),ownerOrder=["Directory","UserStore"],outcomes=outcomes))
+        if not all(all(row.values()) for row in outcomes.values()):
+            raise ValueError("Retained financial login or Worker-only version selection failed")
 
 
 if __name__=="__main__":

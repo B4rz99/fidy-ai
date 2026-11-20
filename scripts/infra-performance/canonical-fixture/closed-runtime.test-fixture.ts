@@ -1,3 +1,4 @@
+import { appendFileSync } from "node:fs";
 import { serveFixture } from "./bridge";
 // Disposable production Workers and the pinned release's private Google provider, without an account transport.
 import { Config, Effect, Redacted } from "effect";
@@ -10,8 +11,47 @@ import {
 } from "../../../apps/server/cloudflare/user-store.test-fixture";
 
 const text = (value: string): { type: "text"; value: string } => ({ type: "text", value });
+const boundaryObserver = (name: string): string => {
+  const note = `
+      function note(request, boundary) {
+        const path = new URL(request.url).pathname;
+        const phase = path === "/web/providers/google/complete" ? "complete" :
+          path === "/bootstrap/inspect" ? "inspect" : undefined;
+        if (phase) console.log("FIDY_VERSION_BOUNDARY " + boundary + " " + phase + " " +
+          (request.headers.has("cloudflare-workers-version-overrides") ? "selected" : "ordinary"));
+      }`;
+  const observer =
+    name === "core"
+      ? `
+      import original from "./production.mjs";
+      export * from "./production.mjs";
+      export default {...original, fetch(request,env,ctx) {
+        note(request, "core"); return original.fetch(request,env,ctx);
+      }};`
+      : `
+      import {Directory as Original} from "./production.mjs";
+      export {default} from "./production.mjs";
+      export * from "./production.mjs";
+      export class Directory extends Original {
+        fetch(request) {note(request,"directory"); return super.fetch(request);}
+      }`;
+  return note + observer;
+};
 const observedManifest = Effect.fnUntraced(function* (module: string, name: string) {
   const manifest = yield* workerManifest(module);
+  const placement = yield* Config.String("FIDY_REHEARSAL_SPLIT_OWNERS").pipe(
+    Config.withDefault("combined")
+  );
+  if (placement !== "combined" && (name === "core" || name === "directory-owner")) {
+    const contents = boundaryObserver(name);
+    return {
+      mainModule: "index.mjs",
+      modules: {
+        "index.mjs": { type: "esm" as const, contents },
+        "production.mjs": manifest.modules["index.mjs"],
+      },
+    };
+  }
   if (name !== "ingress") return manifest;
   const entrypoints = new Bun.Transpiler({ loader: "js" }).scan(
     manifest.modules["index.mjs"].contents
@@ -141,6 +181,12 @@ const splitOwnerWorkers = Effect.fnUntraced(function* (input: {
   ];
 });
 
+const recordBoundary = (logFile: string, message: string): void => {
+  const event =
+    /FIDY_VERSION_BOUNDARY (core|directory) (complete|inspect) (selected|ordinary)/u.exec(message);
+  if (event && logFile !== "") appendFileSync(logFile, event[0] + "\n");
+};
+
 export const closedRuntime = Effect.fnUntraced(function* (
   { revision, secret }: { revision: string; secret: string },
   directory: string = ""
@@ -154,6 +200,7 @@ export const closedRuntime = Effect.fnUntraced(function* (
       ? {}
       : { ACCEPTANCE_PROVIDER_REVISION: text(providerRevision) }),
   };
+  const logFile = yield* Config.String("FIDY_REHEARSAL_SELECTOR_LOG").pipe(Config.withDefault(""));
   const configs = yield* Effect.all([
     worker("ingress", ingressEntry, {
       env: {
@@ -162,7 +209,7 @@ export const closedRuntime = Effect.fnUntraced(function* (
         PAT_ADMISSION_KEY: text(deriveSecret(secret, revision, "pat-admission")),
       },
     }),
-    worker("core", coreEntry, {
+    worker("core", !baseline && logFile !== "" ? "./core-worker.ts" : coreEntry, {
       env: {
         ...shared,
         ...nativeOwnerBindings,
@@ -194,7 +241,7 @@ export const closedRuntime = Effect.fnUntraced(function* (
   ]);
   return new Miniflare({
     ...(directory === "" ? {} : { resourcePersistencePath: directory }),
-    handleStructuredLogs: (): void => undefined,
+    handleStructuredLogs: (log): void => recordBoundary(logFile, log.message),
     workers: yield* splitOwnerWorkers({ configs, revision, providerRevision }),
   });
 });

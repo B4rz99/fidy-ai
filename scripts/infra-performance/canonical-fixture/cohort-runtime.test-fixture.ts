@@ -99,6 +99,7 @@ const financialControls = Effect.fnUntraced(function* (
   auth: { revision: string; secret: string },
   streamed: boolean
 ) {
+  const selected = yield* Config.String("FIDY_REHEARSAL_SELECTOR_LOG").pipe(Config.withDefault(""));
   const listener = yield* native(() => runtime.ready);
   const client = Context.get(yield* Layer.build(ReleaseHttpLive), HttpClient.HttpClient);
   const network = yield* FetchHttpClient.Fetch;
@@ -110,6 +111,14 @@ const financialControls = Effect.fnUntraced(function* (
       }
       const headers = new Headers(init?.headers);
       headers.set("cf-connecting-ip", "192.0.2.1");
+      if (selected !== "") {
+        // Fixed synthetic selector for the two request-serving Workers. Object assignments are controlled separately.
+        headers.set("x-fidy-smoke-proof", auth.secret);
+        headers.set(
+          "cloudflare-workers-version-overrides",
+          'ingress="14740000-0000-4000-8000-000000000001", core="14740000-0000-4000-8000-000000000002"'
+        );
+      }
       return network(new URL(url.pathname + url.search, listener), { ...init, headers });
     },
     { preconnect: network.preconnect }

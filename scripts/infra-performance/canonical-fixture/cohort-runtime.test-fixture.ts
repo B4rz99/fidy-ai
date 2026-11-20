@@ -101,6 +101,7 @@ const financialControls = Effect.fnUntraced(function* (
 ) {
   const listener = yield* native(() => runtime.ready);
   const client = Context.get(yield* Layer.build(ReleaseHttpLive), HttpClient.HttpClient);
+  const network = yield* FetchHttpClient.Fetch;
   const loopback: typeof fetch = Object.assign(
     (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]): Promise<Response> => {
       const url = new URL(input instanceof Request ? input.url : input);
@@ -109,9 +110,9 @@ const financialControls = Effect.fnUntraced(function* (
       }
       const headers = new Headers(init?.headers);
       headers.set("cf-connecting-ip", "192.0.2.1");
-      return fetch(new URL(url.pathname + url.search, listener), { ...init, headers });
+      return network(new URL(url.pathname + url.search, listener), { ...init, headers });
     },
-    { preconnect: globalThis.fetch.preconnect }
+    { preconnect: network.preconnect }
   );
   return yield* retainedFinancialControls({
     revision: auth.revision,

@@ -130,7 +130,7 @@ const authenticatedDigest = Effect.fn(function* (ctx: Context & { now: number })
   return authenticated ? Option.some(digest) : Option.none<string>();
 });
 const verifiedBody = Effect.fn(
-  function* (ctx: Context & { now: number }, source: () => Request) {
+  function* (ctx: Context & { now: number }, source: () => Pick<Request, "body" | "signal">) {
     const digest = yield* authenticatedDigest(ctx);
     if (Option.isNone(digest)) return Option.none<Uint8Array<ArrayBuffer>>();
     const bytes = yield* readBoundedRequestBody(yield* Effect.try(source), policy);

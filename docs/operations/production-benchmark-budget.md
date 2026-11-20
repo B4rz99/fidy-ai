@@ -165,13 +165,13 @@ args=(--prefix "$RESOURCE_PREFIX" --revision "$NATIVE_REVISION" --fixture "$PRIV
       --bundle "$VERIFIED_D1_BUNDLE" --manifest-sha256 "$TRUSTED_MANIFEST_SHA256" --pairs 30)
 python3 "$owner" propose "${args[@]}" --out "$PRIVATE_OUTPUT/proposal"
 python3 "$owner" run "${args[@]}" --core-version "$APPROVED_NATIVE_CORE_VERSION" \
-  --ingress-version "$APPROVED_NATIVE_INGRESS_VERSION" --maximum-reads "$APPROVED_READS" --maximum-writes "$APPROVED_WRITES" \
+  --ingress-version "$APPROVED_NATIVE_INGRESS_VERSION" --maximum-reads "$APPROVED_READS" \
   --out "$PRIVATE_OUTPUT/attempt"
 ```
 
 `propose` verifies the native binding, complete final-schema import, frozen package and ceilings
-for every SQL batch, Login, inspection, history read and final Audit check. Use the returned read
-and write maximums when approving the run. `run` obtains current account-wide D1 GraphQL analytics,
+for every SQL batch, Login, inspection, history read and final Audit check. Pass the approved read ceiling and pin the package that contains
+the measured write reservation. `run` obtains current account-wide D1 GraphQL analytics,
 adds previously accounted same-day experiment work and evaluates the repository's Free policy.
 Before taking custody, it independently reads the current native installation and authenticates
 the approved Core and Ingress version UUIDs, closed authority, source revision and exact signer
@@ -350,8 +350,8 @@ The rollout must contain its tested rollback receipt and full native verificatio
 those records with the live deployment identities of all five Workers, the closed host, the Core
 signer fingerprint and UserStore namespace. It uses the existing protected smoke proof and
 `FIDY_NATIVE_FIXTURE_PUBLIC_KEY` public environment variable. Select one or thirty isolated pairs.
-The workflow builds the frozen comparator on the private runner and checks the independently
-calibrated ceiling of 18,194 D1 rows read and 4,754 written.
+The workflow builds the frozen comparator on the private runner, checks the 18,194-row read
+ceiling for the isolated history cohort and reserves the measured writes against account headroom.
 
 The native owner shares the production-deployment concurrency group. Before enrolling, it
 requires two existing smoke User logins, a refused login for the unused performance subject,
@@ -443,7 +443,7 @@ The protected owner reserves the entire single-use browser window before dispatc
 enforce the calibrated method, query and request counts. The D1 meter reserves the exact User
 coordinator's native allowance for the Correction or batch before forwarding. Setup, Login,
 eight inspections, the browser window, both mutations, confirmation reads and the final Session
-Audit share one D1 quote under the 5,000-write experiment cap. An incomplete window keeps its
+Audit share one measured D1 reservation against current account headroom. An incomplete window keeps its
 reservation fenced. The original native cleanup procedure verifies physical erasure and both
 surviving Users. The workflow retains aggregate observations and the origin and cleanup records.
 The populated planning views, loaded 20-User case, repeated mutations and 400 ms profile run on

@@ -136,7 +136,7 @@ try {
   const event = (row) => appendFileSync(events, JSON.stringify(row) + "\n");
   const checkpoint =
     process.env.FIDY_REFERENCE_D1_COST === "1"
-      ? observeBrowserD1(page, api, operator, event)
+      ? observeBrowserD1(page, { api, operator }, event)
       : undefined;
   if (checkpoint) await checkpoint("before-startup");
   const idleMs = Number(process.env.FIDY_REFERENCE_SETUP_IDLE_MS ?? "0");

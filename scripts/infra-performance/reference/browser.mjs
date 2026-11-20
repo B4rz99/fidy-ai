@@ -221,6 +221,9 @@ try {
     event({ type: "startup-resources", resources: await startupTrace });
     event({
       type: "startup-marks",
+      documentReady: await page.evaluate(() =>
+        performance.getEntriesByType("navigation").map((n) => n.toJSON().domContentLoadedEventEnd)
+      ),
       marks: await page.evaluate(() =>
         performance
           .getEntriesByType("mark")

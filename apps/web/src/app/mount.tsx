@@ -1,8 +1,25 @@
+import type { InitialBrowserSession } from "@/transport/initial-session";
 import { preloadWebRouteCode } from "./entry-code";
 import { tryMountProviderReturn } from "./provider-return";
 import { beginInitialBrowserRequest } from "@/transport/initial-request";
 import { browserApiOrigin } from "@/transport/origin";
 import { observeInitialBrowserRequest } from "@/session/initial-request";
+
+const markResolved =
+  (name: string) =>
+  <Value,>(value: Value): Value => {
+    performance.mark(name);
+    return value;
+  };
+const observeSessionCode = (
+  request: ReturnType<typeof observeInitialBrowserRequest>
+): Promise<InitialBrowserSession> =>
+  import("@/transport/initial-session").then(({ beginInitialBrowserSession }) => {
+    performance.mark("fidy-session-code");
+    const initial = beginInitialBrowserSession({ ...request, request });
+    initial.ready.then(markResolved("fidy-session-admitted")).catch(() => undefined);
+    return initial;
+  });
 
 export const mountWebApplication = (): void => {
   if (tryMountProviderReturn()) return;
@@ -23,17 +40,17 @@ export const mountWebApplication = (): void => {
       transactions,
     })
   );
-  const render = import("./render");
-  const initialSession = import("@/transport/initial-session").then(
-    ({ beginInitialBrowserSession }) => beginInitialBrowserSession({ ...request, request })
-  );
+  const render = import("./render").then(markResolved("fidy-render-code"));
+  const initialSession = observeSessionCode(request);
   const routeCode = transactions
     ? Promise.all([
         import("./application-frame"),
         import("./bound-application"),
         import("./transactions-page"),
         import("./routes").then(({ preloadTransactionsEntry }) => preloadTransactionsEntry()),
-      ]).catch(() => undefined)
+      ])
+        .then(() => performance.mark("fidy-route-code"))
+        .catch(() => undefined)
     : undefined;
   if (!transactions) preloadWebRouteCode(pathname).catch(() => undefined);
   Promise.all([render, initialSession, routeCode])

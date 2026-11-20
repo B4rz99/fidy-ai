@@ -57,7 +57,7 @@ export const nativeReleaseContext = Effect.fn(function* (development: boolean, s
   );
   const closed = admission === "closed",
     origin = pairedOrigin(closed, hosts);
-  const artifacts = yield* fixtureArtifacts;
+  const artifacts = yield* fixtureArtifacts(release.gitRevision);
   const fixtureSecret = (
     name: string,
     prefix = "",

@@ -3,7 +3,12 @@ import { inspectNativeAccess } from "./native-deployed-access";
 import { Config, Effect, Schema } from "effect";
 import { HttpClient, HttpClientRequest } from "effect/http";
 import { type ProductionReleaseConfig, releaseEvidence } from "./production-release";
-import { type NativeHostMode, installationNames, nativeHostPairs } from "./storage-installation";
+import {
+  type NativeHostMode,
+  installationNames,
+  nativeHostPairs,
+  nativeIngressHost,
+} from "./storage-installation";
 
 import { type ProviderRead as Read, readProviderList as readList } from "./native-provider-list";
 
@@ -96,6 +101,26 @@ const domain = Schema.Struct({
   zone_id: Schema.NonEmptyString,
   enabled: Schema.Boolean,
   previews_enabled: Schema.Boolean,
+});
+/** WorkerProvider reconciles every custom domain on the script even for a zero-traffic version upload. */
+export const requireClosedIngressDomains = Effect.fn(function* (read: Read) {
+  const rows = yield* readList(
+    read,
+    "workers/domains?service=" + installationNames.Ingress,
+    domain
+  );
+  const [only] = rows;
+  if (
+    rows.length !== 1 ||
+    only?.service !== installationNames.Ingress ||
+    only.hostname !== nativeIngressHost ||
+    !only.enabled ||
+    only.previews_enabled
+  ) {
+    return yield* Effect.fail(
+      Error("Native Ingress domain inventory differs from closed acceptance")
+    );
+  }
 });
 const record = Schema.Struct({
   name: Schema.NonEmptyString,

@@ -154,7 +154,7 @@ const webApplication = Effect.fn(function* (release: NativeRelease) {
     outdir: "dist",
     env: {
       CONTRACT_DIGEST: release.release.contractDigest,
-      RELEASE_GIT_SHA: release.release.gitRevision,
+      RELEASE_GIT_SHA: release.resourceRevision,
     },
     dev: {
       command: `bun run dev -- --host 127.0.0.1 --port ${productionTopology.web.localPort} --strictPort`,
@@ -168,13 +168,13 @@ const webApplication = Effect.fn(function* (release: NativeRelease) {
 });
 export const nativeApplication = Effect.gen(function* () {
   const release = yield* nativeReleaseContext(yield* Alchemy.ALCHEMY_DEV, yield* Alchemy.Stage);
-  const queues = yield* nativeQueues(release.release.gitRevision),
+  const queues = yield* nativeQueues(release.resourceRevision),
     buckets = yield* nativeBuckets;
   const executor = yield* nativeSmokeExecutor({ release, queues, buckets });
   const core = yield* coreWorker({ release, queues, buckets, executor });
   yield* installConsumers({
     queues,
-    revision: release.release.gitRevision,
+    revision: release.resourceRevision,
     core,
     smoke: executor.smoke,
   });
@@ -182,7 +182,7 @@ export const nativeApplication = Effect.gen(function* () {
     ...workerPolicy,
     name: installationNames.ForwardedEmail,
     main: "../../apps/server/cloudflare/ingestion/email-worker.ts",
-    env: { RELEASE_GIT_SHA: release.release.gitRevision },
+    env: { RELEASE_GIT_SHA: release.resourceRevision },
   });
   const ingress = yield* Cloudflare.Worker("Ingress", {
     ...workerPolicy,

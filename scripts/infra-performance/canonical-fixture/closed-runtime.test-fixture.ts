@@ -13,6 +13,14 @@ const text = (value: string): { type: "text"; value: string } => ({ type: "text"
 const observedManifest = Effect.fnUntraced(function* (module: string, name: string) {
   const manifest = yield* workerManifest(module);
   if (name !== "ingress") return manifest;
+  const entrypoints = new Bun.Transpiler({ loader: "js" }).scan(
+    manifest.modules["index.mjs"].contents
+  ).exports;
+  if (entrypoints.toSorted().join(",") !== "default,makePublicWorker") {
+    return yield* Effect.fail(
+      Error("Ingress bundle differs from the captured public export inventory")
+    );
+  }
   // The local Miniflare entry listener supplies its loopback URL. Preserve the fixed original TLS
   // URL when delivering to the production Ingress so the real signed request can be verified.
   const wrapper = `import worker from "./production.mjs";

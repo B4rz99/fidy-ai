@@ -25,6 +25,7 @@ const stage: FallbackStage = {
     maintenance: "4".repeat(32),
     erasure: "5".repeat(32),
   },
+  smoke: { deploymentId: uuid(13), versionId: uuid(14) },
   provider: { revision: stableRevision, deploymentId: uuid(11), versionId: uuid(12) },
   release: {
     snapshot: {

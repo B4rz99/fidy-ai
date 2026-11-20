@@ -54,9 +54,27 @@ def retained_provider():
     return json.loads((Path(__file__).resolve().parents[3] / "infra/cloudflare/native-retained-provider.json").read_bytes())
 
 
+def fixture_upload():
+    return json.loads((Path(__file__).resolve().parents[3] / "infra/cloudflare/native-fixture-upload.json").read_bytes())
+
+
 def serving_graph(read, account, revision, installed):
-    if not re.fullmatch("[0-9a-f]{64}", installed.get("fixtureControlsDigest", "")):
-        raise ValueError("Protected release has no retained financial control evidence")
+    upload = fixture_upload()
+    generation = upload["revision"]
+    if (installed.get("revision") != revision or installed.get("resourceRevision") != generation
+            or not re.fullmatch("[0-9a-f]{40}", generation)):
+        raise ValueError("Qualified application source or retained resource generation differs")
+    websites = installed.get("website")
+    if not isinstance(websites, list) or len(websites) != 1:
+        raise ValueError("Missing qualified acceptance website")
+    website = websites[0]
+    if (website.get("browser") != "https://storage-web-acceptance.fidyapp.com"
+            or website.get("api") != "https://storage-acceptance.fidyapp.com"
+            or website.get("revision") != generation or not website.get("entryAssets")):
+        raise ValueError("Acceptance website does not serve the retained build")
+    controls = installed.get("fixtureControlsDigest", "")
+    if not re.fullmatch("[0-9a-f]{64}", controls) or controls != upload["controlsDigest"]:
+        raise ValueError("Protected release differs from pinned retained financial control evidence")
     recorded_provider = installed["retainedProvider"]
     pin = retained_provider()
     if recorded_provider != pin:
@@ -68,7 +86,7 @@ def serving_graph(read, account, revision, installed):
         raise ValueError("Retained closed provider deployment changed")
     standard_buckets(read, account, installed)
     expected = {"Core":"fidy-native-storage-core", "Ingress":"fidy-native-storage-ingress",
-                "Smoke":"fidy-native-smoke-"+revision, "Web":"fidy-native-web", "ForwardedEmail":"fidy-native-email"}
+                "Smoke":"fidy-native-smoke-"+generation, "Web":"fidy-native-web", "ForwardedEmail":"fidy-native-email"}
     workers = {item["role"]:item for item in installed["workers"]}
     if set(workers) != set(expected) or len(workers) != len(installed["workers"]):
         raise ValueError("Incomplete protected Worker qualification")
@@ -76,12 +94,35 @@ def serving_graph(read, account, revision, installed):
         recorded = workers[role]
         if recorded["name"] != name:
             raise ValueError("Foreign Worker in release qualification")
+        if role in ("Core", "Ingress"):
+            if recorded["versionId"] != installed["coreVersionId" if role == "Core" else "publicVersionId"]:
+                raise ValueError("Serving pair differs from the qualified application")
+        elif role == "Smoke":
+            if any(recorded[key] == upload["support"][role][key] for key in ("versionId", "deploymentId")):
+                raise ValueError("Technical smoke receiver did not deploy the repaired source")
+        elif any(recorded[key] != upload["support"][role][key] for key in ("versionId", "deploymentId")):
+            raise ValueError("Retained support Worker differs from the independently pinned deployment")
         deployments = read(f"accounts/{account}/workers/scripts/{name}/deployments")["deployments"]
         active = deployments[0]
         version, = active["versions"]
         if (active["id"] != recorded["deploymentId"] or version["version_id"] != recorded["versionId"]
                 or version["percentage"] != 100):
             raise ValueError("A qualified native Worker deployment changed")
+        if role in ("Smoke", "ForwardedEmail"):
+            raw = read(f"accounts/{account}/workers/scripts/{name}/versions/{recorded['versionId']}")
+            rows = raw["resources"]["bindings"]
+            bindings = {row["name"]: row for row in rows}
+            source = bindings.get("RELEASE_GIT_SHA", {})
+            expected_source = revision if role == "Smoke" else generation
+            if (raw.get("id") != recorded["versionId"] or len(bindings) != len(rows)
+                    or (source.get("type"), source.get("text")) != ("plain_text", expected_source)):
+                raise ValueError("Installed support Worker has a different source revision")
+            if role == "Smoke":
+                queue, workflow = bindings.get("SMOKE_QUEUE_NAME", {}), bindings.get("SMOKE_WORKFLOW", {})
+                if ((queue.get("type"), queue.get("text")) != ("plain_text", name)
+                        or (workflow.get("type"), workflow.get("workflow_name"), workflow.get("class_name"),
+                            workflow.get("script_name", name)) != ("workflow", name, "ReleaseSmokeWorkflowV2", name)):
+                    raise ValueError("Repaired smoke receiver targets a different resource generation")
 
 
 def standard_buckets(read, account, installed):

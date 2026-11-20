@@ -90,6 +90,10 @@ jobs:
           google-chrome --version
       - name: Verify one equivalent pair before collecting timings
         run: |
+          (cd apps/server && bun run contracts:generate --check)
+          (cd apps/server && bun --bun vitest run --config vitest.config.ts --coverage.enabled=false src/shell/canonical-catalog/contract.test.ts src/shell/operations/operations.test.ts src/shell/schema-codecs/contract.test.ts src/shell/observability/registry.test.ts)
+          (cd apps/web && bun --bun vitest run src/session/initial-session.test.ts src/transport/client.test.ts src/features/transactions/capture-task.test.ts)
+          (cd apps/cli && bun --bun vitest run src/canonical)
           bun scripts/infra-performance/reference/native-review-pressure.test.mjs
           bun apps/web/scripts/check-transaction-panel.ts
           bun scripts/infra-performance/reference/review-failure.test.mjs

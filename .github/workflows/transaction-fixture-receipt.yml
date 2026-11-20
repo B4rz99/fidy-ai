@@ -1,10 +1,16 @@
 name: Rehearse closed Transaction fixture provenance
 on:
   workflow_dispatch:
+    inputs:
+      native_smoke_only:
+        description: Rehearse only the native browser correctness smoke and signed Audit on workerd
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
   receipt:
+    if: ${{ !inputs.native_smoke_only }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -69,6 +75,7 @@ jobs:
             apps/server/test-results/closed-native-cohort-second-member/summary.json
 
   calibration:
+    if: ${{ !inputs.native_smoke_only }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -122,3 +129,30 @@ jobs:
             ${{ runner.temp }}/full/summary.json
             ${{ runner.temp }}/full/native-window-audit.json
             ${{ runner.temp }}/full/paired/comparison.json
+
+  native-smoke:
+    if: inputs.native_smoke_only
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/bun-install
+      - name: Rehearse one native-only browser refresh, mutation rollback, signed Audit and cleanup
+        run: |
+          bun infra/cloudflare/verify-edge-policy.ts
+          python3 -m unittest discover -s scripts/infra-performance/canonical-fixture -p test_native_smoke.py
+          source scripts/infra-performance/hosted-browser/tls.sh
+          export ASSESSMENT_CHROMIUM="$(command -v google-chrome)"
+          export NATIVE_WEB_ASSETS="$RUNNER_TEMP/native-web"
+          (cd apps/web && VITE_API_ORIGIN=installed bun ../../node_modules/vite/bin/vite.js build --mode production --outDir "$NATIVE_WEB_ASSETS")
+          python3 scripts/infra-performance/canonical-fixture/rehearse_cohort.py --second-member --native-smoke --out "$RUNNER_TEMP/native-smoke-rehearsal"
+      - name: Keep only aggregate native correctness evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-smoke-workerd-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/native-smoke-rehearsal/native-correctness.json
+            ${{ runner.temp }}/native-smoke-rehearsal/summary.json

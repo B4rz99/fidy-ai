@@ -161,12 +161,16 @@ const snapshot = Effect.fn("nativeAccountingSnapshot")(function* (scope: Scope) 
   });
 });
 
+export const nativeAccountingSnapshot = Effect.fn(function* (input: unknown) {
+  return yield* snapshot(yield* Schema.decodeUnknownEffect(Scope)(input));
+});
+
 if (import.meta.main) {
   const runtime = ManagedRuntime.make(FetchHttpClient.layer);
   try {
     const input: unknown = await Bun.stdin.json();
     const proof = await runtime.runPromise(
-      snapshot(Schema.decodeUnknownSync(Scope)(input)).pipe(
+      nativeAccountingSnapshot(input).pipe(
         Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" })
       )
     );

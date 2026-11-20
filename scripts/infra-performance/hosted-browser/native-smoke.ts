@@ -52,9 +52,13 @@ const signedRequest = async (config: Smoke, incoming: Request): Promise<Request>
   return request;
 };
 
-const nativeTransport = (
-  config: Smoke
-): {
+const nativeTransport = ({
+  config,
+  http,
+}: {
+  config: Smoke;
+  http: typeof fetch;
+}): {
   forward: (incoming: Request) => Promise<Response>;
   verifyReservation: () => void;
 } => {
@@ -85,7 +89,7 @@ const nativeTransport = (
     const request = await signedRequest(config, incoming);
     scopeOpen(config.deadline);
     return exposedResponse(
-      await fetch(request, {
+      await http(request, {
         redirect: "error",
         signal: AbortSignal.timeout(requestTimeoutMs),
       })
@@ -97,7 +101,15 @@ const nativeTransport = (
   };
 };
 
-const deployedWeb = async (config: Smoke, request: Request): Promise<Response> => {
+const deployedWeb = async ({
+  config,
+  request,
+  http,
+}: {
+  config: Smoke;
+  request: Request;
+  http: typeof fetch;
+}): Promise<Response> => {
   scopeOpen(config.deadline);
   const url = new URL(request.url);
   assert.equal(url.origin, origins.browser);
@@ -109,19 +121,31 @@ const deployedWeb = async (config: Smoke, request: Request): Promise<Response> =
     return new Response(null, { status: 404 });
   }
   return exposedResponse(
-    await fetch(request.url, {
+    await http(request.url, {
       redirect: "error",
       signal: AbortSignal.timeout(requestTimeoutMs),
     })
   );
 };
 
-const run = async (config: Smoke): Promise<void> => {
+export const runNativeSmoke = async ({
+  config,
+  http,
+}: {
+  config: Smoke;
+  http: typeof fetch;
+}): Promise<
+  Readonly<{
+    freshVisibleTransactions: true;
+    nativeWebRevision: string;
+    mutation: Awaited<ReturnType<typeof proveScopedCorrection>>;
+  }>
+> => {
   assert.equal(config.native.web.api, origins.api);
   assert.equal(config.native.web.browser, origins.browser);
   assert.match(config.native.revision, /^[a-f0-9]{40}$/u);
   scopeOpen(config.deadline);
-  const metadata = await fetch(origins.browser + "/deployment-metadata.json", {
+  const metadata = await http(origins.browser + "/deployment-metadata.json", {
     redirect: "error",
     signal: AbortSignal.timeout(requestTimeoutMs),
   });
@@ -129,7 +153,7 @@ const run = async (config: Smoke): Promise<void> => {
   const deployed = parseDeployment(await metadata.json());
   assert.equal(deployed.gitRevision, config.native.web.revision);
   assert.equal(deployed.contractDigest, config.native.web.contractDigest);
-  const transport = nativeTransport(config);
+  const transport = nativeTransport({ config, http });
   await runBrowser({
     variant: "do",
     origins,
@@ -138,7 +162,7 @@ const run = async (config: Smoke): Promise<void> => {
     workspace: config.expected.workspace,
     observations: 1,
     forward: transport.forward,
-    forwardWeb: (request) => deployedWeb(config, request),
+    forwardWeb: (request) => deployedWeb({ config, request, http }),
   });
   const mutation = await proveScopedCorrection(
     config.expected.history,
@@ -159,19 +183,21 @@ const run = async (config: Smoke): Promise<void> => {
     }
   );
   transport.verifyReservation();
-  await Bun.write(
-    join(process.env.FIDY_DIAGNOSTIC_DIR ?? "", "smoke.json"),
-    JSON.stringify({
-      freshVisibleTransactions: true,
-      nativeWebRevision: deployed.gitRevision,
-      mutation,
-    })
-  );
+  return { freshVisibleTransactions: true, nativeWebRevision: deployed.gitRevision, mutation };
 };
 
-try {
-  await run(parseNativeSmoke(await Bun.stdin.json()));
-} catch {
-  process.stderr.write("Protected native Transactions correctness smoke failed\n");
-  process.exitCode = 1;
+if (import.meta.main) {
+  try {
+    const result = await runNativeSmoke({
+      config: parseNativeSmoke(await Bun.stdin.json()),
+      http: fetch,
+    });
+    await Bun.write(
+      join(process.env.FIDY_DIAGNOSTIC_DIR ?? "", "smoke.json"),
+      JSON.stringify(result)
+    );
+  } catch {
+    process.stderr.write("Protected native Transactions correctness smoke failed\n");
+    process.exitCode = 1;
+  }
 }

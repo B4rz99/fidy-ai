@@ -294,7 +294,11 @@ def run(args):
             if args.browser_workspace:
                 write(args.out/"qualified-web.json", installed["website"][0])
             verify()
-            write(args.out/"summary.json", dict(scope="hosted native fixture", originals=8,effective=7,**proof))
+            summary = dict(scope="hosted native fixture", originals=8, effective=7, **proof)
+            if smoke_env is not None:
+                summary["releaseSource"] = dict(artifactId=args.release_artifact, sha256=args.archive_sha256,
+                                                versions=candidate["versions"], deployments=candidate["deployments"])
+            write(args.out/"summary.json", summary)
             if smoke_env is not None:
                 from native_smoke import run_smoke
                 observation = run_smoke(owner, port, proof, installed["website"][0], args.out, smoke_env)

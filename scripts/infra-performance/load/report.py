@@ -117,6 +117,44 @@ def summarize(rows, users, samples, audit=True, fixture=True, offered_history=Fa
     return output
 
 
+def overlapped_responses(row):
+    """Validate two successful responses whose dispatch-to-completion windows intersect."""
+    responses = row.get("responses", [])
+    if len(responses) != 2 or any(response.get("status") != 200 for response in responses):
+        return []
+    if not all(isinstance(response.get(key), (int, float)) and math.isfinite(response[key])
+               for key in ("dispatched", "completedAt") for response in responses):
+        return []
+    if not math.isclose(min(response["dispatched"] for response in responses),
+                        row["dispatched"], rel_tol=0, abs_tol=.001):
+        return []
+    if not math.isclose(max(response["completedAt"] for response in responses),
+                        row["completedAt"], rel_tol=0, abs_tol=.001):
+        return []
+    if max(response["dispatched"] for response in responses) >= min(response["completedAt"] for response in responses):
+        return []
+    return responses
+
+
+def two_tab_evidence(report, rows, samples):
+    """Apply the declared overlap gate and retain individual complete HTTP durations."""
+    evidence = {}
+    for variant in ("d1", "do"):
+        selected = [row for row in rows if row["variant"] == variant and row["ok"]]
+        pairs = [overlapped_responses(row) for row in selected]
+        evidence[variant] = dict(
+            overlappingPairs=sum(bool(pair) for pair in pairs),
+            readDispatchMs=stats([reply["completedAt"] - reply["dispatched"]
+                                  for pair in pairs for reply in pair]),
+        )
+    overlap_verified = all(row["overlappingPairs"] == samples for row in evidence.values())
+    report["sameSessionOverlap"] = dict(verified=overlap_verified, **evidence)
+    if not overlap_verified:
+        for boundary in ("scheduledMs", "dispatchMs"):
+            if report[boundary]["status"] == "pass":
+                report[boundary]["status"] = "fail"
+
+
 if __name__ == "__main__":
     directory = Path(sys.argv[1])
     plan = json.loads((directory / "plan.json").read_text())
@@ -125,12 +163,18 @@ if __name__ == "__main__":
     audits = json.loads(audit_path.read_text()) if audit_path.exists() else {}
     retention = directory / "retention.json"
     fixture = retention.exists() and json.loads(retention.read_text())["verified"] is True
+    two_tabs = plan["profile"] == "two-tabs"
+    cells = [("history", plan["users"])]
+    if not two_tabs:
+        cells.extend((("correction", 1), ("rollback", 1)))
     result = {
         cell: summarize([row for row in rows if row["cell"] == cell], users, plan["samples"], audits.get(cell) is True, fixture, offered_history=cell == "history", native_only=plan["profile"] == "native-original")
-        for cell, users in (("history", plan["users"]), ("correction", 1), ("rollback", 1))
+        for cell, users in cells
     }
+    if two_tabs:
+        two_tab_evidence(result["history"], rows, plan["samples"])
     spans_path = directory / "worker-spans.jsonl"
-    if spans_path.exists():
+    if spans_path.exists() and not two_tabs:
         spans = [json.loads(line) for line in spans_path.read_text().splitlines()]
         result["history"]["workerSpans"] = history_spans(rows, spans)
     (directory / "report.json").write_text(json.dumps(result, indent=2))

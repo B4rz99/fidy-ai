@@ -19,9 +19,9 @@ on:
         options: [normal, poor]
         default: normal
       workerd_profile:
-        description: User count and review population for the workerd load
+        description: Workerd fixture or contention profile
         type: choice
-        options: [original, native-original, mixed-review, single, cpu]
+        options: [original, native-original, mixed-review, single, two-tabs, cpu]
         default: original
       workerd_load:
         description: Run 20 authenticated financial Users and 30 paired Corrections in workerd

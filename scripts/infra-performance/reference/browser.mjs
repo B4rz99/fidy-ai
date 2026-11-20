@@ -1,6 +1,7 @@
 // Each invocation owns an isolated browser context and one newly seeded local installation.
 import assert from "node:assert/strict";
-import { appendFileSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
+import { TraceMap, originalPositionFor } from "@jridgewell/trace-mapping";
 import { createHash } from "node:crypto";
 import { Schema } from "effect";
 import { freshBudgetMonth, freshPendingReview } from "./fresh-workspaces.mjs";
@@ -127,6 +128,54 @@ try {
     process.stderr.write("REFERENCE_STAGE recurring-fixture\n");
     await prepareReferenceRecurring(request, installation);
   }
+  const maps = new Map();
+  const cpu = port === 4173;
+  if (cpu) {
+    await cdp.send("Profiler.enable");
+    await cdp.send("Profiler.setSamplingInterval", {interval: 250});
+  }
+  const capture = async (journey) => {
+    if (cpu && journey === "refresh") await cdp.send("Profiler.start");
+  };
+  const summarize = async (journey) => {
+    if (!cpu || journey !== "refresh") return;
+    const {profile} = await cdp.send("Profiler.stop");
+    const parents = new Map();
+    const source = new Map();
+    for (const node of profile.nodes) {
+      for (const child of node.children ?? []) parents.set(child,node.id);
+      const frame = node.callFrame;
+      let file = ["(idle)", "(program)", "(garbage collector)"].includes(frame.functionName) ? frame.functionName : "(browser)";
+      if (frame.url.startsWith(app+"/assets/")) {
+        const path = new URL(frame.url).pathname;
+        if (!maps.has(path)) {
+          try { maps.set(path, new TraceMap(readFileSync("apps/web/playwright-dist"+path+".map","utf8"))); }
+          catch { maps.set(path,null); }
+        }
+        const sm = maps.get(path);
+        if (sm && frame.lineNumber >= 0 && frame.columnNumber >= 0) {
+          const loc=originalPositionFor(sm, { line:frame.lineNumber+1,column:frame.columnNumber });
+          if (loc.source) file = loc.source;
+        }
+      }
+      source.set(node.id,file);
+    }
+    const exclusive = new Map(), inclusive = new Map();
+    for (let i=0; i<profile.samples.length; i++) {
+      const delta=profile.timeDeltas[i]/1000;
+      let id=profile.samples[i];
+      const leaf=source.get(id);
+      exclusive.set(leaf,(exclusive.get(leaf)??0)+delta);
+      const seen=new Set();
+      while (id) {
+        seen.add(source.get(id));
+        id=parents.get(id);
+      }
+      for (const file of seen) inclusive.set(file,(inclusive.get(file)??0)+delta);
+    }
+    writeFileSync(process.env.FIDY_REFERENCE_EVENTS.replace("workspace-events.jsonl","refresh-profile.json"),
+      JSON.stringify({samples:profile.samples.length, exclusive:Object.fromEntries(exclusive), inclusive:Object.fromEntries(inclusive)}));
+  };
   const { before, startupMs, readMs, correctionMs } = await freshTransactions({
     page,
     ledger,
@@ -135,7 +184,7 @@ try {
     observe,
     observeStartup: async (reply) =>
       Schema.decodeSync(Schema.fromJsonString(Schema.Unknown))(await reply.text()),
-    beforeRefresh: evidence,
+    beforeRefresh: evidence, offered:capture, completed:summarize,
   });
   process.stderr.write("REFERENCE_STAGE accountability-after\n");
   const after = await evidence();

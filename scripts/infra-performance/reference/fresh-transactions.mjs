@@ -215,7 +215,7 @@ const refreshHistory = async (input, startup) => {
   process.stderr.write("REFERENCE_STAGE read\n");
   const refreshCycle = await watchRefresh(page);
   const list = responseFor(input, "GET", "/transactions");
-  offered?.("refresh");
+  await offered?.("refresh");
   const started = performance.now();
   await page.getByRole("button", { name: "Actualizar transacciones", exact: true }).click();
   const initialResponse = await list;
@@ -229,7 +229,7 @@ const refreshHistory = async (input, startup) => {
   const initial = historyPage(await observe(initialResponse));
   assert.deepEqual(initial, startup, "Refresh changed the seeded history");
   const target = verifySeededPage(initial, calibration);
-  completed?.("refresh", readMs);
+  await completed?.("refresh", readMs);
   return { initial, target, readMs };
 };
 /**

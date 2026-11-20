@@ -36,10 +36,6 @@ jobs:
       - name: Check comparator inventory completeness and scoped recovery
         if: always()
         run: python3 -m unittest discover -s scripts/infra-performance/cells
-      - name: Reopen native custody and prove physical disposal on fresh workerd
-        run: |
-          python3 scripts/infra-performance/canonical-fixture/rehearse_cohort.py --out apps/server/test-results/closed-native-cohort
-          python3 scripts/infra-performance/canonical-fixture/rehearse_cohort.py --second-member --out apps/server/test-results/closed-native-cohort-second-member
       - name: Check receipt policy code
         if: always()
         run: |
@@ -55,6 +51,11 @@ jobs:
           bun x tsc --build
           bun run --cwd apps/server typecheck
           bun run --cwd apps/server lint:deps
+      - name: Reopen native custody and prove physical disposal on fresh workerd
+        if: always()
+        run: |
+          python3 scripts/infra-performance/canonical-fixture/rehearse_cohort.py --out apps/server/test-results/closed-native-cohort
+          python3 scripts/infra-performance/canonical-fixture/rehearse_cohort.py --second-member --out apps/server/test-results/closed-native-cohort-second-member
       - name: Keep only aggregate result
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

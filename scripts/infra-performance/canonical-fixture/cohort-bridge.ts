@@ -135,14 +135,12 @@ export const serveCohort = Effect.fn(function* (
   const read: Read = () =>
     iterator.next().then((value) => (value.done === true ? "" : value.value));
   const apply = dispatch(
-    performanceCohortBrowser(
-      {
-        revision: auth.revision,
-        proof: Redacted.make(auth.secret),
-        send: network(read),
-      },
-      auth.member
-    ),
+    performanceCohortBrowser({
+      revision: auth.revision,
+      proof: Redacted.make(auth.secret),
+      send: network(read),
+      member: auth.member,
+    }),
     local,
     auth.member
   );

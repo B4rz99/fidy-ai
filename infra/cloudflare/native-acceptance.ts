@@ -577,10 +577,11 @@ type CohortBrowser = {
   renew: () => Effect.Effect<void, Error>;
   call: Driver["call"];
 };
-export const performanceCohortBrowser = (
-  input: Omit<Inputs, "erasure" | "origins">,
-  member: PerformanceMember
-): CohortBrowser => {
+export const performanceCohortBrowser = ({
+  member,
+  ...input
+}: Omit<Inputs, "erasure" | "origins"> &
+  Readonly<{ member: PerformanceMember }>): CohortBrowser => {
   const closed = {
     ...input,
     origins: installedOrigins.acceptance,

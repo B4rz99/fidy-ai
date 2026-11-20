@@ -682,7 +682,7 @@ await write("plan", {
   users,
   samples,
   command:
-    "bun scripts/infra-performance/load/measure.mjs baseline-d1 apps/server/test-results/load " +
+    "bun scripts/infra-performance/load/measure.test-fixture.mjs baseline-d1 apps/server/test-results/load " +
     size +
     " " +
     profile,

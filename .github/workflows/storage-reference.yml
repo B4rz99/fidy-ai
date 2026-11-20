@@ -141,7 +141,7 @@ jobs:
         run: |
           mkdir -p apps/server/test-results/load
           touch apps/server/test-results/load/attempts.jsonl
-          bun scripts/infra-performance/load/measure.mjs baseline-d1 apps/server/test-results/load "$DATASET" "$PROFILE"
+          bun scripts/infra-performance/load/measure.test-fixture.mjs baseline-d1 apps/server/test-results/load "$DATASET" "$PROFILE"
       - name: Evaluate every planned boundary
         if: always() && inputs.workerd_profile != 'cpu'
         run: python3 scripts/infra-performance/load/report.py apps/server/test-results/load

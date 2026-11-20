@@ -9,7 +9,7 @@ const maxFrames = 48,
   batches = 25,
   readsPerBatch = 4,
   interBatchMs = 500;
-/** @typedef {Parameters<NonNullable<Parameters<typeof profileWorkerRequest>[1]>>[0]} Profile */
+/** @typedef {Parameters<NonNullable<Parameters<typeof profileWorkerRequest>[0]["onProfile"]>>[0]} Profile */
 /** @typedef {Map<string,number>} Frames */
 /** @typedef {{leaf:Frames, inclusive:Frames}} Counts */
 const targetsFrom = Schema.decodeUnknownSync(
@@ -91,17 +91,15 @@ export const profileHistory = async (runtime, read, write) => {
     await inOrder(indices(batches), async () => {
       // Keep the rate-limit interval completely outside the sampled interval.
       await delay(interBatchMs);
-      await profileWorkerRequest(
-        {
-          debuggerUrl: address.href,
-          signal: Option.none(),
-          sendRequest: async () => {
-            await inOrder(indices(readsPerBatch), read);
-            return new Response();
-          },
+      await profileWorkerRequest({
+        debuggerUrl: address.href,
+        signal: Option.none(),
+        sendRequest: async () => {
+          await inOrder(indices(readsPerBatch), read);
+          return new Response();
         },
-        (profile) => accumulate(profile, counts)
-      );
+        onProfile: (profile) => accumulate(profile, counts),
+      });
     });
     await write("profile-" + target.id.split(/[:/]/).at(-1), {
       reads: batches * readsPerBatch,

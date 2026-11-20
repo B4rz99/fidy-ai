@@ -16,13 +16,15 @@ export default {
           "^cloudflare/erasure-worker\\.test-fixture\\.ts$",
           "^cloudflare/login-email-worker\\.test-fixture\\.ts$",
           "^cloudflare/storage-forward-repair\\.test-fixture\\.ts$",
+          // The exact two permitted fallback-to-application edges are checked by published-only.
+          "^cloudflare/fixture-fallback-(core|ingress)\\.ts$",
           "^cloudflare/(core-worker|public-worker|operational-canary-workflow)\\.ts$",
           "^cloudflare/ingestion/email-worker\\.ts$",
           "\\.d\\.mts$",
         ],
       },
       to: {
-        path: "^cloudflare/((core-worker|public-worker|operational-canary-workflow)\\.ts|ingestion/email-worker\\.ts)$",
+        path: "^cloudflare/((core-worker|public-worker|operational-canary-workflow|fixture-fallback-core|fixture-fallback-ingress)\\.ts|ingestion/email-worker\\.ts)$",
       },
     },
     {

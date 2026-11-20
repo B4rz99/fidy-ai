@@ -9,14 +9,16 @@ MIGRATIONS = "apps/server/cloudflare/migrations"
 QUERY = Path(__file__).with_name("legacy-inventory.sql")
 
 # A shallow CI checkout may provide the pinned baseline as a second repository.
-git = ["git", "-C", sys.argv[1] if len(sys.argv) > 1 else "."]
+checkout = Path(sys.argv[1]) if len(sys.argv) > 1 else Path.cwd()
 db = sqlite3.connect(":memory:")
 files = subprocess.check_output(
-    [*git, "ls-tree", "-r", "--name-only", BASELINE, MIGRATIONS], text=True
+    ["git", "ls-tree", "-r", "--name-only", BASELINE, MIGRATIONS], cwd=checkout, text=True
 ).splitlines()
 assert files and files[-1].endswith("0015_remove_price_notices.sql")
 for filename in files:
-    migration = subprocess.check_output([*git, "show", f"{BASELINE}:{filename}"], text=True)
+    migration = subprocess.check_output(
+        ["git", "show", f"{BASELINE}:{filename}"], cwd=checkout, text=True
+    )
     try:
         db.executescript(migration)
     except sqlite3.DatabaseError as error:

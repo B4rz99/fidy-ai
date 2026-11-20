@@ -249,6 +249,29 @@ export const requireRoleBindings = ({
   if (role === "Ingress" || role === "Core") requireClosedRole(role, bindings, fingerprint);
 };
 
+export const requireSuccessorCoreBindings = ({
+  bindings,
+  fingerprint,
+}: {
+  bindings: ReadonlyArray<NativeBinding>;
+  fingerprint: string;
+}): void => {
+  const members = bindings.filter((binding) => binding.name === "NATIVE_FIXTURE_MEMBER");
+  const [member] = members;
+  if (
+    fingerprint === "" ||
+    members.length !== 1 ||
+    member?.type !== "plain_text" ||
+    member.text !== "performance-2"
+  ) {
+    throw Error("Successor Core must select the second fixture member");
+  }
+  requireRoleBindings({
+    role: "Core",
+    fingerprint,
+    bindings: bindings.filter((binding) => binding.name !== "NATIVE_FIXTURE_MEMBER"),
+  });
+};
 export const smokeResource = (id: string): boolean =>
   /^(?:ReleaseSmoke(?:Queue|WorkflowV2|Consumer)?)-[0-9a-f]{40}$/u.test(id);
 const Planned = Schema.Struct({

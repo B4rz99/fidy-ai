@@ -37,7 +37,8 @@ def custody_credentials(account, key, parent_id, token, *, read_only=False):
 
 
 class CustodyObject:
-    def __init__(self, account, cloud, *, native_revision=None, receipt_marker=False, member="performance-1"):
+    def __init__(self, account, cloud, *, native_revision=None, receipt_marker=False, member="performance-1",
+                 read_only=False):
         if not re.fullmatch("[a-f0-9]{32}", account):
             raise Refused("missing_account_binding")
         self.key = f"protected-storage/account/{account}/d1-ledger.json"
@@ -50,7 +51,8 @@ class CustodyObject:
                         else f"protected-storage/account/{account}/{member}/{native_revision}.json")
         elif receipt_marker:
             raise Refused("invalid_native_custody_revision")
-        self.read_only = receipt_marker
+        self.receipt_marker = receipt_marker
+        self.read_only = receipt_marker or read_only
         self.command = [
             "aws",
             "--endpoint-url",
@@ -68,7 +70,7 @@ class CustodyObject:
         if token.get("status") != "active":
             raise Refused("inactive_account_credential")
         self.env = dict(PATH=os.environ["PATH"], AWS_MAX_ATTEMPTS="1", AWS_EC2_METADATA_DISABLED="true",
-                        **custody_credentials(account, self.key, token["id"], cloud.auth, read_only=receipt_marker))
+                        **custody_credentials(account, self.key, token["id"], cloud.auth, read_only=self.read_only))
 
     def call(self, operation, *args):
         return subprocess.run(
@@ -86,7 +88,7 @@ class CustodyObject:
                 if b"(NoSuchKey)" in reply.stderr:
                     return None, None
                 raise Refused("account_ledger_unavailable")
-            return json.loads(reply.stdout)["ETag"], (path.read_text() if self.read_only else json.loads(path.read_text()))
+            return json.loads(reply.stdout)["ETag"], (path.read_text() if self.receipt_marker else json.loads(path.read_text()))
 
     def replace(self, version, value):
         if self.read_only:

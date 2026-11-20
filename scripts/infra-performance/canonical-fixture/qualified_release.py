@@ -17,7 +17,8 @@ def actions_get(path):
     return subprocess.check_output(["gh", "api", BASE + path], timeout=40)
 
 
-def protected_archive(account_revision, artifact_id, expected_digest, *, prefix, conclusions, get=actions_get):
+def protected_archive(account_revision, artifact_id, expected_digest, *, prefix, conclusions, get=actions_get,
+                      workflow="native-storage-release.yml", suffix=""):
     if not re.fullmatch("[1-9][0-9]{0,19}", artifact_id or "") or not re.fullmatch("[0-9a-f]{64}", expected_digest or ""):
         raise ValueError("Exact protected rollout artifact ID and independently pinned digest required")
 
@@ -27,10 +28,10 @@ def protected_archive(account_revision, artifact_id, expected_digest, *, prefix,
         raise ValueError("Foreign GitHub artifact or source run")
     run = json.loads(get("runs/" + run_id))
     if (str(run["id"]) != run_id or run["repository"]["full_name"] != REPO or run["head_repository"]["full_name"] != REPO
-            or run["path"] != ".github/workflows/native-storage-release.yml" or run["head_branch"] != "trunk"
+            or run["path"] != ".github/workflows/" + workflow or run["head_branch"] != "trunk"
             or run["head_sha"] != account_revision or run["event"] != "workflow_dispatch"
             or run["conclusion"] not in conclusions or run["run_attempt"] != 1
-            or meta["expired"] is not False or meta["name"] != prefix + run_id
+            or meta["expired"] is not False or meta["name"] != prefix + run_id + suffix
             or meta["workflow_run"]["head_sha"] != account_revision or not 0 < meta["size_in_bytes"] <= 1_048_576
             or meta["digest"] != "sha256:" + expected_digest):
         raise ValueError("Foreign, expired or unsuccessful protected rollout")

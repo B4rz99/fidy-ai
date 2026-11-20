@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 
-import { parseAck, parseRefusal } from "./contracts";
+import { parseAck, parseHistory, parseRefusal } from "./contracts";
 
 const success = 200,
   invalid = 400;
@@ -18,9 +18,10 @@ const completed = async (response, status) => {
 /** @param {string} notes New synthetic notes. */
 const change = (notes) => ({ expectedRevision: 0, changes: { notes } });
 
-/** @param {{data: Array<{id:string, counterparty:string,revision:number}>}} before Verified effective history.
+/** @param {unknown} captured Verified effective history.
  * @param {(method:string,path:string,body?:unknown)=>Promise<Response>} send Original, bound WebSession transport. */
-export const proveScopedCorrection = async (before, send) => {
+export const proveScopedCorrection = async (captured, send) => {
+  const before = parseHistory(captured);
   const target = before.data.find((row) => row.counterparty === "Evaluación 2");
   const untouched = before.data.find((row) => row.counterparty === "Evaluación 3");
   assert.ok(target && untouched && target.revision === 0 && untouched.revision === 0);

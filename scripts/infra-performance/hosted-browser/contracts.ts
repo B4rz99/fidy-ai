@@ -12,6 +12,8 @@ const row = Schema.StructWithRest(
   }),
   [extras]
 );
+const history = Schema.StructWithRest(Schema.Struct({ data: Schema.Array(row) }), [extras]);
+export const parseHistory = Schema.decodeUnknownSync(history);
 const config = Schema.Struct({
   deadline: Schema.Int,
   d1: Schema.Struct({
@@ -32,7 +34,7 @@ const config = Schema.Struct({
     }),
   }),
   expected: Schema.Struct({
-    history: Schema.StructWithRest(Schema.Struct({ data: Schema.Array(row) }), [extras]),
+    history,
     workspace: Schema.Struct({ profile: Schema.Unknown, review: Schema.Unknown }),
   }),
   allowed: Schema.Record(Schema.String, Schema.Int),
@@ -78,7 +80,10 @@ export const parseRefusal = Schema.decodeUnknownSync(
 
 export type PairConfig = typeof config.Type;
 export type Variant = "d1" | "do";
-export type PairHttp = (...args: Parameters<typeof fetch>) => Promise<Response>;
+export type PairHttp = (
+  request: Request | string,
+  ...options: [] | [RequestInit & Partial<{ decompress: boolean }>]
+) => Promise<Response>;
 export type Dispatch = { variant: Variant; method: string; path: string };
 export type Observation = { index: number; variant: Variant; offered: boolean };
 export type PairEvidence = Record<string, unknown> & {

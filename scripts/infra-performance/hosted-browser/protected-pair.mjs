@@ -50,13 +50,13 @@ const available = (config) =>
 const stats = (values) => {
   assert.equal(values.length, pairs);
   assert.ok(values.every((value) => Number.isFinite(value) && value >= 0));
-  const sorted = values.toSorted((left, right) => left - right);
+  const sorted = [...values].sort((left, right) => left - right);
   const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
   return {
     count: pairs,
     median: (sorted[pairs / 2 - 1] + sorted[pairs / 2]) / 2,
     p95: sorted[Math.ceil(pairs * percentile) - 1],
-    maximum: sorted.at(-1),
+    maximum: sorted[pairs - 1],
     standardDeviation: Math.sqrt(
       values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length
     ),
@@ -391,8 +391,8 @@ const keepPartial = async ({ dir, evidence }, variant) => {
         event.stage === "incomplete" ||
         event.stage === "refresh" ||
         (event.status ?? 0) >= firstError ||
-        event.failed ||
-        event.rejected
+        Boolean(event.failed) ||
+        Boolean(event.rejected)
     );
   }
 };

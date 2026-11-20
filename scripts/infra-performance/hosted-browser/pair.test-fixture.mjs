@@ -37,7 +37,8 @@ const http = async (input, init = {}) => {
   const url = new URL(incoming.url);
   if (url.origin === config.d1.url) {
     return fetch(new Request("http://127.0.0.1:" + port + url.pathname + url.search, incoming), {
-      decompress: init.decompress,
+      decompress:
+        "decompress" in init && typeof init.decompress === "boolean" ? init.decompress : true,
       redirect: "error",
     });
   }
@@ -63,15 +64,12 @@ const counters = async () => {
     const reply = await (await runtime.getWorker(role)).fetch("https://offline.invalid/" + path);
     return reply.json();
   };
+  /** @param {string} role Workerd binding role. @returns {Promise<[string,unknown]>} Role and observed counters. */
+  const roleStats = async (role) => [role, await get(role, "r2-counts")];
   return {
     sql: await get("core", "native-row-counts"),
     r2: Object.fromEntries(
-      await Promise.all(
-        ["ingress", "core", "closed-provider"].map(async (role) => [
-          role,
-          await get(role, "r2-counts"),
-        ])
-      )
+      await Promise.all(["ingress", "core", "closed-provider"].map(roleStats))
     ),
   };
 };

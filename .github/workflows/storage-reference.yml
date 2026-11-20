@@ -1,153 +1,83 @@
-name: Compare the storage reference
+name: Verify workerd source and recover saved first-attempt evidence
 
 on:
-  pull_request:
-    paths:
-      - ".github/workflows/storage-reference.yml"
-      - "scripts/infra-performance/reference/**"
-      - "scripts/dev-browser-api.ts"
   workflow_dispatch:
     inputs:
-      dataset:
-        description: FinancialRecord fixture
-        type: choice
-        options: [production, small, extreme]
-        default: production
-      network:
-        description: Browser network
-        type: choice
-        options: [normal, poor]
-        default: normal
-      workerd_profile:
-        description: User count and review population for the workerd load
-        type: choice
-        options: [original, native-original, mixed-review, single, cpu]
-        default: original
-      workerd_load:
-        description: Run 20 authenticated financial Users and 30 paired Corrections in workerd
-        type: boolean
-        default: false
-      transaction_read_only:
-        description: Measure mounted Transactions startup and fresh history only
-        type: boolean
-        default: false
-      full_recurring:
-        description: Measure only the four compact Recurring interactions and full revision HTTP on extreme
-        type: boolean
-        default: false
-      setup_idle_ms:
-        description: Idle time between authenticated fixture preparation and the first browser journey
-        type: choice
-        options: ["0", "2000"]
-        default: "0"
+      evidence:
+        type: string
+        description: Base85-encoded original public benchmark artifact files
+      receipt:
+        type: string
+        description: One of the two fixed local archive SHA-256 receipts
+      source:
+        type: string
+        description: Source revision to test on the credential-free runner
 
 permissions:
   contents: read
 
-concurrency:
-  group: storage-reference-${{ github.ref }}-${{ inputs.workerd_profile }}-${{ inputs.dataset || 'production' }}-${{ inputs.network || 'normal' }}-${{ inputs.setup_idle_ms || '0' }}-${{ inputs.transaction_read_only || false }}-${{ inputs.full_recurring || false }}
-  cancel-in-progress: false
-
 jobs:
-  compare:
-    if: ${{ !inputs.workerd_load }}
+  recover:
+    if: inputs.receipt != ''
     runs-on: ubuntu-latest
-    timeout-minutes: 90
-    env:
-      DATASET: ${{ inputs.dataset || 'production' }}
-      NETWORK: ${{ inputs.network || 'normal' }}
-      RECURRING_FLAG: ${{ inputs.full_recurring && '--full-recurring' || '' }}
-      READ_ONLY_FLAG: ${{ inputs.transaction_read_only && '--transaction-read-only' || '' }}
-      SETUP_IDLE_MS: ${{ inputs.setup_idle_ms || '0' }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          persist-credentials: false
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          ref: fb53d9e755c14393048dc945fc0b7f117730d872
-          path: baseline-d1
-          persist-credentials: false
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          ref: 972ecaa22bb58ab472de2e9458c76290c72aa09d
-          path: baseline-fixtures
-          persist-credentials: false
-          sparse-checkout: apps/server/cloudflare
-      - uses: ./.github/actions/bun-runtime
-      - name: Prepare both frozen checkouts and the common browser
-        run: |
-          export GIT_ALTERNATE_OBJECT_DIRECTORIES="$GITHUB_WORKSPACE/baseline-fixtures/.git/objects"
-          echo "GIT_ALTERNATE_OBJECT_DIRECTORIES=$GIT_ALTERNATE_OBJECT_DIRECTORIES" >> "$GITHUB_ENV"
-          git -C baseline-d1 restore --source=972ecaa22bb58ab472de2e9458c76290c72aa09d --worktree -- \
-            apps/server/cloudflare/browser-assessment.test-fixture.ts \
-            apps/server/cloudflare/browser-acceptance-preview.ts \
-            apps/server/cloudflare/browser-acceptance-seed.ts
-          bash scripts/install-workspace.sh --ignore-scripts
-          (cd baseline-d1 && bash scripts/install-workspace.sh --ignore-scripts)
-          echo "ASSESSMENT_CHROMIUM=$(command -v google-chrome)" >> "$GITHUB_ENV"
-          google-chrome --version
-      - name: Verify one equivalent pair before collecting timings
-        run: |
-          bun scripts/infra-performance/reference/native-review-pressure.test.mjs
-          bun apps/web/scripts/check-transaction-panel.ts
-          bun scripts/infra-performance/reference/review-failure.test.mjs
-          bun scripts/infra-performance/reference/recurring-response.test.mjs
-          python3 -m unittest discover -s scripts/infra-performance/reference
-          python3 scripts/infra-performance/reference/run.py --d1 baseline-d1 --do . \
-            --dataset "$DATASET" --network "$NETWORK" --setup-idle-ms "$SETUP_IDLE_MS" ${READ_ONLY_FLAG:+"$READ_ONLY_FLAG"} ${RECURRING_FLAG:+"$RECURRING_FLAG"} --pairs 1 --origin "GitHub-hosted Ubuntu loopback"
-      - name: Measure 30 alternating pairs
-        run: |
-          python3 scripts/infra-performance/reference/run.py --d1 baseline-d1 --do . \
-            --dataset "$DATASET" --network "$NETWORK" --setup-idle-ms "$SETUP_IDLE_MS" ${READ_ONLY_FLAG:+"$READ_ONLY_FLAG"} ${RECURRING_FLAG:+"$RECURRING_FLAG"} --pairs 30 --origin "GitHub-hosted Ubuntu loopback"
-      - name: Preserve reference evidence
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: storage-reference-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            apps/web/test-results/reference/*/plan.json
-            apps/web/test-results/reference/*/attempts.jsonl
-            apps/web/test-results/reference/*/*/workspace-events.jsonl
-            apps/web/test-results/reference/*/report.json
-          if-no-files-found: warn
-
-  workerd-load:
-    if: inputs.workerd_load
-    runs-on: ubuntu-latest
-    timeout-minutes: 150
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          ref: fb53d9e755c14393048dc945fc0b7f117730d872
-          path: baseline-d1
-          persist-credentials: false
-      - uses: ./.github/actions/bun-runtime
-      - name: Prepare both immutable application checkouts
-        run: |
-          bash scripts/install-workspace.sh --ignore-scripts
-          (cd baseline-d1 && bash scripts/install-workspace.sh --ignore-scripts)
-          bun scripts/infra-performance/load/trace.test.mjs
-          python3 -m unittest discover -s scripts/infra-performance/load
-      - name: Measure complete workerd requests and confirmed Corrections
+      - name: Verify the archive and restore original generated files
         env:
-          DATASET: ${{ inputs.dataset }}
-          PROFILE: ${{ inputs.workerd_profile }}
-          FIDY_WORKERD_CPU: ${{ inputs.workerd_profile == 'cpu' && '1' || '0' }}
+          RECEIPT: ${{ inputs.receipt }}
+          EVIDENCE: ${{ inputs.evidence }}
         run: |
-          mkdir -p apps/server/test-results/load
-          touch apps/server/test-results/load/attempts.jsonl
-          bun scripts/infra-performance/load/measure.mjs baseline-d1 apps/server/test-results/load "$DATASET" "$PROFILE"
-      - name: Evaluate every planned boundary
-        if: always() && inputs.workerd_profile != 'cpu'
-        run: python3 scripts/infra-performance/load/report.py apps/server/test-results/load
-      - name: Preserve fixture counts, attempts, accountability and comparison
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+          python3 - <<'PY'
+          import base64, hashlib, io, json, os, pathlib, tarfile
+          expected = {
+              "a31fcc836fcc26cd1fad3f1b80a5bfef13cf03159c35b86e6ddbb679a2eebfa4": "workerd-load-44732847622-1",
+              "ca90cd4fbaae804eda71bde403f8d123b0a68759c3935aada4a4ab967d6b7618": "workerd-load-44732852474-1",
+          }
+          receipt = os.environ["RECEIPT"]
+          original = expected[receipt]
+          packed = base64.b85decode(os.environ["EVIDENCE"])
+          assert hashlib.sha256(packed).hexdigest() == receipt
+          dest = pathlib.Path("evidence") / original
+          dest.mkdir(parents=True)
+          with tarfile.open(fileobj=io.BytesIO(packed), mode="r:xz") as archive:
+            for member in archive.getmembers():
+              assert member.isfile() and pathlib.Path(member.name).name == member.name
+              (dest / member.name).write_bytes(archive.extractfile(member).read())
+          files = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in dest.iterdir()}
+          (dest.parent / "provenance.json").write_text(json.dumps(dict(
+            originalArtifact=original, capturedBeforeRerun=True, localArchiveSha256=receipt, sha256=files), indent=2))
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: workerd-load-${{ github.run_id }}-${{ github.run_attempt }}
-          path: apps/server/test-results/load
+          name: restored-first-attempt-${{ github.run_id }}
+          path: evidence
+  verify:
+    if: inputs.source != ''
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [types, lint, runtime]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.source }}
+          persist-credentials: false
+      - uses: ./.github/actions/bun-runtime
+      - run: bash scripts/install-workspace.sh --ignore-scripts
+      - name: Run project reference typecheck
+        if: matrix.check == 'types'
+        run: |
+          bun install --cwd tools/astro --frozen-lockfile
+          bun run typecheck
+      - name: Check formatting and type-aware lint
+        if: matrix.check == 'lint'
+        run: |
+          bun run lint:type-aware
+          bunx oxfmt --check scripts/dev-browser-api.ts scripts/document-parsing/workerd-inspector.ts scripts/infra-performance/load scripts/infra-performance/reference/native-seed.ts apps/server/cloudflare/{user-store.test-fixture.ts,routing/operations.ts,bancolombia-authentication/runtime.ts,transactions/internal/{sqlite-history.ts,transaction-history.ts}} apps/server/src/{shell/{public-http,transactions},core/quotas}/operations.ts
+      - name: Exercise the source and public runtime paths
+        if: matrix.check == 'runtime'
+        run: |
+          python3 -m unittest discover -s scripts/infra-performance/load
+          bun scripts/infra-performance/load/trace.test.mjs
+          bun run --cwd apps/server test:core src/core/quotas/operations.test.ts --coverage.enabled=false
+          bun run --cwd apps/server test:cloudflare cloudflare/transactions/user-store.test.ts --coverage.enabled=false

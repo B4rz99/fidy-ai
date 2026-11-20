@@ -1,4 +1,4 @@
-import { reviewPageContextQuery } from "./page-context-query";
+import { reviewPageContextSource } from "./page-context-query";
 import { observeReviewQuery } from "./query-observation";
 import { reviewItemKey, reviewWorkspaceKey } from "./query-keys";
 import { Data, DateTime, Effect, Option } from "effect";
@@ -186,14 +186,13 @@ export const prepareReviewWorkspace = (input: ReviewPreparation): Promise<void> 
       if (AsyncResult.isSuccess(snapshot) && !snapshot.waiting) {
         // Start the authorized excerpt read as soon as the page identities are known.
         // The mounted page shares this exact query, including its membership and expiry fences.
-        registry.get(
-          reviewPageContextQuery({
-            client: apiClient,
-            filter,
-            page,
-            ids: snapshot.value.data.items.map((item) => item.id),
-          })
-        );
+        const context = reviewPageContextSource({
+          client: apiClient,
+          filter,
+          page,
+          ids: snapshot.value.data.items.map((item) => item.id),
+        });
+        registry.get(registry.get(context));
       }
       registry.set(visited(apiClient), true);
       if (first) {

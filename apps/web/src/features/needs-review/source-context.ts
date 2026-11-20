@@ -1,4 +1,4 @@
-import { reviewPageContextQuery } from "./page-context-query";
+import { reviewPageContextSource } from "./page-context-query";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { DateTime, Option } from "effect";
@@ -14,17 +14,18 @@ export type SourceContext =
   CanonicalSuccess<"ingestion.getReviewPageContext">["data"]["items"][number];
 export type PageContexts = ReadonlyMap<string, SourceContext>;
 
-const evidenceProjection = Atom.family((query: ReturnType<typeof reviewPageContextQuery>) =>
-  Atom.make((get) => {
-    const state = get(query).pipe(presentCanonicalQuery);
-    const deadlines = new Map<string, Item["expiresAt"]>();
-    if (state._tag === "Ready") {
-      for (const entry of state.value.data.items) {
-        deadlines.set(entry.id, get(originalDeadlineQuery(entry)));
+const evidenceProjection = Atom.family(
+  (query: Atom.Type<ReturnType<typeof reviewPageContextSource>>) =>
+    Atom.make((get) => {
+      const state = get(query).pipe(presentCanonicalQuery);
+      const deadlines = new Map<string, Item["expiresAt"]>();
+      if (state._tag === "Ready") {
+        for (const entry of state.value.data.items) {
+          deadlines.set(entry.id, get(originalDeadlineQuery(entry)));
+        }
       }
-    }
-    return { state, deadlines };
-  })
+      return { state, deadlines };
+    })
 );
 
 /** Page-local source evidence stays in the authentication registry and expires independently of drafts. */
@@ -44,7 +45,9 @@ export const useReviewPageContext = ({
   refresh: () => void;
 }> => {
   const client = useRouter().options.context.apiClient;
-  const query = reviewPageContextQuery({ client, filter, page, ids: items.map((item) => item.id) });
+  const query = useAtomValue(
+    reviewPageContextSource({ client, filter, page, ids: items.map((item) => item.id) })
+  );
   const projectionQuery = evidenceProjection(query);
   const projection = useAtomValue(projectionQuery);
   const state = projection.state;

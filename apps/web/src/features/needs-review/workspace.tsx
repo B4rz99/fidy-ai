@@ -26,6 +26,7 @@ import { ReviewEditor } from "./editor";
 import { Inbox, ReviewPagination } from "./inbox";
 import { type Workspace, sources } from "./model";
 import { type Filter, ReviewNavigation } from "./view-navigation";
+import { prepareKnownReviewPage } from "./page-context-query";
 import { reviewWorkspaceQueries } from "./query";
 
 /** The active route owns pagination repair; application composition retains the workspace. */
@@ -278,7 +279,7 @@ type ReadyInboxProps = Readonly<{
 }>;
 type ReviewScope = Readonly<{ filter: Filter; page: number }>;
 const useSelectionScope = (
-  props: Pick<ReadyInboxProps, "filter" | "page" | "select">,
+  props: Pick<ReadyInboxProps, "filter" | "page" | "view" | "select">,
   control: InboxControl
 ): Readonly<{
   select: ReadyInboxProps["select"];
@@ -287,6 +288,7 @@ const useSelectionScope = (
   sourceId: string;
 }> => {
   const sourceId = useId();
+  const openPage = useReviewPageSelection(props);
   const [pending, setPending] = useState<Option.Option<ReviewScope>>(Option.none);
   const select = (filter: Filter, page: number): void => {
     const changed = filter !== props.filter || page !== props.page;
@@ -296,7 +298,7 @@ const useSelectionScope = (
       ["pending", "history"].includes(props.filter);
     if (control.checked.length > 0 && changed && !retainsPanel) {
       setPending(Option.some({ filter, page }));
-    } else props.select(filter, page);
+    } else openPage(filter, page);
   };
   return {
     sourceId,
@@ -311,7 +313,7 @@ const useSelectionScope = (
         onDiscard={() => {
           if (Option.isNone(pending)) return;
           control.clearChecked();
-          props.select(pending.value.filter, pending.value.page);
+          openPage(pending.value.filter, pending.value.page);
           setPending(Option.none());
         }}
       />
@@ -347,6 +349,25 @@ const useReviewFilters = (): Readonly<{
   const [search, setSearch] = useState("");
   return { source, setSource, search, setSearch };
 };
+const useReviewPageSelection = ({
+  filter,
+  page,
+  view,
+  select,
+}: Pick<ReadyInboxProps, "filter" | "page" | "view" | "select">): ReadyInboxProps["select"] => {
+  const { apiClient, registry } = useRouter().options.context;
+  return (status, offset) => {
+    const populated =
+      (status === "pending" && offset < view.pendingCount) ||
+      (status === filter && offset < view.total);
+    if ((status !== filter || offset !== page) && populated) {
+      prepareKnownReviewPage({ client: apiClient, registry, filter: status, page: offset }).catch(
+        () => undefined
+      );
+    }
+    select(status, offset);
+  };
+};
 const ReadyInboxView = ({
   children,
   workspaceQuery,
@@ -363,7 +384,7 @@ const ReadyInboxView = ({
   const visible = filterReviewPage({ view, source, search, page, contexts: context.contexts });
   const inbox = useInboxControl({ view, visibleItems: visible.items, decisions });
   const control = { ...inbox, locked: inbox.locked || freshness !== "current" };
-  const scope = useSelectionScope({ filter, page, select }, control);
+  const scope = useSelectionScope({ filter, page, view, select }, control);
   return (
     <>
       {scope.confirmation}

@@ -241,7 +241,8 @@ def observation(path, env, destination, variant="d1"):
         with (destination / "browser.log").open("w") as log:
             measure = subprocess.run(
                 ["bun", str(BROWSER)],
-                env={**env, "FIDY_REFERENCE_EVENTS": str(destination / "workspace-events.jsonl")},
+                env={**env, "FIDY_REFERENCE_EVENTS": str(destination / "workspace-events.jsonl"),
+                     "FIDY_REFERENCE_ASSETS": str(path / "apps/web/playwright-dist/assets")},
                 cwd=ROOT,
                 text=True,
                 stdout=subprocess.PIPE,
@@ -509,6 +510,8 @@ def main():
                         "production",
                         "--outDir",
                         "playwright-dist",
+                        "--sourcemap",
+                        "hidden",
                     ],
                     cwd=path / "apps/web",
                     env={**env, "VITE_API_ORIGIN": f"https://127.0.0.1:{WEB_PORT[variant] + 1}"},

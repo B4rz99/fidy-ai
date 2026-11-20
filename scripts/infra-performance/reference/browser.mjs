@@ -1,3 +1,4 @@
+import { SourceMapConsumer } from "source-map-js";
 // Each invocation owns an isolated browser context and one newly seeded local installation.
 import assert from "node:assert/strict";
 import { appendFileSync } from "node:fs";
@@ -230,11 +231,32 @@ try {
       const { nodes, samples = [], timeDeltas = [] } = measuredCpu.profile;
       const calls = new Map(nodes.map(({ id, callFrame }) => [id, callFrame]));
       const elapsed = new Map();
+      const maps = new Map();
+      const sourceName = async (call) => {
+        const url = URL.canParse(call.url) ? new URL(call.url).pathname : "";
+        if (!/^\/assets\/[a-zA-Z0-9_.-]+\.js$/.test(url)) return url;
+        if (!maps.has(url)) {
+          const path =
+            process.env.FIDY_REFERENCE_ASSETS + "/" + url.slice("/assets/".length) + ".map";
+          maps.set(
+            url,
+            await Bun.file(path)
+              .json()
+              .then((data) => new SourceMapConsumer(data))
+              .catch(() => undefined)
+          );
+        }
+        return (
+          maps
+            .get(url)
+            ?.originalPositionFor({ line: call.lineNumber + 1, column: call.columnNumber })
+            .source ?? url
+        );
+      };
       for (const [index, id] of samples.entries()) {
         const call = calls.get(id);
         if (!call) continue;
-        const url = URL.canParse(call.url) ? new URL(call.url).pathname : "";
-        const name = url + " " + call.functionName;
+        const name = (await sourceName(call)) + " " + call.functionName;
         elapsed.set(name, (elapsed.get(name) ?? 0) + (timeDeltas[index] ?? 0));
       }
       event({ type: "startup-cpu", frames: [...elapsed].sort((a, b) => b[1] - a[1]).slice(0, 60) });

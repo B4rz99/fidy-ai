@@ -263,16 +263,14 @@ const generatedDates = (
   from: string,
   through: string
 ): ReadonlyArray<string> =>
-  plan.revisions.flatMap((revision, index) =>
-    projectDates({
-      plan: revision.plan,
-      from: revision.from > from ? revision.from : from,
-      through,
-    }).filter((date) => {
-      const next = plan.revisions[index + 1];
-      return (next === undefined || date < next.from) && trackedOn({ plan, date });
-    })
-  );
+  plan.revisions.flatMap((revision, index) => {
+    const first = revision.from > from ? revision.from : from;
+    const next = plan.revisions[index + 1];
+    if (first > through || (next !== undefined && next.from <= first)) return [];
+    return projectDates({ plan: revision.plan, from: first, through }).filter(
+      (date) => (next === undefined || date < next.from) && trackedOn({ plan, date })
+    );
+  });
 const occurrenceKey = (entry: Readonly<{ planId: string; date: string }>): string =>
   `${entry.planId}:${entry.date}`;
 

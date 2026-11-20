@@ -72,7 +72,9 @@ const canonical = Effect.fnUntraced(function* (port: Browser, item: Item) {
       origin: installedOrigins.acceptance.browser,
       "content-type": "application/json",
     },
-    ...(item.body == null ? {} : { body: JSON.stringify(item.body) }),
+    ...(item.body == null
+      ? {}
+      : { body: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))(item.body) }),
   });
   return { status: reply.status, data: reply.ok ? yield* io(() => reply.json()) : null };
 });

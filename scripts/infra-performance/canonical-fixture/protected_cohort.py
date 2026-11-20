@@ -1,0 +1,202 @@
+"""Protected native fixture admission, collection and independent, cohort-only physical disposal."""
+import json
+import os
+import re
+import sys
+import time
+from urllib.parse import urlsplit
+
+from cohort import Cohort
+from cohort_runner import BrowserPort, collect_owned, commands
+from fixture import write
+from hosted import HERE
+from installation import validate_candidate, validate_qualification
+from qualified_release import artifact, serving_graph
+
+sys.path.insert(0, str(HERE.parent / "cells"))
+from owner_cloud import Cloud
+from owner_state import CustodyObject
+from owner_transport import NATIVE_API, cloudflare, fetch
+# Select the existing native fleet meter ahead of the unrelated D1 pilot.
+fleet_path = HERE.parent / "deployed-fleet"
+sys.path.insert(0, str(fleet_path))
+from native_budget import CLEANUP_READS, CLEANUP_WRITES, DAY, check, observe, recovery_reservation
+
+
+def protected_runner():
+    env = os.environ
+    if not (env.get("GITHUB_ACTIONS") == "true" and env.get("GITHUB_REF_PROTECTED") == "true"
+            and env.get("GITHUB_EVENT_NAME") == "workflow_dispatch" and env.get("NATIVE_STORAGE_ADMISSION") == "closed"
+            and env.get("GITHUB_REF") == "refs/heads/trunk" and env.get("GITHUB_REPOSITORY") == "B4rz99/fidy-ai"
+            and env.get("GITHUB_WORKFLOW_REF") == "B4rz99/fidy-ai/.github/workflows/native-transaction-cohort.yml@refs/heads/trunk"):
+        raise ValueError("Closed protected native cohort dispatch required")
+
+
+class HostedPort(BrowserPort):
+    def __init__(self, command, directory, *, account, verify, store, marker, cloud):
+        super().__init__(command, directory)
+        self.account, self.verify, self.store, self.marker, self.cloud = account, verify, store, marker, cloud
+        self.owner = None
+        self.initial = None
+        self.finished = None
+        self.run = os.environ["GITHUB_RUN_ID"] + "/" + os.environ["GITHUB_RUN_ATTEMPT"]
+
+    def marker_owner(self):
+        return self.marker.read()[1]
+
+    def guard(self, phase):
+        self.verify()
+        now = int(time.time())
+        if phase == "begin":
+            self.initial = observe(cloudflare, self.account)
+            check(self.initial, self.initial, phase, now)
+            return
+        state = self.owner.state
+        initial = state.get("usageBefore", self.initial)
+        if not initial:
+            raise ValueError("Native account reservation missing")
+        if "foregroundUntil" not in state:
+            state.update(usageBefore=initial, foregroundUntil=now+20*60, foregroundRun=self.run)
+        cleaning = phase in ("cleanup", "finish")
+        if cleaning and self.run != state["foregroundRun"] and now < state["foregroundUntil"] + 90:
+            raise ValueError("Original cohort dispatch or its in-flight grace period is still active")
+        if not cleaning and (self.run != state["foregroundRun"] or now >= state["foregroundUntil"]
+                             or state.get("cleanupRun")):
+            raise ValueError("Native foreground custody expired")
+        if cleaning and state.get("cleanupRun", self.run) != self.run and now < state.get("cleanupUntil", 0):
+            raise ValueError("Independent cleanup claim still active")
+        current = observe(cloudflare, self.account)
+        if cleaning and initial["sqlite"]["sampled"] // DAY != now // DAY:
+            if "recoveryUsageBefore" not in state:
+                state["recoveryUsageBefore"] = recovery_reservation(initial, current, now)
+            initial = state["recoveryUsageBefore"]
+        delta = check(initial, current, phase, now)
+        if "recoveryUsageBefore" in state and (delta["reads"] > CLEANUP_READS or delta["writes"] > CLEANUP_WRITES):
+            raise ValueError("Reserved recovery rows exhausted")
+        if phase == "finish":
+            # Work accepted by Cloudflare can be absent from the newest analytics group.
+            finished = state.get("lastDispatch", now)
+            for attempt in range(20):
+                if min(current["sqlite"]["latest"], current["r2"]["latest"]) >= finished and all(current["sqlite"][k] > initial["sqlite"][k]
+                                                                  for k in ("reads", "writes")):
+                    break
+                if attempt == 19:
+                    raise ValueError("Native account counters have not covered cleanup")
+                time.sleep(30)
+                current = observe(cloudflare, self.account)
+                check(initial, current, phase, int(time.time()))
+            self.finished = current
+        if cleaning:
+            state.update(cleanupRun=self.run, cleanupUntil=int(time.time())+15*60)
+        self.owner.save(state["stage"], lastUsage=current)
+
+    def exchange(self, outgoing):
+        url = urlsplit(outgoing["url"])
+        if url.scheme != "https" or url.netloc != urlsplit(NATIVE_API).netloc or url.fragment:
+            raise ValueError("Foreign native cohort origin")
+        method = outgoing["method"]
+        body = outgoing["body"]
+        if method not in ("GET", "POST") or (method == "GET" and body is not None):
+            raise ValueError("Unexpected native cohort HTTP operation")
+        state = self.owner.state
+        now = int(time.time())
+        clean = bool(state.get("cleanupRun"))
+        deadline = state.get("cleanupUntil" if clean else "foregroundUntil", 0)
+        if now >= deadline or state.get("cleanupRun" if clean else "foregroundRun") != self.run:
+            raise ValueError("Cohort HTTP dispatch lost its custody lease")
+        key = "cleanupRequests" if clean else "foregroundRequests"
+        if state.get(key,0) >= (180 if clean else 100):
+            raise ValueError("Native cohort request ceiling reached")
+        self.owner.save(state["stage"], **{key: state.get(key,0)+1}, lastDispatch=now)
+        if int(time.time()) >= deadline:
+            raise ValueError("Cohort HTTP lease expired before dispatch")
+        status, headers, raw = fetch(outgoing["url"], outgoing["headers"],
+                                     None if method == "GET" else (body or "").encode())
+        return dict(status=status, headers=dict(headers.items()), body=raw.decode())
+
+    def census(self):
+        namespace = self.owner.coordinates["userNamespace"]
+        root = "workers/durable_objects/namespaces/" + namespace + "/objects?"
+        response = self.cloud.request("GET", root+"limit=100")
+        rows = response["result"]
+        info = response.get("result_info") or {}
+        if (len(rows) >= 100 or info.get("cursor") or (info.get("cursors") or {}).get("after")
+                or len(set(row["id"] for row in rows)) != len(rows)):
+            raise ValueError("Physical User inventory exceeds the calibrated single-page bound")
+        return {row["id"]:row["hasStoredData"] for row in rows}
+
+
+def run(args):
+    protected_runner()
+    account, revision, prefix = os.environ["CLOUDFLARE_ACCOUNT_ID"], args.native_revision, args.resource_prefix
+    if not re.fullmatch("[a-f0-9]{40}", revision or "") or not re.fullmatch("fidy-2259-[a-f0-9]{12}", prefix or ""):
+        raise ValueError("Exact release and allocated cohort prefix required")
+    versions = dict(core=args.core_version, ingress=args.ingress_version)
+    key = os.environ["FIDY_NATIVE_FIXTURE_PUBLIC_KEY"]
+    promotion, installed = artifact(revision, args.release_artifact, args.archive_sha256)
+
+    def verify():
+        actual = validate_candidate(cloudflare, account=account, revision=revision, versions=versions, public_key=key)
+        validate_qualification(actual, promotion, installed)
+        serving_graph(cloudflare, account, revision, installed)
+        return actual
+
+    candidate = verify()
+    coords = dict(**candidate, account=account, prefix=prefix, archive=args.archive_sha256)
+    cloud = Cloud(account,prefix)
+    store = CustodyObject(account, cloud, native_revision=revision)
+    marker = CustodyObject(account, cloud, native_revision=revision, receipt_marker=True)
+    directory = args.out / "fixture"
+    if args.out.is_symlink() or args.out.stat().st_mode & 0o077 or directory.is_symlink():
+        raise ValueError("Native collection requires a private runner directory")
+    directory.mkdir(mode=0o700, exist_ok=True)
+    if directory.stat().st_mode & 0o077:
+        raise ValueError("Native fixture directory is not private")
+    with commands(revision, exchange=lambda req: port.exchange(req)) as command:
+        port = HostedPort(command, directory, account=account, verify=verify, store=store, marker=marker, cloud=cloud)
+        owner = Cohort(store, coords, port)
+        port.owner = owner
+        if args.mode == "cleanup":
+            owner.cleanup()
+            write(args.out/"cleanup.json", dict(scope="hosted native cohort", status=owner.state["stage"],
+                  physicalState=owner.state.get("physicalState"), survivors=2,
+                  retainedOneUseFence=owner.state.get("receiptMarkerRetained"),
+                  usageBefore=owner.state.get("usageBefore"), final=owner.state.get("lastUsage"),
+                  recoveryUsageBefore=owner.state.get("recoveryUsageBefore"),
+                  originalDaySettled="recoveryUsageBefore" not in owner.state))
+        else:
+            owner.enroll()
+            proof = collect_owned(owner, port)
+            verify()
+            write(args.out/"summary.json", dict(scope="hosted native fixture", originals=8,effective=7,**proof))
+
+
+def comparable_native_reads(account, candidate, proof, pairs):
+    """Reserve each timed read before signing or starting either measured HTTP clock."""
+    protected_runner()
+    prefix, revision = proof["resourcePrefix"], proof["nativeRevision"]
+    cloud = Cloud(account, prefix)
+    store = CustodyObject(account, cloud, native_revision=revision)
+    version, state = store.read()
+    run = os.environ["GITHUB_RUN_ID"] + "/" + os.environ["GITHUB_RUN_ATTEMPT"]
+    coords = state["coordinates"] if state else {}
+    if (not state or state["stage"] != "receipt-verified" or state.get("foregroundRun") != run
+            or state.get("cleanupRun") or coords.get("prefix") != prefix or coords.get("account") != account
+            or any(coords.get(k) != v for k,v in candidate.items())
+            or state.get("receiptDigest") != proof["nativeReceiptDigest"] or state.get("comparisonOffered") is not None
+            or pairs not in (1,30)):
+        raise ValueError("Comparison does not own this protected native receipt")
+    reserved = 0
+    def reserve():
+        nonlocal version, reserved
+        now = int(time.time())
+        if now >= state["foregroundUntil"] or reserved >= pairs:
+            raise ValueError("Native comparison allowance expired")
+        current = observe(cloudflare, account)
+        check(state["usageBefore"], current, "foreground", now)
+        reserved += 1
+        state.update(comparisonOffered=reserved, lastDispatch=now, lastUsage=current)
+        version = store.replace(version,state)
+        if time.time() >= state["foregroundUntil"]:
+            raise ValueError("Native comparison lease expired before dispatch")
+    return reserve

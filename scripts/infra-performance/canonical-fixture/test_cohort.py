@@ -38,7 +38,7 @@ class Port:
     def register(self):
         self.operations.append("signup")
         self.objects[self.target] = True
-        return "created", "carol"
+        return "created", "carol", "a"*64
 
     def login(self):
         self.operations.append("login")
@@ -52,7 +52,7 @@ class Port:
     def renew(self):
         self.operations.append("lease")
 
-    def denial(self):
+    def denial(self, _):
         self.operations.append("denied")
 
     def guard(self, phase):
@@ -103,3 +103,52 @@ class CohortTests(unittest.TestCase):
         Cohort(store, coords, port, sleep=lambda *_: self.fail("Still waiting for unoffered erasure")).cleanup()
         self.assertEqual(port.operations.count("erase"), 1)
         self.assertEqual(port.operations.count("signup"), 1)
+
+    def test_lost_signup_reply_uses_established_login_and_preserves_existing_objects(self):
+        port, store = Port(), Store()
+        coords = dict(prefix="fidy-2259-0123456789ab", revision="a"*40)
+        register = port.register
+        def interrupted():
+            register()
+            raise IOError("lost signup response")
+        port.register = interrupted
+        owner = Cohort(store, coords, port)
+        with self.assertRaises(IOError):
+            owner.enroll()
+        with self.assertRaisesRegex(ValueError, "Foreign native"):
+            Cohort(store, {**coords, "prefix":"fidy-2259-ab0123456789"}, port)
+        Cohort(store, coords, port).cleanup()
+        self.assertEqual(port.operations.count("signup"), 1)
+        self.assertEqual(port.operations.count("erase"), 1)
+        self.assertEqual(store.data["stage"], "disposed")
+
+    def test_ambiguous_or_changed_physical_ownership_never_submits_erasure(self):
+        coords = dict(prefix="fidy-2259-0123456789ab", revision="a"*40)
+        for change in ("retained", "extra", "identity"):
+            port, store = Port(), Store()
+            owner = Cohort(store, coords, port)
+            owner.enroll()
+            if change == "retained":
+                port.objects["a"*64] = False
+            elif change == "extra":
+                port.objects["d"*64] = True
+            else:
+                port.login = lambda: "alice"
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                owner.cleanup()
+            self.assertNotIn("erase", port.operations)
+
+    def test_existing_one_use_marker_or_private_provider_identity_prevent_signup(self):
+        coords = dict(prefix="fidy-2259-0123456789ab", revision="a"*40)
+        for reason in ("marker", "login"):
+            port, store = Port(), Store()
+            if reason == "marker":
+                port.marker = coords["prefix"]
+            else:
+                def existing():
+                    raise ValueError("performance User already exists")
+                port.before_signup = existing
+            with self.subTest(reason=reason), self.assertRaises(ValueError):
+                Cohort(store, coords, port).enroll()
+            self.assertNotIn("signup", port.operations)
+            self.assertNotIn("erase", port.operations)

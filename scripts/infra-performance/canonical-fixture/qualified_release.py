@@ -1,0 +1,58 @@
+"""Verify a successful protected native rollout and its independently approved artifact digest."""
+import hashlib
+from io import BytesIO
+import json
+import re
+import subprocess
+from zipfile import ZipFile
+
+REPO = "B4rz99/fidy-ai"
+BASE = "repos/" + REPO + "/actions/"
+
+
+def artifact(account_revision, artifact_id, expected_digest):
+    if not re.fullmatch("[1-9][0-9]{0,19}", artifact_id or "") or not re.fullmatch("[0-9a-f]{64}", expected_digest or ""):
+        raise ValueError("Exact protected rollout artifact ID and independently pinned digest required")
+
+    def get(path):
+        return subprocess.check_output(["gh", "api", BASE + path], timeout=40)
+
+    meta = json.loads(get("artifacts/" + artifact_id))
+    run_id = str(meta["workflow_run"]["id"])
+    run = json.loads(get("runs/" + run_id))
+    if (run["repository"]["full_name"] != REPO or run["head_repository"]["full_name"] != REPO
+            or run["path"] != ".github/workflows/native-storage-release.yml" or run["head_branch"] != "trunk"
+            or run["head_sha"] != account_revision or run["event"] != "workflow_dispatch"
+            or run["conclusion"] != "success" or run["run_attempt"] != 1
+            or meta["expired"] is not False or meta["name"] != "native-storage-release-" + run_id
+            or meta["workflow_run"]["head_sha"] != account_revision or not 0 < meta["size_in_bytes"] <= 1_048_576
+            or meta["digest"] != "sha256:" + expected_digest):
+        raise ValueError("Foreign, expired or unsuccessful protected rollout")
+    data = get("artifacts/" + artifact_id + "/zip")
+    if len(data) != meta["size_in_bytes"] or hashlib.sha256(data).hexdigest() != expected_digest:
+        raise ValueError("Protected release archive differs")
+    with ZipFile(BytesIO(data)) as archive:
+        def document(name):
+            items = [item for item in archive.infolist() if item.filename == name]
+            if len(items) != 1 or items[0].file_size > 2_000_000:
+                raise ValueError("Missing unique protected release evidence")
+            return json.loads(archive.read(items[0]))
+        return document("native-release.json.promoted"), document("native-verification.json")
+
+
+def serving_graph(read, account, revision, installed):
+    expected = {"Core":"fidy-native-storage-core", "Ingress":"fidy-native-storage-ingress",
+                "Smoke":"fidy-native-smoke-"+revision, "Web":"fidy-native-web", "ForwardedEmail":"fidy-native-email"}
+    workers = {item["role"]:item for item in installed["workers"]}
+    if set(workers) != set(expected) or len(workers) != len(installed["workers"]):
+        raise ValueError("Incomplete protected Worker qualification")
+    for role, name in expected.items():
+        recorded = workers[role]
+        if recorded["name"] != name:
+            raise ValueError("Foreign Worker in release qualification")
+        deployments = read(f"accounts/{account}/workers/scripts/{name}/deployments")["deployments"]
+        active = deployments[0]
+        version, = active["versions"]
+        if (active["id"] != recorded["deploymentId"] or version["version_id"] != recorded["versionId"]
+                or version["percentage"] != 100):
+            raise ValueError("A qualified native Worker deployment changed")

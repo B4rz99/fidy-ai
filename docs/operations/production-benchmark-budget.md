@@ -267,21 +267,43 @@ P-256 PKCS#8 private key. Configure the protected release secret as lowercase DE
 the fingerprint independently. The comparator receives only the public SPKI DER hex as
 `FIDY_NATIVE_FIXTURE_PUBLIC_KEY` and the existing closed-request `SMOKE_PROOF`.
 
-For a protected collection, verify the whole closed installation through the normal release
-inventory. Record the candidate revision and its serving Ingress and Core version UUIDs. Keep the
-receipt, Session, fixture rows and module package in the run's private directory. The comparison
-owner allocates one resource prefix, records admission and owns cleanup. A collector can then use:
+Use the **Measure the closed native Transaction cohort** protected workflow on trunk. Provide a
+new random comparison prefix, the installed SHA, the two serving version UUIDs, and the artifact
+ID and separately pinned archive SHA-256 from that release's successful protected rollout.
+The rollout must contain its tested rollback receipt and full native verification. The job compares
+those records with the live deployment identities of all five Workers, the closed host, the Core
+signer fingerprint and UserStore namespace. It uses the existing protected smoke proof and
+`FIDY_NATIVE_FIXTURE_PUBLIC_KEY` public environment variable. Select one or thirty isolated pairs.
+The workflow builds the frozen comparator on the private runner and checks the independently
+calibrated ceiling of 18,194 D1 rows read and 4,754 written.
 
-```sh
-python3 scripts/infra-performance/canonical-fixture/hosted.py hosted \
-  --native-revision "$VERIFIED_NATIVE_REVISION" --resource-prefix "$OWNED_PREFIX" \
-  --core-version "$VERIFIED_CORE_VERSION" --ingress-version "$VERIFIED_INGRESS_VERSION" \
-  --out "$PRIVATE_NATIVE_RUN"
-```
+The native owner shares the production-deployment concurrency group. Before enrolling, it
+requires two existing smoke User logins, a refused login for the unused performance subject,
+no existing one-use marker and a complete physical census. It applies the existing native pilot's
+SQLite ceiling of two million reads and 75,000 writes. It holds 250,000 reads and 10,000 writes
+for cleanup, in addition to the standing production reserve. It checks fresh account-wide SQLite
+analytics and a rolling 31-day R2 usage window. The R2 check counts all operations against the
+lower Class A allowance and sums maximum observed payload and metadata sizes for each bucket.
+It holds 4,096 operations and one MiB for the experiment. These are conservative headroom checks.
+Cloudflare analytics and settlement can lag. [R2 account datasets](https://developers.cloudflare.com/r2/platform/metrics-analytics/)
 
-The hosted command refuses before installation reads or signup while the native
-row-admission and independent cleanup owner are pending. The isolated Actions rehearsal exercises
-the entire receipt issuance path.
+The native custody object in the existing private release-smoke bucket is
+`protected-storage/account/<account-id>/performance-1/<native-revision>.json`. The runner derives
+separate credentials for conditional ledger updates and a read-only lookup of the exact receipt
+marker. It records intent before dispatch, including before every timed native read. Sessions,
+fixture evidence and the D1 package stay on the runner. After the comparison it admits ordinary
+erasure for that exact performance User, independently observes an absent or empty UserStore,
+checks the former Session or an expired ungranted login, and signs in both original smoke Users.
+The revision's one-use issuance marker contains the random prefix and stays in place. Shared
+background leases expire normally.
+
+After an interruption, select **cleanup** with the identical prefix, revisions and rollout
+artifact. A different runner waits for the 20-minute foreground lease and 90-second in-flight
+grace to expire. The independent runner can recover from the private account ledger without a
+local Session or signup. An ambiguous identity, unexpected physical object or unreconciled cost
+stays fenced. After UTC rollover only one separately metered cleanup reservation is available.
+Its evidence marks the original accounting day incomplete. D1 infrastructure recovery remains
+the responsibility of the comparator owner's `cleanup` command above.
 
 The candidate verifier checks the acceptance hostname, actual
 deployments, version bindings and signer fingerprint from the account. It uses the fixed
@@ -298,7 +320,9 @@ Check the captured coordinates and digests independently before creating the dis
 The already installed revision has its own qualification record. Any new candidate needs its own
 verified installation, resource observations and native usage bounds.
 
-The credential-free command `hosted.py rehearse --out <private-directory>` runs the same
+The credential-free command `rehearse_cohort.py --out <private-directory>` reopens persistent workerd
+from a fresh controller after receipt issuance and verifies physical erasure and both survivor identities.
+The command `hosted.py rehearse --out <private-directory>` runs the same
 closed provider, Ingress, Core and SQLite owners on workerd. Its temporary verifier credentials
 are private to that rehearsal. Upload only `summary.json`, which contains counts and digests.
 

@@ -286,7 +286,7 @@ def exercise(owner, cloud, bundle, send, native, versions, key, pairs, report, s
     )
 
 
-def native_read(session, revision):
+def native_read(session, revision, reserve):
     def sign():
         proof = subprocess.run(
             ["bun", str(HERE / "sign.mjs")],
@@ -302,6 +302,7 @@ def native_read(session, revision):
         return proof.stdout
 
     def prepared():
+        reserve()
         proof = sign()
 
         def read(_, path):
@@ -429,12 +430,14 @@ def main():
         account = os.environ["CLOUDFLARE_ACCOUNT_ID"]
         if args.action == "run":
             report["nativeCandidate"] = native_installation(account, args.revision, approved_native)
+            from protected_cohort import comparable_native_reads
+            reserve_native = comparable_native_reads(account, report["nativeCandidate"], proof, args.pairs)
         cloud = Cloud(account, args.prefix)
         owner = AccountExperiment(CustodyObject(account, cloud), account)
         if args.action == "cleanup":
             report["cleanup"] = cleanup_evidence(owner, cloud, resumed=True)
         else:
-            read = native_read(session, args.revision)
+            read = native_read(session, args.revision, reserve_native)
             observation = usage(account)
             observed_day = observation["utcDate"]
             decision = admit(ROOT, account, observation, owner.full_estimate(bundle.estimate, observed_day))

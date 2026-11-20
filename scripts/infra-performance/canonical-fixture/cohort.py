@@ -33,7 +33,7 @@ class Cohort:
 
     def census(self):
         result = self.port.census()
-        if (len(result) >= 36 or any(not re.fullmatch("[a-f0-9]{64}", key)
+        if (len(result) > 36 or any(not re.fullmatch("[a-f0-9]{64}", key)
                                      or type(stored) is not bool for key, stored in result.items())):
             raise ValueError("Native inventory outside the calibrated envelope")
         return result
@@ -64,15 +64,15 @@ class Cohort:
         survivors = self.survivor_ids()
         self.port.before_signup()
         before = self.census()
-        if sum(before.values()) < 2:
+        if len(before) >= 36 or sum(before.values()) < 2:
             raise ValueError("Missing independently stored survivor Users")
         self.port.guard("signup")
         self.save("signup-offered", before=before, survivors=survivors)
-        outcome, user = self.port.register()
+        outcome, user, binding_digest = self.port.register()
         if outcome != "created" or identity(user) in survivors:
             self.save("foreign-registration")
             raise ValueError("Protected signup did not create the expected fresh User")
-        self.save("signup-created", user=identity(user))
+        self.save("signup-created", user=identity(user), originalBinding=binding_digest)
         self.save("owned", physical=self.fresh_object())
 
     def offer_receipt(self):
@@ -133,7 +133,7 @@ class Cohort:
             self.port.guard("cleanup")
             self.port.renew()
             self.sleep(30)
-        self.port.denial()
+        self.port.denial(self.state.get("originalBinding"))
         if self.survivor_ids() != self.state["survivors"] or self.physical_state() == "populated":
             raise ValueError("Independent erasure and survivor identities differ")
         marker = self.port.marker_owner()

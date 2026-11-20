@@ -44,7 +44,7 @@ def validate_candidate(read, *, account, revision, versions, public_key):
             owner = bindings.get("USER_STORE", {})
             user_namespace = owner.get("namespace_id", "")
             if (owner.get("type") != "durable_object_namespace" or owner.get("class_name") != "UserStore"
-                    or owner.get("script_name", script) != script or not re.fullmatch("[a-f0-9]{32}", user_namespace)
+                    or (owner.get("script_name") or script) != script or not re.fullmatch("[a-f0-9]{32}", user_namespace)
                     or bindings.get("SMOKE_BUCKET", {}).get("bucket_name") != "fidy-native-release-smoke"):
                 raise ValueError("Native User or receipt storage owner differs")
             expected_text["NATIVE_FIXTURE_SIGNER_SHA256"] = fingerprint

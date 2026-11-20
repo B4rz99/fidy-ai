@@ -1,5 +1,6 @@
 """Execute the fixed cohort actions through a private pipe and the ordinary closed provider."""
 from contextlib import contextmanager
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -13,7 +14,9 @@ from hosted import HERE, ROOT, RECEIPT_PATH, private_file, verify_native_fixture
 
 @contextmanager
 def commands(revision, runtime="cohort-bridge.ts", exchange=None):
-    env = {**os.environ, "FIDY_NATIVE_REVISION": revision}
+    env = {key: value for key, value in os.environ.items() if key in (
+        "PATH", "HOME", "TMPDIR", "SystemRoot", "SMOKE_PROOF", "TEST_FIXTURE_PRIVATE_KEY", "FIDY_REHEARSAL_STATE")}
+    env["FIDY_NATIVE_REVISION"] = revision
     with subprocess.Popen(["bun", str(HERE / runtime)], cwd=ROOT, env=env, stdin=subprocess.PIPE,
                           stdout=subprocess.PIPE, text=True, bufsize=1) as child:
         def push(payload):
@@ -71,9 +74,10 @@ class BrowserPort:
 
     def register(self):
         member = self.command("register")
+        session = self.session(member)
         if member["outcome"] == "created":
-            write(self.directory / "native-session.json", self.session(member))
-        return member["outcome"], uuid(member["id"])
+            write(self.directory / "native-session.json", session)
+        return member["outcome"], uuid(member["id"]), hashlib.sha256(session["binding"].encode()).hexdigest()
 
     def login(self):
         return self.remember(self.command("login"))
@@ -94,9 +98,12 @@ class BrowserPort:
             raise ValueError("Cleanup belongs to another Session")
         self.command("erase", **self.cleanup_session[1])
 
-    def denial(self):
-        if (self.directory / "native-session.json").exists():
-            self.command("denied", **private_file(self.directory, "native-session.json"))
+    def denial(self, binding_digest):
+        if binding_digest and (self.directory / "native-session.json").exists():
+            previous = private_file(self.directory, "native-session.json")
+            if hashlib.sha256(previous["binding"].encode()).hexdigest() != binding_digest:
+                raise ValueError("Private session differs from the original enrollment")
+            self.command("denied", **previous)
         else:
             self.command("refused")
 
@@ -123,5 +130,5 @@ def collect_owned(owner, port):
     result = verify_native_fixture(port.directory, revision=coords["revision"], resource_prefix=coords["prefix"])
     if port.marker_owner() != coords["prefix"]:
         raise ValueError("Receipt lacks its independently observed one-use marker")
-    owner.save("receipt-verified")
+    owner.save("receipt-verified", receiptDigest=result["nativeReceiptDigest"])
     return result

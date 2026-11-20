@@ -1,3 +1,4 @@
+import retainedProvider from "./native-retained-provider.json" with { type: "json" };
 import { installedOrigins } from "../../apps/server/src/shell/browser-transport/contract";
 import { Schema } from "effect";
 
@@ -197,6 +198,7 @@ export const nativeBindingInventory = ({
     throw Error("Invalid expected native fixture signer fingerprint");
   }
   if (fingerprint !== "" && role === "Core") {
+    expected.set("ACCEPTANCE_PROVIDER_REVISION", "plain_text");
     expected.set("NATIVE_FIXTURE_SIGNING_KEY", "secret_text");
     expected.set("NATIVE_FIXTURE_SIGNER_SHA256", "plain_text");
   }
@@ -217,7 +219,8 @@ const requireClosedRole = (
   if (
     fingerprint !== "" &&
     role === "Core" &&
-    (text("NATIVE_FIXTURE_SIGNER_SHA256") !== fingerprint ||
+    (text("ACCEPTANCE_PROVIDER_REVISION") !== retainedProvider.revision ||
+      text("NATIVE_FIXTURE_SIGNER_SHA256") !== fingerprint ||
       text("BROWSER_ORIGIN") !== installedOrigins.acceptance.browser)
   ) {
     throw Error("Actual candidate receipt signer or closed acceptance origin differs");

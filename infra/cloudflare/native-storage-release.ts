@@ -1,3 +1,4 @@
+import retainedProvider from "./native-retained-provider.json" with { type: "json" };
 import { expectedFixtureSigner } from "./native-fixture-signer";
 import { BunFileSystem } from "@effect/platform-bun";
 import type { ErasureProgress } from "./native-erasure-continuation";
@@ -143,6 +144,39 @@ const firstInstallInventory = Effect.fn(function* (env: Config, client: HttpClie
   };
 });
 
+const verifyRetainedProvider = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  port: ReleasePort
+) {
+  const name = "fidy-native-smoke-" + retainedProvider.revision;
+  const current = yield* port.current(name);
+  const version = yield* releaseController.servingVersion(current);
+  if (
+    current.id !== retainedProvider.deploymentId ||
+    version !== retainedProvider.versionId ||
+    current.versions.length !== 1
+  ) {
+    return yield* new ReleaseFailure({
+      message: "Original acceptance provider deployment changed",
+    });
+  }
+  const raw = yield* releaseEvidence.readWorkerVersion(env, client, { name, id: version });
+  yield* Effect.try(() =>
+    verifyDeployedVersion({
+      account: env.account,
+      role: "Smoke",
+      revision: retainedProvider.revision,
+      versionId: version,
+      raw,
+      fingerprint: "",
+    })
+  );
+  yield* proveRecoveryCorePrivate(env, client, name);
+  yield* verifyReleaseObservability(env, name, client);
+  return retainedProvider;
+});
+
 const verifyStorageUpload = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
@@ -157,6 +191,7 @@ const verifyStorageUpload = Effect.fn(function* (
       message: "Storage upload snapshot differs from protected build",
     });
   }
+  if ((yield* expectedFixtureSigner) !== "") yield* verifyRetainedProvider(env, client, port);
   yield* releaseController.requireTrunk(port, env.revision);
   yield* releaseController.requireCapturedWorker(port, snapshot.public);
   yield* releaseController.requireCapturedWorker(port, snapshot.core);
@@ -490,7 +525,11 @@ const verifyInstalledTopology = Effect.fn(function* (
         )
       )
   );
-  return { workers, resources, edge, website };
+  const provider =
+    (yield* expectedFixtureSigner) === ""
+      ? {}
+      : { retainedProvider: yield* verifyRetainedProvider(env, client, input.port) };
+  return { workers, resources, edge, website, ...provider };
 });
 const firstInstallWorkers = Effect.fn(function* () {
   const receipts = yield* workersFromState("capture", nativeStack);

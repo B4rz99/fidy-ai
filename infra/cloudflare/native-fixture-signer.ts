@@ -1,3 +1,4 @@
+import retainedProvider from "./native-retained-provider.json" with { type: "json" };
 import { Config, Data, Effect, Redacted } from "effect";
 
 import { Hex } from "effect/encoding";
@@ -8,6 +9,7 @@ export const expectedFixtureSigner = Config.String("NATIVE_FIXTURE_SIGNER_SHA256
 
 type SignerBindings = Partial<
   Readonly<{
+    ACCEPTANCE_PROVIDER_REVISION: string;
     NATIVE_FIXTURE_SIGNING_KEY: Redacted.Redacted<string>;
     NATIVE_FIXTURE_SIGNER_SHA256: string;
   }>
@@ -51,5 +53,9 @@ export const fixtureSignerBindings = Effect.fn(function* (release: {
   if (actual !== fingerprint) {
     return yield* Effect.fail(Error("Candidate signing key fingerprint mismatch"));
   }
-  return { NATIVE_FIXTURE_SIGNING_KEY: secret, NATIVE_FIXTURE_SIGNER_SHA256: fingerprint };
+  return {
+    ACCEPTANCE_PROVIDER_REVISION: retainedProvider.revision,
+    NATIVE_FIXTURE_SIGNING_KEY: secret,
+    NATIVE_FIXTURE_SIGNER_SHA256: fingerprint,
+  };
 });

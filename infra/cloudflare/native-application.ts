@@ -1,3 +1,4 @@
+import retainedProvider from "./native-retained-provider.json" with { type: "json" };
 import { fixtureSignerBindings } from "./native-fixture-signer";
 import { marketingSite } from "./marketing-site";
 import * as Alchemy from "alchemy";
@@ -126,7 +127,9 @@ const coreWorker = Effect.fn(function* ({
         namespaceId: 2257,
         simple: { limit: 8, period: 60 },
       }),
-      RELEASE_FIXTURE: executor.smoke,
+      RELEASE_FIXTURE: release.retainProvider
+        ? yield* Cloudflare.Worker.ref("ReleaseSmoke-" + retainedProvider.revision)
+        : executor.smoke,
       SMOKE_WORKFLOW: executor.reference,
     },
   });
@@ -193,7 +196,9 @@ export const nativeApplication = Effect.gen(function* () {
       ...release.shared,
       ...(yield* ingressBindings(release)),
       CORE: core,
-      RELEASE_FIXTURE: executor.smoke,
+      RELEASE_FIXTURE: release.retainProvider
+        ? yield* Cloudflare.Worker.ref("ReleaseSmoke-" + retainedProvider.revision)
+        : executor.smoke,
     },
   });
   const web = yield* webApplication(release);

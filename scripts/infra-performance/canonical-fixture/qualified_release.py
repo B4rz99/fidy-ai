@@ -2,6 +2,7 @@
 import hashlib
 from io import BytesIO
 import json
+from pathlib import Path
 import re
 import subprocess
 from zipfile import ZipFile
@@ -41,6 +42,15 @@ def artifact(account_revision, artifact_id, expected_digest):
 
 
 def serving_graph(read, account, revision, installed):
+    recorded_provider = installed["retainedProvider"]
+    pin = json.loads((Path(__file__).resolve().parents[3] / "infra/cloudflare/native-retained-provider.json").read_bytes())
+    if recorded_provider != pin:
+        raise ValueError("The qualified release does not retain the original closed provider")
+    name = "fidy-native-smoke-" + pin["revision"]
+    active = read(f"accounts/{account}/workers/scripts/{name}/deployments")["deployments"][0]
+    provider_version, = active["versions"]
+    if active["id"] != pin["deploymentId"] or provider_version != {"version_id":pin["versionId"], "percentage":100}:
+        raise ValueError("Retained closed provider deployment changed")
     standard_buckets(read, account, installed)
     expected = {"Core":"fidy-native-storage-core", "Ingress":"fidy-native-storage-ingress",
                 "Smoke":"fidy-native-smoke-"+revision, "Web":"fidy-native-web", "ForwardedEmail":"fidy-native-email"}

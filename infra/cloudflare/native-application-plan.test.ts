@@ -112,6 +112,9 @@ it.effect.each([false, true])(
               expectedSigner(worker, enabled)
             );
             if (expectedSigner(worker, enabled)) {
+              expect(
+                observed.find((binding) => binding.name === "ACCEPTANCE_PROVIDER_REVISION")?.text
+              ).toBe("8dd3b0d47d655868c1ab4f16b6145a06d99bd721");
               expect(() =>
                 requireClosedBindings({ worker, bindings: observed, fingerprint: "" })
               ).toThrow();

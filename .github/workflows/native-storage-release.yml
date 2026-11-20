@@ -102,6 +102,9 @@ jobs:
       - uses: ./.github/actions/configure-alchemy-cloudflare-profile
       - name: Bind evidence to the protected revision
         run: |
+          if [[ -n "$NATIVE_FIXTURE_SIGNER_SHA256" ]]; then
+            echo "FIDY_NATIVE_FIXTURE_PROVIDER_REVISION=$(jq -er .revision infra/cloudflare/native-retained-provider.json)" >> "$GITHUB_ENV"
+          fi
           echo "HOSTED_AI_MODEL=$(bun infra/cloudflare/scripts/print-approved-openai-model.ts)" >> "$GITHUB_ENV"
           echo "CONTRACT_DIGEST=$(bun run --silent --cwd apps/server contracts:digest)" >> "$GITHUB_ENV"
           echo "RELEASE_SNAPSHOT_FILE=$RUNNER_TEMP/native-release.json" >> "$GITHUB_ENV"

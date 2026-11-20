@@ -4,12 +4,12 @@ import os
 import re
 import sys
 import time
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 from cohort import Cohort
 from cohort_runner import BrowserPort, collect_owned, commands
 from fixture import write
-from hosted import HERE
+from hosted import HERE, RECEIPT_PATH
 from installation import validate_candidate, validate_qualification
 from qualified_release import artifact, serving_graph
 
@@ -30,6 +30,28 @@ def protected_runner():
             and env.get("GITHUB_REF") == "refs/heads/trunk" and env.get("GITHUB_REPOSITORY") == "B4rz99/fidy-ai"
             and env.get("GITHUB_WORKFLOW_REF") == "B4rz99/fidy-ai/.github/workflows/native-transaction-cohort.yml@refs/heads/trunk"):
         raise ValueError("Closed protected native cohort dispatch required")
+
+
+def admitted_route(method, url, body, stage, cleaning):
+    path = url.path + ("?" + url.query if url.query else "")
+    if method == "GET":
+        if path in ("/user", "/web/session/binding", "/web/consent/authorization", "/transactions", "/transactions?limit=25"):
+            return True
+        if url.path == "/providers/google/callback":
+            query = parse_qs(url.query)
+            return set(query) == {"state", "code"} and all(len(value) == 1 for value in query.values())
+        return not cleaning and bool(re.fullmatch("/transactions/[a-f0-9-]{36}", path))
+    if path == "/web/providers/google/start":
+        intent = json.loads(body)["intent"]
+        return intent == "login" or (not cleaning and stage == "signup-offered" and intent == "signup")
+    if path in ("/web/pairings", "/web/pairings/redeem", "/web/providers/google/status", "/web/providers/google/complete"):
+        return True
+    if cleaning:
+        if path == "/web/privacy/erasure":
+            return stage == "erasure-offered" and json.loads(body) == {"confirm": True}
+        return path == "/internal/release-smoke?acceptance=work"
+    return ((stage == "owned" and path in ("/operations/atomic-batch", "/transactions/link"))
+            or (stage == "receipt-offered" and path == RECEIPT_PATH))
 
 
 class HostedPort(BrowserPort):
@@ -90,7 +112,7 @@ class HostedPort(BrowserPort):
             state.update(cleanupRun=self.run, cleanupUntil=int(time.time())+15*60)
         self.owner.save(state["stage"], lastUsage=current)
 
-    def exchange(self, outgoing):
+    def exchange(self, outgoing, transport=fetch):
         url = urlsplit(outgoing["url"])
         if url.scheme != "https" or url.netloc != urlsplit(NATIVE_API).netloc or url.fragment:
             raise ValueError("Foreign native cohort origin")
@@ -101,6 +123,8 @@ class HostedPort(BrowserPort):
         state = self.owner.state
         now = int(time.time())
         clean = bool(state.get("cleanupRun"))
+        if not admitted_route(method, url, body, state["stage"], clean):
+            raise ValueError("HTTP route is outside the current native custody phase")
         deadline = state.get("cleanupUntil" if clean else "foregroundUntil", 0)
         if now >= deadline or state.get("cleanupRun" if clean else "foregroundRun") != self.run:
             raise ValueError("Cohort HTTP dispatch lost its custody lease")
@@ -110,9 +134,9 @@ class HostedPort(BrowserPort):
         self.owner.save(state["stage"], **{key: state.get(key,0)+1}, lastDispatch=now)
         if int(time.time()) >= deadline:
             raise ValueError("Cohort HTTP lease expired before dispatch")
-        status, headers, raw = fetch(outgoing["url"], outgoing["headers"],
+        status, headers, raw = transport(outgoing["url"], outgoing["headers"],
                                      None if method == "GET" else (body or "").encode())
-        return dict(status=status, headers=dict(headers.items()), body=raw.decode())
+        return dict(status=status, headers=list(headers.items()), body=raw.decode())
 
     def census(self):
         namespace = self.owner.coordinates["userNamespace"]

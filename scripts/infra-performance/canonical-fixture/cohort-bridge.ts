@@ -22,7 +22,7 @@ const io = <A>(run: () => Promise<A>): Effect.Effect<A, CohortTransportError> =>
   Effect.tryPromise({ try: run, catch: () => new CohortTransportError() });
 const upstream = Schema.Struct({
   status: Schema.Int,
-  headers: Schema.Record(Schema.String, Schema.String),
+  headers: Schema.Array(Schema.Tuple([Schema.String, Schema.String])),
   body: Schema.String,
 });
 // The parent checks account custody and release admission before it sends each request.
@@ -37,14 +37,17 @@ const relay = (read: Read): Transport =>
       },
     });
     const reply = yield* Schema.decodeEffect(Schema.fromJsonString(upstream))(yield* io(read));
+    const headers = new Headers();
+    for (const [key, value] of reply.headers) headers.append(key, value);
     return new Response(reply.body === "" ? null : reply.body, {
       status: reply.status,
-      headers: reply.headers,
+      headers,
     });
   });
 type Browser = ReturnType<typeof performanceCohortBrowser>;
-type Item = typeof command.Type;
-type Local = (action: string) => Effect.Effect<unknown, Error>;
+export type CohortCommand = typeof command.Type;
+type Item = CohortCommand;
+type Local = (item: Item) => Effect.Effect<unknown, Error>;
 type Action = (item: Item) => Effect.Effect<unknown, Error>;
 const unavailable: Local = () => Effect.fail(new CohortTransportError());
 const fixturePath = (method: string, path: string): boolean =>
@@ -93,8 +96,8 @@ const dispatch = (port: Browser, local: Local): Action => {
   };
   return (item) =>
     Object.hasOwn(actions, item.action)
-      ? (actions[item.action]?.(item) ?? unavailable(item.action))
-      : local(item.action);
+      ? (actions[item.action]?.(item) ?? unavailable(item))
+      : local(item);
 };
 export const cohortAuthority = Effect.gen(function* () {
   const secret = Redacted.value(yield* Config.Redacted("SMOKE_PROOF"));

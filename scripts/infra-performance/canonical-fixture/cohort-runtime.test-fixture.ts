@@ -1,12 +1,12 @@
 import { Database } from "bun:sqlite";
-import { Config, DateTime, Effect, Option, Redacted } from "effect";
+import { Config, DateTime, Effect, Option, Redacted, Schema } from "effect";
 import type { Miniflare } from "miniflare";
 import { installedOrigins } from "../../../apps/server/src/shell/browser-transport/contract";
 import { establishSmokeUsers } from "../../../infra/cloudflare/native-acceptance";
 import { native } from "../../../apps/server/cloudflare/user-store.test-fixture";
 import { transport } from "./bridge";
 import { closedRuntime } from "./closed-runtime.test-fixture";
-import { cohortAuthority, serveCohort } from "./cohort-bridge";
+import { type CohortCommand, cohortAuthority, serveCohort } from "./cohort-bridge";
 
 const readObject = Effect.fnUntraced(function* (directory: string, id: string) {
   if (!/^[a-f0-9]{64}$/u.test(id)) return yield* Effect.fail(Error("Unknown physical object"));
@@ -45,6 +45,30 @@ const tick = Effect.fnUntraced(function* (runtime: Miniflare) {
     "ok"
   );
 });
+const requestSchema = Schema.Struct({
+  url: Schema.String,
+  headers: Schema.Record(Schema.String, Schema.String),
+  method: Schema.Literals(["POST", "GET"]),
+  body: Schema.NullOr(Schema.String),
+});
+const dispatch = Effect.fnUntraced(function* (runtime: Miniflare, value: unknown) {
+  const req = yield* Schema.decodeUnknownEffect(requestSchema)(value);
+  if (new URL(req.url).origin !== installedOrigins.acceptance.api) {
+    return yield* Effect.fail(Error("Foreign rehearsal origin"));
+  }
+  const response = yield* transport(runtime)(
+    new Request(req.url, {
+      method: req.method,
+      headers: req.headers,
+      ...(req.body === null ? {} : { body: req.body }),
+    })
+  );
+  return {
+    status: response.status,
+    headers: [...response.headers],
+    body: yield* native(() => response.text()),
+  };
+});
 const run = Effect.gen(function* () {
   const auth = yield* cohortAuthority;
   const directory = yield* Config.String("FIDY_REHEARSAL_STATE");
@@ -52,7 +76,9 @@ const run = Effect.gen(function* () {
     closedRuntime(auth, directory),
     (runtime) => {
       const send = transport(runtime);
-      const local = Effect.fnUntraced(function* (action: string) {
+      const local = Effect.fnUntraced(function* (item: CohortCommand) {
+        const action = item.action;
+        if (action === "provider-request") return yield* dispatch(runtime, item.body);
         if (action === "seed-survivors") {
           yield* establishSmokeUsers({
             revision: auth.revision,

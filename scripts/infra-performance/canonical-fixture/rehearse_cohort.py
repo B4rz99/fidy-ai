@@ -1,5 +1,7 @@
 """Interrupt the native collector after issuance, discard the controller, then recover against workerd."""
 import argparse
+from contextlib import contextmanager
+from email.message import Message
 import json
 import os
 from pathlib import Path
@@ -11,6 +13,7 @@ from cohort import Cohort
 from cohort_runner import BrowserPort, collect_owned, commands
 from fixture import digest, write
 from hosted import ROOT
+from protected_cohort import HostedPort
 
 
 class LocalCustody:
@@ -32,18 +35,47 @@ class LocalCustody:
 
 class LocalPort(BrowserPort):
     def census(self):
-        return self.command("census")
+        return self.runtime("census")
 
     def marker_owner(self):
-        return self.command("marker")
+        return self.runtime("marker")
 
     def guard(self, phase):
-        pass
+        if phase == "begin":
+            return
+        state = self.owner.state
+        state.setdefault("foregroundRun", self.run)
+        state.setdefault("foregroundUntil", int(time.time())+1200)
+        if phase in ("cleanup", "finish"):
+            state.update(cleanupRun=self.run, cleanupUntil=int(time.time())+900)
+        self.owner.save(state["stage"])
 
     def renew(self):
         super().renew()
-        if not self.command("tick"):
+        if not self.runtime("tick"):
             raise ValueError("Closed background dispatch refused")
+
+    def exchange(self, outgoing):
+        def workerd(url, headers, body):
+            reply = self.runtime("provider-request", body=dict(url=url, method=outgoing["method"], headers=headers,
+                                  body=None if body is None else body.decode()))
+            received = Message()
+            for key, value in reply["headers"]:
+                received[key] = value
+            return reply["status"], received, reply["body"].encode()
+        return HostedPort.exchange(self, outgoing, workerd)
+
+
+@contextmanager
+def controller(directory, coords, path):
+    revision = coords["revision"]
+    with commands(revision, "cohort-runtime.test-fixture.ts") as runtime, commands(
+            revision, exchange=lambda req: port.exchange(req)) as command:
+        port = LocalPort(command, directory)
+        port.runtime = runtime
+        port.run = "disposable-workerd"
+        port.owner = Cohort(LocalCustody(path), coords, port)
+        yield port
 
 
 def main():
@@ -62,21 +94,19 @@ def main():
     os.environ["TEST_FIXTURE_PRIVATE_KEY"], os.environ["FIDY_NATIVE_FIXTURE_PUBLIC_KEY"] = json.loads(
         subprocess.check_output(["bun", "-e", key], text=True))
     path = out / "custody.json"
-    with commands(revision, "cohort-runtime.test-fixture.ts") as cmd:
-        cmd("seed-survivors")
-        port = LocalPort(cmd, directory)
-        owner = Cohort(LocalCustody(path), coords, port)
-        owner.enroll()
-        proof = collect_owned(owner, port)
+    with controller(directory, coords, path) as port:
+        port.runtime("seed-survivors")
+        port.owner.enroll()
+        proof = collect_owned(port.owner, port)
     # New controller and new workerd process. The previous committed native databases and R2
     # marker survive the foreground runtime. Only custody and the original bound Session remain.
-    with commands(revision, "cohort-runtime.test-fixture.ts") as cmd:
-        port = LocalPort(cmd, directory)
-        resumed = Cohort(LocalCustody(path), coords, port)
+    with controller(directory, coords, path) as port:
+        resumed = port.owner
         resumed.cleanup()
         write(out / "summary.json", dict(scope="disposable workerd", nativeRevision=revision,
               receiptDigest=proof["nativeReceiptDigest"], stage=resumed.state["stage"],
-              survivors=2, freshProcess=True, originalSessionDenied=True,
+              survivors=2, freshProcess=True, protectedRelay=True,
+              foregroundRequests=resumed.state["foregroundRequests"], cleanupRequests=resumed.state["cleanupRequests"], originalSessionDenied=True,
               physicalState=resumed.state["physicalState"],
               oneUseFenceRetained=resumed.state["receiptMarkerRetained"]))
 

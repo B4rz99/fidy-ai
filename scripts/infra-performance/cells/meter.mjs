@@ -1,4 +1,5 @@
 // Bundled only in the disposable comparator. The original frozen application owns all SQL.
+import { Schema } from "effect";
 import { AsyncLocalStorage } from "node:async_hooks";
 
 /** @import { Cost, CoreEnvironment, Database, Frame, MeterConfig, PinnedCore, PinnedCoordinator, Statement, StatementReply } from "./contracts.d.mts" */
@@ -149,6 +150,67 @@ const zeroReceipt = (value) =>
   value.rowsRead === 0 &&
   "rowsWritten" in value &&
   value.rowsWritten === 0;
+/** @param {Request} request Frozen internal dispatch. @param {string} parent Exact public route. */
+const expectedChild = (request, parent) => {
+  if (request.method !== "POST") return "";
+  const child = request.url;
+  if (parent.startsWith("PUT /transactions/") && child === "https://coordinator.internal/call") {
+    return "POST /call";
+  }
+  return parent === "POST /operations/atomic-batch" &&
+    child === "https://coordinator.internal/batch"
+    ? "POST /batch"
+    : "";
+};
+const childRows = Schema.Struct({ rowsRead: Schema.Int, rowsWritten: Schema.Int });
+const childCost = Schema.decodeUnknownSync(
+  Schema.StructWithRest(childRows, [Schema.Record(Schema.String, Schema.Unknown)])
+);
+const childTraining = Schema.decodeUnknownSync(
+  Schema.Struct({
+    ...childRows.fields,
+    route: Schema.String,
+    calls: Schema.Array(Schema.Struct({ ...childRows.fields, key: Schema.String })),
+  })
+);
+/** @param {Cost} cost Child database result. @param {Cost|null} cap Pre-dispatch reservation. */
+const checkChildCost = (cost, cap) => {
+  if (fields.some((field) => !count(cost[field]) || (cap && cost[field] > cap[field]))) stop();
+};
+/** @param {Frame} frame Parent request. @param {string} child Metered child route. @param {Record<string,unknown> & Cost} cost Verified row totals. */
+const recordChildCalls = (frame, child, cost) => {
+  if (!frame.training) return;
+  const details = childTraining(cost);
+  if (details.route !== child) stop();
+  frame.calls.push({
+    key: "coordinator:" + child,
+    child,
+    calls: Array.from(details.calls),
+    rowsRead: cost.rowsRead,
+    rowsWritten: cost.rowsWritten,
+  });
+};
+/** @param {Frame} frame Parent accounting. @param {string} child Exact private route.
+ * @param {{config:MeterConfig, forward:()=>Promise<Response>}} dispatch Authorized dispatch and ceilings. */
+const measuredChild = async (frame, child, { config, forward }) => {
+  const key = "coordinator:" + child;
+  const cap = reserve(frame, key);
+  if (cap && fields.some((field) => cap[field] !== config.limits[child]?.maximum[field])) stop();
+  frame.inflight++;
+  try {
+    const response = await forward();
+    const cost = childCost(JSON.parse(response.headers.get(receipt) ?? "null"));
+    checkChildCost(cost, cap);
+    recordChildCalls(frame, child, cost);
+    for (const field of fields) frame.used[field] += cost[field];
+    return response;
+  } catch {
+    return stop();
+  } finally {
+    frame.inflight--;
+    if (cap) for (const field of fields) frame.pending[field] -= cap[field];
+  }
+};
 // The pinned Core consults the private registry for erasure metadata during Login.
 // Only that exact child request is permitted. Its mounted owner has a zero-D1 envelope.
 /**
@@ -168,48 +230,16 @@ const guardedEnvironment = (env, config) => {
         fetch: async (input, init) => {
           const request = new Request(input, init);
           const frame = context();
-          const child = request.method + " " + new URL(request.url).pathname;
-          const expectedChild = frame.route.startsWith("PUT /transactions/")
-            ? "POST /call"
-            : frame.route === "POST /operations/atomic-batch"
-              ? "POST /batch"
-              : null;
+          const child = expectedChild(request, frame.route);
           if (
-            config.mutationSubject &&
+            child &&
             name === "USER_TRANSACTION_COORDINATOR" &&
-            owner === config.mutationSubject &&
-            new URL(request.url).origin === "https://coordinator.internal" &&
-            child === expectedChild
+            owner === config.mutationSubject
           ) {
-            const key = "coordinator:" + child;
-            const cap = reserve(frame, key);
-            if (cap && fields.some((field) => cap[field] !== config.limits[child]?.maximum[field]))
-              stop();
-            frame.inflight++;
-            try {
-              const response = await namespace.getByName(owner, options).fetch(request);
-              const cost = JSON.parse(response.headers.get(receipt) ?? "null");
-              if (
-                !cost ||
-                !fields.every((field) => count(cost[field]) && (!cap || cost[field] <= cap[field]))
-              )
-                stop();
-              if (frame.training && (cost.route !== child || !Array.isArray(cost.calls))) stop();
-              frame.calls.push({
-                key,
-                child,
-                rowsRead: cost.rowsRead,
-                rowsWritten: cost.rowsWritten,
-                ...(frame.training ? { calls: cost.calls } : {}),
-              });
-              for (const field of fields) frame.used[field] += cost[field];
-              return response;
-            } catch {
-              return stop();
-            } finally {
-              frame.inflight--;
-              if (cap) for (const field of fields) frame.pending[field] -= cap[field];
-            }
+            return measuredChild(frame, child, {
+              config,
+              forward: () => namespace.getByName(owner, options).fetch(request),
+            });
           }
           if (
             owner !== "erasure-registry-v1" ||

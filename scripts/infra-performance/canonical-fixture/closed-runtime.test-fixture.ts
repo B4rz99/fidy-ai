@@ -10,7 +10,57 @@ import {
 } from "../../../apps/server/cloudflare/user-store.test-fixture";
 
 const text = (value: string): { type: "text"; value: string } => ({ type: "text", value });
+const meteredManifest = Effect.fnUntraced(function* (module: string, name: string) {
+  const manifest = yield* workerManifest(module);
+  const wrapOwners =
+    name === "core"
+      ? Object.keys(nativeOwners)
+          .map(
+            (owner) =>
+              "export const " +
+              owner +
+              "=observed(" +
+              JSON.stringify(owner) +
+              ",Production." +
+              owner +
+              ");"
+          )
+          .join("\n")
+      : "";
+  const mapping =
+    name === "ingress"
+      ? 'const url=new URL(request.url);if(url.hostname!=="127.0.0.1")return new Response(null,{status:403});request=new Request("' +
+        installedOrigins.acceptance.api +
+        '"+url.pathname+url.search,request);'
+      : "";
+  const wrapper =
+    'import * as Production from "./production.mjs"; import {observed,observedBindings,totals,buckets} from "./meter.mjs"; export * from "./production.mjs";' +
+    wrapOwners +
+    'export default {...Production.default,fetch(request,env,ctx){if(request.url==="https://offline.invalid/native-row-counts")return totals();if(request.url==="https://offline.invalid/r2-counts")return buckets();' +
+    mapping +
+    "return Production.default.fetch(request,observedBindings(env),ctx);}," +
+    (name === "core"
+      ? "scheduled(controller,env){return Production.default.scheduled(controller,observedBindings(env));}"
+      : "") +
+    "};";
+  return {
+    mainModule: "index.mjs",
+    modules: {
+      "index.mjs": { type: "esm" as const, contents: wrapper },
+      "production.mjs": manifest.modules["index.mjs"],
+      "meter.mjs": {
+        type: "esm" as const,
+        contents: yield* Effect.tryPromise({
+          try: () => Bun.file(new URL("./meter.test-fixture.mjs", import.meta.url)).text(),
+          catch: () => Error("Native meter module unavailable"),
+        }),
+      },
+    },
+  };
+});
 const observedManifest = Effect.fnUntraced(function* (module: string, name: string) {
+  if (yield* Config.Boolean("FIDY_BROWSER_METER").pipe(Config.withDefault(false)))
+    {return yield* meteredManifest(module, name);}
   const manifest = yield* workerManifest(module);
   if (name !== "ingress") return manifest;
   const entrypoints = new Bun.Transpiler({ loader: "js" }).scan(

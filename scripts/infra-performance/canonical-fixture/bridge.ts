@@ -165,6 +165,42 @@ const authority = Effect.gen(function* () {
   }
   return { secret, revision };
 });
+const nativeMeters = async (runtime: Miniflare): Promise<unknown> => {
+  const core = await runtime.getWorker("core");
+  const sql: unknown = await (await core.fetch("https://offline.invalid/native-row-counts")).json();
+  const r2 = Object.fromEntries(
+    await Promise.all(
+      ["core", "ingress", "closed-provider"].map(async (name) => {
+        const worker = await runtime.getWorker(name);
+        const counters: unknown = await (
+          await worker.fetch("https://offline.invalid/r2-counts")
+        ).json();
+        return [name, counters];
+      })
+    )
+  );
+  return { sql, r2 };
+};
+const signedForward = async (
+  runtime: Miniflare
+): Promise<(request: Request) => Promise<Response>> => {
+  const environment = environmentOf(await Effect.runPromise(authority));
+  const forward = async (request: Request): Promise<Response> => {
+    request.headers.set(
+      acceptanceProofHeader,
+      await Effect.runPromise(
+        signAcceptanceRequest({
+          request,
+          boundary: "ingress",
+          environment,
+          deadline: Date.now() + acceptanceLifetimeMs,
+        })
+      )
+    );
+    return Effect.runPromise(transport(runtime)(request));
+  };
+  return forward;
+};
 const runMountedWorkspace = (
   runtime: Miniflare,
   active: Session
@@ -174,21 +210,8 @@ const runMountedWorkspace = (
     const manifest = await Bun.file(
       process.env.FIDY_DIAGNOSTIC_DIR + "/native/fixture/manifest.json"
     ).json();
-    const environment = environmentOf(await Effect.runPromise(authority));
-    const forward = async (request: Request): Promise<Response> => {
-      request.headers.set(
-        acceptanceProofHeader,
-        await Effect.runPromise(
-          signAcceptanceRequest({
-            request,
-            boundary: "ingress",
-            environment,
-            deadline: Date.now() + acceptanceLifetimeMs,
-          })
-        )
-      );
-      return Effect.runPromise(transport(runtime)(request));
-    };
+    const forward = await signedForward(runtime);
+    const before = await nativeMeters(runtime);
     await runBrowser({
       variant: "do",
       origins: api,
@@ -197,6 +220,7 @@ const runMountedWorkspace = (
       workspace: manifest.workspace,
       forward,
     });
+    const afterReads = await nativeMeters(runtime);
     const { proveScopedCorrection } = await import("../hosted-browser/scoped-correction.mjs");
     const mutation = await proveScopedCorrection(
       manifest.history,
@@ -218,6 +242,10 @@ const runMountedWorkspace = (
     await Bun.write(
       process.env.FIDY_DIAGNOSTIC_DIR + "/ordinary-native-mutation.json",
       JSON.stringify(mutation)
+    );
+    await Bun.write(
+      process.env.FIDY_DIAGNOSTIC_DIR + "/ordinary-native-accounting.json",
+      JSON.stringify({ before, afterReads, afterMutations: await nativeMeters(runtime) })
     );
     offer({ status: 200 });
   });

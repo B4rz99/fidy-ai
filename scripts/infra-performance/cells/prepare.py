@@ -61,7 +61,7 @@ def main():
                 path.write_bytes(original)
     inspection_ids = []
     mutation_target = None
-    mutation_subject = None
+    mutation_subject = ""
     if args.canonical_fixture:
         sys.path.insert(0, str(HERE.parent / "canonical-fixture"))
         from mirror import materialize

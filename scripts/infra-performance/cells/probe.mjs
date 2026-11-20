@@ -229,7 +229,7 @@ const learn = (route, calls) => {
   const previous = estimates[route] ?? { maximum: empty(), statements: {} };
   const statements = { ...previous.statements };
   for (const entry of calls) {
-    if (entry.child && entry.calls) {
+    if ("child" in entry && "calls" in entry) {
       learn(entry.child, entry.calls);
       statements[entry.key] = estimates[entry.child].maximum;
     } else {
@@ -412,43 +412,42 @@ try {
   } else if (plan.browserUser) {
     assert.ok(expected?.workspace);
     const headers = { cookie, "Fidy-Session-Binding": binding };
-    for (const [id, detail] of inspections) {
+    await eachInOrder(inspections, async ([id, detail]) => {
       await Bun.sleep(secondMs);
       const reply = await request("/transactions/" + id, { headers });
       assert.equal(reply.status, success);
       assert.deepEqual(await reply.json(), detail);
-    }
+    });
     const { runBrowser } = await import("../hosted-browser/captured-profile.mjs");
-    const d1BrowserRoutes = [];
+    /** @type {Record<string,number>} */
+    const routes = {};
     await runBrowser({
       variant: "d1",
       origins: { browser: origin, api: "https://api.fidyapp.com" },
       cookie,
       expected: expected.history,
       workspace: expected.workspace,
-      forward: async (incoming) => {
+      forward: async (/** @type {Request} */ incoming) => {
         const url = new URL(incoming.url);
         const path = url.pathname + url.search;
         const options = { method: incoming.method, headers: Object.fromEntries(incoming.headers) };
         if (incoming.method === "OPTIONS") {
           const reply = await source(path, options);
-          assert.equal(reply.status, 204);
+          const noContent = 204;
+          assert.equal(reply.status, noContent);
           return reply;
         }
-        d1BrowserRoutes.push(incoming.method + " " + path);
+        const route = incoming.method + " " + path;
+        routes[route] = (routes[route] ?? 0) + 1;
         return request(path, options);
       },
     });
-    const routes = d1BrowserRoutes.reduce((counts, route) => {
-      counts[route] = (counts[route] ?? 0) + 1;
-      return counts;
-    }, {});
-    assert.equal(routes["GET /user"], 30);
+    assert.equal(routes["GET /user"], sampleCount);
     assert.equal(
       routes[
         "GET /transactions?limit=25&from=2026-11-01T05%3A00%3A00.000Z&to=2026-12-01T05%3A00%3A00.000Z"
       ],
-      30
+      sampleCount
     );
     assert.equal(routes["GET /ingestion/review-workspace?limit=0&status=pending"], 1);
     const { proveScopedCorrection } = await import("../hosted-browser/scoped-correction.mjs");
@@ -476,10 +475,20 @@ try {
         .bind(subject),
     ]);
     account("audit", audits);
+    const auditRows = Schema.decodeUnknownSync(
+      Schema.Array(
+        Schema.Struct({
+          operation: Schema.NullOr(Schema.String),
+          outcome: Schema.NullOr(Schema.String),
+          n: Schema.Int,
+        })
+      )
+    )(audits[0].results);
+    /** @param {string} operation Canonical operation. */
     const count = (operation) =>
-      audits[0].results.find((row) => row.operation === operation && row.outcome === "success")?.n;
-    assert.equal(count("transactions.listTransactions"), 33);
-    assert.equal(count("transactions.getTransaction"), 8);
+      auditRows.find((row) => row.operation === operation && row.outcome === "success")?.n;
+    assert.equal(count("transactions.listTransactions"), sampleCount + 1 + 2);
+    assert.equal(count("transactions.getTransaction"), fixtureOriginalCount);
     assert.equal(count("transactions.updateTransaction"), 1);
     assert.deepEqual(audits[1].results, [{ units: 0, receipts: 0 }]);
     const limits = training
@@ -492,12 +501,13 @@ try {
       sessionAudit: audits[0].results,
       commercial: audits[1].results[0],
       fullEstimate: [
-        ...sqlBatches.map((b) => b.maximum),
+        ...sqlBatches.map((batch) => batch.maximum),
         ...requests.map((entry) => limits[entry.route].maximum),
       ].reduce(add, empty()),
     });
-    if (training)
+    if (training) {
       await Bun.write(resolve(output, "limits.json"), JSON.stringify(estimates, null, 2));
+    }
   } else {
     /** @type {string | undefined} */
     let responseSha256;

@@ -230,6 +230,8 @@ def main():
         revision=subprocess.check_output(["git","rev-parse","HEAD"],cwd=ROOT,text=True).strip()
         prefix=args.resource_prefix or ("fidy-2259-"+secrets.token_hex(6))
         os.environ["SMOKE_PROOF"]=secrets.token_hex(32)
+        if args.browser_workspace:
+            os.environ["FIDY_BROWSER_METER"] = "true"
         create="const k=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify']);process.stdout.write(JSON.stringify([Buffer.from(await crypto.subtle.exportKey('pkcs8',k.privateKey)).toString('hex'),Buffer.from(await crypto.subtle.exportKey('spki',k.publicKey)).toString('hex')]))"
         pair=json.loads(subprocess.check_output(["bun","-e",create],text=True))
         os.environ["TEST_FIXTURE_PRIVATE_KEY"],os.environ["FIDY_NATIVE_FIXTURE_PUBLIC_KEY"]=pair

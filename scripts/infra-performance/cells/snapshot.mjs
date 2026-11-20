@@ -11,7 +11,10 @@ import { Schema } from "effect";
 /** @typedef {{name:string,type:string,tbl_name:string,sql:string|null}} Definition */
 /** @typedef {{name:string, read:Query, inserts:string[], identities:string[], rowCount:number, dependencies:string[]}} Table */
 const browserFixture = process.argv[4] === "browser";
-const emptyBatchSize = browserFixture ? 45 : 15;
+const browserBatchSize = 45,
+  standardBatchSize = 15,
+  originalCount = 8;
+const emptyBatchSize = browserFixture ? browserBatchSize : standardBatchSize;
 const Rows = Schema.Array(Schema.Record(Schema.String, Schema.Json));
 const encodedRows = Schema.decodeUnknownSync(Rows);
 const QueryShape = Schema.Struct({ sql: Schema.String, params: Schema.Array(Schema.Json) });
@@ -431,8 +434,8 @@ try {
     ]) {
       assert.equal(counts[name], 0, "Unexpected unrelated workspace rows in " + name);
     }
-    assert.equal(counts.transactions, 8);
-    assert.equal(counts.source_attestations, 8);
+    assert.equal(counts.transactions, originalCount);
+    assert.equal(counts.source_attestations, originalCount);
     assert.equal(counts.transaction_reconciliation_decisions, 1);
     evidence.workload = "mounted-transactions-ordinary";
   }

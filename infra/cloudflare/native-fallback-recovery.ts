@@ -112,8 +112,8 @@ export const requireRestoredDormantSource = Effect.fn(function* ({
   for (const role of ["core", "public"] as const) {
     const captured = snapshot[role];
     const stable = release.snapshot[role];
-    const deployment = `${role}DeploymentId`;
-    const version = `${role}VersionId`;
+    const deployment = `${role}DeploymentId` as const;
+    const version = `${role}VersionId` as const;
     const history = yield* port.recentDeployments(captured.name);
     const expected = [
       soleDeployment(source.restored[deployment], sealed[version]),

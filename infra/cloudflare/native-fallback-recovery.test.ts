@@ -125,8 +125,8 @@ it.effect("requires the exact five deployment entries after a verified dormant r
       ["core", core],
       ["public", ingress],
     ] as const) {
-      const deployment = `${role}DeploymentId`;
-      const version = `${role}VersionId`;
+      const deployment = `${role}DeploymentId` as const;
+      const version = `${role}VersionId` as const;
       const stableId = stage.release[version];
       release.snapshot[role] = {
         name,

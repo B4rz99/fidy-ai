@@ -3,6 +3,7 @@
 from io import BytesIO
 import json
 import os
+from pathlib import Path
 import re
 import subprocess
 from zipfile import ZipFile
@@ -171,7 +172,7 @@ def storage_release(binding):
     return release
 
 
-def require_support(read, account):
+def require_materialized_support(read, account):
     base = f"accounts/{account}/"
     queue = read_result(read, base + "queues/" + QUEUE)
     consumer, = read_result(read, base + "queues/" + QUEUE + "/consumers")
@@ -182,6 +183,11 @@ def require_support(read, account):
             or any(consumer["settings"].get(key) != value for key, value in {
                 "batch_size": 1, "max_retries": 3, "max_wait_time_ms": 0}.items())):
         raise ValueError("Materialized smoke Queue or consumer differs")
+
+
+def require_support(read, account):
+    require_materialized_support(read, account)
+    base = f"accounts/{account}/"
     status, workflow = read(base + "workflows/" + SMOKE)
     if (status != 404 or workflow.get("success") is not False
             or [row["code"] for row in workflow.get("errors", [])] != [10200]):
@@ -207,9 +213,10 @@ def require_support(read, account):
     raise ValueError("Workflow inventory exceeded the read-only bound")
 
 
-def main():
-    verifier = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-    if any(subprocess.run(["git", "merge-base", "--is-ancestor", revision, verifier],
+def verified_partial_graph():
+    git = ["git", "-C", str(Path(__file__).resolve().parents[3])]
+    verifier = subprocess.check_output([*git, "rev-parse", "HEAD"], text=True).strip()
+    if any(subprocess.run([*git, "merge-base", "--is-ancestor", revision, verifier],
                           check=False).returncode != 0 for revision in (REVISION, COMPATIBILITY_REVIEW)):
         raise ValueError("Requires the interrupted source and reviewed verifier lineage")
     account, public_key = os.environ["CLOUDFLARE_ACCOUNT_ID"], os.environ["FIDY_NATIVE_FIXTURE_PUBLIC_KEY"]
@@ -224,6 +231,11 @@ def main():
         return status, json.loads(raw)
 
     require_workers(read, account, snapshot, source)
+    return verifier, account, read, source, snapshot
+
+
+def main():
+    verifier, account, read, _, _ = verified_partial_graph()
     require_support(read, account)
     print(json.dumps({"verifierRevision": verifier, "candidateRevision": REVISION,
                       "failedRun": FAILED_RUN, "planRun": PLAN_RUN,

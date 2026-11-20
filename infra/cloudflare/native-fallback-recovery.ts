@@ -85,16 +85,15 @@ const matchesStage = (deployment: Deployment, release: Release, role: Role): boo
   hasZeroCandidate(deployment, release.snapshot[role].stableVersionId, release[`${role}VersionId`]);
 
 type ArchivedPair = typeof archivedPairing;
-export const matchesArchivedStage = (
-  value: Release,
-  archive: ArchivedPair = archivedDormant
-): boolean =>
+const matchesArchivedPair = (value: Release, archive: ArchivedPair): boolean =>
   value.snapshot.revision === archive.revision &&
   (["public", "core"] as const).every(
     (role) =>
       value[`${role}VersionId`] === archive[`${role}VersionId`] &&
       value[`${role}DeploymentId`] === archive[`${role}DeploymentId`]
   );
+export const matchesArchivedStage = (value: Release): boolean =>
+  matchesArchivedPair(value, archivedDormant);
 type StageReader = Pick<FallbackRepairPort, "recentDeployments" | "trunk">;
 const matchesOriginalStage = (
   observed: Deployment,
@@ -115,14 +114,17 @@ const archivedSource = (source: Release["snapshot"]): Option.Option<ArchivedPair
 export const fromArchivedStage = (source: Release["snapshot"]): boolean =>
   Option.isSome(archivedSource(source));
 
-export const matchesReplacementPredecessor = (
-  prior: Release,
-  snapshot: Release["snapshot"]
-): boolean => {
+export const matchesReplacementPredecessor = ({
+  prior,
+  snapshot,
+}: {
+  prior: Release;
+  snapshot: Release["snapshot"];
+}): boolean => {
   const archive = archivedSource(snapshot);
   return (
     Option.isSome(archive) &&
-    matchesArchivedStage(prior, archive.value) &&
+    matchesArchivedPair(prior, archive.value) &&
     isDeepStrictEqual(snapshot, {
       ...prior.snapshot,
       revision: snapshot.revision,

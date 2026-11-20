@@ -272,7 +272,7 @@ const readReplacementPredecessor = Effect.fn(function* (
   const prior = yield* Schema.decodeUnknownEffect(releaseSchemas.staged)(
     yield* readFile(env.file + ".predecessor")
   );
-  if (!matchesReplacementPredecessor(prior, snapshot)) {
+  if (!matchesReplacementPredecessor({ prior, snapshot })) {
     return yield* new ReleaseFailure({
       message: "Replacement source differs from the protected stage",
     });

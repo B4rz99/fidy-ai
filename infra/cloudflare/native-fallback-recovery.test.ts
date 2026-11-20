@@ -307,14 +307,14 @@ it.effect("qualifies only the exact interrupted pairing deployment and retained 
         ],
       };
     }
-    expect(matchesReplacementPredecessor(prior, snapshot)).toBe(true);
-    expect(matchesReplacementPredecessor({ ...prior, coreVersionId: uuid(250) }, snapshot)).toBe(
-      false
-    );
+    expect(matchesReplacementPredecessor({ prior, snapshot })).toBe(true);
     expect(
-      matchesReplacementPredecessor(prior, {
-        ...snapshot,
-        stableContractDigest: "f".repeat(64),
+      matchesReplacementPredecessor({ prior: { ...prior, coreVersionId: uuid(250) }, snapshot })
+    ).toBe(false);
+    expect(
+      matchesReplacementPredecessor({
+        prior,
+        snapshot: { ...snapshot, stableContractDigest: "f".repeat(64) },
       })
     ).toBe(false);
     yield* requireDormantReplacementSource(port, snapshot);

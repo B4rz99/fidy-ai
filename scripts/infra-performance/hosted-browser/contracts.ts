@@ -18,6 +18,20 @@ export const parseHistory = (input: unknown): typeof history.Type => {
   Schema.asserts(history, input);
   return input;
 };
+const nativeBrowser = Schema.Struct({
+  session,
+  revision: Schema.String,
+  web: Schema.Struct({
+    browser: Schema.String,
+    api: Schema.String,
+    revision: Schema.String,
+    contractDigest: Schema.String,
+  }),
+});
+const expectedBrowser = Schema.Struct({
+  history,
+  workspace: Schema.Struct({ profile: Schema.Unknown, review: Schema.Unknown }),
+});
 const config = Schema.Struct({
   deadline: Schema.Int,
   d1: Schema.Struct({
@@ -27,20 +41,8 @@ const config = Schema.Struct({
     key: Schema.String,
     assets: Schema.Record(Schema.String, artifact),
   }),
-  native: Schema.Struct({
-    session,
-    revision: Schema.String,
-    web: Schema.Struct({
-      browser: Schema.String,
-      api: Schema.String,
-      revision: Schema.String,
-      contractDigest: Schema.String,
-    }),
-  }),
-  expected: Schema.Struct({
-    history,
-    workspace: Schema.Struct({ profile: Schema.Unknown, review: Schema.Unknown }),
-  }),
+  native: nativeBrowser,
+  expected: expectedBrowser,
   allowed: Schema.Record(Schema.String, Schema.Int),
   caps: Schema.Record(Schema.String, cost),
   maximum: cost,
@@ -63,6 +65,15 @@ export const parseConfig = (input: unknown): PairConfig => {
 };
 const decoder = <Value>(schema: Schema.ConstraintDecoder<Value>): ((input: unknown) => Value) =>
   Schema.decodeUnknownSync(schema);
+export const parseNativeSmoke = decoder(
+  Schema.Struct({
+    deadline: Schema.Int,
+    native: nativeBrowser,
+    expected: expectedBrowser,
+    allowed: Schema.Record(Schema.String, Schema.Int),
+    maximumPreflights: Schema.Int,
+  })
+);
 export const parseCost = decoder(Schema.fromJsonString(cost));
 export const parseDeployment = decoder(
   Schema.Struct({ gitRevision: Schema.String, contractDigest: Schema.String })

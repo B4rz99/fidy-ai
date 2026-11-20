@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "d9a18875d4d89a9c3eeb81104ec7feaae60593c52f1735234a3ce425017f3e49";
+const expectedEdgePolicyDigest = "0b8905deddd28bf0b07f8e3c48c5910f4f65f508faafc20412294bd7c40e80d4";
 const securityArtifacts = [
   ...(await Promise.all(
     [
@@ -79,6 +79,7 @@ const securityArtifacts = [
       "../../scripts/infra-performance/canonical-fixture/installation.py",
       "../../scripts/infra-performance/canonical-fixture/native_budget.py",
       "../../scripts/infra-performance/canonical-fixture/protected_cohort.py",
+      "../../scripts/infra-performance/canonical-fixture/native_smoke.py",
       "../../scripts/infra-performance/canonical-fixture/qualified_release.py",
       "../../scripts/infra-performance/cells/owner.py",
       "../../scripts/infra-performance/cells/owner_state.py",
@@ -93,6 +94,7 @@ const securityArtifacts = [
       "../../scripts/infra-performance/hosted-browser/captured-profile.mjs",
       "../../scripts/infra-performance/hosted-browser/protected-pair.mjs",
       "../../scripts/infra-performance/hosted-browser/native-accounting.ts",
+      "../../scripts/infra-performance/hosted-browser/native-smoke.ts",
       "../../scripts/infra-performance/hosted-browser/scoped-correction.mjs",
       "../../scripts/infra-performance/deployed-fleet/ten-source.sh",
       "../../scripts/infra-performance/deployed-fleet/ten.py",

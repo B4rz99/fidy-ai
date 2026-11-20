@@ -229,9 +229,12 @@ def main():
     parser.add_argument("--archive-sha256")
     parser.add_argument("--second-member", action="store_true", help="Exercise the independently selected second member on local workerd")
     parser.add_argument("--browser-workspace", action="store_true", help="Capture the original WebSession's User, TrialPeriod and pending Review count on workerd")
+    parser.add_argument("--native-smoke", action="store_true", help="Use the one-use hosted receipt for native-only correctness")
     args=parser.parse_args()
     if args.second_member and args.mode != "rehearse":
         parser.error("Member selection is available only for disposable workerd")
+    if args.native_smoke and (args.mode != "hosted" or not args.browser_workspace):
+        parser.error("Native smoke requires the protected hosted browser workspace")
     member = "performance-2" if args.second_member else "performance-1"
     os.umask(0o077)
     args.out.mkdir(mode=0o700,parents=True,exist_ok=True)

@@ -27,6 +27,10 @@ const bootstrapCodeModule = (id: string): boolean => {
     )
   );
 };
+const sessionAdmissionModules = [
+  "/apps/web/src/transport/browser-http-policy.ts",
+  "/apps/web/src/transport/session-entry.ts",
+];
 const sharedRuntimeModule = (id: string): boolean => {
   const path = id.replaceAll("\\", "/").replace(/\?.*$/u, "");
   if (bootstrapModules.some((suffix) => path.endsWith(suffix))) return false;
@@ -39,6 +43,8 @@ const sharedPresentationModule = (id: string): boolean => {
   const path = id.replaceAll("\\", "/").replace(/\?.*$/u, "");
   if (
     bootstrapModules.some((suffix) => path.endsWith(suffix)) ||
+    // Decode and recheck the session independently of UI and the general-purpose client.
+    sessionAdmissionModules.some((suffix) => path.endsWith(suffix)) ||
     /node_modules\/@base-ui\/react\/combobox\//u.test(path) ||
     /\/apps\/web\/src\/transport\/wompi-/u.test(path) ||
     /\/apps\/web\/src\/ui\/components\/(?:calendar|chart|dashboard-chart|ai-elements|chat-content|subscription-|searchable-choice-dropdown|amount-input)/u.test(

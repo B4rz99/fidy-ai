@@ -281,20 +281,6 @@ const listStatement = ({ db, userId, query, authority }: HistoryRow): D1Prepared
   return db.prepare(page.sql).bind(...page.bindings);
 };
 
-/** Prepare the same bounded page from a live, owner-prepared User selection in this snapshot. */
-export const selectedHistoryPage = ({
-  userSelection,
-  query,
-  authority,
-}: Omit<HistoryRow, "userId" | "db"> & Readonly<{ userSelection: OwnedStatement }>): ReturnType<
-  typeof selectedEffectiveHistoryPage
-> =>
-  selectedEffectiveHistoryPage({
-    taxonomyRevision: true,
-    userSelection,
-    ...listFilters({ userId: Option.none(), query, authority: Option.some(authority) }),
-  });
-
 /** The enclosing User transaction already resolved the live caller; keep every row bound to this User. */
 export const localHistoryPage = ({
   user,

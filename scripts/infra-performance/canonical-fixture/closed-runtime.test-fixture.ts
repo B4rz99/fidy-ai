@@ -50,10 +50,9 @@ const meteredManifest = Effect.fnUntraced(function* (module: string, name: strin
       "production.mjs": manifest.modules["index.mjs"],
       "meter.mjs": {
         type: "esm" as const,
-        contents: yield* Effect.tryPromise({
-          try: () => Bun.file(new URL("./meter.test-fixture.mjs", import.meta.url)).text(),
-          catch: () => Error("Native meter module unavailable"),
-        }),
+        contents: yield* Effect.tryPromise(() =>
+          Bun.file(new URL("./meter.test-fixture.mjs", import.meta.url)).text()
+        ),
       },
     },
   };

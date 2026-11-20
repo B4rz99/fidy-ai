@@ -4,7 +4,7 @@ import { AtomRegistry } from "effect/reactivity";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { makeFidyClient } from "@/transport/client";
-import { reviewPageContextQuery } from "./source-context";
+import { reviewPageContextQuery } from "./page-context-query";
 import { reviewNavigationQuery } from "./navigation-query";
 import { reviewWorkspaceQueries } from "./query";
 

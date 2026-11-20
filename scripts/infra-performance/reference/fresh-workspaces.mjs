@@ -313,7 +313,21 @@ const measurePendingReview = async (input, count, offset) => {
   const milliseconds = performance.now() - start;
   const [summary, original] = await Promise.all([consumeSuccess(reply), consumeSuccess(context)]);
   verifyPending(summary.value, original.value, { count, expected });
-  return { milliseconds, http: summary.http, context: original.http };
+  const summaryTiming = reply.request().timing();
+  const contextTiming = context.request().timing();
+  const actionEpochMs = performance.timeOrigin + start;
+  const summaryEnd = summaryTiming.startTime + summaryTiming.responseEnd;
+  const contextEnd = contextTiming.startTime + contextTiming.responseEnd;
+  return {
+    milliseconds,
+    http: summary.http,
+    context: original.http,
+    phases: {
+      actionToSummaryRequestMs: summaryTiming.startTime - actionEpochMs,
+      summaryEndToContextRequestMs: contextTiming.startTime - summaryEnd,
+      responsesEndToPaintMs: actionEpochMs + milliseconds - Math.max(summaryEnd, contextEnd),
+    },
+  };
 };
 
 /**

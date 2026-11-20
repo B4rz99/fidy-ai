@@ -506,30 +506,26 @@ const filterReviewPage = ({
   view: Workspace;
   source: string;
   search: string;
-}>): Workspace => ({
-  ...view,
-  items: view.items.filter(
-    (item, index) =>
-      (source === "all" || item.source === source) &&
-      [
-        reviewTitle(item),
-        reviewAmount(item),
-        sources[item.source],
-        sourceReference({
-          item,
-          context: Option.fromUndefinedOr(contexts.get(item.id)),
-          position: page + index + 1,
-        }),
-        Option.getOrElse(
-          sourceExcerpt({ item, context: Option.fromUndefinedOr(contexts.get(item.id)) }),
-          () => ""
-        ),
-      ]
-        .join(" ")
-        .toLocaleLowerCase("es-CO")
-        .includes(search.trim().toLocaleLowerCase("es-CO"))
-  ),
-});
+}>): Workspace => {
+  const term = search.trim().toLocaleLowerCase("es-CO");
+  if (source === "all" && term === "") return view;
+  const items = view.items.filter((item, index) => {
+    if (source !== "all" && item.source !== source) return false;
+    if (term === "") return true;
+    const context = Option.fromUndefinedOr(contexts.get(item.id));
+    return [
+      reviewTitle(item),
+      reviewAmount(item),
+      sources[item.source],
+      sourceReference({ item, context, position: page + index + 1 }),
+      Option.getOrElse(sourceExcerpt({ item, context }), () => ""),
+    ]
+      .join(" ")
+      .toLocaleLowerCase("es-CO")
+      .includes(term);
+  });
+  return { ...view, items };
+};
 const decisionLifetime =
   (decisions: ReviewDecisions): RefCallback<HTMLDivElement> =>
   (node) =>

@@ -2172,7 +2172,7 @@ const resumeNativeRollback = Effect.fn(function* (
   const core = yield* resumePairingRollback({
     port: {
       ...releaseEvidence.rollbackPort(port, env, client),
-      recentDeployments: port.recentDeployments,
+      recentDeployments: (name) => port.recentDeployments(name),
     },
     receipt,
     ingressDeploymentId: position.ingressDeploymentId,

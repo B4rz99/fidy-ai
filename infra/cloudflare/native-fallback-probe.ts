@@ -79,7 +79,14 @@ export const controlsDigest = Effect.fn(function* (
   if (controls.length !== 2 || new Set(controls.map((control) => control.id)).size !== 2) {
     return yield* Effect.fail(Error("Original controls are not distinct"));
   }
-  return new Bun.CryptoHasher("sha256").update(JSON.stringify(controls)).digest("hex");
+  const encoded = yield* Schema.encodeEffect(
+    Schema.fromJsonString(
+      Schema.Array(
+        Schema.Struct({ id: Schema.String, historyDigest: SmokeIdentity.fields.contractDigest })
+      )
+    )
+  )(controls);
+  return new Bun.CryptoHasher("sha256").update(encoded).digest("hex");
 });
 
 /** Source artifact 14571027939 identifies the exact proven installation before its one-way repair. */

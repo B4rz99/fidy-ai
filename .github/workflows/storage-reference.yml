@@ -83,6 +83,7 @@ jobs:
           bun scripts/infra-performance/reference/native-review-pressure.test.mjs
           bun apps/web/scripts/check-transaction-panel.ts
           bun scripts/infra-performance/reference/review-failure.test.mjs
+          bun scripts/infra-performance/reference/recurring-response.test.mjs
           python3 -m unittest discover -s scripts/infra-performance/reference
           python3 scripts/infra-performance/reference/run.py --d1 baseline-d1 --do . \
             --dataset "$DATASET" --network "$NETWORK" --setup-idle-ms "$SETUP_IDLE_MS" ${READ_ONLY_FLAG:+"$READ_ONLY_FLAG"} ${RECURRING_FLAG:+"$RECURRING_FLAG"} --pairs 1 --origin "GitHub-hosted Ubuntu loopback"

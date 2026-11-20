@@ -205,7 +205,7 @@ const earlierPanel = async (page) => {
  * @param {string} journey Controlled workload name.
  * @param {import("@playwright/test").Response} reply Canonical API response.
  */
-const responseEvidence = async (input, journey, reply) => {
+export const responseEvidence = async (input, journey, reply) => {
   const body = await reply.body();
   const sizes = await reply.request().sizes();
   const headers = await reply.allHeaders();
@@ -216,7 +216,6 @@ const responseEvidence = async (input, journey, reply) => {
     wireBodyBytes: sizes.responseBodySize,
     wireHeaderBytes: sizes.responseHeadersSize,
     encoding: headers["content-encoding"] ?? "identity",
-    backendMs: Number(headers["x-reference-backend-ms"]),
     httpMs: reply.request().timing().responseEnd,
   };
   input.event({ type: "response", journey, http });
@@ -224,7 +223,7 @@ const responseEvidence = async (input, journey, reply) => {
     process.stderr.write("REFERENCE_HTTP GET " + reply.status() + "\n");
   }
   assert.equal(reply.status(), okStatus);
-  assert.ok(http.wireBodyBytes > 0 && http.httpMs > 0 && http.backendMs > 0);
+  assert.ok(http.wireBodyBytes > 0 && http.httpMs > 0);
   return http;
 };
 /**

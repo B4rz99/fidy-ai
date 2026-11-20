@@ -8,10 +8,8 @@ it.effect(
   "distinguishes the canonical pairing refusal while withholding unrecognized provider bytes",
   () =>
     Effect.gen(function* () {
-      const refusal = JSON.stringify({
-        error: { code: "unavailable", message: "The operation is unavailable. Retry later." },
-        next: [],
-      });
+      const refusal =
+        '{"error":{"code":"unavailable","message":"The operation is unavailable. Retry later."},"next":[]}';
       for (const body of [refusal, "private error detail", refusal + "private error detail"]) {
         const outcome = yield* controlsDigest(
           {

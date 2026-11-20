@@ -1,10 +1,11 @@
 import { Combobox } from "@base-ui/react/combobox";
-import { ArrowDown01Icon, Tick02Icon } from "@hugeicons/core-free-icons";
+import { Tick02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { JSX } from "react";
 import { cn } from "@/ui/class-names";
 import { Button } from "./button";
 import { Input } from "./input";
+import { SearchableChoiceLabel } from "./searchable-choice-label";
 
 type Choice = Readonly<{ value: string; label: string }>;
 type Props = Readonly<{
@@ -16,7 +17,7 @@ type Props = Readonly<{
   width: "full" | "auto";
   onChange: (value: string) => void;
 }>;
-export const SearchableChoiceDropdown = ({
+const ChoiceDropdown = ({
   id,
   label,
   value,
@@ -24,8 +25,10 @@ export const SearchableChoiceDropdown = ({
   disabled,
   width,
   onChange,
-}: Props): JSX.Element => (
+  defaultOpen,
+}: Props & Readonly<{ defaultOpen: boolean }>): JSX.Element => (
   <Combobox.Root
+    defaultOpen={defaultOpen}
     items={options}
     value={options.find((item) => item.value === value) ?? null}
     itemToStringLabel={(item) => item.label}
@@ -49,18 +52,19 @@ export const SearchableChoiceDropdown = ({
         />
       }
     >
-      <span className={cn("min-w-0 whitespace-normal text-left", width === "full" && "flex-1")}>
-        {options.find((item) => item.value === value)?.label ?? "Seleccionar"}
-      </span>
-      <HugeiconsIcon
-        icon={ArrowDown01Icon}
-        strokeWidth={1.5}
-        data-icon="inline-end"
-        aria-hidden="true"
+      <SearchableChoiceLabel
+        label={options.find((item) => item.value === value)?.label ?? "Seleccionar"}
+        width={width}
       />
     </Combobox.Trigger>
     <SearchableChoicePopup label={label} />
   </Combobox.Root>
+);
+export const SearchableChoiceDropdown = (props: Props): JSX.Element => (
+  <ChoiceDropdown {...props} defaultOpen={false} />
+);
+export const OpenSearchableChoiceDropdown = (props: Props): JSX.Element => (
+  <ChoiceDropdown {...props} defaultOpen />
 );
 const SearchableChoicePopup = ({ label }: Readonly<{ label: string }>): JSX.Element => (
   <Combobox.Portal>

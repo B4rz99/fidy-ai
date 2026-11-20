@@ -1,8 +1,8 @@
 import { DateTime, Schema } from "effect";
-import { type ComponentProps, type JSX, useId } from "react";
+import { type ComponentProps, type JSX, Suspense, lazy, useId, useState } from "react";
 import { cn } from "@/ui/class-names";
 import { Button } from "@/ui/components/button";
-import { SearchableChoiceDropdown } from "@/ui/components/searchable-choice-dropdown";
+import { SearchableChoiceLabel } from "@/ui/components/searchable-choice-label";
 import { Label } from "@/ui/components/label";
 import { NativeSelect, NativeSelectOption } from "@/ui/components/native-select";
 import { TransactionMonth, shiftTransactionMonth } from "./period";
@@ -18,10 +18,11 @@ const months = Array.from({ length: 12 }, (_, index) => {
     ),
   };
 });
-const years = Array.from({ length: 9997 }, (_, index) => {
-  const year = String(index + 2).padStart(4, "0");
-  return { value: year, label: year };
-});
+const TransactionYearChoices = lazy(() =>
+  import("./year-choices").then(({ TransactionYearChoices }) => ({
+    default: TransactionYearChoices,
+  }))
+);
 
 type PeriodControlsProps = Readonly<{
   value: string;
@@ -100,16 +101,55 @@ const PeriodChoices = ({
       </div>
       <div data-period-field="year">
         <Label htmlFor={`${id}-year`}>Año</Label>
-        <SearchableChoiceDropdown
+        <YearChoice
           id={`${id}-year`}
-          label="Año de transacciones"
           value={year}
-          options={years}
           disabled={disabled}
-          width="full"
           onChange={(next) => changePeriod(`${next}-${month}`)}
         />
       </div>
     </>
+  );
+};
+
+type YearChoiceProps = Readonly<{
+  id: string;
+  value: string;
+  disabled: boolean;
+  onChange: (value: string) => void;
+}>;
+
+const YearChoice = (props: YearChoiceProps): JSX.Element => {
+  const [opened, setOpened] = useState(false);
+  const trigger = (
+    <Button
+      id={props.id}
+      type="button"
+      aria-label="Año de transacciones"
+      aria-haspopup="listbox"
+      aria-expanded={false}
+      aria-busy={opened}
+      contentLayout="wrap"
+      variant="outline"
+      focusAppearance="subtle"
+      className="w-full"
+      disabled={props.disabled}
+      onClick={() => setOpened(true)}
+      onKeyDown={(event) => {
+        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+          event.preventDefault();
+          setOpened(true);
+        }
+      }}
+    >
+      <SearchableChoiceLabel label={props.value} width="full" />
+    </Button>
+  );
+  return opened ? (
+    <Suspense fallback={trigger}>
+      <TransactionYearChoices {...props} />
+    </Suspense>
+  ) : (
+    trigger
   );
 };

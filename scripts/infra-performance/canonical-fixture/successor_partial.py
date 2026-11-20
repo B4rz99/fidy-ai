@@ -213,7 +213,7 @@ def require_support(read, account):
     raise ValueError("Workflow inventory exceeded the read-only bound")
 
 
-def verified_partial_graph():
+def verified_partial_graph(*, staged_view=None):
     git = ["git", "-C", str(Path(__file__).resolve().parents[3])]
     verifier = subprocess.check_output([*git, "rev-parse", "HEAD"], text=True).strip()
     if any(subprocess.run([*git, "merge-base", "--is-ancestor", revision, verifier],
@@ -222,15 +222,15 @@ def verified_partial_graph():
     account, public_key = os.environ["CLOUDFLARE_ACCOUNT_ID"], os.environ["FIDY_NATIVE_FIXTURE_PUBLIC_KEY"]
     snapshot = archived_partial()
     plan = approved_plan(REVISION, *PLAN, expected_run=PLAN_RUN)
-    source = verified_predecessor(REVISION, account, public_key)
-    require_source(source, plan, snapshot)
-
     def read(path):
         status, _, raw = fetch("https://api.cloudflare.com/client/v4/" + path,
                                {"Authorization": "Bearer " + os.environ["CLOUDFLARE_API_TOKEN"]})
         return status, json.loads(raw)
 
-    require_workers(read, account, snapshot, source)
+    view = read if staged_view is None else staged_view(read, account)
+    source = verified_predecessor(REVISION, account, public_key, read=lambda path: read_result(view, path))
+    require_source(source, plan, snapshot)
+    require_workers(view, account, snapshot, source)
     return verifier, account, read, source, snapshot
 
 

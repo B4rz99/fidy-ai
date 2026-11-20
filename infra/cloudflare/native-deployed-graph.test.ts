@@ -134,6 +134,17 @@ it("requires all four buckets, eight exact Workflow owners and nine consumers wi
       ).toBe(true);
     })
   ));
+it("attributes an inventory read failure without disclosing provider messages", async () => {
+  const read = (path: string): Effect.Effect<unknown, Error> =>
+    path.startsWith("workflows?")
+      ? Effect.fail(Error("private-provider-message"))
+      : Effect.try(() => installed(path));
+  const failure = await Effect.runPromise(
+    Effect.flip(inspectNativeResources(read, revision, true))
+  );
+  expect(failure).toMatchObject({ _tag: "NativeInventoryRefused", phase: "Workflow list" });
+  expect(failure.message).not.toContain("private-provider-message");
+});
 it("refuses a correct binding label connected to an incumbent or a foreign Worker", () => {
   const bindings = Object.fromEntries(
     [...nativeBindingInventory({ fingerprint: "", role: "Ingress" })].map(([name, type]) => [

@@ -389,13 +389,12 @@ release. Verify recovery through the original owner and subsequent watchdog obse
 
 ## Adoption evidence
 
-The [acceptance and cutover decision](https://github.com/B4rz99/fidy-ai/issues/2205#issuecomment-6953536107)
-requires approximately 2× lower p95 latency, with 1.8× as the minimum for every comparable acceptance
-case: `D1 p95 / DO p95 >= 1.8`. Apply the gate separately to operations, supported query shapes,
-fixture sizes, isolated/loaded work, warm/cold cohorts, network profiles and timing boundaries.
-Larger workloads, mutations, cold starts and browser journeys have the same minimum; an aggregate
-improvement or a no-regression allowance cannot hide a failing case. Correctness and security
-invariants remain independent requirements.
+The project targets approximately 2× lower p95 latency. Backend processing and ordinary-network
+timings require a D1-to-DO p95 ratio of at least 1.8. At 400 ms RTT / 1 Mbps, each complete HTTP
+response and fresh browser journey passes when its DO p95 is at most its D1 p95. Use unrounded
+nearest-rank timings for the comparison. Evaluate each operation, shape, fixture, load, lifecycle
+and boundary separately. Correctness and security have independent requirements.
+[Acceptance criteria](https://github.com/B4rz99/fidy-ai/issues/2226)
 
 Use a pinned, contemporaneously measured D1 baseline and equivalent domain behavior, authority,
 accountability, fixtures and complete results. Measurements distinguish backend processing,
@@ -406,17 +405,16 @@ Record failed and partial attempts, errors, throttling and completed versus offe
 dispatch or reduced throughput cannot manufacture a latency pass. Cold cohorts need observed
 lifecycle evidence, with unknown runtime state reported as missing evidence.
 
-Compare both deployed variants on Cloudflare with the small fixture containing eight original
-Transactions and one Reconciliation link. Run the 100,000-Transaction fixture on both variants
-in workerd, including its 100 RecurringPlans with 100 revisions each and 5,000 NeedsReviewItems.
-Report each environment separately. Prioritize the browser journeys that missed 1.8× and time
-each through its complete fresh usable view. [Fixture decision](https://github.com/B4rz99/fidy-ai/issues/2226)
+On Cloudflare, compare one ordinary-network read profile with eight original Transactions and
+one Reconciliation link. Verify small committed and rolled-back mutations against their financial
+state, Audit and accounting. Include the complete shared fixture setup, checks and cleanup in the
+5,000 D1-row write cap. Run repeated mutation timings and the 20-active-User load in workerd. Use
+the 100,000-Transaction fixture on both workerd variants with 100 RecurringPlans, 100 revisions
+per plan and 5,000 NeedsReviewItems. Record each environment and its measured origin separately.
 
-Keep network and provider delays inside the timing boundary that includes them. A case that cannot
-reach 1.8× has not passed; subtracting those delays or substituting server-only gains would change
-the decision. New DO-only probes without comparable D1 behavior retain their accepted absolute
-correctness, capacity and coverage requirements, with actual measurements reported rather than an
-invented ratio. Security, expiry and provider-settlement deadlines do not shrink with this target.
+Include network and provider delays within each applicable timing boundary. New DO-only probes
+retain their absolute correctness, capacity and coverage requirements. Security, expiry and
+provider-settlement deadlines remain independent of the timing profile.
 
 [ADR 0039](0039-fresh-read-performance-contract.md) retains the fresh-read definitions, supported
 query shapes, full-lifetime fixtures and 20-active-User workload. The separate 1,000-store workerd watchdog

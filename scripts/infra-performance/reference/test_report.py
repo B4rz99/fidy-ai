@@ -202,6 +202,23 @@ class ReferenceReport(unittest.TestCase):
         self.assertEqual(failed["read.http"]["do"]["comparable"], 29)
         self.assertEqual(failed["read.http"]["do"]["completed"], 30)
 
+    def test_constrained_transport_requires_no_p95_regression_per_cell(self):
+        rows = self.rows(30)
+        for row in rows:
+            if row["variant"] == "do":
+                row["timings"]["read.http"] += 0.001
+        report = compare(30, rows, ["d1", "do"], network="poor")
+        self.assertEqual(report["read.http"]["status"], "fail")
+        self.assertEqual(report["read.browser"]["status"], "pass")
+        self.assertEqual(report["correction.through-fresh-http"]["minimumRatio"], 1.0)
+        self.assertEqual(report["read.backend"]["minimumRatio"], 1.8)
+        self.assertEqual(report["read.backend"]["status"], "fail")
+        normal = compare(30, rows, ["d1", "do"], network="normal")
+        self.assertEqual(normal["correction.browser"]["minimumRatio"], 1.8)
+        self.assertEqual(normal["correction.browser"]["status"], "fail")
+        rows[-1]["status"] = "failed"
+        self.assertEqual(compare(30, rows, ["d1", "do"], network="poor")["read.browser"]["status"], "fail")
+
     def test_stress_evidence_uses_no_comparative_gate(self):
         report = compare(30, self.rows(30), ["d1", "do"], stress=True)
         self.assertEqual(report["read.http"]["status"], "stress")

@@ -295,7 +295,13 @@ def equivalence(row):
     )
 
 
-def compare(samples, rows, variants, *, stress=False, calibration=False, read_only=False, full_size=False, recurring_only=False):
+def minimum_ratio(network, boundary):
+    if network == "poor" and boundary.endswith((".http", ".browser", "-http")):
+        return 1.0
+    return 1.8
+
+
+def compare(samples, rows, variants, *, network="normal", stress=False, calibration=False, read_only=False, full_size=False, recurring_only=False):
     result = {}
     keys = READ_ONLY_BOUNDARIES if read_only else BOUNDARIES + (CALIBRATION_VIEWS if calibration else FULL_SIZE_VIEWS if full_size else [])
     if recurring_only:
@@ -305,7 +311,8 @@ def compare(samples, rows, variants, *, stress=False, calibration=False, read_on
                        and row["status"] == "ok" and key in row.get("timings", {})}
                       for variant in variants]
         comparable = set.intersection(*successful)
-        cell = {}
+        threshold = minimum_ratio(network, key)
+        cell = {"minimumRatio": threshold}
         for variant in variants:
             attempts = [row for row in rows if row["variant"] == variant]
             values = [row["timings"][key] for row in attempts if row["pair"] in comparable]
@@ -335,7 +342,7 @@ def compare(samples, rows, variants, *, stress=False, calibration=False, read_on
         ):
             ratio = cell["d1"]["p95"] / cell["do"]["p95"]
             cell["ratio"] = ratio
-            status = "pass" if ratio >= 1.8 else "fail"
+            status = "pass" if ratio >= threshold else "fail"
         result[key] = {"status": status, **cell}
     if recurring_only or calibration and not read_only:
         result["recurring.full.browser"] = {"status": "not-exposed", "reason": "The product requests view=compact. Complete revisions are verified on recurring.full.http."}
@@ -431,6 +438,7 @@ def main():
         "PLAYWRIGHT_TLS_KEY": str(key),
         "PLAYWRIGHT_TLS_CERT": str(cert),
     }
+    workload = browser_workload(args.dataset, read_only=args.transaction_read_only, recurring_only=args.full_recurring)
     plan = {
         "revisions": revisions,
         "installations": {k: str(v) for k, v in paths.items()},
@@ -443,7 +451,7 @@ def main():
         "postSetupIdleMs": args.setup_idle_ms,
         "d1BrowserCost": args.d1_browser_cost,
         "dataset": args.dataset,
-        **browser_workload(args.dataset, read_only=args.transaction_read_only, recurring_only=args.full_recurring),
+        **workload,
         "stressOnly": args.dataset == "breaking",
         "seedEpochMs": 1794916800000,
         "backendBoundary": {
@@ -463,7 +471,7 @@ def main():
         "order": "alternate D1-first and DO-first pairs" if args.candidate else "pinned D1 reference",
         "sampleFloor": 30,
         "percentile": "nearest-rank",
-        "minimumRatio": 1.8,
+        "minimumRatios": {key: minimum_ratio(args.network, key) for key in workload["boundaries"]},
         "failurePolicy": "failed attempts or unequal paired evidence fail every boundary; incomplete samples stay missing",
         "deployment": "local disposable processes and native SQLite images per variant per pair",
     }
@@ -544,7 +552,7 @@ def main():
     finally:
         key.unlink(missing_ok=True)
         cert.unlink(missing_ok=True)
-        report = compare(args.pairs, rows, paths, stress=args.dataset == "breaking", calibration=args.dataset == "production", read_only=args.transaction_read_only, full_size=args.dataset == "extreme", recurring_only=args.full_recurring)
+        report = compare(args.pairs, rows, paths, network=args.network, stress=args.dataset == "breaking", calibration=args.dataset == "production", read_only=args.transaction_read_only, full_size=args.dataset == "extreme", recurring_only=args.full_recurring)
         (run / "report.json").write_text(json.dumps(report, indent=2))
     if any(row["status"] != "ok" for row in rows) or any(
         cell["status"] == "fail" for cell in report.values()

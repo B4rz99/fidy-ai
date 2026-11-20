@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import subprocess
 
 from disposition import KINDS, SCOPE, digest, dispose, hold_reasons, inventory
 from opening_source import authenticated_activity, authenticated_opening
@@ -84,7 +85,7 @@ def main():
     args = parser.parse_args()
     try:
         run(args.operation)
-    except (Refused, ValueError, OSError, KeyError, TypeError) as failure:
+    except (Refused, ValueError, OSError, KeyError, TypeError, subprocess.SubprocessError) as failure:
         message = str(failure) if isinstance(failure, Refused) else "Protected retirement evidence is incomplete"
         print(message, file=sys.stderr)
         return 1

@@ -37,6 +37,9 @@ class InventorySafety(unittest.TestCase):
                                  {"source": "whatsapp_deliveries", "attention_rows": 4}]},
                     "objects": {"exact": {"count": 0, "multipartClear": None}}}
         self.assertEqual(hold_reasons(snapshot), [])
+        snapshot["objects"]["exact"]["multipartClear"] = False
+        self.assertEqual([hold["source"] for hold in hold_reasons(snapshot)], ["multipart-unverified"])
+        snapshot["objects"]["exact"]["multipartClear"] = None
         snapshot["census"]["exact"].append({"source": "issued_r2_writers", "attention_rows": 1})
         snapshot["objects"]["exact"]["count"] = 1
         self.assertEqual([hold["source"] for hold in hold_reasons(snapshot)],

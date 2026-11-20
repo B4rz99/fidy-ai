@@ -1,6 +1,7 @@
 import { resourceFailureMessage } from "./resource-failure";
 import {
   FallbackStage,
+  RestoredDormantSource,
   archivedDormant,
   fromArchivedStage,
   matchesArchivedStage,
@@ -8,6 +9,7 @@ import {
   recoverFixtureFallback,
   requireDormantReplacementSource,
   requirePromotedDormantSource,
+  requireRestoredDormantSource,
   resumePairingRollback,
   stageUploadedPair,
   verifyUnpromotedFallback,
@@ -362,6 +364,20 @@ const verifyDormantRollbackSource = Effect.fn(function* (
   if (Option.isSome(seal)) {
     yield* requireCapturedSupport(port, seal.value.smoke);
     yield* confirmFallbackVersions(env, client, seal.value.release);
+    const restored = yield* ReleaseConfig.Literal("true", "FIXTURE_RESTORED_ROLLBACK").pipe(
+      ReleaseConfig.option
+    );
+    if (Option.isSome(restored)) {
+      const source = yield* Schema.decodeUnknownEffect(RestoredDormantSource)(
+        yield* readFile(env.file + ".restored-source")
+      );
+      return yield* requireRestoredDormantSource({
+        port,
+        snapshot,
+        sealed: seal.value.release,
+        source,
+      });
+    }
   }
   yield* requirePromotedDormantSource(
     port,
@@ -2078,7 +2094,7 @@ const verifyRestoredNative = Effect.fn(function* (
 const rollbackNative = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
-  port: ReleasePort
+  port: ReturnType<typeof releasePort>
 ) {
   const receipt = yield* readRollbackReceipt(env).pipe(rollbackCheck("promotion receipt"));
   yield* releaseController
@@ -2170,10 +2186,7 @@ const resumeNativeRollback = Effect.fn(function* (
     });
   }
   const core = yield* resumePairingRollback({
-    port: {
-      ...releaseEvidence.rollbackPort(port, env, client),
-      recentDeployments: (name) => port.recentDeployments(name),
-    },
+    port: releaseEvidence.rollbackPort(port, env, client),
     receipt,
     ingressDeploymentId: position.ingressDeploymentId,
   }).pipe(rollbackCheck("exact intermediate assignments and Core restoration"));

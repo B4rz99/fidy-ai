@@ -80,6 +80,28 @@ for name, result in ROLLOUT_STEPS.items():
     else:
         PARTIAL_ROLLBACK_STEPS[name] = result
 
+RESTORED_ROLLBACK = {
+    "verifier": "29c6eb9dcd30fb8a3c561b6e72557926ce96063b",
+    "run": "44763227392",
+    "artifact": "14641568237",
+    "sha256": "0362e572af7a13b6d02cd7735f7742668c8bf9ea6213f3a98f4740e5ee448a41",
+    "coreDeploymentId": "5e7ec6e7-47c9-49d2-b740-1713ee3919da",
+}
+RESTORED_ROLLBACK_STEPS = {
+    "Require closed admission in the protected environment": "success",
+    "Bind the protected verifier to the staged application source": "success",
+    "Check the reviewed release policy": "success",
+    UPLOAD: "skipped",
+    STAGE: "skipped",
+    "Finish only the tested closed forward repair": "skipped",
+    "Verify mixed and candidate versions before promoting closed admission": "skipped",
+    "Verify the installed application and retained schema markers": "skipped",
+    "Restore only a compatible, tested target after failed promoted verification": "skipped",
+    "Restore only the remaining Core from the archived rollback": "success",
+    "Exercise the tested code-only rollback": "skipped",
+    "Retain native release evidence": "success",
+}
+
 
 def rollback_documents(stage, prior, seal, get=actions_get):
     pin = PARTIAL_ROLLBACK
@@ -114,6 +136,32 @@ def rollback_documents(stage, prior, seal, get=actions_get):
         "native-release.json.controls": documents["native-release.json.controls"],
         "native-release.json.rollback-position": {"ingressDeploymentId": pin["ingressDeploymentId"]},
     }
+
+
+def requires_restored_source(application, verifier, git=git_read):
+    restored = RESTORED_ROLLBACK["verifier"]
+    return (application == PARTIAL_ROLLBACK["revision"]
+            and git("merge-base", restored, verifier) == restored)
+
+
+def restored_source(verifier, stage, prior, seal, get=actions_get, git=git_read):
+    pin = RESTORED_ROLLBACK
+    verify_tree(verifier, git, pin["verifier"])
+    documents = rollback_documents(stage, prior, seal, get)
+    run, data = protected_archive(pin["verifier"], pin["artifact"], pin["sha256"],
+                                  prefix="native-storage-release-", conclusions={"success"}, get=get)
+    if run != pin["run"]:
+        raise ValueError("Unexpected protected restoration run")
+    require_steps(get, run, "success", RESTORED_ROLLBACK_STEPS)
+    positions = {"coreDeploymentId":pin["coreDeploymentId"],
+                 "publicDeploymentId":PARTIAL_ROLLBACK["ingressDeploymentId"]}
+    versions = {"revision":stage["revision"], "admission":"closed", **{
+        role + "VersionId":stage["release"][role + "VersionId"] for role in ("core", "public")}}
+    check_documents(data, {**documents, "native-release.json.predecessor":prior,
+                           "native-release.json.seal":seal, "native-release.json.restored":versions,
+                           "native-release.json.restored-deployments":positions})
+    return {"artifactId":pin["artifact"], "sha256":pin["sha256"],
+            "receipt":documents["native-release.json.promoted"], "restored":positions}
 
 
 def upload_pin():
@@ -243,11 +291,15 @@ def bind(env):
                  "native-release.json.seal": seal}
     if operation == "resume-pairing-rollback":
         documents.update(rollback_documents(stage, prior, seal))
+    if operation == "rollout" and requires_restored_source(application, verifier):
+        documents["native-release.json.restored-source"] = restored_source(verifier, stage, prior, seal)
     for name, value in documents.items():
         with os.fdopen(os.open(Path(env["RUNNER_TEMP"]) / name, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600), "w") as file:
             json.dump(value, file)
     with open(env["GITHUB_ENV"], "a") as handle:
         handle.write(f"RELEASE_GIT_SHA={application}\nFIXTURE_PAIRING_APPLICATION={application}\nFIXTURE_STAGED_VERIFIER_SHA={verifier}\n")
+        if "native-release.json.restored-source" in documents:
+            handle.write("FIXTURE_RESTORED_ROLLBACK=true\n")
 
 
 if __name__ == "__main__":

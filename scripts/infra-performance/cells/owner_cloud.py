@@ -136,19 +136,48 @@ class Cloud:
 
     def namespaces(self, recorded=()):
         found = []
+        seen = set()
+        expected_total = None
+        expected_pages = None
         for page in range(1, 101):
             wire = self.request(
                 "GET", f"workers/durable_objects/namespaces?page={page}&per_page=100"
             )
-            for item in wire["result"]:
-                if item.get("script") == self.prefix + "-core" or item["id"] in recorded:
-                    if item["class"] != CLASS or item.get("script") != self.prefix + "-core":
-                        raise Refused("foreign_coordinator")
-                    found.append(item["id"])
-            info = wire["result_info"]
-            if info["page"] != page:
+            entries = wire.get("result")
+            info = wire.get("result_info")
+            if not isinstance(entries, list) or not isinstance(info, dict):
                 raise Refused("incomplete_namespace_inventory")
-            if page >= info["total_pages"]:
+            count, total = info.get("count"), info.get("total_count")
+            if (
+                type(info.get("page")) is not int or info["page"] != page
+                or type(count) is not int or count != len(entries) or count > 100
+                or type(total) is not int or (expected_total is not None and total != expected_total)
+                or len(seen) + count > total
+                or (count == 0 and total != 0)
+            ):
+                raise Refused("incomplete_namespace_inventory")
+            expected_total = total
+            complete = len(seen) + count == total
+            if "total_pages" in info:
+                pages = info["total_pages"]
+                if type(pages) is not int or (expected_pages is not None and pages != expected_pages):
+                    raise Refused("incomplete_namespace_inventory")
+                expected_pages = 1 if total == 0 and pages == 0 else pages
+            if expected_pages is not None and (
+                page > expected_pages or complete != (page == expected_pages)
+            ):
+                raise Refused("incomplete_namespace_inventory")
+            for item in entries:
+                identity = item.get("id") if isinstance(item, dict) else None
+                if not isinstance(identity, str) or not identity or identity in seen:
+                    raise Refused("incomplete_namespace_inventory")
+                seen.add(identity)
+                script = item.get("script")
+                if script == self.prefix + "-core" or identity in recorded:
+                    if item.get("class") != CLASS or script != self.prefix + "-core":
+                        raise Refused("foreign_coordinator")
+                    found.append(identity)
+            if complete:
                 return found
         raise Refused("unbounded_namespace_inventory")
 

@@ -1056,7 +1056,13 @@ const verifyFirstInstall = Effect.fn(function* (
     headers: { "x-fidy-smoke-proof": env.smokeProof },
     public: { ...identity, workerVersionId: installed.publicVersionId },
     core: { ...identity, workerVersionId: installed.coreVersionId },
-  }).pipe(Effect.provideService(HttpClient.HttpClient, client));
+  }).pipe(
+    Effect.provideService(HttpClient.HttpClient, client),
+    Effect.mapError(
+      (failure) =>
+        new ReleaseFailure({ message: "Installed release smoke failed: " + failure.reason })
+    )
+  );
   yield* Effect.logInfo("Verified release smoke against the installed Worker versions.");
   const synthetic = yield* Effect.forEach(nativeHostPairs(yield* hostMode), (pair) =>
     verifySyntheticUsers(env, client, {

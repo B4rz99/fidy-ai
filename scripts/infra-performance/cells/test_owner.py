@@ -1,5 +1,6 @@
 import copy
 import unittest
+from unittest.mock import patch
 
 from budget import Refused, today
 from owner_state import AccountExperiment
@@ -21,7 +22,116 @@ class ConditionalObject:
         return self.version
 
 
+class NamespaceInventoryTests(unittest.TestCase):
+    prefix = "fidy-2259-123456abcdef"
+
+    def scan(self, *pages, recorded=()):
+        from owner_cloud import Cloud
+
+        with patch.dict("os.environ", CLOUDFLARE_API_TOKEN="fixture"):
+            cloud = Cloud("a" * 32, self.prefix)
+        with patch.object(cloud, "request", side_effect=pages) as request:
+            result = cloud.namespaces(recorded)
+        self.assertEqual(request.call_count, len(pages))
+        for page, call in enumerate(request.call_args_list, 1):
+            self.assertEqual(call.args, (
+                "GET", f"workers/durable_objects/namespaces?page={page}&per_page=100",
+            ))
+        return result
+
+    def item(self, identity, owned=False):
+        return {"id": identity, "class": "UserTransactionCoordinator",
+                "script": self.prefix + "-core" if owned else "established-core"}
+
+    def test_provider_inventory_without_total_pages(self):
+        entries = [self.item(str(i)) for i in range(8)]
+        self.assertEqual(self.scan(dict(result=entries, result_info=dict(
+            page=1, count=8, total_count=8,
+        ))), [])
+
+    def test_discovers_owned_coordinator_on_later_page(self):
+        first = dict(result=[self.item("foreign")], result_info=dict(page=1, count=1, total_count=2))
+        second = dict(result=[self.item("owned", owned=True)], result_info=dict(
+            page=2, count=1, total_count=2, total_pages=2,
+        ))
+        self.assertEqual(self.scan(first, second, recorded=("owned",)), ["owned"])
+
+    def test_refuses_incomplete_or_duplicate_inventory(self):
+        item = self.item("foreign")
+        first = dict(result=[item], result_info=dict(page=1, count=1, total_count=2))
+        for description, pages in (
+            ("short inventory", [first, dict(result=[], result_info=dict(page=2, count=0, total_count=2))]),
+            ("duplicate identity", [first, dict(result=[item], result_info=dict(page=2, count=1, total_count=2))]),
+            ("wrong page", [first, dict(result=[self.item("other")], result_info=dict(page=1, count=1, total_count=2))]),
+            ("changed total", [first, dict(result=[self.item("other")], result_info=dict(page=2, count=1, total_count=3))]),
+            ("wrong count", [dict(result=[item], result_info=dict(page=1, count=0, total_count=1))]),
+            ("premature last page", [dict(first, result_info=dict(first["result_info"], total_pages=1))]),
+            ("extra page", [dict(result=[item], result_info=dict(page=1, count=1, total_count=1, total_pages=2))]),
+            ("changed page total", [
+                dict(first, result_info=dict(first["result_info"], total_pages=3)),
+                dict(result=[self.item("other")], result_info=dict(page=2, count=1, total_count=2)),
+            ]),
+        ):
+            with self.subTest(description), self.assertRaisesRegex(Refused, "incomplete_namespace_inventory"):
+                self.scan(*pages)
+
+    def test_recorded_identity_must_still_belong_to_exact_core(self):
+        page = dict(result=[self.item("recorded")], result_info=dict(page=1, count=1, total_count=1))
+        with self.assertRaisesRegex(Refused, "foreign_coordinator"):
+            self.scan(page, recorded=("recorded",))
+
+
 class OwnerTests(unittest.TestCase):
+    def test_preflight_refuses_an_active_experiment_before_touching_provider_inventory(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from owner import main
+
+        prefix, account = "fidy-2259-123456abcdef", "a" * 32
+        store = ConditionalObject()
+        AccountExperiment(store, account).begin(
+            prefix, dict(_tag="Allowed", maximumRowsRead=100, maximumRowsWritten=10), today()
+        )
+        with TemporaryDirectory() as tmp:
+            out = Path(tmp, "report")
+            with (
+                patch("sys.argv", ["owner.py", "preflight", "--prefix", prefix, "--out", str(out)]),
+                patch.dict("os.environ", CLOUDFLARE_ACCOUNT_ID=account),
+                patch("owner.Cloud"),
+                patch("owner.CustodyObject", return_value=store),
+                patch("owner.require_empty_inventory") as inventory,
+            ):
+                self.assertEqual(main(), 1)
+            inventory.assert_not_called()
+            self.assertIn("account_experiment_unavailable", (out / "report.json").read_text())
+        self.assertEqual(store.version, 1)
+
+    def test_resumed_empty_inventory_cleanup_archives_the_exact_run(self):
+        from owner import cleanup_evidence
+        from owner_cloud import Cloud
+
+        account, prefix = "a" * 32, "fidy-2259-123456abcdef"
+        store = ConditionalObject()
+        original = AccountExperiment(store, account)
+        original.begin(prefix, dict(_tag="Allowed", maximumRowsRead=100, maximumRowsWritten=10), today())
+        original.active.update(cleaning=True, cleanupUntil=original.active["deadline"] + 90)
+        original.save()
+        restored = AccountExperiment(store, account)
+        with patch.dict("os.environ", CLOUDFLARE_API_TOKEN="fixture"):
+            cloud = Cloud(account, prefix)
+        wire = dict(result=[], result_info=dict(page=1, count=0, total_count=0))
+        with (
+            patch("owner.time.time", return_value=restored.active["deadline"] + 91),
+            patch.object(cloud, "request", return_value=wire) as request,
+        ):
+            evidence = cleanup_evidence(restored, cloud, resumed=True)
+        request.assert_called_once_with("GET", "workers/durable_objects/namespaces?page=1&per_page=100")
+        self.assertEqual(evidence["removed"], [])
+        self.assertEqual(evidence["controlDispatches"], 0)
+        self.assertTrue(evidence["namespacesAbsent"])
+        self.assertIsNone(AccountExperiment(store, account).active)
+        self.assertEqual(store.value["last"]["prefix"], prefix)
+
     def test_interrupted_reservation_survives_runner_loss_and_refuses_replay(self):
         obj = ConditionalObject()
         account, prefix = "a" * 32, "fidy-2259-123456abcdef"
@@ -148,7 +258,7 @@ class OwnerTests(unittest.TestCase):
                     raise HTTPError(req.full_url, 404, "absent", {}, io.BytesIO(b""))
 
                 if path.startswith("workers/durable_objects/namespaces?"):
-                    wire = dict(result=[], result_info=dict(page=1, total_pages=1))
+                    wire = dict(result=[], result_info=dict(page=1, count=0, total_count=0))
                 elif path == "d1/database?name=" + prefix:
                     wire = dict(result=[self.stored] if self.stored else [],
                                 result_info=dict(total_count=int(self.stored is not None)))

@@ -104,6 +104,24 @@ def session_accounts(db, session, user):
     return {**audit,"canonicalUnits":units,"receipts":receipts}
 
 
+EXPECTED_WINDOW_ACCOUNTS = {
+    "ingestion.getReviewWorkspace.success": 1,
+    "transactions.listTransactions.success": 33,
+    "transactions.updateTransaction.success": 1,
+    "transactions.updateTransaction.validation_failed": 1,
+    "operations.executeAtomicBatch.validation_failed": 1,
+    "canonicalUnits": 0,
+    "receipts": 0,
+}
+
+
+def check_window_accounts(delta):
+    observed = {key: count for key, count in delta.items()
+                if count != 0 or key in ("canonicalUnits", "receipts")}
+    if observed != EXPECTED_WINDOW_ACCOUNTS:
+        raise ValueError("Original native Session Audit or commercial accounting differs")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", required=True, type=Path)
@@ -145,9 +163,7 @@ def main():
             after=native_accounts(out/"workerd",physical,session,user)
             delta={k:after.get(k,0)-before.get(k,0) for k in after.keys()|before.keys()}
             write(out/"native-window-audit.json",delta)
-            expected={"transactions.listTransactions.success":33,"transactions.updateTransaction.success":1,"transactions.updateTransaction.validation_failed":1,"canonicalUnits":0,"receipts":0}
-            if any(delta.get(k,0)!=v for k,v in expected.items()):
-                raise ValueError("Original native Session Audit or commercial accounting differs")
+            check_window_accounts(delta)
         finally:
             with controller(directory, coords, path) as port:
                 port.owner.cleanup()

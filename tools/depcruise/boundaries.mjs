@@ -159,6 +159,7 @@ const recoveryWorker = new Map([
 
 /** @param {Edge} edge - Resolved architectural dependency. */
 const isSharedComposition = ({ from, to }) =>
+  recoveryWorker.get(from) === to ||
   (sharedTestSupport.has(to) && (testSource.test(from) || sharedTestSupport.has(from))) ||
   (compositionRoots.has(to) &&
     (compositionRoots.has(from) || testSource.test(from) || sharedTestSupport.has(from)));
@@ -170,7 +171,6 @@ const publishedEdge = (edge) =>
   sharedKernel.test(edge.to) ||
   (testRunner.has(edge.from) && testRunner.has(edge.to)) ||
   isSharedComposition(edge) ||
-  recoveryWorker.get(edge.from) === edge.to ||
   (edge.to === "src/shell/api.ts" && !edge.from.startsWith("src/core/"));
 
 /** @type {readonly Rule[]} */

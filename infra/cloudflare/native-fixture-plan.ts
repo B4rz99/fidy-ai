@@ -63,7 +63,7 @@ export const verifyFixturePlan = ({
   const [worker] = Object.values(plan.deletions).filter(
     (row) => row !== undefined && describeResource(row).logicalId === originalId
   );
-  if (worker === undefined || worker.action !== "delete") {
+  if (worker?.action !== "delete") {
     throw Error("Missing deferred original provider");
   }
   Schema.decodeUnknownSync(

@@ -281,6 +281,25 @@ def compare(samples, rows, variants, *, stress=False, calibration=False):
     return result
 
 
+def browser_workload(dataset):
+    start = "Before document navigation or the loaded Refresh or Save interaction."
+    end = ("Refresh requires search to disable then re-enable. Startup, Refresh and Save require "
+           "the expected ordered rows to be visible and enabled through two animation frames.")
+    if dataset != "production":
+        return {"boundaries": BOUNDARIES, "browserStart": start,
+                "browserEnd": end + " Payload verification follows timing."}
+    return {
+        "boundaries": BOUNDARIES + CALIBRATION_VIEWS,
+        "browserStart": start + " Additional views start before their declared navigation, disclosure or refresh.",
+        "browserEnd": end + " Budget navigation requires editable caps and fresh spending totals. "
+                      "The pending review inbox requires usable rows with original excerpts. "
+                      "Dashboard and Recurring require their declared populated views. Payload verification follows timing.",
+        "additionalCalibrationSetup": "Four fixed Dashboard WidgetIds and one forward Recurring edit: the second plan has 3 revisions, including an intermediate revision omitted from compact responses.",
+        "dashboardNormalization": ["data.context.calculatedAt"],
+        "recurringHistory": "The product requests compact revisions. Its earlier-month and selective results are visible; complete revision history is checked separately through the bound canonical HTTP API.",
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--d1", required=True, type=Path)
@@ -329,19 +348,15 @@ def main():
         "network": args.network,
         "offeredLoad": "one isolated User, sequential",
         "dataset": args.dataset,
+        **browser_workload(args.dataset),
         "stressOnly": args.dataset == "breaking",
         "seedEpochMs": 1794916800000,
-        "additionalCalibrationSetup": "Four fixed Dashboard WidgetIds and one forward Recurring edit: the second plan has 3 revisions, including an intermediate revision omitted from compact responses.",
-        "dashboardNormalization": ["data.context.calculatedAt"],
-        "recurringHistory": "The product requests compact revisions. Its earlier-month and selective results are visible; complete revision history is checked separately through the bound canonical HTTP API.",
         "backendBoundary": {
             "start": "after loopback request adaptation, immediately before invoking ingress",
             "end": "complete response body buffered in the loopback API process",
             "d1": "direct ingress and Core calls in Bun; D1 binding uses Miniflare",
             "do": "Miniflare dispatchFetch to workerd ingress, Core and User store",
         },
-        "browserStart": "before document navigation or the loaded Refresh, Save, next-month or pending-inbox interaction",
-        "browserEnd": "refresh requires search to disable then re-enable; startup, refresh and save require all expected ordered rows to be visible and enabled through two animation frames; Budget navigation also requires editable caps and the fresh group spending totals; pending review requires usable rows with their original excerpts; payload verification follows timing",
         "lifecycle": "User and shared reconstruction unobserved",
         "warmup": "pairing and fixture preparation excluded; no measured attempts excluded",
         "harnessRevision": output(["git", "rev-parse", "HEAD"], ROOT),
@@ -356,7 +371,6 @@ def main():
         "minimumRatio": 1.8,
         "failurePolicy": "failed attempts or unequal paired evidence fail every boundary; incomplete samples stay missing",
         "deployment": "local disposable processes and native SQLite images per variant per pair",
-        "boundaries": BOUNDARIES + (CALIBRATION_VIEWS if args.dataset == "production" else []),
     }
     (run / "plan.json").write_text(json.dumps(plan, indent=2))
     subprocess.run(

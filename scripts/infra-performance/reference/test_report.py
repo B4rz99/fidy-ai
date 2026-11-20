@@ -4,10 +4,22 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from run import BOUNDARIES, CALIBRATION_VIEWS, compare, failure_metadata, observation
+from run import BOUNDARIES, CALIBRATION_VIEWS, browser_workload, compare, failure_metadata, observation
 
 
 class ReferenceReport(unittest.TestCase):
+    def test_extreme_manifest_declares_only_the_transaction_journeys_it_runs(self):
+        plan = browser_workload("extreme")
+        self.assertEqual(plan["boundaries"], BOUNDARIES)
+        for key in ("additionalCalibrationSetup", "dashboardNormalization", "recurringHistory"):
+            self.assertNotIn(key, plan)
+        self.assertNotIn("Budget", plan["browserEnd"])
+        self.assertNotIn("Additional views", plan["browserStart"])
+        calibrated = browser_workload("production")
+        self.assertEqual(calibrated["boundaries"], BOUNDARIES + CALIBRATION_VIEWS)
+        self.assertIn("additionalCalibrationSetup", calibrated)
+        self.assertIn("pending review", calibrated["browserEnd"])
+
     def test_diagnostics_select_only_fixed_labels_and_source_locations(self):
         with tempfile.TemporaryDirectory() as directory:
             log = Path(directory) / "api.log"

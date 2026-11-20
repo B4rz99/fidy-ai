@@ -22,6 +22,27 @@ class ConditionalObject:
         return self.version
 
 
+class NativeAccountingTests(unittest.TestCase):
+    def test_required_delta_when_persisted_fixture_setup_precedes_browser_window(self):
+        from browser_window import NATIVE_EXPECTED, native_delta
+
+        setup = ["transactions.createTransaction", "success", 8]
+        before = dict(groups=[setup], canonicalUnits=0, receipts=0)
+        after = dict(groups=[setup, *[[*key, count] for key, count in NATIVE_EXPECTED.items()]],
+                     canonicalUnits=0, receipts=0)
+        verified = native_delta(before, after)
+        self.assertTrue(verified["verified"])
+        self.assertEqual({tuple(row[:2]): row[2] for row in verified["audit"]}, NATIVE_EXPECTED)
+        for refused in (
+            {**after, "groups": after["groups"][:-1]},
+            {**after, "groups": [*after["groups"], setup]},
+            {**after, "canonicalUnits": 1},
+            {**after, "receipts": 1},
+        ):
+            with self.assertRaises(Refused):
+                native_delta(before, refused)
+
+
 class NamespaceInventoryTests(unittest.TestCase):
     prefix = "fidy-2259-123456abcdef"
 

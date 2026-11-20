@@ -394,7 +394,7 @@ def main():
         if args.action in ("propose", "run"):
             sys.path.insert(0, str(HERE.parent / "canonical-fixture"))
             try:
-                from hosted import verify_native_fixture, read_native_session
+                from hosted import private_file, verify_native_fixture, read_native_session
             except ModuleNotFoundError as error:
                 if error.name != "hosted":
                     raise
@@ -496,7 +496,9 @@ def main():
                 browser = None
                 if bundle.browser:
                     browser = dict(out=args.out/"browser",reserve=reserve_native,version=versions["ingress"], api=api,
-                        key=key,session=session,revision=args.revision,web=json.loads((args.fixture.parent/"qualified-web.json").read_bytes()))
+                        key=key,session=session,revision=args.revision,web=json.loads((args.fixture.parent/"qualified-web.json").read_bytes()),
+                        accounting=dict(capture=private_file(args.fixture, "native-receipt.json"),
+                                        captureDigest=proof["nativeReceiptDigest"]))
                 exercise(owner, cloud, bundle, send, read, versions, key, args.pairs, report, save,browser)
                 native_installation(account, args.revision, approved_native)
             except Exception as error:

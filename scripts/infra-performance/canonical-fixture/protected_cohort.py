@@ -314,7 +314,7 @@ def comparable_native_reads(account, candidate, proof, pairs, *, browser=False):
         state.update(comparisonOffered=reserved, lastDispatch=now, lastUsage=current)
         if browser:
             state["browserReservation"] = dict(refreshes=30, correction=1, staleBatch=1,
-                authenticatedRequests=67, maximumPreflights=67, admission="one-use")
+                authenticatedRequests=69, maximumPreflights=67, accountingWitnessReads=2, admission="one-use")
         version = store.replace(version,state)
         if time.time() >= state["foregroundUntil"]:
             raise ValueError("Native comparison lease expired before dispatch")

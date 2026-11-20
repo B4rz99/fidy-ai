@@ -1330,11 +1330,21 @@ const MarkerSections = Schema.Struct({
   markers: Schema.optionalKey(Schema.Unknown),
 });
 const decodePinnedStorageEvidence = Effect.fn(function* (
-  response: HttpClientResponse.HttpClientResponse
+  response: HttpClientResponse.HttpClientResponse,
+  ingress: string
 ) {
+  const served = Option.fromUndefinedOr(response.headers["x-fidy-smoke-worker-version"]);
+  const ingressEvidence = Option.match(served, {
+    onNone: () => "missing",
+    onSome: (id) => (id === ingress ? "matched" : "different"),
+  });
   if (response.status !== successStatusStart) {
     return yield* new ReleaseFailure({
-      message: "Pinned storage probe returned HTTP " + response.status,
+      message:
+        "Pinned storage probe returned HTTP " +
+        response.status +
+        " with Ingress version " +
+        ingressEvidence,
     });
   }
   const raw = yield* response.json.pipe(
@@ -1354,7 +1364,11 @@ const decodePinnedStorageEvidence = Effect.fn(function* (
       Schema.is(SharedStoreMarkers)(markers),
   });
   return yield* new ReleaseFailure({
-    message: "Pinned storage probe returned HTTP 200 with " + presented,
+    message:
+      "Pinned storage probe returned HTTP 200 with Ingress version " +
+      ingressEvidence +
+      " and " +
+      presented,
   });
 });
 const requireTestedStorage = Effect.fn(function* (
@@ -1381,7 +1395,7 @@ const requireTestedStorage = Effect.fn(function* (
   const response = yield* client.execute(
     HttpClientRequest.get(origin + "/internal/release-smoke" + compatibilityQuery, { headers })
   );
-  const observation = yield* decodePinnedStorageEvidence(response);
+  const observation = yield* decodePinnedStorageEvidence(response, input.ingress);
   if (
     response.headers["x-fidy-smoke-worker-version"] !== input.ingress ||
     observation.core.workerVersionId !== input.core ||

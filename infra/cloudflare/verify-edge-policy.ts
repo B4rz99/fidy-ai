@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "0564d79a379db19f65d80914e43f370724d1182ca76b6e52ccfa4e9e073dbe3a";
+const expectedEdgePolicyDigest = "d2c16d70cb8c172c1bf0cd19d749b835cdaaca2e1098a319ada9016da4fc8ac9";
 const securityArtifacts = [
   ...(await Promise.all(
     [

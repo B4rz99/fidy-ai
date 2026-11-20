@@ -14,6 +14,7 @@ import { correlateWorkerSpans } from "./trace.mjs";
 import { inOrder, indices } from "./sequence.mjs";
 
 /** @import {Miniflare} from "miniflare" */
+/** @typedef {{status:number; bytes: Uint8Array; dispatched?:number; end:number; trace:string|null}} MeasuredResponse */
 /** @import {Caller, Call, Counts, D1, Journey, Mutation, Offer, Pair, Platform, Platforms, RequestOptions, SpanCall, Subject} from "./contracts.d.mts" */
 const pairProof = Schema.decodeUnknownSync(
   Schema.Struct({
@@ -184,7 +185,7 @@ const authenticate = async (platform, subject) => {
  */
 const observe = async ({ runtime, subject }, { row, scheduled }, journey) => {
   const timing = { dispatched: Number.NaN };
-  /** @type {{status:number; bytes: Uint8Array; dispatched?:number; end:number; trace:string|null}[]} */
+  /** @type {MeasuredResponse[]} */
   const responses = [];
   try {
     /** @type {Call} */
@@ -231,6 +232,13 @@ const observe = async ({ runtime, subject }, { row, scheduled }, journey) => {
       completedAt: performance.now(),
     });
   }
+  recordObservation(row, responses);
+};
+/**
+ * @param {Offer} row Identified timing sample.
+ * @param {MeasuredResponse[]} responses Completed response bodies.
+ */
+const recordObservation = (row, responses) => {
   const outcomes = responses.map(({ status, bytes, dispatched, end }) => ({
     status,
     bytes: bytes.length,

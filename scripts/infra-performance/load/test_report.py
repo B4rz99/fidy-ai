@@ -129,3 +129,5 @@ class OfferedLoadEvidence(unittest.TestCase):
         result = report()
         self.assertEqual(result["sameSessionOverlap"]["do"]["overlappingPairs"], 29)
         self.assertEqual(result["dispatchMs"]["status"], "fail")
+        del rows[-1]["dispatched"]
+        self.assertFalse(report()["sameSessionOverlap"]["verified"])

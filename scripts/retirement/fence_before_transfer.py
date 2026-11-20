@@ -18,6 +18,19 @@ INCUMBENT_DOMAINS = {
 }
 NATIVE = {"core": "fidy-native-storage-core", "ingress": "fidy-native-storage-ingress"}
 ACTIVE = ("queued", "running", "waiting", "waitingForPause", "rollingBack")
+ACCESS = {"SupportRecoveryAccess", "TitularErasureAccess", "BetaProAccess", "IngestSampleReviewAccess"}
+
+
+def require_access_plan(plan, verifier):
+    require(plan["applied"] is False and plan["verifierRevision"] == verifier,
+            "Canonical writer fence requires the approved read-only plan")
+    resources = indexed(plan["resources"], "logicalId")
+    require(set(resources) == ACCESS | {"RecoveryOperators"}, "Canonical Access plan scope differs")
+    require(resources["RecoveryOperators"]["resourceType"] == "Cloudflare.Access.Group" and
+            resources["RecoveryOperators"]["action"] == "noop" and
+            all(resources[name]["resourceType"] == "Cloudflare.Access.Application" and
+                resources[name]["action"] in {"update", "noop"} for name in ACCESS),
+            "Canonical Access plan contains unapproved changes")
 
 
 def protected_inputs(env):
@@ -41,10 +54,9 @@ def protected_inputs(env):
     temp = Path(env["RUNNER_TEMP"])
     plan = json.loads((temp / "native-canonical-host-approved.json").read_bytes())
     source = json.loads((temp / "native-canonical-host-source.json").read_bytes())
-    require(plan["applied"] is False and plan["verifierRevision"] == verifier and
-            isinstance(plan["resources"], list) and plan["resources"] and
-            source["verifierRevision"] == verifier and REVISION.fullmatch(source["revision"]),
-            "Canonical writer fence does not belong to the approved read-only plan")
+    require_access_plan(plan, verifier)
+    require(source["verifierRevision"] == verifier and REVISION.fullmatch(source["revision"]),
+            "Canonical writer fence does not belong to the approved closed source")
     for kind, key in (("SOURCE", "source"), ("SMOKE", "smoke")):
         reference = source[key]
         require(reference["artifactId"] == env["CANONICAL_" + kind + "_ARTIFACT"] and

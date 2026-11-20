@@ -44,6 +44,8 @@ ACTIVITY_FILE = "native-verification.json.canonical-activity"
 
 
 def verify_activity(receipt, opening, opening_archive, opening_sha):
+    require(receipt.get("unresolvedPaidEffects", False) is False,
+            "The protected activity verifier observed an unresolved external side effect")
     require(receipt["openingArtifact"] == opening_archive and receipt["openingSha256"] == opening_sha,
             "Native activity belongs to another canonical opening")
     require(opening_coordinates(receipt) == opening, "Native activity belongs to another serving graph")

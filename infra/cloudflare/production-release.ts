@@ -1,3 +1,4 @@
+import { archivedDormant } from "./native-fallback-recovery";
 import { CategoryTaxonomyRelease } from "../../apps/server/src/core/categories/contract";
 import { compatibleCategoryReleases } from "../../apps/server/src/core/categories/operations";
 import { ReleaseSmokeFailed } from "./smoke-exchange";
@@ -113,6 +114,37 @@ export type ProductionReleaseConfig = Readonly<{
   smokeAttestationFile: string;
 }>;
 type Config = ProductionReleaseConfig;
+export const fixtureVerifier = Effect.sync(() => {
+  const environment = process.env;
+  if (environment.FIXTURE_STAGED_VERIFIER_SHA === undefined) return Option.none<string>();
+  const result = Schema.decodeUnknownOption(
+    Schema.Struct({
+      FIXTURE_STAGED_VERIFIER_SHA: SmokeIdentity.fields.gitRevision,
+      GITHUB_SHA: SmokeIdentity.fields.gitRevision,
+      RELEASE_GIT_SHA: Schema.Literal(archivedDormant.revision),
+      GITHUB_ACTIONS: Schema.Literal("true"),
+      GITHUB_REPOSITORY: Schema.Literal("B4rz99/fidy-ai"),
+      GITHUB_EVENT_NAME: Schema.Literal("workflow_dispatch"),
+      GITHUB_REF: Schema.Literal("refs/heads/trunk"),
+      GITHUB_REF_PROTECTED: Schema.Literal("true"),
+      NATIVE_STORAGE_ADMISSION: Schema.Literal("closed"),
+      NATIVE_STORAGE_HOSTS: Schema.Literal("acceptance"),
+      FIXTURE_RELEASE_OPERATION: Schema.Literals([
+        "reseal-fixture-fallback",
+        "recover-fixture-fallback",
+        "rollout",
+        "verify",
+      ]),
+    })
+  )(environment);
+  if (
+    Option.isNone(result) ||
+    result.value.FIXTURE_STAGED_VERIFIER_SHA !== result.value.GITHUB_SHA
+  ) {
+    throw Error("Unverified staged application source");
+  }
+  return Option.some(result.value.GITHUB_SHA);
+});
 const config = (): Config => {
   const environment = process.env;
   const decoded = Schema.decodeUnknownOption(
@@ -709,7 +741,14 @@ const readTrunk = Effect.fn(function* (env: Config) {
       }),
     })
   )(raw);
-  return response.object.sha;
+  const verifier = yield* fixtureVerifier;
+  if (Option.isNone(verifier)) return response.object.sha;
+  if (response.object.sha !== verifier.value || env.revision !== archivedDormant.revision) {
+    return yield* new ReleaseFailure({
+      message: "Current protected verifier differs from the qualified staged release",
+    });
+  }
+  return env.revision;
 });
 
 /** Authenticated routing adapter with bounded reads and validated release identities. */

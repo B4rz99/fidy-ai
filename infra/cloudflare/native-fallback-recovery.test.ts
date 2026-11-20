@@ -6,6 +6,7 @@ import {
   type FallbackRepairPort,
   type FallbackStage,
   recoverFixtureFallback,
+  verifyUnpromotedFallback,
 } from "./native-fallback-recovery";
 
 const uuid = (index: number): string =>
@@ -192,6 +193,50 @@ it.effect("requires the same deployment IDs after the closed preflight", () =>
     expect((yield* Effect.flip(recoverFixtureFallback(port, stage, raced))).message).toContain(
       "changed during verification"
     );
+    expect(writes).toEqual([]);
+  })
+);
+
+it.effect("reseals only the same zero-traffic pair on its exact original deployment history", () =>
+  Effect.gen(function* () {
+    const { port, deployments, writes } = harness();
+    for (const role of ["core", "public"] as const) {
+      const capture = stage.release.snapshot[role];
+      deployments(capture.name).push({
+        id: capture.deploymentId,
+        versions: [{ id: capture.stableVersionId, percentage: 100 }],
+      });
+    }
+    let checks = 0;
+    const verify = Effect.sync(() => ++checks);
+    expect(yield* verifyUnpromotedFallback({ port, release: stage.release, verify })).toBe(1);
+    const original = deployments(ingress)[1];
+    if (original === undefined) throw Error("Missing original test deployment");
+    deployments(ingress)[1] = { ...original, id: uuid(199) };
+    expect(
+      yield* verifyUnpromotedFallback({ port, release: stage.release, verify }).pipe(
+        Effect.isFailure
+      )
+    ).toBe(true);
+    expect(checks).toBe(1);
+    deployments(ingress)[1] = original;
+    const swap = Effect.sync(() => {
+      deployments(core)[0] = {
+        id: uuid(200),
+        versions: [{ id: stage.release.coreVersionId, percentage: 100 }],
+      };
+    });
+    expect(
+      yield* verifyUnpromotedFallback({ port, release: stage.release, verify: swap }).pipe(
+        Effect.isFailure
+      )
+    ).toBe(true);
+    expect(
+      yield* verifyUnpromotedFallback({ port, release: stage.release, verify }).pipe(
+        Effect.isFailure
+      )
+    ).toBe(true);
+    expect(checks).toBe(1);
     expect(writes).toEqual([]);
   })
 );

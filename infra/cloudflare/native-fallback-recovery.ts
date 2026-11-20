@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { Effect, Schema } from "effect";
 import { gitRevisionPattern } from "../../apps/server/cloudflare/runtime/contract";
 import { SmokeIdentity } from "../../apps/server/cloudflare/runtime/release-smoke/contract";
@@ -9,6 +10,21 @@ import {
 } from "./release-controller";
 
 const Revision = Schema.String.check(Schema.isPattern(gitRevisionPattern));
+export const archivedDormant = {
+  revision: "b85bfb06ab573259c250231623b77b0f65e2ae5c",
+  publicVersionId: "9937b1c5-bdc2-43eb-9cb4-3e65af4e00ab",
+  publicDeploymentId: "61dc398a-e734-4ca1-9de6-786d37e2e9d1",
+  coreVersionId: "0421da6d-3cf8-4e99-a538-52b2b5c47ca2",
+  coreDeploymentId: "d392e5c1-c447-4484-8d94-bb6c5371603e",
+  original: {
+    core: "0b77e855-8813-4ff6-972f-63d2cc389b80",
+    public: "d0058241-f258-4708-805c-ecba0cdd5d7c",
+  },
+  smoke: {
+    deploymentId: "9994372a-6408-47ae-8706-88f1a949b571",
+    versionId: "87f4baef-8e77-4093-86d0-cd075cf62601",
+  },
+} as const;
 const Namespace = Schema.String.check(Schema.isPattern(/^[a-f0-9]{32}$/u));
 const Version = SmokeIdentity.fields.workerVersionId;
 export const FallbackStage = Schema.Struct({
@@ -62,6 +78,83 @@ const matchesStage = (deployment: Deployment, release: Release, role: Role): boo
     (version) => version.id === release.snapshot[role].stableVersionId && version.percentage === 100
   );
 
+export const matchesArchivedStage = (value: Release): boolean =>
+  value.snapshot.revision === archivedDormant.revision &&
+  (["public", "core"] as const).every(
+    (role) =>
+      value[`${role}VersionId`] === archivedDormant[`${role}VersionId`] &&
+      value[`${role}DeploymentId`] === archivedDormant[`${role}DeploymentId`]
+  );
+type StageReader = Pick<FallbackRepairPort, "recentDeployments" | "trunk">;
+const matchesOriginalStage = (observed: Deployment, role: Role): boolean =>
+  observed.id === archivedDormant[`${role}DeploymentId`] &&
+  observed.versions.length === 2 &&
+  observed.versions.some(
+    (row) => row.id === archivedDormant[`${role}VersionId`] && row.percentage === 0
+  ) &&
+  observed.versions.some(
+    (row) => row.id === archivedDormant.original[role] && row.percentage === 100
+  );
+export const requirePromotedDormantSource = Effect.fn(function* (
+  port: StageReader,
+  snapshot: Release["snapshot"]
+) {
+  for (const role of ["core", "public"] as const) {
+    const [active, staged] = yield* port.recentDeployments(snapshot[role].name);
+    const version = archivedDormant[`${role}VersionId`];
+    if (
+      active === undefined ||
+      active.id !== snapshot[role].deploymentId ||
+      active.versions.length !== 1 ||
+      (yield* releaseController.servingVersion(active)) !== version ||
+      staged === undefined ||
+      !matchesOriginalStage(staged, role)
+    ) {
+      return yield* Effect.fail(
+        Error("Active source differs from the sealed dormant deployment history")
+      );
+    }
+  }
+});
+const requireUnpromotedHistory = Effect.fn(function* (port: StageReader, release: Release) {
+  if ((yield* port.trunk()) !== release.snapshot.revision) {
+    return yield* Effect.fail(Error("Staged release verifier is no longer protected trunk"));
+  }
+  for (const role of ["core", "public"] as const) {
+    const snapshot = release.snapshot[role];
+    const [active, original] = yield* port.recentDeployments(snapshot.name);
+    if (
+      active === undefined ||
+      !matchesStage(active, release, role) ||
+      !isDeepStrictEqual(original, {
+        id: snapshot.deploymentId,
+        versions: [{ id: snapshot.stableVersionId, percentage: 100 }],
+      })
+    ) {
+      return yield* Effect.fail(Error("Staged pair or original deployment history differs"));
+    }
+  }
+});
+
+/** Publish the seal only if both original traffic assignments surround the entire verification. */
+export const verifyUnpromotedFallback = Effect.fn(function* <A, E, R>(input: {
+  port: StageReader;
+  release: Release;
+  verify: Effect.Effect<A, E, R>;
+}) {
+  yield* requireUnpromotedHistory(input.port, input.release).pipe(
+    Effect.tapCause(() =>
+      Effect.logError("Staged deployment history differs from the archived 100/0 pair.")
+    )
+  );
+  const result = yield* input.verify;
+  yield* requireUnpromotedHistory(input.port, input.release).pipe(
+    Effect.tapCause(() =>
+      Effect.logError("Staged deployment history differs from the archived 100/0 pair.")
+    )
+  );
+  return result;
+});
 const workerPosition = Effect.fn(function* (
   port: FallbackRepairPort,
   release: Release,

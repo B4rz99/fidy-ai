@@ -1,7 +1,8 @@
 import { Cause, Context, Effect, Exit, Layer, Option } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 import { it } from "@effect/vitest";
-import { describe, expect } from "vitest";
+import { describe, expect, vi } from "vitest";
+import { archivedDormant } from "./native-fallback-recovery";
 import {
   configureReleaseObservability,
   decodeCaptureWorkerReceipts,
@@ -276,7 +277,8 @@ const captureInput = {
   coreName: "prod-core",
 };
 const referenceHarness = (
-  reference: unknown = trunkReference
+  reference: unknown = trunkReference,
+  applicationRevision = revision
 ): { port: ReleasePort; requests: ReadonlyArray<string> } => {
   const requests: string[] = [];
   const client = HttpClient.make((request) => {
@@ -306,7 +308,7 @@ const referenceHarness = (
     env: {
       account: "0".repeat(32),
       token: "test-only-cloudflare",
-      revision,
+      revision: applicationRevision,
       repository: "test/fidy",
       githubToken: "test-only-github",
       file: "/unused-snapshot",
@@ -318,6 +320,37 @@ const referenceHarness = (
   return { port, requests };
 };
 
+it.effect(
+  "binds a staged application to the freshly read protected verifier at every trunk check",
+  () =>
+    Effect.gen(function* () {
+      const verifier = "e".repeat(40);
+      for (const [name, value] of Object.entries({
+        GITHUB_ACTIONS: "true",
+        GITHUB_REF: "refs/heads/trunk",
+        GITHUB_REF_PROTECTED: "true",
+        GITHUB_EVENT_NAME: "workflow_dispatch",
+        GITHUB_REPOSITORY: "B4rz99/fidy-ai",
+        GITHUB_SHA: verifier,
+        FIXTURE_STAGED_VERIFIER_SHA: verifier,
+        RELEASE_GIT_SHA: archivedDormant.revision,
+        FIXTURE_RELEASE_OPERATION: "reseal-fixture-fallback",
+        NATIVE_STORAGE_HOSTS: "acceptance",
+        NATIVE_STORAGE_ADMISSION: "closed",
+      })) {
+        vi.stubEnv(name, value);
+      }
+      const port = (head: string): ReleasePort =>
+        referenceHarness(
+          { ...trunkReference, object: { type: "commit", sha: head } },
+          archivedDormant.revision
+        ).port;
+      expect(yield* port(verifier).trunk()).toBe(archivedDormant.revision);
+      expect(yield* port(revision).trunk().pipe(Effect.isFailure)).toBe(true);
+      vi.stubEnv("FIXTURE_STAGED_VERIFIER_SHA", revision);
+      expect(yield* port(verifier).trunk().pipe(Effect.exit)).toHaveProperty("_tag", "Failure");
+    }).pipe(Effect.ensuring(Effect.sync(() => vi.unstubAllEnvs())))
+);
 it.effect(
   "aborts rejected status and declared oversized native responses before returning release failure",
   () =>

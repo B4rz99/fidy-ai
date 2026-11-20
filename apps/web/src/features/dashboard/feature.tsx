@@ -4,7 +4,7 @@ import { RegistryContext, useAtomRefresh, useAtomValue } from "@effect/atom-reac
 import { Option } from "effect";
 import type { AsyncResult, AtomRegistry } from "effect/reactivity";
 import { type JSX, type ReactNode, Suspense, useContext, useState } from "react";
-import { lazyRouteComponent, useRouter } from "@tanstack/react-router";
+import { useRouter } from "@tanstack/react-router";
 
 import { Button } from "@/ui/components/button";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
@@ -23,14 +23,10 @@ import { DashboardBudgetConfiguration } from "./budget-configuration";
 import { prepareQuery } from "@/transport/query-preparation";
 import type { AnyRouter } from "@tanstack/react-router";
 
-const DashboardRoutePresentation = lazyRouteComponent(
-  () => import("./view"),
-  "DashboardRouteContent"
-);
-const DashboardViewComponent = lazyRouteComponent(() => import("./view"), "DashboardViewComponent");
-// Start the full view before the query finishes, including first-interaction controls.
-DashboardRoutePresentation.preload?.()?.catch(() => undefined);
-DashboardViewComponent.preload?.()?.catch(() => undefined);
+import {
+  DashboardRouteContent as DashboardRoutePresentation,
+  DashboardViewComponent,
+} from "./view";
 
 export const DashboardFeature = ({
   apiClient,

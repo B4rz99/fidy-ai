@@ -233,13 +233,18 @@ const usableReviews = async (page, rows) => {
       expected.every(({ reference, excerpt }, index) => {
         const card = cards[index];
         const open = card.querySelector('button[data-review="row-content"]:enabled');
+        const check = card.querySelector('[role="checkbox"]') ?? card.querySelector('input[type="checkbox"]');
+        const selectable = check instanceof HTMLInputElement
+          ? !check.checked && !check.disabled
+          : check?.getAttribute("aria-checked") === "false" &&
+            !check.matches('[aria-disabled="true"],[data-disabled]');
         return (
           open?.getAttribute("aria-label") === "Abrir Extracto " + reference &&
           open.getClientRects().length > 0 &&
           card.querySelector('[data-review="context-excerpt"]')?.textContent === excerpt &&
-          card.querySelector(
-            '[role="checkbox"][aria-checked="false"]:not([aria-disabled="true"]):not([data-disabled])'
-          ) !== null
+          selectable &&
+          check?.getAttribute("aria-label") === "Seleccionar Extracto " + reference &&
+          check.getClientRects().length > 0
         );
       })
     );

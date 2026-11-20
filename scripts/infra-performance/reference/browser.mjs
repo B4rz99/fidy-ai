@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { appendFileSync } from "node:fs";
 import { createHash } from "node:crypto";
+import { setTimeout as sleep } from "node:timers/promises";
 import { Schema } from "effect";
 import { freshBudgetMonth, freshPendingReview } from "./fresh-workspaces.mjs";
 import { freshDashboard, prepareReferenceDashboard } from "./fresh-dashboard.mjs";
@@ -126,6 +127,23 @@ try {
     await prepareReferenceDashboard(request, installation);
     process.stderr.write("REFERENCE_STAGE recurring-fixture\n");
     await prepareReferenceRecurring(request, installation);
+  }
+  const idleMs = Number(process.env.FIDY_REFERENCE_SETUP_IDLE_MS ?? "0");
+  assert.ok(idleMs === 0 || idleMs === 2000);
+  if (idleMs > 0) {
+    const events = process.env.FIDY_REFERENCE_EVENTS;
+    assert.ok(events, "Missing reference observation file");
+    const started = performance.now();
+    while (performance.now() - started < idleMs) {
+      await sleep(Math.ceil(started + idleMs - performance.now()));
+    }
+    appendFileSync(
+      events,
+      JSON.stringify({
+        stage: "post-setup-idle",
+        elapsedMs: performance.now() - started,
+      }) + "\n"
+    );
   }
   const { before, startupMs, readMs, correctionMs } = await freshTransactions({
     page,

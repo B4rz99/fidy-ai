@@ -18,12 +18,17 @@ on:
         type: choice
         options: [normal, poor]
         default: normal
+      setup_idle_ms:
+        description: Idle time between authenticated fixture preparation and the first browser journey
+        type: choice
+        options: ["0", "2000"]
+        default: "0"
 
 permissions:
   contents: read
 
 concurrency:
-  group: storage-reference-${{ github.ref }}-${{ inputs.dataset || 'production' }}-${{ inputs.network || 'normal' }}
+  group: storage-reference-${{ github.ref }}-${{ inputs.dataset || 'production' }}-${{ inputs.network || 'normal' }}-${{ inputs.setup_idle_ms || '0' }}
   cancel-in-progress: false
 
 jobs:
@@ -33,6 +38,7 @@ jobs:
     env:
       DATASET: ${{ inputs.dataset || 'production' }}
       NETWORK: ${{ inputs.network || 'normal' }}
+      SETUP_IDLE_MS: ${{ inputs.setup_idle_ms || '0' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -68,11 +74,11 @@ jobs:
           bun scripts/infra-performance/reference/review-failure.test.mjs
           python3 -m unittest discover -s scripts/infra-performance/reference
           python3 scripts/infra-performance/reference/run.py --d1 baseline-d1 --do . \
-            --dataset "$DATASET" --network "$NETWORK" --pairs 1 --origin "GitHub-hosted Ubuntu loopback"
+            --dataset "$DATASET" --network "$NETWORK" --setup-idle-ms "$SETUP_IDLE_MS" --pairs 1 --origin "GitHub-hosted Ubuntu loopback"
       - name: Measure 30 alternating pairs
         run: |
           python3 scripts/infra-performance/reference/run.py --d1 baseline-d1 --do . \
-            --dataset "$DATASET" --network "$NETWORK" --pairs 30 --origin "GitHub-hosted Ubuntu loopback"
+            --dataset "$DATASET" --network "$NETWORK" --setup-idle-ms "$SETUP_IDLE_MS" --pairs 30 --origin "GitHub-hosted Ubuntu loopback"
       - name: Preserve reference evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

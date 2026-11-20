@@ -89,6 +89,12 @@ accountability and timing at each boundary. To repeat the comparison on a prepar
 `--do . --pairs 30` to the command above. Hosted release acceptance separately measures the
 deployed Workers from the recorded network origin.
 
+The default run begins navigation immediately after authenticated fixture setup. To measure
+the same sequential journeys after a quiet interval, pass `--setup-idle-ms 2000` or select
+`setup_idle_ms=2000` in the workflow. Both variants wait once before the first navigation.
+Each run records its interval in the plan and retains refusals during setup and timed requests.
+Compare the two starting conditions separately.
+
 ## Recovery verification
 
 After fresh quota headroom is confirmed, verify public OAuth discovery and actual signed-in

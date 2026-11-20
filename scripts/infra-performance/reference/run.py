@@ -310,6 +310,8 @@ def main():
         "--dataset", choices=["production", "small", "extreme", "breaking"], default="small"
     )
     parser.add_argument("--network", choices=["normal", "poor"], default="normal")
+    parser.add_argument("--setup-idle-ms", type=int, choices=[0, 2000], default=0,
+                        help="Fixed idle interval after fixture preparation and before document navigation")
     args = parser.parse_args()
     if output(["bun", "--version"], ROOT) != "1.4.4":
         parser.error("Use the pinned Bun 1.4.4 toolchain")
@@ -334,6 +336,7 @@ def main():
         "CLI_ACCEPTANCE_MODE": "cli",
         "FIDY_ASSESSMENT": args.dataset,
         "FIDY_ASSESSMENT_NETWORK": args.network,
+        "FIDY_REFERENCE_SETUP_IDLE_MS": str(args.setup_idle_ms),
 
         "PLAYWRIGHT_TLS_KEY": str(key),
         "PLAYWRIGHT_TLS_CERT": str(cert),
@@ -347,6 +350,7 @@ def main():
         "bun": output(["bun", "--version"], ROOT),
         "network": args.network,
         "offeredLoad": "one isolated User, sequential",
+        "postSetupIdleMs": args.setup_idle_ms,
         "dataset": args.dataset,
         **browser_workload(args.dataset),
         "stressOnly": args.dataset == "breaking",

@@ -1,4 +1,3 @@
-# Native-provider assertion: inspect only persistence, never credential blob contents.
 param([Parameter(Mandatory=$true)][string]$Name)
 $ErrorActionPreference = 'Stop'
 Add-Type @'

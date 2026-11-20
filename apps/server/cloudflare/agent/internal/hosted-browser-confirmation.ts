@@ -7,7 +7,6 @@ import { HostedTurnConfirmation } from "../../../src/shell/agent/contract";
 
 const maximumReplyButtonBodyLength = 1024;
 
-/** Only the host formats this review, from validated input and the owner's observed revision. */
 export const hostedChallengeText = ({
   db,
   userId,
@@ -46,7 +45,7 @@ export const hostedChallengeText = ({
 const Row = Schema.Struct({
   command: HostedTurnConfirmation.fields.command,
 });
-/** Metadata comes from a live host-issued challenge, never a model-written command in reply text. */
+
 export const readBrowserConfirmation = ({
   db,
   userId,
@@ -77,7 +76,6 @@ export const readBrowserConfirmation = ({
     return Option.some({ command: row.command });
   });
 
-/** Stage exactly the readable text the browser displays; the opaque command travels separately. */
 export const browserConfirmationText = ({
   text,
   command,

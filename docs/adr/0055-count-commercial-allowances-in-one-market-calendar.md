@@ -11,3 +11,7 @@ decides on a new unit and rechecks capacity in the guarded acceptance commit.
 
 Wire meter metadata expresses reset as an absolute UTC instant. Security Retry-After delays
 remain separate. Inspection stays callable when the commercial canonical-call meter is exhausted.
+
+Hosted saved-Transaction history counts once per User and Turn at the release of new retained
+rows. Commit its consumption and evidence atomically. Aggregates, empty or failed reads and
+continuity already held by the Turn do not count as new retained rows.

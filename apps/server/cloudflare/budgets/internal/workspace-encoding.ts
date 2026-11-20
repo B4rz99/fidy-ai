@@ -1,7 +1,6 @@
 import { Effect, Schema, Struct } from "effect";
 import { BudgetStatus, BudgetWorkspace } from "../../../src/core/budgets/contract";
 
-// These union checks read cap, spent and progress; neither reads the removed period field.
 const statusFacts = BudgetStatus.mapMembers(
   ([under, reached, over]) => [
     under.mapFields(Struct.omit(["period"])),
@@ -17,7 +16,6 @@ const workspaceFacts = Schema.Struct({
 const encodeFacts = Schema.encodeEffect(workspaceFacts);
 const encodeComplete = Schema.encodeEffect(Schema.toCodecJson(BudgetWorkspace));
 
-/** Validate the one shared period once, retaining each status's exact financial checks and wire shape. */
 export const encodeBudgetWorkspace = (
   workspace: typeof BudgetWorkspace.Type
 ): Effect.Effect<Schema.Json, Schema.SchemaError> => {

@@ -48,3 +48,9 @@ Live conformance returns a closed capability failure instead of provider content
 
 Provider schema normalization may collapse a homogeneous tuple into its equivalent item schema
 while preserving length bounds. Annotations and literal values are data outside this rewrite.
+
+Production reserves worst-case provider work and rechecks purpose-specific Consent before each
+egress, including failed calls. Only the exact still-Pending admitted Turn can retain its original
+basis through withdrawal. Standalone work and preflight need current standing. Unmetered runs
+belong to private provider-conformance fixtures, with no owner mutation bindings. Install no
+inference for unavailable configuration while keeping unrelated canonical owners available.

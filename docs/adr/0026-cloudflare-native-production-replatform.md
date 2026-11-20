@@ -99,3 +99,16 @@ infrastructure.
   authority.
 - Permanent staging, remote previews, and generic multi-cloud abstractions are deferred until a
   measured need justifies their cost.
+
+## Patched Cloudflare deployment boundaries
+
+An immutable uploaded Worker version receipt can be retained only while that version still
+exists. The live deployment is checked independently because a recorded upload can have no
+traffic. Forward placement in version uploads. Ordinary script-level metadata continues to
+take effect through full deployment. Deferred deletion retains the prior tracked generation
+through release verification. Cleanup-only execution has no deployment authority.
+
+D1 migration execution disables retries because a failed response can follow a committed
+change. Metadata calls outside that executor keep their existing retry policies. When the
+Cloudflare HTTP fallback class lacks provider data, retain only a numeric native error code
+so refusal classification can use it without retaining provider payloads.

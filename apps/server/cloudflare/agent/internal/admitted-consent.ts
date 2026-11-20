@@ -7,7 +7,6 @@ import { AgentUnavailable } from "../contract";
 
 const AdmittedRow = Schema.Struct({ consent_basis_json: Schema.String });
 
-/** Read the exact Pending Turn's captured basis within its active session's original lifetime; it does not decide current Consent. */
 export const readAdmittedBasis = ({
   db,
   userId,

@@ -7,7 +7,7 @@ import { keywordRulesFromRows, selectedKeywordRulesQuery } from "./keyword-rules
 import { findOwnedKeywordRules } from "./keyword-rule-shared";
 
 const maximumCaptures = 100;
-/** Resolve a bounded capture chunk against one explicit User's current instruction snapshot. */
+
 export const captureCategories = ({
   db,
   userId,
@@ -31,7 +31,6 @@ export const captureCategories = ({
     );
   });
 
-/** Decode once and resolve captures without further storage work in a protected read. */
 export const prepareCaptureCategories = ({
   db,
   users,

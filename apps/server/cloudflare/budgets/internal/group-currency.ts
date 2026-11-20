@@ -7,7 +7,6 @@ import type {
 } from "../../../src/core/budgets/contract";
 import { type TransactionCaller, callerAuthority } from "../../canonical-work/operations";
 
-/** Currency is a group fact; an unconfigured group inherits its first retained member's currency. */
 export const findGroupCurrency = ({
   db,
   userId,
@@ -45,7 +44,6 @@ export const findGroupCurrency = ({
     return Option.fromUndefinedOr(decoded[0]?.currency);
   });
 
-/** The requested currency must belong to the chosen group; individual category edits cannot change it. */
 export const acceptsGroupCurrency = ({
   db,
   userId,
@@ -79,7 +77,6 @@ export const acceptsGroupCurrency = ({
     });
   });
 
-/** Setting a group currency preserves exact cap values; incompatible precision is refused. */
 export const acceptsGroupCapPrecision = ({
   db,
   userId,
@@ -120,7 +117,6 @@ export const acceptsGroupCapPrecision = ({
     );
   });
 
-/** Version the group's currency and preserve source history before a collection rename. */
 export const prepareGroupCurrency = ({
   db,
   subject,

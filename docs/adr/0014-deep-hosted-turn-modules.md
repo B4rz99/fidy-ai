@@ -42,3 +42,27 @@ session. Its replacement states the exact terminal prefix incorporated, excludin
 Pending Turn. Recover an abandoned Pending Turn and recheck the current onboarding grant before
 a subsequent admission. Evidence accepted for lossless replay excludes values that cannot
 round-trip through storage and is bounded by encoded UTF-8 bytes.
+
+## Admission, visible delivery and recovery
+
+The User coordinator serializes admission and owns the queue through settlement, including when an
+HTTP deadline ends the observation. Run complete model preflight before recording Pending and the
+User entry. A failed wake after admission is recoverable abandoned work. Fence it through the
+owning channel before releasing the queue. Recovery runs after Consent revocation without
+admitting work or sending User content. It cannot race a late commit because a canonical mutation
+and its Pending Turn fence share the atomic commit. Preserve exact result evidence or report only
+the proven commit when the response is lost. Neither outcome permits repeating the mutation.
+
+The host alone prepares visible confirmation text and opaque commands from validated inputs and the
+owner revision. Persist the short-lived single-use challenge before presenting it. Redeem only an
+exact User-authored command from the original channel. A resumed Turn can recover its own
+consumption. Model prose and unrelated Turns cannot gain that authority. For statement actions,
+the admitted same-channel Turn guard remains part of every owner write.
+
+A browser receipt proves visible presentation of the exact staged reply under current WebSession
+authority. A progress read buys no second Turn. Transcript stores confirmed visible text or the
+fixed terminal marker in the settlement unit. Proactive channel evidence can join WorkingContext
+only from an exact authorized same-User reference. It never creates a synthetic requested Turn
+or session. Thirty-day retention runs independently of later activity. Compaction compares and
+replaces only the same retained terminal prefix and its predecessor revision. Failure keeps the
+original evidence. A newly admitted User request is supplied separately from retained history.

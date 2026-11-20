@@ -24,7 +24,6 @@ const decodeRequestParts = ({
     )
   );
 
-/** Build only a catalog-owned route from validated canonical arguments, never an arbitrary destination. */
 export const requestFor = ({ operation, input }: RequestInput): Option.Option<Request> => {
   const parts = decodeRequestParts({ operation, input });
   if (Option.isNone(parts)) return Option.none();

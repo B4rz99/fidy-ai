@@ -43,7 +43,6 @@ import {
   prepareUpdateKeywordRule as updateRule,
 } from "./internal/canonical-keyword-rules";
 
-/** Prepare an authority-gated peer read; its containing protected query owns Audit and disclosure. */
 export const prepareCategorySnapshot = (
   input: Readonly<{ db: D1Database; authority: QueryAuthority }>
 ): Readonly<{
@@ -51,62 +50,48 @@ export const prepareCategorySnapshot = (
   decode: (rows: unknown) => Option.Option<ReadonlyArray<Category>>;
 }> => preparePeerSnapshot(input);
 
-/** Compose the bounded Category listing and its Audit in a protected browser snapshot. */
 export const prepareBoundCategoryRead: CanonicalBrowserRead = (input) => prepareBrowserRead(input);
 
 export const requireCategory = (
   input: Readonly<{ db: D1Database; categoryId: CategoryId }>
 ): Effect.Effect<Category, CategoryNotFound | CategoriesUnavailable> => requiredCategory(input);
 
-/** Return the complete bounded taxonomy in current presentation order, or fail rather than truncate. */
 export const listCategories = (
   input: Readonly<{ db: D1Database }>
 ): Effect.Effect<ReadonlyArray<Category>, CategoriesUnavailable> => categoryList(input);
 
-/**
- * Categorize up to 100 captures for one established User, preserving input order and hiding rules.
- * The caller owns authentication and its existing User-coordinated unit; this read grants no write authority.
- */
 export const categorizeCaptures: typeof captureCategories = (input) => captureCategories(input);
 
-/** Canonical Category read with live credential, Consent and audit in one native D1 unit. */
 export const executeProtectedCategories: typeof readProtectedCategories = (input) =>
   readProtectedCategories(input);
-/** List the caller's bounded keyword instructions under their live credential. */
+
 export const listOwnKeywordRules: typeof readOwnKeywordRules = (input) =>
   readOwnKeywordRules(input);
 export const keywordRuleInput: typeof decodeRuleInput = (input) => decodeRuleInput(input);
-/** Decode a retained rule's stable public path identity. */
+
 export const keywordRuleIdFromPath: typeof decodeRuleId = (input) => decodeRuleId(input);
-/** Report malformed public rule input without retaining or auditing it. */
+
 export const keywordRuleInvalidInput = (): Response => invalidRuleInput();
-/** Report an absent or foreign rule identity without revealing ownership. */
+
 export const keywordRuleUnknownId = (): Response => unknownRuleId();
-/** Prepare one rule creation inside the caller's atomic, User-coordinated mutation unit. */
+
 export const prepareCreateKeywordRule: typeof createRule = (input) => createRule(input);
-/** Prepare one owned rule replacement, affecting only future capture. */
+
 export const prepareUpdateKeywordRule: typeof updateRule = (input) => updateRule(input);
-/** Prepare one owned rule removal, affecting only future capture. */
+
 export const prepareDeleteKeywordRule: typeof deleteRule = (input) => deleteRule(input);
 export const keywordRuleGuardFailure: typeof classifyRuleGuardFailure = (input) =>
   classifyRuleGuardFailure(input);
 
-/**
- * Compose the exact Category's continued existence into a caller-owned action. category_reference(id)
- * is re-evaluated when the action commits; lookup results alone are not a commit-time guarantee.
- */
 export const prepareCategoryReference: typeof categoryReferenceStatement = (input) =>
   categoryReferenceStatement(input);
 
-/** Verify Category storage is installed for release smoke without loading any retained content. */
 export const verifyCategoryStorage = (
   input: Readonly<{ db: D1Database }>
 ): Effect.Effect<void, CategoriesUnavailable> => verifyStorage(input);
 
-/** Prepare request-local Category interpretation inside an existing protected snapshot. */
 export const prepareCaptureCategories: typeof prepareCaptures = (input) => prepareCaptures(input);
 
-/** Capture owners compose categorization and retention in the same native User transaction. */
 export const categorizeLocalCapture: typeof nativeCategory = (input) => nativeCategory(input);
 export const localKeywordRules: typeof listRules = (user) => listRules(user);
 export const newKeywordRuleId: typeof allocateRuleId = () => allocateRuleId();

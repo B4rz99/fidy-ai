@@ -53,7 +53,6 @@ const userActionRequired = (): Response =>
     { status: 403, headers }
   );
 
-/** The Category owner keeps its bounded projection, live Audit and response codec in one read. */
 export const prepareBoundCategoryRead: CanonicalBrowserRead = ({
   db,
   authority,
@@ -186,7 +185,6 @@ const presentCategoryWork = (
     return new Response(body, { status: 200, headers });
   });
 
-/** Query, live authority and required Audit commit in one D1 unit for either credential. */
 export const executeProtectedCategories = ({
   db,
   subject,

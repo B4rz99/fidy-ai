@@ -371,7 +371,7 @@ const prepareBatch = Effect.fn(function* <E, R>(
       : [];
   return { validInput, selected, resolved, inputHash, digest };
 });
-/** Fresh credential, each child's policy, one commercial call and all owner effects share this native transaction. */
+
 export const runLocalBatch = Effect.fn(
   function* <E, R>(unit: Unit, owners: ReadonlyMap<string, Prepare | ReservedOwner<E, R>>) {
     const resolve = yield* localProof(unit.request, unit.owns);

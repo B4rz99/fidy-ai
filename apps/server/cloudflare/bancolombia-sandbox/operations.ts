@@ -5,7 +5,6 @@ const jwksPath = "/connections/bancolombia/sandbox/jwks";
 const callbackPath = "/connections/bancolombia/sandbox/callback";
 const maximumCallbackLength = 8192;
 
-/** Publishes sandbox registration metadata without granting institution or User authority. */
 export const bancolombiaSandboxResponse = (request: Request): Option.Option<Response> => {
   const url = new URL(request.url);
   if (url.pathname !== jwksPath && url.pathname !== callbackPath) return Option.none();

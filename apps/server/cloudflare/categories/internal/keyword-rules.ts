@@ -9,7 +9,6 @@ import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 
 import type { CategoryAuditOperation } from "../contract";
 
-/** A live credential re-evaluated inside the same D1 unit as the rule write. */
 type Authority = Readonly<{
   table: "pats" | "web_sessions" | "oauth_credentials" | "hosted_turns";
   predicate: string;
@@ -29,21 +28,18 @@ const RuleRow = KeywordRule.mapFields((fields) => ({
 }));
 const boundedRuleCount = maximumKeywordRulesPerUser + 1;
 
-/** One User's rules in stable creation order, for the capture-time precedence decision. */
 export const keywordRulesQuery = ({ userId }: Readonly<{ userId: string }>): OwnedStatement => ({
   sql: `SELECT ${ruleColumns} FROM keyword_rules WHERE user_id = ?
     ORDER BY created_at_ms, id LIMIT ${boundedRuleCount}`,
   params: [userId],
 });
 
-/** Compose bounded instructions with a caller-owned live User selection. */
 export const selectedKeywordRulesQuery = (users: OwnedStatement): OwnedStatement => ({
   sql: `SELECT ${ruleColumns} FROM keyword_rules WHERE user_id IN (SELECT userId FROM (${users.sql}))
     ORDER BY created_at_ms, id LIMIT ${boundedRuleCount}`,
   params: users.params,
 });
 
-/** The same owned rules, re-checking a live caller inside the reading statement. */
 export const protectedKeywordRulesQuery = ({
   userId,
   authority,
@@ -54,7 +50,6 @@ export const protectedKeywordRulesQuery = ({
   params: [userId, ...authority.bindings],
 });
 
-/** Decode a bounded rule list; an over-limit result is unavailable rather than truncated. */
 export const keywordRulesFromRows = (rows: unknown): Option.Option<ReadonlyArray<KeywordRule>> =>
   Option.flatMap(Schema.decodeUnknownOption(Schema.Array(RuleRow))(rows), (rules) =>
     rules.length <= maximumKeywordRulesPerUser ? Option.some(rules) : Option.none()
@@ -63,7 +58,6 @@ export const keywordRulesFromRows = (rows: unknown): Option.Option<ReadonlyArray
 export const keywordRuleFromRows = (row: unknown): Option.Option<KeywordRule> =>
   Schema.decodeUnknownOption(RuleRow)(row);
 
-/** One owned rule by stable id; a foreign or absent id returns no row. */
 export const keywordRuleQuery = ({
   userId,
   id,
@@ -87,11 +81,6 @@ export type KeywordRuleRemoval = Readonly<{
   authority: Authority;
 }>;
 
-/**
- * Insert one rule only for a live caller and an existing stable Category. Both facts are
- * re-evaluated inside the writing statement, so a category or credential that disappeared
- * between validation and commit changes no row.
- */
 export const insertKeywordRule = (input: KeywordRuleWrite): OwnedStatement => ({
   sql: `INSERT OR IGNORE INTO keyword_rules (id,user_id,keyword,category_id,created_at_ms,updated_at_ms)
     SELECT ?,?,?,id,?,? FROM categories WHERE id = ?
@@ -107,7 +96,6 @@ export const insertKeywordRule = (input: KeywordRuleWrite): OwnedStatement => ({
   ],
 });
 
-/** Replace one User-owned rule under the same live credential and Category guarantees. */
 export const replaceKeywordRule = (input: KeywordRuleWrite): OwnedStatement => ({
   sql: `UPDATE OR IGNORE keyword_rules SET keyword = ?, category_id = ?, updated_at_ms = ?
     WHERE id = ? AND user_id = ? AND EXISTS (SELECT 1 FROM categories WHERE id = ?)
@@ -123,7 +111,6 @@ export const replaceKeywordRule = (input: KeywordRuleWrite): OwnedStatement => (
   ],
 });
 
-/** Remove one User-owned rule; a foreign or absent id changes no row. */
 export const removeKeywordRule = (input: KeywordRuleRemoval): OwnedStatement => ({
   sql: `DELETE FROM keyword_rules WHERE id = ? AND user_id = ?
     AND EXISTS (SELECT 1 FROM ${input.authority.table} WHERE ${input.authority.predicate})`,
@@ -152,10 +139,8 @@ const browserKeywordRuleAudit = (
   });
 };
 
-/** One accepted browser rule change, attributable to its exact live WebSession. */
 export const recordBrowserKeywordRuleWork = (input: BrowserKeywordRuleWork): OwnedStatement =>
   browserKeywordRuleAudit(input, true);
 
-/** One accepted browser rule read, attributable to its exact live WebSession. */
 export const recordBrowserKeywordRuleRead = (input: BrowserKeywordRuleWork): OwnedStatement =>
   browserKeywordRuleAudit(input, false);

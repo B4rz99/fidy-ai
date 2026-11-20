@@ -10,7 +10,6 @@ import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { currentProactivityGrantQuery } from "../../consent/operations";
 import { newId } from "../../secret-material/operations";
 
-/** Compose this fence before a new category grant: every pre-opt-in financial revision must already be latched under its prior eligibility. */
 export const prepareOptInFence = (
   input: Readonly<{ db: D1Database; userId: UserId }>
 ): D1PreparedStatement =>
@@ -158,7 +157,6 @@ const matchesCapturedPeriod = (status: BudgetStatus, context: UserContext): bool
   );
 };
 
-/** Commit the bounded report's monotone threshold evidence and one pending occurrence per crossing. */
 export const reconcileStatuses = (
   input: Readonly<{
     db: D1Database;

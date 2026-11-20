@@ -341,7 +341,6 @@ export const isTransientHttpStatus = (status: number): boolean =>
   status === tooManyRequestsStatus ||
   status >= firstServerErrorStatus;
 
-
 export class CanonicalTelemetry extends HttpApiMiddleware.Service<CanonicalTelemetry>()(
   "@fidy/server/shell/public-http/contract/CanonicalTelemetry"
 ) {}

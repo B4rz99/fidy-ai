@@ -14,7 +14,6 @@ const confirmedQueryResult = (outcome: CanonicalToolOutcome): boolean =>
   outcome._tag === "Succeeded" ||
   (outcome._tag === "CanonicalOperationFailed" && Schema.is(queryAbsence)(outcome.failure));
 
-/** A rejected read supplies no data from which the model may infer an empty result. */
 export const failedQueryReply = (
   actions: ReadonlyArray<HostedToolAction>
 ): Option.Option<TranscriptText> =>
@@ -52,7 +51,6 @@ const toolReceipt = (action: HostedToolAction, timeZone: string): Option.Option<
   });
 };
 
-/** A completed canonical write never licenses an unqualified success for other failed calls. */
 export const committedAnswer = ({
   actions,
   timeZone,

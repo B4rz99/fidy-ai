@@ -263,7 +263,6 @@ export const TelemetrySpanId = Schema.String.check(
   Schema.isPattern(/^(?!0{16}$)[0-9a-f]{16}$/u)
 ).pipe(Schema.brand("TelemetrySpanId"));
 
-
 export const TelemetryWorkRecord = Schema.Struct({
   release: TelemetryRelease,
   operation: TelemetryCodeSchema.operation,
@@ -567,7 +566,6 @@ const ProjectedTraceCoordinates = {
   parent_span_id: Schema.optionalKey(TelemetrySpanId),
   op: TelemetryCodeSchema.spanOperation,
 } as const;
-
 
 const ProjectedErrorTraceCoordinates = {
   ...ProjectedTraceCoordinates,

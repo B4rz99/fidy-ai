@@ -26,7 +26,6 @@ type BudgetAuditCall = Readonly<{
   current: number;
 }>;
 
-/** Account for a Budget call through the write's live caller-authority predicate. */
 export const recordBudgetCall = ({
   db,
   subject,

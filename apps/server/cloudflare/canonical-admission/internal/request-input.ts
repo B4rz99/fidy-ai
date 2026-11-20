@@ -124,7 +124,6 @@ const requiredScopes = (
   return Option.some([...scopes]);
 };
 
-/** Validate reflected HTTP input before spending a commercial unit; canonicalized JSON lives only in memory. */
 export const validatedCanonicalInput = (
   input: Readonly<{ operation: CatalogOperation }> &
     (Readonly<{ request: Request }> | Readonly<{ canonicalInput: Schema.Json }>)
@@ -158,7 +157,6 @@ export const validatedCanonicalInput = (
     Effect.orElseSucceed(() => Option.none())
   );
 
-/** Irreversible bounded references, never plaintext inputs or caller-provided retry keys. */
 export const cryptoHash = (value: string): Effect.Effect<string, CanonicalAdmissionUnavailable> =>
   Effect.tryPromise({
     try: () => crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)),

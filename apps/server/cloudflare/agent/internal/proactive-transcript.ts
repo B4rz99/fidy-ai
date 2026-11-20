@@ -27,7 +27,6 @@ const prepareProtected = (
   return input.db.prepare(query.sql).bind(...query.params);
 };
 
-/** Compose one exact verified visible message with Insights settlement. No requested Turn or session is invented. */
 export const prepareProactiveTranscript = (
   input: Readonly<{
     db: D1Database;
@@ -86,7 +85,6 @@ export const prepareMessageTranscript = (
     },
   });
 
-/** Read only the verified message referenced by the authenticated WhatsApp request, with no fabricated session history. */
 export const readContextualProactiveReply = (
   input: Readonly<{
     db: D1Database;
@@ -124,7 +122,6 @@ export const readContextualProactiveReply = (
     return Option.map(entry, (value) => ({ userId: input.userId, entry: value }));
   }).pipe(Effect.mapError(() => new AgentUnavailable()));
 
-/** Exact same-User evidence for correlated ordinary replies, not a fabricated prior Turn. */
 export const readProactiveTranscript = (
   input: Readonly<{ db: D1Database; userId: UserId; association: OwnedStatement; now: number }>
 ): Effect.Effect<
@@ -211,7 +208,7 @@ const decodeProactiveEntry = (
       })
     );
   });
-/** Maintenance also covers proactive-only Users, without manufacturing an Agent Session or Turn. */
+
 export const sweepProactiveTranscript = (
   input: Readonly<{ db: D1Database; now: number }>
 ): Effect.Effect<void, Cause.UnknownError> =>
@@ -224,7 +221,6 @@ export const sweepProactiveTranscript = (
       .run()
   ).pipe(Effect.asVoid);
 
-/** Fixed thirty-day deletion is executable independently of any later User message. */
 export const expireProactiveTranscript = (
   input: Readonly<{ db: D1Database; userId: UserId; now: number }>
 ): Effect.Effect<void, Cause.UnknownError> =>

@@ -15,8 +15,7 @@ const disposeReader = (
   } finally {
     try {
       reader.releaseLock();
-    } catch {
-    }
+    } catch {}
   }
 };
 

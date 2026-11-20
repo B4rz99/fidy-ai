@@ -8,7 +8,6 @@ import {
   type OwnerOutcome,
 } from "../../canonical-operations/contract";
 
-/** One retained Budget by id and stable User; a foreign id resolves to absence. */
 export const findOwnedBudget = ({
   db,
   userId,
@@ -36,7 +35,6 @@ export const findOwnedBudget = ({
     return raw === null ? Option.none<Budget>() : Option.some(yield* budgetFromRow(raw));
   });
 
-/** Read one Budget after its shared D1 unit committed; deletion returns only the removed id. */
 export const findBudgetValue = ({
   db,
   userId,
@@ -63,7 +61,6 @@ export const findBudgetValue = ({
         Effect.orElseSucceed(() => Option.none<CommittedMutationValue>())
       );
 
-/** The Budget owner retains its identity and committed readback. */
 export const budgetOutcome = (outcome: BudgetOutcome): OwnerOutcome => ({
   _tag: "Owner",
   operation: outcome.operation,

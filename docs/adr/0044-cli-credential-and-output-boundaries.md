@@ -25,3 +25,6 @@ Support recovery uses a separate Access-authorized transport with an argument-fr
 terminal prompt. The original browser retains its private verifier. An uncertain recovery request is
 resolved by having the original browser inspect its pairing state, since the server may already have
 recorded the decision.
+
+The Windows native acceptance assertion reads credential type and persistence metadata only.
+It does not dereference the credential blob.

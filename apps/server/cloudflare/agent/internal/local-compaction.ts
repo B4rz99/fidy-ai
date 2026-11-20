@@ -58,7 +58,7 @@ const reserve = Effect.fn(function* (turn: LocalTurn) {
     yield* sql`INSERT INTO hosted_compaction_budgets(user_id,day_ms,used) VALUES(${turn.user_id},${day},1) ON CONFLICT(user_id,day_ms) DO UPDATE SET used=used+1 WHERE used<3 RETURNING 1`;
   return granted.length === 1;
 });
-/** Only replace the same contiguous terminal prefix after the external structured call returns. */
+
 export const compact = Effect.fn(function* (turn: LocalTurn, inference: HostedInferenceService) {
   const snapshot = yield* Effect.gen(function* () {
     yield* liveTurn(turn, yield* Clock.currentTimeMillis);

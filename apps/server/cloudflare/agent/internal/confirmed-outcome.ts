@@ -12,12 +12,12 @@ const ConfirmationOutcome = Schema.Union([
   Schema.TaggedStruct("CommitUnrecorded", {}),
 ]);
 type ConfirmationOutcome = typeof ConfirmationOutcome.Type;
-/** Preserve a retained result, or report a proven commit without inventing its lost response. */
+
 export const confirmedOutcome = (retained: ConfirmationOutcome): CanonicalToolOutcome =>
   retained._tag === "Recorded" ? retained.outcome : { _tag: "CommittedOutputUnavailable" };
 
 type ConfirmationWork = Readonly<{ db: D1Database; userId: UserId; turnId: TranscriptTurnId }>;
-/** Recover this Turn's retained call identity only when its exact operation and input agree. */
+
 export const findConfirmedCall = ({
   db,
   userId,
@@ -44,7 +44,7 @@ export const findConfirmedCall = ({
         .tool_call_id
     );
   });
-/** A retained result or commit fence is decisive; neither permits repeating the mutation. */
+
 export const findConfirmedOutcome = ({
   db,
   userId,

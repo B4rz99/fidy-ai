@@ -16,7 +16,7 @@ const challenge = Schema.Struct({
   revision: Schema.String,
   command: Schema.String,
 });
-/** Only host-generated review descriptions can accompany an executable command. */
+
 export const stageChallenge = Effect.fn(function* (
   turn: LocalTurn,
   tool: HostedTextToolCall,

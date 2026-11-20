@@ -7,7 +7,6 @@ import { activeProUserCondition } from "../../../src/shell/access-tier/operation
 import { loadsSavedHistory } from "./history-allowance";
 import { type LocalTurn } from "./local-turn";
 
-/** Charge a User+Turn only on first release of saved rows, atomically with its tool evidence. */
 export const meterHistory = Effect.fn(function* (turn: LocalTurn, entry: CanonicalToolResultEntry) {
   if (!loadsSavedHistory(entry)) return entry.outcome;
   const sql = yield* SqliteClient,

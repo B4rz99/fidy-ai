@@ -48,7 +48,6 @@ export class CategoryProbe extends DurableObject<ConstructorParameters<typeof Us
                 counterparty: Option.some("Mercado Central"),
               },
             });
-            // Canonical capture/retry has its own ticket; persist the categorization result for a later owner read.
             yield* sql`INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,category_revision,occurred_at_ms,created_at_ms)
           VALUES (${input.id},${input.user},'100','COP','outflow',${choice.categoryId},${choice.revision},1,1)`;
             return choice;

@@ -33,7 +33,6 @@ import type {
 import { maximumActiveRequestTokens, maximumHostedProviderAttempts } from "./limits";
 import { projectHostedStructuredContextInternal, projectHostedTextContextInternal } from "./prompt";
 
-
 const copyInstant = (value: DateTime.Utc): DateTime.Utc =>
   DateTime.makeUnsafe(DateTime.toEpochMillis(value));
 const copyTimestampedEntry = <A extends Readonly<{ occurredAt: DateTime.Utc }>>(entry: A): A => ({
@@ -56,7 +55,6 @@ const isolateTextContext = (context: HostedTextContext): HostedTextContext =>
       return structuredClone(section);
     }),
   });
-
 
 const isolateStructuredContext = (context: HostedStructuredContext): HostedStructuredContext =>
   freezeDeep({

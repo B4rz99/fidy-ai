@@ -116,7 +116,7 @@ const decisionOwner = Effect.fn(function* (target: string, context: Context) {
       : yield* localHostedStatementOrigin(context.hostedTurn, target, context.user);
   return { ...context, origin, requiresOrigin: context.hostedTurn !== undefined };
 });
-/** A resolved review may introduce the first Transaction even when the batch has no Transaction-named child. */
+
 const wakeAfterCapture = (
   plan: LocalMutationPreparation,
   { current, storage }: Context
@@ -134,7 +134,7 @@ const wakeAfterCapture = (
         ),
       }
     : plan;
-/** Only local, transaction-composable commands. Catalog policy controls eligibility and disclosure. */
+
 const readOwner = <Id extends OperationId, E>(
   id: Id,
   read: (
@@ -406,7 +406,6 @@ export const localBatchOwners = new Map<string, Prepare>([
   ),
 ]);
 
-/** Reserve credential destinations outside the transaction. Each resulting command still checks the current subject and its exact grant at commit. */
 type GrantUnit = Pick<Parameters<typeof stageLocalPATGrant>[0], "request" | "directory" | "owns">;
 const reserveGrant = Effect.fn(function* (unit: GrantUnit, operation: string, input: Schema.Json) {
   const { payload } = yield* Schema.decodeUnknownEffect(Schema.Struct({ payload: Schema.Json }))(
@@ -448,7 +447,7 @@ const reviewCalls = Effect.fn(function* (admission: OAuthCanonicalAdmission) {
       )(admission.input)).payload.calls
     : [{ operation: admission.operation, input: admission.input }];
 });
-/** Every sensitive child supplies a fresh owner snapshot. Ordinary siblings still bind their exact position, operation and required scope. */
+
 export const localReviewBinding = Effect.fn(
   function* (admission: OAuthCanonicalAdmission, context: Context) {
     const catalog = getBoundOperationCatalog(),

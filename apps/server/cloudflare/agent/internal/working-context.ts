@@ -15,7 +15,6 @@ import type { ProactiveReplyContext } from "../contract";
 
 const makeInitialContext = Brand.nominal<HostedInitialTextContext>();
 
-/** Exact retained evidence bound to the session in which it was appended, not merely to a User. */
 export type SessionTranscriptEntry = Readonly<{
   sessionId: HostedAgentSessionId;
   userId: UserId;
@@ -23,11 +22,6 @@ export type SessionTranscriptEntry = Readonly<{
   entry: TranscriptEntry;
 }>;
 
-/**
- * Builds one immutable model context from already-decoded User-owned projections. The caller must
- * read current Memories and the exact retained entries under the User coordination boundary and
- * must supply the newly admitted request separately: it is not replayed as prior continuity.
- */
 export const assembleWorkingContext = ({
   sessionId,
   userId,

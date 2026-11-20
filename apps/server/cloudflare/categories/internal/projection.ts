@@ -11,7 +11,6 @@ import {
 import { CategoriesUnavailable } from "../contract";
 import type { QueryAuthority } from "../../canonical-work/operations";
 
-/** Read-only peer plan; the protected containing query owns coordination, Audit and disclosure. */
 export const prepareCategorySnapshot = ({
   db,
   authority,
@@ -23,7 +22,6 @@ export const prepareCategorySnapshot = ({
   decode: (rows) => Option.map(decodeCategoryRead(rows), (response) => response.data),
 });
 
-/** Load one required current projection; absence remains distinct from invalid or unreadable storage. */
 export const requiredCategory = ({
   categoryId,
 }: Readonly<{ db: D1Database; categoryId: CategoryId }>): Effect.Effect<
@@ -36,7 +34,6 @@ export const requiredCategory = ({
     return category;
   });
 
-/** Every retained Category is decoded; corrupt overflow cannot masquerade as a complete taxonomy. */
 export const categoryList = ({
   db,
 }: Readonly<{ db: D1Database }>): Effect.Effect<ReadonlyArray<Category>, CategoriesUnavailable> =>
@@ -51,7 +48,6 @@ export const categoryList = ({
     );
   });
 
-/** The named public relation contains at most the exact requested Category identity. */
 export const categoryReferenceStatement = ({
   db,
   categoryId,
@@ -70,7 +66,6 @@ ${statement.sql}`)
       ...statement.params
     );
 
-/** Check the owned storage schema without reading Category or User content. */
 export const verifyStorage = ({
   db,
 }: Readonly<{ db: D1Database }>): Effect.Effect<void, CategoriesUnavailable> =>

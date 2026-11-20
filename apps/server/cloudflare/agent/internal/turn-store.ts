@@ -136,7 +136,6 @@ type SessionRow = typeof SessionRow.Type;
 type TurnRow = typeof TurnRow.Type;
 type EntryRow = typeof EntryRow.Type;
 
-/** A live credential selects its own User; retained Consent standing distinguishes refusal. */
 export type HostedTurnSnapshot = Readonly<{
   user: UserContext;
   consentBasis: HostedAgentSessionConsentBasis;
@@ -146,7 +145,6 @@ export type HostedTurnSnapshot = Readonly<{
   pending: Option.Option<TurnRow>;
 }>;
 
-/** Recheck the supplied WebSession or verified WhatsApp association and read the User's hosted lifecycle; revoked Consent remains visible for refusal. */
 export const readHostedSnapshot = ({
   db,
   subject,
@@ -252,7 +250,6 @@ const prepareMissingCommittedOutput = ({
           WHERE r.turn_id = c.turn_id AND r.tool_call_id = c.tool_call_id AND r.kind = 'tool_result')`)
     .bind(timestamp, turnId, userId);
 
-/** Recovery works even after revocation: it never admits new work or sends User content. */
 export const recoverHostedTurn = ({
   db,
   userId,
@@ -347,7 +344,6 @@ export const selectHostedSession = ({
   return { id: HostedAgentSessionId.make(newId()), create: true, basis: decision.consentBasis };
 };
 
-/** Read retained continuity; an admitted WhatsApp Turn keeps its admission-time Consent basis through revocation, while new work requires current Consent. */
 export const readHostedContinuity = ({
   db,
   subject,
@@ -443,7 +439,6 @@ export const readHostedContinuity = ({
 
 export type HostedContinuity = Effect.Success<ReturnType<typeof readHostedContinuity>>;
 
-/** Append one decoded tool entry only while its User's Turn remains Pending. */
 type HostedToolEntry = CanonicalToolCallEntry | CanonicalToolResultEntry;
 type ToolPublication = Readonly<{
   db: D1Database;
@@ -516,7 +511,6 @@ const writeToolEntry = (
     return changed === 1 ? Option.some(entry) : Option.none();
   });
 
-/** Publish successful new history and its one User+Turn unit atomically, before exposing any rows to inference. */
 export const appendHostedToolEntry = (
   input: ToolPublication
 ): Effect.Effect<
@@ -564,7 +558,6 @@ export const appendHostedToolEntry = (
     return yield* writeToolEntry({ ...input, entry: rejected }, []);
   });
 
-/** Charge one User-scoped pre-admission model attempt, including abandoned work. */
 export const reserveHostedCompaction = ({
   db,
   subject,
@@ -592,7 +585,6 @@ export const reserveHostedCompaction = ({
     return reserved.meta.changes === 1;
   });
 
-/** Replace continuity only if the exact selected terminal prefix and prior revision still exist. */
 export const commitHostedCompaction = ({
   db,
   subject,
@@ -692,7 +684,6 @@ export const commitHostedCompaction = ({
       ])
     ).pipe(
       Effect.as(true),
-      // Compaction is optional: any refused or failed atomic save retains the original prefix.
       Effect.orElseSucceed(() => false),
       Effect.uninterruptible
     );
@@ -833,7 +824,6 @@ const statementSessionActivity = ({
     },
   });
 
-/** Append the exact User entry and Pending Turn atomically after the complete model preflight. */
 export const admitHostedTurn = ({
   db,
   channel,
@@ -949,7 +939,6 @@ const receiptHash = (
     Effect.map((value) => new Uint8Array(value))
   );
 
-/** Reserve one exact provider answer; this is not yet Transcript evidence. */
 export const stageHostedDelivery = ({
   db,
   userId,
@@ -980,7 +969,6 @@ export const stageHostedDelivery = ({
     return receipt;
   });
 
-/** Reissue only the receipt for a pending answer; never replay a bearer credential from storage. */
 export const refreshHostedDelivery = ({
   db,
   subject,
@@ -1035,7 +1023,7 @@ const ProposalRow = Schema.Struct({
   started_at_ms: RetainedMillis,
   proposed_at_ms: RetainedMillis,
 });
-/** Acknowledgment promotes only an exact staged provider reply with a fresh User-owned WebSession. */
+
 export const acknowledgeHostedDelivery = ({
   db,
   subject,
@@ -1094,7 +1082,6 @@ export const acknowledgeHostedDelivery = ({
     return saved ? Option.some(proposal.text) : Option.none();
   });
 
-/** Retain exact Transcript content for at most thirty days after its terminal Turn. */
 export { hostedTranscriptRetentionMs } from "../contract";
 
 const sweepHostedTranscript = (
@@ -1199,7 +1186,6 @@ const readHostedRetentionDeadline = (
     return deadline.due_ms;
   });
 
-/** DO alarm sweep: recover abandoned work and delete expired terminal content for this User. */
 export const expireHostedPending = ({
   db,
   userId,
@@ -1240,7 +1226,6 @@ export const expireHostedPending = ({
     return Option.some(Option.getOrElse(nextRetention, () => now + hostedTranscriptRetentionMs));
   });
 
-/** Terminal outcome whose evidence must be stored in the same D1 batch. */
 export type HostedTurnOutcome =
   | Readonly<{ _tag: "Completed"; text: TranscriptText }>
   | Readonly<{ _tag: "Failed"; reason: TurnFailureReason }>
@@ -1326,7 +1311,6 @@ const hostedFinishStatements = ({
   ];
 };
 
-/** One terminal transition, with exact visible text or fixed metadata-only marker in the same batch. */
 export const finishHostedTurn = (
   input: HostedFinishInput
 ): Effect.Effect<boolean, Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable> =>

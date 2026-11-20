@@ -35,7 +35,6 @@ const transportFailure = (
   });
 };
 
-/** Fixed OpenAI transport; its Response contains only bytes already bounded by Outbound HTTP. */
 export const makeOpenAiRun =
   (apiKey: Redacted.Redacted<string>): OpenAiRun =>
   (model, request) =>
@@ -87,7 +86,6 @@ const constructInference = (
   });
 };
 
-/** Build the same bounded production adapter with an owning User's short, per-attempt egress claim. */
 export const makeLocalHostedInference = ({
   environment,
   admit,
@@ -131,12 +129,10 @@ export const makeLocalHostedInference = ({
   });
 };
 
-/** Unmetered inference exists only for private provider verification fixtures. */
 export const makeCloudflareHostedInference = (
   environment: OpenAiEnvironment
 ): Effect.Effect<HostedInferenceService, HostedInferenceError> => constructInference(environment);
 
-/** Production inference rechecks User-owned Consent and spend authority at every provider egress. */
 export const makeUserCloudflareHostedInference = ({
   environment,
   db,
@@ -165,7 +161,6 @@ export const cloudflareHostedInferenceLive = ({
     makeUserCloudflareHostedInference({ environment, db, userId, admittedTurnId })
   );
 
-/** Absent inference does not prevent unrelated canonical owners from being available. */
 export const optionalHostedInference = (
   input: Parameters<typeof cloudflareHostedInferenceLive>[0]
 ): Effect.Effect<Option.Option<HostedInferenceService>, never, Scope.Scope> =>

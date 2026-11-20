@@ -97,3 +97,22 @@ D1 assertions use separately owned fixed slots. The read-only-on-success variant
 `changes()` to zero, and the acknowledged-write variant sets it to one. Choose according to
 the next statement's guard. Both abort through the same refusal constraints when the assertion
 fails. A slot identifies a caller's assertion and carries no User data or authority.
+
+Native admission prepares against the original User snapshot. A later child sees removal by an
+earlier child and cannot rely on a premise the earlier child changed. Preparation cannot make
+domain changes. The D1 adapter's indexed CHECK can prove a particular failing child after
+rollback. Preserve that evidence and the owner's refusal mapping instead of treating a
+dependency error as a proved child refusal.
+
+Inspect the bounded envelope before attributing a child. A duplicate call id and excess named
+statement children are envelope conflicts, including when a child also has malformed arguments.
+Owner-specific identities let singleton edits reject collisions without hard-coding each owner
+in the batch adapter. Decodable named failures use the same owner vocabulary as individual
+calls, including absent retained ids and decisions that owe no refusal Audit.
+
+D1 attribution requires a known indexed assertion and the actual extended CHECK result.
+Trigger-supplied text cannot prove attribution. Verify each child's completion and Audit
+before committing the whole unit. Hold coordination until a started D1 unit settles even when
+the caller is interrupted. An ordinary abort is distinct from a proved rejection and can only
+be retried through the explicitly proved same-material publication-race path. Reprepare once
+and keep each attempt's response projection separate.

@@ -108,7 +108,6 @@ const sessionRoute = Effect.fn(function* (
   );
 });
 
-/** Register this exact credential before committing its issue with consumption of the independent browser proof. */
 export const redeemLocalPairing = Effect.fn(function* (
   request: Request,
   directory: Pick<DurableObjectNamespace, "getByName">,
@@ -141,7 +140,6 @@ export const redeemLocalPairing = Effect.fn(function* (
   });
   const sql = yield* SqliteClient;
   const discard = Effect.gen(function* () {
-    // The transaction may have committed even if its acknowledgement was lost.
     const cancelled =
       yield* sql`UPDATE browser_handoffs SET claim_id=NULL,claim_at_ms=NULL WHERE id=${prepare.attempt} AND user_id=${prepare.user} AND pairing_id=${pairingId} AND claim_id=${sessionId} AND state<>'consumed' AND NOT EXISTS(SELECT 1 FROM web_sessions WHERE id=${sessionId}) RETURNING id`.pipe(
         withStoreCapacity("required")

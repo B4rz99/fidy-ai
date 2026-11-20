@@ -81,3 +81,8 @@ after Processing Consent withdrawal. They do not establish current Consent. Firs
 receipt lookup resolves the same live credential and observed state in one snapshot. Historical
 ownership remains available for accountability. Pairing pruning keeps references from retained
 sessions even after expiry or revocation.
+
+Browser proof consumption is single-use and atomic with the exact session issuance. Native
+registration precedes the local commit. A lost acknowledgment can follow a successful commit
+and cannot establish that another issuance is safe. Approval ordering uses the owner's strict
+row order. Retired pairing references remain available for erasure alone.

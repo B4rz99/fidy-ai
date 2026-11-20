@@ -16,7 +16,6 @@ const containsTransactions = (node: DashboardView["layout"]): boolean => {
   );
 };
 
-/** Only newly loaded saved Transaction rows count. Creation, aggregates, empty/failed reads, and prior conversation do not. */
 export const loadsSavedHistory = (entry: CanonicalToolResultEntry): boolean => {
   if (entry.outcome._tag !== "Succeeded") return false;
   switch (entry.operation) {

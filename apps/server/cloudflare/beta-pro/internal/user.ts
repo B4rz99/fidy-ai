@@ -41,7 +41,7 @@ const record = Effect.fn(function* (
   }
   return Response.json({ userId: command.userId, action: command.action });
 });
-/** Recheck the exact mailbox generation, User fence, storage and receipt under the same SQLite transaction. */
+
 export const applyBetaUserCommand = Effect.fn(
   function* (request: Request, owns: (id: string) => boolean) {
     const { command, authority } = yield* Schema.decodeUnknownEffect(BetaUserCommand)(

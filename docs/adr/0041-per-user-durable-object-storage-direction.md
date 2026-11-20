@@ -481,3 +481,21 @@ establish that migration code exists, measurements pass or deployment has occurr
 unreleased and needs no unnecessary backward compatibility. Architecture documents and runtime
 runbooks continue to describe the current implementation until it changes; the implementation
 effort must publish executable procedures beside the actual commands.
+
+Retained canonical receipts use a positive allowlist so new one-time disclosures cannot become
+replayable by default. Chunk large ordinary or correlated receipts before writing SQLite text,
+without splitting Unicode scalars. Finishing does not extend the original retry window. If an
+acknowledgment is lost, reconcile only the exact server-owned receipt or lease and never replay
+owner work on that evidence.
+
+Browser admission uses the same User pressure envelope across credentials and AccessTier.
+Unmetered browser work may share one committed authorized snapshot, or acquire a lease for a
+phased read with dependent work. In the phased case the final snapshot rechecks live authority,
+commits the owner's Audit and releases the exact lease. Request timing exposes bounded elapsed
+phases and no User or queried facts. Failed phases do not become zero-valued successful samples.
+
+Only Memory capacity work requires the explicitly constructed counting service. Missing inference
+cannot deny other local canonical commands. Categories persists stable taxonomy keys for references
+and reads labels and order from the release. Owner writes recheck a referenced Category and their
+live User predicate together. Keyword instructions affect future captures without rewriting
+retained Transactions. Capture interprets them in the same protected snapshot as retention.

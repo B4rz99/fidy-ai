@@ -12,7 +12,6 @@ import {
 import { budgetParameters } from "./budget-queries";
 import { prepareBudgetWorkspace } from "./workspace-read";
 
-/** Resolve live caller, planned caps and exact spending inside admission's atomic browser read. */
 export const prepareBoundBudgetWorkspace = (request: Request): CanonicalBrowserRead => {
   const parsed = budgetParameters({
     operation: "budgets.getBudgetStatus",

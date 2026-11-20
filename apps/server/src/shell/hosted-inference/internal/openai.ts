@@ -145,7 +145,6 @@ if (operationByWireName.size !== openAiOperationBindings.length) {
 
 const byteLength = (text: string): number => new TextEncoder().encode(text).length;
 
-
 const tokenUpperBound = (value: string): number => byteLength(value);
 
 const promptParts = (
@@ -434,7 +433,6 @@ const providerRefusal = (response: Response): Effect.Effect<never, HostedInferen
     Effect.flatMap(Effect.fail)
   );
 };
-
 
 const invoke = ({
   model,

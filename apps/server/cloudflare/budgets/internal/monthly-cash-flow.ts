@@ -6,7 +6,6 @@ import type {
 } from "../../../src/core/budgets/contract";
 import type { EffectiveTransactionAggregate } from "../../../src/core/transactions/contract";
 
-/** Request-local exact totals; no cross-Currency addition or repeated scans of the snapshot. */
 export const monthlySpending = ({
   aggregates,
   query,

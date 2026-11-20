@@ -188,10 +188,8 @@ const inferenceRefused = (error: Option.Option<unknown>): Response => {
     : unavailable();
 };
 
-/** Construct a proposed reply. Only a separate browser-visible receipt permits completion. */
 export type HostedDelivery = (proposal: typeof HostedTurnProposal.Type) => Promise<Response>;
 
-/** Return an inert reply for the authenticated browser to render before acknowledging it. */
 export const browserHostedDelivery: HostedDelivery = (proposal) =>
   Promise.resolve(Response.json(proposal, { status: 202, headers: noStore }));
 
@@ -262,7 +260,6 @@ export const completeHostedTurnWithAdmission = ({
 }>): Effect.Effect<Response, HostedWorkFailure> =>
   executeHostedTurn({ ...input, document: Option.none(), onAdmitted: Option.some(onAdmitted) });
 
-/** Verified inbound text shares the hosted lifecycle but never borrows a browser credential. */
 export const completeWhatsAppTurnWithAdmission = ({
   input,
   onAdmitted,
@@ -281,7 +278,6 @@ export const completeWhatsAppTurnWithAdmission = ({
     onAdmitted: Option.some(onAdmitted),
   });
 
-/** Direct authenticated documents use this same Turn, delivery and installed canonical owner. */
 export const completeWhatsAppDocumentTurnWithAdmission = ({
   input,
   onAdmitted,
@@ -295,7 +291,6 @@ export const completeWhatsAppDocumentTurnWithAdmission = ({
     onAdmitted: Option.some(onAdmitted),
   });
 
-/** Continue only an admitted, still-pending User Turn; Queue contains no User content. */
 const statementReadinessRetryMs = 30_000;
 const waitForStatementReadiness = (
   scheduleRecovery: (at: number) => Promise<void>
@@ -490,11 +485,6 @@ export const resumeWhatsAppTurn = ({
     });
   });
 
-/**
- * Own one hosted Turn under the per-User Durable Object's serialized request. D1 owns
- * admission and exact evidence; the adapter owns bounded provider rounds and delivery. A lost
- * request after Pending is recovered by the next Turn, never silently reported Completed.
- */
 const admissionChannel = (input: AdmittedTurnInput): HostedAdmissionChannel => {
   if (!("inbound" in input)) return { _tag: "Browser", subject: input.subject };
   if (Option.isSome(input.document)) {
@@ -507,8 +497,7 @@ const admissionChannel = (input: AdmittedTurnInput): HostedAdmissionChannel => {
   }
   return { _tag: "WhatsApp", subject: input.subject, inbound: input.inbound };
 };
-/** Once admission commits, a failed wake is abandoned work, never a preflight refusal.
- * Fence it through the same channel recovery before releasing its execution owner. */
+
 const scheduleAdmittedTurn = ({
   db,
   subject,
@@ -540,7 +529,6 @@ const scheduleAdmittedTurn = ({
         })
       ),
       Effect.retry(Schedule.spaced(Duration.seconds(1))),
-      // A defect is not a recovery fence. The service's bounded recovery remains the queue owner.
       Effect.catchDefect(() => Effect.never)
     );
     return false;
@@ -757,7 +745,6 @@ type HostedSessionPreparation = Readonly<{
   ) => ReturnType<typeof admitHostedTurn>;
 }>;
 
-/** Request-local admission preparation stays inside the same-User serialized execution. */
 const prepareHostedSession = ({
   db,
   channel,
@@ -838,7 +825,6 @@ type WorkPreflight = Readonly<{
   contextualReplyQuery: Option.Option<OwnedStatement>;
 }>;
 
-/** Check the complete semantic request before any Pending or User evidence can be written. */
 const prepareHostedWork = ({
   db,
   subject,
@@ -908,7 +894,6 @@ const prepareHostedWork = ({
 
 type HostedContinuity = Effect.Success<ReturnType<typeof readHostedContinuity>>;
 
-/** Best-effort replacement: failure cannot delete evidence or invalidate existing continuity. */
 const compactHostedContinuity = ({
   db,
   subject,
@@ -1390,7 +1375,7 @@ type HostedToolEvent = Extract<
   Parameters<HostedTextResult["continuation"]["prepare"]>[0][number],
   { readonly _tag: "ToolResult" }
 >;
-/** Decode the owner's response into bounded evidence without elevating it to caller authority. */
+
 const hostedResponseOutcome = (
   response: Response
 ): Effect.Effect<CanonicalToolOutcome, HostedWorkFailure> =>
@@ -1412,7 +1397,6 @@ type ToolIdentity = Readonly<{
   operation: (typeof operationCatalog.operations)[number]["id"];
 }>;
 
-/** Persist one canonical call under the Pending Turn before executing its owner. */
 const recordHostedToolCall = ({
   db,
   userId,
@@ -1436,7 +1420,6 @@ const recordHostedToolCall = ({
     return Option.isSome(yield* appendHostedToolEntry({ db, userId, subject, entry }));
   });
 
-/** Retain the terminal outcome linked to the exact call, before handing it back to inference. */
 const recordHostedToolOutcome = ({
   db,
   userId,
@@ -1471,7 +1454,6 @@ const recordHostedToolOutcome = ({
 
 const serverErrorStatusMinimum = 500;
 
-/** A missing response is not a failed mutation: the atomic fence is authoritative for a commit. */
 const fencedMutationOutcome = ({
   db,
   userId,
@@ -1522,7 +1504,6 @@ const executeConfirmedMutation = ({
     return yield* fencedMutationOutcome({ db, userId, identity, response });
   });
 
-/** Dispatch only installed catalog operations, retaining exact call and outcome for this Pending Turn. */
 const executeHostedTool = ({
   db,
   subject,
@@ -1725,7 +1706,6 @@ const executeHostedTool = ({
   }).pipe(Effect.provideService(SecureRandom.SecureRandom, makeSecureRandom()));
 };
 
-/** Redeem one User-authored exact command without giving the model authority to confirm it. */
 const confirmedStatementReply = ({
   db,
   subject,
@@ -2022,7 +2002,6 @@ const proposeChannelDelivery = ({
         return unavailable();
       });
 
-/** The pause notice is fixed product copy, never a model-generated claim or proactive new Session. */
 const proposeDelivery = (
   input: Parameters<typeof proposeChannelDelivery>[0]
 ): Effect.Effect<Response, HostedWorkFailure> =>
@@ -2045,7 +2024,6 @@ const proposeDelivery = (
     return yield* proposeChannelDelivery({ ...input, answer });
   });
 
-/** Complete only after the authenticated browser has rendered and acknowledged the staged reply. */
 export const acknowledgeBrowserTurn = ({
   db,
   subject,
@@ -2064,7 +2042,6 @@ export const acknowledgeBrowserTurn = ({
       : unauthenticated();
   });
 
-/** Read the outcome of one pending Turn under the same live WebSession authority. */
 export const readHostedProgress = ({
   db,
   subject,
@@ -2118,5 +2095,5 @@ export const readHostedProgress = ({
       })
     );
   });
-/** No model or D1 work is bought for invalid input. */
+
 export const invalidHostedTurn = invalid;

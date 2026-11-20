@@ -65,9 +65,6 @@ type StatementCallerInput = Readonly<{
   approval: Approval;
 }>;
 
-/** Mint statement authority only for this verified channel identity's admitted Pending Turn.
- * The live guard remains in every owner write; the readback is routing, never its authorization.
- */
 export const mintHostedStatementCaller = ({
   db,
   subject,

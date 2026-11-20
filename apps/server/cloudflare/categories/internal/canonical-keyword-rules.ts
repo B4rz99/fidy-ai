@@ -72,7 +72,6 @@ type Subject = TransactionCaller;
 const jsonResponse = (body: string, status: number): Response =>
   new Response(body, { headers: keywordRuleJsonHeaders, status });
 
-/** The declared validation failure for a body this route cannot decode. Nothing is audited. */
 export const keywordRuleInvalidInput = (): Response =>
   jsonResponse(
     JSON.stringify(
@@ -90,7 +89,6 @@ export const keywordRuleInvalidInput = (): Response =>
     HTTP_BAD_REQUEST
   );
 
-/** A rule id that cannot be a stable rule identity never resolves to one of the caller's rules. */
 export const keywordRuleUnknownId = (): Response =>
   jsonResponse(
     JSON.stringify(
@@ -107,11 +105,6 @@ export const keywordRuleUnknownId = (): Response =>
     HTTP_NOT_FOUND
   );
 
-/**
- * Decode one bounded keyword-rule payload: `update` selects the update shape rather than the
- * create shape, and None means the request carried no decodable JSON body. The result is an
- * attempted input, never authority — nothing here authenticates or audits the request.
- */
 export const keywordRuleInput = ({
   request,
   update,
@@ -132,11 +125,9 @@ export const keywordRuleInput = ({
     .catch(() => Option.none());
 };
 
-/** The stable rule identity one retained-rule path addresses, or None for a malformed path. */
 export const keywordRuleIdFromPath = (request: Request): Option.Option<KeywordRuleId> =>
   pathId({ schema: KeywordRuleId, request });
 
-/** One keyword-rule dependency failure the owner's prepare seams classify as unavailable. */
 class KeywordRuleBoundaryFailure extends Data.TaggedError("KeywordRuleBoundaryFailure")<{}> {}
 
 const oauthWriteAudit = (
@@ -158,7 +149,6 @@ const oauthWriteAudit = (
   return input.db.prepare(auditStatement.sql).bind(...auditStatement.params);
 };
 
-/** The guarded rule change and its live-authority validation Audit, in the unit's own order. */
 const writeStatements = ({
   db,
   subject,
@@ -223,7 +213,6 @@ type RuleWrite = Readonly<{
   current: number;
 }>;
 
-/** The guarded rule change and its live-authority audit as one prepared canonical mutation. */
 const preparedRuleWrite = (
   write: RuleWrite,
   oauthReview: Option.Option<OAuthMutationReview>
@@ -259,11 +248,6 @@ const preparedRuleWrite = (
   },
 });
 
-/**
- * Decide one keyword-rule change against live caller authority, a stable Category that still
- * exists, and the caller's own retained rules. The returned statements are guard-chained writes;
- * the caller's D1 unit commits them or none of them.
- */
 const prepareRuleWrite = (
   write: RuleWrite
 ): Effect.Effect<CanonicalMutationPreparation, KeywordRuleBoundaryFailure> =>
@@ -313,7 +297,6 @@ const prepareRuleWrite = (
     });
   });
 
-/** Create one keyword rule for future capture only; existing Transactions stay untouched. */
 export const prepareCreateKeywordRule = ({
   db,
   subject,
@@ -352,7 +335,6 @@ export const prepareCreateKeywordRule = ({
   }).pipe(Effect.orElseSucceed(failedPreparation));
 };
 
-/** Replace one owned keyword rule for future capture only; existing Transactions stay untouched. */
 export const prepareUpdateKeywordRule = ({
   db,
   subject,
@@ -392,7 +374,6 @@ export const prepareUpdateKeywordRule = ({
   }).pipe(Effect.orElseSucceed(failedPreparation));
 };
 
-/** Stop applying one owned keyword rule to future capture; existing Transactions stay untouched. */
 export const prepareDeleteKeywordRule = ({
   db,
   subject,
@@ -420,7 +401,6 @@ export const prepareDeleteKeywordRule = ({
   }).pipe(Effect.orElseSucceed(failedPreparation));
 };
 
-/** The protected list read, its live-authority audit, and the caller's own rules. */
 const listStatements = ({
   db,
   subject,
@@ -484,10 +464,6 @@ const listAudit = (
   });
 };
 
-/**
- * Classify a keyword-rule credential refusal through the shared PAT/session branch, defecting to
- * this owner's unavailable answer.
- */
 const refusedWork = ({
   db,
   subject,
@@ -496,7 +472,6 @@ const refusedWork = ({
     Effect.orElseSucceed(keywordRuleUnavailable)
   );
 
-/** List only the caller's own rules under a live WebSession or PAT. */
 export const listOwnKeywordRules = ({
   db,
   subject,

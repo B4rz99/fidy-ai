@@ -325,8 +325,6 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(
           yield* native(() => db.exec("SELECT accepted_at_ms FROM canonical_request_receipts"))
         ).toEqual(before);
-        // The reset bucket records this request's exact admission instant plus one policy interval.
-        // Place the receipt against that same instant to exercise both sides without a wall-clock race.
         const originalWindowMs = 86_400_000;
         yield* native(() => db.exec("UPDATE canonical_request_buckets SET virtual_at_ms=0"));
         yield* native(() =>

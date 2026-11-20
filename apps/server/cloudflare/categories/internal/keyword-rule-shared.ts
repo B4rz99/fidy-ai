@@ -11,7 +11,6 @@ export const keywordRuleJsonHeaders = {
   "content-type": "application/json; charset=utf-8",
 } as const;
 
-/** The caller's own retained rules, or None when the bounded projection cannot be decoded. */
 export const findOwnedKeywordRules = ({
   db,
   userId,
@@ -26,7 +25,6 @@ export const findOwnedKeywordRules = ({
     .then((result) => keywordRulesFromRows(result.results));
 };
 
-/** True while the named stable Category still exists, or None when its read cannot decide. */
 export const findExistingCategory = ({
   db,
   categoryId,

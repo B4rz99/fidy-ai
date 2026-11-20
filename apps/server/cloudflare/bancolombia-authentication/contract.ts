@@ -21,7 +21,6 @@ export class BancolombiaAuthorizationFailed extends Data.TaggedError(
   "BancolombiaAuthorizationFailed"
 ) {}
 
-/** Private Core-only application authentication; transport and signing keys have separate custody. */
 export type BancolombiaSandboxEnvironment = Partial<
   Readonly<{
     BANCOLOMBIA_SANDBOX_CLIENT_ID: string;

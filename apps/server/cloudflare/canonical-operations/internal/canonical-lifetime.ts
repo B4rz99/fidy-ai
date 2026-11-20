@@ -52,7 +52,6 @@ const fencedSession = (
     ),
 });
 
-/** D1 cannot abort an atomic unit. Fence new units and retain the coordination turn until started units settle. */
 const boundedDatabase = (
   database: D1Database,
   lifetime: Lifetime,
@@ -104,7 +103,6 @@ const aborted = (signal: AbortSignal): Effect.Effect<never, CanonicalLifetimeExp
     return Effect.sync(() => signal.removeEventListener("abort", abort));
   });
 
-/** Bound orchestration, including detached Promise owners, without abandoning an in-flight accounting unit. */
 export const withCanonicalLifetime = (
   input: Lifetime &
     Readonly<{ db: D1Database; execute: (db: D1Database) => Effect.Effect<Response> }>

@@ -2,7 +2,6 @@ import { Duration, Effect, Option, Schema } from "effect";
 
 export type CanonicalRequestTimings = Record<"admission" | "owner" | "standing", number>;
 
-/** Completed phases accumulate request-local elapsed time. Failed work remains in total/other; authority, queried content and identifiers never enter headers. */
 export const measureCanonicalPhase = <A, E, R>({
   work,
   phase,
@@ -22,7 +21,6 @@ export const measureCanonicalPhase = <A, E, R>({
         })
       );
 
-/** Preserve streaming and all existing headers while exposing fixed, numeric diagnostic phases. */
 export const appendCanonicalTimings = ({
   response,
   duration,
@@ -70,13 +68,11 @@ const decodeStatementTimings = Schema.decodeUnknownOption(
   ).check(Schema.isMinLength(1))
 );
 
-/** Native statement execution, excluding transport; unavailable metadata is not a zero sample. */
 export const reportedSqlDuration = (metadata: ReadonlyArray<unknown>): Option.Option<number> =>
   Option.map(decodeStatementTimings(metadata), (rows) =>
     rows.reduce((total, row) => total + row.timings.sql_duration_ms, 0)
   );
 
-/** Snapshot protection only; outer ingress is excluded. SQL covers returned statements, not assertions privately owned by a storage wrapper. */
 export const appendSnapshotTimings = ({
   response,
   duration,

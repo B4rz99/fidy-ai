@@ -1,11 +1,11 @@
 import {
+  type PerformanceMember,
   acceptanceProofHeader,
   performanceAccountingMember,
-  type PerformanceMember,
 } from "../../../apps/server/cloudflare/release-isolation/contract";
 import { signAcceptanceRequest } from "../../../apps/server/cloudflare/release-isolation/operations";
 import { Database } from "bun:sqlite";
-import { Config, Context, DateTime, Effect, Layer, Option, Redacted, Schema } from "effect";
+import { Clock, Config, Context, DateTime, Effect, Layer, Option, Redacted, Schema } from "effect";
 import type { Miniflare } from "miniflare";
 import { installedOrigins } from "../../../apps/server/src/shell/browser-transport/contract";
 import { FetchHttpClient, HttpClient } from "effect/http";
@@ -90,6 +90,7 @@ const tick = Effect.fnUntraced(function* (runtime: Miniflare) {
     "ok"
   );
 });
+const witnessProofLifetimeMs = 30_000;
 const requestSchema = Schema.Struct({
   url: Schema.String,
   headers: Schema.Record(Schema.String, Schema.String),
@@ -117,7 +118,7 @@ const dispatch = Effect.fnUntraced(function* (
     const proof = yield* signAcceptanceRequest({
       request,
       boundary: "ingress",
-      deadline: Date.now() + 30_000,
+      deadline: (yield* Clock.currentTimeMillis) + witnessProofLifetimeMs,
       environment: {
         RELEASE_GIT_SHA: witnessAuth.revision,
         SMOKE_PROOF: witnessAuth.secret,
@@ -174,7 +175,6 @@ const run = Effect.gen(function* () {
         const action = item.action;
 
         if (action === "provider-request") return yield* dispatch(runtime, item.body);
-        if (action === "accounting-witness") return yield* dispatch(runtime, item.body, auth);
         if (["seed-survivors", "mount-original-sessions"].includes(action)) {
           const users = yield* establishSmokeUsers({
             revision: auth.revision,
@@ -194,10 +194,12 @@ const run = Effect.gen(function* () {
       return serveCohort(
         auth,
         () => send,
-        (item) =>
-          ["controls", "streamed-controls"].includes(item.action)
+        (item) => {
+          if (item.action === "accounting-witness") return dispatch(runtime, item.body, auth);
+          return ["controls", "streamed-controls"].includes(item.action)
             ? financialControls(runtime, auth, item.action === "streamed-controls")
-            : local(item)
+            : local(item);
+        }
       );
     },
     (runtime) => native(() => runtime.dispose())

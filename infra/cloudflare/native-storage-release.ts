@@ -205,7 +205,7 @@ const verifyRetainedProvider = Effect.fn(function* (
 
 const requireCapturedSupport = Effect.fn(function* (
   port: ReleasePort,
-  smoke = fixtureUpload.support.Smoke
+  smoke: Readonly<{ deploymentId: string; versionId: string }> = fixtureUpload.support.Smoke
 ) {
   for (const role of ["Smoke", "Web", "ForwardedEmail"] as const) {
     const name =

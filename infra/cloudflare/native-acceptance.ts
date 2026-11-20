@@ -1,3 +1,4 @@
+import type { FleetOrdinal } from "./native-ten-fleet";
 import type { FleetPilotBrowser } from "./native-fleet-pilot";
 import {
   PendingBrowserLoginPairing,
@@ -134,7 +135,13 @@ const verifyOriginalDisclosure = Effect.fn(function* (
     return yield* Effect.fail(Error("Missing original provider signup disclosure"));
   }
 });
-type Member = "smoke-1" | "smoke-2" | "erasure-1" | "fleet-1" | "performance-1" | "performance-2";
+type Member =
+  | "smoke-1"
+  | "smoke-2"
+  | "erasure-1"
+  | "performance-1"
+  | "performance-2"
+  | `fleet-${FleetOrdinal}`;
 const verifyProvider = Effect.fn(function* (
   input: Inputs,
   member: Member,
@@ -414,13 +421,18 @@ const identity = Effect.fn(function* (call: Driver["call"], user: User) {
   return current.data.id;
 });
 
+type FleetSubject = `fleet-${FleetOrdinal}`;
 export const fleetBrowser = (
-  input: Inputs
+  input: Inputs & { subject: FleetSubject }
 ): FleetPilotBrowser & {
+  read: () => Effect.Effect<void, Error>;
   refused: (record: ErasureProgress) => Effect.Effect<void, Error>;
+  beginRefusal: (record: ErasureProgress) => Effect.Effect<Effect.Effect<void, Error>, Error>;
 } => {
+  let browser: Option.Option<User> = Option.none();
   const session = Effect.fn(function* (intent: "signup" | "login") {
-    const member = yield* boot(input, "fleet-1", intent);
+    const member = yield* boot(input, input.subject, intent);
+    browser = Option.some(member);
     return {
       id: yield* identity(runner(input).call, member),
       outcome: member.outcome,
@@ -431,11 +443,22 @@ export const fleetBrowser = (
           .pipe(Effect.flatMap((reply) => consume(reply, unauthorized))),
     };
   });
+  const beginRefusal = (
+    record: ErasureProgress
+  ): Effect.Effect<Effect.Effect<void, Error>, Error> =>
+    refusedPairing(input, input.subject, record).pipe(
+      Effect.map((pending) => pending.finish.pipe(Effect.asVoid))
+    );
   return {
     renew: () => renewWork(input),
     register: () => session("signup"),
     login: () => session("login"),
-    refused: (record) => ungrantedPairing(input, "fleet-1", record).pipe(Effect.asVoid),
+    read: Effect.fn(function* () {
+      const user = yield* Effect.fromOption(browser, () => Error("No signed fleet session"));
+      yield* consume(yield* runner(input).call("/transactions", { headers: user.headers }), ok);
+    }),
+    beginRefusal,
+    refused: (record) => beginRefusal(record).pipe(Effect.flatten),
   };
 };
 const erasureEvidence = Effect.fn(function* (
@@ -468,9 +491,9 @@ const completionOutcome = Effect.fn(function* (completion: Response) {
   );
   return outcome;
 });
-const ungrantedPairing = Effect.fn(function* (
+const refusedPairing = Effect.fn(function* (
   input: Inputs,
-  member: "erasure-1" | "fleet-1" | "performance-1",
+  member: "erasure-1" | "performance-1" | FleetSubject,
   record: ErasureProgress
 ) {
   const privateLogin = {
@@ -505,18 +528,23 @@ const ungrantedPairing = Effect.fn(function* (
     return yield* Effect.fail(Error("Erased subject pairing expiry differs"));
   }
   yield* record("pairing-pending");
-  yield* Effect.sleep(remaining + skewMs);
-  const terminal = yield* validStatus(yield* redeem(), invalid);
-  if (
-    !isDeepStrictEqual(
-      yield* Effect.tryPromise(() => terminal.json()),
-      browserLoginPairingInvalidBody
-    )
-  ) {
-    return yield* Effect.fail(Error("Missing terminal pairing refusal"));
-  }
-  yield* record("pairing-expired");
-  return outcome;
+  return {
+    finish: Effect.gen(function* () {
+      const delay = DateTime.toEpochMillis(expiresAt) + skewMs - (yield* Clock.currentTimeMillis);
+      yield* Effect.sleep(Math.max(0, delay));
+      const terminal = yield* validStatus(yield* redeem(), invalid);
+      if (
+        !isDeepStrictEqual(
+          yield* Effect.tryPromise(() => terminal.json()),
+          browserLoginPairingInvalidBody
+        )
+      ) {
+        return yield* Effect.fail(Error("Missing terminal pairing refusal"));
+      }
+      yield* record("pairing-expired");
+      return outcome;
+    }),
+  };
 });
 /** Fixed-subject actions for the protected Transaction comparison. Only register can create a User. */
 type CohortBrowser = {
@@ -565,7 +593,10 @@ export const performanceCohortBrowser = (
       call("/transactions", { headers }).pipe(
         Effect.flatMap((reply) => consume(reply, unauthorized))
       ),
-    refused: () => ungrantedPairing(closed, "performance-1", () => Effect.void),
+    refused: () =>
+      refusedPairing(closed, "performance-1", () => Effect.void).pipe(
+        Effect.flatMap((pending) => pending.finish)
+      ),
     renew: () => renewWork(closed),
     call,
   };
@@ -586,7 +617,10 @@ export const admittedErasureLogins = (
           return yield* identity(call, user);
         })
       ),
-    refused: (record) => ungrantedPairing(transport, "erasure-1", record),
+    refused: (record) =>
+      refusedPairing(transport, "erasure-1", record).pipe(
+        Effect.flatMap((pending) => pending.finish)
+      ),
   };
 };
 export const establishSmokeUsers = Effect.fn(function* (input: Inputs) {

@@ -56,3 +56,23 @@ would no longer be the canonical domain shape.
 
 Rejected because it would allow the hosted agent surface to drift from the API and its access
 policy.
+
+## Assembly order and reflection
+
+Add all groups before attaching API-wide middleware. Effect attaches middleware to the operations
+already present. Telemetry wraps authorization and observes refusals as well as successful calls.
+Authorization runs before validation so unauthenticated input is refused without decoding.
+
+The catalog rejects duplicate ids and missing explicit access policy. Use the assembled endpoint
+codecs for query and parameter decoding and use the JSON codec for bodies. Defer codec construction
+until a consumer uses it so route and policy lookups do not initialize unrelated features. Bind the
+response registry once after assembly. A distinct second assembly would change the policy and
+codec behind an existing id, so it fails.
+
+Suggestion filtering applies throughout the encoded response while preserving domain values and
+exact decimal strings. A valid but unavailable operation is filtered by live scope and tier.
+Malformed ids or arguments and more than three available suggestions indicate an invalid handler
+response. Empty strict-object parameters use a never-valued record to admit no keys.
+
+Keyword-rule browser-origin policy derives its stricter route family from the canonical collection
+path so a newly added child inherits the gate.

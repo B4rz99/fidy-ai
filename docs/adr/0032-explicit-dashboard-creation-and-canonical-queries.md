@@ -62,3 +62,7 @@ initialized document uses the ordered four-Widget starter layout.
 Projection calculations use half-open UTC calendar spans resolved in the applied IANA zone.
 Keep directional exact amounts separated by Currency through grouping and final metric
 calculation. Budget bars observe exact outflows in the selected Category and Currency.
+
+A missing Dashboard is an observed result. It grants no authority to create or repair one.
+A view is released only after the full authorized snapshot, including every leaf's exact totals,
+passes validation.

@@ -75,16 +75,15 @@ export type AuditCredentialOperation =
   | "transactions.deleteTransaction"
   | "transactions.updateTransactions"
   | "transactions.updateTransaction";
-/** Supporting evidence is retained only for these credential-free statement projections. */
+
 export type AuditPublicationOperation =
   | "ingestion.submitForExtraction"
   | "ingestion.listNeedsReviewItems";
-/** UTC-day width used by canonical admission, in milliseconds. */
+
 export const utcDayMilliseconds = 86400000;
-/** Maximum retention of canonical activity evidence, in UTC days. */
+
 export const auditRetentionDays = 365;
 
-/** A live, User-scoped credential gate supplied by the credential owner; Audit never resolves identity. */
 export type AuditAuthority =
   | Readonly<{
       table: "web_sessions" | "pats" | "hosted_turns";
@@ -118,7 +117,6 @@ type SessionDecision =
   | Readonly<{ operation: CategoryOperation; outcome: "success" | "validation_failed" }>
   | Readonly<{ operation: "ingestion.listNeedsReviewItems"; outcome: "success" }>;
 
-/** One canonical call's metadata, with outcomes valid for its held credential and operation. */
 export type AuthorizedAuditCall = Readonly<{
   id: string;
   current: number;
@@ -139,7 +137,6 @@ export type AuthorizedAuditCall = Readonly<{
         SessionDecision)
   );
 
-/** Metadata-only admission refusal under the credential owner's current canonical authority. */
 export type CanonicalAdmissionRefusal = Readonly<{
   authority: AuditAuthority;
   id: string;
@@ -147,7 +144,6 @@ export type CanonicalAdmissionRefusal = Readonly<{
   current: number;
 }>;
 
-/** Record a completed retained-response disclosure only with the original snapshot's exact live proof. It grants no permission beyond the coordinator's current authority. */
 export type CanonicalReplayAccess = CanonicalAdmissionRefusal &
   Readonly<{
     authority: AuditAuthority & Readonly<{ table: "pats" | "oauth_credentials" }>;
@@ -155,7 +151,6 @@ export type CanonicalReplayAccess = CanonicalAdmissionRefusal &
     outcome: "accepted" | "rejected";
   }>;
 
-/** Found/absent decisions supported by the query recorder's live credential snapshot. */
 export type AuditQueryCall = Readonly<{
   authority: AuditAuthority;
   id: string;
@@ -172,17 +167,11 @@ export type AuditQueryCall = Readonly<{
   missingWhen: OwnedStatement;
 }>;
 
-/** The acting credential, or supporting publication evidence accounted for by a separate credential row. */
 export type AuditActor =
   | Readonly<{ _tag: "WebSession"; id: string }>
   | Readonly<{ _tag: "PAT"; id: string }>
   | Readonly<{ _tag: "Publication" }>;
 
-/**
- * Metadata accompanying an owner's commit proof. `when` is trusted, parameterized owner SQL
- * selecting existence, never external input or Audit persistence. It must include the same User
- * in every User-owned lookup. The statement records no fields from that proof.
- */
 export type OwnerAuditCall = Readonly<{
   id: string;
   userId: string;
@@ -209,7 +198,6 @@ export type OwnerAuditCall = Readonly<{
       }>
   );
 
-/** Approved credential-replacement evidence, never mailbox content or a proof value. */
 export type EmailReplacementEvidence = Readonly<{
   id: string;
   userId: string;
@@ -226,16 +214,10 @@ export type EmailReplacementEvidence = Readonly<{
       }>
   );
 
-/** A bounded, explicit-User evidence query; at most 256 entries are returned, oldest first. */
 export type AuditQuery = Readonly<{ userId: string; limit: number }>;
 
-/** Closed failure at the Audit runtime seam, without database errors, SQL, or rejected metadata. */
 export class AuditUnavailable extends Data.TaggedError("AuditUnavailable") {}
 
-/**
- * Supporting statement publication/review evidence retained without a credential in the D1
- * baseline. It cannot invent an acting credential or masquerade as another canonical call.
- */
 export const AuditPublicationEvidence = AuditLogEntry.mapFields(Struct.omit(["caller"])).annotate({
   identifier: "AuditPublicationEvidence",
 });
@@ -243,7 +225,6 @@ export type AuditPublicationEvidence = typeof AuditPublicationEvidence.Type;
 
 export { AuditLogEntry };
 
-/** Exact same-User browser or admitted hosted-Turn proof for a PAT activity answer; never a PAT or OAuth credential. */
 export type PATActivityAuthority = Readonly<{
   table: "web_sessions" | "hosted_turns";
   predicate: string;

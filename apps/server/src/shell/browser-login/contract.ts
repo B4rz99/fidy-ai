@@ -16,16 +16,13 @@ import {
 } from "~/shell/public-http/contract";
 import { operationPolicy, verifiedWhatsAppHostedOnly } from "~/shell/canonical-policy/contract";
 
-/** Stable canonical identity of hosted browser-pairing approval. */
 export const browserLoginApprovalOperation = CanonicalOperationId.make(
   "browserLogin.approvePairing"
 );
 
-/** Non-enumerating message shared by every invalid public-code approval outcome. */
 export const browserLoginApprovalGenericMessage =
   "This pairing is no longer valid. Start again." as const;
 
-/** Generic rejection for any public code that cannot be approved without revealing why. */
 export class BrowserLoginPairingApprovalRejected
   extends Schema.Error<
     BrowserLoginPairingApprovalRejected,
@@ -67,7 +64,6 @@ export class BrowserLoginPairingApprovalRateLimited
   readonly canonicalOutcome = "rejected" as const;
 }
 
-/** Deliberately accepts text broadly so malformed submissions share the bounded generic refusal. */
 export const ApproveBrowserLoginPairingPayload = Schema.Struct({
   publicCode: Schema.String,
 }).annotate({ identifier: "ApproveBrowserLoginPairingPayload" });
@@ -108,19 +104,16 @@ const BrowserLoginUnavailableError = Schema.Struct({
   message: Schema.Literal(browserLoginUnavailableError.message),
 });
 
-/** Documented 429 shape; the handler adds Retry-After on its raw encoded response. */
 export class BrowserLoginRateLimitedApi extends Schema.Error<
   BrowserLoginRateLimitedApi,
   Brand.Brand<"BrowserLoginRateLimitedApi">
 >("BrowserLoginRateLimitedApi")({ error: BrowserLoginUnavailableError }, { httpApiStatus: 429 }) {}
 
-/** Capacity exhaustion intentionally shares the generic public message. */
 export class BrowserLoginUnavailableApi extends Schema.Error<
   BrowserLoginUnavailableApi,
   Brand.Brand<"BrowserLoginUnavailableApi">
 >("BrowserLoginUnavailableApi")({ error: BrowserLoginUnavailableError }, { httpApiStatus: 503 }) {}
 
-/** Shared non-enumerating response body for temporarily unavailable browser login admission. */
 export const browserLoginUnavailableBody = Schema.encodeSync(
   Schema.toCodecJson(BrowserLoginUnavailableApi)
 )(BrowserLoginUnavailableApi.make({ error: browserLoginUnavailableError }));
@@ -135,7 +128,6 @@ const BrowserLoginPairingInvalidError = Schema.Struct({
   message: Schema.Literal(browserLoginPairingInvalidError.message),
 });
 
-/** One non-enumerating public refusal for every invalid pairing proof and terminal state. */
 export class BrowserLoginPairingInvalidApi extends Schema.Error<
   BrowserLoginPairingInvalidApi,
   Brand.Brand<"BrowserLoginPairingInvalidApi">
@@ -144,7 +136,6 @@ export class BrowserLoginPairingInvalidApi extends Schema.Error<
   { httpApiStatus: 400 }
 ) {}
 
-/** Polling cadence refusal; the global response adapter derives Retry-After from this body. */
 export class BrowserLoginPollingRateLimitedApi extends Schema.Error<
   BrowserLoginPollingRateLimitedApi,
   Brand.Brand<"BrowserLoginPollingRateLimitedApi">
@@ -158,19 +149,16 @@ export class BrowserLoginPollingRateLimitedApi extends Schema.Error<
   { httpApiStatus: 429 }
 ) {}
 
-/** Shared non-enumerating response body for every terminal redemption refusal. */
 export const browserLoginPairingInvalidBody = {
   error: browserLoginPairingInvalidError,
 } as const;
 
-/** Proof-bearing HTTPS request; malformed field values receive the generic invalid response. */
 export const RedeemBrowserLoginPairingPayload = Schema.Struct({
   pairingId: Schema.optional(Schema.Unknown),
   privateVerifier: Schema.optional(Schema.Unknown),
 });
 export type RedeemBrowserLoginPairingPayload = typeof RedeemBrowserLoginPairingPayload.Type;
 
-/** Correct poll before hosted approval; HTTP 202 distinguishes pending from authenticated. */
 export const PendingBrowserLoginPairing = Schema.Struct({
   status: Schema.Literal("pending_approval"),
   expiresAt: UtcTimestamp,
@@ -180,7 +168,6 @@ export const PendingBrowserLoginPairing = Schema.Struct({
 }).annotate({ identifier: "PendingBrowserLoginPairing", httpApiStatus: 202 });
 export type PendingBrowserLoginPairing = typeof PendingBrowserLoginPairing.Type;
 
-/** Successful redemption carries no bearer or User material; the bearer exists only in a cookie. */
 export const AuthenticatedBrowserLoginPairing = Schema.Struct({
   status: Schema.Literal("authenticated"),
 }).annotate({ identifier: "AuthenticatedBrowserLoginPairing", httpApiStatus: 200 });

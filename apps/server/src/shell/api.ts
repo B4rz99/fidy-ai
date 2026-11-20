@@ -45,19 +45,11 @@ const ordinaryOperationCatalog = makeOperationCatalog(OrdinaryFidyApi);
 const OperationsGroup = makeOperationsGroup(ordinaryOperationCatalog);
 
 export class FidyApi extends OrdinaryFidyApi.add(OperationsGroup)
-  // `.middleware` after `.add`, and not the other way round: it attaches to the operations already
-  // assembled, so a group added below this line would silently skip every API-wide guard.
   .middleware(ValidationGate)
-  // Authorization wraps validation and rejects an unauthenticated request before decoding input.
   .middleware(TokenAuthorization)
-  // Telemetry is outermost and observes both authorization failures and canonical execution.
   .middleware(CanonicalTelemetry)
   .annotate(OpenApi.Title, "fidy-ai canonical API") {}
 
-/**
- * Canonical ids, routes, inputs, outputs, failures, and callability policy reflected from the
- * assembled API. Adding or renaming an operation updates every catalog-derived guard and registry.
- */
 export const operationCatalog = makeOperationCatalog(FidyApi);
 
 type ApiGroups<Api> = Api extends HttpApi.HttpApi<infer _Identifier, infer Groups> ? Groups : never;

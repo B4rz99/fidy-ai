@@ -23,28 +23,16 @@ export const keywordRulesPath = "/category-keyword-rules";
 
 export const retainedKeywordRulePath = `${keywordRulesPath}/:id`;
 
-/**
- * Whether a public path addresses the caller's keyword-rule family. The family prefix derives
- * from the one declared collection path, and the Worker treats a match as the stricter case,
- * so a new route under it inherits the browser-origin gate instead of escaping it.
- */
 export const keywordRulePath = (path: string): boolean =>
   path === keywordRulesPath || path.startsWith(`${keywordRulesPath}/`);
 
 export const ListCategoriesResponse = OperationResponse(Schema.Array(Category));
 
-/** The caller's own rules, in stable creation order. */
 export const ListKeywordRulesResponse = OperationResponse(Schema.Array(KeywordRule));
 
-/** One created or replaced rule, or the id of a removed one. */
 export const KeywordRuleResponse = OperationResponse(KeywordRule);
 export const RemovedKeywordRuleResponse = OperationResponse(KeywordRuleId);
 
-/**
- * The retained keyword-rule path parameter, rebuilt at each declaration. The published document
- * componentizes one schema instance reached from several declarations, so sharing the instance
- * would renumber the OpenAPI components; sharing the shape is what keeps them in step.
- */
 const retainedKeywordRuleParams = (): Schema.Struct<{ readonly id: typeof KeywordRuleId }> =>
   Schema.Struct({ id: KeywordRuleId });
 
@@ -127,7 +115,6 @@ export const CategoriesGroup = HttpApiGroup.make("categories")
       .annotateMerge(destructiveWrite)
   );
 
-/** A Category read inside its caller's native unit; held authority is re-evaluated with the query. */
 export type CategoryReadInput = Readonly<{
   db: D1Database;
   authority: Option.Option<AuditAuthority>;

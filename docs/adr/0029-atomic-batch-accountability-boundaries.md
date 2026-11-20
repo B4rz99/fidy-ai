@@ -73,3 +73,16 @@ refusal with no attributable child earns an envelope row.
 Deriving typed child inputs from the catalog: parameterizing `CatalogOperation.input` across the
 whole catalog to serve two consumers, instead of keeping the input codec beside the operation that
 declares it.
+
+## Exact authority at the Audit seam
+
+Audit consumes the owner's live same-User credential or parameterized subject-scoped proof. It
+owns its fixed metadata projection and takes no domain values from the proof. The coordinator
+must check that the write committed before reporting success. Read Audit shares the disclosure
+snapshot, including retained response reads that can return a whole batch envelope. A replay
+records the current disclosure without repeating the original domain action.
+
+Supporting statement evidence without a credential is recorded separately from attributable
+canonical calls. Missing and foreign PAT activity requests have the same Audit projection and
+retain no requested grant identifier. Retention is separately authorized maintenance. It removes
+only expired evidence under a short-lived subject permit in the same atomic unit.

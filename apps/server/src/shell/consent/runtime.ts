@@ -10,7 +10,7 @@ import {
 } from "~/shell/channels/whatsapp/contract";
 import { makeWhatsAppDelivery } from "~/shell/channels/whatsapp/runtime";
 import { makeKapsoOutboundHttp } from "~/shell/outbound-http/operations";
-/** Send a versioned disclosure to the authenticated WhatsApp caller, with a delivery correlation token. */
+
 export const makeDisclosureSender = (
   input: Readonly<{
     readonly apiKey: Redacted.Redacted<string>;

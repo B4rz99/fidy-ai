@@ -13,7 +13,6 @@ type Authority = Readonly<{
   bindings: ReadonlyArray<string | number | Uint8Array>;
 }>;
 
-/** One Category projection for hosted-agent and D1-protected HTTP reads. */
 export const categoryRowsQuery = (authority?: Authority): OwnedStatement => ({
   sql: `SELECT json_extract(value,'$.id') AS id,json_extract(value,'$.label') AS label FROM json_each(?)
     ${authority === undefined ? "" : `WHERE EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`}
@@ -21,7 +20,6 @@ export const categoryRowsQuery = (authority?: Authority): OwnedStatement => ({
   params: [JSON.stringify(listLaunchCategories()), ...(authority?.bindings ?? [])],
 });
 
-/** Apply the same bounded Category response codec in both execution adapters. */
 export const categoryResponseFromRows = (
   rows: unknown
 ): Option.Option<typeof ListCategoriesResponse.Type> => {

@@ -3,21 +3,17 @@ import { OpenApi } from "effect/http-api";
 import { CanonicalCapability } from "~/core/canonical-operations/contract";
 import type { AccessTier } from "~/core/access-tier/contract";
 
-/** Whether a hosted agent must obtain exact User confirmation before execution. */
 export const AgentConfirmation = Schema.Literals(["not-required", "required"]);
 export type AgentConfirmation = typeof AgentConfirmation.Type;
 
-/** Whether a mutation may be composed as one child of the canonical atomic batch. */
 export const AtomicBatchEligible = Context.Reference<boolean>(
   "@fidy/server/shell/operation-policy/AtomicBatchEligible",
   { defaultValue: () => true }
 );
 
-/** Whether an operation observes domain state or requests a transition, durable work, or external effect. */
 export const CanonicalOperationKind = Schema.Literals(["query", "mutation"]);
 export type CanonicalOperationKind = typeof CanonicalOperationKind.Type;
 
-/** The capability checkpoint for a normal User-owned-agent call or each child of a canonical batch. */
 export const UserOwnedAgentScopeCheck = Schema.Union([
   Schema.TaggedStruct("Operation", { capability: CanonicalCapability }),
   Schema.TaggedStruct("Children", {}),
@@ -111,14 +107,11 @@ export const OperationAccess = PublishedOperationAccessWire.pipe(
 );
 export type OperationAccess = typeof OperationAccess.Type;
 
-/** Public encoded side of the canonical operation-access codec. */
 export const PublishedOperationAccess = Schema.toEncoded(OperationAccess);
 export type PublishedOperationAccess = typeof PublishedOperationAccess.Type;
 
-/** Non-credential provenance retained across a hosted Turn for caller access. */
 export type CanonicalAuthorityRoot = "verified-whatsapp" | "no-verified-whatsapp-authority";
 
-/** The caller facts the access module needs, without identity or credential material. */
 export type OperationAccessCaller =
   | Readonly<{ _tag: "PAT" | "OAuthAgent"; capabilities: ReadonlyArray<CanonicalCapability> }>
   | Readonly<{ _tag: "WebSession"; fresh: boolean }>
@@ -127,44 +120,35 @@ export type OperationAccessCaller =
       authorityRoot: CanonicalAuthorityRoot;
     }>;
 
-/** Closed reason vocabulary returned when a caller fails an access requirement. */
 export type OperationAccessDenial =
   | "user_owned_agent_scope_missing"
   | "fresh_web_session_required"
   | "caller_ineligible";
 
-/** Authoritative execution and discovery result for one operation and caller. */
 export type OperationAccessDecision =
   | Readonly<{ _tag: "Allowed" }>
   | Readonly<{ _tag: "Denied"; reason: OperationAccessDenial }>;
 
-/** Declares an operation-level User-owned-agent capability while admitting web and hosted callers. */
 export const userOwnedAgentScoped = (capability: CanonicalCapability): OperationAccess => ({
   _tag: "UserOwnedAgentScoped",
   scope: { _tag: "Operation", capability },
 });
 
-/** Declares that the canonical atomic batch evaluates every child's User-owned-agent capability. */
 export const userOwnedAgentScopedChildren: OperationAccess = {
   _tag: "UserOwnedAgentScoped",
   scope: { _tag: "Children" },
 };
 
-/** Declares an operation available only to a currently fresh WebSession. */
 export const freshWebSessionOnly: OperationAccess = { _tag: "FreshWebSessionOnly" };
 
-/** Declares an operation available only to a live WebSession. */
 export const webSessionOnly: OperationAccess = { _tag: "WebSessionOnly" };
 
-/** Declares an operation available to web and hosted callers but never User-owned-agent callers. */
 export const webOrHosted: OperationAccess = { _tag: "WebOrHosted" };
 
-/** Declares an operation available only under verified WhatsApp hosted authority. */
 export const verifiedWhatsAppHostedOnly: OperationAccess = {
   _tag: "VerifiedWhatsAppHostedOnly",
 };
 
-/** Declares account-security work available to fresh web or verified-WhatsApp hosted authority. */
 export const freshWebOrVerifiedWhatsAppHosted: OperationAccess = {
   _tag: "FreshWebOrVerifiedWhatsAppHosted",
 };
@@ -174,14 +158,12 @@ const encodeOperationAccess = Schema.encodeSync(OperationAccess);
 export const publishOperationAccess = (access: OperationAccess): PublishedOperationAccess =>
   encodeOperationAccess(access);
 
-/** Whether an operation carries User-owned-agent scope policy and may therefore be an atomic-batch child. */
 export const isUserOwnedAgentScoped = (access: OperationAccess): boolean =>
   access._tag === "UserOwnedAgentScoped";
 
 const scopeCapability = (scope: UserOwnedAgentScopeCheck): Option.Option<CanonicalCapability> =>
   scope._tag === "Operation" ? Option.some(scope.capability) : Option.none();
 
-/** Returns the operation-level User-owned-agent capability, excluding child-evaluated and non-scoped access. */
 export const userOwnedAgentCapability = (
   access: OperationAccess
 ): Option.Option<CanonicalCapability> => {
@@ -189,7 +171,6 @@ export const userOwnedAgentCapability = (
   return scopeCapability(access.scope);
 };
 
-/** Route-independent authorization, availability, accounting, and agent policy carried by an operation. */
 export type OperationPolicyValue = {
   readonly access: OperationAccess;
   readonly requiredTier: AccessTier;
@@ -197,7 +178,6 @@ export type OperationPolicyValue = {
   readonly kind: CanonicalOperationKind;
 };
 
-/** Annotation key read by shared authorization from the active endpoint. */
 export class OperationPolicy extends Context.Service<OperationPolicy, OperationPolicyValue>()(
   "@fidy/server/shell/canonical-policy/contract/OperationPolicy"
 ) {}
@@ -206,18 +186,9 @@ type PolicyAnnotatedOperation = {
   readonly annotations: Context.Context<never>;
 };
 
-/**
- * Reads the complete policy directly from one canonical operation definition.
- * The caller must pass an endpoint carrying `operationPolicy`; absence is a
- * programmer defect and throws rather than silently granting a default policy.
- */
 export const getOperationPolicy = (endpoint: PolicyAnnotatedOperation): OperationPolicyValue =>
   Option.getOrThrow(Context.getOption(endpoint.annotations, OperationPolicy));
 
-/**
- * Builds runtime policy and public metadata together from one complete declaration, so no caller
- * surface can infer access from an independent scope or eligibility field.
- */
 export const operationPolicy = (
   policy: OperationPolicyValue
 ): Context.Context<OperationPolicy | OpenApi.Override> =>

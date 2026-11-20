@@ -141,3 +141,8 @@ The one-time recovery code uses 25 unambiguous base32 symbols. Recovery persists
 Support operators come from the dedicated Access application after origin verification. Recovery
 rejections keep metadata-only evidence with no reason or matching fact. Automatic expiry records
 the policy revision that made the decision.
+
+Email login start uses one fixed acceptance body whether delivery is attempted or suppressed.
+Completion proves both mailbox possession and the same browser pairing and only makes that
+pairing redeemable. Bound refusals use the same non-enumerating body. A failed send response can
+follow acceptance, so a retry may not bypass deduplication with a different proof or key.

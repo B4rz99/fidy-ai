@@ -4,13 +4,12 @@ import type { FreshSessionSubject } from "~/shell/web-session/contract";
 import { freshSessionExists, freshSessionParams } from "~/shell/web-session/operations";
 import type { OwnedStatement } from "~/shell/owner-write/contract";
 
-// One fresh evidence id per row, including multi-grant revocation; no bearer enters a statement.
 const randomConsentId = `lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4'
   || substr(hex(randomblob(2)),2) || '-a' || substr(hex(randomblob(2)),2) || '-'
   || hex(randomblob(6)))`;
 
 type RevokeOneInput = Readonly<{ id: string; shortId: string; current: number }>;
-/** Append a User-origin revocation only for the live grant owned by this fresh WebSession. */
+
 export const revokeOnePATConsentStatement = ({
   disclosure,
   candidates,
@@ -39,7 +38,6 @@ export const revokeOnePATConsentStatement = ({
   ],
 });
 
-/** Append one origin-qualified revocation per active PAT grant under the same User. */
 export const revokeAllPATConsentsStatement = ({
   disclosure,
   candidates,
@@ -67,7 +65,6 @@ export const revokeAllPATConsentsStatement = ({
   ],
 });
 
-/** Include approved but unclaimed PATPairing grants in a User's revoke-all decision. */
 export const revokeAllPairingConsentsStatement = ({
   disclosure,
   candidates,
@@ -94,7 +91,6 @@ export const revokeAllPairingConsentsStatement = ({
   ],
 });
 
-/** Scheduled expiry appends policy-origin evidence for approved unclaimed pairings. */
 export const expirePairingConsentsStatement = ({
   disclosure,
   candidates,
@@ -116,7 +112,6 @@ export const expirePairingConsentsStatement = ({
   ],
 });
 
-/** Scheduled expiry appends policy-origin evidence for every selected fixed-lifetime PAT. */
 export const expirePATConsentsStatement = ({
   disclosure,
   candidates,
@@ -145,7 +140,7 @@ type ManualGrantInput = Readonly<{
   disclosure: string;
   current: number;
 }>;
-/** The User's reviewed manual grant, chained to its guarded PAT issuance in the same D1 unit. */
+
 export const grantManualPATConsentStatement = ({
   revision,
   session,
@@ -173,7 +168,7 @@ type PairedGrantInput = Readonly<{
   disclosure: string;
   current: number;
 }>;
-/** The User's reviewed pairing approval, chained to the guarded pairing transition. */
+
 export const grantPairedPATConsentStatement = ({
   revision,
   session,

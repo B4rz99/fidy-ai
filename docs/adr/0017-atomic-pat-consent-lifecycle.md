@@ -35,3 +35,10 @@ closed.
   decisions.
 - **Let authentication append automatic evidence:** request authentication should deny immediately
   without owning scheduled lifecycle coordination.
+
+Consent composes an owner-controlled parameterized predicate with the owner's same-User guard.
+For D1 statements the owner supplies the predicate before ordering, limits, or returning clauses.
+The grant action must change exactly one owner row before the matching ConsentRecord is appended.
+Terminal actions consume evidence for the exact selection, decision instant and bound used by
+the owner. Each grant gets its own evidence id, including revoke-all and scheduled expiry.
+Preparation creates no authority or evidence on its own.

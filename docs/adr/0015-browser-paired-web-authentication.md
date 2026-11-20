@@ -70,3 +70,8 @@ surviving a total Kapso, Meta, or Resend compromise remains out of scope.
   the existing User.
 - **Mandatory passkey:** deferred because it adds another enrollment and recovery lifecycle beyond
   the MVP threat model.
+
+The public pairing and redemption endpoints normalize malformed, foreign, and terminal inputs to
+the same closed refusal. Polling cadence is surfaced through Retry-After. A valid proof before
+approval returns a pending response. Successful redemption discloses the bearer through the
+host-only WebSession cookie and carries no bearer or User payload.

@@ -1,7 +1,6 @@
 import type { OwnedStatement } from "~/shell/owner-write/contract";
 import type { ConsentSubject } from "~/shell/consent/contract";
 
-/** Correlated columns are the owner's fixed publication, never request-selected identifiers. Continuing work still requires the owner's exact original admission and lifetime. */
 export const erasureAdmissionCondition = (
   input: Readonly<{
     subject: ConsentSubject;

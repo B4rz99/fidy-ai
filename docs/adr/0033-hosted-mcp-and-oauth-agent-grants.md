@@ -269,3 +269,8 @@ allowance without duplicate metering or credential resets. Real ingress/Core/coo
 full dependency verification, exact host reruns, synthetic release checks and explicit operator
 launch approval remain mandatory. Failure of the compatibility matrix is not grounds for weakening
 issuer/resource/confirmation policy.
+
+OAuth Connections use the same atomic Consent evidence rule. The owner's live selection and
+replay predicate are rechecked at commit. A user-origin revocation appends the exact reviewed
+decision for each live grant, with no new evidence on replay. Automatic replay cleanup consumes
+proof of an existing same-User grant without recreating authority to issue a credential.

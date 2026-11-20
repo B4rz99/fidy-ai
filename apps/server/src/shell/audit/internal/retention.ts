@@ -12,7 +12,6 @@ const Time = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const Retention = Schema.Struct({ userId: UserId, now: Time });
 const Subjects = Schema.Array(Schema.Struct({ user_id: UserId }));
 
-/** One bounded subject batch removes expired call evidence and its temporary permit atomically. */
 export const retainEvidence = ({
   database,
   input,
@@ -41,7 +40,6 @@ export const retainEvidence = ({
     return result[2]?.meta.changes ?? 0;
   }).pipe(Effect.mapError(() => new AuditUnavailable()));
 
-/** Select only bounded subject metadata, then apply the same subject-owned retention operation. */
 export const sweepEvidence = ({
   database,
   now,

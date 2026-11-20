@@ -8,3 +8,7 @@ can create or reuse an attempt, or report an already authorized Connection.
 A continuation is a public browser locator. Institution authority still requires authentication
 of the same User and successful authorization. Provider identifiers, credentials and attempt
 authority stay behind the browser flow.
+
+Ingress recognizes the declared browser continuation path independently from the HTTP method.
+This gives method failures to the owning route, which applies the exact origin and header
+policy and rechecks live WebSession and Consent in the authorized work.

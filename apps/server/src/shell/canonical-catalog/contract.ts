@@ -12,22 +12,18 @@ import { makePartialInputSchema } from "~/shell/partial-input/contract";
 type OperationSchema = Schema.Codec<unknown, Schema.Json, never, never>;
 type PartialInputSchema = Schema.Codec<unknown, unknown>;
 
-/** One canonical operation projected for authorization, response checks, and hosted tooling. */
 export type CatalogOperation = {
   readonly id: CanonicalOperationId;
   readonly description: string;
-  /** Fixed HTTP method and route template; request values never participate in this identity. */
   readonly method: HttpApiEndpoint.Top["method"];
   readonly route: string;
   readonly input: OperationSchema;
-  /** HTTP codecs preserve string query/parameter decoding without treating JSON bodies as string trees. */
   readonly httpInput: OperationSchema;
   readonly httpFields: ReadonlyArray<"params" | "query" | "headers" | "payload">;
   readonly success: OperationSchema;
   readonly failure: OperationSchema;
   readonly policy: OperationPolicyValue;
   readonly atomicBatchEligible: boolean;
-  /** None when the generated client accepts no operation input. */
   readonly partialInput: Option.Option<PartialInputSchema>;
 };
 
@@ -64,8 +60,6 @@ const canonicalInput = (endpoint: HttpApiEndpoint.Top, http = false): OperationS
   add("headers", Option.fromUndefinedOr(endpoint.headers));
   const payloads = payloadSchemas(endpoint);
   if (Arr.isReadonlyArrayNonEmpty(payloads)) add("payload", Option.some(unionSchema(payloads)));
-  // A never-valued string record models an empty object while preserving a closed JSON shape for
-  // consumers that require strict object parameters.
   const schema =
     fields.length === 0
       ? Schema.Record(Schema.String, Schema.Never)
@@ -104,13 +98,6 @@ const httpFields = (endpoint: HttpApiEndpoint.Top): CatalogOperation["httpFields
   ...(payloadSchemas(endpoint).length === 0 ? [] : ["payload" as const]),
 ];
 
-/**
- * Reflects canonical ids, partial target inputs, and callability policy from the
- * same assembled HttpApi used by the server and generators. Duplicate ids fail
- * here rather than letting one operation silently replace another in the map.
- * Codec derivation stays suspended until a consumer validates or encodes that operation;
- * routing and policy inspection do not derive every feature’s input and response codecs.
- */
 export const makeOperationCatalog = <Id extends string, Groups extends HttpApiGroup.Constraint>(
   api: HttpApi.HttpApi<Id, Groups>
 ): OperationCatalog => {
@@ -149,7 +136,6 @@ export const makeOperationCatalog = <Id extends string, Groups extends HttpApiGr
         failure: Schema.suspend(() =>
           asOperationSchema(unionSchema([...errors.values()].flatMap((schemas) => [...schemas])))
         ),
-        // Access policy must be explicit on each canonical operation.
         policy: getOperationPolicy(endpoint),
         atomicBatchEligible: Context.get(mergedAnnotations, AtomicBatchEligible),
         partialInput:
@@ -171,11 +157,6 @@ export const makeOperationCatalog = <Id extends string, Groups extends HttpApiGr
 
 let boundCatalog = Option.none<OperationCatalog>();
 
-/**
- * Binds response-schema derivation to the assembled API once module evaluation
- * has finished building it. A second, different assembly is a programmer defect
- * rather than a last-writer-wins global registry.
- */
 export const bindOperationCatalog = (catalog: OperationCatalog): void => {
   if (Option.isSome(boundCatalog) && boundCatalog.value !== catalog) {
     throw new Error("The canonical operation catalog was already bound");

@@ -89,7 +89,6 @@ const authorityCredentialColumn = (authority: AuditAuthority): string => {
   return authority.table === "pats" ? "pat_id" : "session_id";
 };
 
-/** Admission refusals are canonical metadata, not allowance counters or retained request bodies. */
 export const admissionRefusalStatement = ({
   authority,
   id,
@@ -103,7 +102,6 @@ export const admissionRefusalStatement = ({
         params: [id, operation, current, ...authority.bindings],
       };
 
-/** Records fixed metadata after an owner-scoped existence proof, retaining the owner's atomic guard. */
 export const ownerCallStatement = (input: OwnerAuditCall): OwnedStatement => {
   const { operation, when, caller } = input;
   const kind = recordKind(operation, caller._tag === "PAT");
@@ -136,7 +134,6 @@ export const ownerCallStatement = (input: OwnerAuditCall): OwnedStatement => {
   };
 };
 
-/** Builds the found/absent metadata decision inside the query's live credential snapshot. */
 export const queryCallStatement = ({ missingWhen, ...input }: AuditQueryCall): OwnedStatement => {
   const { authority, id, operation, current } = input;
   if (authority.table === "oauth_credentials") {
@@ -188,7 +185,6 @@ export const queryCallStatement = ({ missingWhen, ...input }: AuditQueryCall): O
   };
 };
 
-/** Replay reads get current-credential accountability without restating or reexecuting domain work. */
 export const replayAccessStatement = ({
   authority,
   id,
@@ -245,7 +241,6 @@ const oauthAuthorizedCallStatement = (
 const acceptedOutcome = (outcome: AuthorizedAuditCall["outcome"]): string =>
   outcome === "success" || outcome === "accepted" ? "accepted" : "rejected";
 
-/** Builds evidence under the exact credential gate held by the coordinator. */
 export const authorizedCallStatement = (input: AuthorizedAuditCall): OwnedStatement => {
   const { authority, id, operation, outcome, current, afterOwnerWrite } = input;
   if (authority.table === "oauth_credentials") {

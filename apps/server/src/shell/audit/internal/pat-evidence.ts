@@ -9,7 +9,6 @@ import type { AuditedPATOperation, PATAuthority } from "~/shell/tokens/contract"
 
 type AuditTime = Readonly<{ id: string; current: number }>;
 
-/** A correlated proof that the PAT row's exact successful canonical call exists. */
 export const recordedPATCallProof = ({
   auditId,
   operation,
@@ -18,7 +17,6 @@ export const recordedPATCallProof = ({
   params: [auditId, operation],
 });
 
-/** A successful retained-response read can cover an entire canonical envelope, including a batch. The proof still identifies the current PAT, User, operation and exact Audit write. */
 export const recordedPATReplayCallProof = ({
   auditId,
   operation,
@@ -32,7 +30,7 @@ type TransitionInput = AuditTime &
     operation: "pats.approvePATPairing" | "pats.createManualPAT";
     patId: Option.Option<string>;
   }>;
-/** A successful approval or issuance is accounted for only when its preceding owner write succeeded. */
+
 export const recordSessionPATTransition = ({
   session,
   input,
@@ -54,7 +52,6 @@ export const recordSessionPATTransition = ({
         ],
       };
 
-/** The consumed pairing and its minted bearer must both exist before a claim is audited. */
 export const recordClaimedPAT = (
   input: AuditTime & Readonly<{ userId: string; patId: string }>
 ): OwnedStatement => ({
@@ -62,7 +59,6 @@ export const recordClaimedPAT = (
   params: [input.id, input.userId, input.patId, input.current],
 });
 
-/** Account for safe PAT metadata listing while the same User-owned caller proof remains live. */
 export const recordPATList = ({
   authority,
   input,
@@ -79,7 +75,7 @@ export const recordPATList = ({
 });
 
 type RevokeAuditInput = AuditTime & Readonly<{ shortId: string }>;
-/** Link the exact revoked PAT to its User's audit in the same atomic lifecycle unit. */
+
 export const recordOnePATRevocation = ({
   session,
   input,
@@ -91,7 +87,6 @@ export const recordOnePATRevocation = ({
   };
 };
 
-/** The revoke-all audit is guarded by the same fresh User decision as its PAT transition. */
 export const recordAllPATRevocations = ({
   session,
   input,
@@ -113,22 +108,12 @@ type CanonicalAuditInput = AuditTime &
     afterOwnerWrite: boolean;
   }>;
 
-/**
- * The same canonical PAT audit built from the exact live-authority gate a consumer already holds,
- * so a caller that is not the subject can still account for protected work without restating the
- * bearer, Consent, and scope decision.
- */
 export const recordCanonicalPATWork = ({
   authority,
   input,
 }: Readonly<{ authority: PATAuthority; input: CanonicalAuditInput }>): OwnedStatement =>
   authorizedCallStatement({ authority, ...input });
 
-/**
- * Audit one rejected canonical PAT call from the exact live-authority gate the caller presented.
- * A consumer that already holds a `PATAuthority` — rather than the subject it was derived from —
- * records the same refusal row without restating the bearer, Consent, and scope decision.
- */
 export const recordRejectedPATWork = ({
   authority,
   input,

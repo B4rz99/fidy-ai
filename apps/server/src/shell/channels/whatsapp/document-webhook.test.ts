@@ -2,7 +2,6 @@ import { expect, it } from "@effect/vitest";
 import { DateTime, Effect, Option, Redacted } from "effect";
 import { authenticateWhatsAppInbound } from "./operations";
 
-// Kapso v2 media envelope: https://docs.kapso.ai/docs/platform/webhooks/message-events.md
 const body = JSON.stringify({
   message: {
     id: "wamid.statement-document",

@@ -26,7 +26,6 @@ const replacementVerificationEmail = (combinedCode: EmailVerificationCode): Veri
   html: `<p>Tu código para cambiar el correo de acceso a Fidy es:</p><p><strong><code>${combinedCode}</code></strong></p><p>Escríbelo en <a href="https://app.fidyapp.com/settings/account">https://app.fidyapp.com/settings/account</a>. Este código vence en 10 minutos.</p><p>Si no solicitaste este cambio, ignora este correo. Tu correo actual seguirá funcionando.</p><p>Fidy nunca te pedirá este código por WhatsApp ni por soporte.</p>`,
 });
 
-/** Fixed login projection; no pairing identity, mailbox, or verifier enters provider content. */
 const browserPairingVerificationEmail = (
   combinedCode: EmailVerificationCode
 ): VerificationEmail => ({
@@ -80,7 +79,6 @@ const encodeResendRequest = Schema.encodeSync(jsonStringSchema(ResendRequest));
 const classifyResendResponse = (
   response: OutboundHttpResponse
 ): Effect.Effect<void, EmailSendFailed> => {
-  // A server error can follow acceptance; a different proof/key must not bypass deduplication.
   if (response.status >= serverErrorStatusMinimum) {
     return new EmailSendFailed({ certainty: "ambiguous", retryable: false });
   }

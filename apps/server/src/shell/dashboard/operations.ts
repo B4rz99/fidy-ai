@@ -17,11 +17,6 @@ import { renderDashboardView as render } from "~/shell/dashboard/internal/presen
 
 const decodeDashboardView = Schema.decodeEffect(Schema.toType(DashboardView));
 
-/**
- * Publish a complete, validated view of one User's decoded facts at an explicit instant.
- * The caller supplies authorized, same-User projections with complete per-Widget totals.
- * Missing or invalid presentation facts fail closed; no partial financial answer is returned.
- */
 export const renderDashboardView: typeof render = (input) =>
   render(input).pipe(
     Effect.flatMap(decodeDashboardView),
@@ -155,7 +150,6 @@ const toFieldIssue = (issue: DashboardIssue): ValidationFailed["error"]["fields"
     onSome: (path) => ({ path, message: issue.message }),
   });
 
-/** Maps dashboard decisions to compact canonical failures without rejected document data. */
 export const toApiFailure = ({
   failure,
   caller,

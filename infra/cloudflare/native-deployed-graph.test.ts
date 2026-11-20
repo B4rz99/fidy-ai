@@ -4,6 +4,8 @@ import {
   inspectNativeResources,
   requireDeployedRole,
   verifyDeployedVersion,
+  verifySuccessorVersion,
+  verifySuccessorVersionAt,
 } from "./native-deployed-graph";
 import { inspectNativeAccess } from "./native-deployed-access";
 import { nativeBindingInventory } from "./native-graph";
@@ -254,6 +256,61 @@ it("requires all five pinned Alchemy runtime bindings alongside only the declare
     expect(() => check({ ...entries, [name]: "another-value" })).toThrow();
   }
   expect(() => check({ ...entries, ALCHEMY_UNREVIEWED: "runtime" })).toThrow();
+});
+
+it("uses the selected Smoke generation without relaxing the immutable source or version checks", () => {
+  const account = "a".repeat(32);
+  const versionId = "9635b92e-fcc9-41b6-a7e2-4fd97c9eddd9";
+  const source = "2".repeat(40);
+  const text = {
+    ALCHEMY_PHASE: "runtime",
+    ALCHEMY_WORKER_NAME: smoke,
+    ALCHEMY_STACK_NAME: "FidyNativeStorage",
+    ALCHEMY_STAGE: "production",
+    ALCHEMY_CLOUDFLARE_ACCOUNT_ID: account,
+    RELEASE_GIT_SHA: source,
+    SMOKE_QUEUE_NAME: smoke,
+    CONTRACT_DIGEST: "3".repeat(64),
+    NATIVE_STORAGE_ADMISSION: "closed",
+    ACCEPTANCE_API_ORIGIN: "https://" + apiHost,
+  };
+  const version = {
+    success: true,
+    result: {
+      id: versionId,
+      resources: {
+        bindings: [
+          ...Object.entries(text).map(([name, text]) => ({ name, text, type: "plain_text" })),
+          { name: "SMOKE_BUCKET", type: "r2_bucket", bucket_name: "fidy-native-release-smoke" },
+          {
+            name: "SMOKE_WORKFLOW",
+            type: "workflow",
+            workflow_name: smoke,
+            class_name: "ReleaseSmokeWorkflowV2",
+          },
+          { name: "CF_VERSION_METADATA", type: "version_metadata" },
+          { name: "ACCEPTANCE_CODE_KEY", type: "secret_text" },
+          { name: "ACCEPTANCE_GOOGLE_SECRET", type: "secret_text" },
+          { name: "ACCEPTANCE_MICROSOFT_SECRET", type: "secret_text" },
+        ],
+        script: { handlers: ["fetch", "queue"], named_handlers: [] },
+        script_runtime: { compatibility_date: "2026-09-08" },
+      },
+    },
+  };
+  const input = {
+    account,
+    raw: version,
+    revision: source,
+    versionId,
+    role: "Smoke",
+    fingerprint: "4".repeat(64),
+  } as const;
+  const historical = { ...input, generation: revision };
+  expect(() => verifySuccessorVersionAt(historical)).not.toThrow();
+  expect(() => verifySuccessorVersion(input)).toThrow();
+  expect(() => verifySuccessorVersionAt({ ...historical, revision })).toThrow();
+  expect(() => verifySuccessorVersionAt({ ...historical, versionId: "other" })).toThrow();
 });
 
 const appRoles = [

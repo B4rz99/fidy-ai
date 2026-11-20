@@ -6,6 +6,7 @@ import type { SharedBindings } from "../../apps/server/cloudflare/storage-bootst
 import { NodeFileSystem } from "@effect/platform-node";
 import { nativeUserPlatform } from "../../apps/server/cloudflare/user-store.test-fixture";
 import { handleSmoke } from "../../apps/server/cloudflare/runtime/release-smoke/operations";
+import type { SmokeEnvironment } from "../../apps/server/cloudflare/runtime/release-smoke/contract";
 import {
   SyntheticBindings,
   smokeEnvironment,
@@ -23,7 +24,35 @@ const awaitSmokeCompletion = Effect.fn(function* (poll: () => Promise<Response>)
   return yield* Effect.die("Native smoke completion exceeded the local poll budget");
 });
 
-const nativeSmokeJourney = Effect.fnUntraced(function* () {
+const executorFor = (
+  release: SmokeEnvironment,
+  retained: boolean
+): Readonly<{
+  revision: string;
+  version: string;
+  queueName: string;
+  coreSettings: Pick<SmokeEnvironment, "NATIVE_STORAGE_ADMISSION" | "NATIVE_FIXTURE_MEMBER">;
+}> => {
+  const revision = "de04a192c3836be0efb488b170a7b93b9f98f28f";
+  return retained
+    ? {
+        revision,
+        version: "54c5d73f-2682-4626-85bc-f8462914b1d4",
+        queueName: "fidy-native-smoke-" + revision,
+        coreSettings: {
+          NATIVE_STORAGE_ADMISSION: "closed",
+          NATIVE_FIXTURE_MEMBER: "performance-2",
+        },
+      }
+    : {
+        revision: release.RELEASE_GIT_SHA,
+        version: "11111111-1111-4111-8111-111111111111",
+        queueName: release.RELEASE_GIT_SHA,
+        coreSettings: {},
+      };
+};
+
+const nativeSmokeJourney = Effect.fnUntraced(function* (retainExecutor: boolean) {
   const bundle = yield* Effect.tryPromise(() =>
     Bun.build({
       entrypoints: [
@@ -39,9 +68,14 @@ const nativeSmokeJourney = Effect.fnUntraced(function* () {
   }
   const script = yield* Effect.tryPromise(() => output.text());
   const release = smokeEnvironment();
-  const executorVersion = "11111111-1111-4111-8111-111111111111";
+  const {
+    revision: executorRevision,
+    version: executorVersion,
+    queueName,
+    coreSettings,
+  } = executorFor(release, retainExecutor);
   const priorRevision = "f".repeat(40);
-  const nativeWorker = (revision: string, version: string): WorkerOptions => ({
+  const nativeWorker = (revision: string, version: string, queue: string): WorkerOptions => ({
     config: {
       name: revision,
       type: "worker",
@@ -53,8 +87,8 @@ const nativeSmokeJourney = Effect.fnUntraced(function* () {
           namespace: "1493",
           simple: { limit: 8, period: 60 },
         },
-        SMOKE_QUEUE: { type: "queue", name: revision },
-        SMOKE_QUEUE_NAME: { type: "text", value: revision },
+        SMOKE_QUEUE: { type: "queue", name: queue },
+        SMOKE_QUEUE_NAME: { type: "text", value: queue },
         SMOKE_WORKFLOW: {
           type: "workflow",
           name: revision,
@@ -68,7 +102,7 @@ const nativeSmokeJourney = Effect.fnUntraced(function* () {
       triggers: [
         {
           type: "queue",
-          name: revision,
+          name: queue,
           maxBatchSize: 1,
           maxBatchTimeout: 0,
           maxConcurrency: 4,
@@ -89,8 +123,8 @@ const nativeSmokeJourney = Effect.fnUntraced(function* () {
   });
   const mf = new Miniflare({
     workers: [
-      nativeWorker(release.RELEASE_GIT_SHA, executorVersion),
-      nativeWorker(priorRevision, "22222222-2222-4222-8222-222222222222"),
+      nativeWorker(executorRevision, executorVersion, queueName),
+      nativeWorker(priorRevision, "22222222-2222-4222-8222-222222222222", priorRevision),
     ],
   });
   yield* Effect.addFinalizer(() => Effect.tryPromise(() => mf.dispose()).pipe(Effect.orDie));
@@ -105,19 +139,20 @@ const nativeSmokeJourney = Effect.fnUntraced(function* () {
       SMOKE_WORKFLOW: Workflow;
       SMOKE_QUEUE: Queue;
       SMOKE_LIMITER: RateLimit;
-    }>(release.RELEASE_GIT_SHA)
+    }>(executorRevision)
   );
   let publications = 0;
   let bankCalls = 0;
   let offered: unknown;
   const environment = smokeEnvironment({
+    ...coreSettings,
     USER_STORE: ownersBindings.USER_STORE,
     DIRECTORY: ownersBindings.DIRECTORY,
     PRICING: ownersBindings.PRICING,
     MAINTENANCE: ownersBindings.MAINTENANCE,
     ERASURE: ownersBindings.ERASURE,
     SMOKE_LIMITER: bindings.SMOKE_LIMITER,
-    SMOKE_QUEUE_NAME: release.RELEASE_GIT_SHA,
+    SMOKE_QUEUE_NAME: queueName,
     SMOKE_WORKFLOW: bindings.SMOKE_WORKFLOW,
     SMOKE_BUCKET: bindings.SMOKE_BUCKET,
     SMOKE_QUEUE: SyntheticBindings.withMethods(unavailableQueue, {
@@ -155,6 +190,11 @@ const nativeSmokeJourney = Effect.fnUntraced(function* () {
   expect((yield* Effect.tryPromise(() => probe("a"))).status).toBe(202);
   expect(publications).toBe(1);
   expect(bankCalls).toBe(0);
+  expect(offered).toMatchObject({
+    gitRevision: executorRevision,
+    coreVersionId: environment.CF_VERSION_METADATA.id,
+    contractDigest: environment.CONTRACT_DIGEST,
+  });
   const poll = (overrides = environment): Promise<Response> =>
     handleSmoke({
       bankAuthentication: Option.none(),
@@ -169,7 +209,7 @@ const nativeSmokeJourney = Effect.fnUntraced(function* () {
   expect(yield* Effect.tryPromise(() => poll().then((response) => response.json()))).toMatchObject({
     status: "pending",
   });
-  const markerKey = `_release-smoke/${environment.RELEASE_GIT_SHA}/smoke-v2-${environment.CF_VERSION_METADATA.id}-${"a".repeat(32)}`;
+  const markerKey = `_release-smoke/${executorRevision}/smoke-v2-${environment.CF_VERSION_METADATA.id}-${"a".repeat(32)}`;
   expect(
     yield* Effect.tryPromise(() =>
       bindings.SMOKE_BUCKET.get(markerKey).then((marker) => marker?.text())
@@ -187,9 +227,10 @@ const nativeSmokeJourney = Effect.fnUntraced(function* () {
   const completed = {
     probeId: "a".repeat(32),
     coreVersionId: core.workerVersionId,
-    executor: { ...core, workerVersionId: executorVersion },
+    executor: { ...core, gitRevision: executorRevision, workerVersionId: executorVersion },
     expiresAtMs: now + 300000,
   };
+  const otherExecutorVersion = "44444444-4444-4444-8444-444444444444";
   for (const output of [
     { ...completed, probeId: "b".repeat(32) },
     { ...completed, executor: { ...completed.executor, gitRevision: "f".repeat(40) } },
@@ -197,6 +238,14 @@ const nativeSmokeJourney = Effect.fnUntraced(function* () {
     { ...completed, coreVersionId: executorVersion },
     { ...completed, expiresAtMs: now - 1 },
     { ...completed, expiresAtMs: now + 600000 },
+    ...(retainExecutor
+      ? [
+          {
+            ...completed,
+            executor: { ...completed.executor, workerVersionId: otherExecutorVersion },
+          },
+        ]
+      : []),
     {},
   ]) {
     const stale = yield* Effect.tryPromise(() =>
@@ -212,6 +261,17 @@ const nativeSmokeJourney = Effect.fnUntraced(function* () {
     );
     expect(stale.status).toBe(503);
     expect(stale.headers.get("x-fidy-smoke-failure")).toBe("probe_state");
+  }
+  if (retainExecutor) {
+    for (const disabled of [
+      { NATIVE_STORAGE_ADMISSION: "open" },
+      { NATIVE_FIXTURE_MEMBER: "performance-1" },
+      { SMOKE_QUEUE_NAME: "fidy-native-smoke-" + release.RELEASE_GIT_SHA },
+    ]) {
+      const rejected = yield* Effect.tryPromise(() => poll({ ...environment, ...disabled }));
+      expect(rejected.status).toBe(503);
+      expect(rejected.headers.get("x-fidy-smoke-failure")).toBe("probe_state");
+    }
   }
   const prior = yield* Effect.tryPromise(() =>
     mf.getBindings<{ SMOKE_WORKFLOW: Workflow; SMOKE_QUEUE: Queue }>(priorRevision)
@@ -275,10 +335,15 @@ const nativeSmokeJourney = Effect.fnUntraced(function* () {
 
   expect(yield* Effect.tryPromise(() => refused.text())).not.toContain("payment_source_context");
 });
-it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) =>
+it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "verifies native storage and version-scoped Queue and Workflow completion before accepting a candidate",
-    nativeSmokeJourney,
+    () => nativeSmokeJourney(false),
     { timeout: 30_000 }
-  )
-);
+  );
+  test.effect(
+    "attests the closed candidate Core through the exact retained Queue and Workflow executor",
+    () => nativeSmokeJourney(true),
+    { timeout: 30_000 }
+  );
+});

@@ -54,6 +54,17 @@ const releaseIdentity = (environment: SmokeEnvironment): SmokeIdentityType => ({
   workerVersionId: environment.CF_VERSION_METADATA.id,
 });
 
+const retainedExecutor = {
+  gitRevision: "de04a192c3836be0efb488b170a7b93b9f98f28f",
+  workerVersionId: "54c5d73f-2682-4626-85bc-f8462914b1d4",
+};
+
+const usesRetainedExecutor = (environment: SmokeEnvironment): boolean =>
+  environment.NATIVE_STORAGE_ADMISSION === "closed" &&
+  environment.NATIVE_FIXTURE_MEMBER === "performance-2" &&
+  environment.RELEASE_GIT_SHA !== retainedExecutor.gitRevision &&
+  environment.SMOKE_QUEUE_NAME === "fidy-native-smoke-" + retainedExecutor.gitRevision;
+
 const responseFor = (environment: SmokeEnvironment, status: string, httpStatus: number): Response =>
   Response.json(
     { status, core: releaseIdentity(environment), manifest: smokeManifest },
@@ -145,7 +156,9 @@ const startProbe = Effect.fn(function* (
   const work: SmokeWork = {
     protocolVersion: 2,
     probeId: probe.probeId,
-    gitRevision: environment.RELEASE_GIT_SHA,
+    gitRevision: usesRetainedExecutor(environment)
+      ? retainedExecutor.gitRevision
+      : environment.RELEASE_GIT_SHA,
     contractDigest: environment.CONTRACT_DIGEST,
     coreVersionId: environment.CF_VERSION_METADATA.id,
     expiresAtMs: now + smokeLifetimeMs,
@@ -160,15 +173,30 @@ const startProbe = Effect.fn(function* (
   return responseFor(environment, "pending", acceptedStatus);
 });
 
+const matchesExecutor = (
+  observed: SmokeIdentityType,
+  expected: SmokeIdentityType,
+  retained: boolean
+): boolean =>
+  retained
+    ? verifySmokeIdentity({
+        expected: { ...retainedExecutor, contractDigest: expected.contractDigest },
+        observed,
+      })
+    : observed.gitRevision === expected.gitRevision &&
+      observed.contractDigest === expected.contractDigest;
+
 const validCompletion = ({
   output,
   probeId,
   expected,
+  retained,
   now,
 }: Readonly<{
   output: unknown;
   probeId: string;
   expected: SmokeIdentityType;
+  retained: boolean;
   now: number;
 }>): boolean => {
   const decoded = Schema.decodeUnknownOption(SmokeCompletion)(output);
@@ -178,8 +206,7 @@ const validCompletion = ({
     decoded.value.expiresAtMs > now &&
     decoded.value.expiresAtMs <= now + smokeLifetimeMs &&
     decoded.value.coreVersionId === expected.workerVersionId &&
-    decoded.value.executor.gitRevision === expected.gitRevision &&
-    decoded.value.executor.contractDigest === expected.contractDigest
+    matchesExecutor(decoded.value.executor, expected, retained)
   );
 };
 
@@ -210,6 +237,7 @@ const getProbe = Effect.fn(function* (request: Request, environment: SmokeEnviro
       output: state.output,
       probeId: probeId.value,
       expected: releaseIdentity(environment),
+      retained: usesRetainedExecutor(environment),
       now,
     })
   ) {

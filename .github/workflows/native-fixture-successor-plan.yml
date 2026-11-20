@@ -7,7 +7,18 @@ on:
         description: Read the scoped inventory or prepare the independently approved dormant successor
         type: choice
         default: plan
-        options: [plan, stage, resume, reseal, recover, recover-resumed, rollout, rollout-resumed]
+        options:
+          [
+            plan,
+            stage,
+            resume,
+            reseal,
+            recover,
+            recover-resumed,
+            rollout,
+            rollout-resumed,
+            rollout-accounting,
+          ]
         required: true
       plan_artifact:
         description: Successful protected plan artifact ID from the exact current trunk commit
@@ -52,10 +63,11 @@ jobs:
       FIXTURE_RELEASE_OPERATION:
         ${{ (inputs.operation == 'resume' || inputs.operation == 'reseal') && 'stage-fixture-successor'
         || inputs.operation == 'recover-resumed' && 'recover-fixture-successor'
-        || inputs.operation == 'rollout-resumed' && 'rollout-fixture-successor'
+        || (inputs.operation == 'rollout-resumed' || inputs.operation == 'rollout-accounting') && 'rollout-fixture-successor'
         || format('{0}-fixture-successor', inputs.operation) }}
       FIXTURE_SUCCESSOR_RESUME: ${{ inputs.operation == 'resume' || inputs.operation == 'reseal' || endsWith(inputs.operation, '-resumed') }}
       FIXTURE_SUCCESSOR_RESEAL: ${{ inputs.operation == 'reseal' }}
+      FIXTURE_ACCOUNTING_ROLLOUT: ${{ inputs.operation == 'rollout-accounting' }}
       SUCCESSOR_WORKFLOW_ARTIFACT: ${{ inputs.workflow_artifact }}
       SUCCESSOR_WORKFLOW_DIGEST: ${{ inputs.workflow_sha256 }}
       APPROVED_PLAN_ARTIFACT: ${{ inputs.plan_artifact }}
@@ -143,32 +155,39 @@ jobs:
             echo "FIXTURE_STAGED_VERIFIER_SHA=$GITHUB_SHA" >> "$GITHUB_ENV"
           fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        if: inputs.operation == 'rollout-resumed'
+        if: inputs.operation == 'rollout-resumed' || inputs.operation == 'rollout-accounting'
         with:
           ref: de04a192c3836be0efb488b170a7b93b9f98f28f
           path: interrupted
           persist-credentials: false
       - run: bash scripts/install-workspace.sh --ignore-scripts
-        if: inputs.operation == 'rollout-resumed'
+        if: inputs.operation == 'rollout-resumed' || inputs.operation == 'rollout-accounting'
         working-directory: interrupted
       - name: Match the original app and provider build environment
-        if: inputs.operation == 'rollout-resumed'
+        if: inputs.operation == 'rollout-resumed' || inputs.operation == 'rollout-accounting'
         run: |
           set -euo pipefail
-          [[ "$(git -C interrupted rev-parse HEAD)" == "$RELEASE_GIT_SHA" ]]
+          original=de04a192c3836be0efb488b170a7b93b9f98f28f
+          [[ "$(git -C interrupted rev-parse HEAD)" == "$original" ]]
           for package in alchemy effect @effect/platform-bun @effect/platform-node @alchemy.run/cloudflare-runtime @distilled.cloud/cloudflare @distilled.cloud/core; do
             if ! cmp -s "node_modules/$package/package.json" "interrupted/node_modules/$package/package.json"; then
               echo "Historical and verifier runtime dependency differs for $package" >&2
               exit 1
             fi
           done
-          git diff --quiet "$RELEASE_GIT_SHA" "$GITHUB_SHA" -- ':(glob)patches/alchemy@*.patch'
+          git diff --quiet "$original" "$GITHUB_SHA" -- ':(glob)patches/alchemy@*.patch'
       - uses: ./.github/actions/configure-alchemy-cloudflare-profile
       - name: Bind the protected plan to the reviewed revision
         working-directory: ${{ inputs.operation == 'rollout-resumed' && 'interrupted' || '.' }}
         run: |
           echo "HOSTED_AI_MODEL=$(bun infra/cloudflare/scripts/print-approved-openai-model.ts)" >> "$GITHUB_ENV"
-          echo "CONTRACT_DIGEST=$(bun run --silent --cwd apps/server contracts:digest)" >> "$GITHUB_ENV"
+          contract_digest=$(bun run --silent --cwd apps/server contracts:digest)
+          if [[ "$FIXTURE_ACCOUNTING_ROLLOUT" == true ]]; then
+            original_digest=$(bun run --silent --cwd interrupted/apps/server contracts:digest)
+            [[ "$original_digest" == 7a998d31ff69335d7c90bef16407af1a772cf00aab9e44e23d6c2c357857618f ]]
+            [[ "$contract_digest" == "$original_digest" ]]
+          fi
+          echo "CONTRACT_DIGEST=$contract_digest" >> "$GITHUB_ENV"
           echo "FIDY_NATIVE_FIXTURE_PROVIDER_REVISION=$(jq -er .revision infra/cloudflare/native-retained-provider.json)" >> "$GITHUB_ENV"
           echo "RELEASE_SNAPSHOT_FILE=$RUNNER_TEMP/native-release.json" >> "$GITHUB_ENV"
           echo "SMOKE_ATTESTATION_FILE=$RUNNER_TEMP/native-verification.json" >> "$GITHUB_ENV"
@@ -259,7 +278,7 @@ jobs:
           )
           mkdir -p apps/web/dist
           cp -R "$RUNNER_TEMP/retained-web/apps/web/dist/." apps/web/dist
-          if [[ "$FIXTURE_SUCCESSOR_RESUME" == true ]]; then
+          if [[ "$FIXTURE_SUCCESSOR_RESUME" == true || "$FIXTURE_ACCOUNTING_ROLLOUT" == true ]]; then
             mkdir -p interrupted/apps/web/dist
             cp -R "$RUNNER_TEMP/retained-web/apps/web/dist/." interrupted/apps/web/dist
           fi
@@ -270,7 +289,7 @@ jobs:
         run: bun native-storage-release.ts capture-successor-rollout
       - name: Upload the reviewed active successor pair
         if: env.FIXTURE_RELEASE_OPERATION == 'rollout-fixture-successor'
-        working-directory: ${{ inputs.operation == 'rollout-resumed' && 'interrupted/infra/cloudflare' || 'infra/cloudflare' }}
+        working-directory: ${{ (inputs.operation == 'rollout-resumed' || inputs.operation == 'rollout-accounting') && 'interrupted/infra/cloudflare' || 'infra/cloudflare' }}
         env:
           NATIVE_FIXTURE_SIGNING_KEY: ${{ secrets.NATIVE_FIXTURE_SIGNING_KEY }}
         run: bun "$GITHUB_WORKSPACE/infra/cloudflare/native-storage-resources.ts" rollout-fixture-successor

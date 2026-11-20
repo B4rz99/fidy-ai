@@ -47,7 +47,7 @@ import {
   NativeInventoryRefused,
   inspectNativeResources,
   verifyDeployedVersion,
-  verifySuccessorVersion,
+  verifySuccessorVersionAt,
 } from "./native-deployed-graph";
 import type { NativeRole } from "./native-graph";
 import { continueAdmittedErasure } from "./native-erasure-continuation";
@@ -729,6 +729,21 @@ const verifySupportIdentity = Effect.fn(function* (
       : deployment.id === expected.deploymentId && id === expected.versionId;
   if (!rightVersion) return yield* Effect.fail(Error("Unexpected auxiliary Worker release"));
 });
+const verifyInstallationWorker = (
+  input: Parameters<typeof verifyDeployedVersion>[0],
+  generation: string,
+  successor: boolean
+): void => {
+  if (successor && input.role !== "Web" && input.role !== "ForwardedEmail") {
+    verifySuccessorVersionAt({
+      ...input,
+      revision: input.role === "Smoke" ? generation : input.revision,
+      generation,
+    });
+    return;
+  }
+  verifyDeployedVersion(input);
+};
 const verifyDeployedWorkers = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
@@ -751,14 +766,18 @@ const verifyDeployedWorkers = Effect.fn(function* (
     if (fingerprint !== "") yield* verifySupportIdentity(role, deployment, id);
     const raw = yield* releaseEvidence.readWorkerVersion(env, client, { name, id });
     yield* Effect.try(() =>
-      (artifacts.successorPlan && !auxiliary ? verifySuccessorVersion : verifyDeployedVersion)({
-        role,
-        account: env.account,
-        revision: auxiliary ? artifacts.supportRevision : env.revision,
-        versionId: id,
-        raw,
-        fingerprint,
-      })
+      verifyInstallationWorker(
+        {
+          role,
+          account: env.account,
+          revision: auxiliary ? artifacts.supportRevision : env.revision,
+          versionId: id,
+          raw,
+          fingerprint,
+        },
+        generation,
+        artifacts.successorPlan
+      )
     );
     yield* verifyReleaseObservability(env, name, client);
     if (role === "Core") yield* verifyCoreDefaultPlacement(env, { name, version: id }, client);
@@ -1152,10 +1171,12 @@ const verifyFirstInstall = Effect.fn(function* (
   if (new Set(synthetic.map((result) => result.callback.workflow)).size !== 1) {
     return yield* Effect.fail(Error("Staged hosts reached different native payment attempts"));
   }
+  const { accountingRollout } = yield* fixtureArtifacts(env.revision);
   yield* writeFile(
     env.smokeAttestationFile,
     encodeJson({
       ...installed,
+      ...(accountingRollout ? { nativeAccountingWitness: true } : {}),
       verifierRevision: Option.getOrElse(yield* fixtureVerifier, () => verifier.revision),
       smoke,
       synthetic,
@@ -2186,6 +2207,7 @@ const stageSuccessor = Effect.fn(function* (
       env,
       client,
       release: candidate,
+      generation: env.revision,
       fingerprint: yield* expectedFixtureSigner,
     });
   }
@@ -2197,10 +2219,11 @@ const successorResources = Effect.fn(function* (input: {
   client: HttpClient.HttpClient;
   release: Pick<FallbackStage["release"], "coreVersionId" | "publicVersionId">;
   fingerprint: string;
+  generation: string;
 }) {
-  const { env, client, release, fingerprint } = input;
+  const { env, client, release, fingerprint, generation } = input;
   const port = releasePort({ env, client });
-  const smokeName = "fidy-native-smoke-" + env.revision;
+  const smokeName = "fidy-native-smoke-" + generation;
   const smoke = yield* port.current(smokeName);
   const versionId = yield* releaseController.servingVersion(smoke);
   for (const [role, name, id] of [
@@ -2210,13 +2233,14 @@ const successorResources = Effect.fn(function* (input: {
   ] as const) {
     const raw = yield* releaseEvidence.readWorkerVersion(env, client, { name, id });
     yield* Effect.try(() =>
-      verifySuccessorVersion({
+      verifySuccessorVersionAt({
         role,
         raw,
         account: env.account,
-        revision: env.revision,
+        revision: role === "Smoke" ? generation : env.revision,
         versionId: id,
         fingerprint,
+        generation,
       })
     );
     yield* verifyReleaseObservability(env, name, client);
@@ -2224,7 +2248,7 @@ const successorResources = Effect.fn(function* (input: {
   yield* proveRecoveryCorePrivate(env, client, smokeName);
   yield* proveRecoveryCorePrivate(env, client, installationNames.Core);
   yield* inspectInstalledResources(env, client, fixtureUpload.revision);
-  yield* inspectInstalledResources(env, client, env.revision);
+  yield* inspectInstalledResources(env, client, generation);
   return { versionId, deploymentId: smoke.id };
 });
 const verifyStagedSuccessor = Effect.fn(function* (input: {
@@ -2254,7 +2278,13 @@ const verifyStagedSuccessor = Effect.fn(function* (input: {
     hosts: "acceptance",
     staging: false,
   });
-  const smoke = yield* successorResources({ env, client, release, fingerprint });
+  const smoke = yield* successorResources({
+    env,
+    client,
+    release,
+    fingerprint,
+    generation: env.revision,
+  });
   yield* probePromotionPairs({ env, client }, release, {
     descriptions: deployed.descriptions,
     probeOriginal: true,
@@ -2334,8 +2364,9 @@ const readSuccessorSeal = Effect.fn(function* (env: Config) {
   const seal = yield* Schema.decodeUnknownEffect(SuccessorArtifact)(
     yield* readFile(directory + "/fixture-successor-seal-reference.json")
   );
+  const artifacts = yield* fixtureArtifacts(env.revision);
   if (
-    env.revision !== stage.revision ||
+    artifacts.resourceRevision !== stage.revision ||
     !isDeepStrictEqual(source, stage.predecessor) ||
     !isDeepStrictEqual(stage.provider, retainedProvider) ||
     stage.controlsDigest !== fixtureUpload.controlsDigest
@@ -2344,7 +2375,7 @@ const readSuccessorSeal = Effect.fn(function* (env: Config) {
       message: "Sealed dormant successor differs from protected evidence",
     });
   }
-  yield* requireSuccessorCapture(env, stage.release.snapshot);
+  yield* requireSuccessorCapture({ ...env, revision: stage.revision }, stage.release.snapshot);
   return { directory, stage, seal, source, fingerprint };
 });
 const verifyRecoveredSuccessor = Effect.fn(function* (input: {
@@ -2362,7 +2393,13 @@ const verifyRecoveredSuccessor = Effect.fn(function* (input: {
   });
   yield* requireClosedAdmission(client);
   yield* requireClosedIngressDomains(accountReader(env, client));
-  const smoke = yield* successorResources({ env, client, release: stage.release, fingerprint });
+  const smoke = yield* successorResources({
+    env: { ...env, revision: stage.revision },
+    client,
+    release: stage.release,
+    generation: stage.revision,
+    fingerprint,
+  });
   if (!isDeepStrictEqual(smoke, stage.smoke)) {
     return yield* new ReleaseFailure({
       message: "Successor technical smoke differs from the sealed stage",
@@ -2424,7 +2461,7 @@ const verifySuccessorReturnSource = Effect.fn(function* (
   if (
     !isDeepStrictEqual(recovered.stage, stage) ||
     !isDeepStrictEqual(recovered.seal, seal) ||
-    snapshot.revision !== stage.revision ||
+    snapshot.revision !== env.revision ||
     snapshot.stableRevision !== stage.revision ||
     snapshot.core.deploymentId !== recovered.promoted.coreDeploymentId ||
     snapshot.public.deploymentId !== recovered.promoted.publicDeploymentId
@@ -2439,7 +2476,7 @@ const verifySuccessorReturnSource = Effect.fn(function* (
   yield* observeDormantPair(
     client,
     {
-      revision: env.revision,
+      revision: stage.revision,
       ingress: snapshot.public.stableVersionId,
       core: snapshot.core.stableVersionId,
       proof: env.smokeProof,
@@ -2485,7 +2522,7 @@ const promoteSuccessor = Effect.fn(function* (
     yield* readFile(env.file)
   );
   const expected = {
-    revision: stage.revision,
+    revision: env.revision,
     stableRevision: stage.revision,
     core: {
       name: installationNames.Core,
@@ -2504,7 +2541,13 @@ const promoteSuccessor = Effect.fn(function* (
       message: "Staged successor differs from its authorized return pair",
     });
   }
-  const smoke = yield* successorResources({ env, client, release, fingerprint });
+  const smoke = yield* successorResources({
+    env,
+    client,
+    release,
+    fingerprint,
+    generation: stage.revision,
+  });
   if (!isDeepStrictEqual(smoke, stage.smoke)) {
     return yield* new ReleaseFailure({
       message: "Active successor smoke changed before promotion",

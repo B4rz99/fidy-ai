@@ -1,5 +1,6 @@
 import type { SharedBindings } from "../../storage-bootstrap/contract";
 import type { BancolombiaSandboxEnvironment } from "../../bancolombia-authentication/contract";
+import type { NativeAcceptanceSettings } from "../../release-isolation/contract";
 import { Schema } from "effect";
 import { contractDigestPattern, gitRevisionPattern } from "../contract";
 
@@ -93,6 +94,7 @@ export type SmokeCompletion = typeof SmokeCompletion.Type;
 
 export type SmokeEnvironment = BancolombiaSandboxEnvironment &
   SharedBindings &
+  Pick<NativeAcceptanceSettings, "NATIVE_STORAGE_ADMISSION" | "NATIVE_FIXTURE_MEMBER"> &
   Readonly<{
     SMOKE_LIMITER: RateLimit;
     SMOKE_BUCKET: R2Bucket;

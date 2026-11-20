@@ -74,7 +74,7 @@ def artifact(account_revision, artifact_id, expected_digest, get=actions_get, gi
         from successor_artifacts import active_successor
         if git("merge-base", account_revision, git("rev-parse", "HEAD")) != account_revision:
             raise ValueError("Protected successor release came from a different lineage")
-        return active_successor(account_revision, {"artifactId":artifact_id, "sha256":expected_digest}, get)
+        return active_successor(account_revision, {"artifactId":artifact_id, "sha256":expected_digest}, get, git=git)
     source = archive_verifier(artifact_id, git("rev-parse", "HEAD"), get, git, account_revision)
     run, data = protected_archive(source, artifact_id, expected_digest,
                                   prefix="native-storage-release-", conclusions={"success"}, get=get)
@@ -136,6 +136,12 @@ def serving_graph(read, account, revision, installed):
     support = upload["revision"]
     successor = installed.get("fixtureMember") == "performance-2"
     generation = revision if successor else support
+    accounting = installed.get("nativeAccountingWitness") is True
+    if accounting:
+        from successor_partial import REVISION
+        if not successor or revision == REVISION:
+            raise ValueError("Accounting witness does not identify a new active successor")
+        generation = REVISION
     if (installed.get("revision") != revision or installed.get("resourceRevision") != generation
             or not re.fullmatch("[0-9a-f]{40}", generation)):
         raise ValueError("Qualified application source or retained resource generation differs")
@@ -188,7 +194,7 @@ def serving_graph(read, account, revision, installed):
             rows = raw["resources"]["bindings"]
             bindings = {row["name"]: row for row in rows}
             source = bindings.get("RELEASE_GIT_SHA", {})
-            expected_source = revision if role == "Smoke" else support
+            expected_source = (generation if accounting else revision) if role == "Smoke" else support
             if (raw.get("id") != recorded["versionId"] or len(bindings) != len(rows)
                     or (source.get("type"), source.get("text")) != ("plain_text", expected_source)):
                 raise ValueError("Installed support Worker has a different source revision")

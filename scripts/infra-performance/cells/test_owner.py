@@ -22,6 +22,27 @@ class ConditionalObject:
         return self.version
 
 
+class NativeAccountingTests(unittest.TestCase):
+    def test_required_delta_when_persisted_fixture_setup_precedes_browser_window(self):
+        from browser_window import NATIVE_EXPECTED, native_delta
+
+        setup = ["transactions.createTransaction", "success", 8]
+        before = dict(groups=[setup], canonicalUnits=0, receipts=0)
+        after = dict(groups=[setup, *[[*key, count] for key, count in NATIVE_EXPECTED.items()]],
+                     canonicalUnits=0, receipts=0)
+        verified = native_delta(before, after)
+        self.assertTrue(verified["verified"])
+        self.assertEqual({tuple(row[:2]): row[2] for row in verified["audit"]}, NATIVE_EXPECTED)
+        for refused in (
+            {**after, "groups": after["groups"][:-1]},
+            {**after, "groups": [*after["groups"], setup]},
+            {**after, "canonicalUnits": 1},
+            {**after, "receipts": 1},
+        ):
+            with self.assertRaises(Refused):
+                native_delta(before, refused)
+
+
 class NamespaceInventoryTests(unittest.TestCase):
     prefix = "fidy-2259-123456abcdef"
 
@@ -82,6 +103,52 @@ class NamespaceInventoryTests(unittest.TestCase):
 
 
 class OwnerTests(unittest.TestCase):
+    def test_preflight_checks_the_verified_quote_and_current_shared_headroom_without_reserving(self):
+        import json
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from types import SimpleNamespace
+        from owner import ROOT, main
+
+        prefix, account, day = "fidy-2259-123456abcdef", "a" * 32, today()
+        store = ConditionalObject()
+        store.value = dict(account=account, active=None, last=None, charged=dict(
+            day=day, spent=dict(rowsRead=10, rowsWritten=2),
+        ))
+        bundle = SimpleNamespace(estimate=dict(rowsRead=90, rowsWritten=8))
+        observed = dict(accountId=account, utcDate=day)
+        allowed = dict(_tag="Allowed", maximumRowsRead=100, maximumRowsWritten=10)
+        with TemporaryDirectory() as tmp:
+            for outcome, expected in ((allowed, 0), (Refused("budget_refused"), 1)):
+                with self.subTest(expected=expected):
+                    out = Path(tmp, str(expected))
+                    argv = ["owner.py", "preflight", "--prefix", prefix, "--out", str(out),
+                            "--maximum-reads", "90"]
+                    with (
+                        patch("sys.argv", argv),
+                        patch.dict("os.environ", CLOUDFLARE_ACCOUNT_ID=account),
+                        patch("owner.Cloud") as cloud,
+                        patch("owner.CustodyObject", return_value=store) as custody,
+                        patch("owner.require_empty_inventory") as inventory,
+                        patch("owner.verified_comparator", return_value=(bundle, {}, {})),
+                        patch("owner.usage", return_value=observed),
+                        patch("owner.admit", side_effect=[outcome]) as admit,
+                        patch("owner.prepare_inventory") as provision,
+                    ):
+                        self.assertEqual(main(), expected)
+                    custody.assert_called_once_with(account, cloud.return_value, read_only=True)
+                    inventory.assert_called_once_with(cloud.return_value)
+                    admit.assert_called_once_with(ROOT, account, observed,
+                                                  dict(rowsRead=100, rowsWritten=10))
+                    provision.assert_not_called()
+                    report = json.loads((out / "report.json").read_bytes())
+                    if expected:
+                        self.assertEqual(report["reason"], "budget_refused")
+                    else:
+                        self.assertEqual(report["preflight"], dict(day=day, decision=allowed, applied=False))
+        self.assertEqual(store.version, 0)
+        self.assertIsNone(store.value["active"])
+
     def test_preflight_refuses_an_active_experiment_before_touching_provider_inventory(self):
         from pathlib import Path
         from tempfile import TemporaryDirectory

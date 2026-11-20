@@ -223,6 +223,29 @@ class ResumedSuccessorArchiveTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "tested dormant installation"):
             active_successor(REVISION, ref, self.archive.get, verifier=CHECKOUT, git=git_lineage)
 
+    def test_accounting_app_keeps_verified_dormant_and_support_generation(self):
+        seal = self.stage_archive()
+        recovery, recovered = self.recovery_archive(seal)
+        _, files, _ = self.active_archive(seal, recovery, recovered)
+        promotion = files["native-release.json.promoted"]
+        installed = files["native-verification.json"]
+        promotion["release"]["snapshot"]["revision"] = ROLLOUT
+        installed.update(revision=ROLLOUT, nativeAccountingWitness=True)
+        ref = self.archive.add("104", ROLLOUT, "native-fixture-successor-active-", files, ACTIVE_STEPS)
+        self.assertEqual(
+            active_successor(ROLLOUT, ref, self.archive.get, verifier=CHECKOUT, git=git_lineage),
+            (promotion, installed),
+        )
+        for changed in (
+            {"resourceRevision": ROLLOUT},
+            {"verifierRevision": REVISION},
+            {"nativeAccountingWitness": False},
+        ):
+            forged = {**files, "native-verification.json": {**installed, **changed}}
+            ref = self.archive.add("104", ROLLOUT, "native-fixture-successor-active-", forged, ACTIVE_STEPS)
+            with self.assertRaises(ValueError):
+                active_successor(ROLLOUT, ref, self.archive.get, verifier=CHECKOUT, git=git_lineage)
+
     def test_refuses_a_foreign_or_later_archive_in_the_chain(self):
         seal = self.stage_archive(producer="f" * 40)
         with self.assertRaisesRegex(ValueError, "outside the protected verifier lineage"):

@@ -131,8 +131,13 @@ def archive_revision(revision, reference, verifier, get, git):
         verifier = git("rev-parse", "HEAD") if revision == REVISION else revision
     if verifier == revision:
         return revision
+    if revision != REVISION:
+        if (not re.fullmatch(r"[a-f0-9]{40}", verifier)
+                or git("merge-base", revision, verifier) != revision):
+            raise ValueError("Successor archive is outside the protected verifier lineage")
+        return revision
     artifact_id = reference["artifactId"]
-    if (revision != REVISION or not re.fullmatch(r"[a-f0-9]{40}", verifier)
+    if (not re.fullmatch(r"[a-f0-9]{40}", verifier)
             or not re.fullmatch(r"[1-9][0-9]{0,19}", artifact_id or "")):
         raise ValueError("Unexpected resumed successor source or verifier")
     producer = json.loads(get("artifacts/" + artifact_id))["workflow_run"]["head_sha"]
@@ -257,16 +262,20 @@ def active_successor(revision, reference, get=actions_get, *, verifier=None, git
     files = artifacts(producer, reference, "native-fixture-successor-active-",
                       continuation_steps(resumed, ACTIVE_STEPS),
                       [promotion_name, installation_name, seal_name, recovery_name], get)
-    recovered = recovered_successor(revision, files[recovery_name], files[seal_name], get, verifier=producer, git=git)
-    stage, promoted = recovered["stage"], recovered["promoted"]
     promotion, installed = files[promotion_name], files[installation_name]
+    accounting = installed.get("nativeAccountingWitness", False)
+    if type(accounting) is not bool or (accounting and (revision == REVISION or producer != revision)):
+        raise ValueError("Native accounting rollout requires a new exact application")
+    support = REVISION if accounting else revision
+    recovered = recovered_successor(support, files[recovery_name], files[seal_name], get, verifier=producer, git=git)
+    stage, promoted = recovered["stage"], recovered["promoted"]
     release = promotion["release"]
     snapshot = release["snapshot"]
     smoke, = [worker for worker in installed["workers"] if worker["role"] == "Smoke"]
-    if (("resume" in stage) != resumed or promotion["rollbackTested"] is not True or snapshot["revision"] != revision
-            or snapshot["stableRevision"] != revision or installed["revision"] != revision
+    if (("resume" in stage) != (resumed or accounting) or promotion["rollbackTested"] is not True or snapshot["revision"] != revision
+            or snapshot["stableRevision"] != support or installed["revision"] != revision
             or installed["verifierRevision"] != producer or installed["admission"] != "closed"
-            or installed["fixtureMember"] != "performance-2" or installed["resourceRevision"] != revision
+            or installed["fixtureMember"] != "performance-2" or installed["resourceRevision"] != support
             or installed["retainedProvider"] != stage["provider"] or installed["fixtureControlsDigest"] != stage["controlsDigest"]
             or installed["namespaces"] != [stage["namespaces"][role] for role in OWNERS]
             or installed["userNamespace"] != stage["namespaces"]["user"]
@@ -277,7 +286,7 @@ def active_successor(revision, reference, get=actions_get, *, verifier=None, git
         if (snapshot[role]["deploymentId"] != promoted[deployment_key]
                 or snapshot[role]["stableVersionId"] != stage["release"][version_key]
                 or release[version_key] == stage["release"][version_key]
-                or (resumed and installed[version_key] != release[version_key])):
+                or ((resumed or accounting) and installed[version_key] != release[version_key])):
             raise ValueError("Active successor does not identify its tested return pair")
     return promotion, installed
 
@@ -289,9 +298,12 @@ def main():
     revision = env.get("RELEASE_GIT_SHA", verifier)
     mode = env.get("FIXTURE_SUCCESSOR_RESUME", "false")
     resumed = mode == "true"
+    accounting_mode = env.get("FIXTURE_ACCOUNTING_ROLLOUT", "false")
+    accounting = accounting_mode == "true"
     if (operation not in ("recover-fixture-successor", "rollout-fixture-successor")
             or not re.fullmatch(r"[a-f0-9]{40}", verifier)
-            or mode not in ("true", "false")
+            or mode not in ("true", "false") or accounting_mode not in ("true", "false")
+            or (accounting and (resumed or revision == REVISION or operation != "rollout-fixture-successor"))
             or (resumed and (revision != REVISION or revision == verifier))
             or (not resumed and revision != verifier)
             or env.get("GITHUB_ACTIONS") != "true" or env.get("GITHUB_REF_PROTECTED") != "true"
@@ -299,7 +311,7 @@ def main():
             or env.get("GITHUB_WORKFLOW_REF") != WORKFLOW_REF or env.get("GITHUB_RUN_ATTEMPT") != "1"
             or env.get("NATIVE_STORAGE_ADMISSION") != "closed" or env.get("NATIVE_STORAGE_HOSTS") != "acceptance"):
         raise ValueError("Requires the protected successor workflow and exact verifier checkout")
-    if resumed and git_read("rev-parse", "HEAD") != verifier:
+    if (resumed or accounting) and git_read("rev-parse", "HEAD") != verifier:
         raise ValueError("Resumed successor verification requires the current checkout")
     seal = {"artifactId":env["SUCCESSOR_SEAL_ARTIFACT"], "sha256":env["SUCCESSOR_SEAL_DIGEST"]}
     if operation == "recover-fixture-successor":
@@ -307,11 +319,11 @@ def main():
         files = {"native-fixture-successor-stage.json":stage}
     else:
         recovery = {"artifactId":env["SUCCESSOR_RECOVERY_ARTIFACT"], "sha256":env["SUCCESSOR_RECOVERY_DIGEST"]}
-        recovered = recovered_successor(revision, recovery, seal, verifier=verifier)
+        recovered = recovered_successor(REVISION if accounting else revision, recovery, seal, verifier=verifier)
         stage = recovered["stage"]
         files = {"native-fixture-successor-stage.json":stage, "native-fixture-successor-recovered.json":recovered,
                  "fixture-successor-recovery-reference.json":recovery}
-    if ("resume" in stage) != resumed:
+    if ("resume" in stage) != (resumed or accounting):
         raise ValueError("Successor seal does not match the protected resume mode")
     files.update({"fixture-successor-seal-reference.json":seal, "fixture-successor-source.json":stage["predecessor"]})
     for name, contents in files.items():

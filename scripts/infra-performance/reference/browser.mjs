@@ -90,15 +90,28 @@ try {
   await cdp.send("Performance.enable");
   const note = (event) => events.push({ epoch:performance.timeOrigin+performance.now(), ...event });
   const marks = (type,journey) => note({type,journey});
+  await page.addInitScript(() => {
+    const getStyle = window.getComputedStyle;
+    window.__rootStyleMs = 0;
+    window.__rootStyleReads = 0;
+    window.getComputedStyle = function(element, pseudo) {
+      if (element !== document.documentElement) return getStyle.call(this, element, pseudo);
+      const start = performance.now();
+      const result = getStyle.call(this, element, pseudo);
+      window.__rootStyleMs += performance.now()-start;
+      window.__rootStyleReads++;
+      return result;
+    };
+  });
   const measureStage = async (type, journey) => {
-    const [options, cpu] = await Promise.all([
-      page.evaluate(() => window.__referenceChoiceOptions ?? 0),
+    const [style, cpu] = await Promise.all([
+      page.evaluate(() => ({reads:window.__rootStyleReads ?? 0, ms:window.__rootStyleMs ?? 0})),
       cdp.send("Performance.getMetrics"),
     ]);
     const metrics = Object.fromEntries(cpu.metrics.filter((metric) =>
       ["TaskDuration", "ScriptDuration", "LayoutDuration", "RecalcStyleDuration"].includes(metric.name)
     ).map((metric) => [metric.name, metric.value]));
-    note({ type, journey, options, metrics });
+    note({ type, journey, style, metrics });
   };
   const started = new Map();
   await cdp.send("Network.enable");

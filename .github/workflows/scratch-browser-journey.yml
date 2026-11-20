@@ -1,8 +1,8 @@
-name: Count work in closed Category menus
+name: Trace computed style reads during refresh
 
 on:
   push:
-    branches: [test/2260-browser-menu-work]
+    branches: [test/2260-compare-toast-work]
 
 permissions:
   contents: read
@@ -36,12 +36,12 @@ jobs:
           sparse-checkout: apps/server/cloudflare
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: 5b5efae4a6996760a7266c0fe7a8823db5349d34
+          ref: 289a268f8077aacca47bba9c2c3f46d3d5c9331a
           path: native-before
           persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: dc66809f9354cc87394a08468e4860b99e8f10af
+          ref: 9710178bf6506dffcc61de7abec977952c181fe9
           path: native-after
           persist-credentials: false
       - uses: ./.github/actions/bun-runtime
@@ -73,7 +73,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: same-runner-menu-timing-${{ github.run_id }}
+          name: same-runner-root-style-${{ github.run_id }}
           path: |
             apps/web/test-results/reference/*/plan.json
             apps/web/test-results/reference/*/attempts.jsonl

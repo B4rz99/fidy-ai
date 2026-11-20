@@ -1,3 +1,4 @@
+import retainedProvider from "./native-retained-provider.json" with { type: "json" };
 import {
   type NativeBinding,
   NativeBindings,
@@ -149,6 +150,17 @@ const requireFixtureMain = (
     )(props);
   }
 };
+const requireFixtureService = (
+  role: NativeRole,
+  bindings: readonly NativeBinding[],
+  fingerprint: string
+): void => {
+  if (fingerprint === "" || (role !== "Ingress" && role !== "Core")) return;
+  const provider = bindings.find((binding) => binding.name === "RELEASE_FIXTURE");
+  if (provider?.service !== "fidy-native-smoke-" + retainedProvider.revision) {
+    throw Error("Resolved original provider target differs");
+  }
+};
 export const requireNativeBindings = ({
   plan,
   revision,
@@ -174,6 +186,7 @@ export const requireNativeBindings = ({
     const bindings = node.bindings.flatMap(
       (binding) => Schema.decodeUnknownSync(ProviderBindings)(binding.data).bindings ?? []
     );
+    requireFixtureService(role, bindings, fingerprint);
     requireSiteAsset(role, props, bindings);
     requireClosedBindings({ worker: role, bindings, fingerprint });
     if (role === "Core") requireNativeClasses(bindings);

@@ -51,6 +51,8 @@ def artifact(account_revision, artifact_id, expected_digest):
 
 
 def serving_graph(read, account, revision, installed):
+    if not re.fullmatch("[0-9a-f]{64}", installed.get("fixtureControlsDigest", "")):
+        raise ValueError("Protected release has no retained financial control evidence")
     recorded_provider = installed["retainedProvider"]
     pin = json.loads((Path(__file__).resolve().parents[3] / "infra/cloudflare/native-retained-provider.json").read_bytes())
     if recorded_provider != pin:

@@ -1,5 +1,12 @@
+import { FallbackStage, recoverFixtureFallback } from "./native-fallback-recovery";
+import {
+  controlsDigest,
+  fallbackNamespaces,
+  observeDormantPair,
+  requireOriginalFallbackSource,
+} from "./native-fallback-probe";
 import retainedProvider from "./native-retained-provider.json" with { type: "json" };
-import { expectedFixtureSigner } from "./native-fixture-signer";
+import { expectedFixtureSigner, fixtureBuild } from "./native-fixture-signer";
 import { BunFileSystem } from "@effect/platform-bun";
 import type { ErasureProgress } from "./native-erasure-continuation";
 import type { ErasureObservation } from "./native-erasure";
@@ -177,6 +184,35 @@ const verifyRetainedProvider = Effect.fn(function* (
   return retainedProvider;
 });
 
+const preflightSignedSource = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  { port, snapshot }: { port: ReleasePort; snapshot: typeof releaseSchemas.snapshot.Type }
+) {
+  yield* verifyRetainedProvider(env, client, port);
+  yield* requireClosedAdmission(client);
+  const pair = {
+    revision: snapshot.stableRevision,
+    ingress: snapshot.public.stableVersionId,
+    core: snapshot.core.stableVersionId,
+    proof: env.smokeProof,
+  };
+  if ((yield* fixtureBuild) === "fallback") {
+    yield* Effect.try(() => requireOriginalFallbackSource(snapshot));
+  } else {
+    if (snapshot.stableRevision !== env.revision) {
+      return yield* Effect.fail(
+        Error("Active receipt requires the dormant build of this exact revision")
+      );
+    }
+    yield* observeDormantPair(client, pair, true);
+  }
+  if ((yield* ReleaseConfig.String("FIXTURE_RELEASE_OPERATION")) === "plan-fixture-fallback") {
+    return;
+  }
+  const digest = yield* controlsDigest(pair, acceptanceSend(client));
+  yield* writeFile(env.file + ".controls", encodeJson({ digest }));
+});
 const verifyStorageUpload = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
@@ -191,7 +227,9 @@ const verifyStorageUpload = Effect.fn(function* (
       message: "Storage upload snapshot differs from protected build",
     });
   }
-  if ((yield* expectedFixtureSigner) !== "") yield* verifyRetainedProvider(env, client, port);
+  if ((yield* expectedFixtureSigner) !== "") {
+    yield* preflightSignedSource(env, client, { port, snapshot });
+  }
   yield* releaseController.requireTrunk(port, env.revision);
   yield* releaseController.requireCapturedWorker(port, snapshot.public);
   yield* releaseController.requireCapturedWorker(port, snapshot.core);
@@ -704,6 +742,37 @@ const installedConfig = Effect.fn(function* (verifier: Config) {
   );
   return { ...verifier, revision };
 });
+const originalControlEvidence = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  versions: { core: string; ingress: string }
+) {
+  const { digest } = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({ digest: SmokeIdentity.fields.contractDigest })
+  )(yield* readFile(env.file + ".controls"));
+  const observed = yield* controlsDigest(
+    { revision: env.revision, ...versions, proof: env.smokeProof },
+    acceptanceSend(client)
+  );
+  if (observed !== digest) {
+    return yield* Effect.fail(Error("Original financial control identities changed"));
+  }
+  return { fixtureControlsDigest: digest };
+});
+const activeControlEvidence = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  installed: Effect.Success<ReturnType<typeof installedRelease>>
+) {
+  const operation = yield* ReleaseConfig.String("FIXTURE_RELEASE_OPERATION").pipe(
+    ReleaseConfig.withDefault("")
+  );
+  if ((yield* expectedFixtureSigner) === "" || operation !== "rollout") return {};
+  return yield* originalControlEvidence(env, client, {
+    ingress: installed.publicVersionId,
+    core: installed.coreVersionId,
+  });
+});
 const verifyFirstInstall = Effect.fn(function* (
   verifier: Config,
   client: HttpClient.HttpClient,
@@ -748,7 +817,13 @@ const verifyFirstInstall = Effect.fn(function* (
   }
   yield* writeFile(
     env.smokeAttestationFile,
-    encodeJson({ ...installed, verifierRevision: verifier.revision, smoke, synthetic })
+    encodeJson({
+      ...installed,
+      verifierRevision: verifier.revision,
+      smoke,
+      synthetic,
+      ...(yield* activeControlEvidence(env, client, installed)),
+    })
   );
 });
 
@@ -1124,6 +1199,126 @@ const storageCompatibility = Effect.fn(function* (
   }
   return { rollback };
 });
+const confirmFallbackVersions = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  stage: FallbackStage
+) {
+  const fingerprint = yield* expectedFixtureSigner;
+  for (const [role, worker, id] of [
+    ["Core", installationNames.Core, stage.release.coreVersionId],
+    ["Ingress", installationNames.Ingress, stage.release.publicVersionId],
+  ] as const) {
+    const raw = yield* releaseEvidence.readWorkerVersion(env, client, { name: worker, id });
+    yield* Effect.try(() =>
+      verifyDeployedVersion({
+        role,
+        raw,
+        versionId: id,
+        revision: env.revision,
+        account: env.account,
+        fingerprint,
+      })
+    );
+  }
+});
+const checkedFixtureStage = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  stage: FallbackStage
+) {
+  yield* Effect.try(() => requireOriginalFallbackSource(stage.release.snapshot));
+  const port = releasePort({ env, client });
+  const provider = yield* verifyRetainedProvider(env, client, port);
+  const edge = yield* hostMode;
+  if (
+    env.revision !== stage.revision ||
+    edge !== "acceptance" ||
+    !isDeepStrictEqual(stage.provider, provider) ||
+    (yield* expectedFixtureSigner) === "" ||
+    (yield* fixtureBuild) !== "fallback"
+  ) {
+    return yield* Effect.fail(Error("Closed dormant stage differs from the protected release"));
+  }
+  yield* releaseController.requireTrunk(port, env.revision);
+  yield* requireClosedAdmission(client);
+  yield* storageCompatibility({ env, client }, stage.release, "stage");
+  const { core, ingress, descriptions } = yield* deployedStorage({
+    env,
+    client,
+    release: stage.release,
+  });
+  const observed = fallbackNamespaces(descriptions.candidate.namespaces);
+  if (!isDeepStrictEqual(stage.namespaces, observed)) {
+    return yield* Effect.fail(Error("Dormant namespace identities changed"));
+  }
+  yield* verifyInstalledNamespaces({
+    env,
+    client,
+    storage: descriptions.candidate,
+    workers: [core.candidate, ingress.candidate],
+  });
+  yield* confirmFallbackVersions(env, client, stage);
+  yield* proveRecoveryCorePrivate(env, client, installationNames.Core);
+  yield* inspectNativeResources(accountReader(env, client), env.revision, true);
+  yield* inspectDeployedEdge(env, client, {
+    installed: true,
+    bindings: core.candidate.bindings,
+    hosts: edge,
+    staging: false,
+  });
+  return {
+    revision: env.revision,
+    ingress: stage.release.publicVersionId,
+    core: stage.release.coreVersionId,
+    proof: env.smokeProof,
+  };
+});
+const verifyDormantPhase = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  { stage, phase }: { stage: FallbackStage; phase: "before" | "after" }
+) {
+  const pair = yield* checkedFixtureStage(env, client, stage);
+  const probe = observeDormantPair(client, pair, phase === "after");
+  yield* phase === "after"
+    ? probe.pipe(Effect.retry({ times: 12, schedule: Schedule.spaced("25 seconds") }))
+    : probe;
+  if ((yield* controlsDigest(pair, acceptanceSend(client))) !== stage.controlsDigest) {
+    return yield* Effect.fail(Error("Original financial control identities changed"));
+  }
+});
+const stagePath = ReleaseConfig.String("RUNNER_TEMP").pipe(
+  Effect.map((directory) => directory + "/native-fallback-stage.json")
+);
+const sealFallback = Effect.fn(function* (env: Config, client: HttpClient.HttpClient) {
+  const release = yield* Schema.decodeUnknownEffect(releaseSchemas.staged)(
+    yield* readFile(env.file)
+  );
+  const { descriptions } = yield* deployedStorage({ env, client, release });
+  const controls = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({ digest: SmokeIdentity.fields.contractDigest })
+  )(yield* readFile(env.file + ".controls"));
+  const stage = yield* Schema.decodeUnknownEffect(FallbackStage)({
+    revision: env.revision,
+    stableRevision: release.snapshot.stableRevision,
+    release,
+    provider: retainedProvider,
+    namespaces: fallbackNamespaces(descriptions.serving.namespaces),
+    controlsDigest: controls.digest,
+  });
+  yield* storageCompatibility({ env, client }, release, "promote");
+  yield* verifyDormantPhase(env, client, { stage, phase: "before" });
+  yield* writeFile(yield* stagePath, encodeJson(stage));
+});
+const forwardFallback = Effect.fn(function* (env: Config, client: HttpClient.HttpClient) {
+  const stage = yield* Schema.decodeUnknownEffect(FallbackStage)(yield* readFile(yield* stagePath));
+  const port = releasePort({ env, client });
+  const promoted = yield* recoverFixtureFallback(port, stage, (verified, phase) =>
+    verifyDormantPhase(env, client, { stage: verified, phase })
+  );
+  yield* writeFile(env.file + ".fallback", encodeJson({ stage, promoted, rollbackTested: false }));
+});
 const nativeWorkerReceipts = Effect.fn(function* (mode: "capture" | "completed") {
   const receipts = yield* workersFromState(mode, nativeStack);
   if (
@@ -1263,6 +1458,19 @@ const rollbackNative = Effect.fn(function* (
     });
   }
   yield* requireClosedAdmission(client);
+  if ((yield* expectedFixtureSigner) !== "") {
+    const pair = {
+      revision: restored.identity.stableRevision,
+      ingress: restored.publicStable,
+      core: restored.coreStable,
+      proof: env.smokeProof,
+    };
+    yield* observeDormantPair(client, pair, true).pipe(
+      Effect.retry({ times: 12, schedule: Schedule.spaced("25 seconds") })
+    );
+    yield* originalControlEvidence(env, client, pair);
+  }
+
   yield* writeFile(
     env.file + ".restored",
     encodeJson({
@@ -1569,6 +1777,8 @@ const tenCommand =
   (env, client, port) =>
     tenFleet(env, client, { port, action });
 const commands = {
+  "seal-fallback": sealFallback,
+  "forward-fallback": forwardFallback,
   "ten-prepare": tenCommand("ten-prepare"),
   "ten-hosted": tenCommand("ten-hosted"),
   "continue-ten-cleanup": tenCommand("continue-ten-cleanup"),
@@ -1591,6 +1801,8 @@ if (import.meta.main) {
   const program = Effect.gen(function* () {
     const command = yield* Schema.decodeUnknownEffect(
       Schema.Literals([
+        "seal-fallback",
+        "forward-fallback",
         "ten-prepare",
         "ten-hosted",
         "continue-ten-cleanup",

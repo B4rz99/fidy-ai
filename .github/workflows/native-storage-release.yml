@@ -12,6 +12,14 @@ on:
         required: false
         default: false
         type: boolean
+      fallback_artifact:
+        description: Protected sealed stage artifact ID for dormant forward recovery
+        required: false
+        type: string
+      fallback_sha256:
+        description: Independently approved stage archive SHA-256 for dormant forward recovery
+        required: false
+        type: string
       fleet_source_run:
         description: Original protected ten-User trial run ID for cleanup
         required: false
@@ -32,6 +40,9 @@ on:
             plan-first-install,
             first-install,
             stage-hosts,
+            plan-fixture-fallback,
+            prepare-fixture-fallback,
+            recover-fixture-fallback,
             rollout,
             rehearse-rollback,
             publish-site,
@@ -48,12 +59,14 @@ jobs:
   release:
     if: ${{ github.ref == 'refs/heads/trunk' && inputs.operation != 'publish-site' }}
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ (inputs.operation == 'fleet-pilot' || inputs.operation == 'ten-hosted' || inputs.operation == 'continue-ten-cleanup') && 110 || inputs.operation == 'continue-fleet-cleanup' && 55 || (inputs.operation == 'first-install' || inputs.operation == 'verify-erasure' || inputs.operation == 'continue-erasure') && 90 || 30 }}
+    timeout-minutes: ${{ (inputs.operation == 'fleet-pilot' || inputs.operation == 'ten-hosted' || inputs.operation == 'continue-ten-cleanup') && 110 || inputs.operation == 'continue-fleet-cleanup' && 55 || (inputs.operation == 'first-install' || inputs.operation == 'verify-erasure' || inputs.operation == 'continue-erasure' || inputs.operation == 'prepare-fixture-fallback' || inputs.operation == 'recover-fixture-fallback') && 90 || 30 }}
     environment: production
     permissions:
       actions: read
       contents: read
     env:
+      FIXTURE_RELEASE_OPERATION: ${{ inputs.operation }}
+      NATIVE_FIXTURE_BUILD: ${{ (inputs.operation == 'plan-fixture-fallback' || inputs.operation == 'prepare-fixture-fallback' || inputs.operation == 'recover-fixture-fallback') && 'fallback' || 'ordinary' }}
       NATIVE_FIXTURE_SIGNER_SHA256: ${{ inputs.transaction_fixture_signer && vars.NATIVE_FIXTURE_SIGNER_SHA256 || '' }}
       NATIVE_STORAGE_HOSTS: ${{ vars.NATIVE_STORAGE_HOSTS || 'acceptance' }}
       CLOUDFLARE_ACCESS_ISSUER: ${{ secrets.CLOUDFLARE_ACCESS_ISSUER }}
@@ -79,9 +92,12 @@ jobs:
           FIXTURE_SIGNER_REQUESTED: ${{ inputs.transaction_fixture_signer }}
         run: |
           test "$NATIVE_STORAGE_ADMISSION" = closed
+          if [[ "$NATIVE_FIXTURE_BUILD" == fallback ]]; then
+            [[ "$GITHUB_RUN_ATTEMPT" == 1 && "$GITHUB_REF_PROTECTED" == true && "$FIXTURE_SIGNER_REQUESTED" == true ]]
+          fi
           if [[ "$FIXTURE_SIGNER_REQUESTED" == true ]]; then
             [[ "$NATIVE_STORAGE_HOSTS" == acceptance && "$NATIVE_FIXTURE_SIGNER_SHA256" =~ ^[a-f0-9]{64}$ ]]
-            [[ "$RELEASE_OPERATION" != stage-hosts && "$RELEASE_OPERATION" != publish-site && "$RELEASE_OPERATION" != rehearse-rollback ]]
+            [[ "$RELEASE_OPERATION" == rollout || "$RELEASE_OPERATION" == verify || "$NATIVE_FIXTURE_BUILD" == fallback ]]
           fi
           if [[ "$RELEASE_OPERATION" == ten-hosted ]]; then
             test "$GITHUB_RUN_ATTEMPT" = 1
@@ -127,30 +143,71 @@ jobs:
         working-directory: infra/cloudflare
         run: bun native-storage-resources.ts first-install
       - name: Capture the native stable pair
-        if: inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback'
+        if: inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback' || inputs.operation == 'prepare-fixture-fallback' || inputs.operation == 'plan-fixture-fallback'
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts capture
+      - name: Read the complete dormant resource plan without applying it
+        if: inputs.operation == 'plan-fixture-fallback'
+        working-directory: infra/cloudflare
+        env:
+          NATIVE_FIXTURE_SIGNING_KEY: ${{ secrets.NATIVE_FIXTURE_SIGNING_KEY }}
+        run: bun native-storage-resources.ts plan-fixture-fallback
+      - name: Save the verified read-only fallback inventory
+        if: inputs.operation == 'plan-fixture-fallback'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-fixture-plan-${{ github.run_id }}
+          path: ${{ runner.temp }}/native-fixture-plan.json
+          if-no-files-found: error
       - name: Upload the verified native candidates
-        if: inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback'
+        if: inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback' || inputs.operation == 'prepare-fixture-fallback'
         env:
           NATIVE_FIXTURE_SIGNING_KEY: ${{ inputs.transaction_fixture_signer && secrets.NATIVE_FIXTURE_SIGNING_KEY || '' }}
         working-directory: infra/cloudflare
         run: bun native-storage-resources.ts upload
       - name: Stage the zero-traffic native candidates
-        if: inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback'
+        if: inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback' || inputs.operation == 'prepare-fixture-fallback'
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts stage
       - name: Persist and read back private observability on the installed application Workers
-        if: inputs.operation == 'first-install' || inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback'
+        if: inputs.operation == 'first-install' || inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback' || inputs.operation == 'prepare-fixture-fallback'
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts prepare-diagnostics
+      - name: Qualify the closed recovery artifacts and their retained controls
+        if: inputs.operation == 'prepare-fixture-fallback'
+        env:
+          CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
+        working-directory: infra/cloudflare
+        run: bun native-storage-release.ts seal-fallback
+      - name: Seal dormant fallback stage before promotion
+        if: inputs.operation == 'prepare-fixture-fallback'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-fixture-fallback-${{ github.run_id }}
+          path: ${{ runner.temp }}/native-fallback-stage.json
+          if-no-files-found: error
+      - name: Authenticate the interrupted dormant stage
+        if: inputs.operation == 'recover-fixture-fallback'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STAGE_ARTIFACT: ${{ inputs.fallback_artifact }}
+          STAGE_SHA256: ${{ inputs.fallback_sha256 }}
+        run: |
+          python3 scripts/infra-performance/canonical-fixture/fallback_stage.py \
+            --artifact-id "$STAGE_ARTIFACT" --sha256 "$STAGE_SHA256" --out "$RUNNER_TEMP/native-fallback-stage.json"
+      - name: Finish only the tested closed forward repair
+        if: inputs.operation == 'prepare-fixture-fallback' || inputs.operation == 'recover-fixture-fallback'
+        env:
+          CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
+        working-directory: infra/cloudflare
+        run: bun native-storage-release.ts forward-fallback
       - name: Verify mixed and candidate versions before promoting closed admission
         id: promote
         if: inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback'
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts promote
       - name: Build the expected browser artifact for independent verification
-        if: inputs.operation == 'verify' || inputs.operation == 'verify-erasure' || inputs.operation == 'continue-erasure' || inputs.operation == 'fleet-pilot' || inputs.operation == 'continue-fleet-cleanup' || inputs.operation == 'ten-hosted' || inputs.operation == 'continue-ten-cleanup' || inputs.operation == 'stage-hosts'
+        if: inputs.operation == 'verify' || inputs.operation == 'verify-erasure' || inputs.operation == 'continue-erasure' || inputs.operation == 'fleet-pilot' || inputs.operation == 'continue-fleet-cleanup' || inputs.operation == 'ten-hosted' || inputs.operation == 'continue-ten-cleanup' || inputs.operation == 'stage-hosts' || inputs.operation == 'recover-fixture-fallback'
         env:
           RELEASE_GIT_SHA: ${{ inputs.installed_revision || github.sha }}
         working-directory: apps/web
@@ -165,7 +222,7 @@ jobs:
           bun native-storage-release.ts attach-hosts
       - name: Verify the installed application and retained schema markers
         id: verify
-        if: inputs.operation != 'plan-first-install' && inputs.operation != 'first-install' && inputs.operation != 'verify-erasure' && inputs.operation != 'continue-erasure' && inputs.operation != 'fleet-pilot' && inputs.operation != 'continue-fleet-cleanup' && inputs.operation != 'ten-hosted' && inputs.operation != 'continue-ten-cleanup'
+        if: inputs.operation != 'plan-fixture-fallback' && inputs.operation != 'plan-first-install' && inputs.operation != 'first-install' && inputs.operation != 'verify-erasure' && inputs.operation != 'continue-erasure' && inputs.operation != 'fleet-pilot' && inputs.operation != 'continue-fleet-cleanup' && inputs.operation != 'ten-hosted' && inputs.operation != 'continue-ten-cleanup'
         env:
           EXPECTED_INSTALLED_REVISION: ${{ inputs.installed_revision }}
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}

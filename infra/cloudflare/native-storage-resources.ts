@@ -1,3 +1,4 @@
+import { verifyFixturePlan } from "./native-fixture-plan";
 import { expectedFixtureSigner, fixtureBuild } from "./native-fixture-signer";
 import { productionTopology } from "../../apps/server/cloudflare/runtime/contract";
 import { requireHostPlan, stagedAccessApplications } from "./native-host-plan";
@@ -16,7 +17,10 @@ import { nativeResourceFailureMessage, nativeResourceStage } from "./resource-fa
 import { type NativeHostMode, requireNativeBindings } from "./storage-installation";
 
 const Phase = Schema.Literals(["first-install", "upload", "stage-hosts"]);
-const Operation = Schema.Union([Phase, Schema.Literal("plan-first-install")]);
+const Operation = Schema.Union([
+  Phase,
+  Schema.Literals(["plan-first-install", "plan-fixture-fallback"]),
+]);
 const requireProtectedDispatch = Effect.gen(function* () {
   const actions = yield* Config.String("GITHUB_ACTIONS");
   const ref = yield* Config.String("GITHUB_REF");
@@ -79,6 +83,11 @@ const verifyResourcePlan = Effect.fn(function* ({
   } else {
     const fingerprint = yield* expectedFixtureSigner;
     const fallback = (yield* fixtureBuild) === "fallback";
+    if (fingerprint !== "") {
+      yield* Effect.try(() => verifyFixturePlan(plan, revision, fallback)).pipe(
+        nativeResourceStage("retained fixture generation")
+      );
+    }
     yield* Effect.sync(() =>
       requireNativeBindings({ plan, revision, hosts, fingerprint, fallback })
     ).pipe(nativeResourceStage("Worker bindings"));
@@ -114,6 +123,24 @@ const preflight = Effect.fn(function* (phase: typeof Phase.Type, preview: boolea
     lifetime: phase === "upload" ? "read-only" : "started-write",
   }).pipe(nativeResourceStage(phase === "upload" ? "upload verification" : "host capture"));
 });
+const recordPreview = Effect.fn(function* (phase: typeof Phase.Type, revision: string, plan: Plan) {
+  if (phase === "upload") {
+    const rows = describePlan(plan).resources.map(({ action, logicalId, resourceType }) => ({
+      action,
+      logicalId,
+      resourceType,
+    }));
+    yield* releaseEvidence.writeFile(
+      (yield* Config.String("RUNNER_TEMP")) + "/native-fixture-plan.json",
+      releaseEvidence.encodeJson({ revision, resources: rows, applied: false })
+    );
+  }
+  return yield* Effect.logInfo(
+    phase === "upload"
+      ? "Verified the closed fallback lifecycle and retained provider plan without applying it."
+      : "Verified the fresh native first-install plan and closed edge."
+  );
+});
 const resourceRelease = Effect.fn(function* (phase: typeof Phase.Type, preview: boolean) {
   yield* requireProtectedDispatch;
   const revision = yield* Config.String("RELEASE_GIT_SHA");
@@ -140,9 +167,7 @@ const resourceRelease = Effect.fn(function* (phase: typeof Phase.Type, preview: 
   ).pipe(diagnoseNativePlan(revision));
   yield* verifyResourcePlan({ phase, plan: snapshot.native, revision, hosts, pin });
   yield* preflight(phase, preview);
-  if (preview) {
-    return yield* Effect.logInfo("Verified the fresh native first-install plan and closed edge.");
-  }
+  if (preview) return yield* recordPreview(phase, revision, snapshot.native);
   return yield* Apply.apply(snapshot.native, { deletions: "defer" }).pipe(
     Effect.provide(snapshot.session.context),
     Effect.uninterruptible,
@@ -199,6 +224,7 @@ if (import.meta.main) {
   const program = Effect.gen(function* () {
     if (process.argv[2] === "publish-site") return yield* publishSite;
     const operation = yield* Schema.decodeUnknownEffect(Operation)(process.argv[2]);
+    if (operation === "plan-fixture-fallback") return yield* resourceRelease("upload", true);
     if (operation === "plan-first-install") return yield* resourceRelease("first-install", true);
     return yield* resourceRelease(operation, false);
   }).pipe(Effect.provide(Alchemist.layer()), Effect.scoped);

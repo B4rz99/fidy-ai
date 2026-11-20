@@ -4,7 +4,7 @@ import re
 COVERAGE = "fidy.operational component=watchdog operation=coverage state="
 
 
-def observation(query, account, version, start, end):
+def observation(query, account, version, start, end, *, fleet=False):
     filters = [{"key": key, "type": "string", "operation": op, "value": value} for key, op, value in (
         ("$workers.scriptName", "eq", "fidy-native-storage-core"),
         ("$workers.scriptVersion.id", "eq", version),
@@ -21,6 +21,8 @@ def observation(query, account, version, start, end):
         raise ValueError("Coverage events truncated")
     rows = {}
     counters = ("attempted", "observed", "failed", "unknown", "unsupported", "repaired")
+    if fleet:
+        counters += ("admitted", "wraps", "wrapped_at")
     for event in events:
         worker, metadata = event["$workers"], event["$metadata"]
         at = event["timestamp"]
@@ -36,7 +38,11 @@ def observation(query, account, version, start, end):
         source = event.get("source")
         if isinstance(source, dict) and all(type(source.get(key)) is int and source[key] >= 0 for key in counters):
             row.update({key: source[key] for key in counters})
-        rows[metadata["id"]] = row
+        event_id = metadata["id"]
+        if fleet and (not isinstance(event_id, str) or not event_id or event_id in rows
+                      or any(key not in row for key in counters)):
+            raise ValueError("Ambiguous or incomplete structured watchdog observation")
+        rows[event_id] = row
     ordered = sorted(rows.values(), key=lambda row: row["at"])
     midpoint = start + 300_000
     wraps = [row["at"] for row in ordered if row["halt"] == "wrapped"]

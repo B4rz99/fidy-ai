@@ -1,14 +1,15 @@
 """Require both original financial Sessions to remain usable across a fresh native code release."""
 import argparse
+import json
 import os
 from pathlib import Path
 import secrets
 import subprocess
 import tempfile
 
-from cohort_runner import commands
-from fixture import digest, write
-from hosted import ROOT
+from cohort_runner import BrowserPort, commands
+from fixture import digest, prepare, write
+from hosted import RECEIPT_PATH, ROOT, verify_native_fixture
 
 BASELINE = "8dd3b0d47d655868c1ab4f16b6145a06d99bd721"
 
@@ -20,6 +21,42 @@ def observations(runtime, sessions):
                         cookie=session["cookie"], binding=session["fidy-session-binding"])
         result.append(dict(status=reply["status"], bodyDigest=digest(reply["data"])))
     return result
+
+
+def qualify_fallback(revision, out, storage):
+    directory = out / "fixture"
+    directory.mkdir(mode=0o700)
+    prefix = "fidy-2259-" + secrets.token_hex(6)
+    os.environ["FIDY_REHEARSAL_STATE"] = str(Path(storage) / "fallback")
+    os.environ["FIDY_REHEARSAL_BASELINE"] = "false"
+    os.environ["FIDY_REHEARSAL_FALLBACK"] = "true"
+    with commands(revision, "cohort-runtime.test-fixture.ts") as runtime:
+        session = BrowserPort.session(runtime("register"))
+        write(directory/"native-session.json", session)
+        def call(method, path, body):
+            result = runtime("canonical", method=method, path=path, body=body, **session)
+            if result["status"] // 100 != 2:
+                raise ValueError("Ordinary financial route failed in the recovery artifact")
+            return result["data"]
+        manifest = prepare(call, directory, revision, "performance-1")
+        offering = dict(resourcePrefix=prefix, nativeManifestDigest=digest(manifest))
+        denied = runtime("canonical", method="POST", path=RECEIPT_PATH, body=offering, **session)
+        if denied["status"] != 404 or runtime("marker") is not None:
+            raise ValueError("The recovery artifact issued a receipt for a fully authorized fixture")
+    os.environ["FIDY_REHEARSAL_FALLBACK"] = "false"
+    with commands(revision, "cohort-runtime.test-fixture.ts") as runtime:
+        response = runtime("canonical", method="POST", path=RECEIPT_PATH, body=offering, **session)
+        if response["status"] != 200 or runtime("marker") != prefix:
+            raise ValueError("The active artifact failed to issue the original fixture")
+        write(directory/"native-receipt.json",response["data"])
+        proof = verify_native_fixture(directory, revision=revision, resource_prefix=prefix)
+    os.environ["FIDY_REHEARSAL_FALLBACK"] = "true"
+    with commands(revision, "cohort-runtime.test-fixture.ts") as runtime:
+        history = runtime("canonical", method="GET", path="/transactions?limit=25", **session)
+        if history["status"] != 200 or history["data"] != manifest["history"]:
+            raise ValueError("Reverting to the recovery artifact failed the signed fixture read")
+    return {"fallbackReceiptStatus":denied["status"], "activeReceiptStatus":response["status"],
+            "restoredHistoryDigest":digest(history["data"]), "receiptDigest":proof["nativeReceiptDigest"]}
 
 
 def main():
@@ -34,9 +71,9 @@ def main():
     if baseline != BASELINE or candidate == baseline:
         raise ValueError("Two exact distinct release revisions are required")
     os.environ["SMOKE_PROOF"] = secrets.token_hex(32)
-    os.environ["TEST_FIXTURE_PRIVATE_KEY"] = subprocess.check_output(
-        ["bun", "-e", "const key=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify']);process.stdout.write(Buffer.from(await crypto.subtle.exportKey('pkcs8',key.privateKey)).toString('hex'))"],
-        text=True)
+    os.environ["TEST_FIXTURE_PRIVATE_KEY"], os.environ["FIDY_NATIVE_FIXTURE_PUBLIC_KEY"] = json.loads(subprocess.check_output(
+        ["bun", "-e", "const key=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify']);process.stdout.write(JSON.stringify([Buffer.from(await crypto.subtle.exportKey('pkcs8',key.privateKey)).toString('hex'),Buffer.from(await crypto.subtle.exportKey('spki',key.publicKey)).toString('hex')]))"],
+        text=True))
     with tempfile.TemporaryDirectory() as storage:
         os.environ["FIDY_REHEARSAL_STATE"] = storage
         os.environ["FIDY_REHEARSAL_BASELINE"] = "true"
@@ -58,7 +95,8 @@ def main():
             restored = observations(runtime, sessions)
             restored_inventory = inventory == runtime("census")
         passed = advanced == restored == original and same_inventory and restored_inventory and resumed_identity
-        write(out/"summary.json", dict(baseline=baseline, candidate=candidate,
+        fallback = qualify_fallback(candidate, out, storage)
+        write(out/"summary.json", dict(fallback=fallback, baseline=baseline, candidate=candidate,
               scope="disposable workerd; original two bound Sessions", original=original,
               advanced=advanced, restored=restored, freshLoginsMatched=resumed_identity, samePhysicalInventory=same_inventory,
               restoredPhysicalInventory=restored_inventory, passed=passed))

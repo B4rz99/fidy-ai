@@ -501,8 +501,13 @@ export const acceptanceSend = (
   client: HttpClient.HttpClient
 ): Parameters<typeof admittedErasureLogins>[0]["send"] =>
   Effect.fn(function* (request: Request) {
+    // FromWeb drops Content-Type on an empty body. The Ingress proof binds the explicit headers.
+    const outbound = HttpClientRequest.setHeaders(
+      HttpClientRequest.fromWeb(request),
+      request.headers
+    );
     const reply = yield* client
-      .execute(HttpClientRequest.fromWeb(request))
+      .execute(outbound)
       .pipe(Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }));
     const native = HttpClientResponse.toWeb(reply);
     if (Option.isNone(native)) {

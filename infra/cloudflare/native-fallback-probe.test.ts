@@ -76,11 +76,16 @@ it.live(
       });
       const calls: Array<Effect.Success<ReturnType<typeof wire>>> = [];
       const client = Context.get(yield* Layer.build(ReleaseHttpLive), HttpClient.HttpClient);
+      const run = Effect.runPromiseWith(yield* Effect.context<never>());
       const receive: typeof fetch = Object.assign(
-        async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
-          calls.push(await Effect.runPromise(wire(new Request(input, init))));
-          return new Response("private response", { status: 503 });
-        },
+        (
+          input: Parameters<typeof fetch>[0],
+          init?: Parameters<typeof fetch>[1]
+        ): Promise<Response> =>
+          run(wire(new Request(input, init))).then((received) => {
+            calls.push(received);
+            return new Response("private response", { status: 503 });
+          }),
         { preconnect: globalThis.fetch.preconnect }
       );
       const send = (request: Request): ReturnType<ReturnType<typeof acceptanceSend>> =>

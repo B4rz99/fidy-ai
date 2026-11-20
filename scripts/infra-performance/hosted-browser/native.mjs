@@ -58,7 +58,6 @@ try {
     country,
     colo,
     source: "Cloudflare trace at browser hostname",
-    colombianEgress: country === "CO",
   });
   stage = "release";
   const metadata = await fetch(origins.browser + "/deployment-metadata.json", {

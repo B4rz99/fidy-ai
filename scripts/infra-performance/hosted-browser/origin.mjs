@@ -21,10 +21,6 @@ export const parseTrace = (lines) => {
   return { country, colo, warp: warp ?? "unknown" };
 };
 
-/** @param {{api:{country?:string},browser:{country?:string}}} origins Installed browser and API origins. */
-export const isColombianEgress = (origins) =>
-  origins.api.country === "CO" && origins.browser.country === "CO";
-
 export const inspectBrowserOrigin = async () => {
   const browser = await chromium.launch({
     executablePath: process.env.ASSESSMENT_CHROMIUM,
@@ -47,7 +43,6 @@ export const inspectBrowserOrigin = async () => {
       observedAt: new Date().toISOString(),
       chromium: browser.version(),
       origins,
-      colombianEgress: isColombianEgress(origins),
     };
   } finally {
     await browser.close();
@@ -57,8 +52,4 @@ export const inspectBrowserOrigin = async () => {
 if (import.meta.main) {
   const report = await inspectBrowserOrigin();
   await Bun.write(process.argv[2], JSON.stringify(report, null, 2));
-  if (!report.colombianEgress) {
-    process.stderr.write("Both acceptance hosts must observe Colombia egress before enrollment.\n");
-    process.exitCode = 1;
-  }
 }

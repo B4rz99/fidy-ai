@@ -44,6 +44,7 @@ import { readProviderList } from "./native-provider-list";
 import { verifyInstalledWebsite } from "./native-deployed-web";
 import { inspectDeployedEdge, requireClosedIngressDomains } from "./native-deployed-edge";
 import {
+  NativeInventoryRefused,
   inspectNativeResources,
   verifyDeployedVersion,
   verifySuccessorVersion,
@@ -791,9 +792,14 @@ const inspectInstalledResources = Effect.fn(function* (
       Effect.logError("Native data resource inventory failed: " + resourceFailureMessage(cause))
     ),
     Effect.mapError(
-      () =>
+      (failure) =>
         new ReleaseFailure({
-          message: "Native bucket, Queue or Workflow inventory differs after bounded reads",
+          message:
+            failure instanceof NativeInventoryRefused
+              ? "Native data resource inventory differs at " +
+                failure.phase +
+                " after bounded reads"
+              : "Native bucket, Queue or Workflow inventory differs after bounded reads",
         })
     )
   );
@@ -2131,6 +2137,12 @@ const ResumedSuccessor = Schema.Struct({
   supportSha256: SmokeIdentity.fields.contractDigest,
   coreVersionId: Schema.Literal("ba7f02c9-89fa-4990-8484-42b698854d3d"),
   publicVersionId: Schema.Literal("a0339369-cd2e-4ebc-ad4e-c849c14cd836"),
+  reseal: Schema.optionalKey(
+    Schema.Struct({
+      artifactId: Schema.Literal("14673926918"),
+      sha256: Schema.Literal("f5df86d3d6c140f73f3e70367a658434e797220c690e0bcb9e2cd40435036dcc"),
+    })
+  ),
 });
 const resumedSuccessor = Effect.gen(function* () {
   const resumed = yield* ReleaseConfig.Boolean("FIXTURE_SUCCESSOR_RESUME").pipe(
@@ -2272,12 +2284,19 @@ const sealSuccessor = Effect.fn(function* (env: Config, client: HttpClient.HttpC
       sha256: SmokeIdentity.fields.contractDigest,
     })
   )(yield* readFile(directory + "/fixture-successor-approval.json"));
+  const resume = yield* resumedSuccessor;
+  const reseal = yield* ReleaseConfig.Boolean("FIXTURE_SUCCESSOR_RESEAL").pipe(
+    ReleaseConfig.withDefault(false)
+  );
+  const resumedReseal = Option.isSome(resume) && resume.value.reseal !== undefined;
+  if (reseal !== resumedReseal) {
+    return yield* new ReleaseFailure({ message: "Unexpected verification-only successor lineage" });
+  }
   const verified = yield* verifyUnpromotedFallback({
     port: releasePort({ env, client }),
     release,
     verify: verifyStagedSuccessor({ env, client, release, fingerprint, source }),
   });
-  const resume = yield* resumedSuccessor;
   yield* writeFile(
     directory + "/native-fixture-successor-stage.json",
     encodeJson({

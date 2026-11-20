@@ -28,6 +28,8 @@ STAGE_STEPS = {
     "Verify and promote the active successor with its tested return pair": "skipped",
 }
 RESUME_CAPTURE_STEP = "Authenticate the repaired support and restore the exact captured predecessor"
+RESEAL_CAPTURE_STEP = "Authenticate the failed stage and unchanged zero-traffic assignments"
+RESEAL_SAVE_STEP = "Save the authenticated zero-traffic reseal"
 SEAL_AUTH_STEP = "Authenticate same-SHA successor seals"
 RESUMED_STAGE_STEPS = {
     "Require closed protected planning": "success",
@@ -141,13 +143,30 @@ def archive_revision(revision, reference, verifier, get, git):
     return producer
 
 
-def require_resumed_seal(stage, producer, plan, get, git):
+def reseal_steps():
+    steps = {}
+    for name, outcome in RESUMED_STAGE_STEPS.items():
+        steps[name] = "skipped" if name in (
+            RESUME_CAPTURE_STEP, "Stage the verified successors at zero traffic",
+            "Save the zero-traffic successor seal", "Retain successor staging coordinates",
+        ) else outcome
+        if name == RESUME_CAPTURE_STEP:
+            steps[RESEAL_CAPTURE_STEP] = "success"
+        if name == "Save the zero-traffic successor seal":
+            steps[RESEAL_SAVE_STEP] = "success"
+    return steps
+
+
+def require_resumed_seal(stage, producer, plan, get, git, *, resealed=False):
     from successor_resume import workflow_receipt
 
     receipt = stage["resume"]
-    if not isinstance(receipt, dict) or set(receipt) != {
+    fields = {
             "verifierRevision", "supportVerifierRevision", "supportArtifact", "supportSha256",
-            "coreVersionId", "publicVersionId"}:
+            "coreVersionId", "publicVersionId"}
+    if resealed:
+        fields.add("reseal")
+    if not isinstance(receipt, dict) or set(receipt) != fields:
         raise ValueError("Unexpected resumed successor seal evidence")
     ids = {"coreVersionId": CORE_VERSION, "publicVersionId": INGRESS_VERSION}
     if (receipt["verifierRevision"] != producer
@@ -166,14 +185,25 @@ def require_resumed_seal(stage, producer, plan, get, git):
     if stage["release"]["snapshot"] != snapshot:
         raise ValueError("Resumed seal differs from the original captured archive")
     require_source(stage["predecessor"], plan, snapshot)
+    if resealed:
+        from successor_reseal import STAGING, STAGING_VERIFIER, SUPPORT, archived_staging
+
+        if (receipt["reseal"] != STAGING or receipt["supportArtifact"] != SUPPORT["artifactId"]
+                or receipt["supportSha256"] != SUPPORT["sha256"] or producer == STAGING_VERIFIER
+                or git("merge-base", STAGING_VERIFIER, producer) != STAGING_VERIFIER
+                or stage["release"] != archived_staging(get)):
+            raise ValueError("Reseal does not preserve the exact zero-traffic assignments")
 
 
 def sealed_successor(revision, reference, get=actions_get, *, verifier=None, git=git_read):
     producer = archive_revision(revision, reference, verifier, get, git)
     resumed = producer != revision
     filename = "native-fixture-successor-stage.json"
-    stage = artifacts(producer, reference, "native-fixture-successor-stage-",
-                      RESUMED_STAGE_STEPS if resumed else STAGE_STEPS, [filename], get)[filename]
+    reseal_prefix = "native-fixture-successor-resealed-"
+    resealed = resumed and json.loads(get("artifacts/" + reference["artifactId"]))["name"].startswith(reseal_prefix)
+    prefix = reseal_prefix if resealed else "native-fixture-successor-stage-"
+    steps = reseal_steps() if resealed else (RESUMED_STAGE_STEPS if resumed else STAGE_STEPS)
+    stage = artifacts(producer, reference, prefix, steps, [filename], get)[filename]
     if ("resume" in stage) != resumed:
         raise ValueError("Successor seal does not identify its archived stage operation")
     approval = stage["approval"]
@@ -181,7 +211,7 @@ def sealed_successor(revision, reference, get=actions_get, *, verifier=None, git
         if approval != dict(zip(("artifactId", "sha256"), PLAN)):
             raise ValueError("Resumed successor must retain the original protected plan")
         plan = approved_plan(revision, *PLAN, get, expected_run=PLAN_RUN)
-        require_resumed_seal(stage, producer, plan, get, git)
+        require_resumed_seal(stage, producer, plan, get, git, resealed=resealed)
     else:
         plan = approved_plan(revision, approval["artifactId"], approval["sha256"], get)
     require_sealed_source(revision, stage, plan)

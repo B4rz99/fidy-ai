@@ -64,7 +64,7 @@ def workflow_receipt(checkout, artifact_id, digest, *, get=actions_get, git=git_
     return receipt, approved
 
 
-def write_capture(directory, source, snapshot, receipt, checkout, artifact_id, digest):
+def write_capture(directory, source, snapshot, receipt, checkout, artifact_id, digest, *, stage=None, reseal=None):
     rows = {
         "fixture-successor-source.json": source,
         "native-release.json": snapshot,
@@ -79,6 +79,10 @@ def write_capture(directory, source, snapshot, receipt, checkout, artifact_id, d
             "publicVersionId": INGRESS_VERSION,
         },
     }
+    if stage is not None:
+        rows["native-release.json"] = stage
+        rows["native-release.json.uploads"] = {key: stage[key] for key in ("coreVersionId", "publicVersionId")}
+        rows["fixture-successor-resume.json"]["reseal"] = reseal
     for name, contents in rows.items():
         with (directory / name).open("x") as handle:
             json.dump(contents, handle)

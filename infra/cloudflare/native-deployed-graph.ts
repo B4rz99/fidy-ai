@@ -1,6 +1,6 @@
 import { resourceRevision } from "./native-fixture-signer";
 import retainedProvider from "./native-retained-provider.json" with { type: "json" };
-import { Effect, Schema } from "effect";
+import { Data, Effect, Schema } from "effect";
 import {
   type NativeBinding,
   NativeBindings,
@@ -16,6 +16,30 @@ import { type ProviderRead as Read, readProviderList as pages } from "./native-p
 const identifier = Schema.NonEmptyString;
 const named = Schema.Struct({ name: identifier });
 const prefix = "fidy-native-";
+type InventoryPhase =
+  | "R2 bucket list"
+  | "Queue list"
+  | "Workflow list"
+  | "installed R2 buckets"
+  | "installed Queues"
+  | "installed Workflows"
+  | "Workflow host bindings"
+  | "Queue consumer bindings";
+export class NativeInventoryRefused extends Data.TaggedError("NativeInventoryRefused")<{
+  phase: InventoryPhase;
+}> {}
+const inventoryPhase =
+  (phase: InventoryPhase) =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, NativeInventoryRefused, R> =>
+    effect.pipe(Effect.mapError(() => new NativeInventoryRefused({ phase })));
+const verifyInventoryNames = (
+  phase: InventoryPhase,
+  rows: readonly string[],
+  wanted: readonly string[]
+): Effect.Effect<void, NativeInventoryRefused> =>
+  rows.length === wanted.length && wanted.every((item) => rows.includes(item))
+    ? Effect.void
+    : Effect.fail(new NativeInventoryRefused({ phase }));
 const bucketTargets = {
   STATEMENT_STAGING_BUCKET: "statement-staging",
   SAMPLE_BUCKET: "approved-ingest-samples",
@@ -300,34 +324,32 @@ export const inspectNativeResources = Effect.fn(function* (
   const wantedBuckets = Object.values(bucketTargets).map((slug) => prefix + slug),
     wantedQueues = Object.values(queueTargets(revision)).map((slug) => prefix + slug),
     wantedWorkflows = Object.values(workflowTargets(revision));
-  const presentBuckets = (yield* buckets(read)).filter((item) => wantedBuckets.includes(item)),
-    presentQueues = (yield* pages(read, "queues", Queue)).filter((item) =>
-      wantedQueues.includes(item.queue_name)
+  const presentBuckets = (yield* buckets(read).pipe(inventoryPhase("R2 bucket list"))).filter(
+      (item) => wantedBuckets.includes(item)
     ),
-    presentWorkflows = (yield* pages(read, "workflows", Workflow)).filter((item) =>
-      wantedWorkflows.some(([slug]) => prefix + slug === item.name)
-    );
+    presentQueues = (yield* pages(read, "queues", Queue).pipe(inventoryPhase("Queue list"))).filter(
+      (item) => wantedQueues.includes(item.queue_name)
+    ),
+    presentWorkflows = (yield* pages(read, "workflows", Workflow).pipe(
+      inventoryPhase("Workflow list")
+    )).filter((item) => wantedWorkflows.some(([slug]) => prefix + slug === item.name));
   if (!installed) {
     if (presentBuckets.length + presentQueues.length + presentWorkflows.length > 0) {
       return yield* Effect.fail(Error("Native Queue, bucket or Workflow already exists"));
     }
     return { buckets: [], queues: [], workflows: [] };
   }
-  const same = (rows: readonly string[], wanted: readonly string[]): boolean =>
-    rows.length === wanted.length && wanted.every((item) => rows.includes(item));
-  if (
-    !same(presentBuckets, wantedBuckets) ||
-    !same(
-      presentQueues.map((item) => item.queue_name),
-      wantedQueues
-    ) ||
-    !same(
-      presentWorkflows.map((item) => item.name),
-      wantedWorkflows.map(([slug]) => prefix + slug)
-    )
-  ) {
-    return yield* Effect.fail(Error("Missing deployed data resource"));
-  }
+  yield* verifyInventoryNames("installed R2 buckets", presentBuckets, wantedBuckets);
+  yield* verifyInventoryNames(
+    "installed Queues",
+    presentQueues.map((item) => item.queue_name),
+    wantedQueues
+  );
+  yield* verifyInventoryNames(
+    "installed Workflows",
+    presentWorkflows.map((item) => item.name),
+    wantedWorkflows.map(([slug]) => prefix + slug)
+  );
   for (const item of presentWorkflows) {
     const target = wantedWorkflows.find(([slug]) => item.name === prefix + slug);
     yield* Effect.try(() =>
@@ -338,12 +360,17 @@ export const inspectNativeResources = Effect.fn(function* (
             (item.name === smokeName(revision) ? item.name : installationNames.Core),
         item.name
       )
-    );
+    ).pipe(inventoryPhase("Workflow host bindings"));
   }
   const queues = yield* Effect.forEach(
     presentQueues,
     Effect.fn(function* (item) {
-      return { ...item, consumers: yield* inspectConsumers(read, item, revision) };
+      return {
+        ...item,
+        consumers: yield* inspectConsumers(read, item, revision).pipe(
+          inventoryPhase("Queue consumer bindings")
+        ),
+      };
     }),
     { concurrency: 3 }
   );

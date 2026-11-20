@@ -140,13 +140,13 @@ def approved_plan(revision, artifact_id, digest, get=actions_get, *, expected_ru
     return plan
 
 
-def verified_predecessor(revision, account, public_key):
+def verified_predecessor(revision, account, public_key, *, read=cloudflare):
     promotion, installed = artifact(ORIGINAL_REVISION, ACTIVE_ARTIFACT, ACTIVE_DIGEST)
     original = archived_cohort(ORIGINAL_FIXTURE, "failure",
                                ("success", "success", "failure", "failure", "success"), "summary.json")
     cleanup = archived_cohort(ORIGINAL_CLEANUP, "success",
                               ("skipped", "skipped", "skipped", "success", "success"), "cleanup.json")
-    actual = verify_live_predecessor(cloudflare, account, promotion, installed, public_key)
+    actual = verify_live_predecessor(read, account, promotion, installed, public_key)
     prefix = original["resourcePrefix"]
     cloud = Cloud(account, prefix)
     store = CustodyObject(account, cloud, native_revision=ORIGINAL_REVISION, read_only=True)

@@ -7,7 +7,7 @@ on:
         description: Read the scoped inventory or prepare the independently approved dormant successor
         type: choice
         default: plan
-        options: [plan, stage, resume, recover, recover-resumed, rollout, rollout-resumed]
+        options: [plan, stage, resume, reseal, recover, recover-resumed, rollout, rollout-resumed]
         required: true
       plan_artifact:
         description: Successful protected plan artifact ID from the exact current trunk commit
@@ -49,11 +49,13 @@ jobs:
     environment: production
     timeout-minutes: 60
     env:
-      FIXTURE_RELEASE_OPERATION: ${{ inputs.operation == 'resume' && 'stage-fixture-successor'
+      FIXTURE_RELEASE_OPERATION:
+        ${{ (inputs.operation == 'resume' || inputs.operation == 'reseal') && 'stage-fixture-successor'
         || inputs.operation == 'recover-resumed' && 'recover-fixture-successor'
         || inputs.operation == 'rollout-resumed' && 'rollout-fixture-successor'
         || format('{0}-fixture-successor', inputs.operation) }}
-      FIXTURE_SUCCESSOR_RESUME: ${{ inputs.operation == 'resume' || endsWith(inputs.operation, '-resumed') }}
+      FIXTURE_SUCCESSOR_RESUME: ${{ inputs.operation == 'resume' || inputs.operation == 'reseal' || endsWith(inputs.operation, '-resumed') }}
+      FIXTURE_SUCCESSOR_RESEAL: ${{ inputs.operation == 'reseal' }}
       SUCCESSOR_WORKFLOW_ARTIFACT: ${{ inputs.workflow_artifact }}
       SUCCESSOR_WORKFLOW_DIGEST: ${{ inputs.workflow_sha256 }}
       APPROVED_PLAN_ARTIFACT: ${{ inputs.plan_artifact }}
@@ -64,7 +66,7 @@ jobs:
       SUCCESSOR_RECOVERY_DIGEST: ${{ inputs.recovery_sha256 }}
       NATIVE_STORAGE_ADMISSION: ${{ vars.NATIVE_STORAGE_ADMISSION }}
       NATIVE_STORAGE_HOSTS: ${{ vars.NATIVE_STORAGE_HOSTS || 'acceptance' }}
-      RELEASE_GIT_SHA: ${{ (inputs.operation == 'resume' || endsWith(inputs.operation, '-resumed')) && 'de04a192c3836be0efb488b170a7b93b9f98f28f' || github.sha }}
+      RELEASE_GIT_SHA: ${{ (inputs.operation == 'resume' || inputs.operation == 'reseal' || endsWith(inputs.operation, '-resumed')) && 'de04a192c3836be0efb488b170a7b93b9f98f28f' || github.sha }}
       RELEASE_ATTEMPT_ID: ${{ github.run_id }}-${{ github.run_attempt }}
       RELEASE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}
       ALCHEMY_PROFILE: ci
@@ -96,7 +98,7 @@ jobs:
           else
             [[ -z "$APPROVED_PLAN_ARTIFACT" && -z "$APPROVED_PLAN_DIGEST" ]]
           fi
-          if [[ "$FIXTURE_SUCCESSOR_RESUME" == true && "$FIXTURE_RELEASE_OPERATION" == stage-fixture-successor ]]; then
+          if [[ "$FIXTURE_SUCCESSOR_RESUME" == true && "$FIXTURE_SUCCESSOR_RESEAL" == false && "$FIXTURE_RELEASE_OPERATION" == stage-fixture-successor ]]; then
             [[ "$SUCCESSOR_WORKFLOW_ARTIFACT" =~ ^[1-9][0-9]{0,19}$ && "$SUCCESSOR_WORKFLOW_DIGEST" =~ ^[a-f0-9]{64}$ ]]
           else
             [[ -z "$SUCCESSOR_WORKFLOW_ARTIFACT" && -z "$SUCCESSOR_WORKFLOW_DIGEST" ]]
@@ -125,6 +127,12 @@ jobs:
         run: |
           umask 077
           python3 scripts/infra-performance/canonical-fixture/successor_resume.py
+          echo "FIXTURE_STAGED_VERIFIER_SHA=$GITHUB_SHA" >> "$GITHUB_ENV"
+      - name: Authenticate the failed stage and unchanged zero-traffic assignments
+        if: inputs.operation == 'reseal'
+        run: |
+          umask 077
+          python3 scripts/infra-performance/canonical-fixture/successor_reseal.py
           echo "FIXTURE_STAGED_VERIFIER_SHA=$GITHUB_SHA" >> "$GITHUB_ENV"
       - name: Authenticate same-SHA successor seals
         if: env.FIXTURE_RELEASE_OPERATION == 'recover-fixture-successor' || env.FIXTURE_RELEASE_OPERATION == 'rollout-fixture-successor'
@@ -195,7 +203,7 @@ jobs:
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts stage-successor
       - name: Verify the successor and seal the dormant stage
-        if: inputs.operation == 'stage' || inputs.operation == 'resume'
+        if: inputs.operation == 'stage' || inputs.operation == 'resume' || inputs.operation == 'reseal'
         working-directory: infra/cloudflare
         env:
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
@@ -205,6 +213,13 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: native-fixture-successor-stage-${{ github.run_id }}
+          path: ${{ runner.temp }}/native-fixture-successor-stage.json
+          if-no-files-found: error
+      - name: Save the authenticated zero-traffic reseal
+        if: inputs.operation == 'reseal'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-fixture-successor-resealed-${{ github.run_id }}
           path: ${{ runner.temp }}/native-fixture-successor-stage.json
           if-no-files-found: error
       - name: Retain successor staging coordinates

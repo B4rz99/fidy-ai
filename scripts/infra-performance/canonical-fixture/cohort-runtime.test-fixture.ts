@@ -37,6 +37,24 @@ const marker = Effect.fnUntraced(function* (runtime: Miniflare, revision: string
   );
   return value === null ? null : yield* native(() => value.text());
 });
+const recoveryProbe = Effect.fnUntraced(function* (runtime: Miniflare, secret: string) {
+  const response = yield* transport(runtime)(
+    new Request(installedOrigins.acceptance.api + "/internal/release-smoke?storage=compatibility", {
+      headers: { "x-fidy-smoke-proof": secret },
+    })
+  );
+  const evidence = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({
+      core: Schema.Struct({ workerVersionId: Schema.String }),
+      fixtureFallbackCoreVersion: Schema.optional(Schema.String),
+    })
+  )(yield* native(() => response.json()));
+  return {
+    status: response.status,
+    ingress: response.headers.get("x-fidy-fixture-fallback-ingress") !== null,
+    core: evidence.fixtureFallbackCoreVersion === evidence.core.workerVersionId,
+  };
+});
 const tick = Effect.fnUntraced(function* (runtime: Miniflare) {
   const core = yield* native(() => runtime.getWorker("core"));
   const now = DateTime.toDateUtc(yield* DateTime.now);
@@ -79,7 +97,7 @@ const run = Effect.gen(function* () {
       const local = Effect.fnUntraced(function* (item: CohortCommand) {
         const action = item.action;
         if (action === "provider-request") return yield* dispatch(runtime, item.body);
-        if (action === "seed-survivors" || action === "mount-original-sessions") {
+        if (["seed-survivors", "mount-original-sessions"].includes(action)) {
           const users = yield* establishSmokeUsers({
             revision: auth.revision,
             proof: Redacted.make(auth.secret),
@@ -89,6 +107,7 @@ const run = Effect.gen(function* () {
           });
           return action === "mount-original-sessions" ? [users[0].headers, users[1].headers] : true;
         }
+        if (action === "recovery-probe") return yield* recoveryProbe(runtime, auth.secret);
         if (action === "census") return yield* state(runtime, directory);
         if (action === "marker") return yield* marker(runtime, auth.revision);
         if (action === "tick") return yield* tick(runtime);

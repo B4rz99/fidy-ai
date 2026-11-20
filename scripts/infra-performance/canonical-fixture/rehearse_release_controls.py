@@ -32,6 +32,8 @@ def qualify_fallback(revision, out, storage):
     os.environ["FIDY_REHEARSAL_BASELINE"] = "false"
     os.environ["FIDY_REHEARSAL_FALLBACK"] = "true"
     with commands(revision, "cohort-runtime.test-fixture.ts") as runtime:
+        if runtime("recovery-probe") != {"status":200,"ingress":True,"core":True}:
+            raise ValueError("The two dormant artifacts did not identify themselves")
         session = BrowserPort.session(runtime("register"))
         write(directory/"native-session.json", session)
         def call(method, path, body):
@@ -47,6 +49,8 @@ def qualify_fallback(revision, out, storage):
             raise ValueError("The recovery artifact issued a receipt for a fully authorized fixture")
     os.environ["FIDY_REHEARSAL_FALLBACK"] = "false"
     with commands(revision, "cohort-runtime.test-fixture.ts") as runtime:
+        if runtime("recovery-probe") != {"status":200,"ingress":False,"core":False}:
+            raise ValueError("The active application claimed the recovery artifacts")
         response = runtime("canonical", method="POST", path=RECEIPT_PATH, body=offering, **session)
         if response["status"] != 200 or runtime("marker") != prefix:
             raise ValueError("The active artifact failed to issue the original fixture")

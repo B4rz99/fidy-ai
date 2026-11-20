@@ -60,7 +60,7 @@ def serving_graph(read, account, revision, installed):
     name = "fidy-native-smoke-" + pin["revision"]
     active = read(f"accounts/{account}/workers/scripts/{name}/deployments")["deployments"][0]
     provider_version, = active["versions"]
-    if active["id"] != pin["deploymentId"] or provider_version != {"version_id":pin["versionId"], "percentage":100}:
+    if active["id"] != pin["deploymentId"] or provider_version.get("version_id") != pin["versionId"] or provider_version.get("percentage") != 100:
         raise ValueError("Retained closed provider deployment changed")
     standard_buckets(read, account, installed)
     expected = {"Core":"fidy-native-storage-core", "Ingress":"fidy-native-storage-ingress",

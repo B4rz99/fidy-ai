@@ -25,7 +25,7 @@ jobs:
         run: python3 scripts/infra-performance/canonical-fixture/rehearse_release_controls.py --out apps/server/test-results/closed-release-controls
       - name: Verify closed release signer inventories on the real plan
         working-directory: infra/cloudflare
-        run: bun run test native-application-plan.test.ts native-deployed-graph.test.ts
+        run: bun run test native-application-plan.test.ts native-deployed-graph.test.ts native-fixture-plan.test.ts native-fallback-recovery.test.ts
       - name: Require genuine signed capture and own-fixture proof
         if: always()
         run: |

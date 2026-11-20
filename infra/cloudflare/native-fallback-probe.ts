@@ -79,7 +79,7 @@ export const controlsDigest = Effect.fn(function* (
   if (ids.length !== 2 || new Set(ids).size !== 2) {
     return yield* Effect.fail(Error("Original controls are not distinct"));
   }
-  return new Bun.CryptoHasher("sha256").update(ids.toSorted().join("\n")).digest("hex");
+  return new Bun.CryptoHasher("sha256").update(ids.join("\n")).digest("hex");
 });
 
 /** Source artifact 14571027939 identifies the exact proven installation before its one-way repair. */

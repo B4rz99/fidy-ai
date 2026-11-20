@@ -341,8 +341,9 @@ const pairingSeal = Effect.fn(function* () {
 const verifyDormantRollbackSource = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
-  { port, snapshot }: { port: ReleasePort; snapshot: FallbackStage["release"]["snapshot"] }
+  snapshot: FallbackStage["release"]["snapshot"]
 ) {
+  const port = releasePort({ env, client });
   if (snapshot.stableRevision !== env.revision) {
     return yield* Effect.fail(
       Error("Active receipt requires the dormant build of this exact revision")
@@ -390,7 +391,7 @@ const preflightSignedSource = Effect.fn(function* (
     yield* verifyInterruptedUpload(env, client, { port, snapshot });
     if (operation === "plan-fixture-repair") return;
   } else {
-    yield* verifyDormantRollbackSource(env, client, { port, snapshot });
+    yield* verifyDormantRollbackSource(env, client, snapshot);
     yield* observeDormantPair(client, pair, true);
   }
   yield* recordSourceControls(env, client, { pair, replacing });
@@ -1001,6 +1002,19 @@ const activeControlEvidence = Effect.fn(function* (
     ReleaseConfig.withDefault("")
   );
   if ((yield* expectedFixtureSigner) === "" || operation !== "rollout") return {};
+  const seal = yield* pairingSeal();
+  if (Option.isSome(seal)) {
+    const smoke = installed.workers.find((worker) => worker.role === "Smoke");
+    if (
+      !isDeepStrictEqual(fallbackNamespaces(installed.namespaces), seal.value.namespaces) ||
+      smoke?.versionId !== seal.value.smoke.versionId ||
+      smoke.deploymentId !== seal.value.smoke.deploymentId
+    ) {
+      return yield* new ReleaseFailure({
+        message: "Active release differs from the sealed namespaces or Smoke Worker",
+      });
+    }
+  }
   return yield* originalControlEvidence(env, client, {
     ingress: installed.publicVersionId,
     core: installed.coreVersionId,

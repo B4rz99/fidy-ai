@@ -31,11 +31,16 @@ class PairingStage(TestCase):
             "controlsDigest":fixture_upload()["controlsDigest"]}
         self.archive.docs = {"native-fallback-stage.json": self.stage}
 
+    def git(self, command, *args):
+        if command == "merge-base" and args[0] == pairing_stage.PAIRING_REPAIR:
+            return pairing_stage.PAIRING_REPAIR
+        return self.archive.git(command, *args)
+
     def authenticate(self):
         self.archive.seal()
         with patch.object(pairing_stage, "staged_documents", return_value=(self.prior, {"digest": self.stage_digest})):
             return pairing_stage.sealed_pair(self.archive.verifier, "34", self.archive.digest,
-                                            self.archive.get, self.archive.git)
+                                            self.archive.get, self.git)
 
     @property
     def stage_digest(self):

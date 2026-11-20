@@ -407,8 +407,8 @@ lifecycle evidence, with unknown runtime state reported as missing evidence.
 
 On Cloudflare, compare one ordinary-network read profile with eight original Transactions and
 one Reconciliation link. Verify small committed and rolled-back mutations against their financial
-state, Audit and accounting. Include the complete shared fixture setup, checks and cleanup in the
-5,000 D1-row write cap. Run repeated mutation timings and the 20-active-User load in workerd. Use
+state, Audit and accounting. Count shared fixture setup, checks and cleanup against the observed
+D1 account headroom and production reserve. Run repeated mutation timings and the 20-active-User load in workerd. Use
 the 100,000-Transaction fixture on both workerd variants with 100 RecurringPlans, 100 revisions
 per plan and 5,000 NeedsReviewItems. Record each environment and its measured origin separately.
 

@@ -11,7 +11,8 @@ export async function runBrowser({variant, origins, cookie, expected, forward, a
   const tls={ cert:Bun.file(process.env.BROWSER_TLS_CERT),key:Bun.file(process.env.BROWSER_TLS_KEY) };
   const dir=resolve(process.env.FIDY_DIAGNOSTIC_DIR);
   const events=[], snapshots={};
-  const report = () => Bun.write(join(dir,variant+"-"+network+".json"),JSON.stringify({variant,network,events,snapshots},null,2));
+  const assetsDelivered={rawBytes:0,encodedBytes:0,responses:0,gzip:0};
+  const report = () => Bun.write(join(dir,variant+"-"+network+".json"),JSON.stringify({variant,network,events,snapshots,assetsDelivered},null,2));
   const controls = expected.data.map(w=>({id:"transaction-"+w.id,label:w.counterparty}));
   const assets=resolve(process.env[variant==="d1"?"D1_WEB_ASSETS":"NATIVE_WEB_ASSETS"]);
   const web=Bun.serve({hostname:"127.0.0.1",port:0,tls,fetch:async request=>{
@@ -20,7 +21,14 @@ export async function runBrowser({variant, origins, cookie, expected, forward, a
     const path=resolve(assets,"."+u.pathname);
     if(!path.startsWith(assets+sep))return new Response(null,{status:403});
     const file=Bun.file(u.pathname==="/app/transactions"?join(assets,"index.html"):path);
-    return await file.exists()?new Response(file):new Response(null,{status:404});
+    if(!await file.exists())return new Response(null,{status:404});
+    assetsDelivered.responses++;assetsDelivered.rawBytes+=file.size;
+    if(/(?:javascript|css|html)/.test(file.type)&&request.headers.get("accept-encoding")?.includes("gzip")){
+      const bytes=Bun.gzipSync(await file.arrayBuffer());
+      assetsDelivered.encodedBytes+=bytes.byteLength;assetsDelivered.gzip++;
+      return new Response(bytes,{headers:{"content-type":file.type,"content-encoding":"gzip","vary":"accept-encoding"}});
+    }
+    assetsDelivered.encodedBytes+=file.size;return new Response(file);
   }});
   const api=Bun.serve({hostname:"127.0.0.1",port:0,tls,fetch:async request=>{
     const url=new URL(request.url);

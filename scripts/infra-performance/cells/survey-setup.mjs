@@ -1,6 +1,5 @@
 // Configure the two disposable WebSessions through the same committed edits as the browser reference.
 import assert from "node:assert/strict";
-import { request } from "@playwright/test";
 import { Schema } from "effect";
 import { prepareReferenceDashboard } from "../reference/fresh-dashboard.mjs";
 import { prepareReferenceRecurring } from "../reference/fresh-recurring.mjs";
@@ -17,6 +16,7 @@ const input = Schema.decodeSync(
 const api = new URL(input.origin);
 api.port = String(Number(api.port) + 1);
 assert.equal(api.hostname, "127.0.0.1");
+const { request } = await import("@playwright/test");
 const client = await request.newContext({ ignoreHTTPSErrors: true, maxRedirects: 0 });
 const installation = {
   api: api.origin,

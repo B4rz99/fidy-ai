@@ -508,7 +508,7 @@ const completionOutcome = Effect.fn(function* (completion: Response) {
 });
 const refusedPairing = Effect.fn(function* (
   input: Inputs,
-  member: "erasure-1" | "performance-1" | FleetSubject,
+  member: "erasure-1" | PerformanceMember | FleetSubject,
   record: ErasureProgress
 ) {
   const privateLogin = {

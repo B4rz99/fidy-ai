@@ -32,7 +32,9 @@ class InventorySafety(unittest.TestCase):
             worker_deletion_order({"a": ["b"], "b": ["a"]})
 
     def test_disposable_samples_are_distinct_from_unfinished_writers(self):
-        snapshot = {"census": {"exact": [{"source": "structural_samples", "attention_rows": 7}]},
+        snapshot = {"census": {"exact": [{"source": "structural_samples", "attention_rows": 7},
+                                 {"source": "billing_attempts", "attention_rows": 2},
+                                 {"source": "whatsapp_deliveries", "attention_rows": 4}]},
                     "objects": {"exact": {"count": 0, "multipartClear": None}}}
         self.assertEqual(hold_reasons(snapshot), [])
         snapshot["census"]["exact"].append({"source": "issued_r2_writers", "attention_rows": 1})
@@ -49,14 +51,14 @@ class InventorySafety(unittest.TestCase):
             with self.assertRaises(Refused):
                 unchanged_remaining(plan, {**plan, **change})
 
-    def test_no_delete_before_current_opening_and_external_work_checks(self):
+    def test_no_delete_before_current_opening_and_active_writer_checks(self):
         provider = Mock()
         plan = {"opening": "exact", "targets": {kind: [] for kind in KINDS}, "preserve": {},
                 "workers": {}, "census": {}, "objects": {}, "workerDependencies": {}, "queues": {}}
         with self.assertRaises(Refused):
             dispose(provider, {}, plan, Mock(), observe=Mock(return_value={**plan, "opening": "changed"}))
         provider.delete.assert_not_called()
-        plan["census"] = {"db": [{"source": "billing_attempts", "attention_rows": 1}]}
+        plan["census"] = {"db": [{"source": "issued_r2_writers", "attention_rows": 1}]}
         record = Mock()
         with self.assertRaises(Refused):
             dispose(provider, {}, plan, record, observe=Mock(return_value=deepcopy(plan)))

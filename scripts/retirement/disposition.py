@@ -13,10 +13,6 @@ KINDS = ("workflows", "queues", "workers", "buckets", "databases")
 NATIVE_WORKERS = {"fidy-native-storage-core", "fidy-native-storage-ingress", "fidy-native-web"}
 HOSTS = {"api.fidyapp.com": "fidy-native-storage-ingress", "app.fidyapp.com": "fidy-native-web"}
 BLOCKING_WRITERS = {"issued_r2_writers", "upload_admission_events"}
-EXTERNAL_WORK = {
-    "wompi_callback_candidates", "billing_attempts", "refund_attempts", "payment_enrollments",
-    "whatsapp_deliveries", "connection_attempts", "provider_authentication_attempts",
-}
 
 
 def digest(value):
@@ -109,7 +105,7 @@ def require_isolation(workers, workflows, references):
                 "An unexpected Workflow references an incumbent Worker")
 
 
-def queue_graph(provider, queues, workers):
+def queue_graph(provider, queues, workers, *, require_paused=True):
     observed = {}
     obsolete_names = set(SCOPE["queues"].values())
     for ident, row in queues.items():
@@ -126,7 +122,8 @@ def queue_graph(provider, queues, workers):
                         consumer.get("dead_letter_queue") not in obsolete_names,
                         "An unrelated queue still references incumbent infrastructure")
         if owner:
-            require(row["settings"]["delivery_paused"] is True, "An incumbent queue is still delivering")
+            require(not require_paused or row["settings"]["delivery_paused"] is True,
+                    "An incumbent queue is still delivering")
             detail = provider.result(f"queues/{ident}")
             producers = detail["producers"]
             require(type(producers) is list and detail["producers_total_count"] == len(producers),
@@ -263,7 +260,7 @@ def hold_reasons(snapshot):
     holds = []
     for database, rows in snapshot["census"].items():
         for row in rows:
-            if row["attention_rows"] and row["source"] in BLOCKING_WRITERS | EXTERNAL_WORK:
+            if row["attention_rows"] and row["source"] in BLOCKING_WRITERS:
                 holds.append({"database": database, "source": row["source"], "count": row["attention_rows"]})
     for bucket, observed in snapshot["objects"].items():
         if observed["count"] and observed["multipartClear"] is not True:

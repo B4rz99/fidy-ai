@@ -1,0 +1,72 @@
+name: Plan the closed Transaction fixture successor
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: production-deployment
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    if: github.ref == 'refs/heads/trunk' && github.ref_protected
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 25
+    env:
+      FIXTURE_RELEASE_OPERATION: plan-fixture-successor
+      NATIVE_STORAGE_ADMISSION: ${{ vars.NATIVE_STORAGE_ADMISSION }}
+      NATIVE_STORAGE_HOSTS: ${{ vars.NATIVE_STORAGE_HOSTS || 'acceptance' }}
+      RELEASE_GIT_SHA: ${{ github.sha }}
+      RELEASE_ATTEMPT_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+      ALCHEMY_PROFILE: ci
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      FIDY_NATIVE_FIXTURE_PUBLIC_KEY: ${{ vars.FIDY_NATIVE_FIXTURE_PUBLIC_KEY }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Require closed protected planning
+        run: |
+          test "$NATIVE_STORAGE_ADMISSION" = closed
+          test "$NATIVE_STORAGE_HOSTS" = acceptance
+          test "$GITHUB_RUN_ATTEMPT" = 1
+      - uses: ./.github/actions/bun-runtime
+      - run: bash scripts/install-workspace.sh --ignore-scripts
+      - name: Check the reviewed edge policy
+        run: bun infra/cloudflare/verify-edge-policy.ts
+      - name: Authenticate the original release, receipt, and exact erasure
+        run: |
+          umask 077
+          python3 scripts/infra-performance/canonical-fixture/successor_source.py
+      - uses: ./.github/actions/configure-alchemy-cloudflare-profile
+      - name: Bind the protected plan to the reviewed revision
+        run: |
+          echo "HOSTED_AI_MODEL=$(bun infra/cloudflare/scripts/print-approved-openai-model.ts)" >> "$GITHUB_ENV"
+          echo "CONTRACT_DIGEST=$(bun run --silent --cwd apps/server contracts:digest)" >> "$GITHUB_ENV"
+      - name: Inspect the scoped successor resources
+        working-directory: infra/cloudflare
+        env:
+          NATIVE_FIXTURE_SIGNER_SHA256: ${{ vars.NATIVE_FIXTURE_SIGNER_SHA256 }}
+          NATIVE_FIXTURE_SIGNING_KEY: ${{ secrets.NATIVE_FIXTURE_SIGNING_KEY }}
+          SMOKE_PROOF: ${{ secrets.NATIVE_STORAGE_SMOKE_PROOF }}
+          CLOUDFLARE_ACCESS_ISSUER: ${{ secrets.CLOUDFLARE_ACCESS_ISSUER }}
+          RECOVERY_OPERATOR_EMAIL: ${{ vars.RECOVERY_OPERATOR_EMAIL }}
+          BETA_PRO_OPERATOR_EMAIL: ${{ vars.BETA_PRO_OPERATOR_EMAIL }}
+          SAMPLE_REVIEWER_EMAIL: ${{ vars.SAMPLE_REVIEWER_EMAIL }}
+          BILLING_SUPPORT_AUDIENCE: ${{ vars.BILLING_SUPPORT_AUDIENCE }}
+          PRICING_PUBLISH_AUDIENCE: ${{ vars.PRICING_PUBLISH_AUDIENCE }}
+        run: bun native-storage-resources.ts plan-fixture-successor
+      - name: Save the verified read-only successor inventory
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-fixture-successor-plan-${{ github.run_id }}
+          path: ${{ runner.temp }}/native-fixture-successor-plan.json
+          if-no-files-found: error

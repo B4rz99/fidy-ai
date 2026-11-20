@@ -1,3 +1,4 @@
+import type { PerformanceMember } from "../../../apps/server/cloudflare/release-isolation/contract";
 import { serveFixture } from "./bridge";
 import { Config, Effect, Redacted } from "effect";
 import { Miniflare, type MiniflareWorkerConfig } from "miniflare";
@@ -140,7 +141,8 @@ const fixtureGeneration = Effect.fnUntraced(function* (revision: string) {
 });
 export const closedRuntime = Effect.fnUntraced(function* (
   { revision, secret }: { revision: string; secret: string },
-  directory: string = ""
+  directory: string = "",
+  member: PerformanceMember = "performance-1"
 ) {
   const privateKey = Redacted.value(yield* Config.Redacted("TEST_FIXTURE_PRIVATE_KEY"));
   const { baseline, ingressEntry, coreEntry, providerEntry, providerRevision } =
@@ -170,6 +172,7 @@ export const closedRuntime = Effect.fnUntraced(function* (
           STATEMENT_STAGING_BUCKET: { type: "r2", name: "private-statements" },
           SAMPLE_BUCKET: { type: "r2", name: "private-samples" },
           ...(baseline ? {} : { NATIVE_FIXTURE_SIGNING_KEY: text(privateKey) }),
+          ...(member === "performance-2" ? { NATIVE_FIXTURE_MEMBER: text(member) } : {}),
           SQLITE_STORE_CAPACITY_BYTES: text("1000000000"),
           GOOGLE_CLIENT_ID: text("fidy-native-google"),
           GOOGLE_CLIENT_SECRET: text(deriveSecret(secret, providerRevision, "google")),
@@ -197,8 +200,14 @@ export const closedRuntime = Effect.fnUntraced(function* (
 const run = Effect.gen(function* () {
   const revision = yield* Config.String("FIDY_NATIVE_REVISION");
   const secret = Redacted.value(yield* Config.Redacted("SMOKE_PROOF"));
-  yield* Effect.acquireUseRelease(closedRuntime({ revision, secret }), serveFixture, (runtime) =>
-    Effect.tryPromise(() => runtime.dispose()).pipe(Effect.orDie)
+  const member = yield* Config.Literals(
+    ["performance-1", "performance-2"],
+    "FIDY_BOUND_FIXTURE_MEMBER"
+  ).pipe(Config.withDefault("performance-1"));
+  yield* Effect.acquireUseRelease(
+    closedRuntime({ revision, secret }, "", member),
+    (runtime) => serveFixture(runtime, member),
+    (runtime) => Effect.tryPromise(() => runtime.dispose()).pipe(Effect.orDie)
   );
 });
 if (import.meta.main) {

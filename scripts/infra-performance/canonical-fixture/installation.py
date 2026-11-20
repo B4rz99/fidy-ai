@@ -23,6 +23,7 @@ def validate_candidate(read, *, account, revision, versions, public_key):
     deployments = {}
     user_namespace = None
     resource_revision = None
+    member = {}
     for role, script in SCRIPTS.items():
         expected = versions[role]
         if str(UUID(expected)) != expected:
@@ -48,6 +49,11 @@ def validate_candidate(read, *, account, revision, versions, public_key):
             "NATIVE_STORAGE_ADMISSION": "closed", "RECOVERY_ISOLATION": "isolated",
             "RELEASE_GIT_SHA": revision, "BROWSER_ORIGIN": BROWSER,
         }
+        selection = bindings.get("NATIVE_FIXTURE_MEMBER")
+        if selection is not None:
+            if role != "core" or (selection.get("type"), selection.get("text")) != ("plain_text", "performance-2"):
+                raise ValueError("Unexpected native fixture member binding")
+            member = {"fixtureMember": "performance-2"}
         if role == "core":
             smoke = bindings.get("SMOKE_QUEUE_NAME", {})
             generation = re.fullmatch(r"fidy-native-smoke-([0-9a-f]{40})", smoke.get("text", ""))
@@ -75,7 +81,7 @@ def validate_candidate(read, *, account, revision, versions, public_key):
             if (bindings.get(name, {}).get("type"), bindings.get(name, {}).get("text")) != ("plain_text", value):
                 raise ValueError("Native candidate release, origin or signer fingerprint differs")
     return dict(revision=revision, versions=versions, signerSha256=fingerprint,
-                deployments=deployments, userNamespace=user_namespace, resourceRevision=resource_revision)
+                deployments=deployments, userNamespace=user_namespace, resourceRevision=resource_revision, **member)
 
 
 def validate_qualification(candidate, promotion, installation):
@@ -85,6 +91,7 @@ def validate_qualification(candidate, promotion, installation):
     if (promotion["rollbackTested"] is not True or installation["admission"] != "closed"
             or installation["revision"] != candidate["revision"]
             or installation["resourceRevision"] != candidate["resourceRevision"]
+            or installation.get("fixtureMember") != candidate.get("fixtureMember")
             or snapshot["revision"] != candidate["revision"]
             or installation["userNamespace"] != candidate["userNamespace"]
             or not re.fullmatch("[0-9a-f]{32}", candidate["userNamespace"])):

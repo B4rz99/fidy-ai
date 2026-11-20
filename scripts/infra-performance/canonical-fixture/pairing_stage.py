@@ -241,6 +241,8 @@ def sealed_pair(verifier, artifact_id, digest, get=actions_get, git=git_read):
         if member.filename != "native-fallback-stage.json" or not 0 < member.file_size <= 65_536:
             raise ValueError("Unexpected replacement seal archive")
         stage = json.loads(archive.read(member))
+    if "fixtureMember" in stage:
+        raise ValueError("Historical pairing repair cannot authorize another fixture member")
     release = stage["release"]
     application = stage["revision"]
     if application == issuer:

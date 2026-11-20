@@ -154,7 +154,7 @@ const webApplication = Effect.fn(function* (release: NativeRelease) {
     outdir: "dist",
     env: {
       CONTRACT_DIGEST: release.release.contractDigest,
-      RELEASE_GIT_SHA: release.resourceRevision,
+      RELEASE_GIT_SHA: release.supportRevision,
     },
     dev: {
       command: `bun run dev -- --host 127.0.0.1 --port ${productionTopology.web.localPort} --strictPort`,
@@ -182,7 +182,7 @@ export const nativeApplication = Effect.gen(function* () {
     ...workerPolicy,
     name: installationNames.ForwardedEmail,
     main: "../../apps/server/cloudflare/ingestion/email-worker.ts",
-    env: { RELEASE_GIT_SHA: release.resourceRevision },
+    env: { RELEASE_GIT_SHA: release.supportRevision },
   });
   const ingress = yield* Cloudflare.Worker("Ingress", {
     ...workerPolicy,

@@ -10,7 +10,7 @@ import { evaluate } from "alchemy/Output";
 import { FetchHttpClient } from "effect/http";
 import { ConfigProvider, Effect, Schema } from "effect";
 import { nativeApplication } from "./native-application";
-import { NativeBindings } from "./native-graph";
+import { type NativeBinding, NativeBindings, requireSuccessorCoreBindings } from "./native-graph";
 import { requireClosedBindings } from "./storage-installation";
 
 const pinId = "76a38a57-13ac-41e9-9004-0e1e1bf41d98";
@@ -46,9 +46,11 @@ const rehearsalKey = Effect.gen(function* () {
   };
 });
 const testSigner = await Effect.runPromise(rehearsalKey);
-it.effect.each([false, true])(
-  "declares exactly the requested Core and smoke bindings before resources exist (fixture signer %s)",
-  (enabled) => {
+it.effect.each(["unsigned", "original", "successor"] as const)(
+  "declares exactly the requested Core and smoke bindings before resources exist (%s)",
+  (mode) => {
+    const enabled = mode !== "unsigned";
+    const successorPlan = mode === "successor";
     const revision = "1".repeat(40);
     const fingerprint = enabled ? testSigner.fingerprint : "";
     const configuration = ConfigProvider.fromUnknown({
@@ -58,6 +60,7 @@ it.effect.each([false, true])(
             NATIVE_FIXTURE_SIGNING_KEY: testSigner.secret,
           }
         : {}),
+      ...(successorPlan ? { FIXTURE_RELEASE_OPERATION: "plan-fixture-successor" } : {}),
       NATIVE_STORAGE_ADMISSION: "closed",
       RELEASE_GIT_SHA: revision,
       CONTRACT_DIGEST: "2".repeat(64),
@@ -74,7 +77,16 @@ it.effect.each([false, true])(
       { providers: Cloudflare.providers(), state: Alchemy.inMemoryState() },
       nativeApplication.pipe(Effect.provideService(ConfigProvider.ConfigProvider, configuration))
     );
-    const generation = enabled ? "aa447b8b781cdda48e021c1332f4377eae00f179" : revision;
+    const assertBindings = (
+      worker: "Core" | "Smoke",
+      observed: ReadonlyArray<NativeBinding>
+    ): void => {
+      if (successorPlan && worker === "Core") {
+        requireSuccessorCoreBindings({ bindings: observed, fingerprint });
+      } else requireClosedBindings({ worker, bindings: observed, fingerprint });
+    };
+    const generation =
+      enabled && !successorPlan ? "aa447b8b781cdda48e021c1332f4377eae00f179" : revision;
     return evalStack(
       stack,
       (compiled) =>
@@ -111,7 +123,7 @@ it.effect.each([false, true])(
             expect(observed).toContainEqual(
               expect.objectContaining({ name: "RELEASE_GIT_SHA", text: revision })
             );
-            requireClosedBindings({ worker, bindings: observed, fingerprint });
+            assertBindings(worker, observed);
             expect(observed.some((item) => item.name === "NATIVE_FIXTURE_SIGNING_KEY")).toBe(
               expectedSigner(worker, enabled)
             );

@@ -1,4 +1,4 @@
-"""Capture the exact performance-1 Transactions and obtain sealed evidence from their real owner."""
+"""Capture the exact performance Transactions and obtain sealed evidence from their real owner."""
 import argparse
 from contextlib import contextmanager
 import hashlib
@@ -17,6 +17,7 @@ from fixture import digest, instant, prepare, serialized, validate_originals, wr
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 RECEIPT_PATH = "/internal/release-smoke?acceptance=transaction-fixture&cohort=performance&ordinal=1"
+RECEIPT_PATHS = {"performance-1": RECEIPT_PATH, "performance-2": RECEIPT_PATH[:-1] + "2"}
 
 
 def private_file(directory, name):
@@ -91,15 +92,17 @@ def verify_signed_views(manifest, links):
             raise ValueError("An inspection response differs from its signed original facts and link")
 
 
-def verified_provenance(directory, *, revision, resource_prefix):
+def verified_provenance(directory, *, revision, resource_prefix, member="performance-1"):
     directory = Path(directory)
     manifest = private_file(directory, "manifest.json")
     sealed = private_file(directory, "native-receipt.json")
     session = read_native_session(directory)
-    if (not re.fullmatch(r"[0-9a-f]{40}", revision) or not re.fullmatch(r"fidy-2259-[0-9a-f]{12}", resource_prefix)
-            or manifest["revision"] != revision or manifest["member"] != "performance-1"
+    if member is None:
+        member = manifest["member"]
+    if (member not in RECEIPT_PATHS or not re.fullmatch(r"[0-9a-f]{40}", revision) or not re.fullmatch(r"fidy-2259-[0-9a-f]{12}", resource_prefix)
+            or manifest["revision"] != revision or manifest["member"] != member
             or sealed["nativeRevision"] != revision or sealed["resourcePrefix"] != resource_prefix
-            or sealed["member"] != "performance-1" or sealed["nativeManifestDigest"] != digest(manifest)
+            or sealed["member"] != member or sealed["nativeManifestDigest"] != digest(manifest)
             or sealed["sessionBindingSha256"] != hashlib.sha256(session["binding"].encode()).hexdigest()):
         raise ValueError("Native receipt coordinates differ from the approved experiment")
     evidence = open_envelope(sealed,revision)
@@ -107,17 +110,17 @@ def verified_provenance(directory, *, revision, resource_prefix):
     verify_signed_views(manifest, evidence["links"])
     if len(evidence["capture"])!=8 or len(evidence["links"])!=1:
         raise ValueError("Native owner receipt has the wrong fixture cardinality")
-    return evidence, dict(nativeRevision=revision, member="performance-1", resourcePrefix=resource_prefix,
+    return evidence, dict(nativeRevision=revision, member=member, resourcePrefix=resource_prefix,
                           nativeReceiptDigest=digest(sealed), nativeManifestDigest=digest(manifest))
 
 
-def verify_native_fixture(directory, *, revision, resource_prefix):
-    return verified_provenance(directory, revision=revision, resource_prefix=resource_prefix)[1]
+def verify_native_fixture(directory, *, revision, resource_prefix, member="performance-1"):
+    return verified_provenance(directory, revision=revision, resource_prefix=resource_prefix, member=member)[1]
 
 
 @contextmanager
-def bridge(mode, revision, session):
-    env = {**os.environ, "FIDY_NATIVE_REVISION": revision}
+def bridge(mode, revision, session, member="performance-1"):
+    env = {**os.environ, "FIDY_NATIVE_REVISION": revision, "FIDY_BOUND_FIXTURE_MEMBER": member}
     if session.exists():
         env["FIDY_BOUND_SESSION_FILE"] = str(session.resolve())
     else:
@@ -163,23 +166,25 @@ def bridge(mode, revision, session):
                 child.kill()
 
 
-def rehearse(revision, prefix, out, *, browser_workspace=False):
+def rehearse(revision, prefix, out, *, browser_workspace=False, member="performance-1"):
     mode = "rehearse"
+    path = RECEIPT_PATHS[member]
+    other_member = "performance-2" if member == "performance-1" else "performance-1"
     directory=out/"fixture"
     directory.mkdir(mode=0o700, exist_ok=True)
     with serialized(out/"owner"):
         marker=out/"owner"/"attempt.json"
-        state=json.loads(marker.read_text()) if marker.is_file() else {"revision":revision,"resourcePrefix":prefix,"member":"performance-1"}
-        if state["revision"]!=revision or state["resourcePrefix"]!=prefix or state["member"]!="performance-1":
+        state=json.loads(marker.read_text()) if marker.is_file() else {"revision":revision,"resourcePrefix":prefix,"member":member}
+        if state["revision"]!=revision or state["resourcePrefix"]!=prefix or state["member"]!=member:
             raise ValueError("Another synthetic fixture owns this journal")
         if (directory/"native-receipt.json").is_file():
-            return verify_native_fixture(directory,revision=revision,resource_prefix=prefix)
+            return verify_native_fixture(directory,revision=revision,resource_prefix=prefix,member=member)
         if "receipt" in state or ("signup" in state and not (directory/"native-session.json").is_file()):
             raise ValueError("A prior protected offering is unresolved")
         state["signup"]="offered"; write(marker,state)
-        with bridge(mode,revision,directory/"native-session.json") as send:
+        with bridge(mode,revision,directory/"native-session.json",member) as send:
             if mode=="rehearse":
-                absent=send("POST",RECEIPT_PATH,{"resourcePrefix":prefix,"nativeManifestDigest":"0"*64})
+                absent=send("POST",path,{"resourcePrefix":prefix,"nativeManifestDigest":"0"*64})
                 if absent["status"]//100==2:
                     raise ValueError("An empty synthetic User obtained a provenance receipt")
             def canonical(method,path,data):
@@ -188,23 +193,26 @@ def rehearse(revision, prefix, out, *, browser_workspace=False):
                 if reply["status"]//100 != 2:
                     raise ValueError("Canonical fixture operation returned HTTP "+str(reply["status"]))
                 return reply["data"]
-            report=prepare(canonical,directory,revision,"performance-1",browser_workspace=browser_workspace)
+            report=prepare(canonical,directory,revision,member,browser_workspace=browser_workspace)
             request={"resourcePrefix":prefix,"nativeManifestDigest":digest(report)}
             if mode=="rehearse":
                 for failure in ("unsigned","wrong-binding","foreign-session"):
-                    refused=send("POST",RECEIPT_PATH,request,failure)
+                    refused=send("POST",path,request,failure)
                     if refused["status"]//100==2:
                         raise ValueError("Foreign or unauthorized fixture receipt was issued")
+                wrong = send("POST", RECEIPT_PATHS[other_member], request)
+                if wrong["status"]//100 == 2 or not send("POST", path, request, "receipt-markers")["clear"]:
+                    raise ValueError("Denied receipt changed a member's issuance marker")
             state["receipt"]="offered"; write(marker,state)
-            result=send("POST",RECEIPT_PATH,request)
+            result=send("POST",path,request)
             if result["status"]!=200:
                 raise ValueError("Native provenance owner returned HTTP "+str(result["status"]))
             write(directory/"native-receipt.json",result["data"])
             if browser_workspace and send("GET", "/transactions?limit=25", None, "mounted-workspace")["status"] != 200:
                 raise ValueError("Native mounted workspace did not complete")
-            if mode=="rehearse" and send("POST",RECEIPT_PATH,request)["status"]//100==2:
+            if mode=="rehearse" and send("POST",path,request)["status"]//100==2:
                 raise ValueError("Native owner reissued a single-use receipt")
-        bindings=verify_native_fixture(directory,revision=revision,resource_prefix=prefix)
+        bindings=verify_native_fixture(directory,revision=revision,resource_prefix=prefix,member=member)
         state["receipt"]="verified";write(marker,state)
         return bindings
 
@@ -219,8 +227,12 @@ def main():
     parser.add_argument("--ingress-version")
     parser.add_argument("--release-artifact")
     parser.add_argument("--archive-sha256")
+    parser.add_argument("--second-member", action="store_true", help="Exercise the independently selected second member on local workerd")
     parser.add_argument("--browser-workspace", action="store_true", help="Capture the original WebSession's User, TrialPeriod and pending Review count on workerd")
     args=parser.parse_args()
+    if args.second_member and args.mode != "rehearse":
+        parser.error("Member selection is available only for disposable workerd")
+    member = "performance-2" if args.second_member else "performance-1"
     os.umask(0o077)
     args.out.mkdir(mode=0o700,parents=True,exist_ok=True)
     if args.mode=="rehearse":
@@ -238,7 +250,7 @@ def main():
         return run(args)
     if not re.fullmatch(r"[a-f0-9]{40}",revision) or not re.fullmatch(r"fidy-2259-[a-f0-9]{12}",prefix):
         raise ValueError("Missing exact native revision or allocated comparison prefix")
-    verified=rehearse(revision,prefix,args.out,browser_workspace=args.browser_workspace)
+    verified=rehearse(revision,prefix,args.out,browser_workspace=args.browser_workspace,member=member)
     if args.mode=="rehearse":
         envelope=private_file(args.out/"fixture","native-receipt.json")
         damaged={**envelope, "signature":("0" if envelope["signature"][0]!="0" else "1")+envelope["signature"][1:]}
@@ -248,9 +260,25 @@ def main():
             pass
         else:
             raise ValueError("Modified owner signature was accepted")
-        if rehearse(revision,prefix,args.out,browser_workspace=args.browser_workspace)!=verified:
+        other_member = "performance-1" if member == "performance-2" else "performance-2"
+        for coordinates in ({"resource_prefix":"fidy-2259-" + ("0"*12 if prefix != "fidy-2259-" + "0"*12 else "1"*12),
+                             "member":member},
+                            {"resource_prefix":prefix, "member":other_member}):
+            try:
+                verify_native_fixture(args.out/"fixture", revision=revision, **coordinates)
+            except ValueError:
+                pass
+            else:
+                raise ValueError("Receipt verified under foreign fixture coordinates")
+        try:
+            open_envelope({**envelope, "member":other_member}, revision)
+        except ValueError:
+            pass
+        else:
+            raise ValueError("Receipt verified after changing the signed member")
+        if rehearse(revision,prefix,args.out,browser_workspace=args.browser_workspace,member=member)!=verified:
             raise ValueError("Protected resume changed the signed fixture")
-    write(args.out/"summary.json",{"scope":args.mode,"nativeRevision":revision,"member":"performance-1",
+    write(args.out/"summary.json",{"scope":args.mode,"nativeRevision":revision,"member":member,
         "originals":8,"effective":7,"sourceAttestations":8,"linkedPairs":1,"verified":True,
         "nativeReceiptDigest":verified["nativeReceiptDigest"],"nativeManifestDigest":verified["nativeManifestDigest"]})
 

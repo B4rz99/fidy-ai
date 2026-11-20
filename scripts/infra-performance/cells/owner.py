@@ -401,10 +401,10 @@ def main():
                 raise Refused("protected_native_receipt_verifier_missing") from None
 
             proof = verify_native_fixture(
-                args.fixture, revision=args.revision, resource_prefix=args.prefix
+                args.fixture, revision=args.revision, resource_prefix=args.prefix, member=None
             )
             if (
-                proof["member"] != "performance-1"
+                proof["member"] not in ("performance-1", "performance-2")
                 or proof["resourcePrefix"] != args.prefix
                 or proof["nativeRevision"] != args.revision
             ):

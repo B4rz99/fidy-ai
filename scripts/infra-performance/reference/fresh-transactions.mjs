@@ -246,6 +246,28 @@ const correctHistory = async (input, { initial, target }) => {
   if (!(await counterparty.isVisible())) await edit.click();
   await counterparty.fill(afterName);
   process.stderr.write("REFERENCE_STAGE save\n");
+  await page.evaluate(() => {
+    const button = Array.from(document.querySelectorAll("button")).find((element) => element.textContent === "Guardar");
+    const allowed = ["transaction-context-panel", "transaction-form-actions", "transaction-workspace",
+       "transaction-period", "transaction-page-header"];
+    const geometry = () => {
+      const rect = button.getBoundingClientRect();
+      const hit = document.elementFromPoint(rect.left + rect.width / 2,rect.top + rect.height / 2);
+      const slot = hit?.closest("[data-transaction-slot]")?.getAttribute("data-transaction-slot");
+      console.debug("REFERENCE_SAVE_BOUNDS "+JSON.stringify({epoch:performance.timeOrigin+performance.now(),
+        top:Math.round(rect.top),height:Math.round(rect.height),viewport:innerHeight,scroll:Math.round(scrollY),
+        hit:!hit ? "outside" : button.contains(hit) ? "button" : allowed.includes(slot) ? slot : "other",
+        disabled:button.disabled}));
+    };
+    geometry();
+    const until=performance.now()+800;
+    function watch() {
+      if (performance.now()>=until || !button.isConnected) return;
+      geometry();
+      requestAnimationFrame(watch);
+    }
+    requestAnimationFrame(watch);
+  });
   const save = responseFor(input, "PUT", "/transactions/" + targetId);
   const refresh = responseFor(input, "GET", "/transactions");
   offered?.("correction");

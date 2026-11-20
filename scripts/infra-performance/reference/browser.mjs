@@ -95,6 +95,7 @@ try {
     console.debug("SYNTHETIC_CLICK_MS "+String(performance.timeOrigin+performance.now()));
   },true));
   page.on("console", (message) => {
+    if (message.text().startsWith("REFERENCE_SAVE_BOUNDS ")) note({type:"save-bounds",...JSON.parse(message.text().slice("REFERENCE_SAVE_BOUNDS ".length))});
     const match = /^SYNTHETIC_CLICK_MS (\d+\.?\d*)$/.exec(message.text());
     if (match) note({type:"click",epoch:Number(match[1])});
   });

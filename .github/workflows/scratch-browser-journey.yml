@@ -2,7 +2,7 @@ name: Attribute browser request timing
 
 on:
   push:
-    branches: [test/2260-browser-menu-trace]
+    branches: [test/2260-save-actionability]
 
 permissions:
   contents: read
@@ -47,15 +47,33 @@ jobs:
           (cd baseline-d1 && bash scripts/install-workspace.sh --ignore-scripts)
           echo "ASSESSMENT_CHROMIUM=$(command -v google-chrome)" >> "$GITHUB_ENV"
           google-chrome --version
-      - name: Check live choice menus, Recurring navigation and Correction recovery
-        working-directory: apps/web
-        run: |
-          bun ../../node_modules/vitest/vitest.mjs run src/ui/components/choice-dropdown.test.ts src/features/recurring/feature.test.ts src/features/transactions/corrections.test.ts src/transport/workspace-query.test.ts --coverage.enabled=false --maxWorkers=1
-          bun run typecheck
-      - name: Trace three ordinary matched pairs
+      - name: Observe the Save button in three matched 25-row pairs
+        env:
+          DEBUG: pw:api
         run: |
           python3 scripts/infra-performance/reference/run.py --d1 baseline-d1 --do . \
-            --dataset production --network normal --pairs 3 --origin "GitHub-hosted Ubuntu loopback"
+            --dataset small --network normal --pairs 3 --origin "GitHub-hosted Ubuntu loopback"
+      - name: Preserve allowlisted actionability events
+        if: always()
+        run: |
+          python3 - <<'PYCODE'
+          import json, re
+          from pathlib import Path
+          stages = ("visible, enabled and stable", "not stable", "outside of the viewport",
+                    "intercepts pointer events", "waiting for scheduled navigations",
+                    "retrying click action", "element is visible", "scrolling into view",
+                    "done scrolling", "performing click action", "element is not enabled",
+                    "waiting 20ms", "waiting 100ms", "waiting 500ms", "click action done",
+                    "waiting for getByRole", "attempting click action")
+          for path in Path("apps/web/test-results/reference").glob("*/*/browser.log"):
+              log = path.read_text().split("REFERENCE_STAGE save")[-1].split("REFERENCE_STAGE fresh-read")[0]
+              out = []
+              for line in log.splitlines():
+                  found = next((stage for stage in stages if stage in line), None)
+                  time = re.search(r"\d{4}-\d{2}-\d{2}T[\d:.]+Z", line)
+                  if time and found: out.append({"event": found, "time": time[0]})
+              path.with_name("save-actions.json").write_text(json.dumps(out))
+          PYCODE
       - name: Preserve reference evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -66,5 +84,6 @@ jobs:
             apps/web/test-results/reference/*/attempts.jsonl
             apps/web/test-results/reference/*/*/workspace-events.jsonl
             apps/web/test-results/reference/*/*/network-events.jsonl
+            apps/web/test-results/reference/*/*/save-actions.json
             apps/web/test-results/reference/*/report.json
           if-no-files-found: warn

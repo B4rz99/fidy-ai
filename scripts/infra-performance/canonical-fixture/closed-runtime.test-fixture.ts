@@ -4,7 +4,6 @@ import { Config, Effect, Redacted } from "effect";
 import { Miniflare, type MiniflareWorkerConfig } from "miniflare";
 import { installedOrigins } from "../../../apps/server/src/shell/browser-transport/contract";
 import {
-  native,
   nativeOwnerBindings,
   nativeOwners,
   workerManifest,
@@ -51,7 +50,7 @@ const meteredManifest = Effect.fnUntraced(function* (module: string, name: strin
       "production.mjs": manifest.modules["index.mjs"],
       "meter.mjs": {
         type: "esm" as const,
-        contents: yield* native(() =>
+        contents: yield* Effect.tryPromise(() =>
           Bun.file(new URL("./meter.test-fixture.mjs", import.meta.url)).text()
         ),
       },

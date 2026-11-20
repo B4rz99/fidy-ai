@@ -1,14 +1,12 @@
 // A tall Correction must remain reachable alongside a longer desktop Transaction history.
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { Config, Effect, Option } from "effect";
 
 const { chromium } = await import("@playwright/test");
 
-const css = await readFile(
-  new URL("../src/ui/components/transactions.css", import.meta.url),
-  "utf8"
-);
-const browser = await chromium.launch({ executablePath: process.env.ASSESSMENT_CHROMIUM });
+const css = Bun.fileURLToPath(new URL("../src/ui/components/transactions.css", import.meta.url));
+const executable = await Effect.runPromise(Config.option(Config.String("ASSESSMENT_CHROMIUM")));
+const browser = await chromium.launch({ executablePath: Option.getOrUndefined(executable) });
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   await page.setContent(`
@@ -29,7 +27,7 @@ try {
         </dialog>
       </div>
     </main>`);
-  await page.addStyleTag({ content: css });
+  await page.addStyleTag({ path: css });
   const reachable = (control: ReturnType<typeof page.getByRole>): Promise<boolean> =>
     control.evaluate((element) => {
       element.scrollIntoView({ block: "center", behavior: "instant" });

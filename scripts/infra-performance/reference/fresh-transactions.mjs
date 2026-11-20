@@ -14,7 +14,7 @@ const productionPage = 7,
 /** @typedef {"startup" | "refresh" | "correction"} Stage */
 /** @typedef {{page: Page, ledger: string, api: string, calibration: boolean,
  * observe: (reply: BrowserResponse) => Promise<unknown>, observeStartup: (reply: BrowserResponse) => Promise<unknown>,
- * checkpoint?: (stage: string) => Promise<void>, offered?: (stage: Stage) => void, completed?: (stage: Stage, milliseconds: number) => void}} Journey */
+ * startupPhases?: () => Promise<void>, checkpoint?: (stage: string) => Promise<void>, offered?: (stage: Stage) => void, completed?: (stage: Stage, milliseconds: number) => void}} Journey */
 const extraFields = Schema.Record(Schema.String, Schema.Unknown);
 const transaction = Schema.StructWithRest(
   Schema.Struct({
@@ -172,6 +172,7 @@ const startApplication = async (input) => {
   await page.goto(ledger, { waitUntil: "commit" });
   await ready(input, "Evaluación 2");
   const startupMs = performance.now() - booting;
+  await input.startupPhases?.();
   page.off("response", captureStartup);
   const direct = responses.history;
   const reply = direct ?? responses.bootstrap;

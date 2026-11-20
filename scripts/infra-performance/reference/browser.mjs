@@ -175,6 +175,35 @@ try {
       correction: "correction.browser",
     };
     const journey = readOnly ? freshTransactionHistory : freshTransactions;
+    const startupPhases = async () => {
+      const phases = await page.evaluate(
+        ({ api }) => {
+          const binding = performance.getEntriesByType("resource").flatMap((entry) => {
+            if (!(entry instanceof PerformanceResourceTiming)) return [];
+            const url = new URL(entry.name);
+            if (url.origin !== api || url.pathname !== "/web/session/binding") return [];
+            return [
+              {
+                context: url.searchParams.get("context"),
+                start: entry.startTime,
+                end: entry.responseEnd,
+              },
+            ];
+          });
+          const navigation = performance.getEntriesByType("navigation")[0];
+          return {
+            sampled: performance.now(),
+            dom:
+              navigation instanceof PerformanceNavigationTiming
+                ? navigation.domContentLoadedEventEnd
+                : 0,
+            binding,
+          };
+        },
+        { api }
+      );
+      event({ type: "startup-phases", ...phases });
+    };
     const result = await journey({
       page,
       ledger,
@@ -184,6 +213,7 @@ try {
       observeStartup: async (reply) =>
         Schema.decodeSync(Schema.fromJsonString(Schema.Unknown))(await reply.text()),
       beforeRefresh: evidence,
+      startupPhases: process.env.FIDY_REFERENCE_NATIVE_PAIR === "1" ? startupPhases : undefined,
       checkpoint,
       offered: (stage) => event({ type: "offered", journey: journeys[stage] }),
       completed: (stage, milliseconds) =>

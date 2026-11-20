@@ -38,9 +38,12 @@ const knownResources = new Map([
   ...nativeResourceInventory(retainedProvider.revision),
 ]);
 type ObservedResource = Pick<PlanRows[number], "logicalId" | "resourceType" | "action">;
-export const projectFixtureInventory = (rows: PlanRows): ReadonlyArray<ObservedResource> =>
+export const projectFixtureInventory = (
+  rows: PlanRows,
+  inventory: ReadonlyMap<string, string> = knownResources
+): ReadonlyArray<ObservedResource> =>
   rows.map(({ logicalId, resourceType, action }) =>
-    knownResources.has(logicalId) && knownResources.get(logicalId) === resourceType
+    inventory.get(logicalId) === resourceType
       ? { logicalId, resourceType, action }
       : { logicalId: "unrecognized", resourceType: "unrecognized", action }
   );

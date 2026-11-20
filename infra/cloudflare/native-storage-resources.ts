@@ -25,7 +25,7 @@ import {
   diagnoseSuccessorApply,
 } from "./native-plan-diagnostics";
 import { firstInstallEdge } from "./native-storage-release";
-import { requireNativeResourcePlan } from "./native-graph";
+import { nativeResourceInventory, requireNativeResourcePlan } from "./native-graph";
 import { type Plan, describePlan, describeResource } from "alchemy/Plan";
 import { Config, Effect, Option, Schema } from "effect";
 import { HttpClient, HttpClientRequest } from "effect/http";
@@ -358,11 +358,10 @@ const successorEntrypoint = Effect.fn(function* (accounting: boolean) {
   return fileURLToPath(new URL("./alchemy.storage.ts", import.meta.url));
 });
 
-const planFixtureSuccessor = Effect.fn(function* (action: SuccessorAction) {
+const prepareSuccessorPlan = Effect.fn(function* (action: SuccessorAction) {
   const { revision, artifacts, fingerprint, directory, source } =
     yield* requireSuccessorSource(action);
   const generation = artifacts.resourceRevision;
-  const active = action === "rollout";
   const snapshot = yield* readScopedPlan({
     profile: yield* Config.String("ALCHEMY_PROFILE"),
     fingerprint,
@@ -370,6 +369,31 @@ const planFixtureSuccessor = Effect.fn(function* (action: SuccessorAction) {
     include: successorPlanSelection(generation),
     entrypoint: yield* successorEntrypoint(artifacts.accountingRollout),
   });
+  return { revision, artifacts, fingerprint, directory, source, generation, snapshot };
+});
+
+const inspectAccountingSuccessor = Effect.gen(function* () {
+  yield* Config.Literal("true", "FIXTURE_ACCOUNTING_INSPECTION");
+  yield* Config.Literal("true", "FIXTURE_ACCOUNTING_ROLLOUT");
+  const { revision, generation, directory, snapshot } = yield* prepareSuccessorPlan("rollout");
+  const observed = describePlan(snapshot.native);
+  return yield* releaseEvidence.writeFile(
+    directory + "/native-fixture-accounting-inspection.json",
+    releaseEvidence.encodeJson({
+      revision,
+      resourceRevision: generation,
+      applied: false,
+      scoped: snapshot.native.selectedFqns !== undefined,
+      stackActions: observed.actions.length,
+      resources: projectFixtureInventory(observed.resources, nativeResourceInventory(generation)),
+    })
+  );
+});
+
+const planFixtureSuccessor = Effect.fn(function* (action: SuccessorAction) {
+  const { revision, artifacts, fingerprint, directory, source, generation, snapshot } =
+    yield* prepareSuccessorPlan(action);
+  const active = action === "rollout";
   const observed = describePlan(snapshot.native);
   if (snapshot.native.selectedFqns === undefined || observed.actions.length !== 0) {
     return yield* Effect.fail(Error("Successor inventory requires a scoped read-only plan"));
@@ -425,6 +449,9 @@ if (import.meta.main) {
     if (process.argv[2] === "stage-fixture-successor") return yield* planFixtureSuccessor("stage");
     if (process.argv[2] === "rollout-fixture-successor") {
       return yield* planFixtureSuccessor("rollout");
+    }
+    if (process.argv[2] === "inspect-accounting-successor") {
+      return yield* inspectAccountingSuccessor;
     }
     if (process.argv[2] === "publish-site") return yield* publishSite;
     const operation = yield* Schema.decodeUnknownEffect(Operation)(process.argv[2]);

@@ -1,3 +1,4 @@
+import { requireFixtureLifecycle } from "./native-fixture-plan";
 import { Credentials, apiTokenCredentials } from "@distilled.cloud/cloudflare/Credentials";
 import { createScriptVersion } from "@distilled.cloud/cloudflare/workers";
 import { BadRequest } from "@distilled.cloud/cloudflare/Errors";
@@ -12,6 +13,32 @@ import {
 } from "./resource-failure";
 
 describe("resource release refusal diagnostics", () => {
+  it.effect("reports the closed fixture refusal without publishing an unreviewed coordinate", () =>
+    Effect.gen(function* () {
+      const failure = yield* Effect.try(() =>
+        requireFixtureLifecycle({
+          rows: [
+            {
+              logicalId: "unreviewed-coordinate",
+              fqn: "unreviewed-coordinate",
+              resourceType: "foreign",
+              action: "create",
+              bindings: [],
+            },
+          ],
+          fallback: true,
+        })
+      ).pipe(
+        nativeResourceStage("resource inventory"),
+        Effect.matchCause({
+          onFailure: nativeResourceFailureMessage,
+          onSuccess: () => "accepted",
+        })
+      );
+      expect(failure).toContain("closed fixture unexpected change");
+      expect(failure).not.toContain("unreviewed-coordinate");
+    })
+  );
   it.effect("identifies the failed native release stage without disclosing the provider body", () =>
     Effect.gen(function* () {
       const message = yield* Effect.die({

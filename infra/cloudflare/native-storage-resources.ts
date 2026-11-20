@@ -1,4 +1,8 @@
-import { nativePlanOptions, verifyFixturePlan } from "./native-fixture-plan";
+import {
+  nativePlanOptions,
+  projectFixtureInventory,
+  verifyFixturePlan,
+} from "./native-fixture-plan";
 import { expectedFixtureSigner, fixtureBuild, resourceRevision } from "./native-fixture-signer";
 import { productionTopology } from "../../apps/server/cloudflare/runtime/contract";
 import { requireHostPlan, stagedAccessApplications } from "./native-host-plan";
@@ -124,23 +128,54 @@ const preflight = Effect.fn(function* (phase: typeof Phase.Type, preview: boolea
     lifetime: phase === "upload" ? "read-only" : "started-write",
   }).pipe(nativeResourceStage(phase === "upload" ? "upload verification" : "host capture"));
 });
-const recordPreview = Effect.fn(function* (phase: typeof Phase.Type, revision: string, plan: Plan) {
-  if (phase === "upload") {
-    const rows = describePlan(plan).resources.map(({ action, logicalId, resourceType }) => ({
-      action,
-      logicalId,
-      resourceType,
-    }));
-    yield* releaseEvidence.writeFile(
-      (yield* Config.String("RUNNER_TEMP")) + "/native-fixture-plan.json",
-      releaseEvidence.encodeJson({ revision, resources: rows, applied: false })
-    );
-  }
-  return yield* Effect.logInfo(
-    phase === "upload"
-      ? "Verified the closed fallback lifecycle and retained provider plan without applying it."
-      : "Verified the fresh native first-install plan and closed edge."
+const recordFixturePreview = Effect.fn(function* (input: {
+  revision: string;
+  plan: Plan;
+  result: { qualified: true } | { qualified: false; refusal: string };
+}) {
+  const plan = describePlan(input.plan);
+  const resources = projectFixtureInventory(plan.resources);
+  yield* releaseEvidence.writeFile(
+    (yield* Config.String("RUNNER_TEMP")) + "/native-fixture-plan.json",
+    releaseEvidence.encodeJson({
+      revision: input.revision,
+      applied: false,
+      ...input.result,
+      actionCount: plan.actions.length,
+      resources,
+    })
   );
+});
+const verifyPreparedPlan = Effect.fn(function* (
+  input: Parameters<typeof verifyResourcePlan>[0] & { preview: boolean }
+) {
+  const { phase, plan, preview, revision } = input;
+  const verification = verifyResourcePlan(input).pipe(Effect.andThen(preflight(phase, preview)));
+  if (phase === "upload" && (yield* expectedFixtureSigner) !== "") {
+    const changes = projectFixtureInventory(describePlan(plan).resources).filter(
+      (row) => row.action !== "noop"
+    );
+    yield* Effect.logInfo("Closed fixture plan changes " + releaseEvidence.encodeJson(changes));
+    if (preview) {
+      yield* verification.pipe(
+        Effect.tapCause((cause) =>
+          recordFixturePreview({
+            revision,
+            plan,
+            result: { qualified: false, refusal: nativeResourceFailureMessage(cause) },
+          })
+        )
+      );
+      yield* recordFixturePreview({ revision, plan, result: { qualified: true } });
+      return yield* Effect.logInfo(
+        "Verified the closed fallback lifecycle and retained provider plan without applying it."
+      );
+    }
+  }
+  yield* verification;
+  if (preview) {
+    yield* Effect.logInfo("Verified the fresh native first-install plan and closed edge.");
+  }
 });
 const resourceRelease = Effect.fn(function* (phase: typeof Phase.Type, preview: boolean) {
   yield* requireProtectedDispatch;
@@ -162,9 +197,8 @@ const resourceRelease = Effect.fn(function* (phase: typeof Phase.Type, preview: 
       ? Alchemist.Stack.plan({ ...input, include: stagedAccessApplications })
       : Alchemist.Stack.plan(input)
   ).pipe(diagnoseNativePlan(revision));
-  yield* verifyResourcePlan({ phase, plan: snapshot.native, revision, hosts, pin });
-  yield* preflight(phase, preview);
-  if (preview) return yield* recordPreview(phase, revision, snapshot.native);
+  yield* verifyPreparedPlan({ phase, preview, plan: snapshot.native, revision, hosts, pin });
+  if (preview) return;
   return yield* Apply.apply(snapshot.native, { deletions: "defer" }).pipe(
     Effect.provide(snapshot.session.context),
     Effect.uninterruptible,

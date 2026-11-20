@@ -312,8 +312,9 @@ revision, `resume-fixture-upload` captures the current stable pair and revalidat
 installation before uploading replacement Core and Ingress versions and updating the existing
 Smoke executor to their revision. The Queue, Workflow and consumer keep their original identities.
 The sealed stage records the new Smoke version and deployment for the forward recovery checks. The
-one-off workflow admits only the immediate protected trunk successor of the original upload.
-The signed Web verification builds the retained Web revision to compare its actual serving assets.
+one-off workflow checks ancestry from the reviewed repair and permits only its listed verifier changes.
+The signed workflow builds the retained Web revision before planning so Alchemy can compare its local
+output with the recorded Build. The read-only inventory records qualification or refusal and never applies a change.
 
 The original private fixture Worker owns the synthetic OIDC and payment identities. Current OAuth
 flows use fresh pairing state, nonce, PKCE and authorization codes against that retained provider.

@@ -80,7 +80,7 @@ jobs:
         with:
           name: signed-browser-read-feasibility-${{ github.run_id }}
           path: |
-            ${{runner.temp}}/paired-browser/do.json
-            ${{runner.temp}}/paired-browser/d1.json
+            ${{runner.temp}}/paired-browser/do-*.json
+            ${{runner.temp}}/paired-browser/d1-*.json
             ${{runner.temp}}/paired-browser/native/summary.json
             ${{runner.temp}}/paired-browser/d1-bundle/probe.json

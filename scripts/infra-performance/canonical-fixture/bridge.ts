@@ -175,7 +175,8 @@ export const serveFixture = Effect.fn(function* (runtime: Miniflare) {
                 const manifest = await Bun.file(
                   process.env.FIDY_DIAGNOSTIC_DIR + "/native/fixture/manifest.json"
                 ).json();
-                await runBrowser({
+                for(const network of ["ordinary","poor"])await runBrowser({
+                  network,
                   variant: "do",
                   origins: api,
                   cookie: active.cookie,

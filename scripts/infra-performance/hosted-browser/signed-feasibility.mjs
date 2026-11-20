@@ -6,11 +6,11 @@ import { chromium } from "@playwright/test";
 
 const sum = (v) => createHash("sha256").update(JSON.stringify(v)).digest("hex");
 const sort = (v) => v === null || typeof v !== "object" ? v : Array.isArray(v) ? v.map(sort) : Object.fromEntries(Object.keys(v).sort().map(k=>[k,sort(v[k])]));
-export async function runBrowser({variant, origins, cookie, expected, forward, afterRequest, observations=3}) {
+export async function runBrowser({variant, origins, cookie, expected, forward, afterRequest, observations=3, network="ordinary"}) {
   const tls={ cert:Bun.file(process.env.BROWSER_TLS_CERT),key:Bun.file(process.env.BROWSER_TLS_KEY) };
   const dir=resolve(process.env.FIDY_DIAGNOSTIC_DIR);
   const events=[], snapshots={};
-  const report = () => Bun.write(join(dir,variant+".json"),JSON.stringify({variant,events,snapshots},null,2));
+  const report = () => Bun.write(join(dir,variant+"-"+network+".json"),JSON.stringify({variant,network,events,snapshots},null,2));
   const controls = expected.data.map(w=>({id:"transaction-"+w.id,label:w.counterparty}));
   const assets=resolve(process.env[variant==="d1"?"D1_WEB_ASSETS":"NATIVE_WEB_ASSETS"]);
   const web=Bun.serve({hostname:"127.0.0.1",port:0,tls,fetch:async request=>{
@@ -58,6 +58,11 @@ export async function runBrowser({variant, origins, cookie, expected, forward, a
     const context=await browser.newContext({timezoneId:"America/Bogota",serviceWorkers:"block"});
     await context.addCookies([{name:"__Host-fidy_session",value:cookie.slice("__Host-fidy_session=".length),url:origins.api,httpOnly:true,secure:true,sameSite:"Lax"}]);
     const page=await context.newPage();
+    if(network==="poor"){
+      const cdp=await context.newCDPSession(page);
+      await cdp.send("Network.enable");
+      await cdp.send("Network.emulateNetworkConditions",{offline:false,latency:400,downloadThroughput:125000,uploadThroughput:125000});
+    }
     const ready=()=>page.waitForFunction(rows=>{
       const controls=Array.from(document.querySelectorAll('button[data-transaction-slot="transaction-identity-control"]'));
       return controls.length===rows.length&&controls.every((el,i)=>el.id===rows[i].id&&el.matches(":enabled")&&el.getClientRects().length>0&&el.textContent.includes(rows[i].label));

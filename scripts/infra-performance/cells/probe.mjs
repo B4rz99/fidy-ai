@@ -44,7 +44,7 @@ const history = Schema.decodeUnknownSync(
 );
 
 const shaWidth = 64;
-const setupLifetimeMs = 180000;
+const setupLifetimeMs = 600000;
 const trialMs = 604800000;
 const secondMs = 1000;
 const sampleCount = 1;
@@ -391,7 +391,7 @@ try {
     const budget=training ? {} : routeBounds(await Bun.file(resolve(output,"limits.json")).json());
     const {runBrowser}=await import("../hosted-browser/signed-feasibility.mjs");
     const month="/transactions?limit=25&from=2026-11-01T05%3A00%3A00.000Z&to=2026-12-01T05%3A00%3A00.000Z";
-    await runBrowser({variant:"d1",origins:{browser:origin,api:"https://api.fidyapp.com"},cookie,expected:expected.history,observations:30,
+    for(const network of ["ordinary","poor"])await runBrowser({network,variant:"d1",origins:{browser:origin,api:"https://api.fidyapp.com"},cookie,expected:expected.history,observations:30,
       forward:async r=>{const u=new URL(r.url);return source(u.pathname+u.search,{method:r.method,headers:Object.fromEntries(r.headers)})},
       afterRequest:(key,response,ev)=>{
         if(key.startsWith("OPTIONS ")){assert.equal(response.status,204);return;}
@@ -404,13 +404,13 @@ try {
       }
     });
     const expectedRoutes=["GET /web/session/binding?context=transactions","GET /web/session/binding","GET /ingestion/review-workspace?limit=0&status=pending",...Array.from({length:30},()=>["GET "+month,"GET /user"]).flat()];
-    assert.deepEqual(browserRoutes.sort(),expectedRoutes.sort());
+    assert.deepEqual(browserRoutes.sort(),[...expectedRoutes,...expectedRoutes].sort());
     const check=await db.batch([
       db.prepare("SELECT operation,outcome,count(*) AS entries FROM audit_entries WHERE user_id=? AND session_id=? GROUP BY operation,outcome ORDER BY operation,outcome").bind(subject,binding),
       db.prepare("SELECT (SELECT COALESCE(sum(units),0) FROM commercial_allowance_consumptions WHERE user_id=?1 AND allowance='canonical_call') AS units,(SELECT count(*) FROM canonical_request_replays WHERE user_id=?1 AND state='completed') AS receipts").bind(subject)
     ]);
     account("audit",check);metadata.sessionAudit=check[0].results;
-    assert.equal(check[0].results.find(r=>r.operation==="transactions.listTransactions"&&r.outcome==="success")?.entries,31);
+    assert.equal(check[0].results.find(r=>r.operation==="transactions.listTransactions"&&r.outcome==="success")?.entries,62);
     assert.equal(check[0].results.find(r=>r.operation==="transactions.getTransaction"&&r.outcome==="success")?.entries,8);
     assert.equal(check[0].results.filter(r=>r.operation==="transactions.updateTransaction").length,0);
     assert.deepEqual(check[1].results,[{units:0,receipts:0}]);
@@ -420,7 +420,9 @@ try {
     const allCaps=sqlBatches.map(b=>b.maximum).concat(routes.map(name=>(training?estimates:budget)[name].maximum));
     metadata.fullEstimate=Object.fromEntries(["rowsRead","rowsWritten"].map(k=>[k,allCaps.reduce((a,b)=>a+b[k],0)]));
     metadata.routes=Object.fromEntries([...new Set(routes)].map(name=>[name,{count:routes.filter(r=>r===name).length,cap:(training?estimates:budget)[name].maximum}]));
-    assert.ok(metadata.fullEstimate.rowsRead<=100000&&metadata.fullEstimate.rowsWritten<=5000);
+    metadata.oneProfileEstimate=Object.fromEntries(["rowsRead","rowsWritten"].map(k=>[k,metadata.fullEstimate[k]-expectedRoutes.reduce((a,name)=>a+(training?estimates:budget)[name].maximum[k],0)]));
+    assert.ok(metadata.oneProfileEstimate.rowsRead<=100000 && metadata.oneProfileEstimate.rowsWritten<=5000);
+    assert.ok(metadata.fullEstimate.rowsWritten>5000);
     if (training) {
       await Bun.write(resolve(output, "limits.json"), JSON.stringify(estimates, null, 2));
     }

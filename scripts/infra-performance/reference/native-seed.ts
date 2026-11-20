@@ -138,13 +138,16 @@ const reviewSubmission = Effect.fn(function* (
   yield* execute(
     db,
     `INSERT INTO statement_staging_objects(id,user_id,object_key,byte_length,sha256,source_format,status,created_at_ms,expires_at_ms,published_submission_id)
-    VALUES(?1,?2,'synthetic-assessment-original-' || ?1,1,?3,'csv','published',?,?,?)`,
+    VALUES(?1,?2,?7,1,?3,'csv','published',?4,?5,?6)`,
     staging,
     subject,
     "a".repeat(digestCharacters),
     created,
     expires,
-    submission
+    submission,
+    segment === "8000" && start === 0
+      ? "synthetic-assessment-original"
+      : "synthetic-assessment-original-" + staging
   );
   yield* execute(
     db,

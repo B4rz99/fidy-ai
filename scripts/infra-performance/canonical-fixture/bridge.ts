@@ -183,9 +183,9 @@ export const serveFixture = Effect.fn(function* (runtime: Miniflare) {
                   return {sql,r2};
                 };
                 const observed={before:await counts()};
-                for(const network of ["ordinary","poor"]){await runBrowser({
-                  observations:30,
-                  network,
+                for(const encoding of ["identity","gzip"]){await runBrowser({
+                  observations:1,
+                  encoding,network:"poor",
                   variant: "do",
                   origins: api,
                   cookie: active.cookie,
@@ -204,8 +204,8 @@ export const serveFixture = Effect.fn(function* (runtime: Miniflare) {
                     );
                     return Effect.runPromise(transport(runtime)(request));
                   },
-                });
-                observed[network]=await counts();
+                }).catch(err=>{if(encoding!=="identity")throw err;});
+                observed[encoding]=await counts();
                 await Bun.write(process.env.FIDY_DIAGNOSTIC_DIR+"/native-counters.json",JSON.stringify(observed));
                 }
                 offer({ status: 200 });

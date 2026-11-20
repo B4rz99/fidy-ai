@@ -1,4 +1,4 @@
-import { DateTime } from "effect";
+import { DateTime, Option } from "effect";
 import type { AccessTier } from "~/core/access-tier/contract";
 import {
   type AllowanceKind,
@@ -10,14 +10,25 @@ import {
 
 const bogota = DateTime.zoneMakeNamedUnsafe("America/Bogota");
 const limits = freeAllowanceLimits;
+let lastPeriod = Option.none<AllowancePeriod>();
 
 /** Returns the commercial period containing now; midnight Bogotá is 05:00 UTC at launch. */
 export const allowancePeriod = (now: DateTime.Utc): AllowancePeriod => {
+  // Only the shared calendar is reusable. Each call reads the current User's standing separately.
+  if (
+    Option.isSome(lastPeriod) &&
+    DateTime.isGreaterThanOrEqualTo(now, lastPeriod.value.startsAt) &&
+    DateTime.isLessThan(now, lastPeriod.value.resetsAt)
+  ) {
+    return lastPeriod.value;
+  }
   const start = DateTime.startOf(DateTime.setZone(now, bogota), "month");
-  return {
+  const period = Object.freeze({
     startsAt: DateTime.toUtc(start),
     resetsAt: DateTime.toUtc(DateTime.add(start, { months: 1 })),
-  };
+  });
+  lastPeriod = Option.some(period);
+  return period;
 };
 
 /** Projects four decoded counts under one calendar period, without granting authority or capacity. */

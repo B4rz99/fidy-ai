@@ -12,12 +12,17 @@ import {
   acceptanceProofHeader,
   performanceReceiptPath,
 } from "../../../apps/server/cloudflare/release-isolation/contract";
+import { TransactionListResponse } from "../../../apps/server/src/shell/transactions/contract";
 import { openPerformanceBrowser } from "../../../infra/cloudflare/native-acceptance";
 
 const api = installedOrigins.acceptance;
 const minimumSecret = 32;
 const caseIntervalMs = 1000;
 const session = Schema.Struct({ cookie: Schema.String, binding: Schema.String });
+const mountedManifest = Schema.Struct({
+  history: Schema.toEncoded(Schema.toCodecJson(TransactionListResponse)),
+  workspace: Schema.Struct({ profile: Schema.Json, review: Schema.Json }),
+});
 const command = Schema.Struct({
   path: Schema.String,
   method: Schema.Literals(["POST", "GET"]),
@@ -175,7 +180,7 @@ const nativeMeters = async (runtime: Miniflare): Promise<unknown> => {
         const counters: unknown = await (
           await worker.fetch("https://offline.invalid/r2-counts")
         ).json();
-        return [name, counters];
+        return [name, counters] as const;
       })
     )
   );
@@ -207,9 +212,10 @@ const runMountedWorkspace = (
 ): Effect.Effect<void, FixtureTransportError> =>
   io(async () => {
     const { runBrowser } = await import("../hosted-browser/captured-profile.mjs");
-    const manifest = await Bun.file(
+    const manifest: unknown = await Bun.file(
       process.env.FIDY_DIAGNOSTIC_DIR + "/native/fixture/manifest.json"
     ).json();
+    if (!Schema.is(mountedManifest)(manifest)) throw new FixtureTransportError();
     const forward = await signedForward(runtime);
     const before = await nativeMeters(runtime);
     await runBrowser({

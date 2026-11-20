@@ -71,6 +71,9 @@ export const verifyBancolombiaSandboxAuthentication = (
 ): Effect.Effect<void, BancolombiaAuthenticationFailed> =>
   withSandboxClient(environment, verifyBancolombiaSandboxTokenLifecycle);
 
+const decodeSandboxProfile = Schema.decodeUnknownOption(
+  Schema.fromJsonString(BancolombiaConsentProfile)
+);
 const sandboxProfile = (
   environment: BancolombiaSandboxEnvironment
 ): Option.Option<BancolombiaConsentProfile> =>
@@ -78,7 +81,7 @@ const sandboxProfile = (
     Option.fromUndefinedOr(environment.BANCOLOMBIA_SANDBOX_CONSENT_PROFILE).pipe(
       Option.filter((value) => value.length <= maximumProfileLength)
     ),
-    Schema.decodeUnknownOption(Schema.fromJsonString(BancolombiaConsentProfile))
+    decodeSandboxProfile
   );
 
 export const bancolombiaSandboxAdmission = (

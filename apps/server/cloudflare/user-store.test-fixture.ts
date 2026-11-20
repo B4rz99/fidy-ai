@@ -349,20 +349,24 @@ const fixtureModules: Partial<Record<NativeFixture, string>> = {
   login: "./login-email-worker.test-fixture.ts",
   connection: "./connection-worker.test-fixture.ts",
 };
+const inspectionOptions = (
+  mode: NativeFixture
+): Pick<ConstructorParameters<typeof Miniflare>[0], "inspectorPort"> =>
+  mode === "browser" && Bun.env.FIDY_WORKERD_CPU === "1" ? { inspectorPort: 0 } : {};
 const fixtureWorkers = (
   mode: NativeFixture
 ): Readonly<{
   withBilling: boolean;
   withOidc: boolean;
   coreModule: string;
-  ingressOptions: Pick<ConstructorParameters<typeof Miniflare>[0], "upstream">;
+  ingressOptions: Pick<ConstructorParameters<typeof Miniflare>[0], "upstream" | "inspectorPort">;
 }> => ({
   withBilling: ["billing", "erasure", "custody"].includes(mode),
   withOidc: ["browser", "login", "custody"].includes(mode),
   coreModule: fixtureModules[mode] ?? "./core-worker.ts",
   ingressOptions: ["oauth", "connection"].includes(mode)
     ? { upstream: "https://api.fidyapp.com" }
-    : {},
+    : inspectionOptions(mode),
 });
 
 const hostedFixture = Effect.fnUntraced(function* (mode: NativeFixture) {

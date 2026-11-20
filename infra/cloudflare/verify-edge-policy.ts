@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "1b71086ed8408ca34a834dc20cf81314590cf7c674dd4b950f013600c6b0c7ab";
+const expectedEdgePolicyDigest = "36b714ec25f8456429a6f9397d45df5e9197cd8102546c8fda367e1ba8bcc49a";
 const securityArtifacts = [
   ...(await Promise.all(
     [
@@ -32,6 +32,7 @@ const securityArtifacts = [
       "./native-retained-provider.json",
       "./native-fallback-probe.ts",
       "./native-fixture-plan.ts",
+      "./native-smoke-consumer-recovery.ts",
       "../../.github/workflows/native-fixture-successor-plan.yml",
       "../../.github/workflows/native-fixture-workflow-recovery-plan.yml",
       "../../.github/workflows/native-fixture-workflow-recovery-apply.yml",

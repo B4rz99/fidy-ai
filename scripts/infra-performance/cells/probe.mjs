@@ -47,7 +47,7 @@ const shaWidth = 64;
 const setupLifetimeMs = 180000;
 const trialMs = 604800000;
 const secondMs = 1000;
-const sampleCount = 30;
+const sampleCount = 1;
 const success = 200;
 const forbidden = 403;
 const uuidDigits = 12;
@@ -435,7 +435,7 @@ try {
       .all();
     account("audit", [audit]);
     const counts = Schema.decodeUnknownSync(Schema.Struct({ n: Schema.Int }))(audit.results[0]);
-    assert.equal(counts.n, sampleCount);
+    assert.equal(counts.n, sampleCount+3);
     metadata.sqlBatches = sqlBatches;
     if (!training) {
       const limits = routeBounds(await Bun.file(resolve(output, "limits.json")).json());

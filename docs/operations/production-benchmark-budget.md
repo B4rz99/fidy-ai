@@ -10,7 +10,7 @@ requires the account owner's approval of recurring charges; it is not an automat
 
 For the storage comparison, run one ordinary-network read profile and small mutation correctness
 checks on the eight-original-Transaction fixture. Charge the complete experiment, including setup
-and cleanup, against the 5,000-write D1 cap. Run repeated mutation timings and the 20-User
+and cleanup, against current D1 account headroom. Run repeated mutation timings and the 20-User
 offered-load comparison on workerd. [Storage acceptance criteria](https://github.com/B4rz99/fidy-ai/issues/2226)
 
 ## Before any hosted experiment
@@ -22,7 +22,8 @@ offered-load comparison on workerd. [Storage acceptance criteria](https://github
    may lag; the counters do not reserve capacity against concurrent production work.
 3. Evaluate `scripts/infra-performance/d1-budget.ts` with the observation and full experiment
    estimate as JSON on stdin. It uses its own clock. Unknown, foreign, stale, future or previous-day
-   observations refuse. Maximum experiment: 100,000 rows read and 5,000 written. Preserve at least
+   observations refuse. Limit each experiment to 100,000 rows read. Admit writes against current
+   account usage and the complete measured workload. Preserve at least
    2,500,000 reads and 50,000 writes for production. A refusal stops provisioning.
 4. Serialize experiments sharing an account. Carry the admitted ceiling into the runner. Before
    every bounded batch or burst, check its conservative maximum against remaining experiment

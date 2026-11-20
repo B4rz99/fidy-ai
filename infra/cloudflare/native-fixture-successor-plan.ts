@@ -73,7 +73,7 @@ const plan = Effect.gen(function* () {
 });
 
 if (import.meta.main) {
-  await Effect.runPromise(plan).catch(() => {
+  await Effect.runPromise(plan.pipe(Effect.provide(Alchemist.layer()), Effect.scoped)).catch(() => {
     process.stderr.write("Closed fixture successor plan refused\n");
     process.exitCode = 1;
   });

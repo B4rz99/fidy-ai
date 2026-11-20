@@ -33,3 +33,11 @@ assert.deepEqual(
 assert.deepEqual(correlateWorkerSpans([], calls).at(0)?.responses, [
   { ingressMs: null, coreMs: null },
 ]);
+
+assert.deepEqual(correlateWorkerSpans(logs, calls, true).at(0)?.responses, [
+  { ingressMs: 7, coreMs: 4, ingressFinishedClockMs: 43_200_000 },
+]);
+assert.deepEqual(
+  correlateWorkerSpans([...logs, message("worker.public.fetch", 3)], calls, true).at(0)?.responses,
+  [{ ingressMs: null, coreMs: 4, ingressFinishedClockMs: null }]
+);

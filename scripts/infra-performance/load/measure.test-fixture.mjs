@@ -14,7 +14,7 @@ import { correlateWorkerSpans } from "./trace.mjs";
 import { inOrder, indices } from "./sequence.mjs";
 
 /** @import {Miniflare} from "miniflare" */
-/** @typedef {{status:number; bytes: Uint8Array; dispatched?:number; end:number; trace:string|null}} MeasuredResponse */
+/** @typedef {{status:number; bytes: Uint8Array; dispatched?:number; headersAt?:number; end:number; trace:string|null}} MeasuredResponse */
 /** @import {Caller, Call, Counts, D1, Journey, Mutation, Offer, Pair, Platform, Platforms, RequestOptions, SpanCall, Subject} from "./contracts.d.mts" */
 const pairProof = Schema.decodeUnknownSync(
   Schema.Struct({
@@ -64,6 +64,10 @@ assert.ok(
   ["original", "native-original", "mixed-review", "single", "two-tabs", "cpu"].includes(profile)
 );
 const twoTabs = profile === "two-tabs";
+const transportClock = process.env.FIDY_WORKERD_TWO_TAB_CLOCK === "1";
+assert.ok(
+  !transportClock || (twoTabs && Intl.DateTimeFormat().resolvedOptions().timeZone === "UTC")
+);
 const nativeOnly = profile === "native-original";
 assert.ok(!nativeOnly || size === "extreme", "Original native capacity requires the full fixture");
 const cohortSize = 20;
@@ -193,12 +197,14 @@ const observe = async ({ runtime, subject }, { row, scheduled }, journey) => {
       const dispatched = twoTabs ? performance.now() : undefined;
       if (Number.isNaN(timing.dispatched)) timing.dispatched = dispatched ?? performance.now();
       const result = await execute({ runtime, subject }, path, options);
+      const headersAt = transportClock ? performance.now() : undefined;
       const bytes = new Uint8Array(await result.arrayBuffer());
       const end = performance.now();
       responses.push({
         status: result.status,
         bytes,
         dispatched,
+        headersAt,
         end,
         trace: result.headers.get("fidy-trace-id"),
       });
@@ -239,10 +245,11 @@ const observe = async ({ runtime, subject }, { row, scheduled }, journey) => {
  * @param {MeasuredResponse[]} responses Completed response bodies.
  */
 const recordObservation = (row, responses) => {
-  const outcomes = responses.map(({ status, bytes, dispatched, end }) => ({
+  const outcomes = responses.map(({ status, bytes, dispatched, headersAt, end }) => ({
     status,
     bytes: bytes.length,
     dispatched,
+    headersAt,
     completedAt: end,
   }));
   record("attempts", { ...row, responses: outcomes });
@@ -699,7 +706,7 @@ const measure = async (native, d1) => {
     const logs = spanLogs[variant],
       calls = spanCalls[variant];
     assert.ok(logs && calls);
-    for (const row of correlateWorkerSpans(logs, calls)) {
+    for (const row of correlateWorkerSpans(logs, calls, transportClock)) {
       record("worker-spans", { variant, ...row });
     }
   }
@@ -729,6 +736,7 @@ await write("plan", {
   warmup:
     "one authenticated full-history warm-up for each User and variant; actual User/shared reconstruction unobserved",
   sameSessionConcurrency: twoTabs ? 2 : 1,
+  ...(transportClock ? { hostTimeOriginMs: performance.timeOrigin } : {}),
   order: plannedOrder(),
   boundaries: twoTabs
     ? "host scheduled offer and actual first dispatch through both complete responses; retain per-read dispatch and completion and verify overlap"

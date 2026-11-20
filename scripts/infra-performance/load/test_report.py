@@ -1,6 +1,6 @@
 import unittest
 
-from report import summarize, two_tab_evidence
+from report import summarize, two_tab_evidence, two_tab_transport
 
 
 class OfferedLoadEvidence(unittest.TestCase):
@@ -131,3 +131,21 @@ class OfferedLoadEvidence(unittest.TestCase):
         self.assertEqual(result["dispatchMs"]["status"], "fail")
         del rows[-1]["dispatched"]
         self.assertFalse(report()["sameSessionOverlap"]["verified"])
+
+
+    def test_transport_clocks_attribute_the_same_complete_pair_across_midnight(self):
+        responses = [dict(status=200, dispatched=100, headersAt=108, completedAt=110),
+                     dict(status=200, dispatched=101, headersAt=116, completedAt=119)]
+        attempts = [dict(variant="do", user=0, sample=0, ok=True, dispatchMs=19,
+                         dispatched=100, completedAt=119, responses=responses)]
+        spans = [dict(variant="do", cell="history", user=0, sample=0, responses=[
+            dict(ingressMs=4, coreMs=3, ingressFinishedClockMs=86_399_999),
+            dict(ingressMs=6, coreMs=5, ingressFinishedClockMs=6),
+        ])]
+        output = two_tab_transport(attempts, spans, 86_399_893)["do"]
+        self.assertEqual(output["matched"], 1)
+        self.assertEqual(output["pairs"][0]["lastComplete"], dict(
+            beforeIngressMs=6, ingressMs=6, coreMs=5, ingressToHeadersMs=3, bodyMs=3,
+        ))
+        spans[0]["responses"][1]["ingressFinishedClockMs"] = 1_000
+        self.assertEqual(two_tab_transport(attempts, spans, 86_399_893)["do"]["matched"], 0)

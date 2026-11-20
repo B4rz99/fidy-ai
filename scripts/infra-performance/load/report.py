@@ -155,6 +155,45 @@ def two_tab_evidence(report, rows, samples):
                 report[boundary]["status"] = "fail"
 
 
+def two_tab_transport(rows, spans, time_origin):
+    day_ms = 86_400_000
+    clock_tolerance_ms = 2
+    matched = {(row["variant"], row["user"], row["sample"]): row["responses"]
+               for row in spans if row["cell"] == "history" and len(row["responses"]) == 2}
+    output = {}
+    for variant in ("d1", "do"):
+        samples = []
+        selected = [row for row in rows if row["variant"] == variant and row["ok"]]
+        for row in selected:
+            responses = overlapped_responses(row)
+            spans_for_pair = matched.get((variant, row["user"], row["sample"]), [])
+            phases = []
+            for response, span in zip(responses, spans_for_pair):
+                headers, clock, ingress, core = (response.get("headersAt"),
+                    span.get("ingressFinishedClockMs"), span.get("ingressMs"), span.get("coreMs"))
+                if not all(type(n) in (int, float) and math.isfinite(n)
+                           for n in (headers, clock, ingress, core)):
+                    break
+                dispatched, completed = response["dispatched"], response["completedAt"]
+                if not 0 <= core <= ingress or not 0 <= clock < day_ms or not dispatched <= headers <= completed:
+                    break
+                header_wall_clock = (time_origin + headers) % day_ms
+                offset = (clock - header_wall_clock + day_ms / 2) % day_ms - day_ms / 2
+                finish = headers + offset
+                before_ingress, until_headers = finish - ingress - dispatched, headers - finish
+                if min(before_ingress, until_headers) < -clock_tolerance_ms:
+                    break
+                phases.append(dict(
+                    beforeIngressMs=before_ingress, ingressMs=ingress, coreMs=core,
+                    ingressToHeadersMs=until_headers, bodyMs=completed - headers,
+                ))
+            if len(phases) == 2:
+                samples.append(dict(sample=row["sample"], pairDispatchMs=row["dispatchMs"],
+                                    firstComplete=phases[0], lastComplete=phases[1]))
+        output[variant] = dict(eligible=len(selected), matched=len(samples), pairs=samples)
+    return output
+
+
 if __name__ == "__main__":
     directory = Path(sys.argv[1])
     plan = json.loads((directory / "plan.json").read_text())
@@ -174,9 +213,12 @@ if __name__ == "__main__":
     if two_tabs:
         two_tab_evidence(result["history"], rows, plan["samples"])
     spans_path = directory / "worker-spans.jsonl"
-    if spans_path.exists() and not two_tabs:
+    if spans_path.exists():
         spans = [json.loads(line) for line in spans_path.read_text().splitlines()]
-        result["history"]["workerSpans"] = history_spans(rows, spans)
+        if not two_tabs:
+            result["history"]["workerSpans"] = history_spans(rows, spans)
+        elif "hostTimeOriginMs" in plan:
+            result["history"]["transportClocks"] = two_tab_transport(rows, spans, plan["hostTimeOriginMs"])
     (directory / "report.json").write_text(json.dumps(result, indent=2))
     for cell, report in result.items():
         print(cell, report["scheduledMs"], report["dispatchMs"])

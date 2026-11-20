@@ -1,7 +1,7 @@
 import { AcceptanceProofUnavailable } from "./release-isolation/contract";
 import { Effect } from "effect";
 import ingress from "./public-worker";
-import { isPerformanceReceipt } from "./release-isolation/operations";
+import { isPerformanceEvidence } from "./release-isolation/operations";
 import { isStorageCompatibility } from "./storage-bootstrap/contract";
 
 export * from "./public-worker";
@@ -10,7 +10,7 @@ export default {
   fetch: (request, environment): Promise<Response> =>
     Effect.runPromise(
       Effect.gen(function* () {
-        if (isPerformanceReceipt(request)) return new Response(null, { status: 404 });
+        if (isPerformanceEvidence(request)) return new Response(null, { status: 404 });
         const response = yield* Effect.tryPromise({
           try: () => ingress.fetch(request, environment),
           catch: () => new AcceptanceProofUnavailable(),

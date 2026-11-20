@@ -1,7 +1,7 @@
 import { AcceptanceProofUnavailable } from "./release-isolation/contract";
 import { Effect, Schema } from "effect";
 import core, { UserStore as ApplicationUserStore } from "./core-worker";
-import { isPerformanceReceipt } from "./release-isolation/operations";
+import { isPerformanceEvidence } from "./release-isolation/operations";
 import { SharedStoreMarkers, isStorageCompatibility } from "./storage-bootstrap/contract";
 import { SmokeIdentity } from "./runtime/release-smoke/contract";
 
@@ -20,7 +20,7 @@ export default {
   fetch: (request, environment, context): Promise<Response> =>
     Effect.runPromise(
       Effect.gen(function* () {
-        if (isPerformanceReceipt(request)) return new Response(null, { status: 404 });
+        if (isPerformanceEvidence(request)) return new Response(null, { status: 404 });
         const response = yield* Effect.tryPromise({
           try: () => core.fetch(request, environment, context),
           catch: () => new AcceptanceProofUnavailable(),

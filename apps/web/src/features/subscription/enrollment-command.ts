@@ -1,9 +1,6 @@
 import { Effect, Option } from "effect";
 import { Atom } from "effect/reactivity";
 
-/** Own one mounted enrollment command without retaining its transient inputs in atom arguments.
- * The registry owns execution; each offer is consumed once, and clearing discards unstarted work.
- */
 export const makeEnrollmentCommand = <A, E>(): Readonly<{
   atom: Atom.AtomResultFn<void, A, E>;
   offer: (work: Effect.Effect<A, E>) => void;

@@ -56,7 +56,6 @@ const sharedPresentationModule = (id: string): boolean => {
   );
 };
 
-// Asset response headers provide host-specific preconnects for the same installed HTML bytes.
 const installedPreconnect = (enabled: boolean): Plugin => ({
   name: "installed-host-preconnect",
   transformIndexHtml: {
@@ -85,14 +84,12 @@ export default defineConfig(({ mode }) => ({
         codeSplitting: {
           groups: [
             {
-              // Code-only helpers must not add prerequisite downloads before session binding.
               name: "bootstrap-code",
               minShareCount: 1,
               includeDependenciesRecursively: false,
               test: bootstrapCodeModule,
             },
             {
-              // Prepare a screen's closed panels together without making them read dependencies.
               name: (id): string =>
                 `${/\/features\/([^/]+)\//u.exec(id)?.[1] ?? "screen"}-interactions`,
               minShareCount: 1,
@@ -107,9 +104,7 @@ export default defineConfig(({ mode }) => ({
             },
             {
               name: "shared-runtime",
-              // Keep library initialization together, including React compiler dependencies.
               minShareCount: 1,
-              // Recursive capture would pull the dependency-free bootstrap into this chunk.
               includeDependenciesRecursively: false,
               test: sharedRuntimeModule,
             },

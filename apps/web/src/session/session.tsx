@@ -10,7 +10,6 @@ import { useCallback, useContext, useState } from "react";
 import type { ReactNode } from "react";
 import { type BrowserAuthentication, SessionContext } from "./session-context";
 
-/** A local, non-secret epoch identifying one authentication lifetime. */
 export type AuthenticationLifetime = number;
 
 type SessionRegistryProviderProps = Readonly<{
@@ -33,7 +32,6 @@ const QueryLifetime = (): React.JSX.Element => {
   return <span ref={initialize} hidden />;
 };
 
-/** Replacing the authentication lifetime makes prior cached server state unavailable. */
 export const SessionRegistryProvider = ({
   children,
 }: SessionRegistryProviderProps): React.JSX.Element => {

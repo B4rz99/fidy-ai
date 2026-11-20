@@ -63,7 +63,6 @@ type ProviderPoll = (
   WebAuthSuccess<"providerAuthentication", "status">,
   Effect.Error<ReturnType<Client["providerAuthentication"]["status"]>>
 >;
-/** One mounted owner preserves the server's five-per-five-seconds cadence across retries/phases. */
 const makeProviderPoller = (): ProviderPoll => {
   const intervalMilliseconds = 1_000;
   let readyAt = 0;
@@ -191,7 +190,6 @@ type ActiveAttempt = {
   provider: AuthenticationProvider;
   poll: ProviderPoll;
 };
-/** Isolated external provider windows must close themselves or be closed by the User. */
 const closeProviderPopup = (popup: Window): void => {
   if (popup.closed) return;
   let location: string;
@@ -520,7 +518,6 @@ const makeProviderController = (originalInput: ControllerInput): ProviderControl
   };
 };
 
-/** Owns one mounted Provider attempt; proofs and recovery are discarded on navigation or restart. */
 type ProviderAuthentication = Readonly<{
   state: ProviderViewState;
   provider: AuthenticationProvider;

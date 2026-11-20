@@ -27,3 +27,18 @@ receive bounded subject data and must not become a second domain or authorizatio
 Tests cover portable context, schema, authorization, redaction, and model-boundary behavior directly.
 Platform execution tests belong to the Cloudflare adapter and are not simulated by a process-local
 agent loop.
+
+## Durable Transcript and compaction evidence
+
+Store User and Assistant text together with exact canonical tool call arguments and host-proved
+results correlated by provider-issued call identity. A committed mutation for which the response
+was lost has a separate outcome. Turn failure and interruption retain allowlisted lifecycle facts
+without arbitrary error prose. Proactive delivery uses its own identity and verified evidence,
+without inventing a requested Turn or requiring every message to be an InsightEvent.
+
+The model window selects the newest contiguous complete Turns under independent character and
+whole-Turn bounds. Compaction also starts before the retained-entry limit for a long low-token
+session. Its replacement states the exact terminal prefix incorporated, excluding an active
+Pending Turn. Recover an abandoned Pending Turn and recheck the current onboarding grant before
+a subsequent admission. Evidence accepted for lossless replay excludes values that cannot
+round-trip through storage and is bounded by encoded UTF-8 bytes.

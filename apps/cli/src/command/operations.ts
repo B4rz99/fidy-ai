@@ -123,13 +123,11 @@ const escapeTerminalControls = (text: string): string =>
     (character) => `\\u${character.charCodeAt(0).toString(hexadecimalRadix).padStart(4, "0")}`
   );
 
-/** JSON escaping protects human output from terminal and bidi controls. */
 export const formatOutput = Effect.fn(function* (output: PublicOutput, json: boolean) {
   const text = escapeTerminalControls(yield* Schema.encodeEffect(outputCodec)(output));
   return json ? `${text}\n` : `${messages[output._tag]}\n${text}\n`;
 });
 
-/** Failure text is selected from closed local reasons, never an arbitrary exception or Cause. */
 export const formatFailure = ({
   reason,
   json,
@@ -142,7 +140,6 @@ export const formatFailure = ({
     : message + "\n";
 };
 
-/** Projects process failure without exposing raw causes, retaining interruption certainty. */
 export const formatCommandFailure = ({
   cause,
   json,

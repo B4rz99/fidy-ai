@@ -33,7 +33,6 @@ const AuthorizationRecord = ({
   );
 };
 
-/** Explicit same-browser access to saved Consent evidence, including after processing withdrawal. */
 export const AuthorizationCopy = ({ client }: Readonly<{ client: WebAuthClient }>): JSX.Element => {
   const [operation] = useState(() =>
     client.runtime.fn<void>()(() =>

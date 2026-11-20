@@ -218,7 +218,6 @@ export const TelemetryCodeSchema = {
   breadcrumbAction: Schema.Literals(TelemetryRegistry.breadcrumbAction),
 } as const;
 
-/** Shared upper bound for every approved telemetry count. */
 export const maximumTelemetryCount = 1_000_000;
 
 /** Shared upper bound for every approved telemetry duration, in milliseconds. */

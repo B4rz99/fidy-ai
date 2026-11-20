@@ -2,7 +2,6 @@ import { lstat } from "node:fs/promises";
 import { Effect } from "effect";
 import { CliFailure } from "../contract";
 
-/** Refuses symlink/non-regular local paths and non-private UNIX permissions before trusted use. */
 export const checkLocalPath = Effect.fn(function* (path: string, kind: "file" | "directory") {
   const info = yield* Effect.tryPromise({
     try: () => lstat(path),

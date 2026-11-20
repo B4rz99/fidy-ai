@@ -168,7 +168,6 @@ const makeGeneration = (
     resource,
   };
 };
-/** Route staging and destination rereads share the history generation. Construction starts no reads. */
 export const transactionRouteHistory = (input: RouteHistoryInput): TransactionRouteHistory => {
   const { search, now, timeZone, initialPages } = input;
   const navigation = Atom.make(

@@ -141,9 +141,6 @@ const dispose = (owner: Owner): void => {
   owner.get.set(owner.command, Atom.Interrupt);
 };
 
-/** One panel/page owns decisions until disposal. Hiding it or changing selection does not dispose
- * it. Disposal cancels unsent work; a sent mutation may still commit and must be reread on return.
- */
 export const makeReviewDecisions = ({
   client,
   query,

@@ -274,9 +274,6 @@ const historyActions = (input: HistoryActionInput): History["action"] =>
     if (command !== "refresh-pages") get.refresh(input.firstPage);
   });
 
-/** Canonical query atoms own records; this projection joins explicitly requested pages.
- * Reset replaces continuation identities so old responses cannot join refreshed history.
- */
 export const transactionHistory = ({
   apiClient,
   firstPage,

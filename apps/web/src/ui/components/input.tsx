@@ -7,7 +7,6 @@ import { cn } from "@/ui/class-names";
 const inputVariants = cva("", {
   variants: { variant: { default: "", amount: "text-right tabular-nums" } },
 });
-/** Controlled onValueChange preserves raw text; decimal onChange accepts one separator. */
 const Input = ({
   className,
   type,

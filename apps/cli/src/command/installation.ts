@@ -4,7 +4,6 @@ declare const FIDY_CLI_VERSION: string;
 
 export const cliVersion = typeof FIDY_CLI_VERSION === "undefined" ? "0.1.0" : FIDY_CLI_VERSION;
 
-/** Public installation diagnostics never open a credential store or make a network request. */
 export const installationOutput = (args: ReadonlyArray<string>): Option.Option<string> => {
   if (args.length !== 1) return Option.none();
   if (args[0] === "--version") return Option.some(`fidy ${cliVersion}\n`);

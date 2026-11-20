@@ -102,14 +102,8 @@ export {
   recipientLabelLimit,
 } from "@fidy/server/client";
 
-/**
- * Supplies the substitute HTTP runtime for the derived browser client. Production uses Fetch;
- * callers may provide an equivalent HttpClient layer without replacing canonical operation
- * decoding. Authentication middleware and credentialed request initialization remain internal.
- */
 export type FidyClientLayer = Layer.Layer<HttpClient.HttpClient>;
 
-/** Receives the single browser-lifetime transition caused by a canonical 401 response. */
 export type CanonicalAuthenticationObserver = Readonly<{
   onAuthenticationExpired: () => void;
 }>;
@@ -137,15 +131,6 @@ export type FidyClient = AtomHttpApi.AtomHttpApiClient<
   FidyApiGroups
 >;
 
-/**
- * Derives the sole browser transport from the server-owned canonical API declaration. `apiOrigin`
- * must be a credential-free HTTP(S) origin already validated by `parseApiOrigin`; it is used as the
- * request base URL without further normalization. Production callers use credentialed, no-store
- * Fetch with manual redirects; tests may replace only the underlying HttpClient layer. The client
- * refuses other origins and redirects, bounds request time and response bytes, retries GET/HEAD
- * transport failures once, and exposes transport or schema failures as sanitized defects while
- * retaining canonical request decoding and endpoint-declared failures.
- */
 export const makeFidyClient = (options: FidyClientOptions): FidyClient =>
   AtomHttpApi.Service<never>()("@fidy/web/FidyClient", {
     api: FidyApi,
@@ -177,13 +162,6 @@ export type WebAuthSuccess<
   >
 >;
 
-/**
- * Derives proof-bearing browser authentication calls from the server declaration. `apiOrigin` must
- * be a validated, credential-free HTTP(S) origin; `httpClient` may replace only the underlying
- * transport. Requests use credentialed, no-store Fetch with manual redirects, refuse other origins
- * and redirects, and apply the authentication deadline and response-byte budget. GET/HEAD transport
- * failures retry once; sanitized transport and schema failures remain defects.
- */
 export const makeWebAuthClient = (options: BrowserClientOptions): WebAuthClient =>
   AtomHttpApi.Service<never>()("@fidy/web/WebAuthClient", {
     api: WebAuthApi,
@@ -200,13 +178,7 @@ class EnrollmentClientService extends Context.Service<
 
 class EnrollmentClientDisposed extends Data.TaggedError("EnrollmentClientDisposed")<{}> {}
 
-/**
- * Dedicated browser-only enrollment transport for one authentication lifetime. `dispose` revokes
- * new access synchronously, interrupts in-flight work, releases the ManagedRuntime, and is safe to
- * call repeatedly. The client stays outside canonical operations and PATs.
- */
 export type SubscriptionEnrollmentClient = Readonly<{
-  /** Aborted synchronously on disposal, including while a mounted provider challenge is idle. */
   signal: AbortSignal;
   execute: <A, E>(
     use: (client: EnrollmentApiClient) => Effect.Effect<A, E>,
@@ -215,14 +187,6 @@ export type SubscriptionEnrollmentClient = Readonly<{
   dispose: () => Promise<void>;
 }>;
 
-/**
- * Derives exact enrollment calls with first-party cookies. `apiOrigin` must be a validated,
- * credential-free HTTP(S) origin; `httpClient` may replace only the underlying transport. Requests
- * use no-store Fetch with manual redirects, refuse other origins and redirects, and apply the
- * enrollment deadline and response-byte budget. GET/HEAD transport failures retry once; sanitized
- * transport and schema failures reject `execute`, while endpoint-declared failures retain their
- * generated semantics.
- */
 export const makeSubscriptionEnrollmentClient = (
   options: BrowserClientOptions
 ): SubscriptionEnrollmentClient => {

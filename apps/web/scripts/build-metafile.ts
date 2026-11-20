@@ -19,7 +19,6 @@ const BuildMetafile = Schema.Struct({
 
 export type BuildMetafile = typeof BuildMetafile.Type;
 
-/** Returns Bun's web input graph, or throws when its object or JSON representation is malformed. */
 export const decodeBuildMetafile = (value: unknown): BuildMetafile => {
   try {
     return Predicate.isString(value)

@@ -2,9 +2,7 @@ import { Effect } from "effect";
 import { preloadReviewMaterial, prepareReviewWorkspace } from "./query";
 import { lazyRouteComponent } from "@tanstack/react-router";
 import { type ComponentProps, type JSX, memo } from "react";
-/** Public navigation remains independent of the retained editor and its presentation. */
 export { ReviewPendingCount } from "./navigation";
-/** Public composition stays small; the route and retained owner preload the same workspace. */
 const Workspace = lazyRouteComponent(() =>
   import("./workspace").then((module) => ({ default: memo(module.NeedsReviewFeature) }))
 );

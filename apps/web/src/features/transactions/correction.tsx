@@ -256,7 +256,6 @@ const CorrectionActions = ({
     </Button>
   </div>
 );
-/** Corrects only explicitly changed facts at the observed revision; an uncertain write is never replayed. */
 export const TransactionCorrection = (input: CorrectionProps): JSX.Element => {
   const [transaction] = useState(() => input.transaction);
   const props = { ...input, transaction };

@@ -1,6 +1,5 @@
 import { Schema } from "effect";
 
-/** The canonical operation identity recorded as `<group>.<operation>`. */
 export const CanonicalOperationId = Schema.String.check(
   Schema.isPattern(/^[a-z][A-Za-z0-9]*\.[a-z][A-Za-z0-9]*$/u)
 )
@@ -13,13 +12,11 @@ export const CanonicalCapability = Schema.Literals(["read", "write", "dashboard"
 });
 export type CanonicalCapability = typeof CanonicalCapability.Type;
 
-/** A non-empty capability set with no repeated authority. */
 export const CanonicalCapabilities = Schema.UniqueArray(CanonicalCapability)
   .check(Schema.isNonEmpty())
   .annotate({ identifier: "CanonicalCapabilities" });
 export type CanonicalCapabilities = typeof CanonicalCapabilities.Type;
 
-/** The complete fixed authority of every hosted Turn. */
 export const allCanonicalCapabilities: CanonicalCapabilities = CanonicalCapabilities.make([
   "read",
   "write",

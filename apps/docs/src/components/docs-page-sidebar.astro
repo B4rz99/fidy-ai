@@ -117,7 +117,6 @@ const links = selectLinks();
     const headerHeight = window.matchMedia("(min-width: 800px)").matches
       ? desktopHeaderHeight
       : mobileHeaderHeight;
-    // Native anchor scrolling may round a fractional heading position to a CSS pixel.
     const threshold = headerHeight + anchorSpacing + 1;
     const targets = tocLinks.flatMap((link) => {
       const target = document.getElementById(link.hash.slice(1));

@@ -77,9 +77,6 @@ type Write =
       kind: "bulk";
       input: CanonicalInput<"transactions.updateTransactions">;
     }>;
-/** Owns Correction admission and uncertainty across editing paths. Only a successful explicit
- * canonical reread releases an uncertain write; disposing cannot undo a request already sent.
- */
 export const makeTransactionCorrections = (input: Input): Atom.Atom<TransactionCorrections> =>
   Atom.make((get) => {
     const owner: Owner = {

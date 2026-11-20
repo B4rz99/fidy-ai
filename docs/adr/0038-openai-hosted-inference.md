@@ -25,3 +25,6 @@ policy. Function schemas retain canonical optional arguments using `strict: fals
 function schemas require all properties to be required, which would change omission semantics.
 Canonical Schema decoding remains mandatory before any operation can execute. Conversation
 compaction uses strict structured output. Every request sets `store: false`.
+
+Timestamp fields in provider-facing structured schemas require complete offset-bearing RFC 3339
+input. Express the pattern without lookaround so the provider's validator can accept it.

@@ -48,7 +48,6 @@ export type AtomicBatchCall = Readonly<{
 }>;
 type NonEmptyMutationCalls = readonly [AtomicBatchCall, ...ReadonlyArray<AtomicBatchCall>];
 
-/** Non-empty ordered canonical mutation calls accepted by the atomic batch operation. */
 export type AtomicBatchInput = Readonly<{ calls: NonEmptyMutationCalls }>;
 
 export type AtomicBatchResult = Readonly<{
@@ -131,12 +130,6 @@ const mutationOperations = (catalog: OperationCatalog): ReadonlyArray<CatalogOpe
         operation.policy.access._tag === "WebSessionOnly")
   );
 
-/**
- * The catalog-derived mutations one atomic batch accepts as children, in catalog order: every
- * atomic-batch-eligible canonical mutation except the batch operation itself, so a nested batch is
- * unrepresentable and ADR 0027 standalone mutations stay excluded. The Cloudflare execution
- * registry derives its completeness from this same set rather than restating a readiness list.
- */
 export const atomicBatchChildOperations = (
   catalog: OperationCatalog
 ): ReadonlyArray<CatalogOperation> =>

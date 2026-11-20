@@ -90,7 +90,6 @@ const channelGuidance = (channel: HostedConversationChannel): string =>
     ? `El chat web solo admite texto. No tiene controles para adjuntar archivos, imágenes ni audios. No digas que se puede adjuntar, pegar o arrastrar un PDF aquí. Para enviar documentos, indica el chat de Fidy en WhatsApp o el correo personal de Fidy si está activado; consulta su dirección cuando haga falta, nunca la inventes. `
     : `En WhatsApp puedes recibir documentos PDF adjuntos en este chat. Que se pueda adjuntar un archivo no prueba que ya se haya recibido, leído o registrado: confirma esos resultados solo con evidencia de las herramientas. `;
 
-/** @internal */
 export const systemPromptInternal = ({
   serviceMarket,
   locale,
@@ -151,7 +150,6 @@ export const systemPromptInternal = ({
   `Usuario identifique explícitamente a la persona u organización al otro lado; nunca infieras ` +
   `una empresa a partir del artículo, propósito o contexto, y no inventes notas.`;
 
-/** @internal */
 export const turnPromptInternal = ({
   occurredAt,
   timeZone,
@@ -227,7 +225,6 @@ const exactTranscriptMessage = (entry: TranscriptEntry): Prompt.MessageEncoded =
   }
 };
 
-/** @internal */
 export const exactTranscriptPromptInternal = (
   entries: ReadonlyArray<TranscriptEntry>
 ): ReadonlyArray<Prompt.MessageEncoded> => entries.map(exactTranscriptMessage);
@@ -369,7 +366,6 @@ const activeRequestFrame: Prompt.SystemMessageEncoded = {
     `confirmación de la operación exacta.`,
 };
 
-/** @internal */
 export const projectHostedTextContextInternal = (
   context: HostedTextContext
 ): HostedPromptProjection => {
@@ -398,11 +394,9 @@ export const projectHostedTextContextInternal = (
   };
 };
 
-/** @internal */
 export const hostedStructuredCompactionInstruction =
   "Replace the prior compacted conversation and exact transcript with one faithful concise conversation record.";
 
-/** @internal */
 export const projectHostedStructuredContextInternal = (
   input: HostedStructuredContext
 ): ReadonlyArray<Prompt.MessageEncoded> => [
@@ -421,7 +415,6 @@ const startupHostedAgentSessionId = "00000000-0000-4000-8000-000000000001";
 const startupUuidHexRadix = 16;
 const startupUuidSuffixLength = 12;
 
-/** @internal */
 export const makeStartupTranscriptInternal = (
   input: Readonly<{
     entries: ReadonlyArray<Readonly<{ text: string }>>;

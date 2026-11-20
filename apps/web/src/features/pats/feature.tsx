@@ -64,7 +64,6 @@ const PATManagementContent = ({
   </SensitiveClipboardBoundary>
 );
 
-/** Pairing never receives a bearer; manual disclosure expires with the mounted view. */
 export const PATManagementFeature = ({
   children,
 }: Pick<PATManagementContentProps, "children">): JSX.Element => {

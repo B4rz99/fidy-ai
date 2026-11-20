@@ -36,7 +36,6 @@ const stopProcess = (
     );
   });
 
-/** Scope teardown escalates after 300ms; exit/reader failure is a defect, never silent success. */
 export const scopedProcess = Effect.fn(function* (
   command: ReadonlyArray<string>,
   env?: Readonly<Record<string, string>>,

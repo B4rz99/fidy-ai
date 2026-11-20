@@ -7,7 +7,6 @@ const changeFor = (order: number): "Increased" | "Decreased" | "Unchanged" => {
   if (order > 0) return "Increased";
   return order < 0 ? "Decreased" : "Unchanged";
 };
-/** Exact same-Currency directional comparison; the delta never carries a sign or a percentage. */
 export const WeeklyComparison = Schema.Struct({
   current: Money,
   previous: Money,
@@ -36,7 +35,6 @@ export const WeeklyComparison = Schema.Struct({
 );
 export type WeeklyComparison = typeof WeeklyComparison.Type;
 
-/** One positive current-period outflow total for a stable Category, independent of mutable labels. */
 export const WeeklyCategory = Schema.Struct({ categoryId: CategoryId, outflow: Money }).check(
   Schema.makeFilter<Readonly<{ outflow: ReadonlyMoney }>>((value) =>
     BigDecimal.isPositive(value.outflow.amount)
@@ -84,7 +82,6 @@ type GroupView = Readonly<{
   outflow: ComparisonView;
   topOutflowCategories: ReadonlyArray<CategoryView>;
 }>;
-/** Current outflow leaders use descending Money then ascending stable Category identity, never label order. */
 export const WeeklyCurrencyGroup = Schema.Struct({
   currency: Currency,
   inflow: WeeklyComparison,
@@ -116,7 +113,6 @@ const groupsOrdered = (groups: ReadonlyArray<GroupView>): boolean =>
     const previous = groups[index - 1];
     return previous === undefined || previous.currency < group.currency;
   });
-/** Frozen financial facts for one occurrence; all Currency groups are retained without conversion or commentary. */
 export const WeeklySummaryPayload = Schema.Struct({
   periods: WeeklyPeriods,
   financialRevision: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
@@ -136,14 +132,12 @@ export const WeeklySummaryPayload = Schema.Struct({
   .annotate({ identifier: "WeeklySummaryPayload" });
 export type WeeklySummaryPayload = typeof WeeklySummaryPayload.Type;
 
-/** Deterministic visible facts before channel framing; every Currency group is preserved and Category labels are captured by the caller. */
 export type WeeklySummaryPresentation = Readonly<{
   period: string;
   currencies: ReadonlyArray<Currency>;
   sections: ReadonlyArray<Readonly<{ currency: Currency; text: string }>>;
 }>;
 
-/** Empty current history advances execution without generating a report or send intent. */
 export type WeeklySummaryOutcome =
   | Readonly<{ _tag: "NoActivity" }>
   | Readonly<{ _tag: "Summary"; payload: WeeklySummaryPayload }>;

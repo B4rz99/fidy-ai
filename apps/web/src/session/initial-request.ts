@@ -1,7 +1,6 @@
 import type { InitialBrowserRequest } from "@/transport/initial-request";
 import { authenticationChannelName, authenticationEndedEvent } from "./authentication-channel";
 
-/** Early messages can retire work, never grant identity or publish their payload. */
 export const observeInitialBrowserRequest = (
   request: InitialBrowserRequest
 ): InitialBrowserRequest => {

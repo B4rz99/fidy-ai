@@ -86,7 +86,6 @@ const outcomes = {
   },
 };
 
-/** Local controls exercise shared OAuth treatments without creating credentials or account reads. */
 export const OAuthReference = (): JSX.Element => {
   const [state, select] = useState<"review" | "success" | "information" | "warning">("review");
   return (

@@ -2,7 +2,6 @@ import { DateTime, Effect } from "effect";
 import { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
 import { type TrialPeriod, User, type UserId } from "./contract";
 
-/** Whether the caller-supplied instant falls inside the immutable half-open TrialPeriod. */
 export const isTrialPeriodActive = Effect.fn("isTrialPeriodActive")(function* (
   trialPeriod: TrialPeriod,
   now: DateTime.Utc

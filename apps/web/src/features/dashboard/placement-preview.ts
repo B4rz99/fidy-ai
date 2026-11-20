@@ -128,7 +128,6 @@ const projectMove = (
     ? insert(remaining.value, source.value, edit.at)
     : layout;
 };
-/** Financial results remain the last canonical read during placement previews. */
 export const previewDashboardPlacement = ({
   layout,
   edit,

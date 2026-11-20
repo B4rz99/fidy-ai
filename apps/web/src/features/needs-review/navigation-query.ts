@@ -7,7 +7,6 @@ import { reviewWorkspaceQueries } from "./query";
 import type { Filter } from "./view-navigation";
 import { observeReviewQuery } from "./query-observation";
 
-/** Count-only freshness never mounts an editor or reads item rows. */
 export const reviewPendingCountQuery: (client: FidyClient) => ReviewWorkspaceQuery = Atom.family(
   (client: FidyClient) => {
     const source = client.query("ingestion", "getReviewWorkspace", {

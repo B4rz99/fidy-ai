@@ -5,7 +5,6 @@ import type { BrowserSessionObservation } from "@/transport/session-entry";
 import type { FidyClient, ProcessingConsentStatus, WebAuthClient } from "@/transport/client";
 import { workspaceMetadataInitialValue } from "@/transport/workspace-query";
 import { initialConsentObservation, initialTransactionConsent } from "@/session/transaction-entry";
-/** Hydrate the canonical nodes once in the new authentication registry; later refreshes use HTTP. */
 export const initialApplicationValues = ({
   apiClient,
   webAuthClient,

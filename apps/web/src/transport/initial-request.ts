@@ -39,7 +39,6 @@ const requestLifetime = (): Pick<
     signal: controller.signal,
   };
 };
-/** Settle one injected native transport outcome for the SDK's single-claim handoff. */
 const settleResponse = (
   nativeFetch: typeof globalThis.fetch,
   ...args: Parameters<typeof globalThis.fetch>
@@ -61,7 +60,6 @@ const send = (
     signal: AbortSignal.any([signal, AbortSignal.timeout(initialRequestDeadlineMilliseconds)]),
   });
 
-/** Transport overlaps code loading. The ordinary client owns bounds, codecs, retries and adoption. */
 export const beginInitialBrowserRequest = ({
   apiOrigin,
   context,
@@ -77,7 +75,6 @@ export const beginInitialBrowserRequest = ({
   const url = new URL(identity);
   if (context) url.searchParams.set("context", transactions ? "transactions" : "application");
   const result = send(url.href, lifetime.signal, nativeFetch);
-  // Recheck the current cookie AFTER the private response, concurrently with its bounded decoding.
   const recheck = context
     ? result.then((outcome): ResponseOutcome =>
         outcome.status === "fulfilled" &&
@@ -111,7 +108,6 @@ export const beginInitialBrowserRequest = ({
 };
 const requestMethod = (...args: Parameters<typeof globalThis.fetch>): string =>
   args[1]?.method ?? (args[0] instanceof Request ? args[0].method : "GET");
-/** Claims are shared across decoders; retrying the context also invalidates its earlier recheck. */
 export const initialRequestFetch = (initial: InitialBrowserRequest): typeof globalThis.fetch => {
   const nativeFetch = globalThis.fetch;
   const preparedFetch = (...args: Parameters<typeof globalThis.fetch>): Promise<Response> =>

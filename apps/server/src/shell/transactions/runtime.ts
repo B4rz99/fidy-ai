@@ -21,7 +21,6 @@ const routes = implemented.map((id) => {
   return operation;
 });
 
-/** Match implemented Cloudflare adapters against paths and methods derived from the canonical API. */
 export const transactionRoute = ({
   path,
   method,
@@ -33,11 +32,9 @@ export const transactionRoute = ({
     )
   );
 
-/** True only for paths backed by an implemented canonical Transaction adapter. */
 export const ownsTransactionPath = (path: string): boolean =>
   routes.some((operation) => matchesRouteTemplate({ template: operation.route, path }));
 
-/** Published HTTP methods for the matched canonical path, not a parallel route registry. */
 export const transactionMethods = (path: string): ReadonlyArray<string> =>
   routes
     .filter(({ method }) => Option.isSome(transactionRoute({ path, method })))

@@ -11,7 +11,6 @@ export const WebSessionBearer = Schema.String.check(Schema.isPattern(/^[A-Za-z0-
   .annotate({ identifier: "WebSessionBearer" });
 export type WebSessionBearer = typeof WebSessionBearer.Type;
 
-/** Freshness and idle authority end no later than the immutable hard expiry of one WebSession. */
 export type WebSessionDeadlines = Readonly<{
   freshUntil: DateTime.Utc;
   idleExpiresAt: DateTime.Utc;

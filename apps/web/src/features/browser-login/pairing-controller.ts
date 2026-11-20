@@ -372,7 +372,6 @@ type BrowserLoginPairingController = Readonly<{
   logout: Atom.AtomResultFn<LogoutCommand, void, never>;
 }>;
 
-/** Creates authentication-lifetime commands while keeping all proofs in one private closure. */
 const makeBrowserLoginPairingController = (
   webAuthClient: WebAuthClient
 ): BrowserLoginPairingController => {
@@ -527,10 +526,6 @@ const usePairingPresentation = (retire: () => void): PairingPresentation => {
   return { latestState, admitStart, emailBusy, pairingState, changeState };
 };
 
-/**
- * Owns browser-pairing presentation, command execution, and authentication-lifetime transitions.
- * Its small interface never exposes the pairing id, verifier, callbacks, or Atom commands.
- */
 export const useBrowserLoginPairing = (): BrowserLoginPairing => {
   const router = useRouter();
   const { authentication, completeLogin, completeLogout, replaceAuthenticationLifetime } =

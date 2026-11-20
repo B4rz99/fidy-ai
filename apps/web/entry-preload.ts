@@ -7,7 +7,6 @@ const entryModules = [
   "/src/transport/initial-session.ts",
 ];
 
-/** Fetch shared entry code alongside bootstrap without executing it or loading workspace chunks. */
 export const entryPreload = (): Plugin => ({
   name: "entry-preload",
   apply: "build",
@@ -37,7 +36,6 @@ export const entryPreload = (): Plugin => ({
         tags.push({
           tag: "link",
           attrs: { rel: "modulepreload", crossorigin: "", href: `/${name}`, fetchpriority: "low" },
-          // Keep encoding, viewport and bootstrap discovery ahead of speculative requests.
           injectTo: "head",
         });
       }

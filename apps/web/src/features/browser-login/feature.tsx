@@ -267,7 +267,6 @@ export type BrowserLoginPresentation = Readonly<{
   ) => JSX.Element;
 }>;
 
-/** Owns controller lifetime; publishes presentation and user commands, never private proof. */
 export const BrowserLoginPairingFeature = ({
   children,
 }: Readonly<{

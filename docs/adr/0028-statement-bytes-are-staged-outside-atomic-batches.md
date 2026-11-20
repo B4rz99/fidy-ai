@@ -91,3 +91,19 @@ all; ownership of authority stays with `ingestion.submitForExtraction`.
   expires.
 - **Publishing first and verifying later, or assuming R2 and D1 commit together.** Either can leave
   an authoritative submission pointing at missing or mismatched material.
+
+## Ownership of retained material and row outcomes
+
+The staging handle names an unpredictable server-created object and the exact staged-byte digest.
+A receipt alone grants no authority. Publication verifies the supplied handle against the retained
+owner record, including the byte count and content digest. The caller's submission key identifies
+one logical publication. Unpublished bytes have a hard staging expiry. Published material has a
+separate extraction deadline and cannot be revived when that deadline passes.
+
+A failed run with partial progress counts only finalized input rows. Preserve original row
+evidence while a review can still act on it, without evaluating spreadsheet formulas. A safe
+review summary can remain available independently of its raw evidence. Mechanical capture uses
+only the exact structurally evidenced format and explicitly sourced Currency. Uncertain field
+mapping or Currency requires review instead of applying a regional default to the statement.
+Use zero-based column indexes, one Currency source, and a closed refusal projection that leaves
+the original bytes and parser internals private.

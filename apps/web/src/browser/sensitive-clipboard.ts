@@ -3,17 +3,10 @@ import { type BrowserClipboard, ClipboardAccessFailed } from "./clipboard";
 
 const sensitiveClipboardMinutes = 10;
 
-/** Expiry interval for copied sensitive values. */
 export const sensitiveClipboardLifetime = Duration.minutes(sensitiveClipboardMinutes);
 
-/** Idempotent release of one exact copy; equal text never grants ownership. */
 export type CopyRelease = Readonly<{ release: () => void }>;
 
-/**
- * Mounted disclosure commands. Copied acknowledges only a successful current write. Reveal and
- * copy deadlines are independent. Cleanup is best effort: browser read/write is not atomic and
- * neither release nor scope closure proves physical clipboard erasure.
- */
 export type SensitiveClipboard = Readonly<{
   reveal: (onExpired: () => void) => void;
   copy: (value: string, onCopied?: () => void) => CopyRelease;
@@ -85,7 +78,6 @@ const release = (state: ClipboardState, owner: CopyOwner): void => {
   const generation = state.generation;
   const clipboard = state.clipboard;
   if (Option.isNone(clipboard) || Option.isNone(value)) return;
-  // Native operations can outlive the scope. Recheck local authority after the read.
   Promise.resolve()
     .then(() => clipboard.value.readText())
     .then((observed) => {
@@ -181,7 +173,6 @@ const close = (state: ClipboardState): Effect.Effect<void> =>
     state.open = false;
   });
 
-/** Creates a private owner; scope closure disables admission and retires its exact copy. */
 export const makeSensitiveClipboard: {
   (
     clipboard: Option.Option<BrowserClipboard>,

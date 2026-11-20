@@ -8,7 +8,6 @@ const expiredMaterial: CanonicalSuccess<"ingestion.getReviewMaterial"> = {
   data: { available: false, reason: "expired" },
   next: [],
 };
-/** Immutable evidence keeps only a short preload/commit bridge; expired bounds prevent another read. */
 export const reviewMaterialQuery = ({
   client,
   item,

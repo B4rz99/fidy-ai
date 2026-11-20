@@ -3,7 +3,6 @@ import { type RefCallback, useCallback } from "react";
 
 const clearance = 8;
 
-/** Reveals amount feedback within its local scroll region without changing keyboard focus. */
 export const useReviewAmountVisibility = (
   error: Option.Option<string>
 ): RefCallback<HTMLDivElement> => {

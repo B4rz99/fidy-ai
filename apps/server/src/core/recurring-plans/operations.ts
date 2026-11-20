@@ -72,7 +72,6 @@ const monthlyDates = ({
   }
   return dates.filter((date) => date >= plan.firstDate && date >= from && date <= through);
 };
-/** Preserve the original anchor when clamping short months. No implicit bank-day adjustment. */
 export const projectDates = ({
   plan,
   from,
@@ -120,7 +119,6 @@ export const planAt = ({
   const revision = plan.revisions.findLast((entry) => entry.from <= date) ?? plan.revisions[0];
   return revision.plan;
 };
-/** Observes local-date standing; command admission still depends on the retained lifecycle facts. */
 export const observeRecurringPlan = ({
   document,
   planId,
@@ -276,7 +274,6 @@ const generatedDates = (
 const occurrenceKey = (entry: Readonly<{ planId: string; date: string }>): string =>
   `${entry.planId}:${entry.date}`;
 
-/** One complete month, plus displaced exceptions; completed records survive schedule and lifecycle changes. */
 export const projectRecurringMonth = ({
   document,
   month,
@@ -359,7 +356,6 @@ const normalized = (value: string): string =>
     .replaceAll(/\p{White_Space}+/gu, " ")
     .trim()
     .toLowerCase();
-/** Manual association still requires the same effective identity, Currency and movement direction. */
 export const validAssociation = ({
   plan,
   fact,
@@ -372,7 +368,6 @@ const comparable = (plan: RecurringPlanInput, fact: RecurringMatchFact): boolean
   if (normalized(plan.counterparty) !== normalized(fact.counterparty)) return false;
   return plan.money !== undefined && BigDecimal.equals(plan.money.amount, fact.money.amount);
 };
-/** Revalidate retained associations against effective facts and frozen occurrence settings. */
 export const validRecurringFulfillment = ({
   mark,
   fact,
@@ -400,7 +395,6 @@ const qualifies = (item: RecurringOccurrence, fact: RecurringMatchFact): boolean
     ) / millisecondsPerDay;
   return drift <= maximumDrift && validAssociation({ plan: item.plan, fact });
 };
-/** Return eligible exact pairs for explicit review or a one-to-one automatic projection. */
 export const recurringMatchCandidates = ({
   document,
   items,
@@ -423,7 +417,6 @@ export const recurringMatchCandidates = ({
   );
   return pairs;
 };
-/** Count both sides once; ambiguity refuses the same pairs regardless of candidate ordering. */
 export const uniqueRecurringMatches = (
   pairs: ReadonlyArray<RecurringMatch>
 ): ReadonlyArray<RecurringMatch> => {
@@ -439,7 +432,6 @@ export const uniqueRecurringMatches = (
     ({ item, fact }) => facts.get(fact.id) === 1 && occurrences.get(occurrenceKey(item)) === 1
   );
 };
-/** Deterministic effective-fact associations. Recalculation follows corrections without a query-side write. */
 export const proposeRecurringMatches = (
   input: Parameters<typeof recurringMatchCandidates>[0]
 ): ReadonlyArray<RecurringMatch> => uniqueRecurringMatches(recurringMatchCandidates(input));
@@ -463,7 +455,6 @@ export const filterRecurring = ({
       return true;
     })
   );
-/** Complete filtered monthly items; earlier unresolved rows never contribute to this month's sums. */
 export const summarizeRecurring = (
   items: ReadonlyArray<RecurringOccurrence>
 ): ReadonlyArray<RecurringSummary> => {
@@ -719,7 +710,6 @@ const decide = (
       return skip(document, edit);
   }
 };
-/** Revision-bound pure transitions. Supplied financial associations require adapter validation before commit. */
 export const applyRecurringEdit = ({
   document,
   command,

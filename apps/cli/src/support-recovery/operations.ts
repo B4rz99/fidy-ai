@@ -29,7 +29,6 @@ const discardProof = (proof: Redacted.Redacted<string>): Effect.Effect<void> =>
     Redacted.wipeUnsafe(proof);
   });
 
-/** Submits one support decision. True means failure; uncertain decisions are never replayed. */
 export const runSupportRecovery = Effect.fn(function* (
   args: ReadonlyArray<string>,
   operator: RecoveryOperator

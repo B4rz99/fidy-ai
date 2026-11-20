@@ -3271,7 +3271,6 @@ html:has(.fidy-landing) {
       view-timeline-axis: block;
     }
     .fidy-landing .channel-story > :is(.channel-card, .channel-connector):not(:first-child) {
-      /* Longhands keep the CSS optimizer from folding the named timeline into an unsupported shorthand. */
       animation-name: channel-scroll-reveal;
       animation-timing-function: linear;
       animation-fill-mode: both;

@@ -170,7 +170,6 @@ const ReviewTaskContent = ({
     </OAuthWorkspace>
   );
 };
-/** Public references grant no authority and select no post-login destination. */
 export const OAuthReviewFeature = (): JSX.Element => {
   const params = useParams({ strict: false });
   const requestId = Schema.decodeUnknownOption(OAuthRequestId)(params.requestId);

@@ -5,7 +5,6 @@ type QueryLifetime = Readonly<{
   observe: (settle: () => void) => () => void;
 }>;
 
-/** Logical retirement is synchronous; the React provider may dispose its registry later. */
 const lifetime = Atom.make((get) => {
   let active = true;
   const pending = new Set<() => void>();

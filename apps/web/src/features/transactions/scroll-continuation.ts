@@ -1,4 +1,3 @@
-/** Observes the visible end once; disposing prevents queued observations from requesting more. */
 export const observeContinuation = ({
   element,
   onMore,

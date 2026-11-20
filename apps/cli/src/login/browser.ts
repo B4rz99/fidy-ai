@@ -1,7 +1,6 @@
 import { Effect } from "effect";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 
-/** Scoped, bounded best-effort browser handoff; printed public instructions remain the fallback. */
 export const openApprovalBrowser = (
   url: string
 ): Effect.Effect<void, never, ChildProcessSpawner.ChildProcessSpawner> => {

@@ -105,7 +105,6 @@ export const makeDashboardCatalog = (
   monthlyOutflows,
 ];
 
-/** Assigns caller-generated identity to one already-valid catalog template. */
 export const makeCatalogWidget = (
   input: Readonly<{
     readonly entry: DashboardCatalogEntry;
@@ -122,7 +121,6 @@ const defaultLeaf = (entry: DashboardCatalogEntry, id: WidgetId): LeafNode => ({
   widget: makeCatalogWidget({ entry, id }),
 });
 
-/** Creates the four-Widget, two-by-two first-use document retained for one User. */
 export const makeDefaultDashboard = (
   input: Readonly<{
     readonly restaurantCategoryId: CategoryId;
@@ -244,7 +242,6 @@ const periodCache = new WeakMap<
   Map<IanaTimeZone, Map<DashboardPeriod, AppliedDashboardPeriod>>
 >();
 
-/** Resolves a relative period against local calendar boundaries in the explicitly supplied zone. */
 export const resolveDashboardPeriod = (input: PeriodInput): AppliedDashboardPeriod => {
   let zones = periodCache.get(input.now);
   if (zones === undefined) {
@@ -267,7 +264,6 @@ export const resolveDashboardPeriod = (input: PeriodInput): AppliedDashboardPeri
 const money = (currency: Currency, amount: ReadonlyMoney["amount"]): Money =>
   Money.make({ currency, amount });
 
-/** Converts exact grouped sums into deterministic Currency groups with separated directions. */
 export const dashboardMoneyGroupsFromSums = (
   facts: ReadonlyArray<DashboardDirectionalAmountFact>
 ): MoneyGroups => {
@@ -303,7 +299,6 @@ const metricMoney = (fact: DashboardMetricFact): ReadonlyMoney => {
   );
 };
 
-/** Finalizes sum, average, or maximum without netting direction or combining Currency. */
 export const dashboardMoneyGroupsFromMetrics = (
   facts: ReadonlyArray<DashboardMetricFact>
 ): MoneyGroups =>
@@ -311,7 +306,6 @@ export const dashboardMoneyGroupsFromMetrics = (
     facts.map((fact) => ({ direction: fact.direction, money: metricMoney(fact) }))
   );
 
-/** Exact outflow spend for the selected Budget Currency, never netted with income. */
 const dashboardBudgetSpent: {
   (facts: ReadonlyArray<DashboardDirectionalAmountFact>, currency: Currency): Money;
   (currency: Currency): (facts: ReadonlyArray<DashboardDirectionalAmountFact>) => Money;
@@ -386,7 +380,6 @@ const categoryGroups = (
   return Option.some(results);
 };
 
-/** Group exact projected contributions by the selected Chart dimension and Currency. */
 export const projectAggregateChart = ({
   widget,
   ranges,
@@ -410,7 +403,6 @@ export const projectAggregateChart = ({
   return Option.some(buckets);
 };
 
-/** Combine bucket sums, maxima, and counts before finalizing one Widget's metric. */
 export const projectAggregateMetric: {
   (widget: MetricWidget, ranges: ReadonlyArray<ProjectedRange>): MoneyGroups;
   (ranges: ReadonlyArray<ProjectedRange>): (widget: MetricWidget) => MoneyGroups;
@@ -451,7 +443,6 @@ export const projectAggregateMetric: {
   return dashboardMoneyGroupsFromMetrics(metrics);
 });
 
-/** Calculate spend only from the selected Budget Category, direction, and Currency. */
 export const projectAggregateBudgetSpent: {
   (widget: BudgetWidget, ranges: ReadonlyArray<ProjectedRange>): Money;
   (ranges: ReadonlyArray<ProjectedRange>): (widget: BudgetWidget) => Money;
@@ -471,7 +462,6 @@ const monthCharacters = 7;
 
 const dayCharacters = 10;
 
-/** Resolve requested periods and local chart buckets without consulting retained history. */
 export const dashboardProjectionRanges: {
   (
     widget: Exclude<Widget, { type: "transaction-list" }>,
@@ -555,11 +545,6 @@ export const collectDashboardCategoryReferences = (
     })
   );
 
-/**
- * Applies one decoded UI-or-agent edit and re-proves the complete result.
- * Fails for absent targets, duplicate or self placement, removing the last Widget, resizing the
- * root region, or any edit whose complete result violates Dashboard invariants.
- */
 export const applyDashboardEdit = (
   input: Readonly<{
     readonly document: DashboardDocument;

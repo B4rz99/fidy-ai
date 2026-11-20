@@ -15,10 +15,6 @@ type DashboardReadRequest = Readonly<{
   attempt: DashboardReadAttempt;
   claim: () => Option.Option<() => void>;
 }>;
-/** Successful completion belongs to the requested new load and remains valid for
- * this attempt across later ordinary display refreshes. Failed, superseded and
- * retired loads leave completed() false.
- */
 export type DashboardReadAttempt = Readonly<{ completed: () => boolean }>;
 const makeReadRequest = (active: () => boolean): DashboardReadRequest => {
   let completed = false;
@@ -43,9 +39,6 @@ type DashboardLoad = Readonly<{
   result: Atom.Atom<AsyncResult.AsyncResult<DashboardRead, DashboardError>>;
 }>;
 
-/** Only declared absence permits initialization. Initialization and reread failures propagate;
- * refresh never treats unavailability as absence or recursively initializes.
- */
 const loadDashboard = Effect.fnUntraced(function* (
   apiClient: FidyClient,
   setPhase: (phase: DashboardLoadPhase) => void,

@@ -6,7 +6,6 @@ export const BrowserLoginPairingId = Schema.String.check(Schema.isUUID())
   .annotate({ identifier: "BrowserLoginPairingId" });
 export type BrowserLoginPairingId = typeof BrowserLoginPairingId.Type;
 
-/** Minimum cadence advertised to browsers polling a pairing challenge. */
 export const browserLoginPollingIntervalSeconds = 5;
 
 export const browserLoginPublicCodeAlphabet = "BCDFGHJKLMNPQRSTVWXZ" as const;
@@ -14,7 +13,6 @@ export const browserLoginPublicCodeAlphabet = "BCDFGHJKLMNPQRSTVWXZ" as const;
 const browserLoginPublicCodePattern = /^[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$/u;
 const browserLoginPublicCodeSymbolsPattern = /^[BCDFGHJKLMNPQRSTVWXZ]{8}$/u;
 
-/** Public, human-entered code. Its possession never establishes a browser session. */
 export const BrowserLoginPublicCode = Schema.String.check(
   Schema.isPattern(browserLoginPublicCodePattern)
 )
@@ -22,10 +20,8 @@ export const BrowserLoginPublicCode = Schema.String.check(
   .annotate({ identifier: "BrowserLoginPublicCode" });
 export type BrowserLoginPublicCode = typeof BrowserLoginPublicCode.Type;
 
-/** Fixed lifetime applied by the server when it creates an unbound challenge. */
 export const browserLoginPairingLifetime = "10 minutes" as const;
 
-/** Eight validated symbols sampled from the public-code alphabet before display formatting. */
 export const BrowserLoginPublicCodeSymbols = Schema.String.check(
   Schema.isPattern(browserLoginPublicCodeSymbolsPattern)
 ).pipe(Schema.brand("BrowserLoginPublicCodeSymbols"));
@@ -41,7 +37,6 @@ export const BrowserLoginPairingLifecycle = Schema.Literals([
 ]);
 export type BrowserLoginPairingLifecycle = typeof BrowserLoginPairingLifecycle.Type;
 
-/** Authoritative pairing state and exact proof result at one polling decision instant. */
 export type RedemptionInput = Readonly<{
   lifecycle: BrowserLoginPairingLifecycle;
   verifierMatches: boolean;
@@ -72,7 +67,6 @@ export type BrowserLoginRedemptionDecision =
   | Readonly<{ _tag: "Expired" }>
   | Readonly<{ _tag: "Invalid" }>;
 
-/** Closed outcome for a proof check that deliberately excludes polling cadence and redemption. */
 export type PendingBrowserLoginProofDecision =
   | Readonly<{ _tag: "Accept" }>
   | Readonly<{ _tag: "Invalid" }>
@@ -83,7 +77,6 @@ export type PendingBrowserLoginProofDecision =
       lifecycle: "pending_approval" | "invalidated";
     }>;
 
-/** Pending pairing state and independent browser proof at the mailbox approval boundary. */
 export type PendingBrowserLoginProofInput = Readonly<{
   lifecycle: BrowserLoginPairingLifecycle;
   verifierMatches: boolean;
@@ -99,7 +92,6 @@ const normalizePublicCodeText = (input: string): string => {
     : upper;
 };
 
-/** Public decoder with narrow ASCII presentation normalization and canonical encoding. */
 export const BrowserLoginPublicCodeInput = Schema.String.pipe(
   Schema.decodeTo(
     BrowserLoginPublicCode,
@@ -110,7 +102,6 @@ export const BrowserLoginPublicCodeInput = Schema.String.pipe(
   )
 );
 
-/** One-time browser proof: exactly 32 random octets as unpadded base64url. */
 export const BrowserLoginPrivateVerifier = Schema.String.check(
   Schema.isPattern(/^[A-Za-z0-9_-]{43}$/u)
 )
@@ -118,7 +109,6 @@ export const BrowserLoginPrivateVerifier = Schema.String.check(
   .annotate({ identifier: "BrowserLoginPrivateVerifier" });
 export type BrowserLoginPrivateVerifier = typeof BrowserLoginPrivateVerifier.Type;
 
-/** Secret-bearing direct-HTTPS response; never a canonical operation result. */
 export const StartedBrowserLoginPairing = Schema.Struct({
   pairingId: BrowserLoginPairingId,
   privateVerifier: Schema.RedactedFromValue(BrowserLoginPrivateVerifier),
@@ -128,5 +118,4 @@ export const StartedBrowserLoginPairing = Schema.Struct({
 }).annotate({ identifier: "StartedBrowserLoginPairing" });
 export type StartedBrowserLoginPairing = typeof StartedBrowserLoginPairing.Type;
 
-/** Shared terminal threshold for wrong private-verifier attempts against one pairing. */
 export const maximumWrongVerifierAttempts = 5;

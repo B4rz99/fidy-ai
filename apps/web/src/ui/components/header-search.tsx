@@ -7,7 +7,6 @@ import { Button } from "./button";
 const focusSearch: React.RefCallback<HTMLInputElement> = (element): void => {
   element?.focus();
 };
-/** Opens a focused search field in place; Escape closes it without clearing the feature-owned query. */
 export const HeaderSearch = ({
   value,
   onChange,

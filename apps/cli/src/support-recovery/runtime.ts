@@ -28,7 +28,6 @@ const outcomes: Readonly<
   unavailable: { status: 503, outcome: "unavailable" },
 };
 
-/** Fixed private Access transport. Loss or invalid delivery is uncertain and is never retried. */
 export const makeRecoveryClient = (
   httpClient: HttpClient.HttpClient
 ): RecoveryOperator["submit"] => {
@@ -61,7 +60,6 @@ export const makeRecoveryClient = (
 const pairingCharacters = 9;
 const recoveryCharacters = 29;
 
-/** Constructs private operator ports. It reads no PAT, home directory or claimant proof from env. */
 export const makeRecoveryOperator = Effect.fn(function* (
   httpClient: HttpClient.HttpClient,
   terminalOutput: Pick<RecoveryOperator, "interactive" | "write">

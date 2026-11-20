@@ -142,7 +142,6 @@ const ConnectionList = ({
       </ul>
     </>
   );
-/** Display names are unverified; absent activity does not prove no historical work. */
 export const OAuthManagementView = ({
   list,
   busy,

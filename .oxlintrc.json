@@ -67,8 +67,6 @@
     ],
     "sort-imports": ["error", { "ignoreDeclarationSort": true }],
     "typescript/explicit-function-return-type": "error",
-    // Node ESM configuration imports and Vite's raw HTML/CSS assets require their
-    // extensions; ordinary source imports do not.
     "import/extensions": [
       "error",
       "never",
@@ -92,7 +90,6 @@
     "import/no-cycle": "error",
     "import/no-default-export": "error",
     "import/no-self-import": "error",
-    // Effect's compiler plugin reads this tag to make intentional middleware requirements explicit.
     "jsdoc/check-tag-names": ["error", { "definedTags": ["effect-expect-leaking"] }],
     "jsdoc/empty-tags": "error",
     "jsdoc/require-param-description": "error",
@@ -161,6 +158,12 @@
   },
   "overrides": [
     {
+      "files": ["scripts/comment-syntax.ts"],
+      "rules": {
+        "import/extensions": ["error", "never", { "ignorePackages": true }]
+      }
+    },
+    {
       "files": ["apps/docs/src/components/docs-search.astro"],
       "rules": {
         "complexity": "off",
@@ -187,17 +190,14 @@
       "files": ["apps/web/src/features/agent/visible-reply.tsx"],
       "rules": { "effect-guards/no-react-use-effect": "off" }
     },
-    // Restore Router-owned scroll once asynchronous Transaction pages have rendered.
     {
       "files": ["apps/web/src/features/transactions/scroll-restoration.ts"],
       "rules": { "effect-guards/no-react-use-effect": "off" }
     },
-    // Budget callbacks must observe committed admission and retire on month/auth disposal.
     {
       "files": ["apps/web/src/features/budgets/write-lifetime.ts"],
       "rules": { "effect-guards/no-react-use-effect": "off" }
     },
-    // These libraries expose extensionless package exports that resolve to .mjs.
     {
       "files": [
         "apps/web/src/ui/components/sheet.tsx",
@@ -267,7 +267,6 @@
         "max-lines-per-function": "off"
       }
     },
-    // Vitest discovers these standalone configurations through its required default-export contract.
     {
       "files": [
         "apps/server/tools/contracts/vitest.config.ts",
@@ -278,8 +277,6 @@
         "import/no-default-export": "off"
       }
     },
-    // Oxc's extension resolver misclassifies package entrypoints in these existing
-    // UI components and a few test/configuration files. New browser source retains the rule.
     {
       "files": [
         "scripts/mcp/production-browser.ts",
@@ -293,7 +290,6 @@
         "import/extensions": "off"
       }
     },
-    // Vite and Vitest require default-exported configuration objects.
     {
       "files": [
         "apps/web/{vite,vitest}.config.ts",
@@ -304,8 +300,6 @@
         "import/no-default-export": "off"
       }
     },
-    // Cloudflare Worker modules, Alchemy, and Vitest are discovered through their platforms'
-    // required default-export contracts.
     {
       "files": [
         "infra/cloudflare/alchemy.run.ts",
@@ -365,8 +359,6 @@
         "max-lines-per-function": "off"
       }
     },
-    // Rolldown publishes its package-root entrypoint without an extension; this fixture imports
-    // that public entrypoint to bundle the Worker used by Miniflare's multi-runtime test.
     {
       "files": ["apps/server/cloudflare/resource-admission/resource-admission.test.ts"],
       "rules": {
@@ -385,8 +377,6 @@
         ]
       }
     },
-    // TanStack Router needs inferred return types on two exact exported factories; the custom
-    // guard still requires annotations on other named functions in these files.
     {
       "files": ["apps/web/src/app/routes.ts"],
       "rules": {
@@ -394,36 +384,28 @@
         "effect-guards/require-route-return-type": "error"
       }
     },
-    // dependency-cruiser's public imports resolve through its isolated install.
     {
       "files": ["tools/depcruise/*.mjs"],
       "rules": {
         "import/extensions": ["error", "never", { "pattern": { "js": "always" } }]
       }
     },
-    // The custom plugin's local helper import needs the runtime extension Node ESM requires.
     {
       "files": ["scripts/oxlint/*.js"],
       "rules": {
         "import/extensions": ["error", "never", { "pattern": { "js": "always" } }]
       }
     },
-    // Oxlint's test API requires an extensionless package export while the local
-    // Node ESM plugin import needs `.js`; import/extensions rejects one or the other.
     {
       "files": ["scripts/oxlint/lint-rules.test.js"],
       "rules": {
         "import/extensions": "off"
       }
     },
-    // Node ESM requires local extensions while dependency-cruiser's exports require extensionless
-    // package subpaths. This resolver cannot express both; all tool imports are exercised by Node.
     {
       "files": ["tools/depcruise/*.mjs"],
       "rules": { "import/extensions": "off" }
     },
-    // Effect service and phantom brand fields do not satisfy deep-readonly parameter checks.
-    // Keep the rule scoped to core; its reviewed type exceptions are checked by negative probes.
     {
       "files": ["apps/server/src/core/**"],
       "rules": {
@@ -475,18 +457,6 @@
             "message": "core may not read the clock. `performance.now()` is a clock like any other — a monotonic one — so a core function using it depends on when it runs."
           }
         ],
-        // `DateTime.Utc` carries a mutable lazy cache even though it denotes an
-        // immutable instant; property reassignment remains banned above. Effect's
-        // `Brand` adds phantom scalar identity, but its variance field trips this
-        // deep-readonly rule. scalar-brand-only compensates by rejecting brands on
-        // object schemas. Negative probes exercise both fences in lint:type-aware.
-        // `Option` trips it for the same reason as `Brand`: every member is
-        // readonly apart from the phantom `Unify` symbols, and no-nullable-type
-        // requires it wherever a core parameter may be absent. `Json` is a
-        // recursively readonly array/record union, but the rule loses that
-        // fact through the recursive alias. `SchemaError` holds a decode
-        // failure core reads to report which field to correct; its issue tree
-        // is mutable by declaration only.
         "typescript/prefer-readonly-parameter-types": [
           "error",
           {

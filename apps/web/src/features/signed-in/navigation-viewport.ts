@@ -8,5 +8,4 @@ const subscribe = (onChange: () => void): (() => void) => {
   return () => media.removeEventListener("change", onChange);
 };
 
-/** Match the shell's md breakpoint without mounting two live navigation trees. */
 export const useDesktopNavigation = (): boolean => useSyncExternalStore(subscribe, isDesktop);

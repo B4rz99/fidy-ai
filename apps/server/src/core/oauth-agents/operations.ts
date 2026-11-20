@@ -11,14 +11,12 @@ import {
 
 const dayMs = 86_400_000;
 
-/** Reject future, stale or altered reviews without recalculating their absolute grant expiration. */
 export const isReviewedOAuthExpiration = (input: OAuthExpirationReview): boolean =>
   input.reviewedAt <= input.current &&
   input.reviewedAt + oauthReviewLifetimeMs > input.current &&
   input.expiresAt === input.reviewedAt + input.lifetimeDays * dayMs;
 export const oauthAuthorizationCodeExpiresAt = (current: number): number =>
   current + oauthAuthorizationCodeLifetimeMs;
-/** Finite credentials share the reviewed grant's absolute upper bound, never a sliding grant. */
 export const decideOAuthCredentialExpirations = (
   input: Readonly<{ current: number; grantExpiresAt: number }>
 ): OAuthCredentialExpirations => ({

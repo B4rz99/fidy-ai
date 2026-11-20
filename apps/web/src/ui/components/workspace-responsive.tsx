@@ -4,7 +4,6 @@ import type { RefCallback } from "react";
 
 const railBreakpoint = 75;
 export const WorkspaceDesktop = createContext<Option.Option<boolean>>(Option.none());
-/** Measures workspace width at the current text scale; unmount ends observation. */
 export const useWorkspaceSize = (): Readonly<{
   desktop: boolean;
   measure: RefCallback<HTMLDivElement>;

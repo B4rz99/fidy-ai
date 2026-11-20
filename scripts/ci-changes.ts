@@ -62,7 +62,6 @@ const checksForPath = (path: string): ReadonlyArray<ConditionalJob> => {
   return ownedPaths.find(({ prefix }) => path.startsWith(prefix))?.jobs ?? conditionalJobs;
 };
 
-/** Selects expensive PR checks; unrecognized paths run everything rather than silently losing coverage. */
 export const selectChecks = (paths: ReadonlyArray<string>): CheckPlan => {
   const selected: Record<ConditionalJob, boolean> = {
     builds: false,
@@ -78,7 +77,6 @@ export const selectChecks = (paths: ReadonlyArray<string>): CheckPlan => {
   return selected;
 };
 
-/** Native CLI evidence follows its build inputs; unfamiliar owners still select it. */
 export const selectNativeChecks = (paths: ReadonlyArray<string>): boolean =>
   paths.some((path) => {
     if (isProse(path)) return false;
@@ -99,8 +97,6 @@ if (import.meta.main) {
   if (!/^[0-9a-f]{40}$/u.test(base) || !/^[0-9a-f]{40}$/u.test(head) || output.length === 0) {
     throw new Error("PR_BASE_SHA, PR_HEAD_SHA, and GITHUB_OUTPUT are required");
   }
-  // Both sides of a rename must be considered, including moves out of a code tree.
-  // Full Git history avoids the changed-file API's pagination and file-count limits.
   const diff = Bun.spawnSync([
     "git",
     "diff",

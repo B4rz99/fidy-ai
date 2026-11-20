@@ -9,7 +9,6 @@ export const makeLogoutOperation =
   ({ onLoggedOut }) =>
     logout.pipe(Effect.andThen(Effect.sync(onLoggedOut)), Effect.orDie);
 
-/** Completes local logout and navigation only after the logout mutation reports success. */
 export const completeLogoutNavigation = ({
   completeLogout,
   navigate,

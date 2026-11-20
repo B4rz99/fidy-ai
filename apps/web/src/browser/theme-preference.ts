@@ -7,9 +7,7 @@ export const readThemePreference = (): "light" | "dark" => {
   try {
     const stored = Schema.decodeUnknownOption(Theme)(localStorage.getItem(preferenceKey));
     if (stored._tag === "Some") return stored.value;
-  } catch {
-    // Browser storage can be unavailable; the system preference remains usable.
-  }
+  } catch {}
   return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 };
 export const observeThemePreference = (changed: () => void): (() => void) => {

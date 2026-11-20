@@ -187,10 +187,6 @@ const hasRecovered = (recovery: Option.Option<Recovery>): boolean =>
   Option.exists(recovery, ({ attempt }) =>
     Option.exists(attempt, (requested) => requested.completed())
   );
-/** Owns edit ordering, provisional geometry and recovery for one mounted Dashboard.
- * Uncertain outcomes discard unsent edits and require an explicit successful reread.
- * Unmount discards unsent work; an already-sent mutation may still have committed.
- */
 export const useDashboardEditing = ({
   apiClient,
   onRefresh,

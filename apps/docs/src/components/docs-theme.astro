@@ -78,9 +78,7 @@ const themes = [
     applyTheme(theme);
     try {
       window.localStorage.setItem("starlight-theme", theme === "auto" ? "" : theme);
-    } catch {
-      // A blocked preference store must not prevent selecting a theme for this page.
-    }
+    } catch {}
     options?.hidePopover();
     trigger?.focus();
   });

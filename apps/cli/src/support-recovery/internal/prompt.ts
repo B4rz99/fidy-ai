@@ -11,7 +11,6 @@ const editInput = Effect.fn(function* (text: string, event: Terminal.UserInput) 
   return text + event.input.value;
 });
 
-/** Raw terminal input has no echo, bounded memory and scoped restoration on every exit. */
 export const readPrompt = Effect.fn(
   function* ({
     terminal,

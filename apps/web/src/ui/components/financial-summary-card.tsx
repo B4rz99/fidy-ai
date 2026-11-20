@@ -3,7 +3,6 @@ import { cn } from "@/ui/class-names";
 import "./financial-summary-card.css";
 
 const characterWidth = 1.6;
-/** Presents formatted financial text without interpreting or calculating Money. */
 export const FinancialSummaryCard = ({
   amount,
   label,

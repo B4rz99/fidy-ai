@@ -13,32 +13,27 @@ export const InsightKind = Schema.Literals([
 ]);
 export type InsightKind = typeof InsightKind.Type;
 
-/** Positive bounded counts: pauseAfter is additional deliveries after the question. */
 export const ProactivityThresholds = Schema.Struct({
   askAfter: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 })),
   pauseAfter: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 })),
 });
 export type ProactivityThresholds = typeof ProactivityThresholds.Type;
 
-/** Stable identity of one generated occurrence. */
 export const InsightEventId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("InsightEventId"))
   .annotate({ identifier: "InsightEventId" });
 export type InsightEventId = typeof InsightEventId.Type;
 
-/** Stable identity of the schedule whose revision generated an occurrence. */
 export const ScheduleId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("ScheduleId"))
   .annotate({ identifier: "ScheduleId" });
 export type ScheduleId = typeof ScheduleId.Type;
 
-/** Revisions start at one and increase whenever a Schedule's instructions change. */
 export const ScheduleVersion = Schema.Int.check(Schema.isGreaterThan(0))
   .pipe(Schema.brand("ScheduleVersion"))
   .annotate({ identifier: "ScheduleVersion" });
 export type ScheduleVersion = typeof ScheduleVersion.Type;
 
-/** A category message may be an occurrence, a legal offer, or an operational question; offers/questions are not financial InsightEvents. */
 export const ProactivityMessageRole = Schema.Literals([
   "budget-threshold",
   "manual-entry-reminder",
@@ -50,14 +45,9 @@ export const ProactivityMessageRole = Schema.Literals([
 ]);
 export type ProactivityMessageRole = typeof ProactivityMessageRole.Type;
 
-/** The forward-only attention lifecycle shared by every InsightEvent consumer. */
 export const InsightLifecycleState = Schema.Literals(["pending", "delivered", "read", "dismissed"]);
 export type InsightLifecycleState = typeof InsightLifecycleState.Type;
 
-/**
- * One immutable generated occurrence plus its current lifecycle state. Context
- * is captured here rather than read from current User preferences later.
- */
 export const InsightEvent = Schema.Struct({
   id: InsightEventId,
   kind: InsightKind,
@@ -72,19 +62,16 @@ export const InsightEvent = Schema.Struct({
 }).annotate({ identifier: "InsightEvent" });
 export type InsightEvent = typeof InsightEvent.Type;
 
-/** Trusted generation facts; the operation supplies identity and starts lifecycle at pending. */
 export const InsightGenerationInput = InsightEvent.mapFields(
   Struct.omit(["id", "lifecycleState"])
 ).annotate({ identifier: "InsightGenerationInput" });
 export type InsightGenerationInput = typeof InsightGenerationInput.Type;
 
-/** Stable identity of one append-only provider send record. */
 export const DeliveryAttemptId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("DeliveryAttemptId"))
   .annotate({ identifier: "DeliveryAttemptId" });
 export type DeliveryAttemptId = typeof DeliveryAttemptId.Type;
 
-/** Evidence supplied after an external consumer actually attempted a send. */
 export const InsightDeliveryAttempt = Schema.Struct({
   id: DeliveryAttemptId,
   insightEventId: InsightEventId,
@@ -93,7 +80,6 @@ export const InsightDeliveryAttempt = Schema.Struct({
 }).annotate({ identifier: "InsightDeliveryAttempt" });
 export type InsightDeliveryAttempt = typeof InsightDeliveryAttempt.Type;
 
-/** Provider evidence supplied by a consumer; ids are assigned from operation context. */
 export const DeliveryEvidenceInput = InsightDeliveryAttempt.mapFields(
   Struct.omit(["id", "insightEventId"])
 ).annotate({ identifier: "DeliveryEvidenceInput" });
@@ -103,7 +89,6 @@ export class InsightNotFound extends Data.TaggedError("InsightNotFound")<{
   readonly insightEventId: InsightEventId;
 }> {}
 
-/** A requested lifecycle movement would move backward or repeat the current state. */
 export class InvalidInsightTransition extends Data.TaggedError("InvalidInsightTransition")<{
   readonly current: InsightLifecycleState;
   readonly target: InsightLifecycleState;
@@ -112,7 +97,6 @@ export class InvalidInsightTransition extends Data.TaggedError("InvalidInsightTr
 
 export type InsightFailure = InsightNotFound | InvalidInsightTransition;
 
-/** A start-inclusive, end-exclusive financial reporting interval. */
 export const InsightPeriod = Schema.Struct({
   from: UtcTimestamp,
   toExclusive: UtcTimestamp,
@@ -127,7 +111,6 @@ export const InsightPeriod = Schema.Struct({
   .annotate({ identifier: "InsightPeriod" });
 export type InsightPeriod = typeof InsightPeriod.Type;
 
-/** Consecutive seven-local-day periods anchored to the original scheduled instant. */
 export const WeeklyPeriods = Schema.Struct({
   current: InsightPeriod,
   previous: InsightPeriod,
@@ -142,7 +125,6 @@ export const WeeklyPeriods = Schema.Struct({
   .annotate({ identifier: "WeeklyPeriods" });
 export type WeeklyPeriods = typeof WeeklyPeriods.Type;
 
-/** Weekly wall-clock instructions; weekday uses Sunday=0 through Saturday=6. */
 export const WeeklyTiming = Schema.Struct({
   weekday: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 6 })),
   hour: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 23 })),
@@ -150,7 +132,6 @@ export const WeeklyTiming = Schema.Struct({
 }).annotate({ identifier: "WeeklyTiming" });
 export type WeeklyTiming = typeof WeeklyTiming.Type;
 
-/** One User-owned weekly instruction; execution advancement never changes its revision or retained reports. */
 export const WeeklySchedule = Schema.Struct({
   id: ScheduleId,
   version: ScheduleVersion,
@@ -163,7 +144,6 @@ export const WeeklySchedule = Schema.Struct({
 }).annotate({ identifier: "WeeklySchedule" });
 export type WeeklySchedule = typeof WeeklySchedule.Type;
 
-/** A real ISO local calendar date; it carries no instant or implicit time zone. */
 export const ReminderAnchorDate = Schema.String.check(
   Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u),
   Schema.makeFilter((value) => {
@@ -175,7 +155,6 @@ export const ReminderAnchorDate = Schema.String.check(
 ).annotate({ identifier: "ReminderAnchorDate" });
 export type ReminderAnchorDate = typeof ReminderAnchorDate.Type;
 
-/** Captured local date and midnight window; equal labels with different windows are different days. */
 export const ConfirmationDay = Schema.Struct({
   localDate: ReminderAnchorDate,
   timeZone: IanaTimeZone,
@@ -195,7 +174,6 @@ export const ConfirmationDay = Schema.Struct({
   .annotate({ identifier: "ConfirmationDay" });
 export type ConfirmationDay = typeof ConfirmationDay.Type;
 
-/** Immutable itemized detection facts; Counterparty is captured at confirmation, never substituted later. */
 export const RecurringDigestItem = Schema.Struct({
   confirmationId: RecurringSeriesConfirmed.fields.id,
   seriesId: RecurringSeriesConfirmed.fields.seriesId,
@@ -214,7 +192,6 @@ const digestItemPrecedes = (previous: DigestItemView, item: DigestItemView): boo
   if (previous.counterparty !== item.counterparty) return previous.counterparty < item.counterparty;
   return previous.confirmationId < item.confirmationId;
 };
-/** Complete, nonempty, identity-unique historical items ordered by Currency, Counterparty and confirmation identity. */
 export const RecurringDigestPayload = Schema.Struct({
   confirmationDay: ConfirmationDay,
   items: Schema.NonEmptyArray(RecurringDigestItem),
@@ -242,7 +219,6 @@ export const RecurringDigestPayload = Schema.Struct({
   .annotate({ identifier: "RecurringDigestPayload" });
 export type RecurringDigestPayload = typeof RecurringDigestPayload.Type;
 
-/** Frozen complete historical report; delivery and attention state are separate historical facts. */
 export const RecurringDigestReport = Schema.Struct({
   insightEventId: InsightEventId,
   serviceMarket: ServiceMarket,
@@ -253,7 +229,6 @@ export const RecurringDigestReport = Schema.Struct({
 }).annotate({ identifier: "RecurringDigestReport" });
 export type RecurringDigestReport = typeof RecurringDigestReport.Type;
 
-/** Direct launch presets. Three-day intervals count calendar dates from the retained anchor. */
 export const ReminderCadence = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("daily") }),
   Schema.Struct({ kind: Schema.Literal("weekdays") }),
@@ -262,14 +237,12 @@ export const ReminderCadence = Schema.Union([
 ]).annotate({ identifier: "ReminderCadence" });
 export type ReminderCadence = typeof ReminderCadence.Type;
 
-/** Wall-clock reminder time, interpreted only in the explicitly captured schedule zone. */
 export const ReminderTiming = Schema.Struct({
   hour: WeeklyTiming.fields.hour,
   minute: WeeklyTiming.fields.minute,
 }).annotate({ identifier: "ReminderTiming" });
 export type ReminderTiming = typeof ReminderTiming.Type;
 
-/** One User-owned reminder instruction. Execution advancement keeps its revision; later edits never reinterpret captured occurrences. */
 export const ReminderSchedule = Schema.Struct({
   id: ScheduleId,
   version: ScheduleVersion,
@@ -283,7 +256,6 @@ export const ReminderSchedule = Schema.Struct({
 }).annotate({ identifier: "ReminderSchedule" });
 export type ReminderSchedule = typeof ReminderSchedule.Type;
 
-/** Complete conversational timing edit; the expected instruction revision prevents silently overwriting another edit. */
 export const ReminderScheduleEdit = Schema.Struct({
   expectedVersion: ScheduleVersion,
   cadence: ReminderCadence,
@@ -294,7 +266,6 @@ export type ReminderScheduleEdit = typeof ReminderScheduleEdit.Type;
 
 const reminderPauseAfter = 5;
 
-/** Reminder-only ignored-delivery standing. Pending questions suspend the additional-ignore counter, not scheduled reminders; pausing does not revoke legal Consent. */
 export const ReminderStanding = Schema.Union([
   Schema.TaggedStruct("Attentive", { unanswered: Schema.Literals([0, 1, 2]) }),
   Schema.TaggedStruct("QuestionPending", { unanswered: Schema.Literal(3) }),
@@ -306,7 +277,6 @@ export const ReminderStanding = Schema.Union([
 ]).annotate({ identifier: "ReminderStanding" });
 export type ReminderStanding = typeof ReminderStanding.Type;
 
-/** Temporal eligibility only; every Ready attempt still needs live Consent, identity and admission. */
 export const InsightDeliveryDecision = Schema.Union([
   Schema.TaggedStruct("Ready", {}),
   Schema.TaggedStruct("Deferred", { nextEligibleAt: UtcTimestamp }),
@@ -314,5 +284,4 @@ export const InsightDeliveryDecision = Schema.Union([
 ]).annotate({ identifier: "InsightDeliveryDecision" });
 export type InsightDeliveryDecision = typeof InsightDeliveryDecision.Type;
 
-/** Identifier-only path declaration for the authenticated complete historical report. */
 export const RecurringDigestReportParams = Schema.Struct({ id: InsightEventId });

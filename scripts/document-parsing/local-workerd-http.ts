@@ -162,13 +162,10 @@ const requestProof = (
     { signal: options.signal }
   );
 
-/** Sends a bounded loopback request to the local proof runtime. */
 export const requestWorkerd = (options: WorkerdRequest): Promise<Response> => requestProof(options);
 
-/** Sends a bounded request to the owned HTTPS Cloudflare Preview. */
 export const requestHostedProof = (
   options: WorkerdRequest & Readonly<{ origin: string }>
 ): Promise<Response> => requestProof(options, Option.some(options.origin));
 
-/** Releases the local-only HTTP runtime when the proof process is finished. */
 export const closeWorkerdHttp = (): Promise<void> => runtime.dispose();

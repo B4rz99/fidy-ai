@@ -216,7 +216,6 @@ const requestEmailReplacement = HttpApiEndpoint.post(
     OpenApi.Description,
     "Request verification of a replacement mailbox after User confirmation. Pending may mean existing work was preserved; it does not prove admission or delivery."
   )
-  // Standalone: the mailbox challenge and outbox share their own atomic unit (ADR 0027).
   .annotate(AtomicBatchEligible, false)
   .annotateMerge(
     operationPolicy({
@@ -247,7 +246,6 @@ const completeEmailReplacement = HttpApiEndpoint.post(
     OpenApi.Description,
     "Verify the candidate mailbox and replace the one VerifiedEmailCredential under a fresh WebSession."
   )
-  // Standalone: the single-use proof and credential swap share their own atomic unit (ADR 0027).
   .annotate(AtomicBatchEligible, false)
   .annotateMerge(
     operationPolicy({

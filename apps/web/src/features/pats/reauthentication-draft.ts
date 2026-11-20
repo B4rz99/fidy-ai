@@ -1,7 +1,6 @@
 import { Clock, Duration, Effect, Option, Schema } from "effect";
 import { ManualPATGrantInput, User } from "@/transport/client";
 
-/** Only editable grant choices survive this handoff. Bearers and request proofs never do. */
 export const PATDraft = Schema.Struct({
   recipientLabel: ManualPATGrantInput.fields.recipientLabel,
   scopes: ManualPATGrantInput.fields.scopes,
@@ -19,7 +18,6 @@ const handoffMinutes = 20;
 const lifetimeMilliseconds = Duration.toMillis(Duration.minutes(handoffMinutes));
 const maximumBytes = 2048;
 
-/** Called only from an explicit identity-confirmation action, never from render. */
 export const preservePATDraft = ({
   userId,
   draft,
@@ -40,7 +38,6 @@ export const preservePATDraft = ({
   }
 };
 
-/** Consume once after resolving the authenticated User. Changed accounts discard the draft. */
 export const resumePATDraft = (userId: string): Option.Option<PATDraft> => {
   try {
     const raw = window.sessionStorage.getItem(key);

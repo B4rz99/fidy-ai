@@ -40,10 +40,6 @@ export const freshWidgetId = (): WidgetId => {
 export type DashboardCatalogEntry =
   CanonicalSuccess<"dashboard.listDashboardCatalog">["data"][number];
 
-/**
- * Closed browser interaction vocabulary. Values remain untrusted until compilation decodes the
- * resulting canonical DashboardEdit; a successful result is ready for the typed client.
- */
 export type DashboardGesture =
   | Readonly<{ kind: "move-widget"; widgetId: WidgetId; target: DashboardDropTarget }>
   | Readonly<{ kind: "swap-widgets"; widgetId: WidgetId; withWidgetId: WidgetId }>
@@ -112,7 +108,6 @@ const editFor = (
   }
 };
 
-/** Compiles exactly one UI gesture and proves it against the server-owned DashboardEdit schema. */
 export const compileDashboardGesture = (
   gesture: Readonly<DashboardGesture>
 ): Result.Result<CanonicalDashboardEdit, Schema.SchemaError> =>

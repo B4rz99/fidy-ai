@@ -413,7 +413,6 @@ const makeStructuredBehavior = <Output>(
   return makePreparedStructuredAuthority({ execute, discard });
 };
 
-/** @internal */
 export const hostedStructuredCompactionObjectName = "compacted_conversation";
 
 const hostedStructuredObjectNames: Readonly<Record<HostedStructuredPurpose, string>> = {

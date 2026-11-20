@@ -12,7 +12,6 @@ export {
   HostedTurnProgressRequest,
 } from "@fidy/server/hosted-turn-api";
 
-/** Browser-only reply/receipt channel; loading it never constructs the canonical API catalog. */
 export type HostedTurnClient = AtomHttpApi.AtomHttpApiClient<
   never,
   "@fidy/web/HostedTurnClient",

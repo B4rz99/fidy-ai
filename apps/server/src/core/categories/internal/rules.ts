@@ -23,7 +23,6 @@ type KeywordCategoryInput<Category extends string> = Readonly<{
   readonly rules: ReadonlyArray<CategoryRule<Category>>;
 }>;
 
-/** Selects the longest matching rule; lexical rule identity resolves equal-specificity ties. */
 export const findKeywordCategory = <Category extends string>(
   input: KeywordCategoryInput<Category>
 ): Effect.Effect<Option.Option<Category>> => {
@@ -69,7 +68,6 @@ type KnownCategories<Category extends string> = Readonly<{
   readonly keywordRule: Option.Option<Category>;
 }>;
 
-/** Selects an explicit Category before a User rule; None leaves the model fallback available. */
 export const findKnownCaptureCategory = <Category extends string>(
   choices: KnownCategories<Category>
 ): Effect.Effect<Option.Option<Category>> =>

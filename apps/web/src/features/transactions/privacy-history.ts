@@ -78,7 +78,6 @@ const browse = ({
   return result("complete");
 };
 
-/** Fresh privacy reads own each page in the authentication registry; no receipt or financial data enters local storage. */
 export const privacyTransactionHistory = (client: WebAuthClient): PrivacyHistory => {
   const navigation = Atom.make({ generation: 0, pages: 1 });
   const pages = Atom.family((key: PageKey): PageAtom =>

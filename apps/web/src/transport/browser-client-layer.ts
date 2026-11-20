@@ -11,7 +11,6 @@ export type BrowserClientOptions = Readonly<{ apiOrigin: string }> &
   (Readonly<{ session: BrowserSessionLifetime }> | Readonly<Record<never, never>>) &
   (Readonly<{ httpClient: Layer.Layer<HttpClient.HttpClient> }> | Readonly<Record<never, never>>);
 
-/** Apply the same bounded transport and immutable session ownership to each declared browser channel. */
 export const browserClientLayer = (
   options: BrowserClientOptions & Readonly<{ boundary: BrowserHttpBoundary }>
 ): Layer.Layer<HttpClient.HttpClient> => {

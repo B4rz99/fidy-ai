@@ -32,7 +32,6 @@ const existingWidgetGesture = (
     ? { kind: "swap-widgets", widgetId: source.widgetId, withWidgetId: target.widgetId }
     : { kind: "move-widget", widgetId: source.widgetId, target };
 
-/** A completed library interaction emits at most one application gesture. */
 export const resolveDashboardDrop = ({
   canceled,
   makeWidgetId,

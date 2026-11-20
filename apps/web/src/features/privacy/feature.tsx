@@ -230,7 +230,6 @@ const SavedTransactionsLink = (): JSX.Element => (
   </section>
 );
 
-/** Cookie-only privacy control; ordinary product access is not a prerequisite for withdrawal or its receipt. */
 export const PrivacyFeature = (): JSX.Element => {
   const client = useRouter().options.context.webAuthClient;
   const [query] = useState(() =>

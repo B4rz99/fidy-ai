@@ -229,7 +229,6 @@ const handleProfileMessage = (
   }
 };
 
-/** Profiles one supplied HTTP request and returns its response plus sampled non-idle V8 time. */
 export const profileWorkerRequest = ({
   debuggerUrl,
   sendRequest,
@@ -264,7 +263,6 @@ export const profileWorkerRequest = ({
   );
 };
 
-/** Reads current retained V8 heap bytes from a workerd DevTools target. */
 export const heapUsage = ({
   debuggerUrl,
   signal,

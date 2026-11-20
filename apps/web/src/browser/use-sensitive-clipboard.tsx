@@ -40,21 +40,12 @@ const makeMountedClipboard = (lifetime: Duration.Input): MountedSensitiveClipboa
   return { lifecycleRef, command };
 };
 
-/**
- * Configures one mounted command owner. `lifetime` is fixed at mount; replace the boundary to use a
- * different value. Children receive commands that become inert after unmount, and `className`
- * styles the rendered boundary element.
- */
 export type SensitiveClipboardBoundaryProps = Readonly<{
   children: (clipboard: SensitiveClipboard) => ReactNode;
   className: Option.Option<string>;
   lifetime: Duration.Input;
 }>;
 
-/**
- * Provides sensitive clipboard commands whose timers and callbacks are owned by this mounted
- * boundary. Replacing or unmounting it immediately disables the commands and starts secret cleanup.
- */
 export const SensitiveClipboardBoundary = ({
   children,
   className,

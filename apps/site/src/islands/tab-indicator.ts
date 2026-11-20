@@ -12,7 +12,6 @@ export const moveIndicator = ({
   indicator.style.transform = `translate(${tab.offsetLeft}px, ${tab.offsetTop + tab.offsetHeight - 3}px) scaleX(${tab.offsetWidth})`;
 };
 
-/** Resize repositions immediately; unmount releases the observer. */
 export const mountIndicator = (list: HTMLDivElement): (() => void) => {
   const position = (): void => {
     const active = list.querySelector<HTMLButtonElement>('[aria-selected="true"]');

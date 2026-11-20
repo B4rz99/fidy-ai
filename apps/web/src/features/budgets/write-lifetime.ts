@@ -21,7 +21,6 @@ const makeWriteOwner = (): Readonly<{ version: () => number; advance: () => void
   };
 };
 const initialContext = Option.none<BudgetWriteContext>();
-/** Bridge committed read admission to retained event callbacks; disposal only retires local work. */
 export const useBudgetWriteLifetime = (
   context: BudgetWriteContext
 ): Readonly<{

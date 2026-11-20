@@ -15,7 +15,6 @@ export type AuditLogEntryId = typeof AuditLogEntryId.Type;
 export const AuditOutcome = Schema.Literals(["succeeded", "rejected", "failed"]);
 export type AuditOutcome = typeof AuditOutcome.Type;
 
-/** Exactly one credential-neutral source of canonical-call authority. */
 export const AuditCaller = Schema.Union([
   Schema.TaggedStruct("PAT", { patId: PATId }),
   Schema.TaggedStruct("OAuthAgent", {
@@ -28,11 +27,6 @@ export const AuditCaller = Schema.Union([
 ]).annotate({ identifier: "AuditCaller" });
 export type AuditCaller = typeof AuditCaller.Type;
 
-/**
- * Metadata-only evidence for one canonical call. It identifies the stable User,
- * authority source, operation, outcome, and UTC occurrence without retaining a
- * request, response, bearer, or financial value.
- */
 export const AuditLogEntry = Schema.Struct({
   id: AuditLogEntryId,
   subjectUserId: UserId,
@@ -43,7 +37,6 @@ export const AuditLogEntry = Schema.Struct({
 }).annotate({ identifier: "AuditLogEntry" });
 export type AuditLogEntry = typeof AuditLogEntry.Type;
 
-/** Bounded metadata-only activity for an OAuthConnection's settings projection, never call bodies. */
 export const OAuthRecentActivity = Schema.Array(
   Schema.Struct({
     id: AuditLogEntryId,
@@ -56,14 +49,12 @@ export type OAuthRecentActivity = typeof OAuthRecentActivity.Type;
 
 export const maximumPATActivityEntries = 50;
 
-/** Retained canonical PAT outcomes; no request, credential, attribution, or error prose is exposed. */
 export const PATActivityEntry = Schema.Struct({
   operation: AuditLogEntry.fields.operation,
   outcome: AuditLogEntry.fields.outcome,
   occurredAt: AuditLogEntry.fields.occurredAt,
 }).annotate({ identifier: "PATActivityEntry" });
 
-/** A bounded retained history, never a claim that earlier activity did not occur. */
 export const PATActivityHistory = Schema.Struct({
   entries: Schema.Array(PATActivityEntry).check(Schema.isMaxLength(maximumPATActivityEntries)),
   hasMore: Schema.Boolean,

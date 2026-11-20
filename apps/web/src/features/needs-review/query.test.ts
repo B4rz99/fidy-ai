@@ -58,7 +58,6 @@ it.live.each(["workspace", "count"] as const)(
             });
       expect(panel.source).toBe(badge.source);
       expect(panel.active).toBe(badge.active);
-      // React reads its snapshot during render, before subscribing in the commit.
       registry.get(badge.active);
       yield* Effect.sleep("20 millis");
       const unmount = [registry.mount(badge.active), registry.mount(panel.active)];

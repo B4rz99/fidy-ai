@@ -15,3 +15,12 @@ limit is fail closed, visible in typed evidence, and enforced before the next re
 The Cloudflare adapter owns platform admission and retention. The server package owns only the pure
 allowance decisions and provider-neutral schemas; it does not implement a webhook verifier, a replay
 ledger, a local queue, or a process-local rate limiter.
+
+## Bound source projections before interpretation
+
+Apply the Free media and notification-email caps per Bogotá calendar month and bound deferred
+and unfinished email work independently. Finish envelope metadata and inline-image retrieval
+inside the lease sub-window. Limit recipients and transport lines before User address resolution.
+HTML receives a larger budget than plain text to allow markup overhead. Bound each decoded inline
+image, aggregate image bytes, individual dimensions, and total pixel allocation before
+interpretation.

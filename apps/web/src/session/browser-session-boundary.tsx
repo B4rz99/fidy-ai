@@ -6,7 +6,6 @@ import type { BrowserSessionObservation } from "@/transport/session-entry";
 import { useSession } from "./session-context";
 import { type BindingState, observeBinding } from "./session-observer";
 
-/** Mount authenticated owners only after latching identity; resume never silently adopts another User. */
 export const BrowserSessionBoundary = ({
   apiOrigin,
   initial,

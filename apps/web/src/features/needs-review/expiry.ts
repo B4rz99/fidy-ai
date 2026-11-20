@@ -4,7 +4,6 @@ import { Atom } from "effect/reactivity";
 import type { Item } from "./model";
 
 const maximumTimerMilliseconds = 2_147_483_647;
-/** One registry-owned timer per deadline; long retention periods rearm safely. */
 const deadlineSnapshot = Atom.family((deadline: number) =>
   Atom.make((get): number => {
     const remaining = deadline - DateTime.toEpochMillis(DateTime.nowUnsafe());
@@ -33,7 +32,6 @@ export const useReviewExpired = (item: Item): boolean => {
   return expired === 0 || reviewHasExpired(item);
 };
 
-/** Wake page-local search when the next retained original or draft reaches its deadline. */
 export const useReviewPageExpiry = (items: ReadonlyArray<Pick<Item, "expiresAt">>): void => {
   const current = DateTime.toEpochMillis(DateTime.nowUnsafe());
   const next = items.reduce((nearest, item) => {

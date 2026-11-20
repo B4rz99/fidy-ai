@@ -1,4 +1,3 @@
-/* Neutral, fixed-size test chrome; intentionally independent of the UI under test. */
 .recurring-stress-controls {
   --spacing: 4px;
   --muted: #e5e5e5;

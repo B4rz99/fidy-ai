@@ -319,7 +319,6 @@ export const PATPairingPublicCodeInput = Schema.String.pipe(
   )
 );
 
-/** Fixed server-owned PATPairing lifetime. */
 export const patPairingLifetime = "10 minutes" as const;
 
 /** Minimum cadence advertised to a User-owned client polling a PATPairing. */

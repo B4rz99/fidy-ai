@@ -44,7 +44,6 @@ const preparedResult = (
     })
   );
 
-/** Start once per document. Replay belongs only to the same mounted observer, never another epoch. */
 export const beginInitialBrowserSession = ({
   apiOrigin,
   context,

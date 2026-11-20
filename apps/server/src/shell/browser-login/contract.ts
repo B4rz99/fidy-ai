@@ -46,7 +46,6 @@ export class BrowserLoginPairingApprovalRejected
   readonly canonicalOutcome = "rejected" as const;
 }
 
-/** Generic rejection carrying the stable delay before this User may try another code. */
 export class BrowserLoginPairingApprovalRateLimited
   extends Schema.Error<
     BrowserLoginPairingApprovalRateLimited,

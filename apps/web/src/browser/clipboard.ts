@@ -2,10 +2,8 @@ import { Data, Effect, Function, Option } from "effect";
 
 export class ClipboardAccessFailed extends Data.TaggedError("ClipboardAccessFailed")<{}> {}
 
-/** Read capability modeled separately because browsers may deny it while allowing writes. */
 export type ClipboardReader = Readonly<{ readText: () => Promise<string> }>;
 
-/** Write capability whose rejected Promise represents browser or permission failure. */
 export type ClipboardWriter = Readonly<{ writeText: (text: string) => Promise<void> }>;
 
 export type BrowserClipboard = ClipboardReader & ClipboardWriter;

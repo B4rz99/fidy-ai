@@ -109,7 +109,6 @@ const calendarMonth = Schema.makeFilter<{
       };
 });
 
-/** Exact half-open UTC bounds of one calendar month in an explicitly applied zone. */
 export const AppliedBudgetMonth = Schema.Struct({
   from: UtcTimestamp,
   to: UtcTimestamp,
@@ -251,7 +250,6 @@ const hasExactBudgetProgress = ({ cap, spent, status }: BudgetProgressFact): boo
   return hasExactBudgetStatus(cap, spent, status);
 };
 
-/** Exact progress over decoded Money, shared by monthly status and Dashboard projections. */
 export const BudgetProgress = Schema.Struct({
   cap: Money,
   spent: Money,
@@ -330,7 +328,6 @@ export const BudgetStatusQueryValues = Schema.Struct({
   timeZone: IanaTimeZone,
 });
 
-/** Canonical URL filters; Category and Currency are optional and the IANA zone is explicit. */
 export const BudgetStatusQueryParameters = Schema.Struct({
   categoryId: Schema.optionalKey(BudgetStatusQueryValues.fields.categoryId),
   currency: Schema.optionalKey(BudgetStatusQueryValues.fields.currency),
@@ -353,18 +350,15 @@ export const BudgetMonthLatch = Schema.Struct({
 }).annotate({ identifier: "BudgetMonthLatch" });
 export type BudgetMonthLatch = typeof BudgetMonthLatch.Type;
 
-/** The requested Budget is absent or does not belong to the current User. */
 export class BudgetNotFound extends Data.TaggedError("BudgetNotFound")<{
   readonly budgetId: BudgetId;
 }> {}
 
-/** Another Budget already owns this User/Category/Currency scope. */
 export class BudgetAlreadyExists extends Data.TaggedError("BudgetAlreadyExists")<{
   readonly categoryId: CategoryId;
   readonly currency: Currency;
 }> {}
 
-/** A Budget's denomination cannot be changed in place. */
 export class BudgetCurrencyImmutable extends Data.TaggedError("BudgetCurrencyImmutable")<{
   readonly expected: Currency;
   readonly received: Currency;

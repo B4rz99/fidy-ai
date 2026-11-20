@@ -9,7 +9,6 @@
   font-style: normal;
   font-display: swap;
 }
-/* Prefer the Latin subset; the original face keeps all other script coverage. */
 @font-face {
   font-family: Poppins;
   src: url("./ui/fonts/Poppins-Regular-Latin.woff2") format("woff2");

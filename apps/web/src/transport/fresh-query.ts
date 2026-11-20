@@ -7,9 +7,6 @@ type Request = { claimed: boolean; retired: boolean; completion: Deferred.Deferr
 type FreshRead = (registry: AtomRegistry.AtomRegistry) => Effect.Effect<boolean>;
 const freshReads = new WeakMap<object, FreshRead>();
 
-/** A strict read starts a new invocation in this registry. Failure, supersession and disposal
- * cannot certify recovery; ordinary display values and refresh policy remain independent.
- */
 type FreshOptions<R, ER, A, E> = Readonly<{
   runtime: Atom.AtomRuntime<R, ER>;
   load: Effect.Effect<A, E, R>;
@@ -101,7 +98,6 @@ export const makeFreshQuery = <R, ER, A, E>(
   return query;
 };
 
-/** Associate a retained/SWR projection with its real loader, retiring supplied initial data first. */
 export const forwardFreshQuery = <A, E>(
   options: Readonly<{
     query: Query<A, E>;

@@ -79,7 +79,6 @@ const completeLogin = Effect.fn(function* (
   return yield* new CliFailure({ reason: "Expired" });
 });
 
-/** Owns one non-resumable pairing. Only public progress and persisted safe grant facts escape. */
 export const login = Effect.fn(
   (
     input: unknown,
@@ -98,7 +97,6 @@ export const login = Effect.fn(
     })
 );
 
-/** Carries only the public identity to the fixed first-party approval page. */
 const approvalUrl = (publicCode: StartedPATPairing["publicCode"]): string =>
   `${approvalPageUrl}?cliCode=${encodeURIComponent(publicCode)}`;
 

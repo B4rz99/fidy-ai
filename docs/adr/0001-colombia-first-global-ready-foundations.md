@@ -72,3 +72,12 @@ Rejected because there is no second enabled ServiceMarket against which to valid
 abstractions. It
 would obscure simple Colombian behaviour, create invalid generic concepts, and increase operational
 scope without making current records more truthful.
+
+## Context and Money encodings
+
+Use named IANA time zones so calendar calculations retain daylight-saving rules. Keep the active
+ISO 4217 Currency table and ordinary fractional precision as one static snapshot. Wire amounts
+use normalized plain decimal text to preserve exact precision across JSON, including values for
+which the underlying decimal formatter uses exponent notation. Reject malformed text through
+decoding. A valid zero does not by itself prove that a financial movement occurred. Group inflows
+and outflows independently by Currency and omit empty groups.

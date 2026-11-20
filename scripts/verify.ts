@@ -86,6 +86,7 @@ const checks: Array<Check> = [
     env: Bun.env,
   },
   rootCheck("static", "Lint rule regressions", ["bun", "run", "lint:rules"]),
+  rootCheck("static", "Code comments", ["bun", "run", "lint:comments"]),
   rootCheck("static", "Lint suppressions", ["bun", "run", "lint:suppressions"]),
   rootCheck("static", "oxlint type-aware", ["bun", "run", "lint:type-aware"]),
   rootCheck("static", "Format", ["bun", "run", "format:check"]),

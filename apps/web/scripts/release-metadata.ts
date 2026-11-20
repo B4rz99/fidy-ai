@@ -1,12 +1,10 @@
 import { Schema } from "effect";
 
-/** Exact lowercase Git commit identity embedded in a deployed static artifact. */
 export const GitRevision = Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/u))
   .pipe(Schema.brand("GitRevision"))
   .annotate({ identifier: "GitRevision" });
 export type GitRevision = typeof GitRevision.Type;
 
-/** Exact lowercase canonical-contract digest embedded in a deployed static artifact. */
 export const ContractDigest = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u))
   .pipe(Schema.brand("ContractDigest"))
   .annotate({ identifier: "ContractDigest" });
@@ -32,7 +30,6 @@ const decodeIdentity = <Identity>(
 
 type ReleaseMetadataOptions = Readonly<{ gitRevision: string; contractDigest: string }>;
 
-/** Returns an exact release identity or throws when either value is not full lowercase hex. */
 export const releaseMetadata = ({
   gitRevision,
   contractDigest,

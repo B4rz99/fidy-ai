@@ -26,7 +26,6 @@ entry=zipfile.ZipInfo(name,date_time=(1980,1,1,0,0,0))
 entry.create_system=3
 entry.external_attr=(stat.S_IFREG | 0o755) << 16
 entry.compress_type=zipfile.ZIP_STORED
-# Stored bytes avoid host zlib versions and source mtimes changing the release digest.
 with zipfile.ZipFile(archive,'w') as bundle:
     bundle.writestr(entry,(root/target/name).read_bytes())
 digest=hashlib.sha256(archive.read_bytes()).hexdigest()

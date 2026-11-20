@@ -2,10 +2,6 @@ import { installedOrigins, isHttpOrigin } from "@fidy/server/browser-transport";
 
 const originConfigurationMessage = "VITE_API_ORIGIN must be an HTTP origin";
 
-/**
- * Parses required browser configuration as one credential-free HTTP(S) API origin. Paths, queries,
- * fragments, credentials, and non-URL values fail closed before the transport is constructed.
- */
 export const parseApiOrigin = (configured: unknown): string => {
   if (typeof configured !== "string" || configured.length === 0) {
     throw new Error(originConfigurationMessage);
@@ -22,7 +18,6 @@ export const parseApiOrigin = (configured: unknown): string => {
   }
 };
 
-/** Select the matched API for the installed host pair before constructing the browser transport. */
 export const browserApiOrigin = ({
   configured,
   browserOrigin,

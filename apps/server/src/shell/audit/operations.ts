@@ -199,16 +199,13 @@ export const recordClaimedPAT: typeof patEvidence.recordClaimedPAT = (input) =>
 /** Account for PAT-list access under the exact live User-owned session. */
 export const recordPATList: typeof patEvidence.recordPATList = (input) =>
   patEvidence.recordPATList(input);
-/** Append revocation evidence naming the exact User-owned PAT just revoked. */
 export const recordOnePATRevocation: typeof patEvidence.recordOnePATRevocation = (input) =>
   patEvidence.recordOnePATRevocation(input);
 /** Append revoke-all evidence under the same fresh User decision as its credential transition. */
 export const recordAllPATRevocations: typeof patEvidence.recordAllPATRevocations = (input) =>
   patEvidence.recordAllPATRevocations(input);
-/** Append canonical-call evidence under the exact live authority supplied by the PAT owner. */
 export const recordCanonicalPATWork: typeof patEvidence.recordCanonicalPATWork = (input) =>
   patEvidence.recordCanonicalPATWork(input);
-/** Append a refused canonical call under the live authority that attempted it. */
 export const recordRejectedPATWork: typeof patEvidence.recordRejectedPATWork = (input) =>
   patEvidence.recordRejectedPATWork(input);
 

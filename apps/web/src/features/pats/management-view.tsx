@@ -466,7 +466,6 @@ const PATManagementFeedback = ({
     ),
   });
 
-/** Shows active-only metadata and distinguishes command receipts from current observations. */
 export const ActivePATManagementView = ({
   state,
   task,

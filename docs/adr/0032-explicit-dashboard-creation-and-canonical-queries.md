@@ -49,3 +49,16 @@ Focused Worker/D1/coordinator tests cover absence, corruption, initialized ident
 preservation, read-only PAT refusal with no partial effects, two-User isolation and exact snapshots.
 Built-web journeys cover existing/fresh/concurrent first use and initialization/read refusals.
 These are local/emulated acceptance evidence, not a Production deployment or live provider claim.
+
+## Layout and metric invariants
+
+The persisted layout is a recursive split tree with one stable identity per Widget. Root resize
+is invalid because a weight has meaning relative to siblings. Canonical leaf order supplies the
+mobile layout. A region edit identifies its exact current leaf set so the same coordinates cannot
+silently apply to a different region after another edit. Moving retains identity and configuration.
+Removing the final Widget fails. Catalog templates acquire identity when added, and a newly
+initialized document uses the ordered four-Widget starter layout.
+
+Projection calculations use half-open UTC calendar spans resolved in the applied IANA zone.
+Keep directional exact amounts separated by Currency through grouping and final metric
+calculation. Budget bars observe exact outflows in the selected Category and Currency.

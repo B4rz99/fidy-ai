@@ -6,19 +6,15 @@ import {
   maximumEmailDeliveryGenerations,
 } from "./contract";
 
-/** Uniform 32-symbol alphabet without visually ambiguous I, O, 0, or 1. */
 export const emailCodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" as const;
 const maximumWrongProofAttempts = 5;
 
-/** Returns the exact end of a 24-hour bounded email-control workflow. */
 export const emailWorkflowExpiry = (startedAt: DateTime.Utc): DateTime.Utc =>
   DateTime.add(startedAt, { hours: 24 });
 
-/** Returns the exact end of a fresh proof's ten-minute half-open validity interval. */
 export const proofExpiry = (generatedAt: DateTime.Utc): DateTime.Utc =>
   DateTime.add(generatedAt, { minutes: 10 });
 
-/** Maps random bytes to unbiased code symbols; 256 is exactly divisible by the alphabet size. */
 export const selectEmailCodeSymbols = (input: {
   readonly bytes: ArrayLike<number>;
   readonly maximum: number;
@@ -28,7 +24,6 @@ export const selectEmailCodeSymbols = (input: {
     .map((byte) => emailCodeAlphabet[byte % emailCodeAlphabet.length])
     .join("");
 
-/** Decides resend/supersession admission from one already-locked replacement workflow. */
 export const decideEmailReplacementRequest = (input: {
   readonly existing: Option.Option<
     Readonly<{
@@ -59,7 +54,6 @@ export const decideEmailReplacementRequest = (input: {
     })
   );
 
-/** Decides whether a locked BrowserLogin email workflow may create its next generation. */
 export const decideBrowserPairingEmailRequest = (input: {
   readonly existing: Option.Option<
     Readonly<{
@@ -83,7 +77,6 @@ export const decideBrowserPairingEmailRequest = (input: {
     ? "Reject"
     : "Continue";
 
-/** Applies the enrollment's half-open lifetime at every owner boundary. */
 export const isEmailEnrollmentExpired = (input: {
   readonly expiresAt: DateTime.Utc;
   readonly attemptedAt: DateTime.Utc;
@@ -104,17 +97,11 @@ const wrongProofDecision = (wrongAttempts: number): ProofAttemptDecision =>
 const liveProofDecision = (input: ProofAttemptInput): ProofAttemptDecision =>
   input.digestMatches ? { _tag: "Accept" } : wrongProofDecision(input.wrongAttempts + 1);
 
-/**
- * Decides one proof attempt from already-locked current-generation state. The caller supplies the
- * stored attempt count and both validity bounds; the result is deterministic and performs no write.
- */
 export const decideProofAttempt = (input: ProofAttemptInput): Effect.Effect<ProofAttemptDecision> =>
   Effect.succeed(hasProofAttemptExpired(input) ? { _tag: "Expired" } : liveProofDecision(input));
 
-/** A fourth wrong proof closes the pending enrollment; later attempts cannot revive it. */
 export const maximumOnboardingProofFailures = 4;
 
-/** A proof is redeemable only during both its own lifetime and the pending enrollment's lifetime. */
 export const canRedeemOnboardingProof = (
   input: Readonly<{
     state: "awaiting_proof" | "awaiting_delivery" | "sending" | "rejected" | "ambiguous";

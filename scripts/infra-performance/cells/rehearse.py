@@ -1,6 +1,7 @@
 """Exercise the comparison through the pinned D1 and native DO ingress with real WebSessions."""
 import argparse
 from contextlib import ExitStack
+from functools import partial
 import hashlib
 import http.cookiejar
 import json
@@ -15,7 +16,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from comparison import BOUNDARIES, FIXTURE, READS, boundaries, offers
+from comparison import BOUNDARIES, FIXTURE, READS, boundaries, checked_history, observe, offers
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "reference"))
@@ -37,9 +38,9 @@ class LocalSubject:
                                                  urllib.request.HTTPSHandler(context=tls), urllib.request.ProxyHandler({}))
         self.binding = None
 
-    def canonical(self, path, body=None, method="GET"):
+    def canonical(self, path, body=None, method="GET", *, bound=True):
         headers = {"Origin": self.origin, "Accept": "application/json"}
-        if self.binding:
+        if bound and self.binding:
             headers["Fidy-Session-Binding"] = self.binding
         if body is not None:
             headers["Content-Type"] = "application/json"
@@ -154,7 +155,104 @@ def survey_costs(subjects, dest):
             time.sleep(max(0, 1 - (time.monotonic() - started)))
 
 
-def compare_fixture(root, baseline, dest, scratch):
+def checked_usd_budget(body):
+    data = json.loads(body)["data"]
+    period = data["period"]
+    stamps = (period["from"], period["to"])
+    if (period["timeZone"] != "America/Bogota"
+            or not all(isinstance(value, str) for value in stamps)
+            or not stamps[0].startswith("2026-11-01T05:00:00")
+            or not stamps[1].startswith("2026-12-01T05:00:00")):
+        raise ValueError("wrong-budget-period")
+    rows = {row["budget"]["id"]: row for row in data["statuses"]}
+    if len(data["statuses"]) != 16 or set(rows) != {
+        f"82000000-0000-4000-8000-{ordinal:012d}" for ordinal in range(17, 33)
+    }:
+        raise ValueError("wrong-budget-currency-or-count")
+    for ordinal in range(17, 33):
+        row = rows[f"82000000-0000-4000-8000-{ordinal:012d}"]
+        budget = row["budget"]
+        amount = 1000 if ordinal in (17, 23, 25) else 0
+        if (budget["categoryId"] != f"10000000-0000-4000-8000-{ordinal-16:012d}"
+                or budget["cap"] != dict(currency="USD", amount="100000")
+                or row["spent"] != dict(currency="USD", amount=str(amount))
+                or row["remaining"] != dict(currency="USD", amount=str(100000 - amount))):
+            raise ValueError("wrong-budget-facts")
+
+
+def checked_review_page(body, ordinals):
+    data = json.loads(body)["data"]
+    items = data["items"]
+    ids = [f"87000000-0000-4000-8000-{ordinal:012d}" for ordinal in ordinals]
+    if (data["total"] != 4 or data["pendingCount"] != 4 or [row["id"] for row in items] != ids
+            or any((row["status"], row["source"], row["reason"], row["timeZone"])
+                   != ("pending", "statement", "mapping-unavailable", "America/Bogota") for row in items)):
+        raise ValueError("wrong-review-page")
+
+
+TIMED_READS = {
+    "transactions.maximum": checked_history,
+    "transactions.selective": partial(checked_history, ordinals=(2,)),
+    "transactions.no-match": partial(checked_history, ordinals=()),
+    "budgets.currency": checked_usd_budget,
+    "review.maximum": partial(checked_review_page, ordinals=range(4)),
+    "review.counts": partial(checked_review_page, ordinals=()),
+    "review.next-page": partial(checked_review_page, ordinals=(2, 3)),
+}
+SURVEY_PAIRS = 30
+
+
+def survey_timing_results(rows, shapes, pairs):
+    return {shape: boundaries([row for row in rows if row["operation"] == shape], pairs, 1)
+            for shape in shapes}
+
+
+def timed_survey(subjects, dest, revisions):
+    plan = dict(scope="isolated authenticated loopback workerd HTTP", revisions=revisions,
+                fixture={**FIXTURE, "revisions": 5}, lifecycle="unobserved", pairs=SURVEY_PAIRS,
+                paths={operation: READS[operation] for operation in TIMED_READS},
+                clock="client monotonic through full body", order="alternating D1/DO pair order",
+                offeredLoad="one pre-scheduled dispatch per second, no overlapping requests",
+                network="ordinary loopback", minRatio=1.8)
+    write(dest / "plan.json", plan)
+    rows, authority = [], {}
+    for subject in subjects.values():
+        prepare_survey(subject)
+    before = {variant: subject.snapshot() for variant, subject in subjects.items()}
+    for operation, verify in TIMED_READS.items():
+        authority[operation] = {variant: subject.canonical(READS[operation], bound=False)[0]
+                                for variant, subject in subjects.items()}
+        write(dest / "authority.json", authority)
+        if set(authority[operation].values()) not in ({401}, {403}):
+            continue
+        start = time.monotonic()
+        for pair in range(SURVEY_PAIRS):
+            order = ("d1", "do") if pair % 2 == 0 else ("do", "d1")
+            for index, variant in enumerate(order):
+                due = start + pair * 2 + index
+                time.sleep(max(0, due - time.monotonic()))
+                subject = subjects[variant]
+                row = observe(lambda _, path: subject.canonical(path), variant, pair, 0,
+                              due, operation, verify)
+                rows.append(dict(operation=operation, **row))
+                write(dest / "attempts.json", rows)
+    accountability = {}
+    expected = dict(reads=SURVEY_PAIRS, corrections=0, units=0, receipts=0)
+    for variant, subject in subjects.items():
+        after = subject.snapshot()
+        accountability[variant] = {key: after[key] - count for key, count in before[variant].items()}
+    cells = survey_timing_results(rows, TIMED_READS, SURVEY_PAIRS)
+    write(dest / "report.json", dict(cells=cells, authority=authority, accountability=accountability,
+                                    transactionListAndCommercialVerified=all(
+                                        actual == expected for actual in accountability.values())))
+    if any(actual != expected for actual in accountability.values()):
+        raise ValueError("Transaction list or commercial accounting differed")
+    if any(cell[field]["status"] != "pass" for cell in cells.values()
+           for field in ("httpMs", "scheduledMs")):
+        raise ValueError("One or more workerd survey timing gates did not pass")
+
+
+def compare_fixture(root, baseline, dest, scratch, *, time_survey=False):
     verify = {"d1": reference.revision(baseline, "d1"), "do": reference.revision(root, "do")}
     certificate = scratch / "tls.crt"
     key = scratch / "tls.key"
@@ -167,7 +265,8 @@ def compare_fixture(root, baseline, dest, scratch):
                 operation="transactions.page", path=READS["transactions.page"], order=["d1", "do", "do", "d1"],
                 boundaries=BOUNDARIES, warmup="Session establishment only", sampleFloor=30,
                 minRatio=1.8, clock="client monotonic", offeredLoad="one isolated User")
-    write(dest / "plan.json", plan)
+    if not time_survey:
+        write(dest / "plan.json", plan)
     rows = []
     costs = []
     coverage = {}
@@ -191,6 +290,10 @@ def compare_fixture(root, baseline, dest, scratch):
             if any(seed.get(k) != v for k, v in FIXTURE.items()):
                 raise ValueError("Fixture count mismatch")
             subjects[variant] = subject
+
+        if time_survey:
+            timed_survey(subjects, dest, verify)
+            return
 
         for index, variant in enumerate(plan["order"]):
             subject = subjects[variant]
@@ -224,8 +327,12 @@ def compare_fixture(root, baseline, dest, scratch):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--d1", type=Path, required=True)
+    parser.add_argument("--time-survey", action="store_true",
+                        help="Measure 30 ordinary HTTP pairs for the remaining read shapes on workerd")
     args = parser.parse_args()
-    destination = reference.ROOT / "apps/server/test-results/storage-http"
+    directory = "storage-http-timing" if args.time_survey else "storage-http"
+    destination = reference.ROOT / "apps/server/test-results" / directory
     destination.mkdir(parents=True, exist_ok=False)
     with tempfile.TemporaryDirectory() as temp:
-        compare_fixture(reference.ROOT, args.d1.resolve(), destination, Path(temp))
+        compare_fixture(reference.ROOT, args.d1.resolve(), destination, Path(temp),
+                        time_survey=args.time_survey)

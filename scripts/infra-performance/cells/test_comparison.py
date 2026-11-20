@@ -19,6 +19,24 @@ class ComparisonTests(unittest.TestCase):
 
 
 class SurveyTests(unittest.TestCase):
+    def test_timed_shapes_keep_their_own_pair_counts_and_refuse_payload_drift(self):
+        from rehearse import survey_timing_results
+
+        shapes = ("transactions.maximum", "review.counts", "budgets.currency")
+        rows = [
+            dict(operation=shape, pair=pair, user=0, variant=variant, ok=True,
+                 bytes=120, digest=shape, httpMs=duration, scheduledMs=duration)
+            for shape, count in zip(shapes, (30, 30, 29))
+            for pair in range(count)
+            for variant, duration in (("d1", 18), ("do", 10))
+        ]
+        rows[119]["digest"] = "different"
+        result = survey_timing_results(rows, shapes, 30)
+        self.assertEqual(result["transactions.maximum"]["httpMs"]["status"], "pass")
+        self.assertEqual(result["transactions.maximum"]["backendMs"]["status"], "missing")
+        self.assertEqual(result["review.counts"]["httpMs"]["status"], "fail")
+        self.assertEqual(result["budgets.currency"]["httpMs"]["status"], "missing")
+
     def test_prepared_dashboard_compares_all_fields_except_its_observation_time(self):
         from rehearse import survey_read
         from unittest.mock import Mock

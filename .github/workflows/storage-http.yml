@@ -16,6 +16,11 @@ on:
       - "scripts/infra-performance/canonical-fixture/**"
       - "scripts/infra-performance/reference/native*.ts"
   workflow_dispatch:
+    inputs:
+      survey_timing:
+        description: Time 30 workerd pairs per standalone HTTP survey shape
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -63,7 +68,9 @@ jobs:
       - name: Create eight Transactions with canonical capture and verify a resumed fixture
         run: python3 scripts/infra-performance/canonical-fixture/rehearse.py --out apps/server/test-results/canonical-fixture
       - name: Measure the paired canonical HTTP read with real Sessions
-        run: python3 scripts/infra-performance/cells/rehearse.py --d1 baseline-d1
+        env:
+          SURVEY_FLAG: ${{ inputs.survey_timing && '--time-survey' || '' }}
+        run: python3 scripts/infra-performance/cells/rehearse.py --d1 baseline-d1 ${SURVEY_FLAG:+"$SURVEY_FLAG"}
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: 15cfe773cd263b6a3d4e1b6e1b958f233cdde84f
@@ -108,6 +115,7 @@ jobs:
             apps/server/test-results/storage-preparation/**/*.json
             apps/server/test-results/storage-preparation/*.json
             apps/server/test-results/storage-http/*.json*
+            apps/server/test-results/storage-http-timing/*.json
             apps/server/test-results/materialized/snapshot-proof.json
             apps/server/test-results/materialized/probe.json
             apps/server/test-results/materialized/refusal.json

@@ -27,10 +27,9 @@ READS = {
 BOUNDARIES = ("httpMs", "backendMs", "scheduledMs")
 
 
-def checked_history(body):
+def checked_history(body, ordinals=(0, 2, 3, 4, 5, 6, 7)):
     """Independent facts from the calibrated fixture in addition to full cross-variant byte equality."""
     history = json.loads(body)["data"]
-    ordinals = (0, 2, 3, 4, 5, 6, 7)
     if len(history) != len(ordinals):
         raise ValueError("wrong-page-size")
     for row, ordinal in zip(history, ordinals, strict=True):

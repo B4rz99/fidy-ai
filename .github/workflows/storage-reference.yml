@@ -93,6 +93,9 @@ jobs:
           (cd baseline-d1 && bash scripts/install-workspace.sh --ignore-scripts)
           echo "ASSESSMENT_CHROMIUM=$(command -v google-chrome)" >> "$GITHUB_ENV"
           google-chrome --version
+      - name: Verify Dashboard stays outside the initial browser graph
+        if: inputs.browser_phases
+        run: bun apps/web/scripts/check-browser-bundle.ts
       - name: Verify one equivalent pair before collecting timings
         run: |
           bun scripts/infra-performance/reference/native-review-pressure.test.mjs

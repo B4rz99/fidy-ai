@@ -112,7 +112,7 @@ export const nativeSmokeExecutor = Effect.fn(function* (input: {
     compatibility: { date: "2026-09-08" },
     workersDev: false,
     observability: freeTierWorkerObservability,
-    ...(retained ? { build: historicalBuild } : {}),
+    ...(input.release.accountingRollout ? { build: historicalBuild } : {}),
     env: {
       SMOKE_BUCKET: input.buckets.SMOKE_BUCKET,
       NATIVE_STORAGE_ADMISSION: input.release.shared.NATIVE_STORAGE_ADMISSION,

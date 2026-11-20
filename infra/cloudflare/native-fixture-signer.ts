@@ -117,7 +117,7 @@ const requireAccountingRollout = Effect.fn(function* (revision: string) {
     revision !== verifier ||
     revision === accountingFixture.revision
   ) {
-    return yield* Effect.fail(
+    return yield* Effect.die(
       Error("Accounting rollout requires the current verifier as app source")
     );
   }

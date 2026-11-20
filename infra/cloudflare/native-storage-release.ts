@@ -47,7 +47,7 @@ import {
   NativeInventoryRefused,
   inspectNativeResources,
   verifyDeployedVersion,
-  verifySuccessorVersion,
+  verifySuccessorVersionAt,
 } from "./native-deployed-graph";
 import type { NativeRole } from "./native-graph";
 import { continueAdmittedErasure } from "./native-erasure-continuation";
@@ -735,10 +735,11 @@ const verifyInstallationWorker = (
   successor: boolean
 ): void => {
   if (successor && input.role !== "Web" && input.role !== "ForwardedEmail") {
-    verifySuccessorVersion(
-      { ...input, revision: input.role === "Smoke" ? generation : input.revision },
-      generation
-    );
+    verifySuccessorVersionAt({
+      ...input,
+      revision: input.role === "Smoke" ? generation : input.revision,
+      generation,
+    });
     return;
   }
   verifyDeployedVersion(input);
@@ -2232,17 +2233,15 @@ const successorResources = Effect.fn(function* (input: {
   ] as const) {
     const raw = yield* releaseEvidence.readWorkerVersion(env, client, { name, id });
     yield* Effect.try(() =>
-      verifySuccessorVersion(
-        {
-          role,
-          raw,
-          account: env.account,
-          revision: role === "Smoke" ? generation : env.revision,
-          versionId: id,
-          fingerprint,
-        },
-        generation
-      )
+      verifySuccessorVersionAt({
+        role,
+        raw,
+        account: env.account,
+        revision: role === "Smoke" ? generation : env.revision,
+        versionId: id,
+        fingerprint,
+        generation,
+      })
     );
     yield* verifyReleaseObservability(env, name, client);
   }

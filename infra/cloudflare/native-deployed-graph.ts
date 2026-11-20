@@ -233,8 +233,10 @@ export const verifyDeployedVersion = (input: DeployedVersion): void =>
     generation: resourceRevision({ revision: input.revision, signed: input.fingerprint !== "" }),
     successor: false,
   });
-export const verifySuccessorVersion = (input: DeployedVersion, generation = input.revision): void =>
-  verifyVersionAt({ ...input, generation, successor: true });
+export const verifySuccessorVersionAt = (input: DeployedVersion & { generation: string }): void =>
+  verifyVersionAt({ ...input, successor: true });
+export const verifySuccessorVersion = (input: DeployedVersion): void =>
+  verifySuccessorVersionAt({ ...input, generation: input.revision });
 const limit = 100;
 const buckets = Effect.fn(function* (read: Read) {
   const result: string[] = [],

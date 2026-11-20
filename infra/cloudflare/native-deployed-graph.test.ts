@@ -5,6 +5,7 @@ import {
   requireDeployedRole,
   verifyDeployedVersion,
   verifySuccessorVersion,
+  verifySuccessorVersionAt,
 } from "./native-deployed-graph";
 import { inspectNativeAccess } from "./native-deployed-access";
 import { nativeBindingInventory } from "./native-graph";
@@ -305,10 +306,11 @@ it("uses the selected Smoke generation without relaxing the immutable source or 
     role: "Smoke",
     fingerprint: "4".repeat(64),
   } as const;
-  expect(() => verifySuccessorVersion(input, revision)).not.toThrow();
+  const historical = { ...input, generation: revision };
+  expect(() => verifySuccessorVersionAt(historical)).not.toThrow();
   expect(() => verifySuccessorVersion(input)).toThrow();
-  expect(() => verifySuccessorVersion({ ...input, revision }, revision)).toThrow();
-  expect(() => verifySuccessorVersion({ ...input, versionId: "other" }, revision)).toThrow();
+  expect(() => verifySuccessorVersionAt({ ...historical, revision })).toThrow();
+  expect(() => verifySuccessorVersionAt({ ...historical, versionId: "other" })).toThrow();
 });
 
 const appRoles = [

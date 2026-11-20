@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
-import { Effect, Schema } from "effect";
+import { Clock, Config, Effect, ManagedRuntime, Schema } from "effect";
+import { FetchHttpClient, HttpBody, HttpClient, HttpClientRequest } from "effect/http";
 import { installedOrigins } from "../../../apps/server/src/shell/browser-transport/contract";
 import { signAcceptanceRequest } from "../../../apps/server/cloudflare/release-isolation/operations";
 import {
@@ -46,16 +47,27 @@ const canonical = Schema.encodeSync(Schema.fromJsonString(Schema.Json));
 const maximumGroups = 16;
 const maximumBytes = 8192;
 const requestTimeout = 15000;
+const successStatus = 200;
 const algorithm = { name: "ECDSA", namedCurve: "P-256" };
 const digest = (binding: string): string =>
   new Bun.CryptoHasher("sha256").update(binding).digest("hex");
 
-export const verifyAccounting = async (
-  scope: Pick<Scope, "phase" | "capture" | "captureDigest" | "binding">,
-  text: string,
-  publicKey: string
-): Promise<typeof Snapshot.Type> => {
-  const { statement, signature } = Schema.decodeSync(Schema.fromJsonString(Report))(text);
+const cryptoOperation = <A>(run: () => Promise<A>): Effect.Effect<A, Error> =>
+  Effect.tryPromise({
+    try: run,
+    catch: () => Error("Native accounting cryptographic operation failed"),
+  });
+
+export const verifyAccounting = Effect.fn("verifyAccounting")(function* ({
+  scope,
+  text,
+  publicKey,
+}: {
+  scope: Pick<Scope, "phase" | "capture" | "captureDigest" | "binding">;
+  text: string;
+  publicKey: string;
+}) {
+  const { statement, signature } = yield* Schema.decodeEffect(Schema.fromJsonString(Report))(text);
   const [, , , , , , , groups, canonicalUnits, receipts] = statement;
   const expected = [
     "fidy-2259-native-accounting-v1",
@@ -71,83 +83,99 @@ export const verifyAccounting = async (
     scope.capture.sessionBindingSha256 !== expected[5] ||
     groups.length > maximumGroups
   ) {
-    throw Error("Native accounting witness scope differs");
+    return yield* Effect.fail(Error("Native accounting witness scope differs"));
   }
-  const key = await crypto.subtle.importKey(
-    "spki",
-    Buffer.from(publicKey, "hex"),
-    algorithm,
-    false,
-    ["verify"]
+  const key = yield* cryptoOperation(() =>
+    crypto.subtle.importKey("spki", Buffer.from(publicKey, "hex"), algorithm, false, ["verify"])
   );
-  if (
-    !(await crypto.subtle.verify(
+  const signatureMatches = yield* cryptoOperation(() =>
+    crypto.subtle.verify(
       { name: "ECDSA", hash: "SHA-256" },
       key,
       Buffer.from(signature, "hex"),
       new TextEncoder().encode(canonical(statement))
-    ))
-  ) {
-    throw Error("Native accounting witness signature differs");
+    )
+  );
+  if (!signatureMatches) {
+    return yield* Effect.fail(Error("Native accounting witness signature differs"));
   }
   return { groups, canonicalUnits, receipts };
-};
+});
 
-const snapshot = async (scope: Scope): Promise<typeof Snapshot.Type> => {
-  const deadline = Math.min(scope.deadline, Date.now() + acceptanceLifetimeMs);
-  if (deadline <= Date.now()) throw Error("Native accounting lease expired");
+const snapshot = Effect.fn("nativeAccountingSnapshot")(function* (scope: Scope) {
+  const now = yield* Clock.currentTimeMillis;
+  const deadline = Math.min(scope.deadline, now + acceptanceLifetimeMs);
+  if (deadline <= now) return yield* Effect.fail(Error("Native accounting lease expired"));
   const url = new URL("/internal/release-smoke", origins.api);
   url.searchParams.set("acceptance", "transaction-accounting");
   url.searchParams.set("cohort", "performance");
   url.searchParams.set("ordinal", scope.capture.member === "performance-1" ? "1" : "2");
-  const request = new Request(url, {
+  const payload = canonical({ phase: scope.phase, capture: scope.capture });
+  const headers = {
+    cookie: scope.cookie,
+    origin: origins.browser,
+    "fidy-session-binding": scope.binding,
+    "content-type": "application/json",
+  };
+  const request = new Request(url.href, {
     method: "POST",
     redirect: "error",
-    headers: {
-      cookie: scope.cookie,
-      origin: origins.browser,
-      "fidy-session-binding": scope.binding,
-      "content-type": "application/json",
-    },
-    body: canonical({ phase: scope.phase, capture: scope.capture }),
+    headers,
+    body: payload,
   });
-  request.headers.set(
-    acceptanceProofHeader,
-    await Effect.runPromise(
-      signAcceptanceRequest({
-        request,
-        boundary: "ingress",
-        environment: {
-          BROWSER_ORIGIN: origins.browser,
-          RELEASE_GIT_SHA: scope.capture.nativeRevision,
-          SMOKE_PROOF: process.env.SMOKE_PROOF,
-          RECOVERY_ISOLATION: "isolated",
-          NATIVE_STORAGE_ADMISSION: "closed",
-        },
-        deadline,
+  const proof = yield* signAcceptanceRequest({
+    request,
+    boundary: "ingress",
+    environment: {
+      BROWSER_ORIGIN: origins.browser,
+      RELEASE_GIT_SHA: scope.capture.nativeRevision,
+      SMOKE_PROOF: yield* Config.String("SMOKE_PROOF"),
+      RECOVERY_ISOLATION: "isolated",
+      NATIVE_STORAGE_ADMISSION: "closed",
+    },
+    deadline,
+  });
+  const remaining = Math.min(deadline - (yield* Clock.currentTimeMillis), requestTimeout);
+  if (remaining <= 0) {
+    return yield* Effect.fail(Error("Native accounting lease expired before dispatch"));
+  }
+  const client = yield* HttpClient.HttpClient;
+  const response = yield* client
+    .execute(
+      HttpClientRequest.post(url.href, {
+        headers: { ...headers, [acceptanceProofHeader]: proof },
+        body: HttpBody.text(payload, "application/json"),
       })
     )
-  );
-  const remaining = Math.min(deadline - Date.now(), requestTimeout);
-  if (remaining <= 0) throw Error("Native accounting lease expired before dispatch");
-  const response = await fetch(request, { signal: AbortSignal.timeout(remaining) });
-  if (!response.ok) throw Error("Native accounting witness refused");
-  const bytes = await response.arrayBuffer();
-  if (bytes.byteLength > maximumBytes) throw Error("Native accounting witness exceeds bound");
-  return verifyAccounting(
+    .pipe(Effect.timeout(remaining));
+  if (response.status !== successStatus) {
+    return yield* Effect.fail(Error("Native accounting witness refused"));
+  }
+  const bytes = yield* response.arrayBuffer.pipe(Effect.timeout(remaining));
+  if (bytes.byteLength > maximumBytes) {
+    return yield* Effect.fail(Error("Native accounting witness exceeds bound"));
+  }
+  return yield* verifyAccounting({
     scope,
-    new TextDecoder().decode(bytes),
-    process.env.FIDY_NATIVE_FIXTURE_PUBLIC_KEY ?? ""
-  );
-};
+    text: new TextDecoder().decode(bytes),
+    publicKey: yield* Config.String("FIDY_NATIVE_FIXTURE_PUBLIC_KEY"),
+  });
+});
 
 if (import.meta.main) {
+  const runtime = ManagedRuntime.make(FetchHttpClient.layer);
   try {
     const input: unknown = await Bun.stdin.json();
-    const proof = await snapshot(Schema.decodeUnknownSync(Scope)(input));
+    const proof = await runtime.runPromise(
+      snapshot(Schema.decodeUnknownSync(Scope)(input)).pipe(
+        Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" })
+      )
+    );
     process.stdout.write(canonical(proof));
   } catch {
     process.stderr.write("Protected native accounting witness failed\n");
     process.exitCode = 1;
+  } finally {
+    await runtime.dispose();
   }
 }

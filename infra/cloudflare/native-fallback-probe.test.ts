@@ -69,6 +69,7 @@ it.live(
         ).toBe(true);
         const headers = new Headers(request.headers);
         headers.delete("x-fidy-acceptance-proof");
+        headers.delete("traceparent");
         return {
           headers: Object.fromEntries(headers),
           body: request.body === null ? null : yield* Effect.tryPromise(() => request.text()),

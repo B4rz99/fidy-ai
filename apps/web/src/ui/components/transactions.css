@@ -527,6 +527,12 @@ dialog[data-transaction-slot~="transaction-context-panel"] {
   max-width: none;
   color: inherit;
 }
+@media (min-width: 1051px) {
+  dialog[data-transaction-slot~="transaction-context-panel"] {
+    max-height: 100dvh;
+    overflow-y: auto;
+  }
+}
 [data-transaction-slot~="transaction-context-panel"] > div:focus {
   outline: none;
 }

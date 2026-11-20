@@ -65,6 +65,7 @@ jobs:
       - name: Verify one equivalent read and Correction before collecting timings
         run: |
           bun scripts/infra-performance/reference/native-review-pressure.test.mjs
+          bun scripts/infra-performance/reference/transaction-panel.test.mjs
           bun scripts/infra-performance/reference/review-failure.test.mjs
           python3 -m unittest discover -s scripts/infra-performance/reference
           python3 scripts/infra-performance/reference/run.py --d1 baseline-d1 --do . \

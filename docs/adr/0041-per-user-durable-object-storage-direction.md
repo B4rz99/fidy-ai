@@ -20,8 +20,7 @@ owns the Price catalog and admission ordering. Independent erasure authority ret
 progress after User-local data is removed. A transaction in one object cannot make changes in
 another object atomic.
 R2, Queues and Workflows retain their existing responsibilities
-unless a concrete design constraint warrants changing them. Colombia versus North America is not
-a storage-placement requirement.
+unless a concrete design constraint warrants changing them.
 
 ## User storage and execution
 

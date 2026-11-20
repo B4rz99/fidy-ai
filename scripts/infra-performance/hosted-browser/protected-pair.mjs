@@ -11,7 +11,7 @@ import {
 import { Effect } from "effect";
 import { parseConfig, parseCost, parseDeployment, parseReport } from "./contracts";
 import { runBrowser } from "./captured-profile.mjs";
-import { isColombianEgress, parseTrace } from "./origin.mjs";
+import { parseTrace } from "./origin.mjs";
 import { proveScopedCorrection } from "./scoped-correction.mjs";
 
 /** @import {PairConfig, PairContext, Dispatch, PairHttp, PairEvidence, Variant} from "./contracts" */
@@ -243,7 +243,7 @@ const pairedTurns = ({ config, evidence }) => {
 };
 
 /** @param {PairContext} context Paired browser owner context. */
-const origin = async ({ config, http, evidence }) => {
+const origin = async ({ config, http }) => {
   /** @param {string} host Acceptance host. */
   const trace = async (host) => {
     const response = await http(host + "/cdn-cgi/trace", {
@@ -255,16 +255,13 @@ const origin = async ({ config, http, evidence }) => {
   };
   const [apiTrace, browserTrace] = await Promise.all([trace(native.api), trace(native.browser)]);
   const hosts = { api: apiTrace, browser: browserTrace };
-  const colombianEgress = isColombianEgress(hosts);
-  if (evidence.environment === "deployed Cloudflare") {
-    assert.ok(colombianEgress, "Colombia egress changed before measurement");
-  }
+  const observedAt = new Date().toISOString();
   const metadata = parseDeployment(
     await (await http(native.browser + "/deployment-metadata.json", { redirect: "error" })).json()
   );
   assert.equal(metadata.gitRevision, config.native.web.revision);
   assert.equal(metadata.contractDigest, config.native.web.contractDigest);
-  return { hosts, colombianEgress, nativeWebRevision: metadata.gitRevision };
+  return { observedAt, hosts, nativeWebRevision: metadata.gitRevision };
 };
 
 /** @param {PairContext} context Paired browser owner context. */

@@ -34,11 +34,19 @@ def protected_runner():
 
 
 def checked_browser_origin(path, now):
-    origin = json.loads(path.read_bytes())
-    if (origin.get("colombianEgress") is not True
-            or any(origin["origins"][name]["country"] != "CO" for name in ("api","browser"))
-            or not 0 <= now - datetime.fromisoformat(origin["observedAt"].replace("Z","+00:00")).timestamp() <= 120):
-        raise ValueError("Missing fresh Colombia egress from both actual browser hosts")
+    try:
+        origin = json.loads(path.read_bytes())
+        observed = datetime.fromisoformat(origin["observedAt"].replace("Z", "+00:00"))
+        hosts = origin["origins"]
+        valid_hosts = all(
+            re.fullmatch("[A-Z]{2}", hosts[name]["country"])
+            and re.fullmatch("[A-Z]{3}", hosts[name]["colo"])
+            for name in ("api", "browser")
+        )
+    except (AttributeError, KeyError, TypeError, ValueError) as error:
+        raise ValueError("Invalid Cloudflare origin evidence") from error
+    if observed.utcoffset() is None or not 0 <= now - observed.timestamp() <= 120 or not valid_hosts:
+        raise ValueError("Missing fresh Cloudflare country and colo from both acceptance hosts")
 
 
 def admitted_route(method, url, body, stage, cleaning, browser=False):

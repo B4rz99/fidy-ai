@@ -1,13 +1,12 @@
-import type { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
+import { reviewPageContextSource } from "./page-context-query";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { DateTime, Option } from "effect";
-import { AsyncResult, Atom } from "effect/reactivity";
-import type { CanonicalSuccess, FidyApiGroups, FidyClient } from "@/transport/client";
+import { Atom } from "effect/reactivity";
+import type { CanonicalSuccess } from "@/transport/client";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { useReviewPageExpiry } from "./expiry";
 import { originalDeadlineQuery } from "./original-deadline";
-import { reviewContextKey } from "./query-keys";
 import { type Item, received } from "./model";
 import type { Filter } from "./view-navigation";
 
@@ -15,55 +14,18 @@ export type SourceContext =
   CanonicalSuccess<"ingestion.getReviewPageContext">["data"]["items"][number];
 export type PageContexts = ReadonlyMap<string, SourceContext>;
 
-type ContextEndpoint = HttpApiEndpoint.WithIdentifier<
-  HttpApiGroup.Endpoints<HttpApiGroup.WithIdentifier<FidyApiGroups, "ingestion">>,
-  "getReviewPageContext"
->;
-type ContextQuery = Atom.Atom<
-  AsyncResult.AsyncResult<
-    CanonicalSuccess<"ingestion.getReviewPageContext">,
-    HttpApiEndpoint.Errors<ContextEndpoint>
-  >
->;
-const emptyContext: ContextQuery = Atom.make(
-  AsyncResult.success<CanonicalSuccess<"ingestion.getReviewPageContext">>({
-    data: { items: [] },
-    next: [],
-  })
-);
-export const reviewPageContextQuery = ({
-  client,
-  filter,
-  page,
-  ids,
-}: Readonly<{
-  client: FidyClient;
-  filter: Filter;
-  page: number;
-  ids: ReadonlyArray<string>;
-}>): ContextQuery => {
-  if (ids.length === 0) return emptyContext;
-  return client.query("ingestion", "getReviewPageContext", {
-    query: {
-      status: Option.some(filter),
-      offset: page === 0 ? Option.none() : Option.some(page),
-    },
-    reactivityKeys: ["ingestion-review", reviewContextKey, `review-page:${ids.join(",")}`],
-    timeToLive: "400 millis",
-  });
-};
-
-const evidenceProjection = Atom.family((query: ContextQuery) =>
-  Atom.make((get) => {
-    const state = get(query).pipe(presentCanonicalQuery);
-    const deadlines = new Map<string, Item["expiresAt"]>();
-    if (state._tag === "Ready") {
-      for (const entry of state.value.data.items) {
-        deadlines.set(entry.id, get(originalDeadlineQuery(entry)));
+const evidenceProjection = Atom.family(
+  (query: Atom.Type<ReturnType<typeof reviewPageContextSource>>) =>
+    Atom.make((get) => {
+      const state = get(query).pipe(presentCanonicalQuery);
+      const deadlines = new Map<string, Item["expiresAt"]>();
+      if (state._tag === "Ready") {
+        for (const entry of state.value.data.items) {
+          deadlines.set(entry.id, get(originalDeadlineQuery(entry)));
+        }
       }
-    }
-    return { state, deadlines };
-  })
+      return { state, deadlines };
+    })
 );
 
 /** Page-local source evidence stays in the authentication registry and expires independently of drafts. */
@@ -83,7 +45,9 @@ export const useReviewPageContext = ({
   refresh: () => void;
 }> => {
   const client = useRouter().options.context.apiClient;
-  const query = reviewPageContextQuery({ client, filter, page, ids: items.map((item) => item.id) });
+  const query = useAtomValue(
+    reviewPageContextSource({ client, filter, page, ids: items.map((item) => item.id) })
+  );
   const projectionQuery = evidenceProjection(query);
   const projection = useAtomValue(projectionQuery);
   const state = projection.state;
@@ -92,11 +56,12 @@ export const useReviewPageContext = ({
   const deadlines = projection.deadlines;
   useReviewPageExpiry([...items, ...[...deadlines.values()].map((expiresAt) => ({ expiresAt }))]);
   const current = DateTime.toEpochMillis(DateTime.nowUnsafe());
+  const pageIds = new Set(items.map((item) => item.id));
   return {
     deadlines,
     contexts: new Map(
       entries.flatMap((entry) =>
-        items.some((item) => item.id === entry.id)
+        pageIds.has(entry.id)
           ? [
               [
                 entry.id,

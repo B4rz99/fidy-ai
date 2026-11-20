@@ -7,12 +7,10 @@ import {
 import { useId } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { File01Icon, Image01Icon, Mail01Icon } from "@hugeicons/core-free-icons";
-import { Badge } from "@/ui/components/badge";
-import { reviewHasExpired, useReviewExpired } from "./expiry";
+import { reviewHasExpired } from "./expiry";
 import { Option } from "effect";
 import type { JSX } from "react";
 import { Button } from "@/ui/components/button";
-import { Checkbox } from "@/ui/components/checkbox";
 import { type Item, type Workspace, deadline, sources, statuses } from "./model";
 import { reviewAmount, reviewExpiry, reviewTitle } from "./presentation";
 
@@ -82,7 +80,8 @@ export const ReviewPagination = (
 );
 
 const ReviewRow = ({ item, props }: Readonly<{ item: Item; props: InboxProps }>): JSX.Element => {
-  const expired = useReviewExpired(item);
+  // The inbox already subscribes to the earliest deadline on the complete page.
+  const expired = reviewHasExpired(item);
   const description = useId();
   const context = Option.fromUndefinedOr(props.contexts.get(item.id));
   const position =
@@ -94,18 +93,20 @@ const ReviewRow = ({ item, props }: Readonly<{ item: Item; props: InboxProps }>)
     loading: props.contextLoading,
     source: item.source,
   });
-  const actionable = ["pending", "skipped"].includes(item.status);
+  const actionable = item.status === "pending" || item.status === "skipped";
+  const title = reviewTitle(item);
   return (
     <div data-review="inbox-row" data-active={Option.contains(props.selected, item.id)}>
-      <div data-review="row-check">
-        <Checkbox
+      <label data-review="row-check">
+        <input
+          type="checkbox"
           aria-label={`Seleccionar ${sources[item.source]} ${reference}`}
           aria-describedby={description}
           checked={props.checked.includes(item.id)}
           disabled={expired || !actionable}
-          onCheckedChange={() => props.toggle(item)}
+          onChange={() => props.toggle(item)}
         />
-      </div>
+      </label>
       <button
         type="button"
         aria-label={`Abrir ${sources[item.source]} ${reference}`}
@@ -114,27 +115,25 @@ const ReviewRow = ({ item, props }: Readonly<{ item: Item; props: InboxProps }>)
         onClick={() => props.choose(item)}
         aria-current={Option.contains(props.selected, item.id) ? "true" : undefined}
       >
-        <span className="grid min-w-0 gap-2">
-          <span data-review="row-source">
-            <HugeiconsIcon
-              icon={{ statement: File01Icon, media: Image01Icon, email: Mail01Icon }[item.source]}
-              aria-hidden="true"
-            />
-            {sources[item.source]} · {reference}
-            {item.status === "pending" ? "" : ` · ${statuses[item.status]}`}
-          </span>
-          <span data-review="row-title">{reviewTitle(item)}</span>
-          <span data-review="row-amount">{reviewAmount(item)}</span>
-          <RowContext
-            description={description}
-            position={position}
-            item={item}
-            excerpt={excerpt}
-            evidenceLabel={evidenceLabel}
+        <span data-review="row-source">
+          <HugeiconsIcon
+            icon={{ statement: File01Icon, media: Image01Icon, email: Mail01Icon }[item.source]}
+            aria-hidden="true"
           />
-          <Badge variant="secondary" data-review="deadline" title={deadline(item)}>
-            {reviewExpiry(item)}
-          </Badge>
+          {sources[item.source]} · {reference}
+          {item.status === "pending" ? "" : ` · ${statuses[item.status]}`}
+        </span>
+        <span data-review="row-title">{title}</span>
+        <span data-review="row-amount">{reviewAmount(item)}</span>
+        <RowContext
+          description={description}
+          position={position}
+          title={title}
+          excerpt={excerpt}
+          evidenceLabel={evidenceLabel}
+        />
+        <span data-review="deadline" title={deadline(item)}>
+          {reviewExpiry(item)}
         </span>
       </button>
     </div>
@@ -160,19 +159,19 @@ const contextState = ({
 const RowContext = ({
   description,
   position,
-  item,
+  title,
   excerpt,
   evidenceLabel,
 }: Readonly<{
   description: string;
   position: number;
-  item: Item;
+  title: string;
   excerpt: Option.Option<string>;
   evidenceLabel: string;
 }>): JSX.Element => (
   <span id={description} data-review="row-context">
     <span className="sr-only">
-      Elemento {position}. {reviewTitle(item)}.{" "}
+      Elemento {position}. {title}.{" "}
     </span>
     {Option.match(excerpt, {
       onNone: () => <span data-review="context-state">{evidenceLabel}</span>,

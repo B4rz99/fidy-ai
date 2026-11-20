@@ -1,8 +1,14 @@
 import { Database } from "bun:sqlite";
-import { Config, DateTime, Effect, Option, Redacted, Schema } from "effect";
+import { Config, Context, DateTime, Effect, Layer, Option, Redacted, Schema } from "effect";
 import type { Miniflare } from "miniflare";
 import { installedOrigins } from "../../../apps/server/src/shell/browser-transport/contract";
-import { establishSmokeUsers } from "../../../infra/cloudflare/native-acceptance";
+import { FetchHttpClient, HttpClient } from "effect/http";
+import { acceptanceSend } from "../../../infra/cloudflare/native-storage-release";
+import { ReleaseHttpLive } from "../../../infra/cloudflare/release-http";
+import {
+  establishSmokeUsers,
+  retainedFinancialControls,
+} from "../../../infra/cloudflare/native-acceptance";
 import { native } from "../../../apps/server/cloudflare/user-store.test-fixture";
 import { transport } from "./bridge";
 import { closedRuntime } from "./closed-runtime.test-fixture";
@@ -87,6 +93,34 @@ const dispatch = Effect.fnUntraced(function* (runtime: Miniflare, value: unknown
     body: yield* native(() => response.text()),
   };
 });
+/** Use the protected release's real streamed HTTP transport against the local workerd listener. */
+const financialControls = Effect.fnUntraced(function* (
+  runtime: Miniflare,
+  auth: { revision: string; secret: string },
+  streamed: boolean
+) {
+  const listener = yield* native(() => runtime.ready);
+  const client = Context.get(yield* Layer.build(ReleaseHttpLive), HttpClient.HttpClient);
+  const network = yield* FetchHttpClient.Fetch;
+  const loopback: typeof fetch = Object.assign(
+    (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]): Promise<Response> => {
+      const url = new URL(input instanceof Request ? input.url : input);
+      if (url.origin !== installedOrigins.acceptance.api) {
+        return Promise.reject(Error("Foreign rehearsal origin"));
+      }
+      const headers = new Headers(init?.headers);
+      headers.set("cf-connecting-ip", "192.0.2.1");
+      return network(new URL(url.pathname + url.search, listener), { ...init, headers });
+    },
+    { preconnect: network.preconnect }
+  );
+  return yield* retainedFinancialControls({
+    revision: auth.revision,
+    proof: Redacted.make(auth.secret),
+    origins: installedOrigins.acceptance,
+    send: streamed ? acceptanceSend(client) : transport(runtime),
+  }).pipe(Effect.provideService(FetchHttpClient.Fetch, loopback));
+}, Effect.scoped);
 const run = Effect.gen(function* () {
   const auth = yield* cohortAuthority;
   const directory = yield* Config.String("FIDY_REHEARSAL_STATE");
@@ -96,6 +130,7 @@ const run = Effect.gen(function* () {
       const send = transport(runtime);
       const local = Effect.fnUntraced(function* (item: CohortCommand) {
         const action = item.action;
+
         if (action === "provider-request") return yield* dispatch(runtime, item.body);
         if (["seed-survivors", "mount-original-sessions"].includes(action)) {
           const users = yield* establishSmokeUsers({
@@ -113,7 +148,14 @@ const run = Effect.gen(function* () {
         if (action === "tick") return yield* tick(runtime);
         return yield* Effect.fail(Error("Unknown rehearsal operation"));
       });
-      return serveCohort(auth, () => send, local);
+      return serveCohort(
+        auth,
+        () => send,
+        (item) =>
+          ["controls", "streamed-controls"].includes(item.action)
+            ? financialControls(runtime, auth, item.action === "streamed-controls")
+            : local(item)
+      );
     },
     (runtime) => native(() => runtime.dispose())
   );

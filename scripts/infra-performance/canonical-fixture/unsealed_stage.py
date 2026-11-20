@@ -13,6 +13,7 @@ from qualified_release import REPO, actions_get, archive_verifier, protected_arc
 RUN = "44685945098"
 ARTIFACT = "14606856220"
 ARCHIVE_DIGEST = "75b009f7e7d7d12b156d9a8bf690e33ed3027a381e05f3d1e7a1e7f7ce622927"
+PAIRING_REPAIR = "932fa91d29116f49250bad89173a1b10631d4f69"
 QUALIFY = "Requalify the archived zero-traffic pair without moving traffic"
 SEAL = "Seal dormant fallback stage before promotion"
 FORWARD = "Finish only the tested closed forward repair"
@@ -119,7 +120,7 @@ def main():
                 or env.get("NATIVE_FIXTURE_SIGNER_SHA256") != fixture_upload()["fingerprint"]
                 or env.get("GITHUB_SHA") != git_read("rev-parse", "HEAD")
                 or env.get("RELEASE_GIT_SHA") != env["GITHUB_SHA"]
-                or git_read("merge-base", APPLICATION, env["GITHUB_SHA"]) != APPLICATION):
+                or git_read("merge-base", PAIRING_REPAIR, env["GITHUB_SHA"]) != PAIRING_REPAIR):
             raise ValueError("Replacement requires the new protected application source and closed acceptance hosts")
         staged, controls = staged_documents()
         for name, value in [("native-release.json.predecessor", staged), ("native-release.json.source.controls", controls)]:

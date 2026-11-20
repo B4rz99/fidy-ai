@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import { Effect, Array as EffectArray, Option, Schema } from "effect";
 import { gitRevisionPattern } from "../../apps/server/cloudflare/runtime/contract";
 import { SmokeIdentity } from "../../apps/server/cloudflare/runtime/release-smoke/contract";
-import { type RollbackPort, type RollbackReceipt, releaseRollback } from "./release-rollback";
+import { type RollbackPort, RollbackReceipt, releaseRollback } from "./release-rollback";
 import {
   type Deployment,
   type ReleasePort,
@@ -88,6 +88,51 @@ const matchesStage = (deployment: Deployment, release: Release, role: Role): boo
 const soleDeployment = (id: string, version: string): Deployment => ({
   id,
   versions: [{ id: version, percentage: 100 }],
+});
+
+export const RestoredDormantSource = Schema.Struct({
+  receipt: RollbackReceipt,
+  restored: RollbackReceipt.fields.promoted,
+});
+
+/** The exact five entries connect both live dormant deployments to the original sealed stage. */
+export const requireRestoredDormantSource = Effect.fn(function* ({
+  port,
+  snapshot,
+  sealed,
+  source,
+}: {
+  port: FallbackRepairPort;
+  snapshot: Release["snapshot"];
+  sealed: Release;
+  source: typeof RestoredDormantSource.Type;
+}) {
+  const { release, promoted } = source.receipt;
+  yield* releaseController.requireTrunk(port, snapshot.revision);
+  for (const role of ["core", "public"] as const) {
+    const captured = snapshot[role];
+    const stable = release.snapshot[role];
+    const deployment = `${role}DeploymentId`;
+    const version = `${role}VersionId`;
+    const history = yield* port.recentDeployments(captured.name);
+    const expected = [
+      soleDeployment(source.restored[deployment], sealed[version]),
+      soleDeployment(promoted[deployment], release[version]),
+      soleDeployment(stable.deploymentId, sealed[version]),
+    ];
+    if (
+      !isDeepStrictEqual(captured, { ...stable, deploymentId: source.restored[deployment] }) ||
+      !isDeepStrictEqual([history[0], history[1], history[3]], expected) ||
+      !Option.exists(EffectArray.get(history, 2), (staged) =>
+        matchesStage(staged, release, role)
+      ) ||
+      !Option.exists(EffectArray.get(history, 4), (staged) => matchesStage(staged, sealed, role))
+    ) {
+      return yield* Effect.fail(
+        Error("Dormant rollback history differs from the protected restoration")
+      );
+    }
+  }
 });
 
 type PartialRollback = {

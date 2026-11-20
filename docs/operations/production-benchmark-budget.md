@@ -368,6 +368,10 @@ If the pinned post-promotion rollback stopped after restoring Ingress, use
 failed rollout receipt and checks the exact intermediate deployment histories before restoring
 the remaining Core. It verifies both restored versions, the ordinary serving schema markers,
 and both retained financial histories before publishing restoration evidence.
+The next signed `rollout` uses that restoration archive along with the original seal. It checks
+both restored deployments and the complete sequence of staging, promotion and restoration above
+the sealed dormant pair before uploading the active candidates. The cohort workflow authenticates
+the same restoration when qualifying the active rollout.
 
 Use the **Measure the closed native Transaction cohort** protected workflow on trunk. Provide a
 new random comparison prefix, the installed SHA, the two serving version UUIDs, and the artifact

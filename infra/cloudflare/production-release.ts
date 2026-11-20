@@ -1107,7 +1107,7 @@ const rollbackSource = Effect.fn(function* (snapshot: typeof releaseSchemas.snap
   return { changedPaths, workflowPaths: [...workflowPaths] };
 });
 const rollbackPort = (
-  port: ReleasePort,
+  port: ReturnType<typeof releasePort>,
   env: Config,
   client: HttpClient.HttpClient
 ): RollbackPort => ({

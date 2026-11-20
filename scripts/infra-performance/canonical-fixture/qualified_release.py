@@ -80,9 +80,9 @@ def artifact(account_revision, artifact_id, expected_digest, get=actions_get, gi
         installed = document("native-verification.json")
         if account_revision != APPLICATION:
             # Reauthenticate the dormant rollback target from the independent seal accepted by this rollout.
-            from pairing_stage import sealed_pair, OWNERS
+            from pairing_stage import sealed_pair, requires_restored_source, restored_source, OWNERS
             seal = document("native-release.json.seal")
-            stage, _ = sealed_pair(source, seal["artifactId"], seal["sha256"], get, git)
+            stage, predecessor = sealed_pair(source, seal["artifactId"], seal["sha256"], get, git)
             smoke, = [worker for worker in installed["workers"] if worker["role"] == "Smoke"]
             if (stage["revision"] != account_revision or installed["fixtureControlsDigest"] != stage["controlsDigest"]
                     or installed["retainedProvider"] != stage["provider"]
@@ -91,6 +91,12 @@ def artifact(account_revision, artifact_id, expected_digest, get=actions_get, gi
                     or any(smoke[k] != v for k, v in stage["smoke"].items())):
                 raise ValueError("Active rollout differs from its authenticated replacement")
             dormant = stage["release"]
+            if requires_restored_source(account_revision, source, git):
+                restored = restored_source(source, stage, predecessor, seal, get, git)
+                if (document("native-release.json.restored-source") != restored
+                        or any(promotion["release"]["snapshot"][role]["deploymentId"] != restored["restored"][role + "DeploymentId"]
+                               for role in ("core", "public"))):
+                    raise ValueError("Active rollout did not start from the exact protected restoration")
         else:
             dormant = STAGED_IDS
     release = promotion["release"]

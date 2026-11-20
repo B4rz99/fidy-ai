@@ -1,4 +1,4 @@
-import { Effect, Option } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { describe, expect, it } from "vitest";
 import { type Deployment, type StagedRelease } from "./release-controller";
 import { type RollbackPort, releaseRollback } from "./release-rollback";
@@ -42,6 +42,7 @@ type Fixture = Readonly<{
   unavailable(): void;
   raceCoreAfterPublic(): void;
   stalePublicAfterWrite(): void;
+  undecodablePublicReceipt(): void;
 }>;
 const fixture = (): Fixture => {
   const deployments = new Map<string, Deployment>([
@@ -55,10 +56,12 @@ const fixture = (): Fixture => {
     ],
   ]);
   const writes: string[] = [];
+  const previous = new Map<string, Option.Option<Deployment>>();
   let blocked = Option.none<string>();
   let available = true;
   let raceCore = false;
   let delayPublic = false;
+  let invalidPublicReceipt = false;
   let reportedPublic = Option.none<Deployment>();
   const port: RollbackPort = {
     trunk: (): Effect.Effect<string, Error> => Effect.succeed(release.snapshot.revision),
@@ -73,6 +76,12 @@ const fixture = (): Fixture => {
         if (observed === undefined) return yield* Effect.fail(Error("missing Worker"));
         return structuredClone(observed);
       }),
+    recentDeployments: (name): Effect.Effect<readonly Deployment[], Error> =>
+      Effect.gen(function* () {
+        const current = yield* port.current(name);
+        const prior = Option.flatten(Option.fromUndefinedOr(previous.get(name)));
+        return [current, ...Option.toArray(prior)];
+      }),
     deploy: (name: string, versions: Deployment["versions"]): Effect.Effect<Deployment, Error> =>
       Effect.gen(function* () {
         writes.push(name);
@@ -81,8 +90,10 @@ const fixture = (): Fixture => {
           id: `${String(writes.length).padStart(8, "0")}-9999-4999-8999-999999999999`,
           versions: [...versions],
         };
+        const observed = Option.fromUndefinedOr(deployments.get(name));
+        previous.set(name, observed);
         if (name === publicName && delayPublic) {
-          reportedPublic = Option.fromUndefinedOr(deployments.get(name));
+          reportedPublic = observed;
         }
         deployments.set(name, next);
         if (name === publicName && raceCore) {
@@ -90,6 +101,9 @@ const fixture = (): Fixture => {
             id: "99999999-9999-4999-8999-999999999999",
             versions: [{ id: candidateCore, percentage: 100 }],
           });
+        }
+        if (name === publicName && invalidPublicReceipt) {
+          yield* Schema.decodeUnknownEffect(Schema.Literal("expected"))("unexpected");
         }
         return next;
       }),
@@ -111,6 +125,9 @@ const fixture = (): Fixture => {
     },
     stalePublicAfterWrite: (): void => {
       delayPublic = true;
+    },
+    undecodablePublicReceipt: (): void => {
+      invalidPublicReceipt = true;
     },
   };
 };
@@ -138,6 +155,30 @@ describe("post-promotion code rollback", () => {
         setup.stalePublicAfterWrite();
         yield* releaseRollback.restore(setup.port, { release, promoted, compatible: true });
         expect(setup.writes).toEqual([publicName, coreName]);
+      })
+    ));
+
+  it("confirms an undecodable write receipt only from the exact authenticated predecessor", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const setup = fixture();
+        setup.undecodablePublicReceipt();
+        yield* releaseRollback.restore(setup.port, { release, promoted, compatible: true });
+        expect(setup.writes).toEqual([publicName, coreName]);
+
+        const incomplete = fixture();
+        incomplete.undecodablePublicReceipt();
+        const port: RollbackPort = {
+          ...incomplete.port,
+          recentDeployments: (name) =>
+            incomplete.port.recentDeployments(name).pipe(Effect.map((rows) => rows.slice(0, 1))),
+        };
+        expect(
+          yield* releaseRollback
+            .restore(port, { release, promoted, compatible: true })
+            .pipe(Effect.isFailure)
+        ).toBe(true);
+        expect(incomplete.writes).toEqual([publicName]);
       })
     ));
 

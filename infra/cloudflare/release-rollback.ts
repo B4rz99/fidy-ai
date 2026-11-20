@@ -1,4 +1,4 @@
-import { Data, Effect, Schedule, Schema } from "effect";
+import { Data, Effect, Option, Schedule, Schema } from "effect";
 import { SmokeIdentity } from "../../apps/server/cloudflare/runtime/release-smoke/contract";
 import {
   type Deployment,
@@ -17,6 +17,7 @@ export const RollbackReceipt = Schema.Struct({
 
 export type RollbackPort = ReleasePort &
   Readonly<{
+    recentDeployments(name: string): Effect.Effect<readonly Deployment[], Error>;
     /** True only when Cloudflare lists this exact captured version as deployable. */
     deployable(name: string, versionId: string): Effect.Effect<boolean, Error>;
   }>;
@@ -35,27 +36,59 @@ const requireTraffic = Effect.fn(function* (port: RollbackPort, name: string, ex
   }
 });
 class RollbackObservationPending extends Data.TaggedError("RollbackObservationPending") {}
+const observeRestoration = Effect.fn(function* (
+  port: RollbackPort,
+  name: string,
+  {
+    stableId,
+    previous,
+    returnedId,
+  }: { stableId: string; previous: Traffic; returnedId: Option.Option<string> }
+) {
+  const [latest, prior] = yield* port.recentDeployments(name);
+  if (latest !== undefined && sameTraffic(latest, previous)) {
+    return yield* new RollbackObservationPending();
+  }
+  if (
+    latest === undefined ||
+    prior === undefined ||
+    latest.id === previous.id ||
+    !sameTraffic(prior, previous) ||
+    !sameTraffic(latest, { id: Option.getOrElse(returnedId, () => latest.id), version: stableId })
+  ) {
+    return yield* Effect.fail(Error("Worker traffic changed after the rollback write"));
+  }
+  return latest;
+});
 const routeStable = Effect.fn(function* (
   port: RollbackPort,
   name: string,
   { stableId, previous }: { stableId: string; previous: Traffic }
 ) {
-  const result = yield* port
-    .deploy(name, [{ id: stableId, percentage: 100 }])
-    .pipe(
-      Effect.tapCause(() => Effect.logError("Rollback write could not be confirmed for " + name))
-    );
-  const expected = { id: result.id, version: stableId };
-  if (result.id === previous.id || !sameTraffic(result, expected)) {
+  const reported = yield* port.deploy(name, [{ id: stableId, percentage: 100 }]).pipe(
+    Effect.map(Option.some),
+    Effect.catchIf(Schema.isSchemaError, () =>
+      Effect.logInfo(
+        "Rollback write response could not be decoded; checking history for " + name
+      ).pipe(Effect.as(Option.none<Deployment>()))
+    ),
+    Effect.tapCause(() => Effect.logError("Rollback write could not be confirmed for " + name))
+  );
+  if (
+    Option.exists(
+      reported,
+      (result) =>
+        result.id === previous.id || !sameTraffic(result, { id: result.id, version: stableId })
+    )
+  ) {
     return yield* Effect.fail(
       Error("Rollback write receipt differs from the requested assignment")
     );
   }
-  yield* Effect.gen(function* () {
-    const current = yield* port.current(name);
-    if (sameTraffic(current, expected)) return;
-    if (sameTraffic(current, previous)) return yield* new RollbackObservationPending();
-    return yield* Effect.fail(Error("Worker traffic changed after the rollback write"));
+  return yield* observeRestoration(port, name, {
+    stableId,
+    previous,
+    returnedId: Option.map(reported, (result) => result.id),
   }).pipe(
     Effect.retry({
       while: (error) => error instanceof RollbackObservationPending,
@@ -66,7 +99,6 @@ const routeStable = Effect.fn(function* (
       Effect.logError("Accepted rollback assignment was not observed for " + name)
     )
   );
-  return result;
 });
 
 const restore = Effect.fn(function* (

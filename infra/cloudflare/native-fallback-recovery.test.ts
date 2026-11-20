@@ -11,6 +11,7 @@ import {
   recoverFixtureFallback,
   requireDormantReplacementSource,
   requirePromotedDormantSource,
+  requireRestoredDormantSource,
   resumePairingRollback,
   stageUploadedPair,
   verifyUnpromotedFallback,
@@ -106,6 +107,54 @@ const harness = (): {
   return { port, deployments, writes };
 };
 const verify = (): Effect.Effect<void, Error> => Effect.void;
+
+it.effect("requires the exact five deployment entries after a verified dormant restoration", () =>
+  Effect.gen(function* () {
+    const { port, deployments, writes } = harness();
+    const release = {
+      snapshot: { ...stage.release.snapshot, stableRevision: revision },
+      coreVersionId: uuid(21),
+      publicVersionId: uuid(22),
+      coreDeploymentId: uuid(23),
+      publicDeploymentId: uuid(24),
+    };
+    const promoted = { coreDeploymentId: uuid(25), publicDeploymentId: uuid(26) };
+    const restored = { coreDeploymentId: uuid(27), publicDeploymentId: uuid(28) };
+    const snapshot = { ...release.snapshot };
+    for (const [role, name] of [
+      ["core", core],
+      ["public", ingress],
+    ] as const) {
+      const deployment = `${role}DeploymentId`;
+      const version = `${role}VersionId`;
+      const stableId = stage.release[version];
+      release.snapshot[role] = {
+        name,
+        deploymentId: uuid(role === "core" ? 29 : 30),
+        stableVersionId: stableId,
+      };
+      snapshot[role] = { ...release.snapshot[role], deploymentId: restored[deployment] };
+      deployments(name).unshift(
+        { id: restored[deployment], versions: [{ id: stableId, percentage: 100 }] },
+        { id: promoted[deployment], versions: [{ id: release[version], percentage: 100 }] },
+        {
+          id: release[deployment],
+          versions: [
+            { id: stableId, percentage: 100 },
+            { id: release[version], percentage: 0 },
+          ],
+        },
+        { id: release.snapshot[role].deploymentId, versions: [{ id: stableId, percentage: 100 }] }
+      );
+    }
+    const source = { receipt: { release, promoted }, restored };
+    const check = requireRestoredDormantSource({ port, snapshot, sealed: stage.release, source });
+    yield* check;
+    deployments(core).splice(2, 1);
+    expect(yield* check.pipe(Effect.isFailure)).toBe(true);
+    expect(writes).toEqual([]);
+  })
+);
 
 it.effect(
   "resumes only the exact Ingress-first partial rollback and recognizes a completed Core",

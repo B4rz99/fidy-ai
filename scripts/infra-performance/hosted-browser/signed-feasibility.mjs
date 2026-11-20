@@ -56,13 +56,13 @@ export async function runBrowser({variant, origins, cookie, expected, forward, a
     headers.delete("x-fidy-comparison-cost");
     return new Response(bytes.byteLength?bytes:null,{status:response.status,headers});
   }});
-  let browser;
+  let browser, measuredPage;
   try{
     browser=await chromium.launch({executablePath:process.env.ASSESSMENT_CHROMIUM,env:{HOME:process.env.HOME,PATH:process.env.PATH},args:["--no-proxy-server","--ignore-certificate-errors-spki-list="+process.env.BROWSER_TLS_PIN,
       "--host-resolver-rules=MAP "+new URL(origins.api).hostname+":443 127.0.0.1:"+api.port+", MAP "+new URL(origins.browser).hostname+":443 127.0.0.1:"+web.port+", MAP * ~NOTFOUND, EXCLUDE localhost"]});
     const context=await browser.newContext({timezoneId:"America/Bogota",serviceWorkers:"block"});
     await context.addCookies([{name:"__Host-fidy_session",value:cookie.slice("__Host-fidy_session=".length),url:origins.api,httpOnly:true,secure:true,sameSite:"Lax"}]);
-    const page=await context.newPage();
+    const page=await context.newPage();measuredPage=page;
     if(network==="poor"){
       const cdp=await context.newCDPSession(page);
       await cdp.send("Network.enable");
@@ -81,6 +81,15 @@ export async function runBrowser({variant, origins, cookie, expected, forward, a
       events.push({stage:"refresh",complete:true});
       await Bun.sleep(750);
     }
+  } catch(err) {
+    events.push({stage:"incomplete", error:err.name, message: String(err.message).split("\n")[0].slice(0,100)});
+    if(measuredPage)events.push(await measuredPage.evaluate(()=>({
+      route:location.pathname,title:document.title,
+      text:document.body.innerText.replace(/(?:[a-f0-9-]{20,}|[A-Za-z0-9_+/=-]{32,})/g,"[redacted]").slice(0,380),
+      rowCount:document.querySelectorAll("[data-transaction-slot=transaction-identity-control]").length,
+      resources:performance.getEntriesByType("resource").filter(r=>r.initiatorType==="fetch").map(r=>({path:new URL(r.name).pathname,complete:r.responseEnd>0,status:r.responseStatus})),
+    })));
+    throw err;
   } finally{
     await report();
     await browser?.close();await web.stop(true);await api.stop(true);

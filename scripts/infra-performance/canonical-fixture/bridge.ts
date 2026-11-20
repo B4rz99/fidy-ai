@@ -195,7 +195,7 @@ export const serveFixture = Effect.fn(function* (runtime: Miniflare) {
                     );
                     return Effect.runPromise(transport(runtime)(request));
                   },
-                });
+                }).catch(err=>{if(network!=="poor")throw err;});
                 offer({ status: 200 });
               })
             : execute(item, active, service)

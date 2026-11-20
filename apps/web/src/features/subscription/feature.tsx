@@ -10,9 +10,12 @@ import { Atom } from "effect/reactivity";
 import { type EnrollmentInteraction, makeEnrollmentInteraction } from "./interaction";
 import { SubscriptionConsentBoundary } from "./consent-boundary";
 import { DaviplataAuthorizationLock } from "./daviplata-activity";
-import { type JSX, type RefCallback, Suspense, useState } from "react";
+import { type JSX, type RefCallback, Suspense, useContext, useState } from "react";
 import { useSession } from "@/session/session-context";
-import { useSubscriptionEnrollmentClient } from "@/session/subscription-enrollment-context";
+import {
+  SubscriptionEnrollmentContext,
+  useSubscriptionEnrollmentClient,
+} from "@/session/subscription-enrollment-context";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { type FidyClient } from "@/transport/client";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
@@ -524,9 +527,18 @@ const AuthorizedSubscriptionOffers = (): JSX.Element => {
       );
   }
 };
+const ReadySubscriptionOffers = (): JSX.Element => {
+  const enrollment = useContext(SubscriptionEnrollmentContext);
+  return Option.isSome(enrollment) ? (
+    <AuthorizedSubscriptionOffers />
+  ) : (
+    <PendingRead label="Cargando planes" />
+  );
+};
+
 export const SubscriptionOffersFeature = (): JSX.Element => (
   <SubscriptionConsentBoundary>
-    <AuthorizedSubscriptionOffers />
+    <ReadySubscriptionOffers />
   </SubscriptionConsentBoundary>
 );
 

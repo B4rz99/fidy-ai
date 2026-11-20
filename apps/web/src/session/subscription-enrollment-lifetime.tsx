@@ -29,16 +29,9 @@ export const SubscriptionEnrollmentLifetime = ({
   );
 
   return (
-    <>
+    <SubscriptionEnrollmentContext.Provider value={client}>
       <span ref={attachLifetime} hidden />
-      {Option.match(client, {
-        onNone: () => null,
-        onSome: (current) => (
-          <SubscriptionEnrollmentContext.Provider value={Option.some(current)}>
-            {children}
-          </SubscriptionEnrollmentContext.Provider>
-        ),
-      })}
-    </>
+      {children}
+    </SubscriptionEnrollmentContext.Provider>
   );
 };

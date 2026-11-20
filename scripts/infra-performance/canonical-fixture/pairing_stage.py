@@ -13,7 +13,6 @@ from staged_application import git_read, require_steps, verify_tree
 from unsealed_stage import PAIRING_REPAIR, STAGE, UPLOAD, QUALIFY, QUALIFY_ORIGINAL, staged_documents, verify_dispatch
 
 OWNERS = ("user", "directory", "pricing", "maintenance", "erasure")
-# Stage qualification ends at publication of the dormant seal. Forward recovery is a separate dispatch.
 STEPS = {
     "Require closed admission in the protected environment": "success",
     "Bind the protected verifier to the staged application source": "skipped",
@@ -285,7 +284,6 @@ def bind(env):
     if (operation not in ("recover-fixture-fallback", "resume-pairing-rollback", "rollout", "verify")
             or env.get("EXPECTED_INSTALLED_REVISION") != application):
         raise ValueError("Unexpected operation or requested installed revision")
-    # Keep the seal's independently approved coordinates in the active release archive.
     seal = {"artifactId":artifact_id, "sha256":digest}
     documents = {"native-fallback-stage.json": stage, "native-release.json.predecessor": prior,
                  "native-release.json.seal": seal}

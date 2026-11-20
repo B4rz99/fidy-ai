@@ -6,7 +6,7 @@ const noContentStatus = 204;
 const resetContentStatus = 205;
 const notModifiedStatus = 304;
 const noBodyStatuses = new Set([noContentStatus, resetContentStatus, notModifiedStatus]);
-/** Native cancellation can remain pending after the local reader is no longer owned. */
+
 const ownResponseBody = (response: Response, signal: Option.Option<AbortSignal>): Response => {
   if (response.body === null) return response;
   const reader: Pick<
@@ -76,7 +76,6 @@ const ownedNativeFetch = (native: typeof fetch): typeof fetch =>
     { preconnect: native.preconnect }
   );
 
-/** Proof tooling owns native cancellation and releases response readers locally. */
 export const ProofHttpLive = HttpClient.layerMergedContext(
   Effect.map(HttpClient.HttpClient, (client) =>
     HttpClient.transformResponse(client, (response) =>
@@ -111,11 +110,6 @@ type WorkerdRequest = Readonly<
   )
 >;
 
-/**
- * Materializes a loopback proof response within one owned 30-second HTTP lifetime. At most
- * 1 MiB is retained; the supplied signal and deadline abort headers and unfinished bodies.
- * The returned response contains only buffered bytes and no live transport resource.
- */
 const requestProof = (
   options: WorkerdRequest,
   origin: Option.Option<string> = Option.none()

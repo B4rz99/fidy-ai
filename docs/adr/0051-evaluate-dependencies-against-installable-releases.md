@@ -17,3 +17,13 @@ a recorded OpenAPI artifact digest. Keep exceptions scoped to the exact rule, co
 
 Alchemy hashes the site from the app directory. That package retains a local ignore file for
 generated Astro output and test artifacts because root-relative ignore rules do not rebase there.
+
+Run Astro checking against the tool's isolated TypeScript 6 install because Astro needs
+the JavaScript compiler API that TypeScript 7 does not expose. The isolated JavaScript
+lint plugin uses the classic compiler to keep Fidy's Effect diagnostics out of foreign
+AST callbacks. Stryker also uses Node for Babel instrumentation and the classic compiler API.
+
+Source scan partitions use only the runners selected by the ordinary change plan. Assign the
+complete source scope across those runners so a change-based split cannot hide untouched files
+from whole-repository checks. Publication checks treat export provenance separately from import
+boundaries and exclude upstream checkouts, ignored output and dependencies as graph roots.

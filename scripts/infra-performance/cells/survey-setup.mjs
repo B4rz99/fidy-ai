@@ -1,4 +1,3 @@
-// Configure the two disposable WebSessions through the same committed edits as the browser reference.
 import assert from "node:assert/strict";
 import { Schema } from "effect";
 import { prepareReferenceDashboard } from "../reference/fresh-dashboard.mjs";

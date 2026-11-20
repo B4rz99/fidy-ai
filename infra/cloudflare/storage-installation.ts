@@ -12,7 +12,6 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import { Effect, Schema } from "effect";
 import { namespaceClasses } from "./storage-release";
 
-// The Production physical names are recorded independently of the two Alchemy logical IDs.
 export const nativeStack = "FidyNativeStorage";
 export const nativeIngressHost = new URL(installedOrigins.acceptance.api).hostname;
 export const nativeWebHost = new URL(installedOrigins.acceptance.browser).hostname;
@@ -125,7 +124,6 @@ export const requireClosedBindings = ({
 }): void => requireRoleBindings({ role: worker, bindings, fingerprint });
 
 const requireSiteAsset = (role: NativeRole, props: unknown, bindings: NativeBinding[]): void => {
-  // The Worker provider appends the static ASSETS metadata from its build output outside its binding list.
   if (role === "Web" && !bindings.some((binding) => binding.name === "ASSETS")) {
     Schema.decodeUnknownSync(
       Schema.Struct({ assets: Schema.Struct({ directory: Schema.Unknown }) })

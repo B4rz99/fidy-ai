@@ -99,7 +99,7 @@ const resolveTarget = Effect.fn(function* (
     mailbox: { email: selector.email, revision: selected.revision },
   };
 });
-/** A transport retry carries the identical timestamp-independent intent and resolved User, including its original verified-mailbox generation. */
+
 export const runProCommand = Effect.fn(function* (command: ProCommand, submit: Submit) {
   if (command.action === "list") return yield* list(submit);
   const target = yield* resolveTarget(command.selector, submit);

@@ -24,7 +24,7 @@ const execute = (
 ): Effect.Effect<Awaited<ReturnType<Owner["exec"]>>, Cause.UnknownError> =>
   Effect.tryPromise(() => db.exec(...args));
 const everyHundred = 100;
-// Match the immutable D1 fixture's IDs, facts and dates. Bound each native SQLite statement.
+
 const transactions = Effect.fn(function* (db: Owner, size: Size) {
   const encodedCurrencies = yield* Schema.encodeEffect(
     Schema.fromJsonString(Schema.Array(Schema.String))
@@ -66,7 +66,6 @@ const transactions = Effect.fn(function* (db: Owner, size: Size) {
       FROM transaction_reconciliation_decisions d WHERE transactions.user_id=d.user_id AND transactions.id=d.${member}`
     );
   }
-  // The native Reconciliation writer explicitly updates the affected leaves. Both synthetic members have identical facts.
   yield* execute(
     db,
     `DELETE FROM transaction_projection_leaf WHERE id IN (SELECT second_transaction_id FROM transaction_reconciliation_decisions)`
@@ -163,13 +162,11 @@ export const seed = Effect.fn(function* (db: Owner, dataset: string) {
   }
   const size = sizes[dataset];
   const start = performance.now();
-  // The pinned D1 journey grants this User an active trial before browser approval.
   yield* execute(
     db,
     "UPDATE users SET trial_started_at_ms=created_at_ms,trial_ends_at_ms=created_at_ms+604800000 WHERE id=?",
     subject
   );
-  // Native captures retain stable Category keys on demand. The direct fixture writes bypass capture.
   for (const [position, category] of listLaunchCategories().entries()) {
     yield* execute(
       db,

@@ -54,7 +54,6 @@ export const FallbackStage = Schema.Struct({
 export type FallbackStage = typeof FallbackStage.Type;
 export type FallbackRepairPort = ReleasePort &
   Readonly<{
-    /** Ordered from the newest deployment, including its immediate predecessor when available. */
     recentDeployments(name: string): Effect.Effect<ReadonlyArray<Deployment>, Error>;
   }>;
 
@@ -95,7 +94,6 @@ export const RestoredDormantSource = Schema.Struct({
   restored: RollbackReceipt.fields.promoted,
 });
 
-/** The exact five entries connect both live dormant deployments to the original sealed stage. */
 export const requireRestoredDormantSource = Effect.fn(function* ({
   port,
   snapshot,
@@ -184,7 +182,6 @@ const coreRollbackPosition = Effect.fn(function* (
   return yield* Effect.fail(Error("Rollback Core history differs from the protected rollout"));
 });
 
-/** Finish only the Core side of an archived Ingress-first rollback. */
 export const resumePairingRollback = Effect.fn(function* (
   input: PartialRollback & { port: FallbackRepairPort & RollbackPort }
 ) {
@@ -269,7 +266,7 @@ export const matchesReplacementPredecessor = ({
     })
   );
 };
-/** A replacement may supersede only the identified failed zero-traffic versions. */
+
 export const requireDormantReplacementSource = Effect.fn(function* (
   port: FallbackRepairPort,
   snapshot: Release["snapshot"]
@@ -290,7 +287,6 @@ export const requireDormantReplacementSource = Effect.fn(function* (
   }
 });
 
-/** One interrupted upload may advance only the exact new zero-traffic pair over its original history. */
 const uploadedPosition = Effect.fn(function* (
   port: StageReader,
   snapshot: Release["snapshot"],
@@ -427,7 +423,6 @@ const requireUnpromotedHistory = Effect.fn(function* (port: StageReader, release
   }
 });
 
-/** Publish the seal only if both original traffic assignments surround the entire verification. */
 export const verifyUnpromotedFallback = Effect.fn(function* <A, E, R>(input: {
   port: StageReader;
   release: Release;
@@ -505,7 +500,6 @@ const advance = Effect.fn(function* (
   return observed;
 });
 
-/** Finish only the captured Core-first transition. A lost write reply resumes from provider history. */
 export const recoverFixtureFallback = Effect.fn(function* (
   port: FallbackRepairPort,
   stage: FallbackStage,

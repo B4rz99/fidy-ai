@@ -49,7 +49,6 @@ export const verifyProvenance = Effect.fn(function* (scope: ApprovedScope) {
   }
 });
 const matchesDeployment = (deployed: typeof Deployments.Type, expected: string): boolean => {
-  // The pinned Wrangler deployments list JSON is sorted by creation time, oldest first.
   const versions = deployed.at(-1)?.versions ?? [];
   return (
     versions.length === 1 && versions[0]?.version_id === expected && versions[0].percentage === 100

@@ -46,8 +46,6 @@ class Sandbox:
         self.prefix = "fidy-2259-aabbccddeeff"
         self.storage = scratch / "inventory"
         self.storage.mkdir()
-        # Browser requests run while the controller is idle. Workerd telemetry must have its
-        # own sink, independent of the control replies that are read only between requests.
         read_fd, write_fd = os.pipe()
         with os.fdopen(write_fd, "wb") as control:
             self.process = subprocess.Popen(
@@ -85,7 +83,6 @@ class Sandbox:
         if role == "core":
             self.process.stdin.write('{"action":"close"}\n')
             self.process.stdin.flush()
-            # The surviving supervisor independently waits for and verifies this service exit.
         (self.storage / role).unlink()
 
     def expose(self, role, enabled):
@@ -125,7 +122,6 @@ def main():
     evidence = dict(scope="credential-free workerd", attempts=[], hostedObservations=[])
     with tempfile.TemporaryDirectory() as tmp:
         scratch = Path(tmp)
-        # Rehearsal metadata is confined to scratch. The hosted entry demands the genuine sealed receipt.
         local = scratch / "bundle"
         local.mkdir()
         manifest = json.loads((path / "manifest.json").read_bytes())
@@ -176,7 +172,6 @@ def main():
                         raise AssertionError("Unresolved native batch was replayed")
                     except Refused:
                         pass
-                    # The original controller and pending request have stopped. Advance only the fault clock.
                     from unittest.mock import patch
 
                     with patch("owner.time.time", return_value=restored.active["deadline"] + 91):

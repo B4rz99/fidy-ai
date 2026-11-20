@@ -34,7 +34,7 @@ const installedHeaders = (
     headers["x-content-type-options"] === "nosniff"
   );
 };
-/** Compare actual TLS-served HTML, deployment metadata and entry assets to the locally built, protected revision. */
+
 export const verifyInstalledWebsite = Effect.fn(function* (
   client: HttpClient.HttpClient,
   revision: string,

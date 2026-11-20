@@ -107,7 +107,6 @@ const matchesReadOnlyProtocol = (value: RoutingObservation): boolean =>
   value.status === (value.method === "GET" ? readyStatus : refusedStatus) &&
   value.coreSource === (value.method === "GET" ? "body" : "header");
 
-/** Exact, complete ordinary-call observations after settling; never a synthetic-work attestation. */
 export const settledRoutingAccepted = ({
   env,
   observations,
@@ -135,7 +134,6 @@ export const settledRoutingAccepted = ({
   );
 };
 
-/** Bounded GET/POST observations only; never publishes work, writes an attestation, or changes traffic. */
 export const diagnoseSmokeRouting = Effect.fn(function* (env: unknown) {
   const decoded = Schema.decodeUnknownOption(RoutingConfig)(env);
   if (Option.isNone(decoded)) return yield* new RoutingDiagnosticFailed();

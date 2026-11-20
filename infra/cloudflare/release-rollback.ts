@@ -18,7 +18,6 @@ export const RollbackReceipt = Schema.Struct({
 export type RollbackPort = ReleasePort &
   Readonly<{
     recentDeployments(name: string): Effect.Effect<readonly Deployment[], Error>;
-    /** True only when Cloudflare lists this exact captured version as deployable. */
     deployable(name: string, versionId: string): Effect.Effect<boolean, Error>;
   }>;
 

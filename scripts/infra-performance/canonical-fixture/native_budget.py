@@ -3,16 +3,11 @@ from dataclasses import asdict
 from datetime import datetime
 import time
 
-# This path is set by protected_cohort before importing the existing native fleet meter.
 from pilot import (DAY, DAILY_READS, DAILY_WRITES, MAX_AGE, RESERVE_READS,
                    RESERVE_WRITES, CLEANUP_READS, CLEANUP_WRITES, Usage, admit, check_delta, iso, usage)
 
-# The eight-original fixture, 30 history reads and physical erasure measured 173,511
-# cursor reads, 5,919 cursor writes and 31 alarm writes on workerd. Allow 500k/20k
-# for foreground work and account-meter lag, plus the independent recovery reserve.
 COHORT_READS = 500_000 + CLEANUP_READS
 COHORT_WRITES = 20_000 + CLEANUP_WRITES
-# Reserve for both controller lifetimes, census delay, R2 custody, leases, and final settlement.
 R2_OPERATIONS = 4096
 R2_BYTES = 1_048_576
 MAX_R2_OPERATIONS = 1_000_000
@@ -33,7 +28,6 @@ def class_a_upper_bound(groups, total):
         counts[name] = count
     if not 0 < len(counts) < 100 or sum(counts.values()) != total:
         raise ValueError("Incomplete R2 operation breakdown")
-    # GetObject is Class B. Charge every other action, including unknown actions, against A.
     return total - counts.get("GetObject", 0)
 
 

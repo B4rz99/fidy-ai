@@ -13,7 +13,6 @@ from fixture import prepare, write
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "cells"))
-# The two rehearsal entrypoints share the actual WebSession establishment and native workerd.
 from importlib.util import module_from_spec, spec_from_file_location
 spec = spec_from_file_location("http_rehearsal", HERE.parent / "cells/rehearse.py")
 http = module_from_spec(spec)

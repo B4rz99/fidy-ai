@@ -1,6 +1,5 @@
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
 
-/** Account-wide Free limits: an isolated test database still spends production's allowance. */
 export const freeD1BenchmarkLimits = {
   dailyReads: 5_000_000,
   dailyWrites: 100_000,
@@ -42,10 +41,7 @@ export type D1BenchmarkBudgetDecision =
   | Readonly<{ _tag: "Allowed"; maximumRowsRead: number; maximumRowsWritten: number }>;
 
 const isoDateLength = 10;
-/** A conservative preflight, not a reservation: unknown, stale or another account's usage refuses.
- * The caller must obtain fresh account-wide analytics, including deleted fixture databases, before
- * provisioning and enforce the admitted experiment ceiling against every native batch's metadata.
- */
+
 export const assessFreeD1BenchmarkBudget = (raw: unknown): D1BenchmarkBudgetDecision => {
   const decoded = Schema.decodeUnknownOption(BudgetInput)(raw);
   if (Option.isNone(decoded)) return { _tag: "Refused", reason: "invalid_observation" };
@@ -74,7 +70,6 @@ const validateObservation = ({
 const exceedsExperimentLimit = (estimate: typeof BudgetEstimate.Type): boolean =>
   estimate.rowsRead > freeD1BenchmarkLimits.experimentReads;
 
-/** A size check cannot admit a hosted experiment without fresh account-wide usage. */
 const estimateOnly = (
   raw: unknown
 ):

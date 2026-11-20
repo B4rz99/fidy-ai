@@ -1,4 +1,3 @@
-// Bundled only in the disposable comparator. The original frozen application owns all SQL.
 import { AsyncLocalStorage } from "node:async_hooks";
 
 /** @import { Cost, CoreEnvironment, Database, Frame, MeterConfig, PinnedCore, PinnedCoordinator, Statement, StatementReply } from "./contracts.d.mts" */
@@ -218,8 +217,6 @@ const measuredChild = async (frame, child, { config, forward }) => {
     if (cap) for (const field of fields) frame.pending[field] -= cap[field];
   }
 };
-// The pinned Core consults the private registry for erasure metadata during Login.
-// Only that exact child request is permitted. Its mounted owner has a zero-D1 envelope.
 /**
  * @param {CoreEnvironment} env Bound disposable Core resources.
  * @param {MeterConfig} config Protected package and fixture scope.

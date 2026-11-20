@@ -298,3 +298,10 @@ browser approval. A queued browser terminal decision must still be live before i
 The original native confirmation binds ordered prepared effects, observed owner revisions
 and scopes. Consume it with all writes and Audit in one attempt or roll everything back.
 The continuation proves neither human presence nor receipt of the result.
+
+Compare Inspector behavior against the native dispatcher before importing optional transport
+packages. The isolated launcher preserves TLS and OAuth while using a dispatcher that can
+deliver cancellation alongside an open review stream. The fixture owns and closes the loopback
+sockets independently of client cancellation. Native verification uses isolated client profiles,
+keeps credentials redacted, and reconciles a lost mutation response against canonical state and
+Audit before deciding whether any work remains.

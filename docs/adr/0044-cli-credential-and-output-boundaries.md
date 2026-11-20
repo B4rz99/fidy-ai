@@ -28,3 +28,7 @@ recorded the decision.
 
 The Windows native acceptance assertion reads credential type and persistence metadata only.
 It does not dereference the credential blob.
+
+Cloudflared owns Access authentication for the operator CLI. Capture and contain its
+credentials and provider diagnostics at that seam. Native Request construction is the
+independent reference for signal precedence in the CLI transport tests.

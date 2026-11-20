@@ -121,3 +121,6 @@ Email Routing, deployment, promotion or any live provider workflow.
 - Blanket test/tool/runtime suffix exemptions turn names into authority
 - Copying schemas or moving native implementation into core weakens the canonical contract and
   purity boundaries rather than solving the dependency
+
+Published-only rules pin the two exact fallback-to-application edges. Maintenance owns its
+registry and shares the SQLite runtime without publishing private state.

@@ -1,4 +1,3 @@
-// One existing original is corrected once. The next atomic request must leave both targets unchanged.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 

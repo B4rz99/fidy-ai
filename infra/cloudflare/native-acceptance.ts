@@ -236,7 +236,7 @@ const boot = Effect.fn(function* (
   yield* consume(yield* call("/transactions", { headers }, false), isolated);
   return { headers, subject, outcome: complete.status };
 });
-/** The browser receives only the WebSession of the exact closed synthetic User it just proved. */
+
 export const openPerformanceBrowser = Effect.fn(function* (
   input: Pick<Inputs, "revision" | "proof" | "send">,
   member: "performance-1" | "performance-2"
@@ -560,7 +560,7 @@ const refusedPairing = Effect.fn(function* (
     }),
   };
 });
-/** Fixed-subject actions for the protected Transaction comparison. Only register can create a User. */
+
 type CohortBrowser = {
   open: (
     intent: "signup" | "login"
@@ -615,7 +615,7 @@ export const performanceCohortBrowser = (
     call,
   };
 };
-/** Compare each original User and its complete small financial history in provider-subject order. */
+
 export const retainedFinancialControls = Effect.fn(function* (input: Omit<Inputs, "erasure">) {
   const transport = { ...input, erasure: Option.none<ErasureObservation>() };
   const { call } = runner(transport);
@@ -639,7 +639,6 @@ export const retainedFinancialControls = Effect.fn(function* (input: Omit<Inputs
   );
 });
 
-/** The continuation authenticates the installed revision's existing subjects with login intent only. */
 export const admittedErasureLogins = (
   input: Omit<Inputs, "erasure">
 ): Pick<ErasureContinuation, "renew" | "logins" | "refused"> => {
@@ -664,9 +663,7 @@ export const admittedErasureLogins = (
 export const establishSmokeUsers = Effect.fn(function* (input: Inputs) {
   return [yield* boot(input, "smoke-1"), yield* boot(input, "smoke-2")] as const;
 });
-/** Exercise actual auth, private provider exchange and native financial callback through the installed protected release.
- * Callers verify the deterministic callback Workflow and the User-facing final projections before accepting its receipt.
- */
+
 export const exerciseClosedUsers = Effect.fn(function* (input: Inputs) {
   const { call } = runner(input);
   const ordinary = yield* call(

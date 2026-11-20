@@ -113,7 +113,6 @@ def verified_batch(cloud, database, statements, check=None):
         )
         actual = {k: actual[k] + cost[k] for k in KEYS}
         if "check" in statement:
-            # Snapshot projections use ASCII column names and SQLite-rendered text values.
             stable = [sorted(row.items()) for row in reply["results"]]
             if (
                 sha(json.dumps(stable, ensure_ascii=False, separators=(",", ":")).encode())

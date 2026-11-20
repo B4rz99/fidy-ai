@@ -7,7 +7,7 @@ type StablePair = Readonly<{
   core: SmokeIdentity;
   proof: string;
 }>;
-/** Prove normal-traffic identities without admitting work before capturing a rollback baseline. */
+
 export const verifyStableWorkerIdentity = Effect.fn(function* (
   expected: StablePair,
   origin = "https://api.fidyapp.com"

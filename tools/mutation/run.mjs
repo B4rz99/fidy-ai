@@ -1,4 +1,3 @@
-// Stryker requires Node for Babel instrumentation and the classic TypeScript compiler API.
 
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";

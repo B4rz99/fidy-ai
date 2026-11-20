@@ -42,9 +42,6 @@ const runSamples = (run: typeof timingRun.Type): ReadonlyMap<string, number> => 
   return files;
 };
 
-/** Aggregates complete equivalent Linux runs. Rejects missing/duplicate files instead of
- * inventing measurements; ranges and individual samples retain noise alongside the median.
- */
 export const medianAdapterTimings = (
   runs: typeof timingRuns.Type
 ): ReadonlyArray<

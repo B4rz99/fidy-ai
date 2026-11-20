@@ -281,7 +281,6 @@ const currentRevision = ({
   return Effect.succeed(previous.value);
 };
 
-/** Records a manual workflow fact only. Evidence references never authorize access, withdrawal, disclosure or erasure. */
 export const applyCaseCommand = Effect.fn(function* (
   input: Readonly<{ command: CaseCommand; previous: Option.Option<TitularCase>; atMs: number }>
 ) {

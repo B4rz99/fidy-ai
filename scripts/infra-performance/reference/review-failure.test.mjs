@@ -1,4 +1,3 @@
-// Exercise the mounted browser response boundary when the first summary fails before context exists.
 import assert from "node:assert/strict";
 import { freshPendingReview } from "./fresh-workspaces.mjs";
 

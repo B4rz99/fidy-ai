@@ -102,7 +102,7 @@ const domain = Schema.Struct({
   enabled: Schema.Boolean,
   previews_enabled: Schema.Boolean,
 });
-/** WorkerProvider reconciles every custom domain on the script even for a zero-traffic version upload. */
+
 export const requireClosedIngressDomains = Effect.fn(function* (read: Read) {
   const rows = yield* readList(
     read,
@@ -224,7 +224,7 @@ const readZone = Effect.fn(function* (read: Read, accountId: string) {
   )(yield* read("zones?name=fidyapp.com&account.id=" + accountId));
   return zone;
 });
-/** Verify live account and zone authority using the protected release credential. An unavailable read fails the operation. */
+
 export const inspectDeployedEdge = Effect.fn(function* (
   env: Pick<ProductionReleaseConfig, "account" | "token">,
   client: HttpClient.HttpClient,

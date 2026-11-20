@@ -1,4 +1,3 @@
-// Drive the mounted application through its scoped web and API transports.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { join, resolve, sep } from "node:path";

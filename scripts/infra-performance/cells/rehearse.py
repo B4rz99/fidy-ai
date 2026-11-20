@@ -128,7 +128,6 @@ def prepare_survey(subject):
     request = urllib.request.Request(subject.api + "/web/session/binding")
     subject.jar.add_cookie_header(request)
     credentials = dict(origin=subject.origin, binding=subject.binding, cookie=request.get_header("Cookie"))
-    # Only the synthetic loopback credentials enter this short-lived child via stdin.
     subprocess.run(["bun", str(HERE / "survey-setup.mjs")], cwd=reference.ROOT,
                    input=json.dumps(credentials).encode(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
 
@@ -150,7 +149,6 @@ def survey_costs(subjects, dest):
                 row = survey_read(subjects[variant], path, meter=variant == "d1")
                 report["attempts"].append(dict(operation=operation, variant=variant, **row))
                 write(dest, report)
-            # One isolated request per variant per second permits admission between shapes.
             time.sleep(max(0, 1 - (time.monotonic() - started)))
 
 

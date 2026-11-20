@@ -2,7 +2,6 @@ import retainedProvider from "./native-retained-provider.json" with { type: "jso
 import { installedOrigins } from "../../apps/server/src/shell/browser-transport/contract";
 import { Schema } from "effect";
 
-// This independent inventory guards the pinned Alchemy plan, including the static build and every delivery consumer.
 export const nativeResourceInventory = (revision: string): ReadonlyMap<string, string> => {
   if (!/^[a-f0-9]{40}$/u.test(revision)) throw Error("Missing native release revision");
   const resources: Readonly<Record<string, ReadonlyArray<string>>> = {

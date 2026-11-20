@@ -136,3 +136,26 @@ never become healthy zeroes.
 The Cloudflare adapter shard estimates seed longest-first packing from the recorded native
 Linux run at revision `3d21108`. The assignment still includes every discovered file once.
 [Seed timing run](https://github.com/B4rz99/fidy-ai/actions/runs/44432264215).
+
+### Deployment evidence and recovery
+
+Protect immutable candidate identities across plan, upload and observed traffic. An Alchemy
+state read can describe a replacement's new generation while the old one remains pending
+garbage collection. Verify actual provider metadata independently. Site assets and Worker
+provider coordinates come from the installed artifact or provider when the plan does not
+enumerate them. An unavailable or incomplete provider inventory cannot prove absence or
+readiness. A partially applied policy update rereads the ordered incumbent and patches
+only the next reviewed rule.
+
+Keep version upload, Access reattachment and traffic promotion separate. Preserve the
+original sealed-stage and deployment evidence for an interrupted upload or rollback.
+Resume only the same proved serving or dormant pair. Never substitute positive traffic
+for a denied zero-traffic upload. Script-level privacy settings are independently verified.
+An interrupted write or stale provider read cannot prove rollback. Rollback eligibility
+compares exact source and versioned bindings, including Durable Object configuration.
+
+Closed installation enrollment creates synthetic identities once. Login-only recovery can
+resume a recorded subject without signup or a new observation window. User and synthetic
+provider results are materialized in their deterministic subject order. Preserve pre-enrollment,
+cleanup and physical census evidence independently of the foreground report. A digest for
+the narrowly reviewed Workers types refresh binds the three exact before/after manifests.

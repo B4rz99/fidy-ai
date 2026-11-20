@@ -1,4 +1,3 @@
-// Export provenance is independent of import-boundary validation.
 import { loadGraph } from "./graph.mjs";
 import { launderingViolations } from "./laundering.mjs";
 

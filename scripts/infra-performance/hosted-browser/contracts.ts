@@ -13,7 +13,7 @@ const row = Schema.StructWithRest(
   [extras]
 );
 const history = Schema.StructWithRest(Schema.Struct({ data: Schema.Array(row) }), [extras]);
-// The proof hashes the original captured JSON, including its field order.
+
 export const parseHistory = (input: unknown): typeof history.Type => {
   Schema.asserts(history, input);
   return input;

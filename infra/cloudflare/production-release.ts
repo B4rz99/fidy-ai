@@ -52,8 +52,7 @@ const ResourceLifecycle = Schema.Struct({
   ]),
 });
 const stableWorkerReceiptStatuses = new Set(["created", "updated", "replaced"]);
-// Alchemy `replaced` carries the successfully created generation's attrs; only the old
-// generation is pending garbage collection. Capture still independently verifies live traffic.
+
 const ResourceAttributes = Schema.Record(Schema.String, Schema.Unknown);
 const WorkerIdentity = Schema.Struct({ workerName: WorkerName });
 const StateEntry = Schema.Struct({
@@ -91,7 +90,6 @@ const DeploymentRejection = Schema.Struct({
 });
 export class ReleaseFailure extends Data.TaggedError("ReleaseFailure")<{ message: string }> {}
 
-/** CLI failures report only owned release messages, never foreign errors or provider values. */
 export const releaseFailureMessage = (cause: Cause.Cause<unknown>): string => {
   for (const reason of cause.reasons) {
     if (Cause.isFailReason(reason) && reason.error instanceof ReleaseFailure) {
@@ -289,7 +287,6 @@ const providerJson = Effect.fn(
   Effect.provideService(HttpClient.TracerDisabledWhen, () => true)
 );
 
-/** Require default execution on the exact candidate; live settings may describe another version. */
 export const verifyCoreDefaultPlacement = Effect.fn(function* (
   env: Pick<Config, "account" | "token">,
   core: Readonly<{ name: string; version: string }>,
@@ -324,7 +321,6 @@ export const verifyCoreDefaultPlacement = Effect.fn(function* (
   );
 });
 
-/** Script settings are independent of gradual code uploads; verify privacy before staging. */
 const VerifiedObservability = Schema.Struct({
   success: Schema.Literal(true),
   result: Schema.Struct({
@@ -409,7 +405,6 @@ const toolingRefusal = (stream: ReadableStream<Uint8Array>): Promise<Option.Opti
     )
     .then(() => {
       const output = retained + decoder.decode();
-      // Wrangler 4.144.0 rewrites API 100405 as UserError and removes its numeric code.
       return Option.fromNullishOr(output.match(/\[code: (\d{4,6})\]/u)?.[1]).pipe(
         Option.orElse(() =>
           output.includes(
@@ -514,7 +509,6 @@ const startReleaseCommand = (
   return { child, settlement };
 };
 
-/** Own native command output and actual exit; interruption of a started write is not rollback. */
 export const releaseCommand = ({
   args,
   lifetime,
@@ -695,7 +689,6 @@ export const decodeWorkerReceipts = (output: string): WorkerReceipts =>
 export const decodeCaptureWorkerReceipts = (output: string): WorkerReceipts =>
   decodeWorkerReceiptsWithMode(output, "capture");
 
-/** Require the completed state entries from the interrupted upload, including the technical Smoke Worker. */
 export const decodePairingUploadReceipts = (output: string): WorkerReceipts => {
   const receipts = decodeWorkerReceipts(output);
   const logicalId = "ReleaseSmoke-" + fixtureUpload.revision;
@@ -843,7 +836,6 @@ const readTrunk = Effect.fn(function* (env: Config) {
   return env.revision;
 });
 
-/** Authenticated routing adapter with bounded reads and validated release identities. */
 export const releasePort = ({
   env,
   client,
@@ -878,8 +870,6 @@ export const releasePort = ({
     deploy: (name, versions) =>
       Effect.gen(function* () {
         if (versions.some((version) => version.percentage === 0)) {
-          // Cloudflare documents 0% through Wrangler, but its create-deployment API schema
-          // specifies a nonzero minimum. Never substitute 0.01%.
           yield* releaseCommand({
             args: [
               "bun",
@@ -956,7 +946,6 @@ const readStablePair = Effect.fn(function* (
   return { publicStable, coreStable, identity };
 });
 
-/** Read the release data from the exact attested source for each participating build. */
 const readCategoryRelease = Effect.fn(function* (revision: string) {
   const source = yield* shell([
     "git",
@@ -1126,7 +1115,6 @@ const rollbackPort = (
     }),
 });
 
-/** Shared provider observations and routing primitives for the independently named native installation. */
 export const releaseEvidence = {
   config,
   encodeJson,

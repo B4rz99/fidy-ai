@@ -6,7 +6,6 @@ const resetContentStatus = 205;
 const notModifiedStatus = 304;
 const noBodyStatuses = new Set([noContentStatus, resetContentStatus, notModifiedStatus]);
 
-/** Native cancellation can remain pending after the local reader is no longer owned. */
 const ownResponseBody = (response: Response, signal: Option.Option<AbortSignal>): Response => {
   if (response.body === null) return response;
   const reader: ReadableStreamDefaultReader<unknown> = response.body.getReader();
@@ -73,7 +72,6 @@ const ownedNativeFetch = (native: typeof fetch): typeof fetch =>
     { preconnect: native.preconnect }
   );
 
-/** Release tooling owns native response cleanup without waiting for remote cancellation. */
 export const ReleaseHttpLive = HttpClient.layerMergedContext(
   Effect.map(HttpClient.HttpClient, (client) =>
     HttpClient.transformResponse(client, (response) =>

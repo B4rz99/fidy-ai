@@ -53,8 +53,7 @@ const readClass = (url: URL): Option.Option<string> => {
 };
 
 const maximumReadOutcomes = 32;
-// FetchHttpClient passes an absolute URL and a method. Preserve the request and response,
-// collecting only the reviewed operation class and status.
+
 const observeReads = (fetch: typeof globalThis.fetch, reads: Set<string>): typeof fetch => {
   const record = (kind: string, outcome: string): void => {
     if (reads.size < maximumReadOutcomes) reads.add(kind + " " + outcome);

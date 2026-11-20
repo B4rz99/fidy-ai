@@ -1,4 +1,3 @@
-// Two disposable, local-only D1 bindings shared by the frozen provider and the verifier.
 import { Miniflare } from "miniflare";
 
 export const snapshotRuntime = new Miniflare({

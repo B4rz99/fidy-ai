@@ -77,7 +77,7 @@ const NamedTool = Schema.Struct({
     )
   ),
 });
-// Codex's built-in web search has a type and no name. It is not an MCP namespace.
+
 const CodexCatalog = Schema.Array(
   Schema.Union([NamedTool, Schema.Struct({ type: Schema.Literal("web_search") })])
 );

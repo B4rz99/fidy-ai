@@ -76,7 +76,6 @@ class InstalledRelease(unittest.TestCase):
                 read.assert_not_called()
                 sample("begin", deployed)
                 sample("check", deployed)
-                # Fresh samples just before enrollment must leave room for all remaining phases.
                 sample("signup", deployed)
                 with patch("pilot.usage", return_value=Usage(now, now, 12_000, 7_000)):
                     self.assertRaises(ValueError, sample, "signup", deployed)

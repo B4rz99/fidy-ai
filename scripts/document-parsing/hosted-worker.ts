@@ -19,7 +19,6 @@ class HostedProofCommandFailed extends Data.TaggedError("HostedProofCommandFaile
 }> {}
 export type HostedWorkerProof = Readonly<{ origin: string; token: string }>;
 
-/** Deletes only an isolated XLSX proof Worker; provider refusals contain numeric codes only. */
 export const deleteProofWorker = Effect.fn(
   function* (name: string) {
     if (!/^xlsx-proof-[a-f0-9]{8}$/u.test(name)) throw new Error("Invalid proof Worker name");
@@ -92,7 +91,6 @@ const runWrangler = Effect.fn(function* (directory: string, args: ReadonlyArray<
   return output;
 });
 
-/** Owns one unique synthetic proof Worker and optional namespace retirement through cleanup. */
 export const hostedWorkerProof = Effect.fn(function* (
   input: Readonly<{
     directory: string;

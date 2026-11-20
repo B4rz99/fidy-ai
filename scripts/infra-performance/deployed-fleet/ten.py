@@ -15,13 +15,9 @@ from pilot import (CLEANUP_SECONDS, DAILY_READS, DAILY_WRITES, DAY, MAX_SECONDS,
 
 ORDINALS = tuple(range(2, 12))
 WINDOW_MS = 300_000
-MIN_OWNERS = len(ORDINALS) + 3 + 2  # Three fixed owners and at least two registered smoke Users.
-# Run 44637286958 measured 78,265/2,932 for its signed fixture on all owners.
-# The deployed single-User continuation consumed another 50,924/401 account rows.
-# Round up and allow for 1,196 retained B-tree cells at physical disposal in the native census.
+MIN_OWNERS = len(ORDINALS) + 3 + 2
 ENROLL = (100_000, 3_500)
 DISPOSE = (60_000, 2_000)
-# Reserve shared observation/final settlement and residual usage inside the analytics lag.
 TAIL = (100_000, 4_000)
 WATERMARK_DELAY = 60
 UUID = r"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}"
@@ -49,7 +45,6 @@ def coverage(evidence, lookup):
             or any(not 0 < created_at[r["ordinal"]] <= r["at"] <= start for r in bindings)
             or any(r["at"] < end for r in events if r["stage"] in ("member-admitted", "member-erased"))):
         raise ValueError("Ten bound members must precede both observation windows")
-    # Query exactly the first two windows. In-window completions have both timestamps in range.
     result = lookup(start, start + 2 * WINDOW_MS)
     rows = result["coverageEvents"]
     previous = None
@@ -110,7 +105,6 @@ def written_objects(account, namespace, start_ms, now, lookup):
             continue
         if not isinstance(physical, str) or not re.fullmatch(r"[a-f0-9]{64}", physical):
             raise ValueError("Malformed physical object counters")
-        # Fixed release probes can have a non-User name. Only UUID-named Users can be matched.
         if isinstance(name, str) and re.fullmatch(UUID, name):
             result.append({"name": name, "id": physical})
     if len({r["name"] for r in result}) != len(result) or len({r["id"] for r in result}) != len(result):
@@ -119,7 +113,6 @@ def written_objects(account, namespace, start_ms, now, lookup):
 
 
 def latest_for(events, stage, current):
-    # Keep unresolved work reserved until a later periodic metrics bucket covers completion.
     return {row["ordinal"] for row in events if row["stage"] == stage and row["ordinal"] in ORDINALS
             and row["at"] // 1000 + WATERMARK_DELAY <= current.latest}
 
@@ -132,9 +125,6 @@ def require_ten_room(phase, current, delta, now, enrolled, evidence, resumed=Fal
     events = evidence.get("events", [])
     confirmed = latest_for(events, "signup-created", current)
     erased = latest_for(events, "member-erased", current)
-    # An original enrollment run may have lost its runner before archiving a final meter.
-    # All original work predates this continuation. Until that watermark passes, reserve
-    # all ten possible enrollments even when only the independent pre-enrollment archive survived.
     if resumed:
         potentially_enrolled = set(ORDINALS)
         upper_bound = source_finished or int(os.environ["FLEET_PILOT_STARTED_AT"])
@@ -186,7 +176,6 @@ def last_sample(rows):
 
 
 def source_window(evidence):
-    # Bind evidence for the original intervals before the continuation rewrites its checkpoint.
     stages = {"member-bound", "signup-created", "observation-start", "observation-end"}
     events = [(r["stage"], r["at"], r.get("ordinal")) for r in evidence["events"] if r["stage"] in stages]
     encoded = json.dumps([evidence["coreVersion"], evidence["members"], events],
@@ -305,7 +294,6 @@ def sample_ten(phase, revisions, args):
         print("pending")
         return
     except ValueError:
-        # Preserve sampled refusal evidence without admitting an ordinal or replacing its origin.
         with (directory / "native-fleet-refusal.jsonl").open("a") as out:
             print(json.dumps({**revisions, "phase": phase, "usage": values, "delta": delta}), file=out)
         raise

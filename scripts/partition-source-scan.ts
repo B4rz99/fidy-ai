@@ -1,6 +1,5 @@
 #!/usr/bin/env bun
 
-/** Use only runners that the ordinary change plan already selects. */
 export const sourceScanPlan = ({
   native,
   sca,
@@ -9,7 +8,6 @@ export const sourceScanPlan = ({
   sca: 2 + Number(native),
 });
 
-/** Distribute the complete source scope over existing jobs; never select only changed files. */
 export const partitionSourceFiles = ({
   files,
   count,

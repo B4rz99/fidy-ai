@@ -41,7 +41,6 @@ else
 fi
 cp "$temporary_directory/$archive/$executable" "$install_directory/$executable"
 chmod +x "$install_directory/$executable"
-# Bun dispatches its package runner by executable name; publish it with the same pinned bytes.
 if [[ "$executable" == bun.exe ]]; then
   cp "$install_directory/$executable" "$install_directory/bunx.exe"
 else

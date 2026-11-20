@@ -1,4 +1,3 @@
-# The runner pins one ephemeral loopback certificate in its own Chromium process.
 set -eu
 umask 077
 export BROWSER_TLS_CERT="$RUNNER_TEMP/hosted-browser.pem" BROWSER_TLS_KEY="$RUNNER_TEMP/hosted-browser.key"

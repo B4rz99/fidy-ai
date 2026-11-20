@@ -1,6 +1,5 @@
 import { Data, Schema } from "effect";
 
-/** Opaque references address restricted evidence; they never confer User authority. */
 export const EvidenceReference = Schema.String.check(Schema.isUUID());
 export const LocalDate = Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u));
 export const RequestKind = Schema.Literals([
@@ -17,7 +16,7 @@ export const HandoffWithdrawal = Schema.Union([
   Schema.Struct({ status: Schema.Literal("Recorded"), reference: EvidenceReference }),
   Schema.Struct({ status: Schema.Literals(["NotRequested", "Pending", "Unavailable"]) }),
 ]);
-/** An erasure handoff records the observed request authority and scope, never deletion or product authority. */
+
 export const ErasureHandoff = Schema.Struct({
   evidenceRef: EvidenceReference,
   authorityRef: EvidenceReference,
@@ -114,7 +113,6 @@ export const CaseCommand = Schema.Union([
 ]);
 export type CaseCommand = typeof CaseCommand.Type;
 
-/** Manual case metadata, never an authentication decision or proof of completed data deletion. */
 export const TitularCase = Schema.Struct({
   caseId: EvidenceReference,
   revision: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
@@ -171,7 +169,6 @@ export const CaseReceipt = Schema.Struct({
 });
 export type CaseReceipt = typeof CaseReceipt.Type;
 
-/** Closed local failures contain no request body, personal evidence, path, or storage diagnostics. */
 export class RegisterFailure extends Data.TaggedError("RegisterFailure")<{
   reason: "InvalidInput" | "Conflict" | "InvalidTransition" | "UnsafeStorage" | "Unavailable";
 }> {}

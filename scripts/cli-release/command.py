@@ -19,19 +19,17 @@ def stop_owned(process):
             except ProcessLookupError:
                 pass
             except PermissionError:
-                # Some platforms refuse signaling an already-reaped session leader.
                 if process.poll() is None:
                     process.send_signal(value)
         send(signal.SIGTERM)
         deadline = time.monotonic() + 2
         while time.monotonic() < deadline:
-            process.poll()  # Reap the leader before checking for surviving descendants.
+            process.poll()
             try:
                 os.killpg(process.pid, 0)
             except ProcessLookupError:
                 break
             except PermissionError:
-                # macOS can refuse the existence probe after the owned leader exits.
                 if process.poll() is not None:
                     break
             time.sleep(.01)

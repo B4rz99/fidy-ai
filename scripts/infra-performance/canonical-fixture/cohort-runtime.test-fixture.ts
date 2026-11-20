@@ -16,7 +16,6 @@ import { type CohortCommand, cohortAuthority, serveCohort } from "./cohort-bridg
 
 const readObject = Effect.fnUntraced(function* (runtime: Miniflare, directory: string, id: string) {
   if (!/^[a-f0-9]{64}$/u.test(id)) return yield* Effect.fail(Error("Unknown physical object"));
-  // Close the workerd writer before inspecting its SQLite files during a physical census.
   yield* native(() =>
     runtime.unsafeEvictDurableObject("core", "UserStore", { id }).catch((error: unknown) => {
       if (
@@ -105,7 +104,7 @@ const dispatch = Effect.fnUntraced(function* (runtime: Miniflare, value: unknown
     body: yield* native(() => response.text()),
   };
 });
-/** Use the protected release's real streamed HTTP transport against the local workerd listener. */
+
 const financialControls = Effect.fnUntraced(function* (
   runtime: Miniflare,
   auth: { revision: string; secret: string },

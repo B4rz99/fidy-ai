@@ -146,7 +146,6 @@ def publish(plan_path, directory):
     run('gh', 'release', 'upload', tag, '--repo', REPOSITORY, *(str(path) for path in assets))
     run('gh', 'release', 'edit', tag, '--repo', REPOSITORY, '--draft=false', '--latest=false')
     published = json.loads(run('gh', 'api', f'repos/{REPOSITORY}/releases/tags/{tag}'))
-    # The workflow token can read releases but cannot read administrative settings.
     if not published.get('immutable') or published.get('draft'):
         raise ValueError('Release is not published and immutable; default unchanged')
     with tempfile.TemporaryDirectory() as temporary:

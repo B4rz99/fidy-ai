@@ -34,7 +34,7 @@ const assertNoWriter = Effect.fn(function* (read: ProviderRead, id: string) {
     })
   )(yield* read(path + "/subdomain"));
 });
-/** Read-only check immediately before claiming canonical domains. Old jobs and their DLQ remain isolated. */
+
 export const verifyIncumbentFence = Effect.fn(function* (read: ProviderRead) {
   const scripts = (yield* pages(read, "workers/scripts", worker)).filter((item) =>
     incumbent(item.id)

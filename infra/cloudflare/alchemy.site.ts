@@ -3,7 +3,6 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import { Config, Effect, Layer } from "effect";
 import { marketingSite } from "./marketing-site";
 
-// The existing Site belongs to this state. Publication selects only Site and its Build.
 export default Alchemy.Stack(
   "FidyCloudflare",
   {

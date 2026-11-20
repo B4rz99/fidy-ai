@@ -1,5 +1,4 @@
 import { serveFixture } from "./bridge";
-// Disposable production Workers and the pinned release's private Google provider, without an account transport.
 import { Config, Effect, Redacted } from "effect";
 import { Miniflare, type MiniflareWorkerConfig } from "miniflare";
 import { installedOrigins } from "../../../apps/server/src/shell/browser-transport/contract";
@@ -71,8 +70,6 @@ const observedManifest = Effect.fnUntraced(function* (module: string, name: stri
       Error("Ingress bundle differs from the captured public export inventory")
     );
   }
-  // The local Miniflare entry listener supplies its loopback URL. Preserve the fixed original TLS
-  // URL when delivering to the production Ingress so the real signed request can be verified.
   const wrapper = `import worker from "./production.mjs";
     export default { ...worker,fetch(request,env,ctx) {
       const url=new URL(request.url);

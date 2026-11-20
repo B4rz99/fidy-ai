@@ -16,7 +16,6 @@ export default {
           "^cloudflare/erasure-worker\\.test-fixture\\.ts$",
           "^cloudflare/login-email-worker\\.test-fixture\\.ts$",
           "^cloudflare/storage-forward-repair\\.test-fixture\\.ts$",
-          // The exact two permitted fallback-to-application edges are checked by published-only.
           "^cloudflare/fixture-fallback-(core|ingress)\\.ts$",
           "^cloudflare/(core-worker|public-worker|operational-canary-workflow)\\.ts$",
           "^cloudflare/ingestion/email-worker\\.ts$",
@@ -80,7 +79,6 @@ export default {
         path: ["^cloudflare/", "^src/(core|shell)/"],
         pathNot: [
           "^cloudflare/maintenance/",
-          // The Maintenance registry owns its SQLite state and uses the shared storage runtime.
           "^cloudflare/runtime/sqlite/operations\\.ts$",
           "^cloudflare/.+/(contract|runtime)\\.ts$",
           "^src/(core|shell)/[^/]+/(contract|runtime)\\.ts$",

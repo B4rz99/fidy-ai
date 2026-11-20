@@ -56,14 +56,13 @@ const captureStableUsers = Effect.fn(function* (port: Port) {
   if (new Set(retained).size !== 2) {
     return yield* Effect.fail(Error("Expected two stable smoke Users"));
   }
-  // Shared bootstrap initializes one fixed UserStore probe in addition to the two smoke Users.
   const before = yield* observed(port, "waiting-baseline", (rows) =>
     populated(rows) >= 3 ? Option.some(rows) : Option.none()
   );
   yield* port.record({ stage: "stable-users", populated: populated(before) });
   return { before, retained };
 });
-/** The protected release owns the closed installation's only signup during the physical census. */
+
 export const verifyIndependentErasure = Effect.fn(function* (port: Port) {
   const { before, retained } = yield* captureStableUsers(port);
   yield* port.renew();

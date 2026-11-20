@@ -7,7 +7,6 @@ class ProofCommandFailed extends Data.TaggedError("ProofCommandFailed")<{
   readonly reason: "execution" | "output" | "cleanup";
 }> {}
 
-/** Stops an owned proof process, escalating after two seconds if graceful shutdown stalls. */
 export const stopProofProcess = Effect.fn(function* (child: Bun.Subprocess) {
   if (child.exitCode !== null) return;
   yield* Effect.try({
@@ -30,7 +29,6 @@ export const stopProofProcess = Effect.fn(function* (child: Bun.Subprocess) {
   }
 });
 
-/** Reads at most 1 MiB from a proof output pipe; the process owner closes the pipe on refusal. */
 export const readProofOutput = Effect.fn(function* (stream: ReadableStream<Uint8Array>) {
   const decoder = new TextDecoder();
   let bytes = 0;
@@ -50,7 +48,6 @@ export const readProofOutput = Effect.fn(function* (stream: ReadableStream<Uint8
   return output + decoder.decode();
 });
 
-/** Runs isolated proof tooling with a two-minute lifetime and a 1 MiB cap on each output pipe. */
 export const runProofCommand = (
   args: ReadonlyArray<string>
 ): Effect.Effect<

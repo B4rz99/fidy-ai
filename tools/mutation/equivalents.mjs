@@ -84,7 +84,6 @@ const validateRegistry = new Ajv().compile({
   },
 });
 
-/** Read the reviewed registry with structural validation before any exclusions are applied. */
 export const loadRegistry = () => {
   /** @type {unknown} */
   const registry = JSON.parse(readFileSync(new URL("./equivalents.json", import.meta.url), "utf8"));

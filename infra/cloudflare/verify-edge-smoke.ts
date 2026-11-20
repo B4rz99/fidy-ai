@@ -51,7 +51,6 @@ class EdgeSmokeFailure extends Data.TaggedError("EdgeSmokeFailure")<{
   readonly path: string;
 }> {}
 
-/** Probe credential-free health and rejected operations; never send a valid provider event or User request. */
 export const verifyEdgeSmoke = <E, R>({
   probe,
   candidate,

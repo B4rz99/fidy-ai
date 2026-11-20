@@ -48,7 +48,6 @@ export const observeBrowserD1 = (page, { api, operator }, event) => {
   page.on("requestfinished", (request) => active.delete(request));
   page.on("requestfailed", (request) => active.delete(request));
   return async (/** @type {string} */ stage) => {
-    // Finish previously observed in-flight requests before taking the native row-counter sample.
     await Promise.all(
       Array.from(active, async (request) => (await request.response())?.finished())
     );

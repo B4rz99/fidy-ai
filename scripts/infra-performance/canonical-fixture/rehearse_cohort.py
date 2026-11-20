@@ -83,8 +83,6 @@ def controller(directory, coords, path):
 
 def native_accounts(directory, physical, session, user):
     database, = directory.rglob(physical + ".sqlite")
-    # Both readings occur with workerd stopped. The independent SQLite reader gets its own
-    # WAL index and never opens a shared-memory file in the actual persistence directory.
     with TemporaryDirectory() as temporary:
         snapshot = Path(temporary) / "audit.sqlite"
         copyfile(database, snapshot)
@@ -147,8 +145,6 @@ def main():
         finally:
             with controller(directory, coords, path) as port:
                 port.owner.cleanup()
-    # New controller and new workerd process. The previous committed native databases and R2
-    # marker survive the foreground runtime. Only custody and the original bound Session remain.
     with controller(directory, coords, path) as port:
         resumed = port.owner
         resumed.cleanup()

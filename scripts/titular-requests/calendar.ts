@@ -10,7 +10,6 @@ const completionDays = 5;
 const completionMonths = 2;
 const bogotaZone = DateTime.zoneMakeNamedUnsafe("America/Bogota");
 
-/** Original-request calendar-month review date, never automatic abandonment or an extension of the response target. */
 export const completionReviewDate = (value: TitularCase): Option.Option<string> =>
   Option.flatMap(value.completion, (completion) =>
     Option.map(DateTime.make(completion.requestedAtMs), (instant) =>
@@ -20,7 +19,6 @@ export const completionReviewDate = (value: TitularCase): Option.Option<string> 
     )
   );
 
-// Ley 51/1983 Article 1, including moved observances and Easter-relative days.
 const holidays: Readonly<Record<string, ReadonlyArray<string>>> = {
   "2026": [
     "01-01",
@@ -64,13 +62,11 @@ const holidays: Readonly<Record<string, ReadonlyArray<string>>> = {
   ],
 };
 
-/** Calendar-only decoding rejects normalized impossible dates instead of moving an intake date. */
 export const parseDate = (value: string): Option.Option<DateTime.Utc> =>
   DateTime.make(`${value}T00:00:00Z`).pipe(
     Option.filter((date) => DateTime.formatIsoDateUtc(date) === value)
   );
 
-/** Conservative internal targets count Saturdays, exclude Sundays/national holidays, and never reset on verification. */
 const workingDeadline = (
   value: string,
   count: number,
@@ -95,7 +91,6 @@ const workingDeadline = (
   return Option.some(DateTime.formatIsoDateUtc(date));
 };
 
-/** Provisional Ley 1581 targets cover only 2026–2027; unsupported years require review. Apply any shorter special-regime deadline separately. */
 export const caseDeadlines = ({
   kind,
   receivedDate,

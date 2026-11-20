@@ -13,12 +13,9 @@ from observations import observation
 
 DAY = 86400
 MAX_AGE = 600
-# Keep an entire 36-User rehearsal's measured cost available for the one-User pilot,
-# rounded up from 1,661,321 reads and 70,639 writes, including physical cleanup.
 PILOT_READS, PILOT_WRITES = 2_000_000, 75_000
 DAILY_READS, DAILY_WRITES = 5_000_000, 100_000
 RESERVE_READS, RESERVE_WRITES = 2_500_000, 10_000
-# Calibrated one-User admission includes the entire known 36-User physical rehearsal.
 SIGNUP_READS, SIGNUP_WRITES = 1_661_321, 70_639
 CLEANUP_READS, CLEANUP_WRITES = 250_000, 10_000
 MAX_SECONDS = 100 * 60
@@ -86,7 +83,6 @@ def require_room(phase, current, delta, now, lifetime=MAX_SECONDS):
 
 def continuation_room(before, last, current, now, phase):
     delta = check_delta(before, current, now)
-    # Include concurrent account use, outstanding lag and all intervening retries in both caps.
     cleanup = check_delta(last, current, now)
     if (current.latest < last.sampled or cleanup["reads"] > CLEANUP_READS
             or cleanup["writes"] > CLEANUP_WRITES
@@ -140,7 +136,6 @@ def usage():
     if not re.fullmatch("[a-f0-9]{32}", account):
         raise ValueError("Invalid Cloudflare account")
     window = 'filter:{datetime_geq:"%s",datetime_leq:"%s"}' % (iso(now - now % DAY), iso(now))
-    # No namespace filter and no grouping on totals. The second alias supplies data recency.
     body = query("graphql", {"query": '''
         query($account:String!) {viewer {accounts(filter:{accountTag:$account}) {
           accountTag

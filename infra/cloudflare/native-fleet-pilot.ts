@@ -19,7 +19,7 @@ type Port = FleetPilotBrowser & {
   watch: (physicalObject: string) => Effect.Effect<void, Error>;
   record: (event: Readonly<Record<string, string | number>>) => Effect.Effect<void, Error>;
 };
-// The admitted erasure checkpoint pins native-erasure.ts byte-for-byte to its source revision.
+
 const populated = (rows: UserObjects): number => [...rows.values()].filter(Boolean).length;
 const observePhysicalCensus = Effect.fn(function* <Value>(
   port: Pick<Port, "inventory" | "record" | "renew">,
@@ -83,7 +83,6 @@ const cleanupPilot = Effect.fn(function* ({
   before: UserObjects;
   physical: Option.Option<string>;
 }) {
-  // Submit the same authenticated User's erasure even when foreground metering or logging failed.
   yield* Effect.exit(port.renewCleanup().pipe(Effect.timeout("1 minute")));
   const fresh = yield* freshMember(member, port.login);
   const starting = yield* Effect.exit(port.record({ stage: "erasure-submission-started" }));
@@ -105,7 +104,6 @@ const cleanupPilot = Effect.fn(function* ({
   if (recorded._tag === "Failure") return yield* Effect.failCause(recorded.cause);
 });
 
-/** One synthetic lifetime, from independently observed population to confirmed physical disposal. */
 export const runFleetPilot = Effect.fn(function* (port: Port) {
   const before = yield* observePhysicalCensus(port, "waiting-baseline", baseline);
   if (before.size >= maximumExistingObjects) {
@@ -125,7 +123,6 @@ export const runFleetPilot = Effect.fn(function* (port: Port) {
     if (member.outcome !== "created") return yield* Effect.fail(Error("Fresh fleet User required"));
   } else {
     yield* port.record({ stage: "signup-reply-unconfirmed" });
-    // A single independently populated object permits one login-only recovery, never another signup.
     physical = Option.some(yield* targetFromCensus);
     member = yield* port.login().pipe(Effect.timeout("2 minutes"));
     if (member.outcome !== "approved") {
@@ -169,7 +166,6 @@ const eraseEstablished = Effect.fn(function* (input: Cleanup, transition: Transi
   yield* input.renewCleanup();
   const session = yield* input.login().pipe(Effect.timeout("2 minutes"), Effect.result);
   if (session._tag === "Failure") {
-    // An admitted subject can lose login authority before its storage disappears.
     yield* input.record({ stage: "established-login-unconfirmed" });
     return Option.none<Member>();
   }
@@ -188,7 +184,6 @@ const eraseEstablished = Effect.fn(function* (input: Cleanup, transition: Transi
   return Option.some(member);
 });
 
-/** Finish the archived pilot without reenrollment or a second observation window. */
 export const continueFleetCleanup = Effect.fn(function* (input: Cleanup) {
   const initial = yield* input.inventory();
   const before = new Map(initial);

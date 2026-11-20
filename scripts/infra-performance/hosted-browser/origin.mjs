@@ -1,4 +1,3 @@
-// No account credentials or User state are available during the browser-origin preflight.
 import assert from "node:assert/strict";
 import { installedOrigins } from "../../../apps/server/src/shell/browser-transport/contract";
 

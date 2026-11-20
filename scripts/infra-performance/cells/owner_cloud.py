@@ -182,7 +182,6 @@ class Cloud:
         if migrations:
             metadata["migrations"] = migrations
         if version:
-            # These are script-level settings already applied while the Worker was unbound.
             del metadata["tags"], metadata["observability"]
         body, kind = multipart(metadata, module)
         if version:

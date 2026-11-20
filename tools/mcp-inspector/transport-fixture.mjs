@@ -3,8 +3,6 @@ import { once } from "node:events";
 import { readFile } from "node:fs/promises";
 import { createSecureServer } from "node:http2";
 
-// Initialize Node's own dispatcher before importing any optional external package.
-// Otherwise a nominal baseline can silently exercise Undici's replacement instead.
 await fetch("data:text/plain,initialize-native-fetch");
 const { Client, StreamableHTTPClientTransport, parseJSONRPCMessage } =
   await import("@modelcontextprotocol/client");
@@ -144,7 +142,6 @@ const client = new Client(
 );
 client.setRequestHandler("elicitation/create", async () => {
   reviewSeen.resolve();
-  // Give the competing POST time to reach the server before cancelling the form.
   await new Promise((resolve) => setTimeout(resolve, 100));
   return { action: "cancel" };
 });
@@ -176,7 +173,6 @@ try {
   process.stdout.write(JSON.stringify({ passed: false, cancellationReceived, concurrent }) + "\n");
   process.exitCode = 1;
 } finally {
-  // Close the owned sockets even if the client's timeout cancellation is itself queued.
   for (const session of sessions) session.destroy();
   await client.close();
   await new Promise((resolve) => server.close(resolve));

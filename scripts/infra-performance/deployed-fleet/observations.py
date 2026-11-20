@@ -34,7 +34,6 @@ def observation(query, account, version, start, end, *, fleet=False):
         if not match:
             raise ValueError("Unrecognized watchdog outcome")
         row = {"at": at, "halt": match.group(1)}
-        # Structured fields may be absent when the logger exports an unstructured line.
         source = event.get("source")
         if isinstance(source, dict) and all(type(source.get(key)) is int and source[key] >= 0 for key in counters):
             row.update({key: source[key] for key in counters})

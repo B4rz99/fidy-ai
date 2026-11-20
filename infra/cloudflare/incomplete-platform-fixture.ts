@@ -5,7 +5,6 @@ const unavailable = (): never => {
   throw new Error("Unexpected synthetic binding access");
 };
 
-/** Complete, fail-closed Cloudflare bindings; a test may proxy only the operations it exercises. */
 export const unavailableBucket: R2Bucket = {
   head: unavailable,
   get: unavailable,

@@ -1,5 +1,6 @@
 import { Effect, Option } from "effect";
 import { AsyncResult, type Atom, AtomRegistry } from "effect/reactivity";
+
 export const prepareQuery = <A, E>({
   registry,
   query,

@@ -5,6 +5,7 @@ import type { BrowserSessionObservation } from "@/transport/session-entry";
 import type { FidyClient, ProcessingConsentStatus, WebAuthClient } from "@/transport/client";
 import { workspaceMetadataInitialValue } from "@/transport/workspace-query";
 import { initialConsentObservation, initialTransactionConsent } from "@/session/transaction-entry";
+
 export const initialApplicationValues = ({
   apiClient,
   webAuthClient,

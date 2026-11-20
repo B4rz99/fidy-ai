@@ -3,7 +3,8 @@
 - **Status:** Accepted
 - **Date:** 2026-09-21
 - **Storage direction:** Superseded by [ADR 0041](0041-per-user-durable-object-storage-direction.md)
-  for the migration destination. The D1 implementation described here remains current until cutover.
+  for application storage and execution. [ADR 0038](0038-openai-hosted-inference.md) owns the
+  hosted inference provider decision.
 - **Supersedes:** Earlier process-runtime, relational-database, cluster, and provider-specific
   deployment decisions. Their domain, isolation, durability, provider-ambiguity, and safe-rollout
   invariants remain requirements unless this decision explicitly replaces the mechanism.
@@ -25,21 +26,19 @@ provider webhook.
 Use Cloudflare-native adapters for every production-owned capability. Planned but unimplemented
 capabilities remain future work. Preserve canonical operation identifiers, schemas, contract artifacts,
 domain decisions, security invariants, and portable evidence. Remove process listeners, relational
-runtime owners, local queues and locks, cluster/durable-execution implementations, direct external
-model adapters, and inbound provider-webhook authority. Missing adapters fail closed.
+runtime owners, local queues and locks, cluster/durable-execution implementations, and inbound provider-webhook
+authority. Missing adapters fail closed.
 
 The target production shape is:
 
 - an assets-only web Worker at `app.fidyapp.com`, with `fidyapp.com` redirecting to it;
 - a public ingress Worker at `api.fidyapp.com` and private Core Worker connected by a service
   binding, with the latter owning canonical execution;
-- D1 as the authoritative relational store;
-- one per-User Durable Object for serialized coordination, never as a financial ledger;
-- a D1 transactional outbox and Cloudflare Queues for at-least-once work delivery;
+- per-User SQLite Durable Objects for User state and execution, with separate shared owners;
+- retained owner work, native alarms and Cloudflare Queues for durable delivery;
 - Cloudflare Workflows for durable multi-step execution, waits, retries, and provider ambiguity;
 - private R2 buckets for statements, retained email material, and other bounded objects;
 - Cloudflare Email Routing and an Email Worker for forwarded-email admission;
-- direct Workers AI bindings for hosted-agent inference, without external-model fallback;
 - Cloudflare-native metadata-only logs, traces, metrics, and alerts;
 - Cloudflare WAF, DDoS protection, and operation-aware rate limits.
 
@@ -53,7 +52,7 @@ abstractions.
 
 ### Isolation and state
 
-The public Worker cannot access private D1 directly. Every User-owned operation carries an explicit
+Public Ingress cannot access private User storage. Every User-owned operation carries an explicit
 authenticated `UserId`; the private data API exposes no generic unscoped personal-data query;
 background work carries its subject explicitly; and public and asynchronous seams require negative
 cross-User evidence.
@@ -61,8 +60,7 @@ cross-User evidence.
 A successful canonical mutation and its required outbox record commit atomically. Queues and Workflows
 are execution mechanisms, never domain authority. Consumers are idempotent, assume redelivery, retain
 bounded identities rather than broad payloads, and reconcile ambiguous provider outcomes instead of
-blindly retrying them. Immediate canonical reads agree with successful mutations; derived projections
-may lag briefly.
+blindly retrying them. Immediate canonical reads agree with successful mutations; a derived projection required by a canonical read must meet that read's consistency contract.
 
 Create a fresh Cloudflare migration baseline before the first real User. After launch, applied
 migrations are immutable and forward-only; destructive cleanup requires explicit approval. Money
@@ -92,15 +90,12 @@ infrastructure.
 
 - A local process, mutable host, or hidden in-memory fallback would make correctness depend on one
   runtime instance.
-- D1-only execution would weaken per-User serialization and external-effect ordering.
-- Durable-Object-only authority would multiply data stores and make export and identity indexes harder.
-- A direct external-model fallback would bypass the Workers AI governance boundary.
 - A provider-controlled inbound email webhook would make admission and retention depend on the wrong
   authority.
 - Permanent staging, remote previews, and generic multi-cloud abstractions are deferred until a
   measured need justifies their cost.
 
-## Patched Cloudflare deployment boundaries
+## Deployment patch decisions and retained D1 evidence
 
 An immutable uploaded Worker version receipt can be retained only while that version still
 exists. The live deployment is checked independently because a recorded upload can have no

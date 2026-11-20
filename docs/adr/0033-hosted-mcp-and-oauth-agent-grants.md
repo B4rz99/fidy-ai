@@ -56,16 +56,16 @@ Owner publications follow ADR 0031:
   from the browser-safe server declarations. It neither parses nor stores OAuth credentials and
   does not present per-operation approval; native intent persistence remains with confirmation.
 
-Ingress retains no D1 binding. Private Core/D1 is authoritative, and the existing per-User Durable
-Object serializes canonical work, refresh, confirmation and revocation. All protected D1 work
-rechecks live authority inside its unit; an earlier admission or tools/list is not permission.
-There is no second financial model, operation registry, quota meter, audit stream or inference path.
+Public Ingress has no private database binding. Core routes authenticated work to the named
+UserStore under [ADR 0041](0041-per-user-durable-object-storage-direction.md). That owner
+serializes work, refresh, confirmation and revocation and rechecks live authority within the
+protected unit. Discovery conveys no execution permission. OAuth shares the canonical financial
+model, operation registry, quota, Audit and inference path.
 
 An explicit **OAuth User-owned-agent caller** contains stable UserId, OAuthConnectionId and safe
 credential identity with approved capabilities. It is not a PAT, WebSession or Hosted Agent Session.
 Canonical access policy treats it as a User-owned agent for `read`, `write`, `dashboard`, not as an
-eligible account-security caller. Refactor the currently PAT-named capability requirement into the
-shared User-owned-agent requirement when implementing; retain PAT lifecycle ownership separately.
+eligible account-security caller. The shared User-owned-agent requirement covers capability checks while Tokens retains PAT lifecycle ownership.
 Queries, mutations, nested batch alternatives and SuggestedOperations consume the same policy.
 
 `tools/list` is authorization-private, canonical-ID ordered, initially `ttlMs: 0`, and derived from
@@ -252,7 +252,7 @@ Settings show safe short connection identity, claimed client name, approved perm
 and bounded metadata-only recent activity. Label **Revocar esta conexión**, **Revocar todas las
 conexiones**, PAT controls and **Cerrar sesión** separately. Explain expiration/reconnection and
 that revocation does not undo committed changes. No OAuth jargon or raw scope/token values are
-required of the User. This ADR specifies copy, not a shipped UI.
+required of the User. The owner feature documentation tracks current UI and launch evidence.
 
 ## Gates and consequences
 
@@ -261,7 +261,7 @@ Effect's stateless 2026-07-28 adapter; the observed supported Codex 0.160.0 hand
 2026-only refusal justify 2025-11-25 compatibility. The earlier Pi evidence does not expand scope.
 Remove unneeded older adapters; no second MCP SDK or hand-written wire implementation is approved.
 
-Before production authority: implement and verify the new caller/access algebra, D1 atomicity,
+Before production authority: verify the installed caller/access algebra and UserStore atomicity,
 negative public OAuth tests, two-User isolation, sensitive handoff, streamed bounds/cancellation,
 revocation and refresh concurrency. Instrument bounded Work with metadata-only outcomes, never
 credential-bearing URLs or protocol bodies. #35 must include OAuth in the existing shared User

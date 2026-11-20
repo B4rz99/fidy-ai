@@ -7,8 +7,8 @@
 
 The web application takes seconds to reveal information. Backend redesign will focus on actual
 access patterns, bounded set-based work, compact projections and reducing data movement and
-sequential round trips. Cloudflare Workers, D1 and per-User Durable Objects remain the initial
-platform; replacing them requires evidence of a limiting constraint. Web request composition and
+sequential round trips. The [per-User storage decision](0041-per-user-durable-object-storage-direction.md) owns
+placement and topology. Web request composition and
 canonical query contracts may change. Live authorization, exact Money and consistent financial
 reads remain requirements.
 
@@ -60,7 +60,8 @@ retained product response. Retained-result navigation has a separate measurement
 satisfy the fresh-read gate. Browser result retention will be evaluated separately after fresh
 reads meet their target; it is not being removed by this decision. Exact write-maintained
 aggregates, request-local computation reuse and in-flight request deduplication remain available.
-The atomic financial projection in ADR 0030 is not a stale response cache.
+The [write-maintained financial projection](0060-dashboard-initialization-and-exact-projections.md)
+is part of the fresh-read design.
 
 ## Trade-off
 

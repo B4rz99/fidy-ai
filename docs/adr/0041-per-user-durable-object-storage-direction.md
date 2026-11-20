@@ -1,15 +1,13 @@
 # Per-User Durable Objects own application storage and atomic execution
 
-- **Status:** Accepted implementation-ready migration design, including User storage/execution,
-  routing, shared facts, background discovery, account erasure, operations and acceptance/cutover.
-  Implementation and measured acceptance remain subsequent work. Backup restoration and a new
-  complete User-data export are outside this migration.
+- **Status:** Accepted. The repository implements the per-User SQLite Durable Object topology.
+  Measured acceptance and opening intended admission remain separate release gates.
+  Backup restoration and a new complete User-data export are outside this decision.
 - **Supersedes:** The D1 storage destination and coordination-only Durable Object role in
   [ADR 0026](0026-cloudflare-native-production-replatform.md), and the initial-platform restriction
   in [ADR 0039](0039-fresh-read-performance-contract.md).
 
-Fidy will replace D1 with SQLite Durable Objects, with one object per stable User owning that
-User's application state and atomic execution. Co-locating execution and storage removes the
+One SQLite Durable Object per stable User owns that User's application state and atomic execution. Co-locating execution and storage removes the
 remote database boundary inside the User's unit of work. This trades the simplicity of a shared
 database for explicit global routing, work discovery and recovery protocols. A permanent D1/DO
 hybrid is not the destination.
@@ -476,11 +474,11 @@ operational procedures and required evidence. The
 records source-backed findings and outstanding evidence. Dated research and decision-ticket detail
 remain on the tracker.
 
-This ADR records the chosen boundaries and the explicit disposable-data cutover scope; it does not
-establish that migration code exists, measurements pass or deployment has occurred. Fidy is
-unreleased and needs no unnecessary backward compatibility. Architecture documents and runtime
-runbooks continue to describe the current implementation until it changes; the implementation
-effort must publish executable procedures beside the actual commands.
+This ADR records the storage boundaries and disposable-data cutover scope. Release evidence
+records measured acceptance and deployment. When coupled records move between owners, move
+their production callers with them and preserve exact authority, evidence and historical meaning.
+External deletion is irreversible. Account erasure discards content under independent minimal
+markers and restore enforcement while ordinary feature retention remains separate.
 
 Retained canonical receipts use a positive allowlist so new one-time disclosures cannot become
 replayable by default. Chunk large ordinary or correlated receipts before writing SQLite text,

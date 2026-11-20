@@ -1,6 +1,6 @@
 # OpenAI as the sole hosted inference provider
 
-Fidy will replace Workers AI hosted inference completely with OpenAI `gpt-6-luna`, including
+Fidy uses OpenAI `gpt-6-luna`, including
 hosted-agent text and canonical tool-call rounds and structured conversation compaction. The
 decision is driven by inference cost and existing OpenAI credits; it does not introduce a second
 provider, fallback routing, or product-limit tuning.

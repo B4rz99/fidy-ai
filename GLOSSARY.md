@@ -83,7 +83,7 @@ _Avoid_: Deduplication, matching, merge (as a noun).
 The one purchase a linked Reconciliation pair reads as: the visible member's identity, each fact
 group selected from the member the Transaction-owned policy chooses and recomputed on every read,
 and the addressed member's revision so a correction compare-and-swaps what the read returned.
-History and search read it, and a future Dashboard reuses the same relation; the linked originals
+History, search, and Dashboard projections consume the same effective facts; the linked originals
 stay retained.
 _Avoid_: Merged Transaction, canonical Transaction, deduplicated Transaction.
 

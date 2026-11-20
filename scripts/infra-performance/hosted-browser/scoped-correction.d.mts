@@ -1,9 +1,5 @@
-export type CapturedHistory = Readonly<{
-  data: ReadonlyArray<Readonly<{ id: string; counterparty?: string | null; revision: number }>>;
-}>;
-
 export function proveScopedCorrection(
-  before: CapturedHistory,
+  before: unknown,
   send: (method: "GET" | "PUT" | "POST", path: string, body?: unknown) => Promise<Response>
 ): Promise<
   Readonly<{

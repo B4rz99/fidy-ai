@@ -5,7 +5,9 @@ import { installedOrigins } from "../../../apps/server/src/shell/browser-transpo
 const { chromium } = await import("@playwright/test");
 const success = 200;
 
+/** @param {string} lines Trace response text. */
 export const parseTrace = (lines) => {
+  /** @param {string} name Trace field name. */
   const field = (name) =>
     lines
       .split(/\r?\n/u)
@@ -19,6 +21,7 @@ export const parseTrace = (lines) => {
   return { country, colo, warp: warp ?? "unknown" };
 };
 
+/** @param {{api:{country?:string},browser:{country?:string}}} origins Installed browser and API origins. */
 export const isColombianEgress = (origins) =>
   origins.api.country === "CO" && origins.browser.country === "CO";
 
@@ -30,8 +33,10 @@ export const inspectBrowserOrigin = async () => {
   });
   try {
     const page = await browser.newPage({ serviceWorkers: "block" });
+    /** @param {string} host Acceptance host. */
     const inspect = async (host) => {
       const reply = await page.goto(host + "/cdn-cgi/trace", { waitUntil: "load", timeout: 15000 });
+      assert.ok(reply);
       assert.equal(reply.status(), success);
       assert.equal(reply.url(), host + "/cdn-cgi/trace");
       return parseTrace(await reply.text());

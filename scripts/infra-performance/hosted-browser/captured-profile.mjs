@@ -3,32 +3,47 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { join, resolve, sep } from "node:path";
 
+import { fields, isRecord } from "./contracts";
 import { mountCapturedTransactionHistory } from "../reference/fresh-transactions.mjs";
 
 const { chromium } = await import("@playwright/test");
+/** @import {AssetsDelivered, CapturedEvent, ProfileEvidence, Snapshots} from "./contracts" */
+/** @import {Page, Browser, Response as PlaywrightResponse} from "@playwright/test" */
+/** @typedef {Parameters<typeof import("./captured-profile.mjs").runBrowser>[0]} Config */
+/** @typedef {Config["origins"]} Origins */
+/** @typedef {NonNullable<Config["turn"]>} Turn */
 const success = 200,
   timeoutMs = 60000,
   intervalMs = 750;
+/** @param {unknown} value Observed field. */
 const sum = (value) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+/** @param {unknown} value Observed field. @returns {unknown} Observed result. */
 const sorted = (value) => {
-  if (value === null || typeof value !== "object") return value;
   if (Array.isArray(value)) return value.map(sorted);
+  if (!isRecord(value)) return value;
   return Object.fromEntries(
     Object.keys(value)
       .sort()
       .map((key) => [key, sorted(value[key])])
   );
 };
+/** @param {unknown} value Observed field. */
 const capture = (value) =>
-  Object.fromEntries(Object.entries(value ?? {}).map(([key, field]) => [key, sum(sorted(field))]));
+  Object.fromEntries(
+    Object.entries(fields(value)).map(([key, field]) => [key, sum(sorted(field))])
+  );
+/** @param {Record<string,unknown>} data Observed JSON fields. @param {Snapshots} snapshots Comparison digests. @param {Config["expected"]} expected Signed history. */
 const verifyInitial = (data, snapshots, expected) => {
   snapshots.contextTopLevel = Object.keys(data).sort();
-  snapshots.initial = Object.keys(data.initial ?? {}).sort();
+  snapshots.initial = Object.keys(fields(data.initial)).sort();
   snapshots.initialFields = capture(data.initial);
-  assert.deepEqual(data.initial?.transactions?.page, expected);
+  assert.deepEqual(fields(fields(data.initial).transactions).page, expected);
 };
-const reviewCount = (data) => data.pendingCount ?? data.data?.pendingCount;
-const verifyPayload = (url, data, { snapshots, workspace, expected }) => {
+/** @param {Record<string,unknown>} data Observed JSON fields. */
+const reviewCount = (data) => data.pendingCount ?? fields(data.data).pendingCount;
+/** @param {URL} url Requested URL. @param {unknown} payload Complete response payload. @param {Pick<Config,"workspace"|"expected"> & {snapshots:Snapshots}} scope Captured workspace and observed fields. */
+const verifyPayload = (url, payload, { snapshots, workspace, expected }) => {
+  const data = fields(payload);
   if (url.pathname === "/web/session/binding" && url.search) {
     verifyInitial(data, snapshots, expected);
   }
@@ -45,6 +60,7 @@ const verifyPayload = (url, data, { snapshots, workspace, expected }) => {
     snapshots.reviewCount = reviewCount(data);
   }
 };
+/** @param {(request: Request)=>Promise<Response>} fetch Scoped request handler. */
 const server = (fetch) =>
   Bun.serve({
     hostname: "127.0.0.1",
@@ -57,6 +73,7 @@ const server = (fetch) =>
     },
     fetch,
   });
+/** @param {Request} request Browser HTTP request. @param {URL} url Requested URL. @param {{assets:string, assetsDelivered:AssetsDelivered}} scope Captured workspace and observed fields. */
 const serveAsset = async (request, url, { assets, assetsDelivered }) => {
   const path = resolve(assets, "." + url.pathname);
   if (!path.startsWith(assets + sep)) return new Response(null, { status: 403 });
@@ -82,9 +99,10 @@ const serveAsset = async (request, url, { assets, assetsDelivered }) => {
   assetsDelivered.encodedBytes += file.size;
   return new Response(file);
 };
+/** @param {Config} config Admitted browser workload. @param {AssetsDelivered} assetsDelivered Observed asset totals. */
 const webTransport = ({ variant, origins, forwardWeb }, assetsDelivered) => {
   const assets = forwardWeb
-    ? null
+    ? ""
     : resolve(process.env[variant === "d1" ? "D1_WEB_ASSETS" : "NATIVE_WEB_ASSETS"]);
   return server(async (request) => {
     const url = new URL(request.url);
@@ -104,11 +122,13 @@ const allowedPaths = new Set([
   "/transactions",
   "/user",
 ]);
+/** @param {Request} request Browser HTTP request. @param {URL} url Requested URL. @param {Origins} origins Installed browser and API origins. */
 const outsideProfile = (request, url, origins) =>
   url.origin !== origins.api ||
   request.headers.get("origin") !== origins.browser ||
   !["GET", "OPTIONS"].includes(request.method) ||
   !allowedPaths.has(url.pathname);
+/** @param {Config} config Admitted browser workload. @param {ProfileEvidence} evidence Accumulated browser observations. */
 const apiTransport = (config, evidence) =>
   server(async (request) => {
     const { origins, forward, afterRequest } = config;
@@ -136,6 +156,7 @@ const apiTransport = (config, evidence) =>
     const response = await forward(
       new Request(request.url, { headers: headersOut, method: request.method })
     );
+    /** @type {CapturedEvent} */
     const ev = {
       route: key,
       status: response.status,
@@ -160,6 +181,7 @@ const apiTransport = (config, evidence) =>
     headers.delete("x-fidy-comparison-cost");
     return new Response(bytes.byteLength ? bytes : null, { status: response.status, headers });
   });
+/** @param {Origins} origins Installed browser and API origins. @param {{port:number}} api Local API endpoint. @param {{port:number}} web Local web endpoint. */
 const launch = (origins, api, web) => {
   return chromium.launch({
     executablePath: process.env.ASSESSMENT_CHROMIUM,
@@ -179,6 +201,7 @@ const launch = (origins, api, web) => {
     ],
   });
 };
+/** @param {Browser} browser Isolated Chromium process. @param {Config} config Admitted browser workload. @param {CapturedEvent[]} events Ordered browser events. */
 const mountedPage = async (browser, { origins, cookie }, events) => {
   const context = await browser.newContext({
     timezoneId: "America/Bogota",
@@ -206,10 +229,12 @@ const mountedPage = async (browser, { origins, cookie }, events) => {
 
   return page;
 };
+/** @param {Page} page Mounted application page. @param {string} path Request path. */
 const responseFor = (page, path) =>
   page.waitForResponse(
     (reply) => reply.request().method() === "GET" && new URL(reply.url()).pathname === path
   );
+/** @param {CapturedEvent[]} events Ordered browser events. @returns {(response:PlaywrightResponse)=>Promise<unknown>} Observed result. */
 const observeResponse = (events) => async (response) => {
   assert.equal(response.status(), success);
   const body = await response.body();
@@ -223,9 +248,13 @@ const observeResponse = (events) => async (response) => {
       bodyBytes: body.byteLength,
     });
   }
-  return JSON.parse(body.toString("utf8"));
+  /** @type {unknown} */
+  const payload = JSON.parse(body.toString("utf8"));
+  return payload;
 };
+/** @type {Turn} */
 const immediateTurn = (_index, action) => action();
+/** @param {Page} page Mounted application page. @param {Config} config Admitted browser workload. @param {CapturedEvent[]} events Ordered browser events. */
 const execute = async (
   page,
   { origins, expected, observations = 30, turn = immediateTurn },
@@ -249,6 +278,7 @@ const execute = async (
   await observe(review);
   events.push({ stage: "startup", complete: true, milliseconds: mounted.startupMs });
 
+  /** @param {number} index Pair index. */
   const refresh = async (index) => {
     await turn(index, async () => {
       const profile = responseFor(page, "/user");
@@ -263,12 +293,15 @@ const execute = async (
     Promise.resolve()
   );
 };
+/** @param {Config} config Admitted browser workload. */
 export const runBrowser = async (config) => {
   const { variant, network = "ordinary" } = config;
   assert.equal(network, "ordinary");
   const dir = resolve(process.env.FIDY_DIAGNOSTIC_DIR);
-  const events = [],
-    snapshots = {};
+  /** @type {CapturedEvent[]} */
+  const events = [];
+  /** @type {Snapshots} */
+  const snapshots = {};
 
   const assetsDelivered = { rawBytes: 0, encodedBytes: 0, responses: 0, gzip: 0 };
   const report = () =>
@@ -284,7 +317,7 @@ export const runBrowser = async (config) => {
     browser = await launch(config.origins, api, web);
     await execute(await mountedPage(browser, config, events), config, events);
   } catch (err) {
-    events.push({ stage: "incomplete", error: err.name });
+    events.push({ stage: "incomplete", error: err instanceof Error ? err.name : "Unknown" });
     throw err;
   } finally {
     await report();

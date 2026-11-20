@@ -5,7 +5,9 @@ import type { Deployment } from "./release-controller";
 import {
   type FallbackRepairPort,
   type FallbackStage,
+  archivedDormant,
   recoverFixtureFallback,
+  requireDormantReplacementSource,
   verifyUnpromotedFallback,
 } from "./native-fallback-recovery";
 
@@ -237,6 +239,37 @@ it.effect("reseals only the same zero-traffic pair on its exact original deploym
       )
     ).toBe(true);
     expect(checks).toBe(1);
+    expect(writes).toEqual([]);
+  })
+);
+
+it.effect("replaces only the archived zero-traffic pair over the captured stable release", () =>
+  Effect.gen(function* () {
+    const { port, deployments, writes } = harness();
+    const snapshot = { ...stage.release.snapshot };
+    for (const role of ["core", "public"] as const) {
+      const capture = snapshot[role];
+      snapshot[role] = {
+        ...capture,
+        deploymentId: archivedDormant[`${role}DeploymentId`],
+        stableVersionId: archivedDormant.original[role],
+      };
+      deployments(capture.name)[0] = {
+        id: snapshot[role].deploymentId,
+        versions: [
+          { id: archivedDormant[`${role}VersionId`], percentage: 0 },
+          { id: snapshot[role].stableVersionId, percentage: 100 },
+        ],
+      };
+    }
+    yield* requireDormantReplacementSource(port, snapshot);
+    const active = deployments(core)[0];
+    if (active === undefined) throw Error("Missing staged Core");
+    deployments(core)[0] = {
+      ...active,
+      versions: [{ id: archivedDormant.coreVersionId, percentage: 100 }],
+    };
+    expect(yield* Effect.isFailure(requireDormantReplacementSource(port, snapshot))).toBe(true);
     expect(writes).toEqual([]);
   })
 );

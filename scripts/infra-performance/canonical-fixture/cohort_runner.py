@@ -9,15 +9,16 @@ import time
 
 from fixture import digest, prepare, uuid, write
 from cohort import identity
-from hosted import HERE, ROOT, RECEIPT_PATH, private_file, verify_native_fixture
+from hosted import HERE, ROOT, RECEIPT_PATHS, private_file, verify_native_fixture
 
 
 @contextmanager
-def commands(revision, runtime="cohort-bridge.ts", exchange=None):
+def commands(revision, runtime="cohort-bridge.ts", exchange=None, *, member="performance-1"):
     env = {key: value for key, value in os.environ.items() if key in (
         "PATH", "HOME", "TMPDIR", "SystemRoot", "SMOKE_PROOF", "TEST_FIXTURE_PRIVATE_KEY", "FIDY_REHEARSAL_STATE",
         "FIDY_REHEARSAL_BASELINE", "FIDY_REHEARSAL_FALLBACK", "FIDY_NATIVE_FIXTURE_PROVIDER_REVISION")}
     env["FIDY_NATIVE_REVISION"] = revision
+    env["FIDY_BOUND_FIXTURE_MEMBER"] = member
     with subprocess.Popen(["bun", str(HERE / runtime)], cwd=ROOT, env=env, stdin=subprocess.PIPE,
                           stdout=subprocess.PIPE, text=True, bufsize=1) as child:
         def push(payload):
@@ -114,6 +115,7 @@ class BrowserPort:
 
 def collect_owned(owner, port, *, browser=False):
     coords = owner.coordinates
+    member = coords.get("fixtureMember", "performance-1")
     session = private_file(port.directory, "native-session.json")
 
     def call(method, path, body):
@@ -126,14 +128,15 @@ def collect_owned(owner, port, *, browser=False):
     port.guard("foreground")
     if browser:
         owner.save("owned", workload="mounted-transactions-ordinary")
-    manifest = prepare(call, port.directory, coords["revision"], "performance-1", browser_workspace=browser)
+    manifest = prepare(call, port.directory, coords["revision"], member, browser_workspace=browser)
     if browser and (identity(manifest["workspace"]["profile"]["data"]["id"]) != owner.state["user"]
                     or manifest["workspace"]["review"]["data"]["pendingCount"] != 0):
         raise ValueError("Native original Session or enrolled workspace differs")
     owner.offer_receipt()
-    sealed = call("POST", RECEIPT_PATH, dict(resourcePrefix=coords["prefix"], nativeManifestDigest=digest(manifest)))
+    sealed = call("POST", RECEIPT_PATHS[member], dict(resourcePrefix=coords["prefix"], nativeManifestDigest=digest(manifest)))
     write(port.directory / "native-receipt.json", sealed)
-    result = verify_native_fixture(port.directory, revision=coords["revision"], resource_prefix=coords["prefix"])
+    result = verify_native_fixture(port.directory, revision=coords["revision"], resource_prefix=coords["prefix"],
+                                   member=member)
     if port.marker_owner() != coords["prefix"]:
         raise ValueError("Receipt lacks its independently observed one-use marker")
     owner.save("receipt-verified", receiptDigest=result["nativeReceiptDigest"])

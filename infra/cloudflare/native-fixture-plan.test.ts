@@ -4,6 +4,7 @@ import {
   nativePlanOptions,
   projectFixtureInventory,
   requireFixtureLifecycle,
+  requireSuccessorLifecycle,
 } from "./native-fixture-plan";
 import { nativeResourceInventory } from "./native-graph";
 import provider from "./native-retained-provider.json" with { type: "json" };
@@ -87,4 +88,30 @@ it("projects only known resource and action names from a refused inventory", () 
     { action: "update", logicalId: "unrecognized", resourceType: "unrecognized" },
     { action: "noop", logicalId: "Build", resourceType: "Command.Build" },
   ]);
+});
+
+it("allows only the two existing Workers and four new smoke resources in the successor plan", () => {
+  const pair = [
+    row("Core", "Cloudflare.Worker", "update"),
+    row("Ingress", "Cloudflare.Worker", "update"),
+  ];
+  const rows = [...pair, ...creation];
+  expect(() => requireSuccessorLifecycle({ rows, revision })).not.toThrow();
+  for (const foreign of [
+    ...retained,
+    row("Web", "Cloudflare.Worker", "update"),
+    row("ForwardedEmail", "Cloudflare.Worker", "update"),
+    row("ReleaseSmoke-aa447b8b781cdda48e021c1332f4377eae00f179", "Cloudflare.Worker", "update"),
+    row("Core", "Cloudflare.R2.Bucket", "update"),
+  ]) {
+    expect(() => requireSuccessorLifecycle({ rows: [...rows, foreign], revision })).toThrow();
+  }
+  for (const missing of rows) {
+    expect(() =>
+      requireSuccessorLifecycle({
+        rows: rows.filter((item) => item !== missing),
+        revision,
+      })
+    ).toThrow();
+  }
 });

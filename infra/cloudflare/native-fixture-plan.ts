@@ -93,3 +93,38 @@ export const verifyFixturePlan = ({ plan, fallback }: { plan: Plan; fallback: bo
     throw new FixturePlanRefused({ reason: "original Worker state or name differs" });
   }
 };
+
+export const successorPlanSelection = (revision: string): ReadonlyArray<string> => [
+  "Core",
+  "Ingress",
+  ...smokeResources.map((prefix) => prefix + revision),
+];
+
+export const requireSuccessorLifecycle = ({
+  rows,
+  revision,
+}: {
+  rows: PlanRows;
+  revision: string;
+}): void => {
+  const inventory = nativeResourceInventory(revision);
+  const expected = new Map(
+    successorPlanSelection(revision).map(
+      (id) => [id, id === "Core" || id === "Ingress" ? "update" : "create"] as const
+    )
+  );
+  const observed = new Set<string>();
+  for (const row of rows) {
+    if (inventory.get(row.logicalId) !== row.resourceType || observed.has(row.logicalId)) {
+      throw new FixturePlanRefused({ reason: "unexpected change" });
+    }
+    observed.add(row.logicalId);
+    if (row.action !== (expected.get(row.logicalId) ?? "noop")) {
+      throw new FixturePlanRefused({ reason: "unexpected change" });
+    }
+    expected.delete(row.logicalId);
+  }
+  if (expected.size !== 0) {
+    throw new FixturePlanRefused({ reason: "missing required update or deferred deletion" });
+  }
+};

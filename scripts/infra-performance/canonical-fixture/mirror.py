@@ -63,7 +63,8 @@ def materialize(plan_file, directory):
     if (directory / "native-receipt.json").is_file():
         from hosted import verified_provenance
         envelope = json.loads((directory / "native-receipt.json").read_bytes())
-        private, coordinates = verified_provenance(directory, revision=report["revision"], resource_prefix=envelope["resourcePrefix"])
+        private, coordinates = verified_provenance(directory, revision=report["revision"],
+                                                   resource_prefix=envelope["resourcePrefix"], member=report["member"])
     else:
         private = json.loads((directory / "native-local-provenance.json").read_text())
         if private.get("origin") != "disposable native workerd":

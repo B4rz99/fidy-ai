@@ -1,3 +1,4 @@
+import type { PerformanceMember } from "../../../apps/server/cloudflare/release-isolation/contract";
 import { Database } from "bun:sqlite";
 import { Config, Context, DateTime, Effect, Layer, Option, Redacted, Schema } from "effect";
 import type { Miniflare } from "miniflare";
@@ -48,10 +49,14 @@ const state = Effect.fnUntraced(function* (runtime: Miniflare, directory: string
   const ids = yield* native(() => runtime.listDurableObjectIds("UserStore", "core"));
   return Object.fromEntries(yield* Effect.forEach(ids, (id) => readObject(runtime, directory, id)));
 });
-const marker = Effect.fnUntraced(function* (runtime: Miniflare, revision: string) {
+const marker = Effect.fnUntraced(function* (
+  runtime: Miniflare,
+  revision: string,
+  member: PerformanceMember
+) {
   const bucket = yield* native(() => runtime.getR2Bucket("SMOKE_BUCKET", "core"));
   const value = yield* native(() =>
-    bucket.get("_release-smoke/" + revision + "/acceptance/transactions/performance-1")
+    bucket.get("_release-smoke/" + revision + "/acceptance/transactions/" + member)
   );
   return value === null ? null : yield* native(() => value.text());
 });
@@ -137,7 +142,7 @@ const run = Effect.gen(function* () {
   const auth = yield* cohortAuthority;
   const directory = yield* Config.String("FIDY_REHEARSAL_STATE");
   yield* Effect.acquireUseRelease(
-    closedRuntime(auth, directory),
+    closedRuntime(auth, directory, auth.member),
     (runtime) => {
       const send = transport(runtime);
       const local = Effect.fnUntraced(function* (item: CohortCommand) {
@@ -156,7 +161,7 @@ const run = Effect.gen(function* () {
         }
         if (action === "recovery-probe") return yield* recoveryProbe(runtime, auth.secret);
         if (action === "census") return yield* state(runtime, directory);
-        if (action === "marker") return yield* marker(runtime, auth.revision);
+        if (action === "marker") return yield* marker(runtime, auth.revision, auth.member);
         if (action === "tick") return yield* tick(runtime);
         return yield* Effect.fail(Error("Unknown rehearsal operation"));
       });

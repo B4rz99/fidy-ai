@@ -1,4 +1,4 @@
-import { Data, Schema } from "effect";
+import { Data, Option, Schema } from "effect";
 
 export const acceptanceApiHeader = "x-fidy-acceptance-api";
 export const acceptanceProofHeader = "x-fidy-acceptance-proof";
@@ -23,6 +23,7 @@ export type NativeAcceptanceSettings = Partial<
     RECOVERY_ISOLATION: string;
     RELEASE_GIT_SHA: string;
     ACCEPTANCE_PROVIDER_REVISION: string;
+    NATIVE_FIXTURE_MEMBER: string;
   }>
 >;
 
@@ -36,8 +37,23 @@ export const acceptanceWindowQuery = "?acceptance=work";
 
 export const acceptanceReceiptKind = "charge-receipt";
 
-export const performanceReceiptPath =
-  "/internal/release-smoke?acceptance=transaction-fixture&cohort=performance&ordinal=1";
+export const performanceReceiptPaths = {
+  "performance-1":
+    "/internal/release-smoke?acceptance=transaction-fixture&cohort=performance&ordinal=1",
+  "performance-2":
+    "/internal/release-smoke?acceptance=transaction-fixture&cohort=performance&ordinal=2",
+} as const;
+export type PerformanceMember = keyof typeof performanceReceiptPaths;
+export const performanceReceiptPath = performanceReceiptPaths["performance-1"];
+
+export const performanceReceiptMember = (request: Request): Option.Option<PerformanceMember> => {
+  if (request.method !== "POST") return Option.none();
+  const url = new URL(request.url);
+  const path = url.pathname + url.search;
+  if (path === performanceReceiptPath) return Option.some("performance-1");
+  if (path === performanceReceiptPaths["performance-2"]) return Option.some("performance-2");
+  return Option.none();
+};
 const sha = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u));
 export const ReceiptRequest = Schema.Struct({
   resourcePrefix: Schema.String.check(Schema.isPattern(/^fidy-2259-[a-f0-9]{12}$/u)),
@@ -46,7 +62,7 @@ export const ReceiptRequest = Schema.Struct({
 const coordinates = Schema.Struct({
   ...ReceiptRequest.fields,
   nativeRevision: Schema.String.check(Schema.isPattern(/^[a-f0-9]{40}$/u)),
-  member: Schema.Literal("performance-1"),
+  member: Schema.Literals(["performance-1", "performance-2"]),
   sessionBindingSha256: sha,
 });
 export type Coordinates = typeof coordinates.Type;

@@ -17,7 +17,8 @@ def actions_get(path):
     return subprocess.check_output(["gh", "api", BASE + path], timeout=40)
 
 
-def protected_archive(account_revision, artifact_id, expected_digest, *, prefix, conclusions, get=actions_get):
+def protected_archive(account_revision, artifact_id, expected_digest, *, prefix, conclusions, get=actions_get,
+                      workflow="native-storage-release.yml", suffix=""):
     if not re.fullmatch("[1-9][0-9]{0,19}", artifact_id or "") or not re.fullmatch("[0-9a-f]{64}", expected_digest or ""):
         raise ValueError("Exact protected rollout artifact ID and independently pinned digest required")
 
@@ -27,10 +28,10 @@ def protected_archive(account_revision, artifact_id, expected_digest, *, prefix,
         raise ValueError("Foreign GitHub artifact or source run")
     run = json.loads(get("runs/" + run_id))
     if (str(run["id"]) != run_id or run["repository"]["full_name"] != REPO or run["head_repository"]["full_name"] != REPO
-            or run["path"] != ".github/workflows/native-storage-release.yml" or run["head_branch"] != "trunk"
+            or run["path"] != ".github/workflows/" + workflow or run["head_branch"] != "trunk"
             or run["head_sha"] != account_revision or run["event"] != "workflow_dispatch"
             or run["conclusion"] not in conclusions or run["run_attempt"] != 1
-            or meta["expired"] is not False or meta["name"] != prefix + run_id
+            or meta["expired"] is not False or meta["name"] != prefix + run_id + suffix
             or meta["workflow_run"]["head_sha"] != account_revision or not 0 < meta["size_in_bytes"] <= 1_048_576
             or meta["digest"] != "sha256:" + expected_digest):
         raise ValueError("Foreign, expired or unsuccessful protected rollout")
@@ -78,13 +79,17 @@ def artifact(account_revision, artifact_id, expected_digest, get=actions_get, gi
             return json.loads(archive.read(items[0]))
         promotion = document("native-release.json.promoted")
         installed = document("native-verification.json")
+        member = installed.get("fixtureMember")
+        if "fixtureMember" in installed and (member != "performance-2" or account_revision == APPLICATION):
+            raise ValueError("Unexpected approved native fixture member")
         if account_revision != APPLICATION:
             # Reauthenticate the dormant rollback target from the independent seal accepted by this rollout.
             from pairing_stage import sealed_pair, requires_restored_source, restored_source, OWNERS
             seal = document("native-release.json.seal")
             stage, predecessor = sealed_pair(source, seal["artifactId"], seal["sha256"], get, git)
             smoke, = [worker for worker in installed["workers"] if worker["role"] == "Smoke"]
-            if (stage["revision"] != account_revision or installed["fixtureControlsDigest"] != stage["controlsDigest"]
+            if (stage["revision"] != account_revision or stage.get("fixtureMember") != member
+                    or installed["fixtureControlsDigest"] != stage["controlsDigest"]
                     or installed["retainedProvider"] != stage["provider"]
                     or installed["namespaces"] != [stage["namespaces"][role] for role in OWNERS]
                     or installed["userNamespace"] != stage["namespaces"]["user"]

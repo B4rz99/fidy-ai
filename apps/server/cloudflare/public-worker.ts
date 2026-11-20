@@ -68,11 +68,7 @@ import {
   releaseAdmission,
   signAcceptanceRequest,
 } from "./release-isolation/operations";
-import {
-  acceptanceApiHeader,
-  acceptanceProofHeader,
-  performanceReceiptPath,
-} from "./release-isolation/contract";
+import { acceptanceApiHeader, acceptanceProofHeader } from "./release-isolation/contract";
 
 type PublicEnvironment = WorkerTelemetryEnvironment & {
   readonly BROWSER_ORIGIN: string;
@@ -994,7 +990,8 @@ const forwardPerformanceReceipt = Effect.fn(function* (
   for (const name of ["origin", "cookie", "fidy-session-binding", "content-type"]) {
     headers.set(name, request.headers.get(name) ?? "");
   }
-  const forwarded = new Request("https://core.internal" + performanceReceiptPath, {
+  const url = new URL(request.url);
+  const forwarded = new Request("https://core.internal" + url.pathname + url.search, {
     method: "POST",
     headers,
     body: request.body,

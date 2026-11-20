@@ -1,4 +1,8 @@
-import { ReceiptRequest, acceptanceProviderRevision } from "../../release-isolation/contract";
+import {
+  ReceiptRequest,
+  acceptanceProviderRevision,
+  performanceReceiptMember,
+} from "../../release-isolation/contract";
 import { Clock, Effect, Option, Schema } from "effect";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Hex } from "effect/encoding";
@@ -8,6 +12,7 @@ import { receiptAdmitted, sealTransactionReceipt } from "../../release-isolation
 import type {
   AcceptanceEnvironment,
   AcceptanceWindowBindings,
+  PerformanceMember,
   SealedTransactionReceipt,
 } from "../../release-isolation/contract";
 import { boundedJsonBody } from "../../http/operations";
@@ -78,9 +83,15 @@ const linkedOriginals = (
     [link.first, link.second, link.visible].every((id) => pair.includes(id))
   );
 };
-const readEvidence = Effect.fn(function* (user: string, revision: string, binding: string) {
+const readEvidence = Effect.fn(function* (input: {
+  user: string;
+  revision: string;
+  member: PerformanceMember;
+  binding: string;
+}) {
+  const { user, revision, member, binding } = input;
   const sql = yield* SqliteClient;
-  const subject = "fidy-acceptance-" + revision + "-performance-1";
+  const subject = "fidy-acceptance-" + revision + "-" + member;
   const proof = yield* sql`SELECT 1 FROM provider_credentials p
     WHERE p.user_id=${user} AND p.issuer='https://accounts.google.com' AND p.subject=${subject}
     AND (SELECT count(*) FROM transactions WHERE user_id=${user})=8
@@ -119,19 +130,34 @@ type FixtureEnvironment = AcceptanceEnvironment &
   AcceptanceWindowBindings &
   Partial<Readonly<{ NATIVE_FIXTURE_SIGNING_KEY: string }>>;
 const credentials = (
-  env: FixtureEnvironment
-): Option.Option<{ secret: string; privateKey: string; bucket: Pick<R2Bucket, "get" | "put"> }> =>
-  env.SMOKE_PROOF !== undefined &&
-  env.SMOKE_PROOF !== "" &&
-  env.NATIVE_FIXTURE_SIGNING_KEY !== undefined &&
-  env.NATIVE_FIXTURE_SIGNING_KEY !== "" &&
-  env.SMOKE_BUCKET !== undefined
+  env: FixtureEnvironment,
+  request: Request
+): Option.Option<{
+  secret: string;
+  privateKey: string;
+  bucket: Pick<R2Bucket, "put">;
+  member: PerformanceMember;
+}> => {
+  const selected = env.NATIVE_FIXTURE_MEMBER;
+  const member = Option.filter(performanceReceiptMember(request), (value) =>
+    selected === undefined
+      ? value === "performance-1"
+      : selected === "performance-2" && value === selected
+  );
+  return Option.isSome(member) &&
+    env.SMOKE_PROOF !== undefined &&
+    env.SMOKE_PROOF !== "" &&
+    env.NATIVE_FIXTURE_SIGNING_KEY !== undefined &&
+    env.NATIVE_FIXTURE_SIGNING_KEY !== "" &&
+    env.SMOKE_BUCKET !== undefined
     ? Option.some({
         secret: env.SMOKE_PROOF,
         privateKey: env.NATIVE_FIXTURE_SIGNING_KEY,
         bucket: env.SMOKE_BUCKET,
+        member: member.value,
       })
     : Option.none();
+};
 const boundUser = Effect.fn(function* (request: Request, owns: (user: string) => boolean) {
   const operation = canonicalOperation({ method: "GET", path: "/transactions" });
   return Option.isSome(operation)
@@ -140,13 +166,12 @@ const boundUser = Effect.fn(function* (request: Request, owns: (user: string) =>
 });
 const issueOnce = Effect.fnUntraced(function* (input: {
   bucket: Pick<R2Bucket, "put">;
-  revision: string;
-  prefix: string;
   receipt: typeof SealedTransactionReceipt.Type;
 }) {
-  const key = "_release-smoke/" + input.revision + "/acceptance/transactions/performance-1";
+  const { nativeRevision, member, resourcePrefix } = input.receipt;
+  const key = "_release-smoke/" + nativeRevision + "/acceptance/transactions/" + member;
   const stored = yield* Effect.tryPromise(() =>
-    input.bucket.put(key, input.prefix, { onlyIf: { etagDoesNotMatch: "*" } })
+    input.bucket.put(key, resourcePrefix, { onlyIf: { etagDoesNotMatch: "*" } })
   );
   return stored === null
     ? denied()
@@ -154,14 +179,12 @@ const issueOnce = Effect.fnUntraced(function* (input: {
 });
 export const ownPerformanceReceipt = Effect.fn(function* (
   request: Request,
-  environment: AcceptanceEnvironment &
-    AcceptanceWindowBindings &
-    Partial<Readonly<{ NATIVE_FIXTURE_SIGNING_KEY: string }>>,
+  environment: FixtureEnvironment,
   owns: (id: string) => boolean
 ) {
   const now = yield* Clock.currentTimeMillis;
   const binding = request.headers.get("fidy-session-binding") ?? "";
-  const signer = credentials(environment);
+  const signer = credentials(environment, request);
   if (
     binding === "" ||
     Option.isNone(signer) ||
@@ -173,11 +196,13 @@ export const ownPerformanceReceipt = Effect.fn(function* (
   if (Option.isNone(command)) return denied();
   const user = yield* boundUser(request, owns);
   if (Option.isNone(user)) return denied();
-  const evidence = yield* readEvidence(
-    user.value,
-    acceptanceProviderRevision(environment),
-    binding
-  );
+  const { secret, privateKey, bucket, member } = signer.value;
+  const evidence = yield* readEvidence({
+    user: user.value,
+    revision: acceptanceProviderRevision(environment),
+    member,
+    binding,
+  });
   if (Option.isNone(evidence)) return denied();
   const digest = yield* Effect.tryPromise(() =>
     crypto.subtle.digest("SHA-256", new TextEncoder().encode(binding))
@@ -185,16 +210,10 @@ export const ownPerformanceReceipt = Effect.fn(function* (
   const coordinates = {
     ...command.value,
     nativeRevision: environment.RELEASE_GIT_SHA,
-    member: "performance-1" as const,
+    member,
     sessionBindingSha256: Hex.encode(new Uint8Array(digest)),
   };
   const data = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))(evidence.value);
-  const { secret, privateKey, bucket } = signer.value;
   const box = yield* sealTransactionReceipt({ secret, privateKey, coordinates, data });
-  return yield* issueOnce({
-    bucket,
-    revision: coordinates.nativeRevision,
-    prefix: coordinates.resourcePrefix,
-    receipt: box,
-  });
+  return yield* issueOnce({ bucket, receipt: box });
 }, Effect.orElseSucceed(denied));

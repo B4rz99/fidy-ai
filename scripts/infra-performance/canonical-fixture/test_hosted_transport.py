@@ -9,6 +9,8 @@ from unittest.mock import Mock, call, patch
 
 from protected_cohort import HostedPort, checked_browser_origin
 from owner_transport import NATIVE_API
+from owner_state import CustodyObject, Refused
+from hosted import RECEIPT_PATHS
 from test_cohort import Store
 from cohort import Cohort, MAX_USER_OBJECTS
 
@@ -40,7 +42,7 @@ class HostedTransportTests(unittest.TestCase):
         with patch.dict("os.environ", GITHUB_RUN_ID="fixture", GITHUB_RUN_ATTEMPT="1"):
             self.port = HostedPort(None, None, account="d"*32, verify=Mock(), store=Mock(), marker=Mock(), cloud=Mock())
         self.state = dict(stage="owned", foregroundUntil=int(time.time())+600, foregroundRun=self.port.run)
-        self.port.owner = SimpleNamespace(state=self.state, save=Mock(side_effect=lambda stage,**kw: self.state.update(kw)))
+        self.port.owner = SimpleNamespace(state=self.state, coordinates={}, save=Mock(side_effect=lambda stage,**kw: self.state.update(kw)))
 
     def test_census_follows_actual_terminal_empty_page(self):
         namespace = "d"*32
@@ -87,6 +89,38 @@ class HostedTransportTests(unittest.TestCase):
             self.port.exchange(outgoing, fetch)
             self.assertEqual(self.state["cleanupRequests"],1)
             fetch.assert_called_once()
+
+    def test_receipt_route_matches_only_the_bound_member(self):
+        self.state["stage"] = "receipt-offered"
+        transport = Mock(return_value=(200, {}, b"{}"))
+        def receipt(member):
+            return dict(url=NATIVE_API+RECEIPT_PATHS[member], method="POST", body="{}", headers={})
+        with self.assertRaises(ValueError):
+            self.port.exchange(receipt("performance-2"), transport)
+        self.port.exchange(receipt("performance-1"), transport)
+        self.port.owner.coordinates["fixtureMember"] = "performance-2"
+        with self.assertRaises(ValueError):
+            self.port.exchange(receipt("performance-1"), transport)
+        self.port.exchange(receipt("performance-2"), transport)
+        self.assertEqual(self.state["foregroundRequests"], 2)
+
+    def test_new_member_credentials_do_not_overlap_original_paths(self):
+        account, revision = "a"*32, "b"*40
+        source = Mock(auth="token")
+        source.result.return_value = {"id":"c"*32, "status":"active"}
+        with patch.dict("os.environ", GITHUB_ACTIONS="true", GITHUB_REF="refs/heads/trunk",
+                        GITHUB_REPOSITORY="B4rz99/fidy-ai", GITHUB_REF_PROTECTED="true"):
+            original = CustodyObject(account, source, native_revision=revision)
+            original_marker = CustodyObject(account, source, native_revision=revision, receipt_marker=True)
+            next_member = CustodyObject(account, source, native_revision=revision, member="performance-2")
+            next_marker = CustodyObject(account, source, native_revision=revision, receipt_marker=True,
+                                        member="performance-2")
+            with self.assertRaises(Refused):
+                CustodyObject(account, source, native_revision=revision, member="performance-3")
+        self.assertEqual(original.key, f"protected-storage/account/{account}/performance-1/{revision}.json")
+        self.assertEqual(original_marker.key, f"_release-smoke/{revision}/acceptance/transactions/performance-1")
+        self.assertEqual(next_member.key, f"protected-storage/account/{account}/performance-2/{revision}.json")
+        self.assertEqual(next_marker.key, f"_release-smoke/{revision}/acceptance/transactions/performance-2")
 
     def test_foreign_expired_and_over_budget_claims_stop_before_private_http(self):
         with patch("protected_cohort.fetch") as fetch:

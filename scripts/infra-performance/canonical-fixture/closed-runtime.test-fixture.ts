@@ -12,22 +12,50 @@ import {
 const text = (value: string): { type: "text"; value: string } => ({ type: "text", value });
 const observedManifest = Effect.fnUntraced(function* (module: string, name: string) {
   const manifest = yield* workerManifest(module);
-  if (name !== "ingress") return manifest;
-  // The local Miniflare entry listener supplies its loopback URL. Preserve the fixed original TLS
-  // URL when delivering to the production Ingress so the real signed request can be verified.
-  const wrapper = `import worker from "./production.mjs";
-    export default { ...worker,fetch(request,env,ctx) {
-      const url=new URL(request.url);
-      if(url.hostname!=="127.0.0.1") return new Response(null,{status:403});
-      return worker.fetch(new Request("${installedOrigins.acceptance.api}"+url.pathname+url.search,request),env,ctx);
-    }};`;
-  return {
-    mainModule: "index.mjs",
-    modules: {
-      "index.mjs": { type: "esm" as const, contents: wrapper },
-      "production.mjs": manifest.modules["index.mjs"],
-    },
-  };
+    const wrapOwners =
+      name === "core"
+        ? Object.keys(nativeOwners)
+            .map(
+              (owner) =>
+                "export const " +
+                owner +
+                "=observed(" +
+                JSON.stringify(owner) +
+                ",Production." +
+                owner +
+                ");"
+            )
+            .join("\n")
+        : "";
+    const mapping =
+      name === "ingress"
+        ? 'const url=new URL(request.url);if(url.hostname!=="127.0.0.1")return new Response(null,{status:403});request=new Request("' +
+          installedOrigins.acceptance.api +
+          '"+url.pathname+url.search,request);'
+        : "";
+    const wrapper =
+      'import * as Production from "./production.mjs"; import {observed,observedBindings,totals,buckets} from "./meter.mjs"; export * from "./production.mjs";' +
+      wrapOwners +
+      'export default {...Production.default,fetch(request,env,ctx){if(request.url==="https://offline.invalid/native-row-counts")return totals();if(request.url==="https://offline.invalid/r2-counts")return buckets();' +
+      mapping +
+      "return Production.default.fetch(request,observedBindings(env),ctx);}," +
+      (name === "core"
+        ? "scheduled(controller,env){return Production.default.scheduled(controller,observedBindings(env));}"
+        : "") +
+      "};";
+    return {
+      mainModule: "index.mjs",
+      modules: {
+        "index.mjs": { type: "esm", contents: wrapper },
+        "production.mjs": manifest.modules["index.mjs"],
+        "meter.mjs": {
+          type: "esm",
+          contents: await Bun.file(new URL("./meter.test-fixture.mjs", import.meta.url)).text(),
+        },
+      },
+    };
+
+
 });
 const worker = Effect.fnUntraced(function* (
   name: string,

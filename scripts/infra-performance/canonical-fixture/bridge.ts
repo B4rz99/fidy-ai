@@ -175,7 +175,16 @@ export const serveFixture = Effect.fn(function* (runtime: Miniflare) {
                 const manifest = await Bun.file(
                   process.env.FIDY_DIAGNOSTIC_DIR + "/native/fixture/manifest.json"
                 ).json();
-                for(const network of ["ordinary","poor"])await runBrowser({
+                const counts=async()=> {
+                  const owner=await runtime.getWorker("core");
+                  const sql=await (await owner.fetch("https://offline.invalid/native-row-counts")).json();
+                  const r2={};
+                  for(const name of ["core","ingress","closed-provider"])r2[name]=await(await(await runtime.getWorker(name)).fetch("https://offline.invalid/r2-counts")).json();
+                  return {sql,r2};
+                };
+                const observed={before:await counts()};
+                for(const network of ["ordinary","poor"]){await runBrowser({
+                  observations:30,
                   network,
                   variant: "do",
                   origins: api,
@@ -196,6 +205,9 @@ export const serveFixture = Effect.fn(function* (runtime: Miniflare) {
                     return Effect.runPromise(transport(runtime)(request));
                   },
                 });
+                observed[network]=await counts();
+                await Bun.write(process.env.FIDY_DIAGNOSTIC_DIR+"/native-counters.json",JSON.stringify(observed));
+                }
                 offer({ status: 200 });
               })
             : execute(item, active, service)

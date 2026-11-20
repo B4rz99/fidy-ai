@@ -62,6 +62,9 @@ for name, result in STEPS.items():
         RESUME_STEPS[RESUME] = "success"
 
 
+FAILED_RESUME_STEPS = {**RESUME_STEPS, QUALIFY_ORIGINAL: "failure", "Seal dormant fallback stage before promotion": "skipped"}
+
+
 def upload_pin():
     return json.loads((Path(__file__).resolve().parents[3] / "infra/cloudflare/native-pairing-upload.json").read_bytes())
 
@@ -82,12 +85,34 @@ def upload_documents(prior, controls, get=actions_get):
     require_steps(get, run, "failure", INTERRUPTED_STEPS)
     documents = {"native-release.json":original_snapshot(pin["revision"], prior), "native-release.json.controls":controls,
                  "native-release.json.predecessor":prior, "native-release.json.source.controls":controls}
+    check_documents(data, documents)
+    return documents
+
+
+def check_documents(data, documents):
     with ZipFile(BytesIO(data)) as archive:
         if (sorted(archive.namelist()) != sorted(documents)
                 or any(not 0 < item.file_size <= 65_536 or json.loads(archive.read(item)) != documents[item.filename]
                        for item in archive.infolist())):
-            raise ValueError("Interrupted upload changed the captured assignments, controls or staging outcome")
-    return documents
+            raise ValueError("Archived assignments, controls or stage outcome differ")
+
+
+def replacement_documents(get=actions_get, git=git_read):
+    pin = upload_pin()
+    failed = pin["failedStage"]
+    verify_tree(failed["verifier"], git, pin["revision"])
+    prior, controls = staged_documents(get)
+    uploaded = upload_documents(prior, controls, get)
+    run, data = protected_archive(failed["verifier"], failed["artifact"], failed["sha256"],
+                                  prefix="native-storage-release-", conclusions={"failure"}, get=get)
+    if run != failed["run"]:
+        raise ValueError("Unexpected failed qualification of the staged repair")
+    require_steps(get, run, "failure", FAILED_RESUME_STEPS)
+    staged = {"snapshot": uploaded["native-release.json"], "coreVersionId": pin["coreVersionId"],
+              "publicVersionId": pin["publicVersionId"], "coreDeploymentId": failed["coreDeploymentId"],
+              "publicDeploymentId": failed["publicDeploymentId"]}
+    check_documents(data, {**uploaded, "native-release.json": staged})
+    return staged, controls
 
 
 def restore_upload(env):
@@ -118,11 +143,15 @@ def sealed_pair(verifier, artifact_id, digest, get=actions_get, git=git_read):
         if member.filename != "native-fallback-stage.json" or not 0 < member.file_size <= 65_536:
             raise ValueError("Unexpected replacement seal archive")
         stage = json.loads(archive.read(member))
-    prior, controls = staged_documents(get)
     release = stage["release"]
     application = stage["revision"]
     if application == issuer:
         require_steps(get, run, "success", STEPS)
+        failed = upload_pin()["failedStage"]
+        if git("merge-base", failed["verifier"], issuer) == failed["verifier"]:
+            prior, controls = replacement_documents(get, git)
+        else:
+            prior, controls = staged_documents(get)
     else:
         pin = upload_pin()
         if (application != pin["revision"] or stage["smoke"] != pin["smoke"]
@@ -130,6 +159,7 @@ def sealed_pair(verifier, artifact_id, digest, get=actions_get, git=git_read):
             raise ValueError("Resumed seal differs from the exact uploaded Workers")
         verify_tree(issuer, git, application)
         require_steps(get, run, "success", RESUME_STEPS)
+        prior, controls = staged_documents(get)
         upload_documents(prior, controls, get)
     snapshot = original_snapshot(application, prior)
     ids = [release[role + kind] for role in ("public", "core") for kind in ("VersionId", "DeploymentId")]

@@ -183,8 +183,11 @@ def two_tab_transport(rows, spans, time_origin):
                 before_ingress, until_headers = finish - ingress - dispatched, headers - finish
                 if min(before_ingress, until_headers) < -clock_tolerance_ms:
                     break
+                canonical = span.get("canonicalHistoryMs")
                 phases.append(dict(
                     beforeIngressMs=before_ingress, ingressMs=ingress, coreMs=core,
+                    canonicalHistoryMs=(canonical if type(canonical) in (int, float)
+                                        and 0 <= canonical <= core else None),
                     ingressToHeadersMs=until_headers, bodyMs=completed - headers,
                 ))
             if len(phases) == 2:

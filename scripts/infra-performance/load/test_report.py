@@ -140,12 +140,12 @@ class OfferedLoadEvidence(unittest.TestCase):
                          dispatched=100, completedAt=119, responses=responses)]
         spans = [dict(variant="do", cell="history", user=0, sample=0, responses=[
             dict(ingressMs=4, coreMs=3, ingressFinishedClockMs=86_399_999),
-            dict(ingressMs=6, coreMs=5, ingressFinishedClockMs=6),
+            dict(ingressMs=6, coreMs=5, canonicalHistoryMs=4, ingressFinishedClockMs=6),
         ])]
         output = two_tab_transport(attempts, spans, 86_399_893)["do"]
         self.assertEqual(output["matched"], 1)
         self.assertEqual(output["pairs"][0]["lastComplete"], dict(
-            beforeIngressMs=6, ingressMs=6, coreMs=5, ingressToHeadersMs=3, bodyMs=3,
+            beforeIngressMs=6, ingressMs=6, coreMs=5, canonicalHistoryMs=4, ingressToHeadersMs=3, bodyMs=3,
         ))
         spans[0]["responses"][1]["ingressFinishedClockMs"] = 1_000
         self.assertEqual(two_tab_transport(attempts, spans, 86_399_893)["do"]["matched"], 0)

@@ -35,9 +35,27 @@ assert.deepEqual(correlateWorkerSpans([], calls).at(0)?.responses, [
 ]);
 
 assert.deepEqual(correlateWorkerSpans(logs, calls, true).at(0)?.responses, [
-  { ingressMs: 7, coreMs: 4, ingressFinishedClockMs: 43_200_000 },
+  { ingressMs: 7, coreMs: 4, ingressFinishedClockMs: 43_200_000, canonicalHistoryMs: null },
 ]);
 assert.deepEqual(
   correlateWorkerSpans([...logs, message("worker.public.fetch", 3)], calls, true).at(0)?.responses,
-  [{ ingressMs: null, coreMs: 4, ingressFinishedClockMs: null }]
+  [{ ingressMs: null, coreMs: 4, ingressFinishedClockMs: null, canonicalHistoryMs: null }]
+);
+
+const coreId = "0".repeat(16);
+const core = message("worker.core.fetch", 4).replace("  data:", `  spanId: "${coreId}",\n  data:`);
+const canonical = message("transactions.listTransactions", 3).replace(
+  "  data:",
+  `  parentSpanId: "${coreId}",\n  data:`
+);
+assert.equal(
+  correlateWorkerSpans([logs[0], core, canonical], calls, true).at(0)?.responses[0]
+    .canonicalHistoryMs,
+  3
+);
+assert.equal(
+  correlateWorkerSpans([logs[0], core, canonical.replace(coreId, "1".repeat(16))], calls, true).at(
+    0
+  )?.responses[0].canonicalHistoryMs,
+  null
 );

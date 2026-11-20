@@ -143,7 +143,10 @@ const uploadedPosition = Effect.fn(function* (
   }
   return { id: active.id, staged: true };
 });
-const uploadedAssignments = Effect.fn(function* (port: StageReader, snapshot: Release["snapshot"]) {
+const uploadedAssignments = Effect.fn(function* (
+  port: FallbackRepairPort,
+  snapshot: Release["snapshot"]
+) {
   yield* releaseController.requireTrunk(port, snapshot.revision);
   const core = yield* uploadedPosition(port, snapshot, "core");
   const ingress = yield* uploadedPosition(port, snapshot, "public");

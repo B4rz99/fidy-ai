@@ -271,7 +271,7 @@ const providerJson = Effect.fn(
   function* (
     request: HttpClientRequest.HttpClientRequest,
     reportDeploymentRejection: boolean = false,
-    immutableVersion = false
+    immutableVersion: boolean = false
   ) {
     const client = yield* HttpClient.HttpClient;
     const response = yield* HttpClient.withScope(client)
@@ -728,7 +728,7 @@ export const decodePairingUploadReceipts = (output: string): WorkerReceipts => {
 const workersFromState = Effect.fn(function* (
   mode: "capture" | "completed",
   stack: string,
-  requirePairingUpload = false
+  requirePairingUpload: boolean = false
 ) {
   const rawState = yield* shell([
     "bun",

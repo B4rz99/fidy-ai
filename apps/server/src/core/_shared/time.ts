@@ -15,31 +15,35 @@ const shortMonthDays = 30;
 const leapFebruaryDays = 29;
 const commonFebruaryDays = 28;
 
-const existingCalendarDate = Schema.makeFilter<string>(
-  (value) => {
+const daysByMonth = [
+  longMonthDays,
+  commonFebruaryDays,
+  longMonthDays,
+  shortMonthDays,
+  longMonthDays,
+  shortMonthDays,
+  longMonthDays,
+  longMonthDays,
+  shortMonthDays,
+  longMonthDays,
+  shortMonthDays,
+  longMonthDays,
+];
+
+/** The caller has checked the fixed-width YYYY-MM-DD prefix. */
+export const isExistingCalendarDate = (value: string): boolean => {
+  const month = Number(value.slice(monthStart, monthEnd));
+  const day = Number(value.slice(dayStart, dayEnd));
+  if (month === 2 && day === leapFebruaryDays) {
     const year = Number(value.slice(0, 4));
-    const month = Number(value.slice(monthStart, monthEnd));
-    const day = Number(value.slice(dayStart, dayEnd));
-    const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % gregorianLeapCycle === 0);
-    const days = [
-      longMonthDays,
-      leapYear ? leapFebruaryDays : commonFebruaryDays,
-      longMonthDays,
-      shortMonthDays,
-      longMonthDays,
-      shortMonthDays,
-      longMonthDays,
-      longMonthDays,
-      shortMonthDays,
-      longMonthDays,
-      shortMonthDays,
-      longMonthDays,
-    ];
-    return day <= (days[month - 1] ?? 0) || "Expected an existing calendar date";
-  },
-  {
-    toJsonSchema: () => [{}, true],
+    return year % 4 === 0 && (year % 100 !== 0 || year % gregorianLeapCycle === 0);
   }
+  return day >= 1 && day <= (daysByMonth[month - 1] ?? 0);
+};
+
+const existingCalendarDate = Schema.makeFilter<string>(
+  (value) => isExistingCalendarDate(value) || "Expected an existing calendar date",
+  { toJsonSchema: () => [{}, true] }
 );
 
 const canonicalUtcDateTime = Schema.DateTimeUtc.check(

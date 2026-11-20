@@ -70,6 +70,10 @@ const Row = Schema.Struct({
   created_at: Schema.String,
   revision: Schema.Int,
 });
+const decodeStoredRow = Schema.decodeUnknownOption(Row);
+const decodeStoredFields = Schema.decodeOption(TransactionOutput);
+const encodeHistoryRows = Schema.encodeSync(Schema.Array(TransactionOutput));
+const encodeHistoryLinks = Schema.encodeSync(TransactionListResponse.fields.next);
 const Query = TransactionQueryValues.mapFields((fields) => ({
   limit: Schema.OptionFromOptionalKey(fields.limit),
   from: Schema.OptionFromOptionalKey(fields.from),
@@ -427,10 +431,8 @@ const storedFields = (row: typeof Row.Type): typeof Transaction.Encoded => ({
 export const decodeTransactionRow = (
   raw: unknown
 ): Option.Option<typeof TransactionOutput.Type> => {
-  const row = Schema.decodeUnknownOption(Row)(raw);
-  return Option.isNone(row)
-    ? Option.none()
-    : Schema.decodeOption(TransactionOutput)(storedFields(row.value));
+  const row = decodeStoredRow(raw);
+  return Option.isNone(row) ? Option.none() : decodeStoredFields(storedFields(row.value));
 };
 
 const PresentationRow = Schema.Struct({
@@ -624,10 +626,8 @@ export const presentHistory = ({
     ? unavailable()
     : Response.json(
         {
-          data: page.value.data.map((transaction) =>
-            Schema.encodeSync(TransactionOutput)(transaction)
-          ),
-          next: Schema.encodeSync(TransactionListResponse.fields.next)(page.value.next),
+          data: encodeHistoryRows(page.value.data),
+          next: encodeHistoryLinks(page.value.next),
         },
         { headers: noStore }
       );

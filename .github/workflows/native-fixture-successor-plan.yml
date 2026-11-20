@@ -43,6 +43,7 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       FIDY_NATIVE_FIXTURE_PUBLIC_KEY: ${{ vars.FIDY_NATIVE_FIXTURE_PUBLIC_KEY }}
       GH_TOKEN: ${{ github.token }}
+      GITHUB_TOKEN: ${{ github.token }}
       NATIVE_FIXTURE_SIGNER_SHA256: ${{ vars.NATIVE_FIXTURE_SIGNER_SHA256 }}
       SMOKE_PROOF: ${{ secrets.NATIVE_STORAGE_SMOKE_PROOF }}
       CLOUDFLARE_ACCESS_ISSUER: ${{ secrets.CLOUDFLARE_ACCESS_ISSUER }}
@@ -79,6 +80,7 @@ jobs:
         run: |
           echo "HOSTED_AI_MODEL=$(bun infra/cloudflare/scripts/print-approved-openai-model.ts)" >> "$GITHUB_ENV"
           echo "CONTRACT_DIGEST=$(bun run --silent --cwd apps/server contracts:digest)" >> "$GITHUB_ENV"
+          echo "FIDY_NATIVE_FIXTURE_PROVIDER_REVISION=$(jq -er .revision infra/cloudflare/native-retained-provider.json)" >> "$GITHUB_ENV"
           echo "RELEASE_SNAPSHOT_FILE=$RUNNER_TEMP/native-release.json" >> "$GITHUB_ENV"
           echo "SMOKE_ATTESTATION_FILE=$RUNNER_TEMP/native-verification.json" >> "$GITHUB_ENV"
       - name: Inspect the scoped successor resources

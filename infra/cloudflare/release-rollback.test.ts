@@ -41,6 +41,7 @@ type Fixture = Readonly<{
   block(name: string): void;
   unavailable(): void;
   raceCoreAfterPublic(): void;
+  stalePublicAfterWrite(): void;
 }>;
 const fixture = (): Fixture => {
   const deployments = new Map<string, Deployment>([
@@ -57,10 +58,17 @@ const fixture = (): Fixture => {
   let blocked = Option.none<string>();
   let available = true;
   let raceCore = false;
+  let delayPublic = false;
+  let reportedPublic = Option.none<Deployment>();
   const port: RollbackPort = {
     trunk: (): Effect.Effect<string, Error> => Effect.succeed(release.snapshot.revision),
     current: (name: string): Effect.Effect<Deployment, Error> =>
       Effect.gen(function* () {
+        if (name === publicName && Option.isSome(reportedPublic)) {
+          const last = reportedPublic.value;
+          reportedPublic = Option.none();
+          return last;
+        }
         const observed = deployments.get(name);
         if (observed === undefined) return yield* Effect.fail(Error("missing Worker"));
         return structuredClone(observed);
@@ -73,6 +81,9 @@ const fixture = (): Fixture => {
           id: `${String(writes.length).padStart(8, "0")}-9999-4999-8999-999999999999`,
           versions: [...versions],
         };
+        if (name === publicName && delayPublic) {
+          reportedPublic = Option.fromUndefinedOr(deployments.get(name));
+        }
         deployments.set(name, next);
         if (name === publicName && raceCore) {
           deployments.set(coreName, {
@@ -98,6 +109,9 @@ const fixture = (): Fixture => {
     raceCoreAfterPublic: (): void => {
       raceCore = true;
     },
+    stalePublicAfterWrite: (): void => {
+      delayPublic = true;
+    },
   };
 };
 
@@ -114,6 +128,16 @@ describe("post-promotion code rollback", () => {
         expect((yield* setup.port.current(coreName)).versions).toEqual([
           { id: stableCore, percentage: 100 },
         ]);
+      })
+    ));
+
+  it("reads through the last promoted assignment after an accepted restoration without rewriting", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const setup = fixture();
+        setup.stalePublicAfterWrite();
+        yield* releaseRollback.restore(setup.port, { release, promoted, compatible: true });
+        expect(setup.writes).toEqual([publicName, coreName]);
       })
     ));
 

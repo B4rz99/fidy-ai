@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import { Effect, Array as EffectArray, Option, Schema } from "effect";
 import { gitRevisionPattern } from "../../apps/server/cloudflare/runtime/contract";
 import { SmokeIdentity } from "../../apps/server/cloudflare/runtime/release-smoke/contract";
+import { type RollbackPort, type RollbackReceipt, releaseRollback } from "./release-rollback";
 import {
   type Deployment,
   type ReleasePort,
@@ -83,6 +84,96 @@ const hasZeroCandidate = (deployment: Deployment, stable: string, candidate: str
 const matchesStage = (deployment: Deployment, release: Release, role: Role): boolean =>
   deployment.id === release[`${role}DeploymentId`] &&
   hasZeroCandidate(deployment, release.snapshot[role].stableVersionId, release[`${role}VersionId`]);
+
+const soleDeployment = (id: string, version: string): Deployment => ({
+  id,
+  versions: [{ id: version, percentage: 100 }],
+});
+
+type PartialRollback = {
+  receipt: typeof RollbackReceipt.Type;
+  ingressDeploymentId: string;
+};
+const requireRestoredIngress = Effect.fn(function* (
+  port: FallbackRepairPort,
+  { receipt, ingressDeploymentId }: PartialRollback
+) {
+  const { release, promoted } = receipt;
+  const ingress = release.snapshot.public;
+  const history = yield* port.recentDeployments(ingress.name);
+  if (
+    !isDeepStrictEqual(history[0], soleDeployment(ingressDeploymentId, ingress.stableVersionId)) ||
+    !isDeepStrictEqual(
+      history[1],
+      soleDeployment(promoted.publicDeploymentId, release.publicVersionId)
+    ) ||
+    !Option.exists(EffectArray.get(history, 2), (staged) => matchesStage(staged, release, "public"))
+  ) {
+    return yield* Effect.fail(
+      Error("Rollback Ingress history differs from the protected intermediate")
+    );
+  }
+});
+const coreRollbackPosition = Effect.fn(function* (
+  port: FallbackRepairPort,
+  { release, promoted }: typeof RollbackReceipt.Type
+) {
+  const core = release.snapshot.core;
+  const history = yield* port.recentDeployments(core.name);
+  const promotedCore = soleDeployment(promoted.coreDeploymentId, release.coreVersionId);
+  const atPromotion = (index: number): boolean =>
+    isDeepStrictEqual(history[index], promotedCore) &&
+    Option.exists(EffectArray.get(history, index + 1), (staged) =>
+      matchesStage(staged, release, "core")
+    );
+  if (atPromotion(0)) return Option.none<Deployment>();
+  const [latest] = history;
+  if (
+    latest !== undefined &&
+    atPromotion(1) &&
+    ![release.coreDeploymentId, promoted.coreDeploymentId].includes(latest.id) &&
+    isDeepStrictEqual(latest, soleDeployment(latest.id, core.stableVersionId))
+  ) {
+    return Option.some(latest);
+  }
+  return yield* Effect.fail(Error("Rollback Core history differs from the protected rollout"));
+});
+
+/** Finish only the Core side of an archived Ingress-first rollback. */
+export const resumePairingRollback = Effect.fn(function* (
+  input: PartialRollback & { port: FallbackRepairPort & RollbackPort }
+) {
+  const {
+    port,
+    receipt: { release, promoted },
+  } = input;
+  const { core, revision } = release.snapshot;
+  yield* releaseController.requireTrunk(port, revision);
+  yield* requireRestoredIngress(port, input);
+  const before = yield* coreRollbackPosition(port, input.receipt);
+  if (Option.isSome(before)) return before.value;
+  if (!(yield* port.deployable(core.name, core.stableVersionId))) {
+    return yield* Effect.fail(Error("Sealed Core version is no longer deployable"));
+  }
+  yield* releaseController.requireTrunk(port, revision);
+  yield* requireRestoredIngress(port, input);
+  const ready = yield* coreRollbackPosition(port, input.receipt);
+  if (Option.isSome(ready)) return ready.value;
+  const restored = yield* releaseRollback.routeStable(port, core.name, {
+    stableId: core.stableVersionId,
+    previous: { id: promoted.coreDeploymentId, version: release.coreVersionId },
+  });
+  yield* requireRestoredIngress(port, input);
+  if (
+    !Option.exists(
+      yield* coreRollbackPosition(port, input.receipt),
+      (current) => current.id === restored.id
+    )
+  ) {
+    return yield* Effect.fail(Error("Rollback Core restoration could not be confirmed"));
+  }
+  return restored;
+});
 
 type ArchivedPair = typeof archivedPairing;
 const matchesArchivedPair = (value: Release, archive: ArchivedPair): boolean =>

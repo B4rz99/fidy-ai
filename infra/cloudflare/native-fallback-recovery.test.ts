@@ -11,6 +11,7 @@ import {
   recoverFixtureFallback,
   requireDormantReplacementSource,
   requirePromotedDormantSource,
+  resumePairingRollback,
   stageUploadedPair,
   verifyUnpromotedFallback,
 } from "./native-fallback-recovery";
@@ -105,6 +106,47 @@ const harness = (): {
   return { port, deployments, writes };
 };
 const verify = (): Effect.Effect<void, Error> => Effect.void;
+
+it.effect(
+  "resumes only the exact Ingress-first partial rollback and recognizes a completed Core",
+  () =>
+    Effect.gen(function* () {
+      const { port, deployments, writes } = harness();
+      const promoted = { coreDeploymentId: uuid(21), publicDeploymentId: uuid(22) };
+      const ingressDeploymentId = uuid(23);
+      for (const [role, name] of [
+        ["core", core],
+        ["public", ingress],
+      ] as const) {
+        deployments(name).unshift({
+          id: promoted[`${role}DeploymentId`],
+          versions: [{ id: stage.release[`${role}VersionId`], percentage: 100 }],
+        });
+      }
+      const restoredIngress = {
+        id: ingressDeploymentId,
+        versions: [{ id: stage.release.snapshot.public.stableVersionId, percentage: 100 }],
+      };
+      deployments(ingress).unshift(restoredIngress);
+      const input = {
+        port: { ...port, deployable: (): Effect.Effect<boolean> => Effect.succeed(true) },
+        receipt: { release: stage.release, promoted },
+        ingressDeploymentId,
+      };
+      expect(
+        yield* resumePairingRollback({ ...input, ingressDeploymentId: uuid(24) }).pipe(
+          Effect.isFailure
+        )
+      ).toBe(true);
+      expect(writes).toEqual([]);
+      const restored = yield* resumePairingRollback(input);
+      expect(restored.versions).toEqual([
+        { id: stage.release.snapshot.core.stableVersionId, percentage: 100 },
+      ]);
+      expect(yield* resumePairingRollback(input)).toEqual(restored);
+      expect(writes).toEqual([core]);
+    })
+);
 
 it.effect("finishes the exact staged dormant pair and verifies a repeat without redeploying", () =>
   Effect.gen(function* () {

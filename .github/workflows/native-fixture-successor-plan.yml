@@ -7,7 +7,7 @@ on:
         description: Read the scoped inventory or prepare the independently approved dormant successor
         type: choice
         default: plan
-        options: [plan, stage, resume, recover, rollout]
+        options: [plan, stage, resume, recover, recover-resumed, rollout, rollout-resumed]
         required: true
       plan_artifact:
         description: Successful protected plan artifact ID from the exact current trunk commit
@@ -49,8 +49,11 @@ jobs:
     environment: production
     timeout-minutes: 60
     env:
-      FIXTURE_RELEASE_OPERATION: ${{ inputs.operation == 'resume' && 'stage-fixture-successor' || format('{0}-fixture-successor', inputs.operation) }}
-      FIXTURE_SUCCESSOR_RESUME: ${{ inputs.operation == 'resume' }}
+      FIXTURE_RELEASE_OPERATION: ${{ inputs.operation == 'resume' && 'stage-fixture-successor'
+        || inputs.operation == 'recover-resumed' && 'recover-fixture-successor'
+        || inputs.operation == 'rollout-resumed' && 'rollout-fixture-successor'
+        || format('{0}-fixture-successor', inputs.operation) }}
+      FIXTURE_SUCCESSOR_RESUME: ${{ inputs.operation == 'resume' || endsWith(inputs.operation, '-resumed') }}
       SUCCESSOR_WORKFLOW_ARTIFACT: ${{ inputs.workflow_artifact }}
       SUCCESSOR_WORKFLOW_DIGEST: ${{ inputs.workflow_sha256 }}
       APPROVED_PLAN_ARTIFACT: ${{ inputs.plan_artifact }}
@@ -61,7 +64,7 @@ jobs:
       SUCCESSOR_RECOVERY_DIGEST: ${{ inputs.recovery_sha256 }}
       NATIVE_STORAGE_ADMISSION: ${{ vars.NATIVE_STORAGE_ADMISSION }}
       NATIVE_STORAGE_HOSTS: ${{ vars.NATIVE_STORAGE_HOSTS || 'acceptance' }}
-      RELEASE_GIT_SHA: ${{ inputs.operation == 'resume' && 'de04a192c3836be0efb488b170a7b93b9f98f28f' || github.sha }}
+      RELEASE_GIT_SHA: ${{ (inputs.operation == 'resume' || endsWith(inputs.operation, '-resumed')) && 'de04a192c3836be0efb488b170a7b93b9f98f28f' || github.sha }}
       RELEASE_ATTEMPT_ID: ${{ github.run_id }}-${{ github.run_attempt }}
       RELEASE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}
       ALCHEMY_PROFILE: ci
@@ -93,7 +96,7 @@ jobs:
           else
             [[ -z "$APPROVED_PLAN_ARTIFACT" && -z "$APPROVED_PLAN_DIGEST" ]]
           fi
-          if [[ "$FIXTURE_SUCCESSOR_RESUME" == true ]]; then
+          if [[ "$FIXTURE_SUCCESSOR_RESUME" == true && "$FIXTURE_RELEASE_OPERATION" == stage-fixture-successor ]]; then
             [[ "$SUCCESSOR_WORKFLOW_ARTIFACT" =~ ^[1-9][0-9]{0,19}$ && "$SUCCESSOR_WORKFLOW_DIGEST" =~ ^[a-f0-9]{64}$ ]]
           else
             [[ -z "$SUCCESSOR_WORKFLOW_ARTIFACT" && -z "$SUCCESSOR_WORKFLOW_DIGEST" ]]
@@ -124,12 +127,37 @@ jobs:
           python3 scripts/infra-performance/canonical-fixture/successor_resume.py
           echo "FIXTURE_STAGED_VERIFIER_SHA=$GITHUB_SHA" >> "$GITHUB_ENV"
       - name: Authenticate same-SHA successor seals
-        if: inputs.operation == 'recover' || inputs.operation == 'rollout'
+        if: env.FIXTURE_RELEASE_OPERATION == 'recover-fixture-successor' || env.FIXTURE_RELEASE_OPERATION == 'rollout-fixture-successor'
         run: |
           umask 077
           python3 scripts/infra-performance/canonical-fixture/successor_artifacts.py
+          if [[ "$FIXTURE_SUCCESSOR_RESUME" == true ]]; then
+            echo "FIXTURE_STAGED_VERIFIER_SHA=$GITHUB_SHA" >> "$GITHUB_ENV"
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        if: inputs.operation == 'rollout-resumed'
+        with:
+          ref: de04a192c3836be0efb488b170a7b93b9f98f28f
+          path: interrupted
+          persist-credentials: false
+      - run: bash scripts/install-workspace.sh --ignore-scripts
+        if: inputs.operation == 'rollout-resumed'
+        working-directory: interrupted
+      - name: Match the original app and provider build environment
+        if: inputs.operation == 'rollout-resumed'
+        run: |
+          set -euo pipefail
+          [[ "$(git -C interrupted rev-parse HEAD)" == "$RELEASE_GIT_SHA" ]]
+          for package in alchemy effect @effect/platform-bun @effect/platform-node @alchemy.run/cloudflare-runtime @distilled.cloud/cloudflare @distilled.cloud/core; do
+            if ! cmp -s "node_modules/$package/package.json" "interrupted/node_modules/$package/package.json"; then
+              echo "Historical and verifier runtime dependency differs for $package" >&2
+              exit 1
+            fi
+          done
+          git diff --quiet "$RELEASE_GIT_SHA" "$GITHUB_SHA" -- ':(glob)patches/alchemy@*.patch'
       - uses: ./.github/actions/configure-alchemy-cloudflare-profile
       - name: Bind the protected plan to the reviewed revision
+        working-directory: ${{ inputs.operation == 'rollout-resumed' && 'interrupted' || '.' }}
         run: |
           echo "HOSTED_AI_MODEL=$(bun infra/cloudflare/scripts/print-approved-openai-model.ts)" >> "$GITHUB_ENV"
           echo "CONTRACT_DIGEST=$(bun run --silent --cwd apps/server contracts:digest)" >> "$GITHUB_ENV"
@@ -190,20 +218,20 @@ jobs:
             ${{ runner.temp }}/native-release.json.uploads
           if-no-files-found: ignore
       - name: Restore the sealed successor dormant pair
-        if: inputs.operation == 'recover'
+        if: env.FIXTURE_RELEASE_OPERATION == 'recover-fixture-successor'
         working-directory: infra/cloudflare
         env:
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
         run: bun native-storage-release.ts recover-successor
       - name: Save the verified dormant recovery
-        if: inputs.operation == 'recover'
+        if: env.FIXTURE_RELEASE_OPERATION == 'recover-fixture-successor'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: native-fixture-successor-recovered-${{ github.run_id }}
           path: ${{ runner.temp }}/native-fixture-successor-recovered.json
           if-no-files-found: error
       - name: Rebuild the original retained Web assets for verification
-        if: inputs.operation == 'rollout'
+        if: env.FIXTURE_RELEASE_OPERATION == 'rollout-fixture-successor'
         run: |
           web_revision=$(jq -er .revision infra/cloudflare/native-fixture-upload.json)
           web_digest=$(jq -er .retainedWebContractDigest "$RUNNER_TEMP/fixture-successor-source.json")
@@ -216,39 +244,43 @@ jobs:
           )
           mkdir -p apps/web/dist
           cp -R "$RUNNER_TEMP/retained-web/apps/web/dist/." apps/web/dist
+          if [[ "$FIXTURE_SUCCESSOR_RESUME" == true ]]; then
+            mkdir -p interrupted/apps/web/dist
+            cp -R "$RUNNER_TEMP/retained-web/apps/web/dist/." interrupted/apps/web/dist
+          fi
           echo "FIXTURE_WEB_CONTRACT_DIGEST=$web_digest" >> "$GITHUB_ENV"
       - name: Capture the verified successor dormant rollback position
-        if: inputs.operation == 'rollout'
+        if: env.FIXTURE_RELEASE_OPERATION == 'rollout-fixture-successor'
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts capture-successor-rollout
       - name: Upload the reviewed active successor pair
-        if: inputs.operation == 'rollout'
-        working-directory: infra/cloudflare
+        if: env.FIXTURE_RELEASE_OPERATION == 'rollout-fixture-successor'
+        working-directory: ${{ inputs.operation == 'rollout-resumed' && 'interrupted/infra/cloudflare' || 'infra/cloudflare' }}
         env:
           NATIVE_FIXTURE_SIGNING_KEY: ${{ secrets.NATIVE_FIXTURE_SIGNING_KEY }}
-        run: bun native-storage-resources.ts rollout-fixture-successor
+        run: bun "$GITHUB_WORKSPACE/infra/cloudflare/native-storage-resources.ts" rollout-fixture-successor
       - name: Stage the active successor pair at zero traffic
-        if: inputs.operation == 'rollout'
+        if: env.FIXTURE_RELEASE_OPERATION == 'rollout-fixture-successor'
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts stage-successor-rollout
       - name: Verify and promote the active successor with its tested return pair
         id: promote_successor
-        if: inputs.operation == 'rollout'
+        if: env.FIXTURE_RELEASE_OPERATION == 'rollout-fixture-successor'
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts promote-successor
       - name: Verify the installed successor and retained controls
         id: verify_successor
-        if: inputs.operation == 'rollout'
+        if: env.FIXTURE_RELEASE_OPERATION == 'rollout-fixture-successor'
         working-directory: infra/cloudflare
         env:
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
         run: bun native-storage-release.ts verify
       - name: Restore the sealed dormant pair after failed verification
-        if: failure() && inputs.operation == 'rollout' && steps.promote_successor.outcome == 'success' && steps.verify_successor.outcome == 'failure'
+        if: failure() && env.FIXTURE_RELEASE_OPERATION == 'rollout-fixture-successor' && steps.promote_successor.outcome == 'success' && steps.verify_successor.outcome == 'failure'
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts rollback
       - name: Save the active successor release
-        if: inputs.operation == 'rollout'
+        if: env.FIXTURE_RELEASE_OPERATION == 'rollout-fixture-successor'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: native-fixture-successor-active-${{ github.run_id }}
@@ -259,7 +291,7 @@ jobs:
             ${{ runner.temp }}/fixture-successor-recovery-reference.json
           if-no-files-found: error
       - name: Retain successor active rollout diagnostics
-        if: always() && inputs.operation == 'rollout'
+        if: always() && env.FIXTURE_RELEASE_OPERATION == 'rollout-fixture-successor'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: native-fixture-successor-rollout-diagnostics-${{ github.run_id }}

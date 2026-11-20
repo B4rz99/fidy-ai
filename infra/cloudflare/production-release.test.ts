@@ -389,7 +389,14 @@ it.effect("accepts only the exact interrupted successor under its current protec
       { ...trunkReference, object: { type: "commit", sha: verifier } },
       application
     );
-    expect(yield* port.trunk()).toBe(application);
+    for (const operation of [
+      "stage-fixture-successor",
+      "recover-fixture-successor",
+      "rollout-fixture-successor",
+    ]) {
+      vi.stubEnv("FIXTURE_RELEASE_OPERATION", operation);
+      expect(yield* port.trunk()).toBe(application);
+    }
     vi.stubEnv("RELEASE_GIT_SHA", revision);
     expect(yield* port.trunk().pipe(Effect.exit)).toHaveProperty("_tag", "Failure");
     vi.stubEnv("RELEASE_GIT_SHA", application);

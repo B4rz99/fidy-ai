@@ -2124,6 +2124,14 @@ const captureSuccessor = Effect.fn(function* (
   );
   yield* verifySuccessorSource(env, client, snapshot);
 });
+const ResumedSuccessor = Schema.Struct({
+  verifierRevision: SmokeIdentity.fields.gitRevision,
+  supportVerifierRevision: SmokeIdentity.fields.gitRevision,
+  supportArtifact: Schema.String.check(Schema.isPattern(/^[1-9][0-9]{0,19}$/u)),
+  supportSha256: SmokeIdentity.fields.contractDigest,
+  coreVersionId: Schema.Literal("ba7f02c9-89fa-4990-8484-42b698854d3d"),
+  publicVersionId: Schema.Literal("a0339369-cd2e-4ebc-ad4e-c849c14cd836"),
+});
 const resumedSuccessor = Effect.gen(function* () {
   const resumed = yield* ReleaseConfig.Boolean("FIXTURE_SUCCESSOR_RESUME").pipe(
     ReleaseConfig.withDefault(false)
@@ -2131,17 +2139,14 @@ const resumedSuccessor = Effect.gen(function* () {
   if (!resumed) return Option.none();
   const dir = yield* ReleaseConfig.String("RUNNER_TEMP");
   const expectedVerifier = yield* ReleaseConfig.String("GITHUB_SHA");
-  const resume = yield* Schema.decodeUnknownEffect(
-    Schema.Struct({
-      verifierRevision: Schema.Literal(expectedVerifier),
-      supportVerifierRevision: SmokeIdentity.fields.gitRevision,
-      supportArtifact: Schema.String.check(Schema.isPattern(/^[1-9][0-9]{0,19}$/u)),
-      supportSha256: SmokeIdentity.fields.contractDigest,
-      coreVersionId: Schema.Literal("ba7f02c9-89fa-4990-8484-42b698854d3d"),
-      publicVersionId: Schema.Literal("a0339369-cd2e-4ebc-ad4e-c849c14cd836"),
-    }),
-    { onExcessProperty: "error" }
-  )(yield* readFile(dir + "/fixture-successor-resume.json"));
+  const resume = yield* Schema.decodeUnknownEffect(ResumedSuccessor, {
+    onExcessProperty: "error",
+  })(yield* readFile(dir + "/fixture-successor-resume.json"));
+  if (resume.verifierRevision !== expectedVerifier) {
+    return yield* new ReleaseFailure({
+      message: "Resumed stage approval came from another verifier",
+    });
+  }
   return Option.some(resume);
 });
 const stageSuccessor = Effect.fn(function* (
@@ -2295,6 +2300,7 @@ const SuccessorStage = Schema.Struct({
   fixtureMember: Schema.Literal("performance-2"),
   approval: SuccessorArtifact,
   predecessor: SuccessorSource,
+  resume: Schema.optionalKey(ResumedSuccessor),
 });
 const RecoveredSuccessor = Schema.Struct({
   stage: SuccessorStage,

@@ -134,6 +134,8 @@ const FixtureVerifierEnvironment = Schema.Struct({
   NATIVE_STORAGE_HOSTS: Schema.Literal("acceptance"),
   FIXTURE_RELEASE_OPERATION: Schema.Literals([
     "stage-fixture-successor",
+    "recover-fixture-successor",
+    "rollout-fixture-successor",
     "resume-pairing-stage",
     "reseal-fixture-fallback",
     "diagnose-fixture-pairing",
@@ -144,17 +146,22 @@ const FixtureVerifierEnvironment = Schema.Struct({
   ]),
 });
 type FixtureVerifierEnvironment = typeof FixtureVerifierEnvironment.Type;
+const resumedSuccessorOperations = new Set<string>([
+  "stage-fixture-successor",
+  "recover-fixture-successor",
+  "rollout-fixture-successor",
+]);
 const matchesResumedSuccessor = (
   selected: FixtureVerifierEnvironment,
   environment: typeof process.env
 ): boolean =>
   selected.RELEASE_GIT_SHA === interruptedSuccessor &&
-  selected.FIXTURE_RELEASE_OPERATION === "stage-fixture-successor" &&
+  resumedSuccessorOperations.has(selected.FIXTURE_RELEASE_OPERATION) &&
   environment.FIXTURE_PAIRING_APPLICATION === undefined &&
   environment.GITHUB_WORKFLOW_REF === successorWorkflow &&
   environment.GITHUB_RUN_ATTEMPT === "1";
 const matchesFixtureSource = (selected: FixtureVerifierEnvironment, sealed?: string): boolean =>
-  selected.FIXTURE_RELEASE_OPERATION !== "stage-fixture-successor" &&
+  !resumedSuccessorOperations.has(selected.FIXTURE_RELEASE_OPERATION) &&
   selected.RELEASE_GIT_SHA === verifiedSource(selected.FIXTURE_RELEASE_OPERATION, sealed) &&
   (sealed === undefined ||
     ["recover-fixture-fallback", "resume-pairing-rollback", "rollout", "verify"].includes(

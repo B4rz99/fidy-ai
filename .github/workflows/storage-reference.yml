@@ -28,7 +28,7 @@ on:
         type: boolean
         default: false
       browser_phases:
-        description: Capture click, request, response and paint phases for Transactions and Dashboard
+        description: Diagnose browser phases on the focused Transactions and Dashboard fixture
         type: boolean
         default: false
       transaction_read_only:

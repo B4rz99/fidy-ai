@@ -1,4 +1,15 @@
 const timingNames = new Set([
+  "review-workerd",
+  "review-route-proof",
+  "review-directory",
+  "review-owner-hop",
+  "review-admission",
+  "review-count-sql",
+  "review-sql",
+  "review-snapshot",
+  "review-completion",
+  "review-local",
+
   "canonical-total",
   "canonical-admission",
   "canonical-owner",
@@ -13,7 +24,7 @@ const timingNames = new Set([
 ]);
 
 /** @param {import("@playwright/test").Response} reply Complete workspace response. */
-const serverTiming = async (reply) => {
+export const serverTiming = async (reply) => {
   const header = await reply.headerValue("server-timing");
   const phases = {};
   for (const entry of header?.split(",") ?? []) {

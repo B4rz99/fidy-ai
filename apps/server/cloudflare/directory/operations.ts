@@ -1,3 +1,8 @@
+import {
+  appendReviewTrace,
+  beginReviewTrace,
+  traceReviewPhase,
+} from "../runtime/review-request-trace";
 import { browserSessionBindingHeader } from "../../src/shell/browser-transport/contract";
 import {
   DirectoryWriteUnavailable,
@@ -47,19 +52,28 @@ const routeCookie = ({
   browserHandoff,
 }: SessionRequest & { browserHandoff: boolean }): Effect.Effect<Response> =>
   Effect.gen(function* () {
+    const trace = beginReviewTrace(request);
     const cookie = sessionCookie(request);
     if (Option.isNone(cookie)) return noAuthority();
     const expected = Option.fromNullishOr(request.headers.get(browserSessionBindingHeader));
     if (missingMountedSession(browserHandoff, expected)) return noAuthority();
-    const digest = yield* Effect.tryPromise(() => sessionDigest(cookie.value));
+    const digest = yield* traceReviewPhase(
+      trace,
+      "review-route-proof",
+      Effect.tryPromise(() => sessionDigest(cookie.value))
+    );
     const { DIRECTORY, USER_STORE } = environment;
     if (DIRECTORY === undefined || USER_STORE === undefined) return canonicalAdmissionUnavailable();
-    const response = yield* Effect.tryPromise((signal) =>
-      DIRECTORY.getByName(directoryName).fetch(sessionRouteUrl, {
-        method: "POST",
-        body: new Uint8Array(digest).buffer,
-        signal,
-      })
+    const response = yield* traceReviewPhase(
+      trace,
+      "review-directory",
+      Effect.tryPromise((signal) =>
+        DIRECTORY.getByName(directoryName).fetch(sessionRouteUrl, {
+          method: "POST",
+          body: new Uint8Array(digest).buffer,
+          signal,
+        })
+      )
     );
     if (response.status === missingRouteStatus) return noAuthority();
     if (!response.ok) return canonicalAdmissionUnavailable();
@@ -69,11 +83,16 @@ const routeCookie = ({
     if (Option.exists(expected, (id) => id !== route.sessionId)) return noAuthority();
     const headers = new Headers(request.headers);
     headers.set(browserSessionBindingHeader, route.sessionId);
-    return yield* Effect.tryPromise((signal) =>
-      USER_STORE.getByName(route.userId).fetch(new Request(request, { headers }), {
-        signal: AbortSignal.any([request.signal, signal]),
-      })
+    const owner = yield* traceReviewPhase(
+      trace,
+      "review-owner-hop",
+      Effect.tryPromise((signal) =>
+        USER_STORE.getByName(route.userId).fetch(new Request(request, { headers }), {
+          signal: AbortSignal.any([request.signal, signal]),
+        })
+      )
     );
+    return appendReviewTrace(owner, trace);
   }).pipe(Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable())));
 
 export const routeSessionRequest = (input: SessionRequest): Effect.Effect<Response> =>

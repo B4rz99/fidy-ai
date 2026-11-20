@@ -1,3 +1,8 @@
+import {
+  appendReviewTrace,
+  isReviewTraceRequest,
+  reviewTraceHeader,
+} from "../../../apps/server/cloudflare/runtime/review-request-trace";
 import { BunFileSystem } from "@effect/platform-bun";
 import { Effect, Option, Schema } from "effect";
 import type { DurableObjectStorageHandle, Miniflare } from "miniflare";
@@ -7,12 +12,27 @@ import { withReviewPressureSnapshot } from "./native-review-pressure";
 
 const apiPort = 4174;
 const operatorPort = 4175;
+const traceReviewResponse = Effect.fn(function* (runtime: Miniflare, request: Request) {
+  const headers = new Headers(request.headers);
+  headers.set(reviewTraceHeader, "1");
+  let started = performance.now();
+  const response = yield* forward(runtime, new Request(request, { headers }), () => {
+    started = performance.now();
+  });
+  return appendReviewTrace(
+    response,
+    Option.some({ "review-workerd": performance.now() - started })
+  );
+});
 const timedResponse = Effect.fn(function* (
   runtime: Miniflare,
   owner: DurableObjectStorageHandle,
   request: Request
 ) {
   let started = Option.none<number>();
+  if (Bun.env.FIDY_REFERENCE_REVIEW_PHASES === "1" && isReviewTraceRequest(request)) {
+    return yield* traceReviewResponse(runtime, request);
+  }
   const response = yield* forward(runtime, request, () => {
     started = Option.some(performance.now());
   });
@@ -23,9 +43,9 @@ const timedResponse = Effect.fn(function* (
       : response;
   }
   const body = yield* Effect.tryPromise(() => response.arrayBuffer());
-  const headers = new Headers(response.headers);
-  headers.set("x-reference-backend-ms", String(performance.now() - started.value));
-  return new Response(body, { status: response.status, headers });
+  const timed = new Headers(response.headers);
+  timed.set("x-reference-backend-ms", String(performance.now() - started.value));
+  return new Response(body, { status: response.status, headers: timed });
 });
 const accountability = Effect.fn(function* (
   owner: Awaited<ReturnType<Miniflare["unsafeGetDurableObjectStorage"]>>

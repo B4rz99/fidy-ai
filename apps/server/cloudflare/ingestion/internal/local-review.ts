@@ -1,3 +1,9 @@
+import {
+  type ReviewRequestTrace,
+  appendReviewTrace,
+  beginReviewTrace,
+  traceReviewPhase,
+} from "../../runtime/review-request-trace";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { hostedStatementSelection } from "./local-statement-scope";
 import { localDetail, missing, readDetail, result } from "./local-review-snapshot";
@@ -57,21 +63,27 @@ const readContext = Effect.fn(function* ({
   filter,
   current,
   offset,
+  trace,
 }: {
   page: OwnedStatement["params"];
   filter: string;
   current: number;
   offset: number;
+  trace: Option.Option<ReviewRequestTrace>;
 }) {
   const sql = yield* SqliteClient;
-  const raw = yield* sql.unsafe(contextSql(filter), [
-    ...page,
-    current,
-    current,
-    maximumReviewExcerptCharacters,
-    maximumExcerptCells,
-    maximumReviewExcerptCharacters,
-  ]);
+  const raw = yield* traceReviewPhase(
+    trace,
+    "review-sql",
+    sql.unsafe(contextSql(filter), [
+      ...page,
+      current,
+      current,
+      maximumReviewExcerptCharacters,
+      maximumExcerptCells,
+      maximumReviewExcerptCharacters,
+    ])
+  );
   const rows = yield* Schema.decodeUnknownEffect(Schema.Array(ContextRow))(raw);
   const items = rows.map((row, index) => projectContext({ row, position: offset + index + 1 }));
   return result(
@@ -80,14 +92,22 @@ const readContext = Effect.fn(function* ({
     )
   );
 });
-export const workspace = Effect.fn(function* (
+type WorkspaceSelection = {
+  current: number;
+  context: boolean;
+  hostedTurn: Option.Option<string>;
+};
+const readWorkspace = Effect.fn(function* (
   query: typeof ReviewWorkspaceQuery.Type,
   user: UserId,
   {
     current,
     context,
     hostedTurn,
-  }: { current: number; context: boolean; hostedTurn: Option.Option<string> }
+    trace,
+  }: WorkspaceSelection & {
+    trace: Option.Option<ReviewRequestTrace>;
+  }
 ) {
   const sql = yield* SqliteClient;
   const { filter, params } = reviewPageSelection({ query, current });
@@ -95,23 +115,45 @@ export const workspace = Effect.fn(function* (
   const origin = originFilter(hostedTurn, user, current);
   const relation = reviewRelation + origin.sql;
   const page = [current, user, ...origin.params, ...params, query.limit ?? reviewPageSize, offset];
-  if (context) return yield* readContext({ page, filter, current, offset });
+  if (context) return yield* readContext({ page, filter, current, offset, trace });
   const pending = Option.getOrElse(query.status, () => "pending") === "pending";
-  const [counts] = pending
-    ? yield* sql.unsafe(
-        `SELECT count(*) AS pendingCount,count(*) AS total FROM (${relation}) WHERE ${filter}`,
-        [current, user, ...origin.params, ...params]
-      )
-    : yield* sql.unsafe(
-        `SELECT count(CASE WHEN visible_status='pending' THEN 1 END) AS pendingCount,count(CASE WHEN ${filter} THEN 1 END) AS total FROM (${relation})`,
-        [...params, current, user, ...origin.params]
-      );
-  const raw = yield* sql.unsafe(
-    `SELECT id,source,reason,time_zone AS timeZone,visible_status AS status,created_at_ms AS createdAt,
+  const [counts] = yield* traceReviewPhase(
+    trace,
+    "review-count-sql",
+    pending
+      ? sql.unsafe(
+          `SELECT count(*) AS pendingCount,count(*) AS total FROM (${relation}) WHERE ${filter}`,
+          [current, user, ...origin.params, ...params]
+        )
+      : sql.unsafe(
+          `SELECT count(CASE WHEN visible_status='pending' THEN 1 END) AS pendingCount,count(CASE WHEN ${filter} THEN 1 END) AS total FROM (${relation})`,
+          [...params, current, user, ...origin.params]
+        )
+  );
+  const raw = yield* traceReviewPhase(
+    trace,
+    "review-sql",
+    sql.unsafe(
+      `SELECT id,source,reason,time_zone AS timeZone,visible_status AS status,created_at_ms AS createdAt,
     expires_at_ms AS expiresAt,transaction_id AS transactionId,revision,draft_json,suggestions_json FROM (${relation}) WHERE ${filter}
     ORDER BY expires_at_ms,id LIMIT ? OFFSET ?`,
-    page
+      page
+    )
   );
+  const projected = yield* projectWorkspace({ raw, counts, user, current });
+  return result(yield* Schema.encodeEffect(Schema.toCodecJson(ReviewWorkspace))(projected));
+});
+const projectWorkspace = Effect.fn(function* ({
+  raw,
+  counts,
+  user,
+  current,
+}: {
+  raw: ReadonlyArray<unknown>;
+  counts: unknown;
+  user: UserId;
+  current: number;
+}) {
   const rows = yield* Schema.decodeUnknownEffect(Schema.Array(ReviewRow))(raw);
   const items = yield* Effect.forEach(rows, (row) => projectReviewSummary({ row, current }));
   const selectedDetail = yield* Effect.transposeOption(
@@ -120,22 +162,23 @@ export const workspace = Effect.fn(function* (
   const totals = yield* Schema.decodeUnknownEffect(
     Schema.Struct({ pendingCount: Schema.Int, total: Schema.Int })
   )(counts);
-  return result(
-    yield* Schema.encodeEffect(Schema.toCodecJson(ReviewWorkspace))({
-      ...totals,
-      items,
-      selectedDetail,
-    })
-  );
+  return { ...totals, items, selectedDetail };
 });
+export const workspace = (
+  query: typeof ReviewWorkspaceQuery.Type,
+  user: UserId,
+  selection: WorkspaceSelection
+): ReturnType<typeof readWorkspace> =>
+  readWorkspace(query, user, { ...selection, trace: Option.none() });
+type ReviewUnit = {
+  request: Request;
+  storage: DurableObjectStorage;
+  bucket: R2Bucket;
+  owns: (id: string) => boolean;
+  operation: CatalogOperation;
+};
 export const dispatchLocalReview = Effect.fn(
-  function* (unit: {
-    request: Request;
-    storage: DurableObjectStorage;
-    bucket: R2Bucket;
-    owns: (id: string) => boolean;
-    operation: CatalogOperation;
-  }) {
+  function* (unit: ReviewUnit) {
     if (unit.operation.id === "ingestion.getReviewMaterial") {
       return yield* localReviewMaterial(unit);
     }
@@ -169,22 +212,43 @@ export const dispatchLocalReview = Effect.fn(
           readReviewItem(user, target, { current, hostedTurn: Option.none() }),
       });
     }
-    const query = Schema.decodeOption(Schema.toCodecStringTree(ReviewWorkspaceQuery))(
-      Object.fromEntries(new URL(unit.request.url).searchParams)
-    );
-    return yield* runLocalMutation({
-      ...unit,
-      input: Effect.succeed(query),
-      work: (selection, user, current) =>
-        workspace(selection, user, {
-          current,
-          context: unit.operation.id === "ingestion.getReviewPageContext",
-          hostedTurn: Option.none(),
-        }),
-    });
+    return yield* workspaceResponse(unit);
   },
   Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
 );
+const workspaceResponse = Effect.fn(function* (unit: ReviewUnit) {
+  const query = Schema.decodeOption(Schema.toCodecStringTree(ReviewWorkspaceQuery))(
+    Object.fromEntries(new URL(unit.request.url).searchParams)
+  );
+  const trace = beginReviewTrace(unit.request);
+  const started = Option.isSome(trace) ? performance.now() : 0;
+  let ownerWorkEnd = started;
+  const response = yield* runLocalMutation({
+    ...unit,
+    input: Effect.succeed(query),
+    work: (selection, user, current) =>
+      Effect.gen(function* () {
+        if (Option.isSome(trace)) trace.value["review-admission"] = performance.now() - started;
+        const snapshot = yield* traceReviewPhase(
+          trace,
+          "review-snapshot",
+          readWorkspace(selection, user, {
+            current,
+            context: unit.operation.id === "ingestion.getReviewPageContext",
+            hostedTurn: Option.none(),
+            trace,
+          })
+        );
+        if (Option.isSome(trace)) ownerWorkEnd = performance.now();
+        return snapshot;
+      }),
+  });
+  if (Option.isSome(trace)) {
+    trace.value["review-completion"] = performance.now() - ownerWorkEnd;
+    trace.value["review-local"] = performance.now() - started;
+  }
+  return appendReviewTrace(response, trace);
+});
 
 export const readReviewItem = Effect.fn(function* (
   user: UserId,

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { Option, Schema } from "effect";
-import { trackBrowserClick } from "./browser-phases.mjs";
+import { serverTiming, trackBrowserClick } from "./browser-phases.mjs";
 
 /** @typedef {import("@playwright/test").Page} Page */
 /** @typedef {import("@playwright/test").Response} BrowserResponse */
@@ -344,6 +344,11 @@ const observeReviewControlChanges = async (page, expected) => {
   await predicate.dispose();
   return observation;
 };
+/** @param {BrowserResponse} reply Completed browser response. */
+const reviewTransport = async (reply) => {
+  const { requestStart, responseStart, responseEnd } = reply.request().timing();
+  return { requestStart, responseStart, responseEnd, server: await serverTiming(reply) };
+};
 /**
  * @param {Workspace} input Mounted view and diagnostic sink.
  * @param {{control: import("@playwright/test").Locator, expected: ReturnType<typeof reviewRows>, journey: string}} boundary Selected control, fresh rows and fixed journey label.
@@ -388,6 +393,13 @@ const measurePendingReview = async (input, count, offset) => {
   verifyPending(summary.value, original.value, { count, expected });
   await recordPhases?.(reply, paintedAt, readiness);
   await readiness.dispose();
+  if (recordPhases) {
+    const [summaryTransport, contextTransport] = await Promise.all([
+      reviewTransport(reply),
+      reviewTransport(context),
+    ]);
+    event({ type: "transport", journey, summary: summaryTransport, context: contextTransport });
+  }
   return { milliseconds, http: summary.http, context: original.http };
 };
 

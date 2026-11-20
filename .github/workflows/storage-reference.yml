@@ -36,7 +36,7 @@ on:
         type: boolean
         default: false
       review_phases:
-        description: Run a paired Needs Review DOM probe on the extreme fixture
+        description: Run focused Needs Review request probes on the extreme fixture
         type: boolean
         default: false
       setup_idle_ms:
@@ -107,6 +107,11 @@ jobs:
         run: |
           python3 scripts/infra-performance/reference/run.py --d1 baseline-d1 --do . \
             --dataset "$DATASET" --network "$NETWORK" --setup-idle-ms "$SETUP_IDLE_MS" ${READ_ONLY_FLAG:+"$READ_ONLY_FLAG"} ${RECURRING_FLAG:+"$RECURRING_FLAG"} --pairs 30 --origin "GitHub-hosted Ubuntu loopback"
+      - name: Capture three paired full-fixture request traces
+        if: ${{ inputs.review_phases }}
+        run: |
+          python3 scripts/infra-performance/reference/run.py --d1 baseline-d1 --do . \
+            --dataset "$DATASET" --network "$NETWORK" --pairs 3 --origin "GitHub-hosted Ubuntu loopback"
       - name: Summarize Needs Review phases
         if: ${{ always() && inputs.review_phases }}
         run: |

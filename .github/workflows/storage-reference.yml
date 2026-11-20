@@ -90,6 +90,7 @@ jobs:
           google-chrome --version
       - name: Verify one equivalent pair before collecting timings
         run: |
+          (cd apps/web && bun --bun vitest run src/features/transactions/capture-task.test.ts)
           bun scripts/infra-performance/reference/native-review-pressure.test.mjs
           bun apps/web/scripts/check-transaction-panel.ts
           bun scripts/infra-performance/reference/review-failure.test.mjs

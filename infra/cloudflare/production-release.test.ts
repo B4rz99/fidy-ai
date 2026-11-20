@@ -1,3 +1,5 @@
+import uploadedPair from "./native-pairing-upload.json" with { type: "json" };
+import fixtureUpload from "./native-fixture-upload.json" with { type: "json" };
 import { Cause, Context, Effect, Exit, Layer, Option } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 import { it } from "@effect/vitest";
@@ -6,6 +8,7 @@ import { archivedDormant } from "./native-fallback-recovery";
 import {
   configureReleaseObservability,
   decodeCaptureWorkerReceipts,
+  decodePairingUploadReceipts,
   decodeWorkerReceipts,
   releaseCommand,
   releaseFailureMessage,
@@ -524,6 +527,44 @@ it.effect.each([
 );
 
 describe("Production release Worker receipts", () => {
+  it("authenticates the two gradual uploads and the completed non-versioned technical Smoke Worker", () => {
+    const worker = (
+      logicalId: string,
+      workerName: string,
+      versionId: string
+    ): Record<string, unknown> => ({
+      logicalId,
+      status: "updated",
+      attr: { workerName, versionId, hash: { main: "state-hash" } },
+    });
+    const smoke = {
+      logicalId: "ReleaseSmoke-" + fixtureUpload.revision,
+      status: "updated",
+      attr: { workerName: "fidy-native-smoke-" + fixtureUpload.revision },
+    };
+    const state = {
+      public: worker("Ingress", "fidy-native-storage-ingress", uploadedPair.publicVersionId),
+      core: worker("Core", "fidy-native-storage-core", uploadedPair.coreVersionId),
+      smoke,
+    };
+    expect(decodePairingUploadReceipts(JSON.stringify(state)).core.versionId).toEqual(
+      Option.some(uploadedPair.coreVersionId)
+    );
+    for (const changed of [
+      { ...smoke, status: "updating" },
+      { ...smoke, attr: { ...smoke.attr, versionId: coreVersion } },
+      { ...smoke, logicalId: "Smoke" },
+    ]) {
+      expect(() =>
+        decodePairingUploadReceipts(JSON.stringify({ ...state, smoke: changed }))
+      ).toThrow();
+    }
+    expect(() =>
+      decodePairingUploadReceipts(
+        JSON.stringify({ ...state, core: worker("Core", "fidy-native-storage-core", coreVersion) })
+      )
+    ).toThrow();
+  });
   it("reports a missing Worker receipt without echoing state values", () => {
     expect(() => decodeWorkerReceipts('{"secret":"not-for-logs"}')).toThrowError(
       new Error("Alchemy Ingress Worker resource is missing")

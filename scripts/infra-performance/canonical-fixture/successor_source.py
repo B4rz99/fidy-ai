@@ -119,9 +119,11 @@ PLAN_STEPS = {
 }
 
 
-def approved_plan(revision, artifact_id, digest, get=actions_get):
+def approved_plan(revision, artifact_id, digest, get=actions_get, *, expected_run=None):
     run, body = protected_archive(revision, artifact_id, digest, prefix="native-fixture-successor-plan-",
                                   conclusions={"success"}, get=get, workflow="native-fixture-successor-plan.yml")
+    if expected_run is not None and run != expected_run:
+        raise ValueError("Unexpected protected successor plan run")
     data = json.loads(get(f"runs/{run}/attempts/1/jobs?per_page=100"))
     job, = data["jobs"]
     steps = [(step["name"], step["conclusion"]) for step in job["steps"] if step["name"] in PLAN_STEPS]
@@ -138,22 +140,13 @@ def approved_plan(revision, artifact_id, digest, get=actions_get):
     return plan
 
 
-def main():
-    env = os.environ
-    operation = env.get("FIXTURE_RELEASE_OPERATION")
-    if (env.get("GITHUB_WORKFLOW_REF") != WORKFLOW_REF or env.get("GITHUB_REF_PROTECTED") != "true"
-            or env.get("GITHUB_ACTIONS") != "true" or env.get("GITHUB_EVENT_NAME") != "workflow_dispatch"
-            or env.get("GITHUB_REF") != "refs/heads/trunk" or env.get("GITHUB_RUN_ATTEMPT") != "1"
-            or env.get("NATIVE_STORAGE_ADMISSION") != "closed"
-            or operation not in ("plan-fixture-successor", "stage-fixture-successor")):
-        raise ValueError("Requires the original protected successor plan attempt")
+def verified_predecessor(revision, account, public_key):
     promotion, installed = artifact(ORIGINAL_REVISION, ACTIVE_ARTIFACT, ACTIVE_DIGEST)
     original = archived_cohort(ORIGINAL_FIXTURE, "failure",
                                ("success", "success", "failure", "failure", "success"), "summary.json")
     cleanup = archived_cohort(ORIGINAL_CLEANUP, "success",
                               ("skipped", "skipped", "skipped", "success", "success"), "cleanup.json")
-    account = env["CLOUDFLARE_ACCOUNT_ID"]
-    actual = verify_live_predecessor(cloudflare, account, promotion, installed, env["FIDY_NATIVE_FIXTURE_PUBLIC_KEY"])
+    actual = verify_live_predecessor(cloudflare, account, promotion, installed, public_key)
     prefix = original["resourcePrefix"]
     cloud = Cloud(account, prefix)
     store = CustodyObject(account, cloud, native_revision=ORIGINAL_REVISION, read_only=True)
@@ -163,7 +156,7 @@ def main():
                          coordinates=coordinates, original_run=ORIGINAL_FIXTURE[0]+"/1",
                          cleanup_run=ORIGINAL_CLEANUP[0]+"/1")
     smoke, = [worker for worker in installed["workers"] if worker["role"] == "Smoke"]
-    source = dict(revision=env["GITHUB_SHA"], previousRevision=ORIGINAL_REVISION,
+    source = dict(revision=revision, previousRevision=ORIGINAL_REVISION,
                   previousRelease=ACTIVE_ARTIFACT, previousCleanup=ORIGINAL_CLEANUP[2],
                   signerSha256=actual["signerSha256"], stableCoreVersion=actual["versions"]["core"],
                   stableCoreDeployment=actual["deployments"]["core"], stableIngressVersion=actual["versions"]["ingress"],
@@ -171,6 +164,20 @@ def main():
                   oldSmokeVersionId=smoke["versionId"], oldSmokeDeploymentId=smoke["deploymentId"],
                   retainedWebContractDigest=installed["website"][0]["contractDigest"],
                   namespaces=installed["namespaces"])
+    return source
+
+
+def main():
+    env = os.environ
+    operation = env.get("FIXTURE_RELEASE_OPERATION")
+    if (env.get("GITHUB_WORKFLOW_REF") != WORKFLOW_REF or env.get("GITHUB_REF_PROTECTED") != "true"
+            or env.get("GITHUB_ACTIONS") != "true" or env.get("GITHUB_EVENT_NAME") != "workflow_dispatch"
+            or env.get("GITHUB_REF") != "refs/heads/trunk" or env.get("GITHUB_RUN_ATTEMPT") != "1"
+            or env.get("NATIVE_STORAGE_ADMISSION") != "closed"
+            or operation not in ("plan-fixture-successor", "stage-fixture-successor")):
+        raise ValueError("Requires the original protected successor plan attempt")
+    source = verified_predecessor(env["GITHUB_SHA"], env["CLOUDFLARE_ACCOUNT_ID"],
+                                  env["FIDY_NATIVE_FIXTURE_PUBLIC_KEY"])
     directory = Path(env["RUNNER_TEMP"])
     if sys.argv[1:] == ["recheck"] and operation == "stage-fixture-successor":
         if source != json.loads((directory / "fixture-successor-source.json").read_bytes()):

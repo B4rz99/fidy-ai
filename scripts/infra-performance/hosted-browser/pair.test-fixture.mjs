@@ -32,13 +32,12 @@ const readWebAsset = async (url) => {
   return (await file.exists()) ? new Response(file) : new Response(null, { status: 404 });
 };
 /** @type {import("./contracts").PairHttp} */
-const http = async (input, init = {}) => {
+const http = async (input, init) => {
   const incoming = new Request(input, init);
   const url = new URL(incoming.url);
   if (url.origin === config.d1.url) {
     return fetch(new Request("http://127.0.0.1:" + port + url.pathname + url.search, incoming), {
-      decompress:
-        "decompress" in init && typeof init.decompress === "boolean" ? init.decompress : true,
+      decompress: init?.decompress,
       redirect: "error",
     });
   }

@@ -67,8 +67,11 @@ Set `ASSESSMENT_CHROMIUM` to select an existing Chromium executable. Use `--data
 500 Transactions, `--dataset extreme` for 100,000 and `--dataset breaking` for the separate
 million-Transaction stress run. The `production` dataset contains eight originals, one linked
 pair, two Currencies, two RecurringPlans with two revisions each, and four NeedsReviewItems.
-The command runs every profile locally. It verifies the effective Transaction count and each
-fixture family's stored counts before Login.
+Use those small-fixture dimensions for the [hosted comparison](https://github.com/B4rz99/fidy-ai/issues/2259).
+Run `--dataset extreme` on both variants in workerd. Record fixture counts, operations and
+network profiles for each result. The 4,754-write calibration below covers 30 paired history
+reads for the eight-original fixture. Other journeys need their own measured budget, including
+fixture preparation, admission, Audit and cleanup.
 
 Open the freshly loaded Transactions workspace, refresh its November 2026 history, correct one
 fixed Counterparty, and observe the committed Correction in the refreshed ledger. The runner drives

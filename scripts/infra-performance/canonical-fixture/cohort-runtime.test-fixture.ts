@@ -22,8 +22,9 @@ const readObject = Effect.fnUntraced(function* (runtime: Miniflare, directory: s
       if (
         error instanceof Error &&
         error.message === "Cannot evict Durable Object: it is not currently running."
-      )
-        {return;}
+      ) {
+        return;
+      }
       throw error;
     })
   );

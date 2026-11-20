@@ -293,11 +293,9 @@ from the same commit. Keep ordinary admission closed and the hosts set to accept
    and version, the five SQLite namespace IDs, an ordered digest of each original User ID and complete financial history, and the candidate
    and mixed-pair smoke probes. It uploads `native-fixture-fallback-<run-id>` before moving traffic.
    Retain the artifact ID and independently pin its GitHub archive SHA-256.
-3. If forward promotion is interrupted after that upload, select `recover-fixture-fallback`
-   with the same SHA, signer, stage artifact ID and pinned archive digest. The controller checks
-   the exact staged deployment or its single observed step to the dormant version. It refreshes
-   admission, provider, namespace, Worker and User evidence before completing the remaining
-   Core-first routing steps. An unrecognized deployment history requires inspection.
+3. Retain any interrupted stage and inspect its release and qualification outcomes before
+   restoring it. The protected recovery operation admits only the independently qualified stage
+   described below.
 4. With the dormant release verified, run `rollout` on the **same trunk SHA** with the signer enabled.
    The active Ingress and Core are separate compiled artifacts. They reuse all four prepared smoke
    resources, the original provider, the signer, the five SQLite namespaces and the closed hosts.
@@ -315,6 +313,23 @@ The sealed stage records the new Smoke version and deployment for the forward re
 one-off workflow checks ancestry from the reviewed repair and permits only its listed verifier changes.
 The signed workflow builds the retained Web revision before planning so Alchemy can compare its local
 output with the recorded Build. The read-only inventory records qualification or refusal and never applies a change.
+
+When the repair has staged the pinned Core and Ingress at zero traffic and stopped during
+qualification, use `reseal-fixture-fallback` with the signer enabled on protected trunk.
+The workflow authenticates both failed source runs, their immutable archives and the original
+User controls. It checks the verifier's complete Git tree against the staged build, records
+the actual verifier SHA separately and keeps the application release SHA on the staged Workers.
+It rechecks the exact stable and candidate deployments before and after qualification. A
+successful run publishes a `native-fixture-fallback-<run-id>` stage archive and leaves
+routing at its original percentages. Preserve the archive ID and independently pin its SHA-256.
+
+To promote the qualified dormant pair, dispatch `recover-fixture-fallback` separately with
+the signer, stage artifact ID and archive digest. Recovery requires a successful protected
+reseal and freshly verifies the original coordinates. After dormant verification passes,
+a separate signed `rollout` can upload and exercise the active pair. Each dispatch checks that
+its protected verifier descends from the staged revision and changes only reviewed verifier
+files. The cohort workflow accepts the resulting active rollout evidence after independently
+checking that lineage, promotion and installed verification.
 
 The original private fixture Worker owns the synthetic OIDC and payment identities. Current OAuth
 flows use fresh pairing state, nonce, PKCE and authorization codes against that retained provider.

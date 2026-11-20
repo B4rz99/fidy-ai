@@ -49,7 +49,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: storage-reference-${{ github.ref }}-${{ inputs.workerd_profile }}-${{ inputs.dataset || 'production' }}-${{ inputs.network || 'normal' }}-${{ inputs.setup_idle_ms || '0' }}-${{ inputs.transaction_read_only || false }}-${{ inputs.full_recurring || false }}
+  group: storage-reference-${{ inputs.review_phases && github.sha || github.ref }}-${{ inputs.workerd_profile }}-${{ inputs.dataset || 'production' }}-${{ inputs.network || 'normal' }}-${{ inputs.setup_idle_ms || '0' }}-${{ inputs.transaction_read_only || false }}-${{ inputs.full_recurring || false }}
   cancel-in-progress: false
 
 jobs:
@@ -107,11 +107,11 @@ jobs:
         run: |
           python3 scripts/infra-performance/reference/run.py --d1 baseline-d1 --do . \
             --dataset "$DATASET" --network "$NETWORK" --setup-idle-ms "$SETUP_IDLE_MS" ${READ_ONLY_FLAG:+"$READ_ONLY_FLAG"} ${RECURRING_FLAG:+"$RECURRING_FLAG"} --pairs 30 --origin "GitHub-hosted Ubuntu loopback"
-      - name: Capture three paired full-fixture request traces
+      - name: Capture two paired full-fixture request traces
         if: ${{ inputs.review_phases }}
         run: |
           python3 scripts/infra-performance/reference/run.py --d1 baseline-d1 --do . \
-            --dataset "$DATASET" --network "$NETWORK" --pairs 3 --origin "GitHub-hosted Ubuntu loopback"
+            --dataset "$DATASET" --network "$NETWORK" --pairs 2 --origin "GitHub-hosted Ubuntu loopback"
       - name: Summarize Needs Review phases
         if: ${{ always() && inputs.review_phases }}
         run: |

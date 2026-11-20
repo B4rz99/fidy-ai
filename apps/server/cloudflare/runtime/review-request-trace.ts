@@ -1,4 +1,5 @@
 import { Effect, Option } from "effect";
+import { browserOrigins } from "./contract";
 
 export type ReviewRequestTrace = Record<string, number>;
 export const reviewTraceHeader = "x-reference-review-trace";
@@ -9,10 +10,15 @@ export const isReviewTraceRequest = (request: Request): boolean => {
   return request.method === "GET" && url.hostname === "127.0.0.1" && reviewPaths.has(url.pathname);
 };
 
-export const beginReviewTrace = (request: Request): Option.Option<ReviewRequestTrace> =>
-  request.headers.get(reviewTraceHeader) === "1" && isReviewTraceRequest(request)
+export const beginReviewTrace = (request: Request): Option.Option<ReviewRequestTrace> => {
+  const routed = new URL(request.url);
+  return request.headers.get(reviewTraceHeader) === "1" &&
+    request.headers.get("origin") === browserOrigins.acceptance &&
+    request.method === "GET" &&
+    reviewPaths.has(routed.pathname)
     ? Option.some({})
     : Option.none();
+};
 
 export const traceReviewPhase = <A, E, R>(
   trace: Option.Option<ReviewRequestTrace>,

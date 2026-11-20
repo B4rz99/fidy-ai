@@ -2,6 +2,7 @@ import { Clock, Effect, Option, Schedule } from "effect";
 import { type UserObjects, newStoredUser, physicalErasure } from "./native-erasure-evidence";
 
 type Member = {
+  id: string;
   outcome: string;
   erase: () => Effect.Effect<string, Error>;
   denied: () => Effect.Effect<void, Error>;
@@ -21,7 +22,7 @@ type Port = FleetPilotBrowser & {
 // The admitted erasure checkpoint pins native-erasure.ts byte-for-byte to its source revision.
 const populated = (rows: UserObjects): number => [...rows.values()].filter(Boolean).length;
 const observePhysicalCensus = Effect.fn(function* <Value>(
-  port: Port,
+  port: Pick<Port, "inventory" | "record" | "renew">,
   stage: "waiting-baseline" | "waiting-fresh-object" | "waiting-physical-erasure",
   transition: (rows: UserObjects) => Option.Option<Value>
 ) {
@@ -52,6 +53,25 @@ const establishedOwners = 3;
 const baseline = (rows: UserObjects): Option.Option<UserObjects> =>
   populated(rows) >= establishedOwners ? Option.some(rows) : Option.none();
 
+const submitErasure = Effect.fn(function* (member: Member, record: Port["record"]) {
+  const admission = yield* Effect.exit(member.erase().pipe(Effect.timeout("2 minutes")));
+  const receipt: Readonly<Record<string, string>> =
+    admission._tag === "Success"
+      ? { stage: "erasure-admitted", reference: admission.value }
+      : { stage: "erasure-reply-unconfirmed" };
+  const recorded = yield* Effect.exit(record(receipt));
+  return { admission, recorded };
+});
+
+const freshMember = Effect.fn(function* (member: Member, login: Port["login"]) {
+  if (member.outcome === "approved") return member;
+  const fresh = yield* login().pipe(Effect.timeout("2 minutes"));
+  if (fresh.outcome !== "approved" || fresh.id !== member.id) {
+    return yield* Effect.fail(Error("Fresh login did not identify the original fleet User"));
+  }
+  return fresh;
+});
+
 const cleanupPilot = Effect.fn(function* ({
   port,
   member,
@@ -64,14 +84,10 @@ const cleanupPilot = Effect.fn(function* ({
   physical: Option.Option<string>;
 }) {
   // Submit the same authenticated User's erasure even when foreground metering or logging failed.
-  const starting = yield* Effect.exit(port.record({ stage: "erasure-submission-started" }));
   yield* Effect.exit(port.renewCleanup().pipe(Effect.timeout("1 minute")));
-  const admission = yield* Effect.exit(member.erase().pipe(Effect.timeout("2 minutes")));
-  const receipt: Readonly<Record<string, string>> =
-    admission._tag === "Success"
-      ? { stage: "erasure-admitted", reference: admission.value }
-      : { stage: "erasure-reply-unconfirmed" };
-  const recorded = yield* Effect.exit(port.record(receipt));
+  const fresh = yield* freshMember(member, port.login);
+  const starting = yield* Effect.exit(port.record({ stage: "erasure-submission-started" }));
+  const { admission, recorded } = yield* submitErasure(fresh, port.record);
   if (Option.isSome(physical)) {
     const subject = physical.value;
     const state = yield* observePhysicalCensus(
@@ -134,4 +150,87 @@ export const runFleetPilot = Effect.fn(function* (port: Port) {
 
   yield* cleanupPilot({ port, member, before, physical });
   if (observation._tag === "Failure") return yield* Effect.failCause(observation.cause);
+});
+
+const digest = (value: string): string =>
+  new Bun.CryptoHasher("sha256").update(value).digest("hex");
+
+type Cleanup = Pick<Port, "inventory" | "login" | "record" | "renewCleanup"> & {
+  target: string;
+  targetSha256: string;
+  userSha256: string;
+  baselineSha256: string;
+  refused: () => Effect.Effect<void, Error>;
+  budget: (phase: "renew-cleanup" | "refusal") => Effect.Effect<void, Error>;
+};
+type Transition = (rows: UserObjects) => ReturnType<typeof physicalErasure>;
+
+const eraseEstablished = Effect.fn(function* (input: Cleanup, transition: Transition) {
+  yield* input.renewCleanup();
+  const session = yield* input.login().pipe(Effect.timeout("2 minutes"), Effect.result);
+  if (session._tag === "Failure") {
+    // An admitted subject can lose login authority before its storage disappears.
+    yield* input.record({ stage: "established-login-unconfirmed" });
+    return Option.none<Member>();
+  }
+  const member = session.success;
+  if (member.outcome !== "approved" || digest(member.id) !== input.userSha256) {
+    return yield* Effect.fail(Error("Established login did not identify the archived fleet User"));
+  }
+  yield* input.record({ stage: "original-fleet-user-authenticated" });
+  const current = yield* input.inventory();
+  if (Option.isNone(yield* Effect.try(() => transition(current)))) {
+    yield* input.budget("renew-cleanup");
+    yield* input.record({ stage: "erasure-submission-started" });
+    const { recorded } = yield* submitErasure(member, input.record);
+    if (recorded._tag === "Failure") return yield* Effect.failCause(recorded.cause);
+  }
+  return Option.some(member);
+});
+
+/** Finish the archived pilot without reenrollment or a second observation window. */
+export const continueFleetCleanup = Effect.fn(function* (input: Cleanup) {
+  const initial = yield* input.inventory();
+  const before = new Map(initial);
+  before.delete(input.target);
+  const retained = [...before]
+    .map(([id, stored]) => id + ":" + stored)
+    .sort()
+    .join("\n");
+  if (digest(input.target) !== input.targetSha256 || digest(retained) !== input.baselineSha256) {
+    return yield* Effect.fail(
+      Error("Archived fleet physical identity or retained baseline differs")
+    );
+  }
+  const transition: Transition = (current) =>
+    physicalErasure({ before, current, subject: input.target });
+  const initialState = transition(initial);
+  let state: "empty" | "absent";
+  let session = Option.none<Member>();
+  if (Option.isSome(initialState)) {
+    state = initialState.value;
+  } else {
+    session = yield* eraseEstablished(input, transition);
+    state = yield* observePhysicalCensus(
+      { ...input, renew: input.renewCleanup },
+      "waiting-physical-erasure",
+      transition
+    );
+  }
+  yield* input.record({
+    stage: "physically-erased",
+    state,
+    physicalObject: input.target,
+  });
+  if (Option.isSome(session)) {
+    yield* session.value.denied().pipe(Effect.timeout("1 minute"));
+    yield* input.record({ stage: "continuation-session-denied" });
+  }
+  yield* input.budget("refusal");
+  yield* input.refused().pipe(Effect.timeout("12 minutes"));
+  const final = yield* input.inventory();
+  if (Option.isNone(yield* Effect.try(() => transition(final)))) {
+    return yield* Effect.fail(Error("Archived fleet User regained physical storage"));
+  }
+  yield* input.record({ stage: "physical-rechecked" });
 });

@@ -17,6 +17,7 @@ on:
             verify-erasure,
             continue-erasure,
             fleet-pilot,
+            continue-fleet-cleanup,
             plan-first-install,
             first-install,
             stage-hosts,
@@ -36,7 +37,7 @@ jobs:
   release:
     if: ${{ github.ref == 'refs/heads/trunk' && inputs.operation != 'publish-site' }}
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ inputs.operation == 'fleet-pilot' && 110 || (inputs.operation == 'first-install' || inputs.operation == 'verify-erasure' || inputs.operation == 'continue-erasure') && 90 || 30 }}
+    timeout-minutes: ${{ inputs.operation == 'fleet-pilot' && 110 || inputs.operation == 'continue-fleet-cleanup' && 55 || (inputs.operation == 'first-install' || inputs.operation == 'verify-erasure' || inputs.operation == 'continue-erasure') && 90 || 30 }}
     environment: production
     permissions:
       actions: read
@@ -65,11 +66,11 @@ jobs:
           RELEASE_OPERATION: ${{ inputs.operation }}
         run: |
           test "$NATIVE_STORAGE_ADMISSION" = closed
-          if [[ "$RELEASE_OPERATION" == fleet-pilot ]]; then
+          if [[ "$RELEASE_OPERATION" == fleet-pilot || "$RELEASE_OPERATION" == continue-fleet-cleanup ]]; then
             echo "FLEET_PILOT_STARTED_AT=$(date -u +%s)" >> "$GITHUB_ENV"
           fi
           if [[ -n "$EXPECTED_INSTALLED_REVISION" ]]; then
-            [[ "$RELEASE_OPERATION" == verify || "$RELEASE_OPERATION" == verify-erasure || "$RELEASE_OPERATION" == continue-erasure || "$RELEASE_OPERATION" == fleet-pilot ]]
+            [[ "$RELEASE_OPERATION" == verify || "$RELEASE_OPERATION" == verify-erasure || "$RELEASE_OPERATION" == continue-erasure || "$RELEASE_OPERATION" == fleet-pilot || "$RELEASE_OPERATION" == continue-fleet-cleanup ]]
             [[ "$EXPECTED_INSTALLED_REVISION" =~ ^[0-9a-f]{40}$ ]]
           fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -117,7 +118,7 @@ jobs:
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts promote
       - name: Build the expected browser artifact for independent verification
-        if: inputs.operation == 'verify' || inputs.operation == 'verify-erasure' || inputs.operation == 'continue-erasure' || inputs.operation == 'fleet-pilot' || inputs.operation == 'stage-hosts'
+        if: inputs.operation == 'verify' || inputs.operation == 'verify-erasure' || inputs.operation == 'continue-erasure' || inputs.operation == 'fleet-pilot' || inputs.operation == 'continue-fleet-cleanup' || inputs.operation == 'stage-hosts'
         env:
           RELEASE_GIT_SHA: ${{ inputs.installed_revision || github.sha }}
         working-directory: apps/web
@@ -132,7 +133,7 @@ jobs:
           bun native-storage-release.ts attach-hosts
       - name: Verify the installed application and retained schema markers
         id: verify
-        if: inputs.operation != 'plan-first-install' && inputs.operation != 'first-install' && inputs.operation != 'verify-erasure' && inputs.operation != 'continue-erasure' && inputs.operation != 'fleet-pilot'
+        if: inputs.operation != 'plan-first-install' && inputs.operation != 'first-install' && inputs.operation != 'verify-erasure' && inputs.operation != 'continue-erasure' && inputs.operation != 'fleet-pilot' && inputs.operation != 'continue-fleet-cleanup'
         env:
           EXPECTED_INSTALLED_REVISION: ${{ inputs.installed_revision }}
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
@@ -145,18 +146,29 @@ jobs:
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts verify-erasure
-      - name: Authenticate the previous admitted erasure checkpoint
-        if: inputs.operation == 'continue-erasure'
+      - name: Authenticate the source protected observation
+        if: inputs.operation == 'continue-erasure' || inputs.operation == 'continue-fleet-cleanup'
         env:
-          EVIDENCE: ${{ vars.ERASURE_CONTINUATION_EVIDENCE }}
+          RELEASE_OPERATION: ${{ inputs.operation }}
+          ERASURE_EVIDENCE: ${{ vars.ERASURE_CONTINUATION_EVIDENCE }}
+          FLEET_EVIDENCE: ${{ vars.FLEET_CONTINUATION_EVIDENCE }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           umask 077
+          if [[ "$RELEASE_OPERATION" == continue-erasure ]]; then
+            EVIDENCE="$ERASURE_EVIDENCE"
+            step="Verify the installed application and physical erasure of one disposable User"
+            jq -e '.survivorsSha256 | test("^[0-9a-f]{64}$")' <<< "$EVIDENCE" > /dev/null
+          else
+            EVIDENCE="$FLEET_EVIDENCE"
+            step="Measure one disposable User on the verified closed release"
+            jq -e '[.meterSha256,.targetSha256,.userSha256] | all(type == "string" and test("^[0-9a-f]{64}$"))' <<< "$EVIDENCE" > /dev/null
+          fi
           jq -e '
             ([.runId,.artifactId] | all(type == "string" and test("^[1-9][0-9]{0,19}$"))) and
             (.sourceRevision | test("^[0-9a-f]{40}$")) and
-            ([.checkpointSha256,.archiveSha256,.baselineSha256,.survivorsSha256] | all(type == "string" and test("^[0-9a-f]{64}$")))
+            ([.checkpointSha256,.archiveSha256,.baselineSha256] | all(type == "string" and test("^[0-9a-f]{64}$")))
           ' <<< "$EVIDENCE" > /dev/null
           run=$(jq -r .runId <<< "$EVIDENCE")
           artifact=$(jq -r .artifactId <<< "$EVIDENCE")
@@ -164,25 +176,37 @@ jobs:
           archive=$(jq -r .archiveSha256 <<< "$EVIDENCE")
           file=$(jq -r .checkpointSha256 <<< "$EVIDENCE")
           git merge-base --is-ancestor "$source" HEAD
-          git diff --quiet "$source" HEAD -- infra/cloudflare/native-erasure.ts
+          if [[ "$RELEASE_OPERATION" == continue-erasure ]]; then
+            git diff --quiet "$source" HEAD -- infra/cloudflare/native-erasure.ts
+          fi
           base="repos/$GITHUB_REPOSITORY/actions"
-          gh api "$base/runs/$run/attempts/1" | jq -e --arg sha "$source" --arg repo "$GITHUB_REPOSITORY" '
+          gh api "$base/runs/$run" | jq -e --arg sha "$source" --arg repo "$GITHUB_REPOSITORY" '
             .path == ".github/workflows/native-storage-release.yml" and .repository.full_name == $repo and
             .event == "workflow_dispatch" and .head_branch == "trunk" and .head_sha == $sha and
             .run_attempt == 1 and .conclusion == "failure"' > /dev/null
-          gh api "$base/runs/$run/attempts/1/jobs" | jq -e '
+          gh api "$base/runs/$run/attempts/1/jobs" | jq -e --arg step "$step" '
             [.jobs[] | select(.name == "release" and .conclusion == "failure") | .steps[] |
-            select(.name == "Verify the installed application and physical erasure of one disposable User" and .conclusion == "failure")] | length == 1' > /dev/null
+            select(.name == $step and .conclusion == "failure")] | length == 1' > /dev/null
           gh api "$base/artifacts/$artifact" | jq -e --arg run "$run" --arg sha "$source" --arg archive "$archive" '
             .name == ("native-storage-release-" + $run) and (.workflow_run.id|tostring) == $run and
             .workflow_run.head_sha == $sha and .expired == false and .size_in_bytes <= 1048576 and
             .digest == ("sha256:" + $archive)' > /dev/null
-          gh api "$base/artifacts/$artifact/zip" > "$RUNNER_TEMP/erasure-source.zip"
-          echo "$archive  $RUNNER_TEMP/erasure-source.zip" | sha256sum --check --status
-          unzip -p "$RUNNER_TEMP/erasure-source.zip" native-verification.json.erasure > "$SMOKE_ATTESTATION_FILE.prior"
-          echo "$file  $SMOKE_ATTESTATION_FILE.prior" | sha256sum --check --status
-          jq -c '{runId,artifactId,sourceRevision,archiveSha256,checkpointSha256,baselineSha256,survivorsSha256}' <<< "$EVIDENCE" > "$RUNNER_TEMP/erasure-provenance.json"
-          echo "ERASURE_SOURCE_EVIDENCE=$RUNNER_TEMP/erasure-provenance.json" >> "$GITHUB_ENV"
+          zip="$RUNNER_TEMP/source.zip"
+          gh api "$base/artifacts/$artifact/zip" > "$zip"
+          echo "$archive  $zip" | sha256sum --check --status
+          if [[ "$RELEASE_OPERATION" == continue-erasure ]]; then
+            unzip -p "$zip" native-verification.json.erasure > "$SMOKE_ATTESTATION_FILE.prior"
+            echo "$file  $SMOKE_ATTESTATION_FILE.prior" | sha256sum --check --status
+            jq -c '{runId,artifactId,sourceRevision,archiveSha256,checkpointSha256,baselineSha256,survivorsSha256}' <<< "$EVIDENCE" > "$RUNNER_TEMP/erasure-provenance.json"
+            echo "ERASURE_SOURCE_EVIDENCE=$RUNNER_TEMP/erasure-provenance.json" >> "$GITHUB_ENV"
+          else
+            unzip -p "$zip" native-verification.json.fleet > "$RUNNER_TEMP/fleet-source.json"
+            echo "$file  $RUNNER_TEMP/fleet-source.json" | sha256sum --check --status
+            unzip -p "$zip" native-fleet-meter.jsonl > "$RUNNER_TEMP/fleet-source-meter.jsonl"
+            echo "$(jq -r .meterSha256 <<< "$EVIDENCE")  $RUNNER_TEMP/fleet-source-meter.jsonl" | sha256sum --check --status
+            jq -c '{runId,artifactId,sourceRevision,archiveSha256,checkpointSha256,meterSha256,targetSha256,userSha256,baselineSha256}' <<< "$EVIDENCE" > "$RUNNER_TEMP/fleet-provenance.json"
+            mv "$zip" "$RUNNER_TEMP/fleet-source.zip"
+          fi
       - name: Continue physical verification of the previously admitted User
         if: inputs.operation == 'continue-erasure'
         env:
@@ -197,6 +221,13 @@ jobs:
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts fleet-pilot
+      - name: Complete cleanup of the archived single fleet User on the verified release
+        if: inputs.operation == 'continue-fleet-cleanup'
+        env:
+          EXPECTED_INSTALLED_REVISION: ${{ inputs.installed_revision }}
+          CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
+        working-directory: infra/cloudflare
+        run: bun native-storage-release.ts continue-fleet-cleanup
       - name: Restore only a compatible, tested target after failed promoted verification
         if: ${{ failure() && steps.promote.outcome == 'success' && steps.verify.outcome == 'failure' }}
         working-directory: infra/cloudflare
@@ -216,6 +247,8 @@ jobs:
             ${{ runner.temp }}/native-verification.json.erasure
             ${{ runner.temp }}/native-verification.json.fleet
             ${{ runner.temp }}/native-fleet-*.jsonl
+            ${{ runner.temp }}/fleet-source.zip
+            ${{ runner.temp }}/fleet-provenance.json
           if-no-files-found: ignore
 
   site:

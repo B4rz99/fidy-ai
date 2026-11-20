@@ -1,10 +1,25 @@
 from copy import deepcopy
+from hashlib import sha256
+from io import BytesIO
+import json
+from pathlib import Path
+import tempfile
 import unittest
+from unittest.mock import patch
 from uuid import UUID
+from zipfile import ZipFile
 
-from successor_artifacts import require_sealed_source
+from successor_artifacts import (
+    ACTIVE_STEPS, RECOVERY_STEPS, RESUMED_STAGE_STEPS, RESUME_CAPTURE_STEP,
+    STAGE_STEPS, WORKFLOW, active_successor, continuation_steps, main,
+    recovered_successor, require_sealed_source, sealed_successor,
+)
+from successor_partial import (
+    CORE_VERSION, INGRESS_VERSION, PLAN, PLAN_RUN, REVISION,
+    SMOKE_DEPLOYMENT, SMOKE_VERSION,
+)
 from successor_source import ACTIVE_ARTIFACT, ORIGINAL_CLEANUP, ORIGINAL_REVISION
-from qualified_release import retained_provider, fixture_upload
+from qualified_release import REPO, retained_provider, fixture_upload
 
 
 class SuccessorArtifactTests(unittest.TestCase):
@@ -42,3 +57,238 @@ class SuccessorArtifactTests(unittest.TestCase):
             edit(changed)
             with self.assertRaises(ValueError):
                 require_sealed_source(rev, changed, plan)
+
+
+SUPPORT = "1" * 40
+STAGE = "2" * 40
+RECOVERY = "3" * 40
+ROLLOUT = "4" * 40
+CHECKOUT = "5" * 40
+LINEAGE = (REVISION, SUPPORT, STAGE, RECOVERY, ROLLOUT, CHECKOUT)
+STAGE_FILE = "native-fixture-successor-stage.json"
+RECOVERY_FILE = "native-fixture-successor-recovered.json"
+
+
+def git_lineage(operation, *revisions):
+    if operation == "rev-parse" and revisions == ("HEAD",):
+        return CHECKOUT
+    if operation == "merge-base" and all(revision in LINEAGE for revision in revisions):
+        return min(revisions, key=LINEAGE.index)
+    return "f" * 40
+
+
+class ArchiveEvidence:
+    def __init__(self):
+        self.documents = {}
+
+    def add(self, artifact_id, producer, prefix, files, steps):
+        run_id = str(int(artifact_id) + 100)
+        stream = BytesIO()
+        with ZipFile(stream, "w") as archive:
+            for name, contents in files.items():
+                archive.writestr(name, json.dumps(contents))
+        body = stream.getvalue()
+        digest = sha256(body).hexdigest()
+        self.documents["artifacts/" + artifact_id] = json.dumps({
+            "id": int(artifact_id), "expired": False, "name": prefix + run_id,
+            "workflow_run": {"id": int(run_id), "head_sha": producer},
+            "digest": "sha256:" + digest, "size_in_bytes": len(body),
+        }).encode()
+        self.documents["runs/" + run_id] = json.dumps({
+            "id": int(run_id), "repository": {"full_name": REPO},
+            "head_repository": {"full_name": REPO}, "path": ".github/workflows/" + WORKFLOW,
+            "head_branch": "trunk", "head_sha": producer, "event": "workflow_dispatch",
+            "conclusion": "success", "run_attempt": 1,
+        }).encode()
+        self.documents[f"runs/{run_id}/attempts/1/jobs?per_page=100"] = json.dumps({
+            "total_count": 1, "jobs": [{"name": "plan", "conclusion": "success", "steps": [
+                {"name": name, "conclusion": conclusion} for name, conclusion in steps.items()
+            ]}],
+        }).encode()
+        self.documents["artifacts/" + artifact_id + "/zip"] = body
+        return {"artifactId": artifact_id, "sha256": digest}
+
+    def get(self, path):
+        return self.documents[path]
+
+
+def resumed_stage():
+    ids = [str(UUID(int=i)) for i in range(1, 9)]
+    source = dict(
+        revision=REVISION, previousRevision=ORIGINAL_REVISION,
+        previousRelease=ACTIVE_ARTIFACT, previousCleanup=ORIGINAL_CLEANUP[2],
+        signerSha256=fixture_upload()["fingerprint"],
+        namespaces=[f"{i:032x}" for i in range(1, 6)],
+        stableCoreVersion=ids[0], stableCoreDeployment=ids[1],
+        stableIngressVersion=ids[2], stableIngressDeployment=ids[3],
+        oldSmokeVersionId=ids[4], oldSmokeDeploymentId=ids[5],
+    )
+    snapshot = dict(
+        revision=REVISION, stableRevision=ORIGINAL_REVISION, stableContractDigest="a" * 64,
+        core=dict(name="fidy-native-storage-core", stableVersionId=ids[0], deploymentId=ids[1]),
+        public=dict(name="fidy-native-storage-ingress", stableVersionId=ids[2], deploymentId=ids[3]),
+    )
+    stage = dict(
+        revision=REVISION, stableRevision=ORIGINAL_REVISION, fixtureMember="performance-2",
+        predecessor=source, provider=retained_provider(), controlsDigest=fixture_upload()["controlsDigest"],
+        smoke=dict(versionId=SMOKE_VERSION, deploymentId=SMOKE_DEPLOYMENT),
+        namespaces=dict(zip(("user", "directory", "pricing", "maintenance", "erasure"), source["namespaces"])),
+        approval=dict(zip(("artifactId", "sha256"), PLAN)),
+        release=dict(snapshot=snapshot, coreVersionId=CORE_VERSION, publicVersionId=INGRESS_VERSION,
+                     coreDeploymentId=ids[6], publicDeploymentId=ids[7]),
+        resume=dict(verifierRevision=STAGE, supportVerifierRevision=SUPPORT, supportArtifact="51",
+                    supportSha256="f" * 64, coreVersionId=CORE_VERSION, publicVersionId=INGRESS_VERSION),
+    )
+    changes = [
+        ("Core", "Cloudflare.Worker", "update"), ("Ingress", "Cloudflare.Worker", "update"),
+        ("ReleaseSmoke-" + REVISION, "Cloudflare.Worker", "create"),
+        ("ReleaseSmokeQueue-" + REVISION, "Cloudflare.Queues.Queue", "create"),
+        ("ReleaseSmokeWorkflowV2-" + REVISION, "Cloudflare.Workflow", "create"),
+        ("ReleaseSmokeConsumer-" + REVISION, "Cloudflare.Queues.Consumer", "create"),
+    ]
+    plan = dict(source, member="performance-2", applied=False,
+                resources=[dict(logicalId=logical_id, resourceType=kind, action=action)
+                           for logical_id, kind, action in changes])
+    return stage, plan
+
+
+class ResumedSuccessorArchiveTests(unittest.TestCase):
+    def setUp(self):
+        self.stage, self.plan = resumed_stage()
+        self.archive = ArchiveEvidence()
+        self.approved = dict(verifierRevision=SUPPORT, candidateRevision=REVISION,
+                             stateProof="c" * 64, instanceProof="d" * 64)
+        self.support = dict(self.approved, workflowId=str(UUID(int=70)))
+        for patcher in (
+            patch("successor_artifacts.approved_plan", return_value=self.plan),
+            patch("successor_artifacts.archived_partial", return_value=deepcopy(self.stage["release"]["snapshot"])),
+            patch("successor_resume.workflow_receipt", side_effect=lambda *_args, **_kwargs: (self.support, self.approved)),
+        ):
+            value = patcher.start()
+            self.addCleanup(patcher.stop)
+            self.__dict__[patcher.attribute + "_mock"] = value
+
+    def stage_archive(self, stage=None, producer=STAGE, steps=RESUMED_STAGE_STEPS):
+        return self.archive.add("101", producer, "native-fixture-successor-stage-",
+                                {STAGE_FILE: self.stage if stage is None else stage}, steps)
+
+    def recovery_archive(self, seal, stage=None, producer=RECOVERY):
+        receipt = dict(seal=seal, stage=self.stage if stage is None else stage,
+                       promoted=dict(coreDeploymentId=str(UUID(int=31)), publicDeploymentId=str(UUID(int=32))))
+        ref = self.archive.add("102", producer, "native-fixture-successor-recovered-",
+                               {RECOVERY_FILE: receipt}, continuation_steps(True, RECOVERY_STEPS))
+        return ref, receipt
+
+    def active_archive(self, seal, recovery, recovered):
+        release = deepcopy(self.stage["release"])
+        snapshot = release["snapshot"]
+        snapshot["stableRevision"] = REVISION
+        for role, value, ordinal in (("core", CORE_VERSION, 41), ("public", INGRESS_VERSION, 42)):
+            snapshot[role].update(deploymentId=recovered["promoted"][role + "DeploymentId"], stableVersionId=value)
+            release[role + "VersionId"] = str(UUID(int=ordinal))
+        promotion = dict(rollbackTested=True, release=release)
+        installed = dict(revision=REVISION, verifierRevision=ROLLOUT, admission="closed",
+                         fixtureMember="performance-2", resourceRevision=REVISION,
+                         retainedProvider=self.stage["provider"], fixtureControlsDigest=self.stage["controlsDigest"],
+                         namespaces=self.stage["predecessor"]["namespaces"], userNamespace=self.stage["namespaces"]["user"],
+                         workers=[dict(role="Smoke", **self.stage["smoke"])],
+                         coreVersionId=release["coreVersionId"], publicVersionId=release["publicVersionId"])
+        files = {"native-release.json.promoted": promotion, "native-verification.json": installed,
+                 "fixture-successor-seal-reference.json": seal, "fixture-successor-recovery-reference.json": recovery}
+        steps = continuation_steps(True, ACTIVE_STEPS)
+        ref = self.archive.add("103", ROLLOUT, "native-fixture-successor-active-", files, steps)
+        return ref, files, steps
+
+    def test_exact_same_source_archive_still_authenticates_without_resume(self):
+        stage = dict(self.stage)
+        stage.pop("resume")
+        seal = self.stage_archive(stage=stage, producer=REVISION, steps=STAGE_STEPS)
+        self.assertEqual(sealed_successor(REVISION, seal, self.archive.get, verifier=REVISION, git=git_lineage), stage)
+        self.workflow_receipt_mock.assert_not_called()
+        self.approved_plan_mock.assert_called_once_with(REVISION, *PLAN, self.archive.get)
+
+    def test_hosted_admission_qualifies_historical_candidate_and_current_lineage(self):
+        seal = self.stage_archive()
+        recovery, recovered = self.recovery_archive(seal)
+        ref, files, steps = self.active_archive(seal, recovery, recovered)
+        self.assertEqual(
+            active_successor(REVISION, ref, self.archive.get, git=git_lineage),
+            (files["native-release.json.promoted"], files["native-verification.json"]),
+        )
+        self.workflow_receipt_mock.assert_called_once_with(
+            STAGE, "51", "f" * 64, get=self.archive.get, git=git_lineage)
+        self.approved_plan_mock.assert_called_once_with(REVISION, *PLAN, self.archive.get, expected_run=PLAN_RUN)
+        files["native-verification.json"]["verifierRevision"] = REVISION
+        ref = self.archive.add("103", ROLLOUT, "native-fixture-successor-active-", files, steps)
+        with self.assertRaisesRegex(ValueError, "tested dormant installation"):
+            active_successor(REVISION, ref, self.archive.get, verifier=CHECKOUT, git=git_lineage)
+
+    def test_refuses_a_foreign_or_later_archive_in_the_chain(self):
+        seal = self.stage_archive(producer="f" * 40)
+        with self.assertRaisesRegex(ValueError, "outside the protected verifier lineage"):
+            sealed_successor(REVISION, seal, self.archive.get, verifier=CHECKOUT, git=git_lineage)
+        seal = self.stage_archive()
+        recovery, _ = self.recovery_archive(seal, producer=SUPPORT)
+        with self.assertRaisesRegex(ValueError, "outside the protected verifier lineage"):
+            recovered_successor(REVISION, recovery, seal, self.archive.get, verifier=CHECKOUT, git=git_lineage)
+
+    def test_refuses_incomplete_resume_steps_and_unexpected_stage_upload(self):
+        for edit in (
+            {RESUME_CAPTURE_STEP: "skipped"},
+            {"Upload the approved successor resources": "success"},
+            {"Retain successor staging coordinates": "skipped"},
+        ):
+            seal = self.stage_archive(steps={**RESUMED_STAGE_STEPS, **edit})
+            with self.assertRaisesRegex(ValueError, "step outcomes differ"):
+                sealed_successor(REVISION, seal, self.archive.get, verifier=CHECKOUT, git=git_lineage)
+
+    def test_refuses_candidate_support_approval_and_capture_substitutions(self):
+        for edit in (
+            lambda stage: stage.pop("resume"),
+            lambda stage: stage["resume"].update(verifierRevision=CHECKOUT),
+            lambda stage: stage["resume"].update(supportVerifierRevision=CHECKOUT),
+            lambda stage: stage["resume"].update(coreVersionId=str(UUID(int=77))),
+            lambda stage: stage["release"].update(publicVersionId=str(UUID(int=77))),
+            lambda stage: stage["smoke"].update(deploymentId=str(UUID(int=77))),
+            lambda stage: stage["approval"].update(artifactId="200"),
+            lambda stage: stage["release"]["snapshot"].update(stableContractDigest="b" * 64),
+        ):
+            stage = deepcopy(self.stage)
+            edit(stage)
+            seal = self.stage_archive(stage=stage)
+            with self.assertRaises(ValueError):
+                sealed_successor(REVISION, seal, self.archive.get, verifier=CHECKOUT, git=git_lineage)
+        self.support["instanceProof"] = "b" * 64
+        with self.assertRaisesRegex(ValueError, "approved Workflow state"):
+            sealed_successor(REVISION, self.stage_archive(), self.archive.get, verifier=CHECKOUT, git=git_lineage)
+
+    def test_refuses_recovery_that_dropped_resume_evidence(self):
+        seal = self.stage_archive()
+        truncated = dict(self.stage)
+        truncated.pop("resume")
+        recovery, _ = self.recovery_archive(seal, stage=truncated)
+        with self.assertRaisesRegex(ValueError, "another successor seal"):
+            recovered_successor(REVISION, recovery, seal, self.archive.get, verifier=CHECKOUT, git=git_lineage)
+
+    def test_protected_resume_binds_explicit_mode_candidate_and_checkout(self):
+        with tempfile.TemporaryDirectory() as folder:
+            env = {
+                "FIXTURE_RELEASE_OPERATION": "recover-fixture-successor", "FIXTURE_SUCCESSOR_RESUME": "true",
+                "RELEASE_GIT_SHA": REVISION, "GITHUB_SHA": CHECKOUT, "GITHUB_ACTIONS": "true",
+                "GITHUB_REF_PROTECTED": "true", "GITHUB_REF": "refs/heads/trunk",
+                "GITHUB_EVENT_NAME": "workflow_dispatch", "GITHUB_WORKFLOW_REF": "B4rz99/fidy-ai/.github/workflows/native-fixture-successor-plan.yml@refs/heads/trunk",
+                "GITHUB_RUN_ATTEMPT": "1", "NATIVE_STORAGE_ADMISSION": "closed",
+                "NATIVE_STORAGE_HOSTS": "acceptance", "SUCCESSOR_SEAL_ARTIFACT": "101",
+                "SUCCESSOR_SEAL_DIGEST": "f" * 64, "RUNNER_TEMP": folder,
+            }
+            for edit in ({"FIXTURE_SUCCESSOR_RESUME": "false"}, {"RELEASE_GIT_SHA": CHECKOUT}, {"RELEASE_GIT_SHA": STAGE}):
+                with patch.dict("os.environ", {**env, **edit}, clear=True), self.assertRaises(ValueError):
+                    main()
+            with patch.dict("os.environ", env, clear=True):
+                with patch("successor_artifacts.git_read", return_value=STAGE), self.assertRaisesRegex(ValueError, "current checkout"):
+                    main()
+                with patch("successor_artifacts.git_read", return_value=CHECKOUT):
+                    with patch("successor_artifacts.sealed_successor", return_value=self.stage) as seal:
+                        main()
+                    seal.assert_called_once_with(REVISION, {"artifactId": "101", "sha256": "f" * 64}, verifier=CHECKOUT)
+            self.assertEqual(json.loads((Path(folder) / STAGE_FILE).read_text()), self.stage)

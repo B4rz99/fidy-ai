@@ -369,7 +369,11 @@ const planFixtureSuccessor = Effect.fn(function* (action: SuccessorAction) {
   }
   if (active) {
     yield* releaseCommand({
-      args: ["bun", "native-storage-release.ts", "verify-successor-upload"],
+      args: [
+        "bun",
+        new URL("./native-storage-release.ts", import.meta.url).pathname,
+        "verify-successor-upload",
+      ],
       lifetime: "read-only",
     });
   } else {

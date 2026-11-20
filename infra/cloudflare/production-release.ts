@@ -1,5 +1,6 @@
 import uploadedPair from "./native-pairing-upload.json" with { type: "json" };
 import fixtureUpload from "./native-fixture-upload.json" with { type: "json" };
+import { stagedAccountingRevision } from "./native-fixture-signer";
 import { archivedDormant } from "./native-fallback-recovery";
 import { CategoryTaxonomyRelease } from "../../apps/server/src/core/categories/contract";
 import { compatibleCategoryReleases } from "../../apps/server/src/core/categories/operations";
@@ -167,6 +168,27 @@ const matchesFixtureSource = (selected: FixtureVerifierEnvironment, sealed?: str
     ["recover-fixture-fallback", "resume-pairing-rollback", "rollout", "verify"].includes(
       selected.FIXTURE_RELEASE_OPERATION
     ));
+const matchesAccountingContinuation = (
+  selected: FixtureVerifierEnvironment,
+  environment: typeof process.env
+): boolean =>
+  selected.RELEASE_GIT_SHA === stagedAccountingRevision &&
+  selected.FIXTURE_RELEASE_OPERATION === "rollout-fixture-successor" &&
+  environment.FIXTURE_ACCOUNTING_ROLLOUT === "true" &&
+  environment.FIXTURE_SUCCESSOR_RESUME === "false" &&
+  environment.GITHUB_WORKFLOW_REF === successorWorkflow &&
+  environment.GITHUB_RUN_ATTEMPT === "1";
+const matchesStagedFixture = (
+  selected: FixtureVerifierEnvironment,
+  environment: typeof process.env
+): boolean => {
+  if (environment.FIXTURE_ACCOUNTING_CONTINUATION === "true") {
+    return matchesAccountingContinuation(selected, environment);
+  }
+  return environment.FIXTURE_SUCCESSOR_RESUME === "true"
+    ? matchesResumedSuccessor(selected, environment)
+    : matchesFixtureSource(selected, environment.FIXTURE_PAIRING_APPLICATION);
+};
 const fixtureVerifierIdentity = Effect.sync(() => {
   const environment = process.env;
   if (environment.FIXTURE_STAGED_VERIFIER_SHA === undefined) {
@@ -176,9 +198,7 @@ const fixtureVerifierIdentity = Effect.sync(() => {
   if (
     Option.isNone(result) ||
     result.value.FIXTURE_STAGED_VERIFIER_SHA !== result.value.GITHUB_SHA ||
-    !(environment.FIXTURE_SUCCESSOR_RESUME === "true"
-      ? matchesResumedSuccessor(result.value, environment)
-      : matchesFixtureSource(result.value, environment.FIXTURE_PAIRING_APPLICATION))
+    !matchesStagedFixture(result.value, environment)
   ) {
     throw Error("Unverified staged application source");
   }
@@ -1114,7 +1134,15 @@ const rollbackSource = Effect.fn(function* (snapshot: typeof releaseSchemas.snap
       workflowPaths.add(line.slice(line.indexOf(":") + 1));
     }
   }
-  return { changedPaths, workflowPaths: [...workflowPaths] };
+  const reviewedAccountingVerifier =
+    snapshot.stableRevision === interruptedSuccessor &&
+    snapshot.revision === stagedAccountingRevision;
+  return {
+    changedPaths: reviewedAccountingVerifier
+      ? changedPaths.filter((path) => path !== "infra/cloudflare/storage-installation.ts")
+      : changedPaths,
+    workflowPaths: [...workflowPaths],
+  };
 });
 const rollbackPort = (
   port: ReturnType<typeof releasePort>,

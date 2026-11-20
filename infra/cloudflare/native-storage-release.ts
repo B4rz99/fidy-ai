@@ -11,6 +11,7 @@ import {
   controlsDigest,
   fallbackNamespaces,
   observeDormantPair,
+  observePairingStart,
   requireOriginalFallbackSource,
 } from "./native-fallback-probe";
 import { requireInterruptedUpload } from "./native-upload-recovery";
@@ -496,7 +497,7 @@ const erasureObservation = ({
       }),
   };
 };
-const acceptanceSend = (
+export const acceptanceSend = (
   client: HttpClient.HttpClient
 ): Parameters<typeof admittedErasureLogins>[0]["send"] =>
   Effect.fn(function* (request: Request) {
@@ -1492,7 +1493,7 @@ const verifyDormantPhase = Effect.fn(function* (
 const stagePath = ReleaseConfig.String("RUNNER_TEMP").pipe(
   Effect.map((directory) => directory + "/native-fallback-stage.json")
 );
-const verifyFallbackSeal = Effect.fn(function* (
+const readFallbackStage = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
   release: FallbackStage["release"]
@@ -1514,8 +1515,6 @@ const verifyFallbackSeal = Effect.fn(function* (
     namespaces: fallbackNamespaces(descriptions.serving.namespaces),
     controlsDigest: controls.digest,
   });
-  yield* verifyDormantPhase(env, client, { stage, phase: "before" });
-  yield* storageCompatibility({ env, client }, release, "promote");
   return stage;
 });
 const qualifyFallback = Effect.fn(function* (
@@ -1523,7 +1522,12 @@ const qualifyFallback = Effect.fn(function* (
   client: HttpClient.HttpClient,
   release: FallbackStage["release"]
 ) {
-  const verify = verifyFallbackSeal(env, client, release);
+  const verify = Effect.gen(function* () {
+    const stage = yield* readFallbackStage(env, client, release);
+    yield* verifyDormantPhase(env, client, { stage, phase: "before" });
+    yield* storageCompatibility({ env, client }, release, "promote");
+    return stage;
+  });
   const stage = yield* verifyUnpromotedFallback({
     port: releasePort({ env, client }),
     release,
@@ -1537,7 +1541,7 @@ const sealFallback = Effect.fn(function* (env: Config, client: HttpClient.HttpCl
   );
   return yield* qualifyFallback(env, client, release);
 });
-const resealFallback = Effect.fn(function* (env: Config, client: HttpClient.HttpClient) {
+const readArchivedStage = Effect.fn(function* (env: Config) {
   const archived = yield* Schema.decodeUnknownEffect(releaseSchemas.staged)(
     yield* readFile(env.file)
   );
@@ -1550,7 +1554,34 @@ const resealFallback = Effect.fn(function* (env: Config, client: HttpClient.Http
       message: "Archived unsealed stage differs from its protected source",
     });
   }
-  return yield* qualifyFallback(env, client, archived);
+  return archived;
+});
+const resealFallback = Effect.fn(function* (env: Config, client: HttpClient.HttpClient) {
+  return yield* qualifyFallback(env, client, yield* readArchivedStage(env));
+});
+const diagnosePairing = Effect.fn(function* (env: Config, client: HttpClient.HttpClient) {
+  const release = yield* readArchivedStage(env);
+  const observations = yield* verifyUnpromotedFallback({
+    port: releasePort({ env, client }),
+    release,
+    verify: Effect.gen(function* () {
+      const stage = yield* readFallbackStage(env, client, release);
+      const candidate = yield* checkedFixtureStage(env, client, stage);
+      yield* observeDormantPair(client, candidate, false);
+      const send = acceptanceSend(client);
+      const original = {
+        revision: release.snapshot.stableRevision,
+        core: release.snapshot.core.stableVersionId,
+        ingress: release.snapshot.public.stableVersionId,
+        proof: env.smokeProof,
+      };
+      const ordinary = yield* observePairingStart(candidate, "json", send);
+      const empty = yield* observePairingStart(candidate, "empty", send);
+      const predecessor = yield* observePairingStart(original, "json", send);
+      return { ordinary, empty, predecessor };
+    }),
+  });
+  yield* Effect.logInfo("Pairing transport observation", observations);
 });
 const forwardFallback = Effect.fn(function* (env: Config, client: HttpClient.HttpClient) {
   const stage = yield* Schema.decodeUnknownEffect(FallbackStage)(yield* readFile(yield* stagePath));
@@ -2034,6 +2065,7 @@ const tenCommand =
 const commands = {
   "seal-fallback": sealFallback,
   "reseal-fallback": resealFallback,
+  "diagnose-pairing": diagnosePairing,
   "forward-fallback": forwardFallback,
   "ten-prepare": tenCommand("ten-prepare"),
   "ten-hosted": tenCommand("ten-hosted"),
@@ -2059,6 +2091,7 @@ if (import.meta.main) {
       Schema.Literals([
         "seal-fallback",
         "reseal-fallback",
+        "diagnose-pairing",
         "forward-fallback",
         "ten-prepare",
         "ten-hosted",

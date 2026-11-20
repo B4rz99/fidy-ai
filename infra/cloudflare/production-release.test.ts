@@ -345,7 +345,10 @@ it.effect(
           { ...trunkReference, object: { type: "commit", sha: head } },
           archivedDormant.revision
         ).port;
-      expect(yield* port(verifier).trunk()).toBe(archivedDormant.revision);
+      for (const operation of ["reseal-fixture-fallback", "diagnose-fixture-pairing"]) {
+        vi.stubEnv("FIXTURE_RELEASE_OPERATION", operation);
+        expect(yield* port(verifier).trunk()).toBe(archivedDormant.revision);
+      }
       expect(yield* port(revision).trunk().pipe(Effect.isFailure)).toBe(true);
       vi.stubEnv("FIXTURE_STAGED_VERIFIER_SHA", revision);
       expect(yield* port(verifier).trunk().pipe(Effect.exit)).toHaveProperty("_tag", "Failure");

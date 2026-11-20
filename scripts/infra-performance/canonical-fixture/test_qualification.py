@@ -30,3 +30,15 @@ class ReleaseQualificationTests(unittest.TestCase):
             with self.subTest(field=field), self.assertRaises(ValueError):
                 validate_qualification(candidate, proof, installed)
             obj[field] = original
+
+    def test_native_collection_requires_the_four_release_buckets_to_still_use_standard_storage(self):
+        from qualified_release import standard_buckets
+        names = ["fidy-native-"+role for role in ("release-smoke","forwarded-email","approved-ingest-samples","statement-staging")]
+        record = {"resources":{"buckets":names}}
+        def metadata(path):
+            return {"name":path.split("/")[-1],"storage_class":"Standard"}
+        standard_buckets(metadata, "a"*32, record)
+        for observed in [lambda path: {**metadata(path),"storage_class":"InfrequentAccess"},
+                         lambda path: {"name":path.split("/")[-1]}]:
+            with self.assertRaises(ValueError):
+                standard_buckets(observed, "a"*32, record)

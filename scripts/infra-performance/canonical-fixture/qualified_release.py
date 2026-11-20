@@ -41,6 +41,7 @@ def artifact(account_revision, artifact_id, expected_digest):
 
 
 def serving_graph(read, account, revision, installed):
+    standard_buckets(read, account, installed)
     expected = {"Core":"fidy-native-storage-core", "Ingress":"fidy-native-storage-ingress",
                 "Smoke":"fidy-native-smoke-"+revision, "Web":"fidy-native-web", "ForwardedEmail":"fidy-native-email"}
     workers = {item["role"]:item for item in installed["workers"]}
@@ -56,3 +57,14 @@ def serving_graph(read, account, revision, installed):
         if (active["id"] != recorded["deploymentId"] or version["version_id"] != recorded["versionId"]
                 or version["percentage"] != 100):
             raise ValueError("A qualified native Worker deployment changed")
+
+
+def standard_buckets(read, account, installed):
+    expected = {"fidy-native-"+role for role in ("release-smoke", "forwarded-email", "approved-ingest-samples", "statement-staging")}
+    buckets = installed["resources"]["buckets"]
+    if len(buckets) != len(expected) or set(buckets) != expected:
+        raise ValueError("Unexpected qualified R2 inventory")
+    for bucket in buckets:
+        data = read(f"accounts/{account}/r2/buckets/{bucket}")
+        if data.get("name") != bucket or data.get("storage_class") != "Standard":
+            raise ValueError("Native fixture requires verified Standard R2 storage")

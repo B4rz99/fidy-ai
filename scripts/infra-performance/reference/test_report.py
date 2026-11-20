@@ -128,7 +128,9 @@ class ReferenceReport(unittest.TestCase):
         from run import observed_work
         with tempfile.TemporaryDirectory() as directory:
             log = Path(directory) / "workspace-events.jsonl"
-            log.write_text('{"type":"offered","journey":"budgets.month.browser"}\n'
+            log.write_text('{"stage":"post-setup-idle","elapsedMs":1000}\n'
+                           '{"type":"d1-cost","stage":"verified-refresh","rowsWritten":23}\n'
+                           '{"type":"offered","journey":"budgets.month.browser"}\n'
                            '{"type":"completed","journey":"budgets.month.browser"}\n'
                            '{"type":"offered","journey":"review.pending.browser"}\n'
                            '{"type":"failed","journey":"review.pending.browser"}\n')

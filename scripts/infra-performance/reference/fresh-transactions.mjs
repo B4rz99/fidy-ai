@@ -13,7 +13,7 @@ const productionPage = 7,
 /** @typedef {"startup" | "refresh" | "correction"} Stage */
 /** @typedef {{page: Page, ledger: string, api: string, calibration: boolean,
  * observe: (reply: BrowserResponse) => Promise<unknown>, observeStartup: (reply: BrowserResponse) => Promise<unknown>,
- * offered?: (stage: Stage) => void, completed?: (stage: Stage, milliseconds: number) => void}} Journey */
+ * checkpoint?: (stage: string) => Promise<void>, offered?: (stage: Stage) => void, completed?: (stage: Stage, milliseconds: number) => void}} Journey */
 const extraFields = Schema.Record(Schema.String, Schema.Unknown);
 const transaction = Schema.StructWithRest(
   Schema.Struct({
@@ -245,6 +245,7 @@ const correctHistory = async (input, { initial, target }) => {
   await counterparty.or(edit).first().waitFor({ state: "visible" });
   if (!(await counterparty.isVisible())) await edit.click();
   await counterparty.fill(afterName);
+  if (input.checkpoint) await input.checkpoint("open-correction");
   process.stderr.write("REFERENCE_STAGE save\n");
   const save = responseFor(input, "PUT", "/transactions/" + targetId);
   const refresh = responseFor(input, "GET", "/transactions");
@@ -274,8 +275,11 @@ const correctHistory = async (input, { initial, target }) => {
  */
 export const freshTransactions = async (input) => {
   const { startup, startupMs } = await startApplication(input);
+  if (input.checkpoint) await input.checkpoint("startup");
   const before = await input.beforeRefresh();
   const history = await refreshHistory(input, startup);
+  if (input.checkpoint) await input.checkpoint("refresh");
   const correctionMs = await correctHistory(input, history);
+  if (input.checkpoint) await input.checkpoint("save-through-fresh-view");
   return { before, startupMs, readMs: history.readMs, correctionMs };
 };

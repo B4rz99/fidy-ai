@@ -52,7 +52,7 @@ def observed_work(log):
     try:
         for line in log.read_text().splitlines():
             event = json.loads(line)
-            journey, kind = event["journey"], event["type"]
+            journey, kind = event.get("journey"), event.get("type")
             if journey in EVENT_CELLS and kind in ("offered", "completed"):
                 counts = work.setdefault(journey, {"offered": 0, "completed": 0})
                 counts[kind] += 1
@@ -345,6 +345,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--d1", required=True, type=Path)
     parser.add_argument("--do", dest="candidate", type=Path, help="clean native candidate checkout")
+    parser.add_argument("--d1-browser-cost", action="store_true", help="Observe local D1 work for complete verified Chromium interactions on each fresh fixture")
     parser.add_argument("--origin", default="local loopback; geographic origin unrecorded")
     parser.add_argument("--pairs", type=int, default=1)
     parser.add_argument(
@@ -356,6 +357,8 @@ def main():
         parser.error("Use the pinned Bun 1.4.4 toolchain")
     if args.pairs < 1:
         parser.error("--pairs must be positive")
+    if args.d1_browser_cost and args.candidate:
+        parser.error("D1 cost observations run independently from timing comparisons")
     paths = {"d1": args.d1.resolve()}
     if args.candidate:
         paths["do"] = args.candidate.resolve()
@@ -372,6 +375,8 @@ def main():
     env = {
         **os.environ,
         "FIDY_REFERENCE": "1",
+        "FIDY_REFERENCE_D1_COST": "1" if args.d1_browser_cost else "0",
+        "BROWSER_COST_MEASUREMENT": "1" if args.d1_browser_cost else "0",
         "CLI_ACCEPTANCE_MODE": "cli",
         "FIDY_ASSESSMENT": args.dataset,
         "FIDY_ASSESSMENT_NETWORK": args.network,
@@ -388,6 +393,7 @@ def main():
         "bun": output(["bun", "--version"], ROOT),
         "network": args.network,
         "offeredLoad": "one isolated User, sequential",
+        "d1BrowserCost": args.d1_browser_cost,
         "dataset": args.dataset,
         **browser_workload(args.dataset),
         "stressOnly": args.dataset == "breaking",
@@ -403,7 +409,7 @@ def main():
         "harnessRevision": output(["git", "rev-parse", "HEAD"], ROOT),
         "comparisonSourceSha256": {
             f.name: hashlib.sha256(f.read_bytes()).hexdigest()
-            for f in [Path(__file__), BROWSER, HERE / "fresh-transactions.mjs", HERE / "fresh-workspaces.mjs", HERE / "fresh-dashboard.mjs", HERE / "fresh-recurring.mjs", HERE / "preview.mjs"]
+            for f in [Path(__file__), BROWSER, HERE / "fresh-transactions.mjs", HERE / "fresh-workspaces.mjs", HERE / "fresh-dashboard.mjs", HERE / "fresh-recurring.mjs", HERE / "browser-cost.mjs", HERE / "preview.mjs"]
         },
         "pairs": args.pairs,
         "order": "alternate D1-first and DO-first pairs" if args.candidate else "pinned D1 reference",

@@ -7,6 +7,7 @@ import { freshBudgetMonth, freshPendingReview } from "./fresh-workspaces.mjs";
 import { freshDashboard, prepareReferenceDashboard } from "./fresh-dashboard.mjs";
 import { freshRecurring, prepareReferenceRecurring } from "./fresh-recurring.mjs";
 import { freshTransactions } from "./fresh-transactions.mjs";
+import { observeBrowserD1 } from "./browser-cost.mjs";
 
 const { chromium } = await import("@playwright/test");
 
@@ -131,6 +132,11 @@ try {
   assert.ok(events, "Missing reference observation file");
   /** @param {Readonly<Record<string, unknown>>} row Bounded workspace measurement metadata. */
   const event = (row) => appendFileSync(events, JSON.stringify(row) + "\n");
+  const checkpoint =
+    process.env.FIDY_REFERENCE_D1_COST === "1"
+      ? observeBrowserD1(page, api, operator, event)
+      : undefined;
+  if (checkpoint) await checkpoint("before-startup");
   const journeys = {
     startup: "startup.browser",
     refresh: "read.browser",
@@ -145,6 +151,7 @@ try {
     observeStartup: async (reply) =>
       Schema.decodeSync(Schema.fromJsonString(Schema.Unknown))(await reply.text()),
     beforeRefresh: evidence,
+    checkpoint,
     offered: (stage) => event({ type: "offered", journey: journeys[stage] }),
     completed: (stage, milliseconds) =>
       event({ type: "completed", journey: journeys[stage], milliseconds }),
@@ -165,12 +172,16 @@ try {
     process.stderr.write("REFERENCE_STAGE budgets-month\n");
     const input = { page, api, browser: app, event };
     views["budgets.month.browser"] = await freshBudgetMonth(input);
+    if (checkpoint) await checkpoint("budgets");
     process.stderr.write("REFERENCE_STAGE review-pending\n");
     views["review.pending.browser"] = await freshPendingReview(input);
+    if (checkpoint) await checkpoint("needs-review");
     process.stderr.write("REFERENCE_STAGE dashboard-fresh\n");
     views["dashboard.fresh.browser"] = await freshDashboard(input);
+    if (checkpoint) await checkpoint("dashboard");
     process.stderr.write("REFERENCE_STAGE recurring-fresh\n");
     Object.assign(views, await freshRecurring(input));
+    if (checkpoint) await checkpoint("recurring");
   }
   process.stdout.write(
     JSON.stringify({

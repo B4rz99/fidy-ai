@@ -218,11 +218,15 @@ def observation(path, env, destination, variant="d1"):
     with ExitStack() as stack:
         # The preview process is terminated after each observation. Own its native D1 images here.
         scratch = stack.enter_context(tempfile.TemporaryDirectory(prefix="fidy-reference-"))
+        matched_d1 = variant == "d1" and env.get("FIDY_REFERENCE_D1_WORKERD") == "1"
+        launcher = "apps/server/cloudflare/browser-acceptance-preview.ts" if variant == "d1" else "scripts/infra-performance/reference/native.ts"
+        if matched_d1:
+            launcher = "scripts/infra-performance/reference/d1-workerd.ts"
+            env = {**env, "FIDY_REFERENCE_D1_ROOT": str(path)}
         api = stack.enter_context(
             serve(
-                ["bun", "apps/server/cloudflare/browser-acceptance-preview.ts" if variant == "d1"
-                 else "scripts/infra-performance/reference/native.ts"],
-                path,
+                ["bun", launcher],
+                ROOT if matched_d1 else path,
                 {**env, "TMPDIR": scratch, "TEMP": scratch, "TMP": scratch},
                 destination / "api.log",
             )
@@ -393,6 +397,7 @@ def main():
     parser.add_argument("--transaction-read-only", action="store_true", help="Measure only mounted Transactions startup and fresh Refresh, with real Login and one audited history query")
     parser.add_argument("--full-recurring", action="store_true", help="Measure the four compact Recurring interactions and the bound full history on the 100k fixture")
     parser.add_argument("--d1-browser-cost", action="store_true", help="Observe local D1 work for complete verified Chromium interactions on each fresh fixture")
+    parser.add_argument("--review-workerd-d1", action="store_true", help="Diagnostic only: mount the frozen browser with paired Bun TLS and workerd Ingress/Core")
     parser.add_argument("--origin", default="local loopback; geographic origin unrecorded")
     parser.add_argument("--pairs", type=int, default=1)
     parser.add_argument(
@@ -410,6 +415,9 @@ def main():
         parser.error("D1 cost observations run independently from timing comparisons")
     if args.full_recurring and (args.dataset != "extreme" or not args.candidate or args.transaction_read_only or args.d1_browser_cost):
         parser.error("--full-recurring requires paired extreme fixtures and its own browser workload")
+    if args.review_workerd_d1 and (args.dataset != "extreme" or not args.candidate or args.full_recurring
+                                   or args.transaction_read_only or args.d1_browser_cost):
+        parser.error("--review-workerd-d1 requires paired full-size Needs Review")
     paths = {"d1": args.d1.resolve()}
     if args.candidate:
         paths["do"] = args.candidate.resolve()
@@ -428,6 +436,7 @@ def main():
         "FIDY_REFERENCE": "1",
         "FIDY_REFERENCE_FULL_RECURRING": "1" if args.full_recurring else "0",
         "FIDY_REFERENCE_READ_ONLY": "1" if args.transaction_read_only else "0",
+        "FIDY_REFERENCE_D1_WORKERD": "1" if args.review_workerd_d1 else "0",
         "FIDY_REFERENCE_D1_COST": "1" if args.d1_browser_cost else "0",
         "BROWSER_COST_MEASUREMENT": "1" if args.d1_browser_cost else "0",
         "CLI_ACCEPTANCE_MODE": "cli",
@@ -442,7 +451,7 @@ def main():
     plan = {
         "revisions": revisions,
         "installations": {k: str(v) for k, v in paths.items()},
-        "scope": "local synthetic reference",
+        "scope": "local transport topology diagnostic" if args.review_workerd_d1 else "local synthetic reference",
         "origin": args.origin,
         "host": platform.platform(),
         "bun": output(["bun", "--version"], ROOT),
@@ -457,7 +466,8 @@ def main():
         "backendBoundary": {
             "start": "after loopback request adaptation, immediately before invoking ingress",
             "end": "complete response body buffered in the loopback API process",
-            "d1": "direct ingress and Core calls in Bun; D1 binding uses Miniflare",
+            "d1": ("Miniflare dispatchFetch to frozen workerd ingress and Core" if args.review_workerd_d1
+                   else "direct ingress and Core calls in Bun; D1 binding uses Miniflare"),
             "do": "Miniflare dispatchFetch to workerd ingress, Core and User store",
         },
         "lifecycle": "User and shared reconstruction unobserved",

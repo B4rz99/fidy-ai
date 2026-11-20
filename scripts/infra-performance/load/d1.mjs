@@ -24,17 +24,16 @@ const sha256Width = 64,
   migrationBatchSize = 15,
   secondMs = 1000;
 const shared = {
-  BROWSER_ORIGIN: text(origin),
   RELEASE_GIT_SHA: text(baseline),
   CONTRACT_DIGEST: text("a".repeat(sha256Width)),
 };
 /**
  * *
  * @param {string} root Frozen D1 checkout directory.
- * @param {{name:string,entry:string,env:MiniflareWorkerConfig["env"],exports?:MiniflareWorkerConfig["exports"]}} config Worker binding and module configuration.
+ * @param {{name:string,entry:string,env:MiniflareWorkerConfig["env"],browserOrigin:string,exports?:MiniflareWorkerConfig["exports"]}} config Worker binding and module configuration.
  * @returns {Promise<{config: MiniflareWorkerConfig}>}
  */
-const worker = async (root, { name, entry, env, exports = {} }) => {
+const worker = async (root, { name, entry, env, browserOrigin, exports = {} }) => {
   const build = await Bun.build({
     entrypoints: [resolve(root, "apps/server/cloudflare/" + entry + ".ts")],
     target: "browser",
@@ -48,7 +47,7 @@ const worker = async (root, { name, entry, env, exports = {} }) => {
       name,
       compatibilityDate: "2026-09-08",
       compatibilityFlags: ["nodejs_compat", "enable_request_signal", "request_signal_passthrough"],
-      env: { ...shared, ...env },
+      env: { ...shared, BROWSER_ORIGIN: text(browserOrigin), ...env },
       exports,
       manifest: {
         mainModule: "index.mjs",
@@ -62,8 +61,9 @@ const worker = async (root, { name, entry, env, exports = {} }) => {
 /**
  * @param {string} root Frozen D1 checkout directory.
  * @param {string[]} logs Production structured log messages.
+ * @param {string} browserOrigin Installed browser origin.
  */
-const runtimeFor = async (root, logs) =>
+const runtimeFor = async (root, logs, browserOrigin) =>
   new Miniflare({
     handleStructuredLogs: (log) => {
       logs.push(log.message);
@@ -71,6 +71,7 @@ const runtimeFor = async (root, logs) =>
     workers: [
       await worker(root, {
         name: "ingress",
+        browserOrigin,
         entry: "public-worker",
         env: {
           CORE: { type: "worker", worker: "core" },
@@ -81,6 +82,7 @@ const runtimeFor = async (root, logs) =>
       }),
       await worker(root, {
         name: "core",
+        browserOrigin,
         entry: "core-worker",
         env: {
           DB: { type: "d1", id: "shared-frozen-store" },
@@ -179,7 +181,7 @@ const prepareStorage = async (runtime, root) => {
     },
     /**
      * @param {string} subject Financial User fixture.
-     * @param {Pair} pair Browser Login pairing.
+     * @param {Pick<Pair, "pairingId">} pair Browser Login pairing.
      */
     async approve(subject, pair) {
       await owner.exec(
@@ -194,16 +196,23 @@ const prepareStorage = async (runtime, root) => {
 /**
  * @param {string} root Frozen D1 checkout directory.
  * @param {string[]} logs Production structured log messages.
+ * @param {{browserOrigin?: string, referenceOverlay?: boolean}} [options] Local reference topology.
  */
-export const d1Platform = async (root, logs) => {
+export const d1Platform = async (root, logs, options = {}) => {
   /**
    * @param {...string} args Git command arguments.
    */
   const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
   assert.equal(git("rev-parse", "HEAD"), baseline);
-  assert.equal(git("diff", "HEAD", "--name-only"), "");
+  const modified = git("diff", "HEAD", "--name-only").split("\n").filter(Boolean);
+  const fixtures = new Set([
+    "apps/server/cloudflare/browser-assessment.test-fixture.ts",
+    "apps/server/cloudflare/browser-acceptance-preview.ts",
+    "apps/server/cloudflare/browser-acceptance-seed.ts",
+  ]);
+  assert.ok(modified.every((file) => options.referenceOverlay && fixtures.has(file)));
   // Match the native browser fixture’s host-side structured log sink.
-  const runtime = await runtimeFor(root, logs);
+  const runtime = await runtimeFor(root, logs, options.browserOrigin ?? origin);
   try {
     return await prepareStorage(runtime, root);
   } catch (error) {

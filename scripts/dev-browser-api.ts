@@ -79,7 +79,10 @@ export const forward = Effect.fn(function* (
   onIngress?: () => void
 ) {
   const url = new URL(request.url);
-  if (url.origin !== origin) return new Response(null, { status: 403 });
+  const referenceWebPort = Bun.env.REFERENCE_WEB_PORT;
+  const apiOrigin =
+    referenceWebPort === undefined ? origin : `https://127.0.0.1:${Number(referenceWebPort) + 1}`;
+  if (url.origin !== apiOrigin) return new Response(null, { status: 403 });
   const headers = new Headers(request.headers);
   headers.set("cf-connecting-ip", "127.0.0.1");
   const body = request.body === null ? undefined : yield* native(() => request.arrayBuffer());

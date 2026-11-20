@@ -39,6 +39,10 @@ on:
         description: Run focused Needs Review request probes on the extreme fixture
         type: boolean
         default: false
+      review_workerd_d1:
+        description: Compare the full-size mounted Needs Review journey with both API graphs in workerd
+        type: boolean
+        default: false
       setup_idle_ms:
         description: Idle time between authenticated fixture preparation and the first browser journey
         type: choice
@@ -49,7 +53,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: storage-reference-${{ inputs.review_phases && github.sha || github.ref }}-${{ inputs.workerd_profile }}-${{ inputs.dataset || 'production' }}-${{ inputs.network || 'normal' }}-${{ inputs.setup_idle_ms || '0' }}-${{ inputs.transaction_read_only || false }}-${{ inputs.full_recurring || false }}
+  group: storage-reference-${{ (inputs.review_phases || inputs.review_workerd_d1) && github.sha || github.ref }}-${{ inputs.workerd_profile }}-${{ inputs.dataset || 'production' }}-${{ inputs.network || 'normal' }}-${{ inputs.setup_idle_ms || '0' }}-${{ inputs.transaction_read_only || false }}-${{ inputs.full_recurring || false }}
   cancel-in-progress: false
 
 jobs:
@@ -58,7 +62,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
-      FIDY_REFERENCE_REVIEW_PHASES: ${{ inputs.review_phases && '1' || '0' }}
+      FIDY_REFERENCE_REVIEW_PHASES: ${{ (inputs.review_phases || inputs.review_workerd_d1) && '1' || '0' }}
       DATASET: ${{ inputs.dataset || 'production' }}
       NETWORK: ${{ inputs.network || 'normal' }}
       RECURRING_FLAG: ${{ inputs.full_recurring && '--full-recurring' || '' }}
@@ -94,6 +98,7 @@ jobs:
           echo "ASSESSMENT_CHROMIUM=$(command -v google-chrome)" >> "$GITHUB_ENV"
           google-chrome --version
       - name: Verify one equivalent pair before collecting timings
+        if: ${{ !inputs.review_workerd_d1 }}
         run: |
           bun scripts/infra-performance/reference/native-review-pressure.test.mjs
           bun apps/web/scripts/check-transaction-panel.ts
@@ -103,7 +108,7 @@ jobs:
           python3 scripts/infra-performance/reference/run.py --d1 baseline-d1 --do . \
             --dataset "$DATASET" --network "$NETWORK" --setup-idle-ms "$SETUP_IDLE_MS" ${READ_ONLY_FLAG:+"$READ_ONLY_FLAG"} ${RECURRING_FLAG:+"$RECURRING_FLAG"} --pairs 1 --origin "GitHub-hosted Ubuntu loopback"
       - name: Measure 30 alternating pairs
-        if: ${{ !inputs.review_phases }}
+        if: ${{ !inputs.review_phases && !inputs.review_workerd_d1 }}
         run: |
           python3 scripts/infra-performance/reference/run.py --d1 baseline-d1 --do . \
             --dataset "$DATASET" --network "$NETWORK" --setup-idle-ms "$SETUP_IDLE_MS" ${READ_ONLY_FLAG:+"$READ_ONLY_FLAG"} ${RECURRING_FLAG:+"$RECURRING_FLAG"} --pairs 30 --origin "GitHub-hosted Ubuntu loopback"
@@ -112,8 +117,13 @@ jobs:
         run: |
           python3 scripts/infra-performance/reference/run.py --d1 baseline-d1 --do . \
             --dataset "$DATASET" --network "$NETWORK" --pairs 2 --origin "GitHub-hosted Ubuntu loopback"
+      - name: Compare the full-size browser fixture through both workerd graphs
+        if: ${{ inputs.review_workerd_d1 }}
+        run: |
+          python3 scripts/infra-performance/reference/run.py --d1 baseline-d1 --do . \
+            --dataset extreme --network "$NETWORK" --review-workerd-d1 --pairs 1 --origin "GitHub-hosted Ubuntu loopback"
       - name: Summarize Needs Review phases
-        if: ${{ always() && inputs.review_phases }}
+        if: ${{ always() && (inputs.review_phases || inputs.review_workerd_d1) }}
         run: |
           for folder in apps/web/test-results/reference/*; do
             python3 scripts/infra-performance/reference/phase_report.py "$folder" > "$folder/review-phases.json"

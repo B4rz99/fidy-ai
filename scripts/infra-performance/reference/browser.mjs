@@ -68,7 +68,11 @@ try {
   process.stderr.write("REFERENCE_STAGE approval\n");
   setup(
     await request.post(operator + "/approve", {
-      params: { code: pairing.publicCode, navigationDashboard: "true" },
+      params: {
+        code: pairing.publicCode,
+        navigationDashboard: "true",
+        ...(process.env.FIDY_REFERENCE_D1_WORKERD === "1" ? { pairingId: pairing.pairingId } : {}),
+      },
     })
   );
   process.stderr.write("REFERENCE_STAGE redeem\n");

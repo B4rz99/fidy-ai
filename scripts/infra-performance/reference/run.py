@@ -42,7 +42,7 @@ BOUNDARIES = [
     "startup.browser",
 ]
 
-CALIBRATION_VIEWS = ["budgets.month.browser", "review.pending.browser", "dashboard.fresh.browser", "recurring.month.browser", "recurring.previous.browser", "recurring.selective.browser", "recurring.full.http"]
+CALIBRATION_VIEWS = ["budgets.month.browser", "review.pending.browser", "dashboard.fresh.browser", "recurring.month.browser", "recurring.previous.browser", "recurring.selective.browser", "recurring.no-match.browser", "recurring.full.http"]
 
 # Export only controlled stage names, error classes and harness source coordinates.
 STAGES = {
@@ -293,10 +293,10 @@ def browser_workload(dataset):
         "browserStart": start + " Additional views start before their declared navigation, disclosure or refresh.",
         "browserEnd": end + " Budget navigation requires editable caps and fresh spending totals. "
                       "The pending review inbox requires usable rows with original excerpts. "
-                      "Dashboard and Recurring require their declared populated views. Payload verification follows timing.",
+                      "Dashboard and Recurring require their declared populated views. The no-match Recurring search ends at the visible empty result with an enabled filter reset. Payload verification follows timing.",
         "additionalCalibrationSetup": "Four fixed Dashboard WidgetIds and one forward Recurring edit: the second plan has 3 revisions, including an intermediate revision omitted from compact responses.",
         "dashboardNormalization": ["data.context.calculatedAt"],
-        "recurringHistory": "The product requests compact revisions. Its earlier-month and selective results are visible; complete revision history is checked separately through the bound canonical HTTP API.",
+        "recurringHistory": "The product requests compact revisions. Its earlier-month, selective and no-match results are visible; complete revision history is checked separately through the bound canonical HTTP API.",
     }
 
 

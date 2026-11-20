@@ -116,6 +116,14 @@ class ReferenceReport(unittest.TestCase):
             self.assertEqual(report[key]["status"], "missing")
         self.assertEqual(report["recurring.full.browser"]["status"], "not-exposed")
 
+    def test_no_match_recurring_search_has_its_own_browser_gate(self):
+        key = "recurring.no-match.browser"
+        self.assertIn(key, browser_workload("production")["boundaries"])
+        rows = self.rows(30)
+        for row in rows:
+            row["timings"][key] = 190 if row["variant"] == "d1" else 110
+        self.assertEqual(compare(30, rows, ["d1", "do"], calibration=True)[key]["status"], "fail")
+
     def test_every_boundary_requires_the_minimum_paired_count(self):
         summary = compare(29, self.rows(29), ["d1", "do"])
         self.assertEqual(summary["read.http"]["status"], "missing")

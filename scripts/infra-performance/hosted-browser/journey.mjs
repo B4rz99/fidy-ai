@@ -140,7 +140,9 @@ const recordBrowser = (event, { network, view }, version) => {
     version,
     profile: network,
     view,
-    plannedJourneys: ["transactions", "recurring"].includes(view) ? 3 : 1,
+    plannedJourneys: { transactions: 3, recurring: 4, budgets: 1, "needs-review": 1, dashboard: 1 }[
+      view
+    ],
     network:
       network === "poor"
         ? { latencyMs, bytesPerSecondEachDirection: bytesPerSecond }

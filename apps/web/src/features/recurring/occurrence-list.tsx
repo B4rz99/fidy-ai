@@ -35,15 +35,13 @@ type ListProps = Readonly<{
   disabled: boolean;
 }>;
 type ItemProps = Omit<ListProps, "items"> & Readonly<{ item: Occurrence }>;
+const occurrenceDateFormatter = new Intl.DateTimeFormat("es-CO", {
+  day: "numeric",
+  month: "short",
+  timeZone: "UTC",
+});
 const dateLabel = (date: string, today: string): string =>
-  date === today
-    ? "Hoy"
-    : DateTime.format(DateTime.makeUnsafe(date), {
-        locale: "es-CO",
-        day: "numeric",
-        month: "short",
-        timeZone: "UTC",
-      });
+  date === today ? "Hoy" : DateTime.formatIntl(DateTime.makeUnsafe(date), occurrenceDateFormatter);
 const DesktopItem = ({ item, open, categories, today, save, disabled }: ItemProps): JSX.Element => (
   <TableRow
     tabIndex={0}

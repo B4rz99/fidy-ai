@@ -154,12 +154,12 @@ const CalendarGrid = ({
     </div>
   );
 };
+const calendarDayFormatter = new Intl.DateTimeFormat("es-CO", {
+  dateStyle: "full",
+  timeZone: "UTC",
+});
 const dayLabel = (date: string): string =>
-  DateTime.format(DateTime.makeUnsafe(date), {
-    locale: "es-CO",
-    dateStyle: "full",
-    timeZone: "UTC",
-  });
+  DateTime.formatIntl(DateTime.makeUnsafe(date), calendarDayFormatter);
 
 export const MonthCalendar = ({ view, open }: CalendarProps): JSX.Element => {
   const active = useRouterState({

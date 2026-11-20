@@ -61,6 +61,7 @@ export const BoundApplication = ({
   session: BrowserSessionLifetime;
   initial: BrowserSessionObservation;
 }>): JSX.Element => {
+  performance.mark("fidy-bind-create");
   const { expireAuthentication } = useSession();
   const [clients] = useState(() =>
     makeClients({ apiOrigin, session, expired: expireAuthentication })

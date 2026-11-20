@@ -6,6 +6,7 @@ import { observeInitialBrowserRequest } from "@/session/initial-request";
 
 export const mountWebApplication = (): void => {
   if (tryMountProviderReturn()) return;
+  performance.mark("fidy-entry");
   const ready = Promise.withResolvers<void>();
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => ready.resolve(), { once: true });
@@ -40,6 +41,7 @@ export const mountWebApplication = (): void => {
       ready.promise.then(() => {
         const root = document.querySelector("#root");
         if (root === null) throw new Error("Web application root is missing");
+        performance.mark("fidy-react-mount");
         mountWebApplication({ root, initial });
       })
     )

@@ -219,6 +219,15 @@ try {
     });
     const { before, startupMs, readMs } = result;
     event({ type: "startup-resources", resources: await startupTrace });
+    event({
+      type: "startup-marks",
+      marks: await page.evaluate(() =>
+        performance
+          .getEntriesByType("mark")
+          .filter((entry) => entry.name.startsWith("fidy-"))
+          .map(({ name, startTime }) => ({ name, startTime }))
+      ),
+    });
     process.stderr.write("REFERENCE_STAGE accountability-after\n");
     const after = await evidence();
     const accountability = {

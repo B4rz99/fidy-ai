@@ -36,6 +36,7 @@ export const TransactionsPage = (): JSX.Element => {
   if (status._tag === "Failure" && sessionBinding === "none") {
     return <AccessRefused withdrawn={false} />;
   }
+  performance.mark("fidy-ledger-consent-" + status._tag);
   const consent = currentConsent(status);
   if (Option.isSome(consent)) {
     if (consent.value.status === "Granted") {
@@ -80,6 +81,7 @@ TransactionsPage.prepareEntry = ({
   cause: LoaderFnContext["cause"];
   signal: AbortSignal;
 }>): Promise<Readonly<{ preparation: Promise<void> }> | void> => {
+  performance.mark("fidy-ledger-prepare");
   if (preload || !preparationActive(signal)) return Promise.resolve();
   return Effect.runPromise(
     Effect.gen(function* () {

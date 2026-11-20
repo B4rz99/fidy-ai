@@ -425,6 +425,7 @@ const TransactionResourceContent = (
     }>
 ): JSX.Element => {
   const { categoryState, transactionState, corrections } = props.queries;
+  performance.mark("fidy-ledger-render");
   const retry = corrections.recover;
   const failurePeriod: FailurePeriod = {
     value: props.dateFilter.month,

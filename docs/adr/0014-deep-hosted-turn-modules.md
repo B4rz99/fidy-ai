@@ -15,15 +15,14 @@ rounds, structured output, token accounting, provider failures, and context boun
 contract. [ADR 0038](0038-openai-hosted-inference.md) owns the provider decision. Unavailable
 configuration fails closed at that boundary.
 
-
 Canonical authorization and confirmation policy apply identically to User calls and hosted-agent
 calls. Model output is untrusted data and cannot grant identity, scope, or destructive authority.
 
 ## Consequences
 
 Turn limits, tool-call limits, prompt bounds, cancellation, and terminal states remain explicit and
-reviewable. UserStore owns serialized execution and retained state. Queue and Workflow handoffs carry bounded
-subject data and gain no independent authority.
+reviewable. UserStore owns serialized execution and retained state. Queue and Workflow handoffs
+carry bounded subject data and gain no independent authority.
 
 Tests cover portable context, schema, authorization, redaction, and model-boundary behavior directly.
 Platform execution tests belong to the Cloudflare adapter and are not simulated by a process-local

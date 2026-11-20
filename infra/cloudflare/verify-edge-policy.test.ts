@@ -13,8 +13,10 @@ const policyFixture = Effect.gen(function* () {
   yield* fs.copy(`${workspaceRoot}patches`, `${root}/patches`);
   yield* fs.makeDirectory(`${root}/scripts/infra-performance`, { recursive: true });
   yield* fs.copy(`${workspaceRoot}scripts/pro`, `${root}/scripts/pro`);
-  const fleet = "scripts/infra-performance/deployed-fleet";
-  yield* fs.copy(`${workspaceRoot}${fleet}`, `${root}/${fleet}`);
+  for (const owner of ["deployed-fleet", "canonical-fixture", "cells"]) {
+    const directory = `scripts/infra-performance/${owner}`;
+    yield* fs.copy(`${workspaceRoot}${directory}`, `${root}/${directory}`);
+  }
   for (const name of [".github", "apps", "node_modules", "tsconfig.base.json"]) {
     yield* fs.symlink(`${workspaceRoot}${name}`, `${root}/${name}`);
   }

@@ -22,6 +22,8 @@ VERIFIER_FILES = {
     "infra/cloudflare/native-storage-release.ts",
     "infra/cloudflare/production-release.test.ts",
     "infra/cloudflare/production-release.ts",
+    "infra/cloudflare/release-rollback.ts",
+    "infra/cloudflare/release-rollback.test.ts",
     "infra/cloudflare/scripts/check-production-runtime-config.test.ts",
     "infra/cloudflare/verify-edge-policy.ts",
     "scripts/infra-performance/canonical-fixture/fallback_stage.py",

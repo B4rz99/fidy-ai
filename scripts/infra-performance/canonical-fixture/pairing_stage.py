@@ -8,7 +8,7 @@ import sys
 from uuid import UUID
 from zipfile import ZipFile
 
-from qualified_release import actions_get, protected_archive, retained_provider
+from qualified_release import ROLLOUT_STEPS, actions_get, protected_archive, retained_provider
 from staged_application import git_read, require_steps, verify_tree
 from unsealed_stage import PAIRING_REPAIR, STAGE, UPLOAD, QUALIFY, QUALIFY_ORIGINAL, staged_documents, verify_dispatch
 
@@ -63,6 +63,57 @@ for name, result in STEPS.items():
 
 
 FAILED_RESUME_STEPS = {**RESUME_STEPS, QUALIFY_ORIGINAL: "failure", "Seal dormant fallback stage before promotion": "skipped"}
+
+
+PARTIAL_ROLLBACK = {
+    "revision": "0ba692ff68c1d63da1f4a7fdb8d6df5ff1566287",
+    "run": "44758572606",
+    "artifact": "14640046634",
+    "sha256": "d8b73a2b1409448d339430082519eea1285ccdec194fec9e4344fb833554fdfa",
+    "ingressDeploymentId": "d51a58f1-d274-4471-b887-802ee570ddc9",
+}
+PARTIAL_ROLLBACK_STEPS = {}
+for name, result in ROLLOUT_STEPS.items():
+    if name == "Verify the installed application and retained schema markers":
+        PARTIAL_ROLLBACK_STEPS[name] = "failure"
+        PARTIAL_ROLLBACK_STEPS["Restore only a compatible, tested target after failed promoted verification"] = "failure"
+    else:
+        PARTIAL_ROLLBACK_STEPS[name] = result
+
+
+def rollback_documents(stage, prior, seal, get=actions_get):
+    pin = PARTIAL_ROLLBACK
+    if stage["revision"] != pin["revision"]:
+        raise ValueError("Rollback requires the exact application from the interrupted rollout")
+    run, data = protected_archive(pin["revision"], pin["artifact"], pin["sha256"],
+                                  prefix="native-storage-release-", conclusions={"failure"}, get=get)
+    if run != pin["run"]:
+        raise ValueError("Unexpected interrupted rollback source run")
+    require_steps(get, run, "failure", PARTIAL_ROLLBACK_STEPS)
+    with ZipFile(BytesIO(data)) as archive:
+        names = {"native-release.json" + suffix for suffix in ("", ".controls", ".predecessor", ".promoted", ".seal")}
+        members = archive.infolist()
+        if (len(members) != len(names) or {item.filename for item in members} != names
+                or any(not 0 < item.file_size <= 65_536 for item in members)):
+            raise ValueError("Unexpected interrupted rollback archive")
+        documents = {item.filename: json.loads(archive.read(item)) for item in members}
+    receipt = documents["native-release.json.promoted"]
+    release = receipt["release"]
+    snapshot = release["snapshot"]
+    if (receipt["rollbackTested"] is not True or release != documents["native-release.json"]
+            or documents["native-release.json.seal"] != seal
+            or documents["native-release.json.predecessor"] != prior
+            or documents["native-release.json.controls"] != {"digest": stage["controlsDigest"]}
+            or snapshot["revision"] != stage["revision"] or snapshot["stableRevision"] != stage["revision"]
+            or any(snapshot[role]["stableVersionId"] != stage["release"][role + "VersionId"]
+                   or snapshot[role]["name"] != stage["release"]["snapshot"][role]["name"]
+                   for role in ("core", "public"))):
+        raise ValueError("Interrupted rollout differs from its independently sealed compatible return pair")
+    return {
+        "native-release.json.promoted": receipt,
+        "native-release.json.controls": documents["native-release.json.controls"],
+        "native-release.json.rollback-position": {"ingressDeploymentId": pin["ingressDeploymentId"]},
+    }
 
 
 def upload_pin():
@@ -182,12 +233,17 @@ def bind(env):
     stage, prior = sealed_pair(verifier, artifact_id, digest)
     application = stage["revision"]
     verify_dispatch(env, application=application)
-    if (env["FIXTURE_RELEASE_OPERATION"] not in ("recover-fixture-fallback", "rollout", "verify")
+    operation = env["FIXTURE_RELEASE_OPERATION"]
+    if (operation not in ("recover-fixture-fallback", "resume-pairing-rollback", "rollout", "verify")
             or env.get("EXPECTED_INSTALLED_REVISION") != application):
         raise ValueError("Unexpected operation or requested installed revision")
     # Keep the seal's independently approved coordinates in the active release archive.
-    for name, value in [("native-fallback-stage.json", stage), ("native-release.json.predecessor", prior),
-                        ("native-release.json.seal", {"artifactId":artifact_id, "sha256":digest})]:
+    seal = {"artifactId":artifact_id, "sha256":digest}
+    documents = {"native-fallback-stage.json": stage, "native-release.json.predecessor": prior,
+                 "native-release.json.seal": seal}
+    if operation == "resume-pairing-rollback":
+        documents.update(rollback_documents(stage, prior, seal))
+    for name, value in documents.items():
         with os.fdopen(os.open(Path(env["RUNNER_TEMP"]) / name, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600), "w") as file:
             json.dump(value, file)
     with open(env["GITHUB_ENV"], "a") as handle:

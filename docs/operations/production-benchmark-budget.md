@@ -363,6 +363,12 @@ and the compatible return pair. The final installed check exercises release smok
 traffic, verifies the synthetic Users, and rechecks both retained financial controls. The rollout
 evidence identifies the independent seal used for the rollback pair.
 
+If the pinned post-promotion rollback stopped after restoring Ingress, use
+`resume-pairing-rollback` with the same seal inputs and signer. The operation authenticates the
+failed rollout receipt and checks the exact intermediate deployment histories before restoring
+the remaining Core. It verifies both restored versions, the ordinary serving schema markers,
+and both retained financial histories before publishing restoration evidence.
+
 Use the **Measure the closed native Transaction cohort** protected workflow on trunk. Provide a
 new random comparison prefix, the installed SHA, the two serving version UUIDs, and the artifact
 ID and separately pinned archive SHA-256 from that release's successful protected rollout.

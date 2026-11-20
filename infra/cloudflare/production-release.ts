@@ -142,6 +142,7 @@ const fixtureVerifierIdentity = Effect.sync(() => {
         "reseal-fixture-fallback",
         "diagnose-fixture-pairing",
         "recover-fixture-fallback",
+        "resume-pairing-rollback",
         "rollout",
         "verify",
       ]),
@@ -156,7 +157,7 @@ const fixtureVerifierIdentity = Effect.sync(() => {
         environment.FIXTURE_PAIRING_APPLICATION
       ) ||
     (environment.FIXTURE_PAIRING_APPLICATION !== undefined &&
-      !["recover-fixture-fallback", "rollout", "verify"].includes(
+      !["recover-fixture-fallback", "resume-pairing-rollback", "rollout", "verify"].includes(
         result.value.FIXTURE_RELEASE_OPERATION
       ))
   ) {

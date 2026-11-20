@@ -1,7 +1,12 @@
+import hashlib
+import json
 import unittest
+from io import BytesIO
+from zipfile import ZipFile
 from copy import deepcopy
 
-from successor_source import ORIGINAL_REVISION, live_return_bindings, verify_live_predecessor, verify_prior_custody
+from successor_source import (ORIGINAL_REVISION, PLAN_STEPS, approved_plan, live_return_bindings,
+                              verify_live_predecessor, verify_prior_custody)
 
 
 class SuccessorSourceTests(unittest.TestCase):
@@ -78,3 +83,43 @@ class SuccessorSourceTests(unittest.TestCase):
                     live_return_bindings(read, "a"*32, {"release":release})
             finally:
                 versions[target] = original
+
+
+    def test_only_the_exact_successful_read_only_plan_authorizes_stage(self):
+        revision, run, artifact = "a"*40, "123", "456"
+        document = {"revision":revision, "applied":False, "member":"performance-2"}
+        steps = [dict(name=name, conclusion=conclusion) for name,conclusion in PLAN_STEPS.items()]
+        def check(*, content=document, branch="trunk", recorded_revision=revision, verified=True):
+            artifact_zip = BytesIO()
+            with ZipFile(artifact_zip, "w") as archive:
+                archive.writestr("native-fixture-successor-plan.json", json.dumps(content))
+            archive_bytes = artifact_zip.getvalue()
+            digest = hashlib.sha256(archive_bytes).hexdigest()
+            repository = {"full_name":"B4rz99/fidy-ai"}
+            jobs = deepcopy(steps)
+            if not verified:
+                for step in jobs:
+                    if step["name"] == "Upload the approved successor resources":
+                        step["conclusion"] = "success"
+            records = {
+                "artifacts/"+artifact: dict(id=int(artifact), workflow_run=dict(id=int(run),head_sha=recorded_revision),
+                                           name="native-fixture-successor-plan-"+run, expired=False,
+                                           size_in_bytes=len(archive_bytes), digest="sha256:"+digest),
+                "runs/"+run: dict(id=int(run), repository=repository, head_repository=repository,
+                                  path=".github/workflows/native-fixture-successor-plan.yml",
+                                  head_branch=branch, head_sha=recorded_revision, event="workflow_dispatch",
+                                  conclusion="success", run_attempt=1),
+                f"runs/{run}/attempts/1/jobs?per_page=100": dict(total_count=1, jobs=[
+                    dict(name="plan", conclusion="success", steps=jobs)
+                ]),
+            }
+            def read(path):
+                return archive_bytes if path == "artifacts/"+artifact+"/zip" else json.dumps(records[path])
+            return approved_plan(revision, artifact, digest, read)
+
+        self.assertEqual(check(), document)
+        for change in ({"branch":"feature"}, {"recorded_revision":"b"*40}, {"verified":False},
+                       {"content":{**document, "applied":True}}, {"content":{**document, "member":"performance-1"}},
+                       {"content":{**document, "revision":"b"*40}}):
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                check(**change)

@@ -109,12 +109,43 @@ def verify_live_predecessor(read, account, promotion, installed, public_key):
     return actual
 
 
+PLAN_STEPS = {
+    "Authenticate the original release, receipt, and exact erasure": "success",
+    "Inspect the scoped successor resources": "success",
+    "Save the verified read-only successor inventory": "success",
+    "Upload the approved successor resources": "skipped",
+    "Stage the verified successors at zero traffic": "skipped",
+    "Verify the successor and seal the dormant stage": "skipped",
+}
+
+
+def approved_plan(revision, artifact_id, digest, get=actions_get):
+    run, body = protected_archive(revision, artifact_id, digest, prefix="native-fixture-successor-plan-",
+                                  conclusions={"success"}, get=get, workflow="native-fixture-successor-plan.yml")
+    data = json.loads(get(f"runs/{run}/attempts/1/jobs?per_page=100"))
+    job, = data["jobs"]
+    steps = [(step["name"], step["conclusion"]) for step in job["steps"] if step["name"] in PLAN_STEPS]
+    if (data["total_count"] != 1 or job["name"] != "plan" or job["conclusion"] != "success"
+            or steps != list(PLAN_STEPS.items())):
+        raise ValueError("Successor approval must come from a read-only protected plan")
+    with ZipFile(BytesIO(body)) as archive:
+        member, = archive.infolist()
+        if member.filename != "native-fixture-successor-plan.json" or not 0 < member.file_size <= 32_768:
+            raise ValueError("Unexpected read-only successor evidence")
+        plan = json.loads(archive.read(member))
+    if plan["revision"] != revision or plan["member"] != "performance-2" or plan["applied"] is not False:
+        raise ValueError("Approved successor plan belongs to another operation or revision")
+    return plan
+
+
 def main():
     env = os.environ
+    operation = env.get("FIXTURE_RELEASE_OPERATION")
     if (env.get("GITHUB_WORKFLOW_REF") != WORKFLOW_REF or env.get("GITHUB_REF_PROTECTED") != "true"
             or env.get("GITHUB_ACTIONS") != "true" or env.get("GITHUB_EVENT_NAME") != "workflow_dispatch"
             or env.get("GITHUB_REF") != "refs/heads/trunk" or env.get("GITHUB_RUN_ATTEMPT") != "1"
-            or env.get("NATIVE_STORAGE_ADMISSION") != "closed"):
+            or env.get("NATIVE_STORAGE_ADMISSION") != "closed"
+            or operation not in ("plan-fixture-successor", "stage-fixture-successor")):
         raise ValueError("Requires the original protected successor plan attempt")
     promotion, installed = artifact(ORIGINAL_REVISION, ACTIVE_ARTIFACT, ACTIVE_DIGEST)
     original = archived_cohort(ORIGINAL_FIXTURE, "failure",
@@ -131,10 +162,34 @@ def main():
     verify_prior_custody(original, cleanup, installed, store.read()[1], marker.read()[1],
                          coordinates=coordinates, original_run=ORIGINAL_FIXTURE[0]+"/1",
                          cleanup_run=ORIGINAL_CLEANUP[0]+"/1")
-    with (Path(env["RUNNER_TEMP"]) / "fixture-successor-source.json").open("x") as evidence:
-        json.dump(dict(revision=env["GITHUB_SHA"], previousRevision=ORIGINAL_REVISION,
-                       previousRelease=ACTIVE_ARTIFACT, previousCleanup=ORIGINAL_CLEANUP[2],
-                       signerSha256=actual["signerSha256"]), evidence)
+    smoke, = [worker for worker in installed["workers"] if worker["role"] == "Smoke"]
+    source = dict(revision=env["GITHUB_SHA"], previousRevision=ORIGINAL_REVISION,
+                  previousRelease=ACTIVE_ARTIFACT, previousCleanup=ORIGINAL_CLEANUP[2],
+                  signerSha256=actual["signerSha256"], stableCoreVersion=actual["versions"]["core"],
+                  stableCoreDeployment=actual["deployments"]["core"], stableIngressVersion=actual["versions"]["ingress"],
+                  stableIngressDeployment=actual["deployments"]["ingress"],
+                  oldSmokeVersionId=smoke["versionId"], oldSmokeDeploymentId=smoke["deploymentId"],
+                  retainedWebContractDigest=installed["website"][0]["contractDigest"],
+                  namespaces=installed["namespaces"])
+    directory = Path(env["RUNNER_TEMP"])
+    if sys.argv[1:] == ["recheck"] and operation == "stage-fixture-successor":
+        if source != json.loads((directory / "fixture-successor-source.json").read_bytes()):
+            raise ValueError("Predecessor changed during the protected upload")
+        return
+    if sys.argv[1:]:
+        raise ValueError("Unknown successor evidence operation")
+    if operation == "stage-fixture-successor":
+        artifact_id, digest = env["APPROVED_PLAN_ARTIFACT"], env["APPROVED_PLAN_DIGEST"]
+        approval = approved_plan(source["revision"], artifact_id, digest)
+        if any(approval.get(k) != value for k, value in source.items()):
+            raise ValueError("Approved plan does not retain the verified predecessor")
+        with (directory / "fixture-successor-approved.json").open("x") as evidence:
+            json.dump(approval, evidence)
+        with (directory / "fixture-successor-approval.json").open("x") as evidence:
+            json.dump(dict(artifactId=artifact_id, sha256=digest), evidence)
+    with (directory / "fixture-successor-source.json").open("x") as evidence:
+        json.dump(source, evidence)
+
 
 
 if __name__ == "__main__":

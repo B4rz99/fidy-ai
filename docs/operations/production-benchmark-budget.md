@@ -462,7 +462,7 @@ the incumbent release and its erasure/fleet qualifications in place while this r
 
 ### Plan the second closed Transaction fixture member
 
-Use **Plan the closed Transaction fixture successor** from protected trunk after the original
+Use **Prepare the closed Transaction fixture successor** with the `plan` operation on protected trunk after the original
 performance fixture has been disposed. The workflow authenticates the original active rollout,
 its dormant rollback evidence, the original signed cohort receipt and the successful cleanup
 archive. It reads both current active versions, the archived dormant versions and their matching
@@ -473,8 +473,30 @@ The scoped plan requires two Worker uploads at zero traffic and one new revision
 Worker, Queue, Workflow and consumer. Other resources must stay unchanged. The existing smoke
 resources and closed provider remain available to the original pair, and Web and ForwardedEmail
 retain their original builds. Review the `native-fixture-successor-plan-<run-id>` artifact for the
-exact proposed changes. This workflow publishes only a plan. It cannot stage, promote, or admit
-a second cohort.
+exact proposed changes. The `plan` operation publishes only that inventory.
+
+On the same protected trunk commit, select `stage` and pass the plan artifact ID and an
+independently verified archive SHA-256. The job authenticates the plan and live predecessor,
+repeats the scoped inventory, and compares every proposed row before uploading. It retains the
+old smoke resources, provider, Web, ForwardedEmail, namespaces and Worker versions. The two
+candidate versions receive zero traffic. After checking both financial histories and the release
+probes, the job publishes a `native-fixture-successor-stage-<run-id>` seal. A failed stage may
+leave uploaded versions or zero-traffic assignments. Inspect the retained diagnostics before
+considering any recovery.
+
+Use `recover` on the same protected trunk commit with the independently verified stage
+artifact ID and archive digest. The job authenticates the exact stage, including its reviewed
+read-only plan. It checks both zero-traffic assignments and the original controls before moving
+the dormant Core and Ingress to 100%. It verifies the dormant application through ordinary
+traffic and publishes `native-fixture-successor-recovered-<run-id>`.
+
+Use `rollout` on that same commit with the independently verified stage and recovery artifact
+IDs and digests. The active build updates only Core and Ingress with the sealed bindings,
+namespace IDs and technical smoke generation. The original retained browser build is rebuilt
+separately for installed verification. The protected rollout uses the existing candidate,
+mixed, and code-only rollback probes. If installed verification fails after promotion, it uses
+the tested same-SHA dormant return pair. A successful installed run publishes
+`native-fixture-successor-active-<run-id>` for the closed Transaction cohort workflow.
 
 ### Run the ordinary mounted Transactions browser profile
 

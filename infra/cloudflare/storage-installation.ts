@@ -213,10 +213,8 @@ const requirePlannedBindings = ({
 };
 export const requireNativeBindings = (input: NativePlanBindings): void =>
   requirePlannedBindings({ ...input, successorPlan: false });
-export const requireSuccessorPlanBindings = (
-  input: Omit<NativePlanBindings, "hosts" | "fallback">
-): void =>
-  requirePlannedBindings({ ...input, hosts: "acceptance", fallback: true, successorPlan: true });
+export const requireSuccessorPlanBindings = (input: Omit<NativePlanBindings, "hosts">): void =>
+  requirePlannedBindings({ ...input, hosts: "acceptance", successorPlan: true });
 const requireNativeClasses = (bindings: ReadonlyArray<NativeBinding>): void => {
   const classes = bindings.filter((binding) => binding.type === "durable_object_namespace");
   const verified = Object.entries(namespaceClasses).every(([name, expected]) =>

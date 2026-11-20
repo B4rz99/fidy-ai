@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import type * as Alchemist from "alchemy/Alchemist";
 import { Data, Schema } from "effect";
 import { type Plan, describePlan, describeResource } from "alchemy/Plan";
@@ -45,7 +46,8 @@ export class FixturePlanRefused extends Data.TaggedError("FixturePlanRefused")<{
     | "unexpected change"
     | "missing required update or deferred deletion"
     | "missing deferred original Worker"
-    | "original Worker state or name differs";
+    | "original Worker state or name differs"
+    | "successor differs from reviewed plan";
 }> {}
 export const requireFixtureLifecycle = ({
   rows,
@@ -93,23 +95,41 @@ export const verifyFixturePlan = ({ plan, fallback }: { plan: Plan; fallback: bo
   }
 };
 
+export const SuccessorSource = Schema.Struct({
+  revision: Schema.String,
+  previousRevision: Schema.Literal("0ba692ff68c1d63da1f4a7fdb8d6df5ff1566287"),
+  previousRelease: Schema.Literal("14645515552"),
+  previousCleanup: Schema.Literal("14656121411"),
+  signerSha256: Schema.String,
+  stableCoreVersion: Schema.NonEmptyString,
+  stableCoreDeployment: Schema.NonEmptyString,
+  stableIngressVersion: Schema.NonEmptyString,
+  stableIngressDeployment: Schema.NonEmptyString,
+  oldSmokeVersionId: Schema.NonEmptyString,
+  oldSmokeDeploymentId: Schema.NonEmptyString,
+  retainedWebContractDigest: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u)),
+  namespaces: Schema.Array(Schema.String),
+});
 export const successorPlanSelection = (revision: string): ReadonlyArray<string> => [
   "Core",
   "Ingress",
   ...smokeResources.map((prefix) => prefix + revision),
 ];
 
-export const requireSuccessorLifecycle = ({
+const requireSuccessorResourceChanges = ({
   rows,
   revision,
+  active,
 }: {
   rows: PlanRows;
   revision: string;
+  active: boolean;
 }): void => {
   const inventory = nativeResourceInventory(revision);
+  const smokeAction = active ? "noop" : "create";
   const expected = new Map(
     successorPlanSelection(revision).map(
-      (id) => [id, id === "Core" || id === "Ingress" ? "update" : "create"] as const
+      (id) => [id, id === "Core" || id === "Ingress" ? "update" : smokeAction] as const
     )
   );
   const observed = new Set<string>();
@@ -127,3 +147,30 @@ export const requireSuccessorLifecycle = ({
     throw new FixturePlanRefused({ reason: "missing required update or deferred deletion" });
   }
 };
+
+type ReviewedSuccessor = Readonly<Record<string, unknown>> & {
+  resources: ReadonlyArray<{ logicalId: string }>;
+};
+export const requireSameSuccessorPlan = ({
+  approved,
+  observed,
+}: {
+  approved: ReviewedSuccessor;
+  observed: ReviewedSuccessor;
+}): void => {
+  const order = (plan: ReviewedSuccessor): ReviewedSuccessor => ({
+    ...plan,
+    resources: plan.resources.toSorted((left, right) =>
+      left.logicalId.localeCompare(right.logicalId)
+    ),
+  });
+  if (!isDeepStrictEqual(order(approved), order(observed))) {
+    throw new FixturePlanRefused({ reason: "successor differs from reviewed plan" });
+  }
+};
+
+type SuccessorInventory = { rows: PlanRows; revision: string };
+export const requireSuccessorLifecycle = (input: SuccessorInventory): void =>
+  requireSuccessorResourceChanges({ ...input, active: false });
+export const requireActiveSuccessorLifecycle = (input: SuccessorInventory): void =>
+  requireSuccessorResourceChanges({ ...input, active: true });

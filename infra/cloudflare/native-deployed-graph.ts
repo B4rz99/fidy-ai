@@ -6,6 +6,7 @@ import {
   NativeBindings,
   type NativeRole,
   requireRoleBindings,
+  requireSuccessorCoreBindings,
 } from "./native-graph";
 import { verifiedVersionResources } from "./rollback-compatibility";
 import { installationNames, nativeStack } from "./storage-installation";
@@ -87,15 +88,36 @@ const requireQueueName = (
   }
 };
 
-export const requireDeployedRole = (input: {
+type DeployedRole = {
   role: Exclude<NativeRole, "Web">;
   revision: string;
   bindings: Readonly<Record<string, unknown>>;
   fingerprint: string;
+};
+const requireDeployedInventory = ({
+  role,
+  bindings,
+  fingerprint,
+  successor,
+}: {
+  role: DeployedRole["role"];
+  bindings: ReadonlyArray<NativeBinding>;
+  fingerprint: string;
+  successor: boolean;
 }): void => {
+  if (successor && role === "Core") {
+    requireSuccessorCoreBindings({ bindings, fingerprint });
+  } else requireRoleBindings({ role, bindings, fingerprint });
+};
+const requireDeployedRoleAt = (input: DeployedRole & { successor: boolean }): void => {
   const { role, revision } = input,
     bindings = Schema.decodeUnknownSync(NativeBindings)(Object.values(input.bindings));
-  requireRoleBindings({ role, bindings, fingerprint: input.fingerprint });
+  requireDeployedInventory({
+    role,
+    bindings,
+    fingerprint: input.fingerprint,
+    successor: input.successor,
+  });
   const queues = queueTargets(revision);
   for (const binding of bindings) {
     if (binding.type === "r2_bucket") {
@@ -111,6 +133,9 @@ export const requireDeployedRole = (input: {
     requireQueueName(binding, queues);
   }
 };
+export const requireDeployedRole = (input: DeployedRole): void =>
+  requireDeployedRoleAt({ ...input, successor: false });
+
 const noHandlers = Schema.Tuple([]);
 const staticSiteVersion = Schema.Struct({
   success: Schema.Literal(true),
@@ -136,27 +161,27 @@ const staticSiteVersion = Schema.Struct({
   }),
 });
 
-export const verifyDeployedVersion = (input: {
+type DeployedVersion = {
   role: NativeRole;
   raw: unknown;
   account: string;
   versionId: string;
   revision: string;
   fingerprint: string;
-}): void => {
+};
+const verifyVersionAt = (
+  input: DeployedVersion & { generation: string; successor: boolean }
+): void => {
   if (input.role === "Web") {
     const { result } = Schema.decodeUnknownSync(staticSiteVersion)(input.raw);
     requireTarget(result.id === input.versionId, "Web");
     return;
   }
   const bindings = { ...verifiedVersionResources(input).bindings };
-  const { role, revision } = input;
+  const { role, generation } = input;
   const runtime = {
     ALCHEMY_PHASE: "runtime",
-    ALCHEMY_WORKER_NAME:
-      role === "Smoke"
-        ? smokeName(resourceRevision({ revision, signed: input.fingerprint !== "" }))
-        : installationNames[role],
+    ALCHEMY_WORKER_NAME: role === "Smoke" ? smokeName(generation) : installationNames[role],
     ALCHEMY_STACK_NAME: nativeStack,
     ALCHEMY_STAGE: "production",
     ALCHEMY_CLOUDFLARE_ACCOUNT_ID: input.account,
@@ -170,13 +195,22 @@ export const verifyDeployedVersion = (input: {
     requireTarget(Schema.is(coordinate)(bindings[name]), name);
     delete bindings[name];
   }
-  requireDeployedRole({
+  requireDeployedRoleAt({
     role,
-    revision: resourceRevision({ revision, signed: input.fingerprint !== "" }),
+    revision: generation,
     bindings,
     fingerprint: input.fingerprint,
+    successor: input.successor,
   });
 };
+export const verifyDeployedVersion = (input: DeployedVersion): void =>
+  verifyVersionAt({
+    ...input,
+    generation: resourceRevision({ revision: input.revision, signed: input.fingerprint !== "" }),
+    successor: false,
+  });
+export const verifySuccessorVersion = (input: DeployedVersion): void =>
+  verifyVersionAt({ ...input, generation: input.revision, successor: true });
 const limit = 100;
 const buckets = Effect.fn(function* (read: Read) {
   const result: string[] = [],

@@ -3,7 +3,9 @@ import { expect, it } from "vitest";
 import {
   nativePlanOptions,
   projectFixtureInventory,
+  requireActiveSuccessorLifecycle,
   requireFixtureLifecycle,
+  requireSameSuccessorPlan,
   requireSuccessorLifecycle,
 } from "./native-fixture-plan";
 import { nativeResourceInventory } from "./native-graph";
@@ -110,6 +112,50 @@ it("allows only the two existing Workers and four new smoke resources in the suc
     expect(() =>
       requireSuccessorLifecycle({
         rows: rows.filter((item) => item !== missing),
+        revision,
+      })
+    ).toThrow();
+  }
+});
+
+it("allows the same plan in provider order and rejects changes before any upload", () => {
+  const plan = {
+    revision,
+    applied: false,
+    member: "performance-2",
+    resources: [...creation, row("Core", "Cloudflare.Worker", "update")],
+  };
+  expect(() =>
+    requireSameSuccessorPlan({
+      approved: plan,
+      observed: { ...plan, resources: [...plan.resources].reverse() },
+    })
+  ).not.toThrow();
+  for (const changed of [
+    { ...plan, revision: provider.revision },
+    { ...plan, applied: true },
+    { ...plan, resources: creation },
+    { ...plan, resources: [...plan.resources, row("Web", "Cloudflare.Worker", "update")] },
+  ]) {
+    expect(() => requireSameSuccessorPlan({ approved: plan, observed: changed })).toThrow();
+  }
+});
+
+it("keeps the successor smoke generation and every other resource unchanged for the active pair", () => {
+  const existing = creation.map((entry) => ({ ...entry, action: "noop" as const }));
+  const active = [
+    ...existing,
+    row("Core", "Cloudflare.Worker", "update"),
+    row("Ingress", "Cloudflare.Worker", "update"),
+  ];
+  expect(() => requireActiveSuccessorLifecycle({ rows: active, revision })).not.toThrow();
+  expect(() => requireActiveSuccessorLifecycle({ rows: active.slice(1), revision })).toThrow();
+  for (const unexpected of creation) {
+    expect(() =>
+      requireActiveSuccessorLifecycle({
+        rows: active.map((entry) =>
+          entry.logicalId === unexpected.logicalId ? unexpected : entry
+        ),
         revision,
       })
     ).toThrow();

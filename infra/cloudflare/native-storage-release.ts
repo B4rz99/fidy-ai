@@ -1,3 +1,4 @@
+import { SuccessorSource } from "./native-fixture-plan";
 import { resourceFailureMessage } from "./resource-failure";
 import {
   FallbackStage,
@@ -25,7 +26,12 @@ import { requireInterruptedUpload } from "./native-upload-recovery";
 import uploadedPair from "./native-pairing-upload.json" with { type: "json" };
 import fixtureUpload from "./native-fixture-upload.json" with { type: "json" };
 import retainedProvider from "./native-retained-provider.json" with { type: "json" };
-import { expectedFixtureSigner, fixtureBuild, resourceRevision } from "./native-fixture-signer";
+import {
+  expectedFixtureSigner,
+  fixtureArtifacts,
+  fixtureBuild,
+  resourceRevision,
+} from "./native-fixture-signer";
 import { BunFileSystem } from "@effect/platform-bun";
 import type { ErasureProgress } from "./native-erasure-continuation";
 import type { ErasureObservation } from "./native-erasure";
@@ -37,7 +43,11 @@ import { verifyIncumbentFence, verifyIncumbentMail } from "./native-incumbent-fe
 import { readProviderList } from "./native-provider-list";
 import { verifyInstalledWebsite } from "./native-deployed-web";
 import { inspectDeployedEdge, requireClosedIngressDomains } from "./native-deployed-edge";
-import { inspectNativeResources, verifyDeployedVersion } from "./native-deployed-graph";
+import {
+  inspectNativeResources,
+  verifyDeployedVersion,
+  verifySuccessorVersion,
+} from "./native-deployed-graph";
 import type { NativeRole } from "./native-graph";
 import { continueAdmittedErasure } from "./native-erasure-continuation";
 import { executeTen, prepareTen } from "./native-ten-release";
@@ -406,7 +416,9 @@ const preflightSignedSource = Effect.fn(function* (
     });
   }
   const replacing = replacingPair(operation);
-  if (replacing) {
+  if (operation === "rollout-fixture-successor") {
+    yield* verifySuccessorReturnSource(env, client, snapshot);
+  } else if (replacing) {
     yield* verifyReplacementSource(env, client, snapshot);
   } else if ((yield* fixtureBuild) === "fallback") {
     yield* Effect.try(() => requireOriginalFallbackSource(snapshot));
@@ -722,7 +734,8 @@ const verifyDeployedWorkers = Effect.fn(function* (
   { port, roles }: { port: ReleasePort; roles: "all" | "support" }
 ) {
   const fingerprint = yield* expectedFixtureSigner;
-  const generation = resourceRevision({ revision: env.revision, signed: fingerprint !== "" });
+  const artifacts = yield* fixtureArtifacts(env.revision);
+  const generation = artifacts.resourceRevision;
   const workers: ReadonlyArray<readonly [NativeRole, string]> = [
     ["Ingress", installationNames.Ingress],
     ["Core", installationNames.Core],
@@ -737,10 +750,10 @@ const verifyDeployedWorkers = Effect.fn(function* (
     if (fingerprint !== "") yield* verifySupportIdentity(role, deployment, id);
     const raw = yield* releaseEvidence.readWorkerVersion(env, client, { name, id });
     yield* Effect.try(() =>
-      verifyDeployedVersion({
+      (artifacts.successorPlan && !auxiliary ? verifySuccessorVersion : verifyDeployedVersion)({
         role,
         account: env.account,
-        revision: auxiliary ? generation : env.revision,
+        revision: auxiliary ? artifacts.supportRevision : env.revision,
         versionId: id,
         raw,
         fingerprint,
@@ -798,7 +811,8 @@ const verifyInstalledTopology = Effect.fn(function* (
   }
 ) {
   const signed = (yield* expectedFixtureSigner) !== "";
-  const generation = resourceRevision({ revision: env.revision, signed });
+  const artifacts = yield* fixtureArtifacts(env.revision);
+  const generation = artifacts.resourceRevision;
   const workers = yield* verifyDeployedWorkers(env, client, { port: input.port, roles: "all" });
   if (
     workers.find((item) => item.role === "Ingress")?.versionId !== input.publicStable ||
@@ -822,7 +836,7 @@ const verifyInstalledTopology = Effect.fn(function* (
   const website = yield* Effect.forEach(
     nativeHostPairs(input.staging ? "acceptance" : input.hosts),
     (pair) =>
-      verifyInstalledWebsite(client, generation, pair).pipe(
+      verifyInstalledWebsite(client, artifacts.supportRevision, pair).pipe(
         Effect.mapError(
           () =>
             new ReleaseFailure({
@@ -834,7 +848,12 @@ const verifyInstalledTopology = Effect.fn(function* (
   const verification = { workers, resources, edge, website };
   if (!signed) return verification;
   const retained = yield* verifyRetainedProvider(env, client, input.port);
-  return { ...verification, resourceRevision: generation, retainedProvider: retained };
+  return {
+    ...verification,
+    resourceRevision: generation,
+    retainedProvider: retained,
+    ...(artifacts.successorPlan ? { fixtureMember: "performance-2" } : {}),
+  };
 });
 const firstInstallWorkers = Effect.fn(function* () {
   const receipts = yield* workersFromState("capture", nativeStack);
@@ -1027,6 +1046,24 @@ const originalControlEvidence = Effect.fn(function* (
   }
   return { fixtureControlsDigest: digest };
 });
+const requireInstalledSeal = ({
+  installed,
+  seal,
+}: {
+  installed: Effect.Success<ReturnType<typeof installedRelease>>;
+  seal: FallbackStage;
+}): void => {
+  const smoke = installed.workers.find((worker) => worker.role === "Smoke");
+  if (
+    !isDeepStrictEqual(fallbackNamespaces(installed.namespaces), seal.namespaces) ||
+    smoke?.versionId !== seal.smoke.versionId ||
+    smoke.deploymentId !== seal.smoke.deploymentId
+  ) {
+    throw new ReleaseFailure({
+      message: "Active release differs from the sealed namespaces or Smoke Worker",
+    });
+  }
+};
 const activeControlEvidence = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
@@ -1035,19 +1072,18 @@ const activeControlEvidence = Effect.fn(function* (
   const operation = yield* ReleaseConfig.String("FIXTURE_RELEASE_OPERATION").pipe(
     ReleaseConfig.withDefault("")
   );
-  if ((yield* expectedFixtureSigner) === "" || operation !== "rollout") return {};
-  const seal = yield* pairingSeal();
+  if (
+    (yield* expectedFixtureSigner) === "" ||
+    (operation !== "rollout" && operation !== "rollout-fixture-successor")
+  ) {
+    return {};
+  }
+  const seal =
+    operation === "rollout-fixture-successor"
+      ? Option.some((yield* readSuccessorSeal(env)).stage)
+      : yield* pairingSeal();
   if (Option.isSome(seal)) {
-    const smoke = installed.workers.find((worker) => worker.role === "Smoke");
-    if (
-      !isDeepStrictEqual(fallbackNamespaces(installed.namespaces), seal.value.namespaces) ||
-      smoke?.versionId !== seal.value.smoke.versionId ||
-      smoke.deploymentId !== seal.value.smoke.deploymentId
-    ) {
-      return yield* new ReleaseFailure({
-        message: "Active release differs from the sealed namespaces or Smoke Worker",
-      });
-    }
+    yield* Effect.try(() => requireInstalledSeal({ installed, seal: seal.value }));
   }
   return yield* originalControlEvidence(env, client, {
     ingress: installed.publicVersionId,
@@ -1401,7 +1437,7 @@ const probeReleaseTransport = Effect.fn(function* (
   });
 });
 type Descriptions = Effect.Success<ReturnType<typeof deployedStorage>>["descriptions"];
-type ProbePair = { descriptions: Descriptions; rollback: boolean };
+type ProbePair = { descriptions: Descriptions; probeOriginal: boolean };
 const storageProbeOwners = (
   release: StorageTransition,
   descriptions: Descriptions
@@ -1458,7 +1494,7 @@ const pairRole = (original: boolean, mixed: boolean): keyof typeof pairChecks =>
 const probePromotionPairs = Effect.fn(function* (
   { env, client }: { env: Config; client: HttpClient.HttpClient },
   release: StorageTransition,
-  { descriptions, rollback }: ProbePair
+  { descriptions, probeOriginal }: ProbePair
 ) {
   const owners = storageProbeOwners(release, descriptions);
   const probe = (
@@ -1504,7 +1540,7 @@ const probePromotionPairs = Effect.fn(function* (
     release.coreVersionId,
     release.snapshot.revision
   );
-  if (rollback) {
+  if (probeOriginal) {
     yield* verifiedPair(
       release.snapshot.public.stableVersionId,
       release.snapshot.core.stableVersionId,
@@ -1563,7 +1599,7 @@ const storageCompatibility = Effect.fn(function* (
   const rollback =
     overlap.rollback && [ingress, core].every((pair) => rollbackCompatible({ ...pair, ...source }));
   if (phase === "promote") {
-    yield* probePromotionPairs({ env, client }, release, { descriptions, rollback });
+    yield* probePromotionPairs({ env, client }, release, { descriptions, probeOriginal: rollback });
   }
   return { rollback };
 });
@@ -1965,6 +2001,30 @@ const resumePairingStage = Effect.fn(function* (env: Config, client: HttpClient.
   yield* writeFile(env.file, encodeJson(staged));
 });
 
+const uploadedNativePair = Effect.gen(function* () {
+  const workers = yield* nativeWorkerReceipts("completed");
+  if (Option.isNone(workers.public.versionId) || Option.isNone(workers.core.versionId)) {
+    return yield* new ReleaseFailure({ message: "Native Worker upload receipts incomplete" });
+  }
+  return {
+    publicVersionId: workers.public.versionId.value,
+    coreVersionId: workers.core.versionId.value,
+  };
+});
+const stageCapturedPair = Effect.fn(function* (input: {
+  env: Config;
+  client: HttpClient.HttpClient;
+  port: ReleasePort;
+  snapshot: typeof releaseSchemas.snapshot.Type;
+  candidate: Effect.Success<typeof uploadedNativePair>;
+}) {
+  const { env, client, port, snapshot, candidate } = input;
+  yield* storageCompatibility({ env, client }, { snapshot, ...candidate }, "stage");
+  yield* writeFile(
+    env.file,
+    encodeJson(yield* releaseController.stageRelease(port, snapshot, candidate))
+  );
+});
 const stageNative = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
@@ -1974,19 +2034,419 @@ const stageNative = Effect.fn(function* (
     yield* readFile(env.file)
   );
   yield* Effect.try(() => requireNativeTarget(snapshot));
-  const workers = yield* nativeWorkerReceipts("completed");
-  if (Option.isNone(workers.public.versionId) || Option.isNone(workers.core.versionId)) {
-    return yield* new ReleaseFailure({ message: "Native Worker upload receipts incomplete" });
-  }
-  const candidate = {
-    publicVersionId: workers.public.versionId.value,
-    coreVersionId: workers.core.versionId.value,
-  };
-  yield* storageCompatibility({ env, client }, { snapshot, ...candidate }, "stage");
-  yield* writeFile(
-    env.file,
-    encodeJson(yield* releaseController.stageRelease(port, snapshot, candidate))
+  const candidate = yield* uploadedNativePair;
+  yield* stageCapturedPair({ env, client, port, snapshot, candidate });
+});
+
+const successorSource = Effect.gen(function* () {
+  yield* ReleaseConfig.Literal("true", "GITHUB_ACTIONS");
+  yield* ReleaseConfig.Literal("true", "GITHUB_REF_PROTECTED");
+  yield* ReleaseConfig.Literal("workflow_dispatch", "GITHUB_EVENT_NAME");
+  yield* ReleaseConfig.Literal("refs/heads/trunk", "GITHUB_REF");
+  yield* ReleaseConfig.Literal("1", "GITHUB_RUN_ATTEMPT");
+  yield* ReleaseConfig.Literal("closed", "NATIVE_STORAGE_ADMISSION");
+  yield* ReleaseConfig.Literal("acceptance", "NATIVE_STORAGE_HOSTS");
+  yield* ReleaseConfig.Literals(
+    ["stage-fixture-successor", "recover-fixture-successor", "rollout-fixture-successor"],
+    "FIXTURE_RELEASE_OPERATION"
   );
+  yield* ReleaseConfig.Literal(
+    "B4rz99/fidy-ai/.github/workflows/native-fixture-successor-plan.yml@refs/heads/trunk",
+    "GITHUB_WORKFLOW_REF"
+  );
+  const directory = yield* ReleaseConfig.String("RUNNER_TEMP");
+  const source = yield* Schema.decodeUnknownEffect(SuccessorSource)(
+    yield* readFile(directory + "/fixture-successor-source.json")
+  );
+  const fingerprint = yield* expectedFixtureSigner;
+  if (fingerprint !== source.signerSha256 || fingerprint !== fixtureUpload.fingerprint) {
+    return yield* new ReleaseFailure({
+      message: "Successor signer differs from the reviewed plan",
+    });
+  }
+  return { directory, source, fingerprint };
+});
+const requireSuccessorCapture = Effect.fn(function* (
+  env: Config,
+  snapshot: typeof releaseSchemas.snapshot.Type
+) {
+  const authorized = yield* successorSource;
+  const { source } = authorized;
+  if (
+    env.revision !== source.revision ||
+    snapshot.revision !== source.revision ||
+    snapshot.stableRevision !== source.previousRevision ||
+    snapshot.core.stableVersionId !== source.stableCoreVersion ||
+    snapshot.core.deploymentId !== source.stableCoreDeployment ||
+    snapshot.public.stableVersionId !== source.stableIngressVersion ||
+    snapshot.public.deploymentId !== source.stableIngressDeployment
+  ) {
+    return yield* new ReleaseFailure({
+      message: "Captured successor predecessor differs from the approved plan",
+    });
+  }
+  return authorized;
+});
+const verifySuccessorSource = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  snapshot: typeof releaseSchemas.snapshot.Type
+) {
+  const { source } = yield* requireSuccessorCapture(env, snapshot);
+  const port = releasePort({ env, client });
+  yield* verifyRetainedProvider(env, client, port);
+  yield* requireCapturedSupport(port, {
+    versionId: source.oldSmokeVersionId,
+    deploymentId: source.oldSmokeDeploymentId,
+  });
+  yield* requireClosedAdmission(client);
+  yield* requireClosedIngressDomains(accountReader(env, client));
+  yield* recordSourceControls(env, client, {
+    replacing: true,
+    pair: {
+      revision: snapshot.stableRevision,
+      ingress: snapshot.public.stableVersionId,
+      core: snapshot.core.stableVersionId,
+      proof: env.smokeProof,
+    },
+  });
+});
+const captureSuccessor = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  port: ReleasePort
+) {
+  yield* ReleaseConfig.Literal("stage-fixture-successor", "FIXTURE_RELEASE_OPERATION");
+  yield* successorSource;
+  yield* captureNative(env, client, port);
+  const snapshot = yield* Schema.decodeUnknownEffect(releaseSchemas.snapshot)(
+    yield* readFile(env.file)
+  );
+  yield* verifySuccessorSource(env, client, snapshot);
+});
+const stageSuccessor = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  port: ReleasePort
+) {
+  yield* ReleaseConfig.Literal("stage-fixture-successor", "FIXTURE_RELEASE_OPERATION");
+  const snapshot = yield* Schema.decodeUnknownEffect(releaseSchemas.snapshot)(
+    yield* readFile(env.file)
+  );
+  yield* verifySuccessorSource(env, client, snapshot);
+  const candidate = yield* uploadedNativePair;
+  yield* writeFile(env.file + ".uploads", encodeJson(candidate));
+  yield* stageCapturedPair({ env, client, port, snapshot, candidate });
+});
+const successorResources = Effect.fn(function* (input: {
+  env: Config;
+  client: HttpClient.HttpClient;
+  release: FallbackStage["release"];
+  fingerprint: string;
+}) {
+  const { env, client, release, fingerprint } = input;
+  const port = releasePort({ env, client });
+  const smokeName = "fidy-native-smoke-" + env.revision;
+  const smoke = yield* port.current(smokeName);
+  const versionId = yield* releaseController.servingVersion(smoke);
+  for (const [role, name, id] of [
+    ["Core", installationNames.Core, release.coreVersionId],
+    ["Ingress", installationNames.Ingress, release.publicVersionId],
+    ["Smoke", smokeName, versionId],
+  ] as const) {
+    const raw = yield* releaseEvidence.readWorkerVersion(env, client, { name, id });
+    yield* Effect.try(() =>
+      verifySuccessorVersion({
+        role,
+        raw,
+        account: env.account,
+        revision: env.revision,
+        versionId: id,
+        fingerprint,
+      })
+    );
+    yield* verifyReleaseObservability(env, name, client);
+  }
+  yield* proveRecoveryCorePrivate(env, client, smokeName);
+  yield* proveRecoveryCorePrivate(env, client, installationNames.Core);
+  yield* inspectInstalledResources(env, client, fixtureUpload.revision);
+  yield* inspectInstalledResources(env, client, env.revision);
+  return { versionId, deploymentId: smoke.id };
+});
+const verifyStagedSuccessor = Effect.fn(function* (input: {
+  env: Config;
+  client: HttpClient.HttpClient;
+  release: FallbackStage["release"];
+  fingerprint: string;
+  source: typeof SuccessorSource.Type;
+}) {
+  const { env, client, release, fingerprint, source } = input;
+  yield* verifySuccessorSource(env, client, release.snapshot);
+  yield* storageCompatibility({ env, client }, release, "stage");
+  const deployed = yield* deployedStorage({ env, client, release });
+  const namespaces = fallbackNamespaces(deployed.descriptions.candidate.namespaces);
+  if (!isDeepStrictEqual(Object.values(namespaces), source.namespaces)) {
+    return yield* new ReleaseFailure({ message: "Successor namespace identities changed" });
+  }
+  yield* verifyInstalledNamespaces({
+    env,
+    client,
+    storage: deployed.descriptions.candidate,
+    workers: [deployed.core.candidate, deployed.ingress.candidate],
+  });
+  yield* inspectDeployedEdge(env, client, {
+    installed: true,
+    bindings: deployed.core.candidate.bindings,
+    hosts: "acceptance",
+    staging: false,
+  });
+  const smoke = yield* successorResources({ env, client, release, fingerprint });
+  yield* probePromotionPairs({ env, client }, release, {
+    descriptions: deployed.descriptions,
+    probeOriginal: true,
+  });
+  const candidate = {
+    revision: env.revision,
+    ingress: release.publicVersionId,
+    core: release.coreVersionId,
+    proof: env.smokeProof,
+  };
+  yield* observeDormantPair(client, candidate, false);
+  const digest = yield* controlsDigest(candidate, acceptanceSend(client));
+  if (digest !== fixtureUpload.controlsDigest) {
+    return yield* new ReleaseFailure({ message: "Successor financial control histories differ" });
+  }
+  return { smoke, namespaces, controlsDigest: digest };
+});
+const sealSuccessor = Effect.fn(function* (env: Config, client: HttpClient.HttpClient) {
+  yield* ReleaseConfig.Literal("stage-fixture-successor", "FIXTURE_RELEASE_OPERATION");
+  const release = yield* Schema.decodeUnknownEffect(releaseSchemas.staged)(
+    yield* readFile(env.file)
+  );
+  const { directory, source, fingerprint } = yield* requireSuccessorCapture(env, release.snapshot);
+  const approval = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({
+      artifactId: Schema.String.check(Schema.isPattern(/^[1-9][0-9]{0,19}$/u)),
+      sha256: SmokeIdentity.fields.contractDigest,
+    })
+  )(yield* readFile(directory + "/fixture-successor-approval.json"));
+  const verified = yield* verifyUnpromotedFallback({
+    port: releasePort({ env, client }),
+    release,
+    verify: verifyStagedSuccessor({ env, client, release, fingerprint, source }),
+  });
+  yield* writeFile(
+    directory + "/native-fixture-successor-stage.json",
+    encodeJson({
+      revision: env.revision,
+      stableRevision: source.previousRevision,
+      release,
+      ...verified,
+      provider: retainedProvider,
+      fixtureMember: "performance-2",
+      approval,
+      predecessor: source,
+    })
+  );
+});
+
+const SuccessorArtifact = Schema.Struct({ artifactId: artifactNumber, sha256: evidenceDigest });
+const SuccessorStage = Schema.Struct({
+  ...FallbackStage.fields,
+  fixtureMember: Schema.Literal("performance-2"),
+  approval: SuccessorArtifact,
+  predecessor: SuccessorSource,
+});
+const RecoveredSuccessor = Schema.Struct({
+  stage: SuccessorStage,
+  seal: SuccessorArtifact,
+  promoted: RollbackReceipt.fields.promoted,
+});
+const readSuccessorSeal = Effect.fn(function* (env: Config) {
+  const { directory, source, fingerprint } = yield* successorSource;
+  const stage = yield* Schema.decodeUnknownEffect(SuccessorStage)(
+    yield* readFile(directory + "/native-fixture-successor-stage.json")
+  );
+  const seal = yield* Schema.decodeUnknownEffect(SuccessorArtifact)(
+    yield* readFile(directory + "/fixture-successor-seal-reference.json")
+  );
+  if (
+    env.revision !== stage.revision ||
+    !isDeepStrictEqual(source, stage.predecessor) ||
+    !isDeepStrictEqual(stage.provider, retainedProvider) ||
+    stage.controlsDigest !== fixtureUpload.controlsDigest
+  ) {
+    return yield* new ReleaseFailure({
+      message: "Sealed dormant successor differs from protected evidence",
+    });
+  }
+  yield* requireSuccessorCapture(env, stage.release.snapshot);
+  return { directory, stage, seal, source, fingerprint };
+});
+const verifyRecoveredSuccessor = Effect.fn(function* (input: {
+  env: Config;
+  client: HttpClient.HttpClient;
+  stage: typeof SuccessorStage.Type;
+  fingerprint: string;
+}) {
+  const { env, client, stage, fingerprint } = input;
+  const port = releasePort({ env, client });
+  yield* verifyRetainedProvider(env, client, port);
+  yield* requireCapturedSupport(port, {
+    versionId: stage.predecessor.oldSmokeVersionId,
+    deploymentId: stage.predecessor.oldSmokeDeploymentId,
+  });
+  yield* requireClosedAdmission(client);
+  yield* requireClosedIngressDomains(accountReader(env, client));
+  const smoke = yield* successorResources({ env, client, release: stage.release, fingerprint });
+  if (!isDeepStrictEqual(smoke, stage.smoke)) {
+    return yield* new ReleaseFailure({
+      message: "Successor technical smoke differs from the sealed stage",
+    });
+  }
+});
+const recoverSuccessor = Effect.fn(function* (env: Config, client: HttpClient.HttpClient) {
+  yield* ReleaseConfig.Literal("recover-fixture-successor", "FIXTURE_RELEASE_OPERATION");
+  const { directory, seal, stage, source, fingerprint } = yield* readSuccessorSeal(env);
+  const port = releasePort({ env, client });
+  const verified = yield* verifyUnpromotedFallback({
+    port,
+    release: stage.release,
+    verify: verifyStagedSuccessor({ env, client, release: stage.release, source, fingerprint }),
+  });
+  if (
+    !isDeepStrictEqual(verified.smoke, stage.smoke) ||
+    !isDeepStrictEqual(verified.namespaces, stage.namespaces) ||
+    verified.controlsDigest !== stage.controlsDigest
+  ) {
+    return yield* new ReleaseFailure({
+      message: "Zero-traffic successor no longer matches its seal",
+    });
+  }
+  const pair = {
+    revision: env.revision,
+    ingress: stage.release.publicVersionId,
+    core: stage.release.coreVersionId,
+    proof: env.smokeProof,
+  };
+  const promoted = yield* recoverFixtureFallback(port, stage, (_stage, phase) =>
+    Effect.gen(function* () {
+      yield* verifyRecoveredSuccessor({ env, client, stage, fingerprint });
+      yield* observeDormantPair(client, pair, phase === "after").pipe(
+        Effect.retry({ times: 8, schedule: Schedule.spaced("10 seconds") })
+      );
+      if ((yield* controlsDigest(pair, acceptanceSend(client))) !== stage.controlsDigest) {
+        return yield* new ReleaseFailure({
+          message: "Dormant successor financial controls changed",
+        });
+      }
+    })
+  );
+  yield* writeFile(
+    directory + "/native-fixture-successor-recovered.json",
+    encodeJson({ stage, seal, promoted })
+  );
+});
+const verifySuccessorReturnSource = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  snapshot: typeof releaseSchemas.snapshot.Type
+) {
+  yield* ReleaseConfig.Literal("rollout-fixture-successor", "FIXTURE_RELEASE_OPERATION");
+  const { directory, seal, stage, fingerprint } = yield* readSuccessorSeal(env);
+  const recovered = yield* Schema.decodeUnknownEffect(RecoveredSuccessor)(
+    yield* readFile(directory + "/native-fixture-successor-recovered.json")
+  );
+  if (
+    !isDeepStrictEqual(recovered.stage, stage) ||
+    !isDeepStrictEqual(recovered.seal, seal) ||
+    snapshot.revision !== stage.revision ||
+    snapshot.stableRevision !== stage.revision ||
+    snapshot.core.deploymentId !== recovered.promoted.coreDeploymentId ||
+    snapshot.public.deploymentId !== recovered.promoted.publicDeploymentId
+  ) {
+    return yield* new ReleaseFailure({
+      message: "Active successor did not start from the verified recovery",
+    });
+  }
+  const port = releasePort({ env, client });
+  yield* requirePromotedDormantSource(port, snapshot, stage.release);
+  yield* verifyRecoveredSuccessor({ env, client, stage, fingerprint });
+  yield* observeDormantPair(
+    client,
+    {
+      revision: env.revision,
+      ingress: snapshot.public.stableVersionId,
+      core: snapshot.core.stableVersionId,
+      proof: env.smokeProof,
+    },
+    true
+  );
+});
+const captureSuccessorRollout = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  port: ReleasePort
+) {
+  yield* ReleaseConfig.Literal("rollout-fixture-successor", "FIXTURE_RELEASE_OPERATION");
+  yield* captureNative(env, client, port);
+  yield* verifyStorageUpload(env, client, port);
+  yield* verifyInstalledWebsite(client, fixtureUpload.revision, installedOrigins.acceptance);
+});
+const stageSuccessorRollout = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  port: ReleasePort
+) {
+  yield* ReleaseConfig.Literal("rollout-fixture-successor", "FIXTURE_RELEASE_OPERATION");
+  yield* verifyStorageUpload(env, client, port);
+  const snapshot = yield* Schema.decodeUnknownEffect(releaseSchemas.snapshot)(
+    yield* readFile(env.file)
+  );
+  const candidate = yield* uploadedNativePair;
+  yield* writeFile(env.file + ".uploads", encodeJson(candidate));
+  yield* stageCapturedPair({ env, client, port, snapshot, candidate });
+});
+const promoteSuccessor = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  port: ReleasePort
+) {
+  yield* ReleaseConfig.Literal("rollout-fixture-successor", "FIXTURE_RELEASE_OPERATION");
+  const { stage, directory, fingerprint } = yield* readSuccessorSeal(env);
+  const recovered = yield* Schema.decodeUnknownEffect(RecoveredSuccessor)(
+    yield* readFile(directory + "/native-fixture-successor-recovered.json")
+  );
+  const release = yield* Schema.decodeUnknownEffect(releaseSchemas.staged)(
+    yield* readFile(env.file)
+  );
+  const expected = {
+    revision: stage.revision,
+    stableRevision: stage.revision,
+    core: {
+      name: installationNames.Core,
+      deploymentId: recovered.promoted.coreDeploymentId,
+      stableVersionId: stage.release.coreVersionId,
+    },
+    public: {
+      name: installationNames.Ingress,
+      deploymentId: recovered.promoted.publicDeploymentId,
+      stableVersionId: stage.release.publicVersionId,
+    },
+  };
+  const { stableContractDigest: _stableContractDigest, ...coordinates } = release.snapshot;
+  if (!isDeepStrictEqual(stage, recovered.stage) || !isDeepStrictEqual(coordinates, expected)) {
+    return yield* new ReleaseFailure({
+      message: "Staged successor differs from its authorized return pair",
+    });
+  }
+  const smoke = yield* successorResources({ env, client, release, fingerprint });
+  if (!isDeepStrictEqual(smoke, stage.smoke)) {
+    return yield* new ReleaseFailure({
+      message: "Active successor smoke changed before promotion",
+    });
+  }
+  yield* promoteClosed(env, client, port);
 });
 
 const promoteClosed = Effect.fn(function* (
@@ -2494,6 +2954,14 @@ const tenCommand =
   (env, client, port) =>
     tenFleet(env, client, { port, action });
 const commands = {
+  "recover-successor": recoverSuccessor,
+  "capture-successor-rollout": captureSuccessorRollout,
+  "verify-successor-upload": verifyStorageUpload,
+  "stage-successor-rollout": stageSuccessorRollout,
+  "promote-successor": promoteSuccessor,
+  "capture-successor": captureSuccessor,
+  "stage-successor": stageSuccessor,
+  "seal-successor": sealSuccessor,
   "resume-pairing-stage": resumePairingStage,
   "resume-pairing-rollback": resumeNativeRollback,
   "seal-fallback": sealFallback,
@@ -2522,6 +2990,14 @@ if (import.meta.main) {
   const program = Effect.gen(function* () {
     const command = yield* Schema.decodeUnknownEffect(
       Schema.Literals([
+        "recover-successor",
+        "capture-successor-rollout",
+        "verify-successor-upload",
+        "stage-successor-rollout",
+        "promote-successor",
+        "capture-successor",
+        "stage-successor",
+        "seal-successor",
         "resume-pairing-stage",
         "resume-pairing-rollback",
         "seal-fallback",

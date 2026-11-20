@@ -33,6 +33,25 @@ class ReferenceReport(unittest.TestCase):
                 "stage": "fresh-read", "httpMethod": "PUT", "httpStatus": 429,
             })
 
+    def test_first_review_failure_survives_later_responses_with_allowlisted_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory) / "browser.log"
+            log.write_text(
+                "REFERENCE_STAGE review-pending\n"
+                "REFERENCE_HTTP GET 429 review-context rate_limited bucket\n"
+                "REFERENCE_STAGE dashboard-fresh\nREFERENCE_HTTP GET 403\n"
+            )
+            self.assertEqual(failure_metadata(log), {
+                "stage": "review-pending", "httpMethod": "GET", "httpStatus": 429,
+                "reviewResponse": "review-context", "errorCode": "rate_limited",
+                "pressureAfterResponse": "bucket",
+            })
+            log.write_text(
+                "REFERENCE_STAGE review-pending\n"
+                "REFERENCE_HTTP GET 429 review-context private-verifier bucket\n"
+            )
+            self.assertEqual(failure_metadata(log), {"stage": "review-pending"})
+
     def test_failed_preview_releases_native_fixture_images(self):
         images = []
 

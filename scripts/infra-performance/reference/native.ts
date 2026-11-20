@@ -1,18 +1,26 @@
 import { BunFileSystem } from "@effect/platform-bun";
 import { Effect, Option, Schema } from "effect";
-import type { Miniflare } from "miniflare";
+import type { DurableObjectStorageHandle, Miniflare } from "miniflare";
 import { approve, forward, makeBrowserRuntime, prepareBrowserUser } from "../../dev-browser-api";
 import { seed, subject } from "./native-seed";
+import { withReviewPressureSnapshot } from "./native-review-pressure";
 
 const apiPort = 4174;
 const operatorPort = 4175;
-const timedResponse = Effect.fn(function* (runtime: Miniflare, request: Request) {
+const timedResponse = Effect.fn(function* (
+  runtime: Miniflare,
+  owner: DurableObjectStorageHandle,
+  request: Request
+) {
   let started = Option.none<number>();
   const response = yield* forward(runtime, request, () => {
     started = Option.some(performance.now());
   });
   if (Option.isNone(started) || !new URL(request.url).pathname.startsWith("/transactions")) {
-    return response;
+    const tooManyRequests = 429;
+    return response.status === tooManyRequests
+      ? yield* withReviewPressureSnapshot({ owner, user: subject, request, response })
+      : response;
   }
   const body = yield* Effect.tryPromise(() => response.arrayBuffer());
   const headers = new Headers(response.headers);
@@ -70,7 +78,7 @@ const start = Effect.gen(function* () {
       cert: Bun.file(Bun.env.PLAYWRIGHT_TLS_CERT ?? ""),
       key: Bun.file(Bun.env.PLAYWRIGHT_TLS_KEY ?? ""),
     },
-    fetch: (request) => run(timedResponse(runtime, request)),
+    fetch: (request) => run(timedResponse(runtime, owner, request)),
   });
   const operator = Bun.serve({
     hostname: "127.0.0.1",

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { Schema } from "effect";
+import { Option, Schema } from "effect";
 
 /** @typedef {import("@playwright/test").Page} Page */
 /** @typedef {import("@playwright/test").Response} BrowserResponse */
@@ -35,10 +35,9 @@ const wire = Schema.decodeSync(Schema.fromJsonString(Schema.Unknown));
 /**
  * @param {BrowserResponse} reply Actual measured response.
  */
-export const consumed = async (reply) => {
-  const body = await reply.body();
-  if (reply.status() !== success) process.stderr.write("REFERENCE_HTTP " + reply.status() + "\n");
+const consumeSuccess = async (reply) => {
   assert.equal(reply.status(), success);
+  const body = await reply.body();
   return {
     value: wire(body.toString("utf8")),
     http: {
@@ -49,10 +48,15 @@ export const consumed = async (reply) => {
     },
   };
 };
+/** @param {BrowserResponse} reply Actual measured response. */
+export const consumed = (reply) => {
+  if (reply.status() !== success) process.stderr.write("REFERENCE_HTTP " + reply.status() + "\n");
+  return consumeSuccess(reply);
+};
 /**
  * @param {Workspace} input Installed application and evidence sink.
  * @param {string} path Expected canonical operation.
- * @param {Record<string, string>} query Required query parameters.
+ * @param {Record<string, string | null>} query Required or absent query parameters.
  */
 export const responseFor = ({ page, api }, path, query) =>
   page.waitForResponse((reply) => {
@@ -235,28 +239,116 @@ const usableReviews = async (page) => {
   }, reviewRows);
   await painted(page);
 };
+const reviewJourney = "review.pending.browser";
+const reviewError = Schema.decodeUnknownOption(
+  Schema.Struct({
+    error: Schema.Struct({ code: Schema.Literals(["rate_limited", "quota_exhausted"]) }),
+  })
+);
+const reviewPressure = Schema.decodeUnknownOption(
+  Schema.Literals(["bucket", "leases", "both", "neither"])
+);
+/** @typedef {"review-history" | "review-summary" | "review-context" | "review-count"} ReviewResponse */
+/**
+ * @param {BrowserResponse} reply First failed measured response.
+ * @param {ReviewResponse} reviewResponse Selected canonical read.
+ * @param {Workspace["event"]} event Metadata-only evidence sink.
+ */
+const failReview = async (reply, reviewResponse, event) => {
+  const httpStatus = reply.status();
+  const pressureAfterResponse = Option.getOrElse(
+    reviewPressure(reply.headers()["x-reference-review-pressure"]),
+    () => "unobserved"
+  );
+  const failure = reviewError(await reply.json().catch(() => undefined));
+  const errorCode = Option.match(failure, {
+    onNone: () => "unclassified",
+    onSome: (body) => body.error.code,
+  });
+  event({
+    type: "failed",
+    journey: reviewJourney,
+    reviewResponse,
+    httpStatus,
+    errorCode,
+    pressureAfterResponse,
+  });
+  process.stderr.write(
+    `REFERENCE_HTTP GET ${httpStatus} ${reviewResponse} ${errorCode} ${pressureAfterResponse}\n`
+  );
+  throw new Error(`Needs Review ${reviewResponse} failed with HTTP ${httpStatus}`);
+};
 /** @param {Workspace} input Installed application and evidence sink. */
-export const freshPendingReview = async (input) => {
+const measurePendingReview = async (input) => {
   const { page, browser, event } = input;
-  const historical = responseFor(input, inbox, { status: "history" });
-  await page.goto(browser + "/app/needs-review?status=history", { waitUntil: "commit" });
-  const unselected = reviewPage((await consumed(await historical)).value).data;
+  const [historical] = await Promise.all([
+    responseFor(input, inbox, { status: "history", limit: null, offset: null }),
+    page.goto(browser + "/app/needs-review?status=history", { waitUntil: "commit" }),
+  ]);
+  const unselected = reviewPage((await consumeSuccess(historical)).value).data;
   assert.equal(unselected.total, 0);
   assert.equal(unselected.pendingCount, reviewCount);
   assert.deepEqual(unselected.items, []);
   await page.getByRole("button", { name: "Historial", pressed: true, exact: true }).waitFor();
-  const workspace = responseFor(input, inbox, { status: "pending" });
-  const source = responseFor(input, inbox + "/context", { status: "pending" });
-  const journey = "review.pending.browser";
-  event({ type: "offered", journey });
+  const workspace = responseFor(input, inbox, { status: "pending", limit: null, offset: null });
+  const source = responseFor(input, inbox + "/context", {
+    status: "pending",
+    limit: null,
+    offset: null,
+  });
+  event({ type: "offered", journey: reviewJourney });
   const start = performance.now();
-  await page.getByRole("button", { name: /^Pendientes/u }).click();
-  const [reply, context] = await Promise.all([workspace, source]);
+  const [reply, context] = await Promise.all([
+    workspace,
+    source,
+    page.getByRole("button", { name: /^Pendientes/u }).click(),
+  ]);
   await usableReviews(page);
   const milliseconds = performance.now() - start;
-  const [summary, original] = await Promise.all([consumed(reply), consumed(context)]);
+  const [summary, original] = await Promise.all([consumeSuccess(reply), consumeSuccess(context)]);
   verifyPending(summary.value, original.value);
-  const result = { milliseconds, http: summary.http, context: original.http };
-  event({ type: "completed", journey, ...result });
-  return result;
+  return { milliseconds, http: summary.http, context: original.http };
+};
+
+/**
+ * @param {BrowserResponse} reply Browser reply during the journey.
+ * @param {string} api Installed API origin.
+ * @returns {ReviewResponse | undefined} Fixed failed read label, including navigation count.
+ */
+const failedReviewRead = (reply, api) => {
+  if (reply.status() === success || reply.request().method() !== "GET") return;
+  const url = new URL(reply.url());
+  if (url.origin !== api) return;
+  if (url.pathname === inbox + "/context") return "review-context";
+  if (url.pathname !== inbox) return;
+  if (url.searchParams.get("limit") === "0") return "review-count";
+  return url.searchParams.get("status") === "history" ? "review-history" : "review-summary";
+};
+
+/** @param {Workspace} input Installed application and evidence sink. */
+export const freshPendingReview = async (input) => {
+  /** @type {Promise<never> | undefined} */
+  let firstFailure;
+  /** @type {PromiseWithResolvers<never>} */
+  const failure = Promise.withResolvers();
+  /** @param {BrowserResponse} reply Observed response before a client retry or dependent request. */
+  const capture = (reply) => {
+    const name = failedReviewRead(reply, input.api);
+    if (name && !firstFailure) {
+      firstFailure = failReview(reply, name, input.event);
+      failure.resolve(firstFailure);
+    }
+  };
+  input.page.on("response", capture);
+  try {
+    const result = await Promise.race([failure.promise, measurePendingReview(input)]);
+    if (firstFailure) return await firstFailure;
+    input.event({ type: "completed", journey: reviewJourney, ...result });
+    return result;
+  } catch (error) {
+    if (firstFailure) return await firstFailure;
+    throw error;
+  } finally {
+    input.page.off("response", capture);
+  }
 };

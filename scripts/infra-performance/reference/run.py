@@ -70,6 +70,14 @@ SOURCE_LOCATION = re.compile(
 )
 
 
+FAILED_HTTP = re.compile(
+    r"REFERENCE_HTTP (?:(GET|PUT) )?([1-5][0-9]{2})"
+    r"(?: (review-history|review-summary|review-context|review-count)"
+    r" (rate_limited|quota_exhausted|unclassified)"
+    r" (bucket|leases|both|neither|unobserved))?"
+)
+
+
 def failure_metadata(log):
     if not log.exists():
         return {}
@@ -78,11 +86,15 @@ def failure_metadata(log):
     for line in content.splitlines():
         if line.startswith("REFERENCE_STAGE ") and line[16:] in STAGES:
             details["stage"] = line[16:]
-        match = re.fullmatch(r"REFERENCE_HTTP (?:(GET|PUT) )?([1-5][0-9]{2})", line)
+        match = FAILED_HTTP.fullmatch(line)
         if match:
             if match[1]:
                 details["httpMethod"] = match[1]
             details["httpStatus"] = int(match[2])
+            if match[3]:
+                details.update(reviewResponse=match[3], errorCode=match[4],
+                               pressureAfterResponse=match[5])
+            break
     for message, reason in REASONS.items():
         if message in content.lower():
             details["reason"] = reason

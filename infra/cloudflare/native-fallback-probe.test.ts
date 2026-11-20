@@ -7,6 +7,8 @@ import { ReleaseHttpLive } from "./release-http";
 import { controlsDigest, observePairingStart } from "./native-fallback-probe";
 import { acceptanceRequestAdmitted } from "../../apps/server/cloudflare/release-isolation/operations";
 import { installedOrigins } from "@fidy/server/browser-transport";
+import { webSignupDisclosure } from "../../apps/server/src/shell/consent/operations";
+import { acceptanceProofHeader } from "../../apps/server/cloudflare/release-isolation/contract";
 import { releaseFailureMessage } from "./production-release";
 
 it.effect(
@@ -107,4 +109,73 @@ it.live(
       expect(calls[1]).toEqual(calls[0]);
       expect(calls[2]).toEqual({ ...calls[0], body: null });
     }).pipe(Effect.scoped)
+);
+
+it.effect(
+  "requires signed financial reads to succeed and both unsigned reads to return the closed status",
+  () =>
+    Effect.gen(function* () {
+      const pair = {
+        revision: "b".repeat(40),
+        proof: "0".repeat(64),
+        ingress: "11111111-1111-4111-8111-111111111111",
+        core: "22222222-2222-4222-8222-222222222222",
+      };
+      const origin = installedOrigins.acceptance.api;
+      const cookieHeaders = (name: string): HeadersInit => ({
+        "set-cookie": name + "=test; Path=/; Secure; HttpOnly; SameSite=Lax",
+      });
+      for (const [signed, unsigned, expected] of [
+        [200, 503, "180908d13917383f405a0ece55ff98c32294fe42c5396a612d1606b95f50f2c5"],
+        [503, 503, "Retained control refused at transaction history, HTTP 503"],
+        [200, 200, "Closed acceptance expected HTTP 503; received 200"],
+      ] as const) {
+        const ids = [pair.ingress, pair.core];
+        const responses: Record<string, (request: Request) => Response> = {
+          "/web/pairings": () =>
+            Response.json({
+              pairingId: "pairing",
+              privateVerifier: "private",
+              expiresAt: "2026-11-20T00:00:00.000Z",
+            }),
+          "/web/providers/google/start": () =>
+            Response.json(
+              {
+                authorizationUrl:
+                  "https://accounts.google.com/o/oauth2/v2/auth?redirect_uri=" +
+                  encodeURIComponent(origin + "/providers/google/callback"),
+              },
+              { headers: cookieHeaders("__Host-fidy_google") }
+            ),
+          "/providers/google/callback": () => new Response(null, { status: 303 }),
+          "/web/providers/google/status": () => Response.json({ status: "verified" }),
+          "/web/providers/google/complete": () => Response.json({ status: "approved" }),
+          "/web/pairings/redeem": () =>
+            new Response(null, { headers: cookieHeaders("__Host-fidy_session") }),
+          "/web/session/binding": () => Response.json({ binding: "test" }),
+          "/web/consent/authorization": () =>
+            Response.json({
+              authorization: {
+                reference: pair.ingress,
+                acceptedAtMs: 1000,
+                disclosure: webSignupDisclosure(),
+              },
+            }),
+          "/transactions": (request) =>
+            Response.json(
+              { data: [], next: [] },
+              { status: request.headers.has(acceptanceProofHeader) ? signed : unsigned }
+            ),
+          "/user": () => Response.json({ data: { id: ids.shift() } }),
+        };
+        const observed = yield* controlsDigest(pair, (request) =>
+          Effect.sync(() => {
+            const handler = responses[new URL(request.url).pathname];
+            if (handler === undefined) throw Error("Unexpected control path");
+            return handler(request);
+          })
+        ).pipe(Effect.match({ onFailure: (error) => error.message, onSuccess: (value) => value }));
+        expect(observed).toBe(expected);
+      }
+    })
 );

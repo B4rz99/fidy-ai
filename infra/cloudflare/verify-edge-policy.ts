@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "4f9eb84ce2936ea868d3fd6da49eb6ff3b0a1acb88cf0523ae73d239b6de2b8d";
+const expectedEdgePolicyDigest = "fb1da73c7e83c0615dc6c98ed7ab654dbfb852a1c1006f29f03d6197b884f39e";
 const securityArtifacts = [
   ...(await Promise.all(
     [
@@ -37,6 +37,7 @@ const securityArtifacts = [
       "../../scripts/infra-performance/canonical-fixture/interrupted_upload.py",
       "../../scripts/infra-performance/canonical-fixture/unsealed_stage.py",
       "../../scripts/infra-performance/canonical-fixture/staged_application.py",
+      "../../scripts/infra-performance/canonical-fixture/pairing_stage.py",
       "../../apps/server/cloudflare/fixture-fallback-core.ts",
       "../../apps/server/cloudflare/fixture-fallback-ingress.ts",
       "../../apps/server/cloudflare/release-isolation/runtime.ts",

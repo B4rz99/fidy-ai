@@ -40,33 +40,36 @@ def protected_archive(account_revision, artifact_id, expected_digest, *, prefix,
     return run_id, data
 
 
-def archive_verifier(artifact_id, checkout, get, git):
+def archive_verifier(artifact_id, checkout, get, git, application=APPLICATION):
     if not re.fullmatch("[1-9][0-9]{0,19}", artifact_id or ""):
         raise ValueError("Invalid protected artifact ID")
     source = json.loads(get("artifacts/" + artifact_id))["workflow_run"]["head_sha"]
-    verify_tree(source, git)
+    verify_tree(source, git, application)
     if git("merge-base", source, checkout) != source:
         raise ValueError("Protected evidence came from a different verifier lineage")
     return source
 
 
+ROLLOUT_STEPS = {
+    "Bind the protected verifier to the staged application source": "success",
+    "Upload the verified native candidates": "success",
+    "Stage the zero-traffic native candidates": "success",
+    "Requalify the archived zero-traffic pair without moving traffic": "skipped",
+    "Finish only the tested closed forward repair": "skipped",
+    "Verify mixed and candidate versions before promoting closed admission": "success",
+    "Verify the installed application and retained schema markers": "success",
+    "Exercise the tested code-only rollback": "skipped",
+    "Retain native release evidence": "success",
+}
+
+
 def artifact(account_revision, artifact_id, expected_digest, get=actions_get, git=git_read):
-    if account_revision != APPLICATION:
+    if not re.fullmatch("[a-f0-9]{40}", account_revision):
         raise ValueError("Unexpected signed application revision")
-    source = archive_verifier(artifact_id, git("rev-parse", "HEAD"), get, git)
+    source = archive_verifier(artifact_id, git("rev-parse", "HEAD"), get, git, account_revision)
     run, data = protected_archive(source, artifact_id, expected_digest,
                                   prefix="native-storage-release-", conclusions={"success"}, get=get)
-    require_steps(get, run, "success", {
-        "Bind the protected verifier to the staged application source": "success",
-        "Upload the verified native candidates": "success",
-        "Stage the zero-traffic native candidates": "success",
-        "Requalify the archived zero-traffic pair without moving traffic": "skipped",
-        "Finish only the tested closed forward repair": "skipped",
-        "Verify mixed and candidate versions before promoting closed admission": "success",
-        "Verify the installed application and retained schema markers": "success",
-        "Exercise the tested code-only rollback": "skipped",
-        "Retain native release evidence": "success",
-    })
+    require_steps(get, run, "success", ROLLOUT_STEPS)
     with ZipFile(BytesIO(data)) as archive:
         def document(name):
             items = [item for item in archive.infolist() if item.filename == name]
@@ -75,14 +78,29 @@ def artifact(account_revision, artifact_id, expected_digest, get=actions_get, gi
             return json.loads(archive.read(items[0]))
         promotion = document("native-release.json.promoted")
         installed = document("native-verification.json")
+        if account_revision != APPLICATION:
+            # Reauthenticate the dormant rollback target from the independent seal accepted by this rollout.
+            from pairing_stage import sealed_pair, OWNERS
+            seal = document("native-release.json.seal")
+            stage, _ = sealed_pair(source, seal["artifactId"], seal["sha256"], get, git)
+            smoke, = [worker for worker in installed["workers"] if worker["role"] == "Smoke"]
+            if (stage["revision"] != account_revision or installed["fixtureControlsDigest"] != stage["controlsDigest"]
+                    or installed["retainedProvider"] != stage["provider"]
+                    or installed["namespaces"] != [stage["namespaces"][role] for role in OWNERS]
+                    or installed["userNamespace"] != stage["namespaces"]["user"]
+                    or any(smoke[k] != v for k, v in stage["smoke"].items())):
+                raise ValueError("Active rollout differs from its authenticated replacement")
+            dormant = stage["release"]
+        else:
+            dormant = STAGED_IDS
     release = promotion["release"]
     snapshot = release["snapshot"]
-    if (snapshot["revision"] != APPLICATION or snapshot["stableRevision"] != APPLICATION
-            or installed["revision"] != APPLICATION or installed.get("verifierRevision") != source or promotion["rollbackTested"] is not True):
+    if (snapshot["revision"] != account_revision or snapshot["stableRevision"] != account_revision
+            or installed["revision"] != account_revision or installed.get("verifierRevision") != source or promotion["rollbackTested"] is not True):
         raise ValueError("Active release did not exercise the dormant application build as its rollback")
     for role in ("public", "core"):
         version = role + "VersionId"
-        if snapshot[role]["stableVersionId"] != STAGED_IDS[version] or release[version] == STAGED_IDS[version]:
+        if snapshot[role]["stableVersionId"] != dormant[version] or release[version] == dormant[version]:
             raise ValueError("Active rollout did not start from the authenticated dormant versions")
     return promotion, installed
 

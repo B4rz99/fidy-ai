@@ -337,6 +337,15 @@ HTTP request proofs, technical smoke Queue and Workflow delivery, receipt signat
 leases remain bound to the current application revision. The initial forward repair's stage artifact
 and the final promoted rollout's qualification artifact serve different operations.
 
+For a successful `stage-pairing-repair`, record its protected run's application SHA, the
+`native-fixture-fallback-<run-id>` artifact ID, and its independently approved archive SHA-256.
+Pass these as `installed_revision`, `fallback_artifact`, and `fallback_sha256` with the signer
+enabled for `recover-fixture-fallback`. After that recovery succeeds, supply the same three
+inputs for `rollout`. The verifier may advance on protected trunk only through the reviewed
+verifier files. Both Worker builds identify the staged application SHA. The rollout checks
+the live dormant deployment history, its namespaces, support Workers and retained financial
+controls before upload. Its evidence identifies the independent seal used for the rollback pair.
+
 Use the **Measure the closed native Transaction cohort** protected workflow on trunk. Provide a
 new random comparison prefix, the installed SHA, the two serving version UUIDs, and the artifact
 ID and separately pinned archive SHA-256 from that release's successful protected rollout.

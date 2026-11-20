@@ -1,5 +1,4 @@
 import { Effect, Option, Schema } from "effect";
-import type { DurableObjectStorageHandle } from "miniflare";
 import { canonicalRequestProtection as policy } from "../../../apps/server/cloudflare/canonical-admission/contract";
 
 const reviewPaths = new Set(["/ingestion/review-workspace", "/ingestion/review-workspace/context"]);
@@ -15,7 +14,7 @@ export const withReviewPressureSnapshot = Effect.fn(function* ({
   request,
   response,
 }: {
-  owner: DurableObjectStorageHandle;
+  owner: { exec: (sql: string, ...bindings: (string | number)[]) => Promise<unknown[]> };
   user: string;
   request: Request;
   response: Response;

@@ -329,19 +329,23 @@ const failedReviewRead = (reply, api) => {
 export const freshPendingReview = async (input) => {
   /** @type {Promise<never> | undefined} */
   let firstFailure;
-  /** @type {PromiseWithResolvers<never>} */
-  const failure = Promise.withResolvers();
+  /** @type {((refusal: Promise<never>) => void) | undefined} */
+  let signalFailure;
+  /** @type {Promise<never>} */
+  const failure = new Promise((resolve) => {
+    signalFailure = resolve;
+  });
   /** @param {BrowserResponse} reply Observed response before a client retry or dependent request. */
   const capture = (reply) => {
     const name = failedReviewRead(reply, input.api);
     if (name && !firstFailure) {
       firstFailure = failReview(reply, name, input.event);
-      failure.resolve(firstFailure);
+      signalFailure?.(firstFailure);
     }
   };
   input.page.on("response", capture);
   try {
-    const result = await Promise.race([failure.promise, measurePendingReview(input)]);
+    const result = await Promise.race([failure, measurePendingReview(input)]);
     if (firstFailure) return await firstFailure;
     input.event({ type: "completed", journey: reviewJourney, ...result });
     return result;

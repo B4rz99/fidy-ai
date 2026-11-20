@@ -1,3 +1,5 @@
+/// <reference types="bun-types" />
+
 import assert from "node:assert/strict";
 import { Database } from "bun:sqlite";
 import { Effect } from "effect";
@@ -6,10 +8,21 @@ import { withReviewPressureSnapshot } from "./native-review-pressure";
 const db = new Database(":memory:");
 db.exec("CREATE TABLE canonical_request_buckets(subject TEXT, virtual_at_ms INTEGER)");
 db.exec("CREATE TABLE canonical_request_leases(user_id TEXT, expires_at_ms INTEGER)");
-const owner = { exec: async (query, ...params) => db.query(query).all(...params) };
+/**
+ * @param {string} sql Query used by the native owner observer.
+ * @param {...(string | number)} params Bound values for the disposable SQLite database.
+ * @returns {Promise<unknown[]>} Rows decoded by the observer.
+ */
+const queryRows = async (sql, ...params) => {
+  /** @type {unknown[]} */
+  const rows = db.query(sql).all(...params);
+  return rows;
+};
+const owner = { exec: queryRows };
 const user = "fixture";
 const request = new Request("https://127.0.0.1/ingestion/review-workspace/context?status=pending");
 const header = "x-reference-review-pressure";
+/** @param {number} status HTTP status observed by the loopback runner. */
 const observe = (status) =>
   Effect.runPromise(
     withReviewPressureSnapshot({

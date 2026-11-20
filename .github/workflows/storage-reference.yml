@@ -27,6 +27,10 @@ on:
         description: Run 20 authenticated financial Users and 30 paired Corrections in workerd
         type: boolean
         default: false
+      phase_smoke:
+        description: Stop after one verified diagnostic pair
+        type: boolean
+        default: false
       browser_phases:
         description: Diagnose browser phases on the focused Transactions and Dashboard fixture
         type: boolean
@@ -49,7 +53,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: storage-reference-${{ github.ref }}-${{ inputs.browser_phases || false }}-${{ inputs.workerd_profile }}-${{ inputs.dataset || 'production' }}-${{ inputs.network || 'normal' }}-${{ inputs.setup_idle_ms || '0' }}-${{ inputs.transaction_read_only || false }}-${{ inputs.full_recurring || false }}
+  group: storage-reference-${{ github.ref }}-${{ inputs.phase_smoke || false }}-${{ inputs.browser_phases || false }}-${{ inputs.workerd_profile }}-${{ inputs.dataset || 'production' }}-${{ inputs.network || 'normal' }}-${{ inputs.setup_idle_ms || '0' }}-${{ inputs.transaction_read_only || false }}-${{ inputs.full_recurring || false }}
   cancel-in-progress: false
 
 jobs:
@@ -103,6 +107,7 @@ jobs:
           python3 scripts/infra-performance/reference/run.py --d1 baseline-d1 --do . \
             --dataset "$DATASET" --network "$NETWORK" --setup-idle-ms "$SETUP_IDLE_MS" ${READ_ONLY_FLAG:+"$READ_ONLY_FLAG"} ${RECURRING_FLAG:+"$RECURRING_FLAG"} --pairs 1 --origin "GitHub-hosted Ubuntu loopback"
       - name: Measure 30 alternating pairs
+        if: ${{ !inputs.browser_phases || !inputs.phase_smoke }}
         run: |
           python3 scripts/infra-performance/reference/run.py --d1 baseline-d1 --do . \
             --dataset "$DATASET" --network "$NETWORK" --setup-idle-ms "$SETUP_IDLE_MS" ${READ_ONLY_FLAG:+"$READ_ONLY_FLAG"} ${RECURRING_FLAG:+"$RECURRING_FLAG"} --pairs 30 --origin "GitHub-hosted Ubuntu loopback"

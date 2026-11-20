@@ -1,5 +1,5 @@
 import type { CanonicalReadFinalization } from "../../canonical-admission/contract";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Option, Schema, Struct } from "effect";
 import {
   RecurringWorkspace,
   type RecurringWorkspaceQuery,
@@ -317,6 +317,9 @@ export const workspaceFromReadProjection = ({
     ? workspaceFromFacts({ ...input, document: projection.schedule, editing: projection.editing })
     : Effect.fail(new RecurringPlanningUnavailable());
 
+// The editing document has already been decoded from the retained ledger.
+const calculatedWorkspace = Schema.toType(RecurringWorkspace.mapFields(Struct.omit(["document"])));
+
 const workspaceFromFacts = ({
   document,
   editing,
@@ -347,8 +350,7 @@ const workspaceFromFacts = ({
       items: projectRecurringMonth({ document: matched.document, month: query.month, now }),
       filters: query,
     });
-    return yield* Schema.decodeEffect(Schema.toType(RecurringWorkspace))({
-      document: editing,
+    const calculated = yield* Schema.decodeEffect(calculatedWorkspace)({
       month: query.month,
       today: DateTime.formatIsoDate(
         DateTime.makeZonedUnsafe(now, { timeZone: preferences.timeZone })
@@ -367,6 +369,7 @@ const workspaceFromFacts = ({
       matchesComplete:
         matched.complete && earlier.complete && matched.unambiguous && earlier.unambiguous,
     });
+    return { document: editing, ...calculated };
   });
 
 const matchedProjection = (

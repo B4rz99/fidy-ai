@@ -17,6 +17,7 @@ const CpuProfileResponse = Schema.Struct({
         Schema.Struct({
           callFrame: Schema.Struct({ functionName: Schema.String }),
           id: Schema.Int,
+          children: Schema.optional(Schema.Array(Schema.Int)),
         })
       ),
       samples: Schema.Array(Schema.Int),
@@ -172,16 +173,12 @@ const inspectSocket = <A>(
     });
   }).pipe(withInspectorDeadline);
 
-const activeCpuMilliseconds = (message: string): number => {
-  const result = Schema.decodeSync(Schema.fromJsonString(CpuProfileResponse))(message);
-  const namesById = new Map(
-    result.result.profile.nodes.map((node) => [node.id, node.callFrame.functionName])
-  );
-  const activeMicroseconds = result.result.profile.samples.reduce(
+type CpuSamples = typeof CpuProfileResponse.Type.result.profile;
+const activeCpuMilliseconds = (profile: CpuSamples): number => {
+  const namesById = new Map(profile.nodes.map((node) => [node.id, node.callFrame.functionName]));
+  const activeMicroseconds = profile.samples.reduce(
     (total, sample, index) =>
-      namesById.get(sample) === "(idle)"
-        ? total
-        : total + (result.result.profile.timeDeltas[index] ?? 0),
+      namesById.get(sample) === "(idle)" ? total : total + (profile.timeDeltas[index] ?? 0),
     0
   );
   return activeMicroseconds / microsecondsPerMillisecond;
@@ -200,6 +197,7 @@ const handleProfileMessage = (
   context: InspectorContext<ProfileResult> & {
     readonly sendRequest: (signal: AbortSignal) => Promise<Response>;
     readonly response: Option.Option<Response>;
+    readonly onProfile: (profile: CpuSamples) => void;
     readonly setResponse: (value: Response) => void;
   }
 ): void => {
@@ -222,7 +220,11 @@ const handleProfileMessage = (
       }
     }, fail);
   } else if (envelope.value.id === 3) {
-    const cpuMilliseconds = activeCpuMilliseconds(message);
+    const {
+      result: { profile },
+    } = Schema.decodeSync(Schema.fromJsonString(CpuProfileResponse))(message);
+    context.onProfile(profile);
+    const cpuMilliseconds = activeCpuMilliseconds(profile);
     if (Option.isNone(response)) {
       fail(new Error("Worker CPU profile completed without an HTTP response"));
     } else succeed({ cpuMilliseconds, response: response.value });
@@ -234,11 +236,13 @@ export const profileWorkerRequest = ({
   debuggerUrl,
   sendRequest,
   signal,
+  onProfile = () => undefined,
 }: Readonly<{
   debuggerUrl: string;
   sendRequest: (signal: AbortSignal) => Promise<Response>;
   signal: Option.Option<AbortSignal>;
-}>): Promise<ProfileResult> => {
+}> &
+  Partial<Readonly<{ onProfile: (profile: CpuSamples) => void }>>): Promise<ProfileResult> => {
   let response = Option.none<Response>();
   const releaseResponse = (): void => {
     if (Option.isSome(response)) cancelResponse(response.value);
@@ -252,6 +256,7 @@ export const profileWorkerRequest = ({
           handleProfileMessage(message, {
             ...context,
             sendRequest,
+            onProfile,
             response,
             setResponse: (value) => {
               response = Option.some(value);

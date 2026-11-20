@@ -17,7 +17,7 @@ const policyFixture = Effect.gen(function* () {
     const directory = `scripts/infra-performance/${owner}`;
     yield* fs.copy(`${workspaceRoot}${directory}`, `${root}/${directory}`);
   }
-  yield* fs.copy(
+  yield* fs.copyFile(
     `${workspaceRoot}scripts/infra-performance/d1-budget.ts`,
     `${root}/scripts/infra-performance/d1-budget.ts`
   );

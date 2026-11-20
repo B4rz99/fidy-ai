@@ -35,9 +35,10 @@ const HistoryCategoryReference = Schema.Struct({
   category_revision: CategoryReference.fields.revision,
   category_id: CategoryReference.fields.categoryId,
 });
+const decodeHistoryCategory = Schema.decodeUnknownOption(HistoryCategoryReference);
 export const understoodCategory = (row: unknown): boolean =>
   Option.isSome(
-    Schema.decodeUnknownOption(HistoryCategoryReference)(row).pipe(
+    decodeHistoryCategory(row).pipe(
       Option.flatMap(({ category_revision: revision, category_id: categoryId }) =>
         interpretCategory({ release: currentCategoryRelease, reference: { revision, categoryId } })
       )

@@ -18,9 +18,10 @@ class ReferenceReport(unittest.TestCase):
         self.assertEqual(report["read.browser"]["d1"]["completed"], 1)
         self.assertEqual(report["read.browser"]["status"], "missing")
 
-    def test_extreme_manifest_declares_only_the_transaction_journeys_it_runs(self):
+    def test_extreme_manifest_declares_transactions_and_both_pending_review_pages(self):
         plan = browser_workload("extreme")
-        self.assertEqual(plan["boundaries"], BOUNDARIES)
+        self.assertEqual(plan["boundaries"], BOUNDARIES + ["review.pending.browser", "review.next.browser"])
+        self.assertEqual(set(plan["boundaries"]), set(compare(1, self.rows(1), ["d1", "do"], full_size=True)))
         for key in ("additionalCalibrationSetup", "dashboardNormalization", "recurringHistory"):
             self.assertNotIn(key, plan)
         self.assertNotIn("Budget", plan["browserEnd"])
@@ -134,6 +135,14 @@ class ReferenceReport(unittest.TestCase):
             row["timings"][key] = 190 if row["variant"] == "d1" else 110
         self.assertEqual(compare(30, rows, ["d1", "do"], calibration=True)[key]["status"], "fail")
 
+    def test_full_recurring_has_only_its_five_declared_product_cases(self):
+        names = {"recurring.month.browser", "recurring.previous.browser", "recurring.selective.browser",
+                 "recurring.no-match.browser", "recurring.full.http"}
+        manifest = browser_workload("extreme", recurring_only=True)
+        self.assertEqual(set(manifest["boundaries"]), names)
+        self.assertEqual(set(compare(1, [], ["d1", "do"], recurring_only=True)), names | {"recurring.full.browser"})
+        self.assertEqual(compare(1, [], ["d1", "do"], recurring_only=True)["recurring.full.browser"]["status"], "not-exposed")
+
     def test_partial_pair_keeps_completed_offered_and_unreached_views_separate(self):
         from run import observed_work
         with tempfile.TemporaryDirectory() as directory:
@@ -192,6 +201,23 @@ class ReferenceReport(unittest.TestCase):
         self.assertEqual(failed["read.http"]["d1"]["comparable"], 29)
         self.assertEqual(failed["read.http"]["do"]["comparable"], 29)
         self.assertEqual(failed["read.http"]["do"]["completed"], 30)
+
+    def test_constrained_transport_requires_no_p95_regression_per_cell(self):
+        rows = self.rows(30)
+        for row in rows:
+            if row["variant"] == "do":
+                row["timings"]["read.http"] += 0.001
+        report = compare(30, rows, ["d1", "do"], network="poor")
+        self.assertEqual(report["read.http"]["status"], "fail")
+        self.assertEqual(report["read.browser"]["status"], "pass")
+        self.assertEqual(report["correction.through-fresh-http"]["minimumRatio"], 1.0)
+        self.assertEqual(report["read.backend"]["minimumRatio"], 1.8)
+        self.assertEqual(report["read.backend"]["status"], "fail")
+        normal = compare(30, rows, ["d1", "do"], network="normal")
+        self.assertEqual(normal["correction.browser"]["minimumRatio"], 1.8)
+        self.assertEqual(normal["correction.browser"]["status"], "fail")
+        rows[-1]["status"] = "failed"
+        self.assertEqual(compare(30, rows, ["d1", "do"], network="poor")["read.browser"]["status"], "fail")
 
     def test_stress_evidence_uses_no_comparative_gate(self):
         report = compare(30, self.rows(30), ["d1", "do"], stress=True)

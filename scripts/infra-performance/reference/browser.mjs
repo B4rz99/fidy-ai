@@ -138,7 +138,7 @@ try {
     process.env.FIDY_REFERENCE_D1_COST === "1"
       ? observeBrowserD1(page, { api, operator }, event)
       : undefined;
-  if (checkpoint) await checkpoint("before-startup");
+  await checkpoint?.("before-startup");
   const idleMs = Number(process.env.FIDY_REFERENCE_SETUP_IDLE_MS ?? "0");
   const settledSetupMs = 2000;
   assert.ok(idleMs === 0 || idleMs === settledSetupMs);
@@ -150,70 +150,98 @@ try {
     assert.ok(elapsedMs >= idleMs);
     event({ stage: "post-setup-idle", elapsedMs });
   }
-  const journeys = {
-    startup: "startup.browser",
-    refresh: "read.browser",
-    correction: "correction.browser",
-  };
-  const journey = readOnly ? freshTransactionHistory : freshTransactions;
-  const result = await journey({
-    page,
-    ledger,
-    api,
-    calibration: process.env.FIDY_ASSESSMENT === "production",
-    observe,
-    observeStartup: async (reply) =>
-      Schema.decodeSync(Schema.fromJsonString(Schema.Unknown))(await reply.text()),
-    beforeRefresh: evidence,
-    checkpoint,
-    offered: (stage) => event({ type: "offered", journey: journeys[stage] }),
-    completed: (stage, milliseconds) =>
-      event({ type: "completed", journey: journeys[stage], milliseconds }),
-  });
-  const { before, startupMs, readMs } = result;
-  process.stderr.write("REFERENCE_STAGE accountability-after\n");
-  const after = await evidence();
-  const accountability = {
-    reads: after.reads - before.reads,
-    corrections: after.corrections - before.corrections,
-    units: after.units - before.units,
-    receipts: after.receipts - before.receipts,
-  };
-  process.stderr.write(JSON.stringify(accountability) + "\n");
-  // WebSession requests in the pinned baseline write session Audit and carry no external retry key.
-  assert.deepEqual(accountability, {
-    reads: readOnly ? 1 : 2,
-    corrections: readOnly ? 0 : 1,
-    units: 0,
-    receipts: 0,
-  });
-  const views = {};
-  if (process.env.FIDY_ASSESSMENT === "production" && !readOnly) {
-    process.stderr.write("REFERENCE_STAGE budgets-month\n");
-    const input = { page, api, browser: app, event };
-    views["budgets.month.browser"] = await freshBudgetMonth(input);
-    if (checkpoint) await checkpoint("budgets");
-    process.stderr.write("REFERENCE_STAGE review-pending\n");
-    views["review.pending.browser"] = await freshPendingReview(input);
-    if (checkpoint) await checkpoint("needs-review");
-    process.stderr.write("REFERENCE_STAGE dashboard-fresh\n");
-    views["dashboard.fresh.browser"] = await freshDashboard(input);
-    if (checkpoint) await checkpoint("dashboard");
+  if (process.env.FIDY_REFERENCE_FULL_RECURRING === "1") {
+    assert.equal(process.env.FIDY_ASSESSMENT, "extreme");
     process.stderr.write("REFERENCE_STAGE recurring-fresh\n");
-    Object.assign(views, await freshRecurring(input));
-    if (checkpoint) await checkpoint("recurring");
+    const before = await evidence();
+    const views = await freshRecurring({ page, api, browser: app, event }, true);
+    const after = await evidence();
+    const accountability = {
+      reads: after.reads - before.reads,
+      corrections: after.corrections - before.corrections,
+      units: after.units - before.units,
+      receipts: after.receipts - before.receipts,
+    };
+    assert.equal(accountability.corrections, 0);
+    assert.equal(accountability.units, 0);
+    assert.equal(accountability.receipts, 0);
+    process.stdout.write(
+      JSON.stringify({ views, accountability, attempts, browser: browser.version() }) + "\n"
+    );
+  } else {
+    const journeys = {
+      startup: "startup.browser",
+      refresh: "read.browser",
+      correction: "correction.browser",
+    };
+    const journey = readOnly ? freshTransactionHistory : freshTransactions;
+    const result = await journey({
+      page,
+      ledger,
+      api,
+      calibration: process.env.FIDY_ASSESSMENT === "production",
+      observe,
+      observeStartup: async (reply) =>
+        Schema.decodeSync(Schema.fromJsonString(Schema.Unknown))(await reply.text()),
+      beforeRefresh: evidence,
+      checkpoint,
+      offered: (stage) => event({ type: "offered", journey: journeys[stage] }),
+      completed: (stage, milliseconds) =>
+        event({ type: "completed", journey: journeys[stage], milliseconds }),
+    });
+    const { before, startupMs, readMs } = result;
+    process.stderr.write("REFERENCE_STAGE accountability-after\n");
+    const after = await evidence();
+    const accountability = {
+      reads: after.reads - before.reads,
+      corrections: after.corrections - before.corrections,
+      units: after.units - before.units,
+      receipts: after.receipts - before.receipts,
+    };
+    process.stderr.write(JSON.stringify(accountability) + "\n");
+    // WebSession requests in the pinned baseline write session Audit and carry no external retry key.
+    assert.deepEqual(accountability, {
+      reads: readOnly ? 1 : 2,
+      corrections: readOnly ? 0 : 1,
+      units: 0,
+      receipts: 0,
+    });
+    const views = {};
+    if (process.env.FIDY_ASSESSMENT === "production" && !readOnly) {
+      process.stderr.write("REFERENCE_STAGE budgets-month\n");
+      const input = { page, api, browser: app, event };
+      views["budgets.month.browser"] = await freshBudgetMonth(input);
+      await checkpoint?.("budgets");
+      process.stderr.write("REFERENCE_STAGE review-pending\n");
+      views["review.pending.browser"] = await freshPendingReview(input);
+      await checkpoint?.("needs-review");
+      process.stderr.write("REFERENCE_STAGE dashboard-fresh\n");
+      views["dashboard.fresh.browser"] = await freshDashboard(input);
+      await checkpoint?.("dashboard");
+      process.stderr.write("REFERENCE_STAGE recurring-fresh\n");
+      Object.assign(views, await freshRecurring(input));
+      await checkpoint?.("recurring");
+    }
+    if (process.env.FIDY_ASSESSMENT === "extreme" && !readOnly) {
+      const count = 5000,
+        nextPage = 50;
+      const input = { page, api, browser: app, event };
+      process.stderr.write("REFERENCE_STAGE review-pending\n");
+      views["review.pending.browser"] = await freshPendingReview(input, count);
+      views["review.next.browser"] = await freshPendingReview(input, count, nextPage);
+    }
+    process.stdout.write(
+      JSON.stringify({
+        views,
+        browser: browser.version(),
+        startupMs,
+        readMs,
+        ...("correctionMs" in result ? { correctionMs: result.correctionMs } : {}),
+        attempts,
+        accountability,
+      }) + "\n"
+    );
   }
-  process.stdout.write(
-    JSON.stringify({
-      views,
-      browser: browser.version(),
-      startupMs,
-      readMs,
-      ...("correctionMs" in result ? { correctionMs: result.correctionMs } : {}),
-      attempts,
-      accountability,
-    }) + "\n"
-  );
 } finally {
   await browser.close();
 }

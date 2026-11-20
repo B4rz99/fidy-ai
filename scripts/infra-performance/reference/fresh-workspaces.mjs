@@ -165,7 +165,8 @@ export const freshBudgetMonth = async (input) => {
   return { milliseconds, http };
 };
 
-const reviewCount = 4,
+const calibrationReviews = 4,
+  pageSize = 50,
   inbox = "/ingestion/review-workspace";
 const reviewItem = Schema.Struct({
   id: Schema.String,
@@ -192,22 +193,28 @@ const pageContext = Schema.decodeUnknownSync(
     }),
   })
 );
-const reviewRows = Array.from({ length: reviewCount }, (_, ordinal) => ({
-  id: "87000000-0000-4000-8000-" + digits(ordinal),
-  reference: "Fila " + (ordinal + 1),
-  excerpt: "Original sintético " + ordinal + ": 2026-10-01,25000,Mercado",
-}));
+/** @param {number} count Complete pending count. @param {number} offset First requested item. */
+const reviewRows = (count, offset) =>
+  Array.from({ length: Math.min(pageSize, count - offset) }, (_, index) => {
+    const ordinal = offset + index;
+    return {
+      id: "87000000-0000-4000-8000-" + digits(ordinal),
+      reference: "Fila " + (ordinal + 1),
+      excerpt: "Original sintético " + ordinal + ": 2026-10-01,25000,Mercado",
+    };
+  });
 /**
  * @param {unknown} value Fresh summary.
  * @param {unknown} context Browser-authorized source references and excerpts.
+ * @param {{count: number, expected: ReturnType<typeof reviewRows>}} fixture Complete count and expected page in expiry and ID order.
  */
-const verifyPending = (value, context) => {
+const verifyPending = (value, context, { count, expected }) => {
   const { total, pendingCount, items } = reviewPage(value).data;
-  assert.equal(total, reviewCount);
-  assert.equal(pendingCount, reviewCount);
+  assert.equal(total, count);
+  assert.equal(pendingCount, count);
   assert.deepEqual(
     items,
-    reviewRows.map(({ id }) => ({
+    expected.map(({ id }) => ({
       id,
       status: "pending",
       source: "statement",
@@ -215,28 +222,39 @@ const verifyPending = (value, context) => {
       timeZone: "America/Bogota",
     }))
   );
-  assert.deepEqual(pageContext(context).data.items, reviewRows);
+  assert.deepEqual(pageContext(context).data.items, expected);
 };
-/** @param {Page} page Mounted browser page. */
-const usableReviews = async (page) => {
+/** @param {Page} page Mounted browser page. @param {ReturnType<typeof reviewRows>} rows Expected visible entries. */
+const usableReviews = async (page, rows) => {
   await page.waitForFunction((expected) => {
     const cards = document.querySelectorAll('[data-review="inbox-row"]');
+    /** @param {Element | null} check Selection control. */
+    const isSelectable = (check) => {
+      if (check instanceof HTMLInputElement) return !check.checked && !check.disabled;
+      return (
+        check?.getAttribute("aria-checked") === "false" &&
+        !check.matches('[aria-disabled="true"],[data-disabled]')
+      );
+    };
+    /** @param {Element | null} control Ready control. @param {string} label Expected accessible label. */
+    const isVisibleControl = (control, label) =>
+      control?.getAttribute("aria-label") === label && control.getClientRects().length > 0;
     return (
       cards.length === expected.length &&
       expected.every(({ reference, excerpt }, index) => {
         const card = cards[index];
         const open = card.querySelector('button[data-review="row-content"]:enabled');
+        const check =
+          card.querySelector('[role="checkbox"]') ?? card.querySelector('input[type="checkbox"]');
         return (
-          open?.getAttribute("aria-label") === "Abrir Extracto " + reference &&
-          open.getClientRects().length > 0 &&
+          isVisibleControl(open, "Abrir Extracto " + reference) &&
           card.querySelector('[data-review="context-excerpt"]')?.textContent === excerpt &&
-          card.querySelector(
-            '[role="checkbox"][aria-checked="false"]:not([aria-disabled="true"]):not([data-disabled])'
-          ) !== null
+          isSelectable(check) &&
+          isVisibleControl(check, "Seleccionar Extracto " + reference)
         );
       })
     );
-  }, reviewRows);
+  }, rows);
   await painted(page);
 };
 const reviewJourney = "review.pending.browser";
@@ -252,9 +270,9 @@ const reviewPressure = Schema.decodeUnknownOption(
 /**
  * @param {BrowserResponse} reply First failed measured response.
  * @param {ReviewResponse} reviewResponse Selected canonical read.
- * @param {Workspace["event"]} event Metadata-only evidence sink.
+ * @param {{event: Workspace["event"], journey: string}} observation Sink and measured page change.
  */
-const failReview = async (reply, reviewResponse, event) => {
+const failReview = async (reply, reviewResponse, { event, journey }) => {
   const httpStatus = reply.status();
   const pressureAfterResponse = Option.getOrElse(
     reviewPressure(reply.headers()["x-reference-review-pressure"]),
@@ -267,7 +285,7 @@ const failReview = async (reply, reviewResponse, event) => {
   });
   event({
     type: "failed",
-    journey: reviewJourney,
+    journey,
     reviewResponse,
     httpStatus,
     errorCode,
@@ -278,35 +296,34 @@ const failReview = async (reply, reviewResponse, event) => {
   );
   throw new Error(`Needs Review ${reviewResponse} failed with HTTP ${httpStatus}`);
 };
-/** @param {Workspace} input Installed application and evidence sink. */
-const measurePendingReview = async (input) => {
+/** @param {Workspace} input Installed application and evidence sink. @param {number} count Complete fixture size. @param {number} offset Requested page offset. */
+const measurePendingReview = async (input, count, offset) => {
   const { page, browser, event } = input;
-  const [historical] = await Promise.all([
-    responseFor(input, inbox, { status: "history", limit: null, offset: null }),
-    page.goto(browser + "/app/needs-review?status=history", { waitUntil: "commit" }),
-  ]);
-  const unselected = reviewPage((await consumeSuccess(historical)).value).data;
-  assert.equal(unselected.total, 0);
-  assert.equal(unselected.pendingCount, reviewCount);
-  assert.deepEqual(unselected.items, []);
-  await page.getByRole("button", { name: "Historial", pressed: true, exact: true }).waitFor();
-  const workspace = responseFor(input, inbox, { status: "pending", limit: null, offset: null });
-  const source = responseFor(input, inbox + "/context", {
-    status: "pending",
-    limit: null,
-    offset: null,
-  });
-  event({ type: "offered", journey: reviewJourney });
+  if (offset === 0) {
+    const [historical] = await Promise.all([
+      responseFor(input, inbox, { status: "history", limit: null, offset: null }),
+      page.goto(browser + "/app/needs-review?status=history", { waitUntil: "commit" }),
+    ]);
+    const unselected = reviewPage((await consumeSuccess(historical)).value).data;
+    assert.equal(unselected.total, 0);
+    assert.equal(unselected.pendingCount, count);
+    assert.deepEqual(unselected.items, []);
+    await page.getByRole("button", { name: "Historial", pressed: true, exact: true }).waitFor();
+  }
+  const query = { status: "pending", limit: null, offset: offset ? String(offset) : null };
+  const workspace = responseFor(input, inbox, query);
+  const source = responseFor(input, inbox + "/context", query);
+  const control = offset
+    ? page.locator('[data-review="pager"]').getByRole("button", { name: "Siguiente", exact: true })
+    : page.getByRole("button", { name: /^Pendientes/u });
+  const expected = reviewRows(count, offset);
+  event({ type: "offered", journey: offset ? "review.next.browser" : reviewJourney });
   const start = performance.now();
-  const [reply, context] = await Promise.all([
-    workspace,
-    source,
-    page.getByRole("button", { name: /^Pendientes/u }).click(),
-  ]);
-  await usableReviews(page);
+  const [reply, context] = await Promise.all([workspace, source, control.click()]);
+  await usableReviews(page, expected);
   const milliseconds = performance.now() - start;
   const [summary, original] = await Promise.all([consumeSuccess(reply), consumeSuccess(context)]);
-  verifyPending(summary.value, original.value);
+  verifyPending(summary.value, original.value, { count, expected });
   return { milliseconds, http: summary.http, context: original.http };
 };
 
@@ -325,8 +342,9 @@ const failedReviewRead = (reply, api) => {
   return url.searchParams.get("status") === "history" ? "review-history" : "review-summary";
 };
 
-/** @param {Workspace} input Installed application and evidence sink. */
-export const freshPendingReview = async (input) => {
+/** @param {Workspace} input Installed application and evidence sink. @param {number} count Verified pending count. @param {number} offset Page offset. */
+export const freshPendingReview = async (input, count = calibrationReviews, offset = 0) => {
+  const journey = offset ? "review.next.browser" : reviewJourney;
   /** @type {Promise<never> | undefined} */
   let firstFailure;
   /** @type {((refusal: Promise<never>) => void) | undefined} */
@@ -339,15 +357,15 @@ export const freshPendingReview = async (input) => {
   const capture = (reply) => {
     const name = failedReviewRead(reply, input.api);
     if (name && !firstFailure) {
-      firstFailure = failReview(reply, name, input.event);
+      firstFailure = failReview(reply, name, { event: input.event, journey });
       signalFailure?.(firstFailure);
     }
   };
   input.page.on("response", capture);
   try {
-    const result = await Promise.race([failure, measurePendingReview(input)]);
+    const result = await Promise.race([failure, measurePendingReview(input, count, offset)]);
     if (firstFailure) return await firstFailure;
-    input.event({ type: "completed", journey: reviewJourney, ...result });
+    input.event({ type: "completed", journey, ...result });
     return result;
   } catch (error) {
     if (firstFailure) return await firstFailure;

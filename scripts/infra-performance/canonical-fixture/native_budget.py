@@ -43,8 +43,6 @@ def r2_usage(query, account, now):
             or "fidy-native-release-smoke" not in buckets
             or any(type(n) is not int or n < 0 for n in [requests, today_requests, *sizes])):
         raise ValueError("Missing fresh, bounded account R2 observations")
-    if requests + R2_OPERATIONS > MAX_R2_OPERATIONS or sum(sizes) + R2_BYTES > MAX_R2_BYTES:
-        raise ValueError("Insufficient Standard R2 free headroom")
     return dict(requests=requests, todayRequests=today_requests, upperBoundBytes=sum(sizes), sampled=now,
                 latest=epoch(latest["dimensions"]["datetime"]))
 
@@ -53,9 +51,15 @@ def observe(query, account):
     return dict(sqlite=asdict(usage()), r2=r2_usage(query,account,int(time.time())))
 
 
+def r2_room(sample, operations, storage):
+    if sample["requests"] + operations > MAX_R2_OPERATIONS or sample["upperBoundBytes"] + storage > MAX_R2_BYTES:
+        raise ValueError("Insufficient Standard R2 free headroom")
+
+
 def check(initial, current, phase, now):
     rows = Usage(**current["sqlite"])
     if phase == "begin":
+        r2_room(current["r2"], R2_OPERATIONS, R2_BYTES)
         admit(rows, now)
         return
     baseline = Usage(**initial["sqlite"])
@@ -64,6 +68,10 @@ def check(initial, current, phase, now):
     delta = check_delta(baseline, rows, now)
     clean = phase in ("cleanup", "finish")
     r2_delta = current["r2"]["todayRequests"] - initial["r2"]["todayRequests"]
+    growth = max(0, current["r2"]["upperBoundBytes"] - initial["r2"]["upperBoundBytes"])
+    if growth > R2_BYTES:
+        raise ValueError("Account R2 storage growth exceeds the experiment reserve")
+    r2_room(current["r2"], R2_OPERATIONS - r2_delta, R2_BYTES - growth)
     if not 0 <= r2_delta <= (R2_OPERATIONS if clean else R2_OPERATIONS // 2):
         raise ValueError("Additional account R2 requests exceeded the native reserve or regressed")
     if (delta["reads"] + (0 if clean else CLEANUP_READS) > PILOT_READS
@@ -79,6 +87,7 @@ def recovery_reservation(original, current, now):
     from pilot import valid_usage
     rows = Usage(**current["sqlite"])
     valid_usage(rows, now)
+    r2_room(current["r2"], R2_OPERATIONS, R2_BYTES)
     if (original["sqlite"]["sampled"] // DAY >= now // DAY or DAY-now % DAY <= 45*60
             or rows.reads+CLEANUP_READS+RESERVE_READS > DAILY_READS
             or rows.writes+CLEANUP_WRITES+RESERVE_WRITES > DAILY_WRITES):

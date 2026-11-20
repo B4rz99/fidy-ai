@@ -68,11 +68,11 @@ class Cohort:
             raise ValueError("Missing independently stored survivor Users")
         self.port.guard("signup")
         self.save("signup-offered", before=before, survivors=survivors)
-        outcome, user, binding_digest = self.port.register()
+        outcome, user, session_digest = self.port.register()
         if outcome != "created" or identity(user) in survivors:
             self.save("foreign-registration")
             raise ValueError("Protected signup did not create the expected fresh User")
-        self.save("signup-created", user=identity(user), originalBinding=binding_digest)
+        self.save("signup-created", user=identity(user), originalSessionDigest=session_digest)
         self.save("owned", physical=self.fresh_object())
 
     def offer_receipt(self):
@@ -133,7 +133,7 @@ class Cohort:
             self.port.guard("cleanup")
             self.port.renew()
             self.sleep(30)
-        self.port.denial(self.state.get("originalBinding"))
+        self.port.denial(self.state.get("originalSessionDigest"))
         if self.survivor_ids() != self.state["survivors"] or self.physical_state() == "populated":
             raise ValueError("Independent erasure and survivor identities differ")
         marker = self.port.marker_owner()

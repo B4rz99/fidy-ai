@@ -223,4 +223,5 @@ def comparable_native_reads(account, candidate, proof, pairs):
         version = store.replace(version,state)
         if time.time() >= state["foregroundUntil"]:
             raise ValueError("Native comparison lease expired before dispatch")
+        return state["foregroundUntil"]
     return reserve

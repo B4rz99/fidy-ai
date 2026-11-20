@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import patch
 
 from protected_cohort import protected_runner
-from native_budget import Usage, R2_OPERATIONS, MAX_R2_OPERATIONS, PILOT_WRITES, check, r2_usage, iso
+from native_budget import Usage, R2_OPERATIONS, MAX_R2_OPERATIONS, PILOT_WRITES, check, r2_usage, r2_room, iso
 
 
 class NativeBudgetTests(unittest.TestCase):
@@ -11,7 +11,7 @@ class NativeBudgetTests(unittest.TestCase):
         with patch.dict("os.environ", clear=True), self.assertRaisesRegex(ValueError, "protected"):
             protected_runner()
         now = 1795107000
-        base = {"sqlite": asdict(Usage(now, now, 100, 100)), "r2":{"todayRequests":100}}
+        base = {"sqlite": asdict(Usage(now, now, 100, 100)), "r2":{"todayRequests":100,"requests":200,"upperBoundBytes":100}}
         check(base, base, "begin", now)
         for current in [Usage(now, now-601, 100, 100), Usage(now, now, 100, 95),
                         Usage(now, now, 100, PILOT_WRITES)]:
@@ -35,13 +35,24 @@ class NativeBudgetTests(unittest.TestCase):
                              max=dict(payloadSize=10_000_000_000,metadataSize=0))]),
         ]:
             with self.subTest(field=field), self.assertRaises(ValueError):
-                sample({**row,field:value})
+                r2_room(sample({**row,field:value}), R2_OPERATIONS, 1_048_576)
 
     def test_next_day_cleanup_can_reserve_only_its_bounded_recovery_work(self):
         from native_budget import recovery_reservation
         now = 1795107000
         original = {"sqlite":asdict(Usage(now-86400,now-86400,100,100))}
-        current = {"sqlite":asdict(Usage(now,now,200,300))}
+        current = {"sqlite":asdict(Usage(now,now,200,300)), "r2":{"requests":100,"upperBoundBytes":100}}
         self.assertEqual(recovery_reservation(original,current,now),current)
         with self.assertRaises(ValueError):
-            recovery_reservation(original,{"sqlite":asdict(Usage(now,now,200,99_000))},now)
+            recovery_reservation(original,{**current,"sqlite":asdict(Usage(now,now,200,99_000))},now)
+
+    def test_native_cleanup_can_spend_its_already_reserved_r2_operations(self):
+        now = 1795107000
+        initial = dict(sqlite=asdict(Usage(now,now,100,100)),r2=dict(
+            todayRequests=42,requests=MAX_R2_OPERATIONS-R2_OPERATIONS,upperBoundBytes=50))
+        current = dict(sqlite=asdict(Usage(now,now,200,140)),r2=dict(
+            todayRequests=142,requests=MAX_R2_OPERATIONS-R2_OPERATIONS+100,upperBoundBytes=60))
+        check(initial,initial,"begin",now)
+        check(initial,current,"cleanup",now)
+        with self.assertRaises(ValueError):
+            check(current,current,"begin",now)

@@ -302,10 +302,12 @@ def native_read(session, revision, reserve):
         return proof.stdout
 
     def prepared():
-        reserve()
+        deadline = reserve()
         proof = sign()
 
         def read(_, path):
+            if time.time() >= deadline:
+                raise Refused("native_read_lease_expired")
             return fetch(
                 NATIVE_API + path,
                 {

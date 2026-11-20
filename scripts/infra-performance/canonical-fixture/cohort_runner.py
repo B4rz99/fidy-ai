@@ -1,6 +1,5 @@
 """Execute the fixed cohort actions through a private pipe and the ordinary closed provider."""
 from contextlib import contextmanager
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -77,7 +76,7 @@ class BrowserPort:
         session = self.session(member)
         if member["outcome"] == "created":
             write(self.directory / "native-session.json", session)
-        return member["outcome"], uuid(member["id"]), hashlib.sha256(session["binding"].encode()).hexdigest()
+        return member["outcome"], uuid(member["id"]), digest(session)
 
     def login(self):
         return self.remember(self.command("login"))
@@ -98,10 +97,10 @@ class BrowserPort:
             raise ValueError("Cleanup belongs to another Session")
         self.command("erase", **self.cleanup_session[1])
 
-    def denial(self, binding_digest):
-        if binding_digest and (self.directory / "native-session.json").exists():
+    def denial(self, original_digest):
+        if original_digest and (self.directory / "native-session.json").exists():
             previous = private_file(self.directory, "native-session.json")
-            if hashlib.sha256(previous["binding"].encode()).hexdigest() != binding_digest:
+            if digest(previous) != original_digest:
                 raise ValueError("Private session differs from the original enrollment")
             self.command("denied", **previous)
         else:

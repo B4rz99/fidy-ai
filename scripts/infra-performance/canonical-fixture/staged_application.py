@@ -18,6 +18,7 @@ VERIFIER_FILES = {
     "infra/cloudflare/native-fallback-probe.ts",
     "infra/cloudflare/native-fallback-recovery.test.ts",
     "infra/cloudflare/native-fallback-recovery.ts",
+    "infra/cloudflare/native-pairing-upload.json",
     "infra/cloudflare/native-storage-release.ts",
     "infra/cloudflare/production-release.test.ts",
     "infra/cloudflare/production-release.ts",
@@ -42,6 +43,13 @@ def verify_tree(revision, git, application=APPLICATION):
     if not re.fullmatch("[a-f0-9]{40}", revision) or git("merge-base", application, revision) != application:
         raise ValueError("Staged application is not the ancestor of this verifier")
     changed = set(git("diff", "--name-only", "--no-renames", "-z", application, revision, "--").split("\0")) - {""}
+    config = "infra/cloudflare/tsconfig.json"
+    if config in changed:
+        before = json.loads(git("show", application + ":" + config))
+        after = json.loads(git("show", revision + ":" + config))
+        if after != {**before, "include":[*before["include"], "native-pairing-upload.json"]}:
+            raise ValueError("Verifier modified the application build configuration")
+        changed.remove(config)
     if not changed <= VERIFIER_FILES:
         raise ValueError("Verifier changed a staged Worker, Web, binding or dependency source")
 

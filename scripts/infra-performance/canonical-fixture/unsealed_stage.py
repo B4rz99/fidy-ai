@@ -56,7 +56,7 @@ RESEAL_STEPS = {
 def verify_dispatch(env, git=git_read, application=APPLICATION):
     verifier = env.get("GITHUB_SHA", "")
     operation = env.get("FIXTURE_RELEASE_OPERATION")
-    builds = {"diagnose-fixture-pairing":"fallback", "reseal-fixture-fallback":"fallback", "recover-fixture-fallback":"fallback",
+    builds = {"resume-pairing-stage":"fallback", "diagnose-fixture-pairing":"fallback", "reseal-fixture-fallback":"fallback", "recover-fixture-fallback":"fallback",
               "rollout":"ordinary", "verify":"ordinary"}
     if (env.get("GITHUB_ACTIONS") != "true" or env.get("GITHUB_REPOSITORY") != REPO
             or env.get("GITHUB_WORKFLOW_REF") != f"{REPO}/.github/workflows/native-storage-release.yml@refs/heads/trunk"

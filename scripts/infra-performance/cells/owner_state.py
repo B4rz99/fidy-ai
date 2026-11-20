@@ -132,12 +132,18 @@ class AccountExperiment:
         previous = self.prior(day)
         return counts({k: previous[k] + estimate[k] for k in KEYS})
 
-    def begin(self, prefix, decision, day):
+    def require_unclaimed(self, prefix):
         last = self.state["last"]
         if (
             self.active is not None
             or (last and (last["pending"] is not None or last["prefix"] == prefix))
-            or day != today()
+        ):
+            raise Refused("account_experiment_unavailable")
+
+    def begin(self, prefix, decision, day):
+        self.require_unclaimed(prefix)
+        if (
+            day != today()
             or decision.get("_tag") != "Allowed"
             or not re.fullmatch("fidy-2259-[0-9a-f]{12}", prefix)
         ):

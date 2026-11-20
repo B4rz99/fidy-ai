@@ -64,6 +64,11 @@ const ApplicationFrame = lazyRouteComponent(
   () => import("./application-frame"),
   "ApplicationFrame"
 );
+export const preloadTransactionsEntry = (): Promise<void> =>
+  Promise.all([ApplicationFrame.preload?.(), TransactionListFeature.preload?.()]).then(
+    () => undefined
+  );
+
 const PageNotFound = lazyRouteComponent(() => import("./not-found"), "PageNotFound");
 const rootRoute = createRootRouteWithContext<WebRouterContext>()({
   component: ApplicationFrame,

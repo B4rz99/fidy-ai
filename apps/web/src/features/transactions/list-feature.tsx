@@ -1,5 +1,5 @@
 import { ManualCaptureProvider } from "./manual-capture";
-import { TransactionWorkspace } from "./workspace-component";
+import { TransactionWorkspace } from "./workspace";
 import { TransactionPeriodControls } from "./period-controls";
 import { PendingRead } from "@/ui/components/pending-read";
 import { TransactionDestinationFailure } from "./destination";

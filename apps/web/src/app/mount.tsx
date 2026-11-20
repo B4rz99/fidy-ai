@@ -10,26 +10,39 @@ export const mountWebApplication = (): void => {
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => ready.resolve(), { once: true });
   } else ready.resolve();
+  const { pathname } = window.location;
+  const transactions = pathname === "/app/transactions";
   const request = observeInitialBrowserRequest(
     beginInitialBrowserRequest({
       apiOrigin: browserApiOrigin({
         configured: import.meta.env.VITE_API_ORIGIN,
         browserOrigin: window.location.origin,
       }),
-      context: window.location.pathname.startsWith("/app/"),
-      transactions: window.location.pathname === "/app/transactions",
+      context: pathname.startsWith("/app/"),
+      transactions,
     })
   );
-  preloadWebRouteCode(window.location.pathname).catch(() => undefined);
-  Promise.all([import("./render"), import("@/transport/initial-session")])
-    .then(([{ mountWebApplication }, { beginInitialBrowserSession }]) => {
-      const initial = beginInitialBrowserSession({ ...request, request });
-      return ready.promise.then(() => {
+  const render = import("./render");
+  const initialSession = import("@/transport/initial-session").then(
+    ({ beginInitialBrowserSession }) => beginInitialBrowserSession({ ...request, request })
+  );
+  const routeCode = transactions
+    ? Promise.all([
+        import("./application-frame"),
+        import("./bound-application"),
+        import("./transactions-page"),
+        import("./routes").then(({ preloadTransactionsEntry }) => preloadTransactionsEntry()),
+      ]).catch(() => undefined)
+    : undefined;
+  if (!transactions) preloadWebRouteCode(pathname).catch(() => undefined);
+  Promise.all([render, initialSession, routeCode])
+    .then(([{ mountWebApplication }, initial]) =>
+      ready.promise.then(() => {
         const root = document.querySelector("#root");
         if (root === null) throw new Error("Web application root is missing");
         mountWebApplication({ root, initial });
-      });
-    })
+      })
+    )
     .catch(() =>
       ready.promise.then(() => {
         const root = document.querySelector("#root") ?? document.body;

@@ -46,7 +46,9 @@ READ_ONLY_BOUNDARIES = ["read.backend", "read.http", "read.browser", "startup.br
 
 CALIBRATION_VIEWS = ["budgets.month.browser", "review.pending.browser", "dashboard.fresh.browser", "recurring.month.browser", "recurring.previous.browser", "recurring.selective.browser", "recurring.no-match.browser", "recurring.full.http"]
 
-EVENT_CELLS = {"startup.browser", "read.browser", "correction.browser", *CALIBRATION_VIEWS}
+FULL_SIZE_VIEWS = ["review.pending.browser", "review.next.browser"]
+
+EVENT_CELLS = {*FULL_SIZE_VIEWS, "startup.browser", "read.browser", "correction.browser", *CALIBRATION_VIEWS}
 
 
 def observed_work(log):
@@ -285,9 +287,9 @@ def equivalence(row):
     )
 
 
-def compare(samples, rows, variants, *, stress=False, calibration=False, read_only=False):
+def compare(samples, rows, variants, *, stress=False, calibration=False, read_only=False, full_size=False):
     result = {}
-    keys = READ_ONLY_BOUNDARIES if read_only else BOUNDARIES + (CALIBRATION_VIEWS if calibration else [])
+    keys = READ_ONLY_BOUNDARIES if read_only else BOUNDARIES + (CALIBRATION_VIEWS if calibration else FULL_SIZE_VIEWS if full_size else [])
     for key in keys:
         successful = [{row["pair"] for row in rows if row["variant"] == variant
                        and row["status"] == "ok" and key in row.get("timings", {})}
@@ -341,6 +343,9 @@ def browser_workload(dataset, *, read_only=False):
     start = "Before document navigation or the loaded Refresh or Save interaction."
     end = ("Refresh requires search to disable then re-enable. Startup, Refresh and Save require "
            "the expected ordered rows to be visible and enabled through two animation frames.")
+    if dataset == "extreme":
+        return {"boundaries": BOUNDARIES + FULL_SIZE_VIEWS, "browserStart": start + " Needs Review starts at the Pending or Next button click.",
+                "browserEnd": end + " Each Needs Review page verifies all 50 actionable rows, their private excerpts, and the complete 5,000-item pending count."}
     if dataset != "production":
         return {"boundaries": BOUNDARIES, "browserStart": start,
                 "browserEnd": end + " Payload verification follows timing."}
@@ -517,7 +522,7 @@ def main():
     finally:
         key.unlink(missing_ok=True)
         cert.unlink(missing_ok=True)
-        report = compare(args.pairs, rows, paths, stress=args.dataset == "breaking", calibration=args.dataset == "production", read_only=args.transaction_read_only)
+        report = compare(args.pairs, rows, paths, stress=args.dataset == "breaking", calibration=args.dataset == "production", read_only=args.transaction_read_only, full_size=args.dataset == "extreme")
         (run / "report.json").write_text(json.dumps(report, indent=2))
     if any(row["status"] != "ok" for row in rows) or any(
         cell["status"] == "fail" for cell in report.values()

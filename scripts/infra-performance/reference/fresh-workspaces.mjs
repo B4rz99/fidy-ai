@@ -206,10 +206,9 @@ const reviewRows = (count, offset) =>
 /**
  * @param {unknown} value Fresh summary.
  * @param {unknown} context Browser-authorized source references and excerpts.
- * @param {number} count Complete pending count.
- * @param {ReturnType<typeof reviewRows>} expected Expected page in expiry and ID order.
+ * @param {{count: number, expected: ReturnType<typeof reviewRows>}} fixture Complete count and expected page in expiry and ID order.
  */
-const verifyPending = (value, context, count, expected) => {
+const verifyPending = (value, context, { count, expected }) => {
   const { total, pendingCount, items } = reviewPage(value).data;
   assert.equal(total, count);
   assert.equal(pendingCount, count);
@@ -260,10 +259,9 @@ const reviewPressure = Schema.decodeUnknownOption(
 /**
  * @param {BrowserResponse} reply First failed measured response.
  * @param {ReviewResponse} reviewResponse Selected canonical read.
- * @param {Workspace["event"]} event Metadata-only evidence sink.
- * @param {string} journey Measured page change.
+ * @param {{event: Workspace["event"], journey: string}} observation Sink and measured page change.
  */
-const failReview = async (reply, reviewResponse, event, journey) => {
+const failReview = async (reply, reviewResponse, { event, journey }) => {
   const httpStatus = reply.status();
   const pressureAfterResponse = Option.getOrElse(
     reviewPressure(reply.headers()["x-reference-review-pressure"]),
@@ -314,7 +312,7 @@ const measurePendingReview = async (input, count, offset) => {
   await usableReviews(page, expected);
   const milliseconds = performance.now() - start;
   const [summary, original] = await Promise.all([consumeSuccess(reply), consumeSuccess(context)]);
-  verifyPending(summary.value, original.value, count, expected);
+  verifyPending(summary.value, original.value, { count, expected });
   return { milliseconds, http: summary.http, context: original.http };
 };
 
@@ -348,7 +346,7 @@ export const freshPendingReview = async (input, count = calibrationReviews, offs
   const capture = (reply) => {
     const name = failedReviewRead(reply, input.api);
     if (name && !firstFailure) {
-      firstFailure = failReview(reply, name, input.event, journey);
+      firstFailure = failReview(reply, name, { event: input.event, journey });
       signalFailure?.(firstFailure);
     }
   };

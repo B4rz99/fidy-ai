@@ -27,7 +27,11 @@ import { HttpClient, HttpClientRequest } from "effect/http";
 import { releaseCommand, releaseEvidence } from "./production-release";
 import { readRecoveryPin } from "./native-recovery-identity";
 import { ReleaseHttpLive } from "./release-http";
-import { nativeResourceFailureMessage, nativeResourceStage } from "./resource-failure";
+import {
+  nativePlanningFailure,
+  nativeResourceFailureMessage,
+  nativeResourceStage,
+} from "./resource-failure";
 import {
   type NativeHostMode,
   requireNativeBindings,
@@ -307,14 +311,36 @@ const requireSuccessorSource = Effect.fn(function* (action: SuccessorAction) {
   }
   return { revision, fingerprint, directory, source };
 });
+export const readNativeScopedPlan = Effect.fn("readNativeScopedPlan")(function* ({
+  profile,
+  fingerprint,
+  revision,
+  include,
+}: {
+  profile: string;
+  fingerprint: string;
+  revision: string;
+  include: readonly string[];
+}) {
+  return yield* Alchemist.Stack.plan({
+    ...nativePlanOptions({ profile, preview: true, fingerprint }),
+    include,
+  }).pipe(
+    diagnoseNativePlan(revision),
+    Effect.catchCause((cause) => Effect.fail(nativePlanningFailure(cause)))
+  );
+});
+
 const planFixtureSuccessor = Effect.fn(function* (action: SuccessorAction) {
   const { revision, fingerprint, directory, source } = yield* requireSuccessorSource(action);
   const active = action === "rollout";
   const profile = yield* Config.String("ALCHEMY_PROFILE");
-  const snapshot = yield* Alchemist.Stack.plan({
-    ...nativePlanOptions({ profile, preview: true, fingerprint }),
+  const snapshot = yield* readNativeScopedPlan({
+    profile,
+    fingerprint,
+    revision,
     include: successorPlanSelection(revision),
-  }).pipe(diagnoseNativePlan(revision));
+  });
   const observed = describePlan(snapshot.native);
   if (snapshot.native.selectedFqns === undefined || observed.actions.length !== 0) {
     return yield* Effect.fail(Error("Successor inventory requires a scoped read-only plan"));

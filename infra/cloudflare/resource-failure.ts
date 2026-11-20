@@ -153,3 +153,6 @@ export const nativeResourceFailureMessage = (cause: Cause.Cause<unknown>): strin
     ? failure.value.message
     : `Native release failed during configuration. ${resourceFailureMessage(cause)}`;
 };
+
+export const nativePlanningFailure = (cause: Cause.Cause<unknown>): NativeStageFailure =>
+  new NativeStageFailure({ message: nativeResourceFailureMessage(cause) });

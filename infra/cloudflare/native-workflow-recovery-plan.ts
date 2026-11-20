@@ -2,9 +2,8 @@ import { isDeepStrictEqual } from "node:util";
 import * as Alchemist from "alchemy/Alchemist";
 import type { Plan } from "alchemy/Plan";
 import { Cause, Config, Data, Effect, ManagedRuntime, Option, Path, Schema } from "effect";
-import { nativePlanOptions } from "./native-fixture-plan";
 import { nativeResourceInventory } from "./native-graph";
-import { diagnoseNativePlan } from "./native-plan-diagnostics";
+import { readNativeScopedPlan } from "./native-storage-resources";
 import { releaseEvidence } from "./production-release";
 import { nativeResourceFailureMessage } from "./resource-failure";
 
@@ -231,19 +230,12 @@ const readWorkflowRecoveryPlan = Effect.fn("readWorkflowRecoveryPlan")(function*
       message: "Unexpected interrupted application checkout or read-only proof",
     });
   }
-  const { native } = yield* Alchemist.Stack.plan({
-    ...nativePlanOptions({ profile, preview: true, fingerprint }),
+  const { native } = yield* readNativeScopedPlan({
+    profile,
+    fingerprint,
+    revision: interruptedRevision,
     include: [workflowId],
-  }).pipe(
-    diagnoseNativePlan(interruptedRevision),
-    Effect.catchCause((cause) =>
-      Effect.fail(
-        new WorkflowRecoveryRefused({
-          message: nativeResourceFailureMessage(cause),
-        })
-      )
-    )
-  );
+  });
   const unchanged = yield* Effect.try({
     try: () => qualifyWorkflowRecoveryPlan(native),
     catch: (error) =>

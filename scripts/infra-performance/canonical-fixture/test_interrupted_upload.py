@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch
 from zipfile import ZipFile
 
-from interrupted_upload import ARCHIVE_DIGEST, ARTIFACT, CONTROLS_DIGEST, REVISION, RUN, STEPS, source_documents, verify_dispatch
+from interrupted_upload import ARCHIVE_DIGEST, ARTIFACT, CONTROLS_DIGEST, REPAIR_REVISION, REVISION, RUN, STEPS, source_documents, verify_dispatch
 from qualified_release import REPO
 
 
@@ -47,15 +47,25 @@ class InterruptedUpload(unittest.TestCase):
             with patch.dict(document, changes), self.assertRaises(ValueError):
                 self.load()
 
-    def test_only_one_protected_successor_can_reuse_the_upload(self):
-        parents = [self.repair, REVISION]
+    def test_only_a_verifier_descendant_keeps_the_repair_sources(self):
+        def git(*args):
+            if args == ("rev-parse", "HEAD"):
+                return self.repair
+            if args == ("merge-base", REPAIR_REVISION, self.repair):
+                return REPAIR_REVISION
+            if args == ("diff", "--name-only", "--no-renames", "-z", REPAIR_REVISION, self.repair, "--"):
+                return ".github/workflows/native-storage-release.yml\0infra/cloudflare/native-fixture-plan.ts\0"
+            self.fail("Unexpected Git observation")
+
         for operation in ["plan-fixture-repair", "resume-fixture-upload"]:
-            verify_dispatch({**self.env, "FIXTURE_RELEASE_OPERATION": operation}, parents)
+            verify_dispatch({**self.env, "FIXTURE_RELEASE_OPERATION": operation}, git)
         for changed in ({"GITHUB_RUN_ATTEMPT":"2"}, {"GITHUB_SHA":REVISION}, {"GITHUB_REF_PROTECTED":"false"},
                         {"NATIVE_STORAGE_ADMISSION":"open"}, {"NATIVE_FIXTURE_BUILD":"ordinary"},
                         {"FIXTURE_RELEASE_OPERATION":"rollout"}, {"NATIVE_FIXTURE_SIGNER_SHA256":""}):
             with self.subTest(changed=changed), self.assertRaises(ValueError):
-                verify_dispatch({**self.env, **changed}, parents)
-        for previous in ([self.repair], [self.repair, "c"*40], [self.repair, REVISION, "c"*40]):
-            with self.assertRaises(ValueError):
-                verify_dispatch(self.env, previous)
+                verify_dispatch({**self.env, **changed}, git)
+        for command, output in (("rev-parse", "c"*40), ("merge-base", REVISION),
+                                ("diff", "apps/web/vite.config.ts\0"), ("diff", "bun.lock\0"),
+                                ("diff", "apps/server/cloudflare/fixture-fallback-ingress.ts\0")):
+            with self.subTest(command=command, output=output), self.assertRaises(ValueError):
+                verify_dispatch(self.env, lambda *args: output if args[0] == command else git(*args))

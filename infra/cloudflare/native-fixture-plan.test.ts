@@ -1,6 +1,10 @@
 import type { describePlan } from "alchemy/Plan";
 import { expect, it } from "vitest";
-import { nativePlanOptions, requireFixtureLifecycle } from "./native-fixture-plan";
+import {
+  nativePlanOptions,
+  projectFixtureInventory,
+  requireFixtureLifecycle,
+} from "./native-fixture-plan";
 import { nativeResourceInventory } from "./native-graph";
 import provider from "./native-retained-provider.json" with { type: "json" };
 
@@ -67,4 +71,20 @@ it("uses the existing Alchemy state Worker for preview and apply of a signed rel
   expect(
     nativePlanOptions({ profile: "ci", preview: false, fingerprint: "" }).updateStateStore
   ).toBe(true);
+});
+
+it("projects only known resource and action names from a refused inventory", () => {
+  const rows = [
+    row("Web", "Cloudflare.Worker", "update"),
+    row("private-tenant", "private-type", "create"),
+    { ...row("Core", "private-type", "update"), fqn: "private-coordinate" },
+    row("Build", "Command.Build", "noop"),
+  ];
+  const observed = projectFixtureInventory(rows);
+  expect(observed).toEqual([
+    { action: "update", logicalId: "Web", resourceType: "Cloudflare.Worker" },
+    { action: "create", logicalId: "unrecognized", resourceType: "unrecognized" },
+    { action: "update", logicalId: "unrecognized", resourceType: "unrecognized" },
+    { action: "noop", logicalId: "Build", resourceType: "Command.Build" },
+  ]);
 });

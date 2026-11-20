@@ -123,7 +123,7 @@ def overlapped_responses(row):
     if len(responses) != 2 or any(response.get("status") != 200 for response in responses):
         return []
     if not all(isinstance(response.get(key), (int, float)) and math.isfinite(response[key])
-               for key in ("dispatched", "completedAt") for response in responses):
+               for key in ("dispatched", "completedAt") for response in [row, *responses]):
         return []
     if not math.isclose(min(response["dispatched"] for response in responses),
                         row["dispatched"], rel_tol=0, abs_tol=.001):

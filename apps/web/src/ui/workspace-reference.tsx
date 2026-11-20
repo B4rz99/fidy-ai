@@ -46,7 +46,7 @@ const ChoiceReference = (): JSX.Element => {
           />
         }
         value={category}
-        options={categoryOptions}
+        getOptions={() => categoryOptions}
         onChange={setCategory}
       >
         {categoryOptions.find((option) => option.value === category)?.label}

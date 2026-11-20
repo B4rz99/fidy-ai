@@ -160,7 +160,7 @@ const RowExample = (): JSX.Element => {
                 <InlineChoiceDropdown
                   label="Categoría de Arriendo de ejemplo"
                   value={category}
-                  options={categories}
+                  getOptions={() => categories}
                   leading={null}
                   disabled={false}
                   onChange={setCategory}

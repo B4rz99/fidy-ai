@@ -23,7 +23,9 @@ export const InlineRecurringCategory = ({
       disabled={disabled || item.fulfillments.length > 0}
       leading={<CategoryVisual label={label} bubble large={false} />}
       value={item.plan.categoryId ?? ""}
-      options={categories.map((category) => ({ value: category.id, label: category.label }))}
+      getOptions={() =>
+        categories.map((category) => ({ value: category.id, label: category.label }))
+      }
       onChange={(value) => {
         if (disabled || item.fulfillments.length > 0 || value === item.plan.categoryId) return;
         const category = categories.find((entry) => entry.id === value);

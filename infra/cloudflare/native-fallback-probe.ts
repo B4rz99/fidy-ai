@@ -104,23 +104,25 @@ const matchesCanonicalUnavailable = Effect.fn(function* (response: Response) {
     HttpClientRequest.get(installedOrigins.acceptance.api),
     response
   );
-  let offset = 0,
-    matches = true;
+  let offset = 0;
   const matchesSegment = (chunk: Uint8Array): boolean =>
     chunk.length <= canonicalUnavailable.length - offset &&
     chunk.every((value, index) => value === canonicalUnavailable[offset + index]);
   const read = yield* internal.stream.pipe(
     Stream.runForEachWhile((chunk) =>
       Effect.sync(() => {
-        matches = matchesSegment(chunk);
-        if (matches) offset += chunk.length;
-        return matches;
+        if (!matchesSegment(chunk)) {
+          offset = -1;
+          return false;
+        }
+        offset += chunk.length;
+        return true;
       })
     ),
     Effect.timeoutOption("2 seconds"),
     Effect.orElseSucceed(() => Option.none())
   );
-  return Option.isSome(read) && matches && offset === canonicalUnavailable.length;
+  return Option.isSome(read) && offset === canonicalUnavailable.length;
 });
 const controlResponse = Effect.fn(function* (operation: string, response: Response) {
   if (response.status < clientError) return response;

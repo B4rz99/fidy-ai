@@ -91,3 +91,17 @@ class OfferedLoadEvidence(unittest.TestCase):
         self.assertEqual(report(False)["nativeWorkload"], "fail")
         rows.pop()
         self.assertEqual(report(True)["nativeWorkload"], "missing")
+
+    def test_tail_attribution_uses_the_same_responses_and_preserves_missing_spans(self):
+        from report import history_spans
+        rows = [dict(variant="do", cell="history", user=0, sample=n, ok=True, dispatchMs=n + 1)
+                for n in range(30)]
+        spans = [dict(variant="do", cell="history", user=0, sample=n,
+                      responses=[dict(ingressMs=n, coreMs=n - 1 if n else 0)])
+                 for n in range(29)]
+        report = history_spans(rows, spans)["do"]
+        self.assertEqual(report["eligible"], 30)
+        self.assertEqual(report["matched"], 29)
+        self.assertEqual(report["dispatchTail"]["eligible"], 2)
+        self.assertEqual(report["dispatchTail"]["matched"], 1)
+        self.assertEqual(report["dispatchTail"]["coreMs"]["p95"], 27)

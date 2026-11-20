@@ -96,7 +96,7 @@ export const forward = Effect.fn(function* (
   });
   return new Response(response.body, { status: response.status, headers: response.headers });
 });
-export const makeBrowserRuntime = Effect.gen(function* () {
+export const makeBrowserRuntimeWithLogs = Effect.fnUntraced(function* (logs: Array<string>) {
   const create = yield* nativeBrowserPlatform;
   const revision = Bun.spawnSync(["git", "rev-parse", "HEAD"]);
   const digest = Bun.spawnSync([
@@ -110,12 +110,13 @@ export const makeBrowserRuntime = Effect.gen(function* () {
   if (revision.exitCode !== 0 || digest.exitCode !== 0) {
     return yield* Effect.die("Could not resolve local release identity");
   }
-  return yield* create(undefined, [], {
+  return yield* create(undefined, logs, {
     BROWSER_ORIGIN: browserOrigins.acceptance,
     RELEASE_GIT_SHA: revision.stdout.toString().trim(),
     CONTRACT_DIGEST: digest.stdout.toString().trim(),
   });
 });
+export const makeBrowserRuntime = Effect.suspend(() => makeBrowserRuntimeWithLogs([]));
 const loopback = Effect.gen(function* () {
   const runtime = yield* makeBrowserRuntime;
   yield* prepareBrowserUser(runtime, recurringUser);

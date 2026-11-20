@@ -131,6 +131,7 @@ jobs:
         run: |
           bash scripts/install-workspace.sh --ignore-scripts
           (cd baseline-d1 && bash scripts/install-workspace.sh --ignore-scripts)
+          bun scripts/infra-performance/load/trace.test.mjs
           python3 -m unittest discover -s scripts/infra-performance/load
       - name: Measure complete workerd requests and confirmed Corrections
         env:

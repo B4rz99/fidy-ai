@@ -52,6 +52,25 @@ def offered_schedule(rows, users, samples, native_only):
     return True
 
 
+def history_spans(rows, spans):
+    """Match the very same slow dispatches to the full public/Core operation telemetry."""
+    matched = {(row["variant"], row["user"], row["sample"]): row["responses"][0]
+               for row in spans if row["cell"] == "history" and len(row["responses"]) == 1}
+    def summary(selected):
+        observations = [matched.get((r["variant"], r["user"], r["sample"]), {}) for r in selected]
+        both = [r for r in observations if r.get("ingressMs") is not None and r.get("coreMs") is not None]
+        return dict(eligible=len(selected), matched=len(both),
+                    ingressMs=stats([r["ingressMs"] for r in both]),
+                    coreMs=stats([r["coreMs"] for r in both]))
+    output = {}
+    for variant in ("d1", "do"):
+        selected = [r for r in rows if r["cell"] == "history" and r["variant"] == variant and r["ok"]]
+        threshold = stats([r["dispatchMs"] for r in selected])
+        tail = [r for r in selected if r["dispatchMs"] >= threshold["p95"]]
+        output[variant] = dict(**summary(selected), dispatchTail=summary(tail))
+    return output
+
+
 def summarize(rows, users, samples, audit=True, fixture=True, offered_history=False, native_only=False):
     expected = {(user, sample) for user in range(users) for sample in range(samples)}
     output, signatures = {}, {}
@@ -110,6 +129,10 @@ if __name__ == "__main__":
         cell: summarize([row for row in rows if row["cell"] == cell], users, plan["samples"], audits.get(cell) is True, fixture, offered_history=cell == "history", native_only=plan["profile"] == "native-original")
         for cell, users in (("history", plan["users"]), ("correction", 1), ("rollback", 1))
     }
+    spans_path = directory / "worker-spans.jsonl"
+    if spans_path.exists():
+        spans = [json.loads(line) for line in spans_path.read_text().splitlines()]
+        result["history"]["workerSpans"] = history_spans(rows, spans)
     (directory / "report.json").write_text(json.dumps(result, indent=2))
     for cell, report in result.items():
         print(cell, report["scheduledMs"], report["dispatchMs"])

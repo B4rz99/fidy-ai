@@ -151,12 +151,12 @@ const prepareStorage = async (runtime, root) => {
     },
   };
 };
-export const d1Platform = async (root) => {
+export const d1Platform = async (root, logs) => {
   const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
   assert.equal(git("rev-parse", "HEAD"), baseline);
   assert.equal(git("diff", "HEAD", "--name-only"), "");
   // Match the native browser fixture’s host-side structured log sink.
-  const runtime = await runtimeFor(root, []);
+  const runtime = await runtimeFor(root, logs);
   try {
     return await prepareStorage(runtime, root);
   } catch (error) {

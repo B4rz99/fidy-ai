@@ -5,11 +5,12 @@ import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { BunFileSystem } from "@effect/platform-bun";
 import { Effect } from "effect";
-import { makeBrowserRuntime, prepareBrowserUser } from "../../dev-browser-api";
+import { makeBrowserRuntimeWithLogs, prepareBrowserUser } from "../../dev-browser-api";
 import { signedChat } from "../../../apps/server/cloudflare/signed-whatsapp.test-fixture";
 import { financialFixtureCounts, seed } from "../reference/native-seed";
 import { baseline, d1Platform, origin } from "./d1.mjs";
 
+import { correlateWorkerSpans } from "./trace.mjs";
 import { inOrder, indices } from "./sequence.mjs";
 
 const [root, directory, size = "extreme", profile = "original"] = process.argv.slice(2);
@@ -61,6 +62,8 @@ const id = (index, ordinal) =>
   "-" +
   String(ordinal).padStart(suffixWidth, "0");
 const run = Effect.runPromise;
+const spanLogs = { d1: [], do: [] };
+const spanCalls = { d1: [], do: [] };
 const execute = ({ runtime, subject }, path, options = {}) =>
   runtime.dispatchFetch("https://api.fidyapp.com" + path, {
     ...options,
@@ -102,7 +105,13 @@ const observe = async ({ runtime, subject }, { row, scheduled }, journey) => {
       dispatched ??= performance.now();
       const result = await execute({ runtime, subject }, path, options);
       const bytes = new Uint8Array(await result.arrayBuffer());
-      responses.push({ status: result.status, bytes, end: performance.now() });
+      const end = performance.now();
+      responses.push({
+        status: result.status,
+        bytes,
+        end,
+        trace: result.headers.get("fidy-trace-id"),
+      });
       return { status: result.status, body: JSON.parse(new TextDecoder().decode(bytes)) };
     };
     await journey(call);
@@ -134,6 +143,12 @@ const observe = async ({ runtime, subject }, { row, scheduled }, journey) => {
     completedAt: end,
   }));
   record("attempts", row);
+  spanCalls[row.variant].push({
+    cell: row.cell,
+    user: row.user,
+    sample: row.sample,
+    traces: responses.map((reply) => reply.trace),
+  });
 };
 const accountability = async (variant, subject) => {
   const receipt = variant === "do" ? "canonical_request_receipts" : "canonical_request_replays";
@@ -451,6 +466,11 @@ const measure = async (native, d1) => {
   });
   await write("audit", audits);
   await retainedFixtures(variants);
+  for (const variant of Object.keys(variants)) {
+    for (const row of correlateWorkerSpans(spanLogs[variant], spanCalls[variant])) {
+      record("worker-spans", { variant, ...row });
+    }
+  }
 };
 await write("plan", {
   baseline,
@@ -479,10 +499,10 @@ await write("plan", {
     : "nearest-rank p95 D1 / DO >= 1.8 at both measured boundaries; compare complete bodies and per-User audited read/write, accounting and receipt deltas",
 });
 const program = Effect.gen(function* () {
-  const native = yield* makeBrowserRuntime;
+  const native = yield* makeBrowserRuntimeWithLogs(spanLogs.do);
   if (nativeOnly) return yield* Effect.tryPromise(() => measure(native));
   const d1 = yield* Effect.acquireRelease(
-    Effect.tryPromise(() => d1Platform(root)),
+    Effect.tryPromise(() => d1Platform(root, spanLogs.d1)),
     (platform) => Effect.tryPromise(() => platform.runtime.dispose()).pipe(Effect.orDie)
   );
   yield* Effect.tryPromise(() => measure(native, d1));

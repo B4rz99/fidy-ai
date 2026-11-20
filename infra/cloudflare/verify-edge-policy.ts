@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "3eeb24f3678d1a657786d6abafa2f58706de110e2955b7e1670b72f4e509fbc2";
+const expectedEdgePolicyDigest = "0a273a4ec69ba97a197c83ddb439b1b5a02d1e463603f30d09a14b4c2d1d2184";
 const securityArtifacts = [
   ...(await Promise.all(
     [
@@ -37,6 +37,7 @@ const securityArtifacts = [
       "../../scripts/infra-performance/canonical-fixture/interrupted_upload.py",
       "../../scripts/infra-performance/canonical-fixture/unsealed_stage.py",
       "../../scripts/infra-performance/canonical-fixture/staged_application.py",
+      "../../scripts/infra-performance/canonical-fixture/pairing_stage.py",
       "../../apps/server/cloudflare/fixture-fallback-core.ts",
       "../../apps/server/cloudflare/fixture-fallback-ingress.ts",
       "../../apps/server/cloudflare/release-isolation/runtime.ts",
@@ -71,6 +72,13 @@ const securityArtifacts = [
       "../../scripts/infra-performance/cells/owner_transport.py",
       "../../scripts/infra-performance/cells/owner_cloud.py",
       "../../scripts/infra-performance/cells/owner_bundle.py",
+      "../../scripts/infra-performance/cells/browser_window.py",
+      "../../scripts/infra-performance/cells/browser_assets.py",
+      "../../scripts/infra-performance/d1-budget.ts",
+      "../../scripts/infra-performance/hosted-browser/origin.mjs",
+      "../../scripts/infra-performance/hosted-browser/captured-profile.mjs",
+      "../../scripts/infra-performance/hosted-browser/protected-pair.mjs",
+      "../../scripts/infra-performance/hosted-browser/scoped-correction.mjs",
       "../../scripts/infra-performance/deployed-fleet/ten-source.sh",
       "../../scripts/infra-performance/deployed-fleet/ten.py",
       "../../scripts/infra-performance/deployed-fleet/pilot.py",

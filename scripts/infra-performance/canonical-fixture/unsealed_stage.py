@@ -53,7 +53,7 @@ RESEAL_STEPS = {
 }
 
 
-def verify_dispatch(env, git=git_read):
+def verify_dispatch(env, git=git_read, application=APPLICATION):
     verifier = env.get("GITHUB_SHA", "")
     operation = env.get("FIXTURE_RELEASE_OPERATION")
     builds = {"diagnose-fixture-pairing":"fallback", "reseal-fixture-fallback":"fallback", "recover-fixture-fallback":"fallback",
@@ -67,7 +67,7 @@ def verify_dispatch(env, git=git_read):
             or env.get("NATIVE_FIXTURE_BUILD") != builds[operation] or git("rev-parse", "HEAD") != verifier
             or env.get("NATIVE_FIXTURE_SIGNER_SHA256") != fixture_upload()["fingerprint"]):
         raise ValueError("A first-attempt protected verifier and the closed signed installation are required")
-    verify_tree(verifier, git)
+    verify_tree(verifier, git, application)
 
 
 def staged_documents(get=actions_get):

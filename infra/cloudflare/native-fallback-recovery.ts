@@ -124,18 +124,25 @@ export const fromArchivedStage = (source: Release["snapshot"]): boolean =>
 
 export const requirePromotedDormantSource = Effect.fn(function* (
   port: StageReader,
-  snapshot: Release["snapshot"]
+  snapshot: Release["snapshot"],
+  sealed?: Release
 ) {
   for (const role of ["core", "public"] as const) {
     const [active, staged] = yield* port.recentDeployments(snapshot[role].name);
-    const version = archivedDormant[`${role}VersionId`];
+    const version = (sealed ?? archivedDormant)[`${role}VersionId`];
+    const expected = {
+      id: snapshot[role].deploymentId,
+      versions: [{ id: version, percentage: 100 }],
+    };
+    const ownsStage =
+      staged !== undefined &&
+      (sealed !== undefined
+        ? matchesStage(staged, sealed, role)
+        : matchesOriginalStage(staged, role));
     if (
-      active === undefined ||
-      active.id !== snapshot[role].deploymentId ||
-      active.versions.length !== 1 ||
-      (yield* releaseController.servingVersion(active)) !== version ||
-      staged === undefined ||
-      !matchesOriginalStage(staged, role)
+      !isDeepStrictEqual(active, expected) ||
+      snapshot[role].stableVersionId !== version ||
+      !ownsStage
     ) {
       return yield* Effect.fail(
         Error("Active source differs from the sealed dormant deployment history")

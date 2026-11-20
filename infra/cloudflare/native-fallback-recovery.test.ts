@@ -8,6 +8,7 @@ import {
   archivedDormant,
   recoverFixtureFallback,
   requireDormantReplacementSource,
+  requirePromotedDormantSource,
   verifyUnpromotedFallback,
 } from "./native-fallback-recovery";
 
@@ -272,4 +273,35 @@ it.effect("replaces only the archived zero-traffic pair over the captured stable
     expect(yield* Effect.isFailure(requireDormantReplacementSource(port, snapshot))).toBe(true);
     expect(writes).toEqual([]);
   })
+);
+
+it.effect(
+  "admits the active receipt only above the promoted, sealed replacement in both Worker histories",
+  () =>
+    Effect.gen(function* () {
+      const { port, deployments } = harness();
+      const promoted = yield* recoverFixtureFallback(port, stage, verify);
+      const snapshot = {
+        ...stage.release.snapshot,
+        stableRevision: stage.revision,
+        core: {
+          name: core,
+          deploymentId: promoted.coreDeploymentId,
+          stableVersionId: stage.release.coreVersionId,
+        },
+        public: {
+          name: ingress,
+          deploymentId: promoted.publicDeploymentId,
+          stableVersionId: stage.release.publicVersionId,
+        },
+      };
+      yield* requirePromotedDormantSource(port, snapshot, stage.release);
+      deployments(core).splice(1, 1, {
+        id: uuid(35),
+        versions: [{ id: stage.release.coreVersionId, percentage: 100 }],
+      });
+      expect(
+        yield* requirePromotedDormantSource(port, snapshot, stage.release).pipe(Effect.isFailure)
+      ).toBe(true);
+    })
 );

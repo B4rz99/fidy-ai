@@ -12,13 +12,26 @@ const rowReceipt = Schema.decodeUnknownSync(
   Schema.Struct({
     ...Rows.fields,
     route: Schema.optional(Schema.String),
-    calls: Schema.optional(Schema.Array(Schema.Struct({ ...Rows.fields, key: Schema.String }))),
+    calls: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          ...Rows.fields,
+          key: Schema.String,
+          child: Schema.optional(Schema.String),
+          calls: Schema.optional(
+            Schema.Array(Schema.Struct({ ...Rows.fields, key: Schema.String }))
+          ),
+        })
+      )
+    ),
   })
 );
 const calibration = Schema.decodeUnknownSync(
   Schema.Struct({
     baseline: Schema.String,
-    browserUser: Schema.optional(Schema.Struct({ id: Schema.String, startedAtMs: Schema.Int, endsAtMs: Schema.Int })),
+    browserUser: Schema.optional(
+      Schema.Struct({ id: Schema.String, startedAtMs: Schema.Int, endsAtMs: Schema.Int })
+    ),
     verified: Schema.Record(Schema.String, Schema.Int),
     batches: Schema.Array(
       Schema.Struct({
@@ -100,7 +113,9 @@ const expected = (await expectation.exists())
   ? Schema.decodeUnknownSync(
       Schema.Struct({
         history: Schema.Unknown,
-        workspace: Schema.optional(Schema.Struct({ profile: Schema.Unknown, review: Schema.Unknown })),
+        workspace: Schema.optional(
+          Schema.Struct({ profile: Schema.Unknown, review: Schema.Unknown })
+        ),
         inspections: Schema.Record(Schema.String, Schema.Unknown),
       })
     )(await expectation.json())
@@ -214,7 +229,12 @@ const learn = (route, calls) => {
   const previous = estimates[route] ?? { maximum: empty(), statements: {} };
   const statements = { ...previous.statements };
   for (const entry of calls) {
-    statements[entry.key] = maximumOf(statements[entry.key] ?? empty(), headroom(entry));
+    if (entry.child && entry.calls) {
+      learn(entry.child, entry.calls);
+      statements[entry.key] = estimates[entry.child].maximum;
+    } else {
+      statements[entry.key] = maximumOf(statements[entry.key] ?? empty(), headroom(entry));
+    }
   }
   const maximum = calls.reduce((total, entry) => add(total, statements[entry.key]), empty());
   estimates[route] = { maximum: maximumOf(previous.maximum, maximum), statements };
@@ -313,7 +333,14 @@ try {
         .prepare(
           "UPDATE users SET whatsapp_portfolio_id=?,whatsapp_bsuid=?,whatsapp_verified_at_ms=?,trial_started_at_ms=?,trial_ends_at_ms=? WHERE id=?"
         )
-        .bind("acceptance-portfolio", "CO.Reference", now, plan.browserUser?.startedAtMs ?? now, plan.browserUser?.endsAtMs ?? now + trialMs, subject),
+        .bind(
+          "acceptance-portfolio",
+          "CO.Reference",
+          now,
+          plan.browserUser?.startedAtMs ?? now,
+          plan.browserUser?.endsAtMs ?? now + trialMs,
+          subject
+        ),
       db
         .prepare(
           "INSERT INTO consent_history(record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,?,?,?,?,?)"
@@ -365,9 +392,12 @@ try {
     throw interruption;
   }
   if (refuse) {
-    const denied = await source(plan.browserUser ? "/web/session/binding?context=transactions" : "/transactions?limit=25", {
-      headers: { cookie, "Fidy-Session-Binding": binding },
-    });
+    const denied = await source(
+      plan.browserUser ? "/web/session/binding?context=transactions" : "/transactions?limit=25",
+      {
+        headers: { cookie, "Fidy-Session-Binding": binding },
+      }
+    );
     const unavailable = 503;
     assert.equal(denied.status, unavailable, "a zero native ceiling must refuse before Audit");
     assert.equal(denied.headers.get("x-fidy-comparison-cost"), null);
@@ -381,51 +411,93 @@ try {
     metadata.result = "zero ceiling refused authenticated work";
   } else if (plan.browserUser) {
     assert.ok(expected?.workspace);
-    const headers = {cookie, "Fidy-Session-Binding": binding};
+    const headers = { cookie, "Fidy-Session-Binding": binding };
     for (const [id, detail] of inspections) {
       await Bun.sleep(secondMs);
-      const reply = await request("/transactions/" + id, {headers});
+      const reply = await request("/transactions/" + id, { headers });
       assert.equal(reply.status, success);
       assert.deepEqual(await reply.json(), detail);
     }
-    const {runBrowser} = await import("../hosted-browser/captured-profile.mjs");
+    const { runBrowser } = await import("../hosted-browser/captured-profile.mjs");
     const d1BrowserRoutes = [];
-    await runBrowser({variant:"d1", origins:{browser:origin,api:"https://api.fidyapp.com"}, cookie,
-      expected:expected.history, workspace:expected.workspace,
+    await runBrowser({
+      variant: "d1",
+      origins: { browser: origin, api: "https://api.fidyapp.com" },
+      cookie,
+      expected: expected.history,
+      workspace: expected.workspace,
       forward: async (incoming) => {
         const url = new URL(incoming.url);
         const path = url.pathname + url.search;
-        const options = {method:incoming.method,headers:Object.fromEntries(incoming.headers)};
+        const options = { method: incoming.method, headers: Object.fromEntries(incoming.headers) };
         if (incoming.method === "OPTIONS") {
-          const reply = await source(path,options);
-          assert.equal(reply.status,204);
+          const reply = await source(path, options);
+          assert.equal(reply.status, 204);
           return reply;
         }
-        d1BrowserRoutes.push(incoming.method+" "+path);
+        d1BrowserRoutes.push(incoming.method + " " + path);
         return request(path, options);
-      }
+      },
     });
     const routes = d1BrowserRoutes.reduce((counts, route) => {
       counts[route] = (counts[route] ?? 0) + 1;
       return counts;
     }, {});
-    assert.equal(routes["GET /user"],30);
-    assert.equal(routes["GET /transactions?limit=25&from=2026-11-01T05%3A00%3A00.000Z&to=2026-12-01T05%3A00%3A00.000Z"],30);
-    assert.equal(routes["GET /ingestion/review-workspace?limit=0&status=pending"],1);
+    assert.equal(routes["GET /user"], 30);
+    assert.equal(
+      routes[
+        "GET /transactions?limit=25&from=2026-11-01T05%3A00%3A00.000Z&to=2026-12-01T05%3A00%3A00.000Z"
+      ],
+      30
+    );
+    assert.equal(routes["GET /ingestion/review-workspace?limit=0&status=pending"], 1);
+    const { proveScopedCorrection } = await import("../hosted-browser/scoped-correction.mjs");
+    metadata.mutation = await proveScopedCorrection(
+      expected.history,
+      async (method, path, body) => {
+        await Bun.sleep(secondMs);
+        return request(path, {
+          method,
+          headers: { ...headers, "content-type": "application/json" },
+          ...(body ? { body: JSON.stringify(body) } : {}),
+        });
+      }
+    );
     const audits = await db.batch([
-      db.prepare("SELECT operation,outcome,count(*) AS n FROM audit_entries WHERE user_id=? AND session_id=? GROUP BY operation,outcome ORDER BY operation,outcome").bind(subject,binding),
-      db.prepare("SELECT (SELECT coalesce(sum(units),0) FROM commercial_allowance_consumptions WHERE user_id=?1 AND allowance='canonical_call') AS units,(SELECT count(*) FROM canonical_request_replays WHERE user_id=?1 AND state='completed') AS receipts").bind(subject),
+      db
+        .prepare(
+          "SELECT operation,outcome,count(*) AS n FROM audit_entries WHERE user_id=? AND session_id=? GROUP BY operation,outcome ORDER BY operation,outcome"
+        )
+        .bind(subject, binding),
+      db
+        .prepare(
+          "SELECT (SELECT coalesce(sum(units),0) FROM commercial_allowance_consumptions WHERE user_id=?1 AND allowance='canonical_call') AS units,(SELECT count(*) FROM canonical_request_replays WHERE user_id=?1 AND state='completed') AS receipts"
+        )
+        .bind(subject),
     ]);
-    account("audit",audits);
-    const count = (operation) => audits[0].results.find(row=>row.operation===operation && row.outcome==="success")?.n;
-    assert.equal(count("transactions.listTransactions"),31);
-    assert.equal(count("transactions.getTransaction"),8);
-    assert.equal(count("transactions.updateTransaction"),undefined);
-    assert.deepEqual(audits[1].results,[{units:0,receipts:0}]);
-    const limits = training ? estimates : routeBounds(await Bun.file(resolve(output, "limits.json")).json());
-    Object.assign(metadata, {result:"passed",sqlBatches,routes,sessionAudit:audits[0].results,commercial:audits[1].results[0],
-      fullEstimate:[...sqlBatches.map(b=>b.maximum),...requests.map(entry=>limits[entry.route].maximum)].reduce(add,empty())});
-    if (training) await Bun.write(resolve(output, "limits.json"), JSON.stringify(estimates, null, 2));
+    account("audit", audits);
+    const count = (operation) =>
+      audits[0].results.find((row) => row.operation === operation && row.outcome === "success")?.n;
+    assert.equal(count("transactions.listTransactions"), 33);
+    assert.equal(count("transactions.getTransaction"), 8);
+    assert.equal(count("transactions.updateTransaction"), 1);
+    assert.deepEqual(audits[1].results, [{ units: 0, receipts: 0 }]);
+    const limits = training
+      ? estimates
+      : routeBounds(await Bun.file(resolve(output, "limits.json")).json());
+    Object.assign(metadata, {
+      result: "passed",
+      sqlBatches,
+      routes,
+      sessionAudit: audits[0].results,
+      commercial: audits[1].results[0],
+      fullEstimate: [
+        ...sqlBatches.map((b) => b.maximum),
+        ...requests.map((entry) => limits[entry.route].maximum),
+      ].reduce(add, empty()),
+    });
+    if (training)
+      await Bun.write(resolve(output, "limits.json"), JSON.stringify(estimates, null, 2));
   } else {
     /** @type {string | undefined} */
     let responseSha256;

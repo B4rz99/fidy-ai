@@ -16,6 +16,7 @@ import { openPerformanceBrowser } from "../../../infra/cloudflare/native-accepta
 
 const api = installedOrigins.acceptance;
 const minimumSecret = 32;
+const caseIntervalMs = 1000;
 const session = Schema.Struct({ cookie: Schema.String, binding: Schema.String });
 const command = Schema.Struct({
   path: Schema.String,
@@ -173,27 +174,51 @@ const runMountedWorkspace = (
     const manifest = await Bun.file(
       process.env.FIDY_DIAGNOSTIC_DIR + "/native/fixture/manifest.json"
     ).json();
+    const environment = environmentOf(await Effect.runPromise(authority));
+    const forward = async (request: Request): Promise<Response> => {
+      request.headers.set(
+        acceptanceProofHeader,
+        await Effect.runPromise(
+          signAcceptanceRequest({
+            request,
+            boundary: "ingress",
+            environment,
+            deadline: Date.now() + acceptanceLifetimeMs,
+          })
+        )
+      );
+      return Effect.runPromise(transport(runtime)(request));
+    };
     await runBrowser({
       variant: "do",
       origins: api,
       cookie: active.cookie,
       expected: manifest.history,
       workspace: manifest.workspace,
-      forward: async (request: Request) => {
-        request.headers.set(
-          acceptanceProofHeader,
-          await Effect.runPromise(
-            signAcceptanceRequest({
-              request,
-              boundary: "ingress",
-              environment: environmentOf(await Effect.runPromise(authority)),
-              deadline: Date.now() + acceptanceLifetimeMs,
-            })
-          )
-        );
-        return Effect.runPromise(transport(runtime)(request));
-      },
+      forward,
     });
+    const { proveScopedCorrection } = await import("../hosted-browser/scoped-correction.mjs");
+    const mutation = await proveScopedCorrection(
+      manifest.history,
+      async (method: string, path: string, body?: unknown) => {
+        await Bun.sleep(caseIntervalMs);
+        return forward(
+          new Request(api.api + path, {
+            method,
+            headers: {
+              origin: api.browser,
+              ...sessionHeaders(active),
+              "content-type": "application/json",
+            },
+            ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+          })
+        );
+      }
+    );
+    await Bun.write(
+      process.env.FIDY_DIAGNOSTIC_DIR + "/ordinary-native-mutation.json",
+      JSON.stringify(mutation)
+    );
     offer({ status: 200 });
   });
 export const serveFixture = Effect.fn(function* (runtime: Miniflare) {

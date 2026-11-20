@@ -423,7 +423,12 @@ try {
   evidence.snapshot = schemaSnapshot;
   if (browserFixture) {
     const counts = Object.fromEntries(tables.map((table) => [table.name, table.rowCount]));
-    for (const name of ["budgets", "recurring_plans", "recurring_plan_revisions", "ingestion_review_items"]) {
+    for (const name of [
+      "budgets",
+      "recurring_plans",
+      "recurring_plan_revisions",
+      "ingestion_review_items",
+    ]) {
       assert.equal(counts[name], 0, "Unexpected unrelated workspace rows in " + name);
     }
     assert.equal(counts.transactions, 8);

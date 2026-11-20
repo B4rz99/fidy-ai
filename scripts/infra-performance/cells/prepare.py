@@ -60,6 +60,8 @@ def main():
             else:
                 path.write_bytes(original)
     inspection_ids = []
+    mutation_target = None
+    mutation_subject = None
     if args.canonical_fixture:
         sys.path.insert(0, str(HERE.parent / "canonical-fixture"))
         from mirror import materialize
@@ -67,6 +69,9 @@ def main():
         if args.browser_workspace != ("workspace" in observed):
             raise ValueError("Signed workspace and requested comparator workload differ")
         inspection_ids = sorted(observed["inspections"])
+        if args.browser_workspace:
+            mutation_subject = observed["workspace"]["profile"]["data"]["id"]
+            mutation_target, = [r["id"] for r in observed["history"]["data"] if r["counterparty"] == "Evaluación 2"]
         (out / "expected.json").write_text(json.dumps({"history": observed["history"], "inspections": observed["inspections"], **({"workspace": observed["workspace"]} if args.browser_workspace else {})}, ensure_ascii=False))
     if args.snapshot or args.materialized:
         # Use the same package and migration registry as the frozen Alchemy D1 provider.
@@ -99,12 +104,12 @@ def main():
     (out / "ingress-entry.mjs").write_text(
         'import ingress from "./public-worker.mjs";\n'
         'import { privateIngress } from "./private-ingress.mjs";\n'
-        f'export default privateIngress(ingress, {json.dumps(inspection_ids)}, {json.dumps(args.browser_workspace)});\n')
+        f'export default privateIngress(ingress, {json.dumps(inspection_ids)}, {json.dumps(mutation_target)});\n')
     (out / "core-entry.mjs").write_text(
         'import core, { UserTransactionCoordinator as Coordinator } from "./core-worker.mjs";\n'
         'import { meteredCore } from "./meter.mjs";\n'
         'import { training, limits } from "./configured-limits.mjs";\n'
-        'const { worker, UserTransactionCoordinator } = meteredCore(core, Coordinator, { training, limits });\n'
+        f'const {{ worker, UserTransactionCoordinator }} = meteredCore(core, Coordinator, {{ training, limits, mutationSubject: {json.dumps(mutation_subject)} }});\n'
         'export { worker as default, UserTransactionCoordinator };\n')
     subprocess.run(["bun", "build", "ingress-entry.mjs", "--target=browser", "--external=cloudflare:workers", "--external=node:*",
                     "--outfile", "bounded-ingress.mjs"], cwd=out, check=True)

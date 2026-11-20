@@ -45,12 +45,17 @@ const admitted = async (request, env, paths) => {
 /**
  * @param {PinnedIngress} ingress Frozen application Ingress.
  * @param {ReadonlyArray<string>} inspectionIds Synthetic Transaction IDs verified at bundle time.
+ * @param {string | null} mutationTarget One signed original for the scoped profile.
  */
-export const privateIngress = (ingress, inspectionIds = [], browserWorkspace = false) => {
+export const privateIngress = (ingress, inspectionIds = [], mutationTarget = null) => {
   const paths = new Set([...fixed, ...inspectionIds.map((id) => "GET /transactions/" + id)]);
-  if (browserWorkspace) for (const path of browserReads) {
-    paths.add("GET " + path);
-    paths.add("OPTIONS " + path);
+  if (mutationTarget && inspectionIds.includes(mutationTarget)) {
+    paths.add("PUT /transactions/" + mutationTarget);
+    paths.add("POST /operations/atomic-batch");
+    for (const path of browserReads) {
+      paths.add("GET " + path);
+      paths.add("OPTIONS " + path);
+    }
   }
   /** @type {string | undefined} */
   let born;

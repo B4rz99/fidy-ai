@@ -153,9 +153,10 @@ const zeroReceipt = (value) =>
 // Only that exact child request is permitted. Its mounted owner has a zero-D1 envelope.
 /**
  * @param {CoreEnvironment} env Bound disposable Core resources.
+ * @param {MeterConfig} config Protected package and fixture scope.
  * @returns {CoreEnvironment}
  */
-const guardedEnvironment = (env) => {
+const guardedEnvironment = (env, config) => {
   const isolated = { ...env, DB: binding(env.DB) };
   /** @type {ReadonlyArray<"USER_TRANSACTION_COORDINATOR" | "ERASURE_REGISTRY_COORDINATOR">} */
   const namespaces = ["USER_TRANSACTION_COORDINATOR", "ERASURE_REGISTRY_COORDINATOR"];
@@ -166,13 +167,56 @@ const guardedEnvironment = (env) => {
       getByName: (owner, options) => ({
         fetch: async (input, init) => {
           const request = new Request(input, init);
+          const frame = context();
+          const child = request.method + " " + new URL(request.url).pathname;
+          const expectedChild = frame.route.startsWith("PUT /transactions/")
+            ? "POST /call"
+            : frame.route === "POST /operations/atomic-batch"
+              ? "POST /batch"
+              : null;
+          if (
+            config.mutationSubject &&
+            name === "USER_TRANSACTION_COORDINATOR" &&
+            owner === config.mutationSubject &&
+            new URL(request.url).origin === "https://coordinator.internal" &&
+            child === expectedChild
+          ) {
+            const key = "coordinator:" + child;
+            const cap = reserve(frame, key);
+            if (cap && fields.some((field) => cap[field] !== config.limits[child]?.maximum[field]))
+              stop();
+            frame.inflight++;
+            try {
+              const response = await namespace.getByName(owner, options).fetch(request);
+              const cost = JSON.parse(response.headers.get(receipt) ?? "null");
+              if (
+                !cost ||
+                !fields.every((field) => count(cost[field]) && (!cap || cost[field] <= cap[field]))
+              )
+                stop();
+              if (frame.training && (cost.route !== child || !Array.isArray(cost.calls))) stop();
+              frame.calls.push({
+                key,
+                child,
+                rowsRead: cost.rowsRead,
+                rowsWritten: cost.rowsWritten,
+                ...(frame.training ? { calls: cost.calls } : {}),
+              });
+              for (const field of fields) frame.used[field] += cost[field];
+              return response;
+            } catch {
+              return stop();
+            } finally {
+              frame.inflight--;
+              if (cap) for (const field of fields) frame.pending[field] -= cap[field];
+            }
+          }
           if (
             owner !== "erasure-registry-v1" ||
             request.url !== "https://erasure-registry.invalid/metadata"
           ) {
             stop();
           }
-          const frame = context();
           frame.inflight++;
           try {
             const response = await namespace.getByName(owner, options).fetch(request);
@@ -204,6 +248,7 @@ const measured = async ({ limits, training }, request, run) => {
   /** @type {Frame} */
   const frame = {
     zeroOnly,
+    route,
     training,
     closed: false,
     inflight: 0,
@@ -249,7 +294,7 @@ export const meteredCore = (core, Coordinator, config) => {
      * @param {CoreEnvironment} env Disposable bindings.
      */
     constructor(state, env) {
-      this.owner = new Coordinator(state, guardedEnvironment(env));
+      this.owner = new Coordinator(state, guardedEnvironment(env, config));
     }
     /** @param {Request} request Original request. */
     fetch(request) {
@@ -264,7 +309,7 @@ export const meteredCore = (core, Coordinator, config) => {
      */
     fetch(request, env, execution) {
       return measured(config, request, () =>
-        core.fetch(request, guardedEnvironment(env), execution)
+        core.fetch(request, guardedEnvironment(env, config), execution)
       );
     },
   };

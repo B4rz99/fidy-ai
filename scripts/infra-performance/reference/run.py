@@ -178,10 +178,10 @@ def observation(path, env, destination, variant="d1"):
         scratch = stack.enter_context(tempfile.TemporaryDirectory(prefix="fidy-reference-"))
         api = stack.enter_context(
             serve(
-                ["bun", "apps/server/cloudflare/browser-acceptance-preview.ts" if variant == "d1"
+                ["bun", "apps/server/cloudflare/diagnostic-browser-preview.ts" if variant == "d1"
                  else "scripts/infra-performance/reference/native.ts"],
                 path,
-                {**env, "TMPDIR": scratch, "TEMP": scratch, "TMP": scratch},
+                {**env, "REFERENCE_PRESSURE_FILE":str(destination / "pressure.jsonl"), "TMPDIR": scratch, "TEMP": scratch, "TMP": scratch},
                 destination / "api.log",
             )
         )
@@ -322,7 +322,10 @@ def main():
     plan = {
         "revisions": revisions,
         "installations": {k: str(v) for k, v in paths.items()},
-        "scope": "local synthetic reference",
+        "scope": "clock and User request pressure diagnostic only; no adoption ratio",
+        "cohort": os.environ["REFERENCE_PRESSURE_COHORT"],
+        "instrumentation": "One post-response SELECT, including after refusals. Ahead is bucket virtual milliseconds beyond the sampled clock; threshold is 900. Cap is 2 live leases. Non-transaction latency includes diagnostic inspection.",
+        "setup": "original setup sequence" if os.environ["REFERENCE_PRESSURE_COHORT"] == "consecutive" else "100 ms before each of eight Dashboard fixture edits; 1100 ms after all calibration before startup; original interactions and timing boundaries thereafter",
         "origin": args.origin,
         "host": platform.platform(),
         "bun": output(["bun", "--version"], ROOT),

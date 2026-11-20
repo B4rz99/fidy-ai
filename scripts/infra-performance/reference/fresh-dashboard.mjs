@@ -65,6 +65,7 @@ export const prepareReferenceDashboard = async (request, { api, headers }) => {
   // Each insertion and subsequent removal transform the previously committed layout.
   await edits.reduce(async (applied, data) => {
     await applied;
+    if (process.env.REFERENCE_PRESSURE_COHORT === "setup-isolated") await Bun.sleep(100);
     const reply = await request.post(api + "/dashboard/edits", { headers, data });
     if (reply.status() !== success) process.stderr.write("REFERENCE_HTTP " + reply.status() + "\n");
     assert.equal(reply.status(), success, "Dashboard fixture edit failed");

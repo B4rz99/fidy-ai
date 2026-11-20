@@ -126,6 +126,7 @@ try {
     await prepareReferenceDashboard(request, installation);
     process.stderr.write("REFERENCE_STAGE recurring-fixture\n");
     await prepareReferenceRecurring(request, installation);
+    if (process.env.REFERENCE_PRESSURE_COHORT === "setup-isolated") await Bun.sleep(1100);
   }
   const { before, startupMs, readMs, correctionMs } = await freshTransactions({
     page,

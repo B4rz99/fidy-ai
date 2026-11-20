@@ -1,3 +1,4 @@
+import { recordPressure } from "./pressure-probe.mjs";
 import { BunFileSystem } from "@effect/platform-bun";
 import { Effect, Option, Schema } from "effect";
 import type { DurableObjectStorageHandle, Miniflare } from "miniflare";
@@ -13,9 +14,18 @@ const timedResponse = Effect.fn(function* (
   request: Request
 ) {
   let started = Option.none<number>();
+  const from = performance.now();
   const response = yield* forward(runtime, request, () => {
     started = Option.some(performance.now());
   });
+  yield* Effect.tryPromise(() =>
+    recordPressure(
+      request,
+      response,
+      from,
+      async (query, user, now) => (await owner.exec(query, user, now))[0]
+    )
+  );
   if (Option.isNone(started) || !new URL(request.url).pathname.startsWith("/transactions")) {
     const tooManyRequests = 429;
     return response.status === tooManyRequests

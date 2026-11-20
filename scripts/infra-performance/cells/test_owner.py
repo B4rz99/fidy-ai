@@ -23,6 +23,20 @@ class ConditionalObject:
 
 
 class NativeAccountingTests(unittest.TestCase):
+    def test_one_refresh_still_requires_the_committed_and_rolled_back_audit(self):
+        from browser_window import NATIVE_EXPECTED, native_delta
+
+        before = dict(groups=[], canonicalUnits=0, receipts=0)
+        single_refresh = {**NATIVE_EXPECTED, ("transactions.listTransactions", "success"): 4}
+        after = dict(groups=[[*key, count] for key, count in single_refresh.items()],
+                     canonicalUnits=0, receipts=0)
+        self.assertTrue(native_delta(before, after, refreshes=1)["verified"])
+        missing_rollback = {**after, "groups": [
+            row for row in after["groups"] if row[0] != "operations.executeAtomicBatch"
+        ]}
+        with self.assertRaises(Refused):
+            native_delta(before, missing_rollback, refreshes=1)
+
     def test_required_delta_when_persisted_fixture_setup_precedes_browser_window(self):
         from browser_window import NATIVE_EXPECTED, native_delta
 

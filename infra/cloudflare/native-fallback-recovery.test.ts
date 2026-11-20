@@ -2,11 +2,12 @@ import uploadedPair from "./native-pairing-upload.json" with { type: "json" };
 import { Effect } from "effect";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
-import type { Deployment } from "./release-controller";
+import { type Deployment, releaseController } from "./release-controller";
 import {
   type FallbackRepairPort,
   type FallbackStage,
   archivedDormant,
+  matchesReplacementPredecessor,
   recoverFixtureFallback,
   requireDormantReplacementSource,
   requirePromotedDormantSource,
@@ -274,6 +275,64 @@ it.effect("replaces only the archived zero-traffic pair over the captured stable
     };
     expect(yield* Effect.isFailure(requireDormantReplacementSource(port, snapshot))).toBe(true);
     expect(writes).toEqual([]);
+  })
+);
+
+it.effect("qualifies only the exact interrupted pairing deployment and retained snapshot", () =>
+  Effect.gen(function* () {
+    const { port, deployments, writes } = harness();
+    const prior = {
+      snapshot: { ...stage.release.snapshot, revision: uploadedPair.revision },
+      coreDeploymentId: uploadedPair.failedStage.coreDeploymentId,
+      publicDeploymentId: uploadedPair.failedStage.publicDeploymentId,
+      coreVersionId: uploadedPair.coreVersionId,
+      publicVersionId: uploadedPair.publicVersionId,
+    };
+    const snapshot = { ...stage.release.snapshot };
+    for (const role of ["core", "public"] as const) {
+      snapshot[role] = {
+        ...snapshot[role],
+        deploymentId: prior[`${role}DeploymentId`],
+        stableVersionId: archivedDormant.original[role],
+      };
+      prior.snapshot[role] = {
+        ...snapshot[role],
+        deploymentId: archivedDormant[`${role}DeploymentId`],
+      };
+      deployments(snapshot[role].name)[0] = {
+        id: snapshot[role].deploymentId,
+        versions: [
+          { id: prior[`${role}VersionId`], percentage: 0 },
+          { id: snapshot[role].stableVersionId, percentage: 100 },
+        ],
+      };
+    }
+    expect(matchesReplacementPredecessor(prior, snapshot)).toBe(true);
+    expect(matchesReplacementPredecessor({ ...prior, coreVersionId: uuid(250) }, snapshot)).toBe(
+      false
+    );
+    expect(
+      matchesReplacementPredecessor(prior, {
+        ...snapshot,
+        stableContractDigest: "f".repeat(64),
+      })
+    ).toBe(false);
+    yield* requireDormantReplacementSource(port, snapshot);
+    const release = yield* releaseController.stageRelease(port, snapshot, stage.release);
+    yield* verifyUnpromotedFallback({ port, release, verify: Effect.void });
+    const predecessor = deployments(core)[1];
+    if (predecessor === undefined) throw Error("Missing staged predecessor");
+    deployments(core)[1] = {
+      ...predecessor,
+      versions: [
+        { id: archivedDormant.coreVersionId, percentage: 0 },
+        { id: snapshot.core.stableVersionId, percentage: 100 },
+      ],
+    };
+    expect(
+      yield* verifyUnpromotedFallback({ port, release, verify: Effect.void }).pipe(Effect.isFailure)
+    ).toBe(true);
+    expect(writes).toEqual([ingress, core]);
   })
 );
 

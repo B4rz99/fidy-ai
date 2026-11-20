@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "72bab15cdf47e001e63c348fa315325408ef6ebf40ba88a7be2c80f99aee58e1";
+const expectedEdgePolicyDigest = "1b71086ed8408ca34a834dc20cf81314590cf7c674dd4b950f013600c6b0c7ab";
 const securityArtifacts = [
   ...(await Promise.all(
     [
@@ -93,7 +93,7 @@ const securityArtifacts = [
       "../../scripts/infra-performance/hosted-browser/captured-profile.mjs",
       "../../scripts/infra-performance/hosted-browser/protected-pair.mjs",
       "../../scripts/infra-performance/hosted-browser/native-accounting.ts",
-      "../../scripts/infra-performance/hosted-browser/native-smoke.mjs",
+      "../../scripts/infra-performance/hosted-browser/native-smoke.ts",
       "../../scripts/infra-performance/hosted-browser/scoped-correction.mjs",
       "../../scripts/infra-performance/deployed-fleet/ten-source.sh",
       "../../scripts/infra-performance/deployed-fleet/ten.py",

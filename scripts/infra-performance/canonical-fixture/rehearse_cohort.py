@@ -120,7 +120,7 @@ def rehearse_native_smoke(directory, path, coords, proof, out):
         )),
     )
     result = subprocess.run(
-        ["bun", "scripts/infra-performance/hosted-browser/native-smoke.test-fixture.mjs"],
+        ["bun", "scripts/infra-performance/hosted-browser/native-smoke.test-fixture.ts"],
         cwd=ROOT, timeout=180, text=True, stdout=subprocess.PIPE, check=True,
         env={**os.environ, "FIDY_DIAGNOSTIC_DIR": str(out)},
         input=json.dumps(dict(config=config, capture=private_file(directory, "native-receipt.json"),

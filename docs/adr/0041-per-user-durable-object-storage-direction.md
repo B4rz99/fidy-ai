@@ -357,8 +357,9 @@ reads available. Capacity pressure never silently drops accepted work, extends i
 authorizes deletion of retained data. Sharding, routing caches and new capacity schedulers remain
 unjustified without measured need.
 
-Validate watchdog coverage initially with 1,000 registered User stores, including idle and newly
-registered stores, plus the fixed shared owners. This is a benchmark target, not a customer limit or
+Validate deployed watchdog coverage with ten synthetic registered Users and the three fixed shared
+owners. Stress the same watchdog in workerd with 1,000 registered User stores and the three fixed
+shared owners, including idle and newly registered stores. This is a benchmark target, not a customer limit or
 a demonstrated capacity claim. Retain ADR 0039's active-User and per-User data fixtures. The
 resolution records adjustable initial budgets and requires measurement of idle-check cost, shared
 load, failures and aggregate producer pressure. Persist traversal progress, coalesce overlapping
@@ -412,7 +413,7 @@ correctness, capacity and coverage requirements, with actual measurements report
 invented ratio. Security, expiry and provider-settlement deadlines do not shrink with this target.
 
 [ADR 0039](0039-fresh-read-performance-contract.md) retains the fresh-read definitions, supported
-query shapes, full-lifetime fixtures and 20-active-User workload. The separate 1,000-store watchdog
+query shapes, full-lifetime fixtures and 20-active-User workload. The separate 1,000-store workerd watchdog
 benchmark preserves attempted-check coverage versus completed recovery. Existing absolute
 performance targets remain follow-on objectives; reaching 150 ms is not a prerequisite for this
 migration, nor is its backend target a browser-latency claim.

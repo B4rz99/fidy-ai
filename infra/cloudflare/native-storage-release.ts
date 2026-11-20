@@ -13,6 +13,7 @@ import { inspectDeployedEdge } from "./native-deployed-edge";
 import { inspectNativeResources, verifyDeployedVersion } from "./native-deployed-graph";
 import type { NativeRole } from "./native-graph";
 import { continueAdmittedErasure } from "./native-erasure-continuation";
+import { executeTen, prepareTen } from "./native-ten-release";
 import { continueFleetCleanup, runFleetPilot } from "./native-fleet-pilot";
 import { admittedErasureLogins, exerciseClosedUsers, fleetBrowser } from "./native-acceptance";
 import { installedOrigins } from "@fidy/server/browser-transport";
@@ -1267,6 +1268,14 @@ const meter = (
     | "renew-cleanup"
     | "settle"
     | "archived-logs"
+    | "ten-begin"
+    | "ten-resume"
+    | "ten-objects"
+    | "ten-check"
+    | "ten-cleanup"
+    | "ten-signup"
+    | "ten-logs"
+    | "ten-settle"
     | "refusal",
   ...args: string[]
 ): Effect.Effect<string, ReleaseFailure> =>
@@ -1280,7 +1289,10 @@ const meter = (
     ],
     lifetime: "read-only",
   });
-const settleFleetMeter = Effect.fn(function* (revision: string, phase: "finish" | "settle") {
+const settleFleetMeter = Effect.fn(function* (
+  revision: string,
+  phase: "finish" | "settle" | "ten-settle"
+) {
   const settled = yield* meter(revision, phase, String(yield* Clock.currentTimeMillis)).pipe(
     Effect.map((status) => status.trim()),
     Effect.repeat({
@@ -1417,6 +1429,7 @@ const fleetPilot = Effect.fn(function* (
     verifierRevision: verifier.revision,
   });
   const browser = fleetBrowser({
+    subject: "fleet-1",
     revision: env.revision,
     proof: Redacted.make(env.smokeProof),
     origins: installedOrigins.acceptance,
@@ -1469,7 +1482,57 @@ const fleetVerification =
   ) => ReturnType<typeof fleetPilot>) =>
   (env: Config, client: HttpClient.HttpClient, port: ReleasePort) =>
     fleetPilot(env, client, { port, operation });
+type TenAction = "ten-prepare" | "ten-hosted" | "continue-ten-cleanup";
+const tenFleet = Effect.fn(function* (
+  verifier: Config,
+  client: HttpClient.HttpClient,
+  { port, action }: { port: ReleasePort; action: TenAction }
+) {
+  const env = yield* installedConfig(verifier);
+  if (action === "ten-prepare") yield* meter(env.revision, "ten-begin");
+  if (action === "continue-ten-cleanup") yield* meter(env.revision, "ten-resume");
+  const installed = yield* installedRelease(env, client, {
+    port,
+    staging: false,
+    verifierRevision: verifier.revision,
+  });
+  const input = {
+    revision: env.revision,
+    proof: Redacted.make(env.smokeProof),
+    origins: installedOrigins.acceptance,
+    send: acceptanceSend(client),
+    erasure: Option.none<ErasureObservation>(),
+  };
+  const release: Parameters<typeof prepareTen>[0] = {
+    revision: env.revision,
+    verifierRevision: verifier.revision,
+    publicVersion: installed.publicVersionId,
+    coreVersion: installed.coreVersionId,
+    userNamespace: installed.userNamespace,
+    path: env.smokeAttestationFile + ".fleet",
+    inventory: () => readUserObjects(accountReader(env, client), installed.userNamespace),
+    survivors: admittedErasureLogins(input).logins,
+    browser: (ordinal) => fleetBrowser({ ...input, subject: `fleet-${ordinal}` }),
+    meter: (phase, ...args) => meter(env.revision, phase, ...args),
+    settle: () => settleFleetMeter(env.revision, "ten-settle"),
+  };
+  if (action === "ten-prepare") return yield* prepareTen(release);
+  yield* executeTen(release, action === "continue-ten-cleanup");
+});
+const tenCommand =
+  (
+    action: TenAction
+  ): ((
+    env: Config,
+    client: HttpClient.HttpClient,
+    port: ReleasePort
+  ) => ReturnType<typeof tenFleet>) =>
+  (env, client, port) =>
+    tenFleet(env, client, { port, action });
 const commands = {
+  "ten-prepare": tenCommand("ten-prepare"),
+  "ten-hosted": tenCommand("ten-hosted"),
+  "continue-ten-cleanup": tenCommand("continue-ten-cleanup"),
   "fleet-pilot": fleetVerification("fleet-pilot"),
   "continue-fleet-cleanup": fleetVerification("continue-fleet-cleanup"),
   "capture-hosts": captureHostStage,
@@ -1489,6 +1552,9 @@ if (import.meta.main) {
   const program = Effect.gen(function* () {
     const command = yield* Schema.decodeUnknownEffect(
       Schema.Literals([
+        "ten-prepare",
+        "ten-hosted",
+        "continue-ten-cleanup",
         "fleet-pilot",
         "continue-fleet-cleanup",
         "capture-hosts",

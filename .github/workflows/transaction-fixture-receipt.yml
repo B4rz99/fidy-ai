@@ -1,10 +1,16 @@
 name: Rehearse closed Transaction fixture provenance
 on:
   workflow_dispatch:
+    inputs:
+      split_owner_completion:
+        description: Run the retained-login version matrix only
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
   receipt:
+    if: ${{ !inputs.split_owner_completion }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -57,3 +63,33 @@ jobs:
             apps/server/test-results/closed-release-controls/summary.json
             apps/server/test-results/closed-native-fixture/summary.json
             apps/server/test-results/closed-native-cohort/summary.json
+
+  provider-completion:
+    if: inputs.split_owner_completion
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 8dd3b0d47d655868c1ab4f16b6145a06d99bd721
+          path: closed-baseline
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 1072b915a879bc94c20ae400bad72d945ed8a341
+          path: closed-candidate
+          persist-credentials: false
+      - uses: ./.github/actions/bun-runtime
+      - run: |
+          bash scripts/install-workspace.sh --ignore-scripts
+          (cd closed-baseline && bash scripts/install-workspace.sh --ignore-scripts)
+          (cd closed-candidate && bash scripts/install-workspace.sh --ignore-scripts)
+      - run: python3 scripts/infra-performance/canonical-fixture/rehearse_provider_versions.py
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: provider-completion
+          path: apps/server/test-results/provider-completion

@@ -74,8 +74,13 @@ const sharedBindings = (
 const fixtureGeneration = Effect.fnUntraced(function* (revision: string) {
   const baseline = yield* Config.Boolean("FIDY_REHEARSAL_BASELINE").pipe(Config.withDefault(false));
   const fallback = yield* Config.Boolean("FIDY_REHEARSAL_FALLBACK").pipe(Config.withDefault(false));
+  const placement = yield* Config.String("FIDY_REHEARSAL_SPLIT_OWNERS").pipe(
+    Config.withDefault("combined")
+  );
+  const activePrefix =
+    placement === "combined" ? "./" : "../../../closed-candidate/apps/server/cloudflare/";
   const entry = (name: string): string =>
-    (baseline ? "../../../closed-baseline/apps/server/cloudflare/" : "./") + name + ".ts";
+    (baseline ? "../../../closed-baseline/apps/server/cloudflare/" : activePrefix) + name + ".ts";
   const providerRevision = yield* Config.String("FIDY_NATIVE_FIXTURE_PROVIDER_REVISION").pipe(
     Config.withDefault(revision)
   );
@@ -91,6 +96,51 @@ const fixtureGeneration = Effect.fnUntraced(function* (revision: string) {
     providerRevision,
   };
 });
+/** Give each named object class its own real code and version bindings across workerd restarts. */
+const splitOwnerWorkers = Effect.fnUntraced(function* (input: {
+  configs: { config: MiniflareWorkerConfig }[];
+  revision: string;
+  providerRevision: string;
+}) {
+  const placement = yield* Config.String("FIDY_REHEARSAL_SPLIT_OWNERS").pipe(
+    Config.withDefault("combined")
+  );
+  if (placement === "combined") return input.configs;
+  const core = input.configs.find(({ config }) => config.name === "core");
+  if (!core || !["old-old", "old-new", "new-old", "new-new"].includes(placement)) {
+    return yield* Effect.die("Invalid split-owner workerd composition");
+  }
+  const ownerBindings = {
+    DIRECTORY: { ...nativeOwnerBindings.DIRECTORY, worker: "directory-owner" },
+    USER_STORE: { ...nativeOwnerBindings.USER_STORE, worker: "user-owner" },
+  };
+  const currentEnv = { ...core.config.env, ...ownerBindings };
+  const owner = (name: "Directory" | "UserStore", frozen: boolean): ReturnType<typeof worker> =>
+    worker(
+      ownerBindings[name === "Directory" ? "DIRECTORY" : "USER_STORE"].worker,
+      frozen
+        ? "../../../closed-baseline/apps/server/cloudflare/core-worker.ts"
+        : "../../../closed-candidate/apps/server/cloudflare/core-worker.ts",
+      {
+        env: {
+          ...currentEnv,
+          RELEASE_GIT_SHA: text(frozen ? input.providerRevision : input.revision),
+        },
+        exports: { [name]: nativeOwners[name] },
+      }
+    );
+  const owners = yield* Effect.all([
+    owner("Directory", placement.startsWith("old-")),
+    owner("UserStore", placement.endsWith("-old")),
+  ]);
+  return [
+    ...input.configs.map((entry) =>
+      entry === core ? { config: { ...core.config, env: currentEnv } } : entry
+    ),
+    ...owners,
+  ];
+});
+
 export const closedRuntime = Effect.fnUntraced(function* (
   { revision, secret }: { revision: string; secret: string },
   directory: string = ""
@@ -104,47 +154,48 @@ export const closedRuntime = Effect.fnUntraced(function* (
       ? {}
       : { ACCEPTANCE_PROVIDER_REVISION: text(providerRevision) }),
   };
+  const configs = yield* Effect.all([
+    worker("ingress", ingressEntry, {
+      env: {
+        ...shared,
+        CORE: { type: "worker", worker: "core" },
+        PAT_ADMISSION_KEY: text(deriveSecret(secret, revision, "pat-admission")),
+      },
+    }),
+    worker("core", coreEntry, {
+      env: {
+        ...shared,
+        ...nativeOwnerBindings,
+        EMAIL_BUCKET: { type: "r2", name: "private-email" },
+        STATEMENT_STAGING_BUCKET: { type: "r2", name: "private-statements" },
+        SAMPLE_BUCKET: { type: "r2", name: "private-samples" },
+        ...(baseline ? {} : { NATIVE_FIXTURE_SIGNING_KEY: text(privateKey) }),
+        SQLITE_STORE_CAPACITY_BYTES: text("1000000000"),
+        GOOGLE_CLIENT_ID: text("fidy-native-google"),
+        GOOGLE_CLIENT_SECRET: text(deriveSecret(secret, providerRevision, "google")),
+        GOOGLE_REDIRECT_URI: text(api.api + "/providers/google/callback"),
+        MICROSOFT_CLIENT_ID: text("fidy-native-microsoft"),
+        MICROSOFT_CLIENT_SECRET: text(deriveSecret(secret, providerRevision, "microsoft")),
+        MICROSOFT_REDIRECT_URI: text(api.api + "/providers/microsoft/callback"),
+        RESEND_API_KEY: text(deriveSecret(secret, revision, "resend")),
+      },
+      exports: nativeOwners,
+    }),
+    worker("closed-provider", providerEntry, {
+      env: {
+        ...shared,
+        RELEASE_GIT_SHA: text(providerRevision),
+        ACCEPTANCE_CODE_KEY: text(deriveSecret(secret, providerRevision, "oidc-code")),
+        ACCEPTANCE_GOOGLE_SECRET: text(deriveSecret(secret, providerRevision, "google")),
+        ACCEPTANCE_MICROSOFT_SECRET: text(deriveSecret(secret, providerRevision, "microsoft")),
+        ACCEPTANCE_API_ORIGIN: text(api.api),
+      },
+    }),
+  ]);
   return new Miniflare({
     ...(directory === "" ? {} : { resourcePersistencePath: directory }),
     handleStructuredLogs: (): void => undefined,
-    workers: yield* Effect.all([
-      worker("ingress", ingressEntry, {
-        env: {
-          ...shared,
-          CORE: { type: "worker", worker: "core" },
-          PAT_ADMISSION_KEY: text(deriveSecret(secret, revision, "pat-admission")),
-        },
-      }),
-      worker("core", coreEntry, {
-        env: {
-          ...shared,
-          ...nativeOwnerBindings,
-          EMAIL_BUCKET: { type: "r2", name: "private-email" },
-          STATEMENT_STAGING_BUCKET: { type: "r2", name: "private-statements" },
-          SAMPLE_BUCKET: { type: "r2", name: "private-samples" },
-          ...(baseline ? {} : { NATIVE_FIXTURE_SIGNING_KEY: text(privateKey) }),
-          SQLITE_STORE_CAPACITY_BYTES: text("1000000000"),
-          GOOGLE_CLIENT_ID: text("fidy-native-google"),
-          GOOGLE_CLIENT_SECRET: text(deriveSecret(secret, providerRevision, "google")),
-          GOOGLE_REDIRECT_URI: text(api.api + "/providers/google/callback"),
-          MICROSOFT_CLIENT_ID: text("fidy-native-microsoft"),
-          MICROSOFT_CLIENT_SECRET: text(deriveSecret(secret, providerRevision, "microsoft")),
-          MICROSOFT_REDIRECT_URI: text(api.api + "/providers/microsoft/callback"),
-          RESEND_API_KEY: text(deriveSecret(secret, revision, "resend")),
-        },
-        exports: nativeOwners,
-      }),
-      worker("closed-provider", providerEntry, {
-        env: {
-          ...shared,
-          RELEASE_GIT_SHA: text(providerRevision),
-          ACCEPTANCE_CODE_KEY: text(deriveSecret(secret, providerRevision, "oidc-code")),
-          ACCEPTANCE_GOOGLE_SECRET: text(deriveSecret(secret, providerRevision, "google")),
-          ACCEPTANCE_MICROSOFT_SECRET: text(deriveSecret(secret, providerRevision, "microsoft")),
-          ACCEPTANCE_API_ORIGIN: text(api.api),
-        },
-      }),
-    ]),
+    workers: yield* splitOwnerWorkers({ configs, revision, providerRevision }),
   });
 });
 const run = Effect.gen(function* () {

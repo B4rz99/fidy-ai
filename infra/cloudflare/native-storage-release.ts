@@ -2124,6 +2124,26 @@ const captureSuccessor = Effect.fn(function* (
   );
   yield* verifySuccessorSource(env, client, snapshot);
 });
+const resumedSuccessor = Effect.gen(function* () {
+  const resumed = yield* ReleaseConfig.Boolean("FIXTURE_SUCCESSOR_RESUME").pipe(
+    ReleaseConfig.withDefault(false)
+  );
+  if (!resumed) return Option.none();
+  const dir = yield* ReleaseConfig.String("RUNNER_TEMP");
+  const expectedVerifier = yield* ReleaseConfig.String("GITHUB_SHA");
+  const resume = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({
+      verifierRevision: Schema.Literal(expectedVerifier),
+      supportVerifierRevision: SmokeIdentity.fields.gitRevision,
+      supportArtifact: Schema.String.check(Schema.isPattern(/^[1-9][0-9]{0,19}$/u)),
+      supportSha256: SmokeIdentity.fields.contractDigest,
+      coreVersionId: Schema.Literal("ba7f02c9-89fa-4990-8484-42b698854d3d"),
+      publicVersionId: Schema.Literal("a0339369-cd2e-4ebc-ad4e-c849c14cd836"),
+    }),
+    { onExcessProperty: "error" }
+  )(yield* readFile(dir + "/fixture-successor-resume.json"));
+  return Option.some(resume);
+});
 const stageSuccessor = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
@@ -2135,13 +2155,30 @@ const stageSuccessor = Effect.fn(function* (
   );
   yield* verifySuccessorSource(env, client, snapshot);
   const candidate = yield* uploadedNativePair;
+  const resume = yield* resumedSuccessor;
+  if (Option.isSome(resume)) {
+    if (
+      candidate.coreVersionId !== resume.value.coreVersionId ||
+      candidate.publicVersionId !== resume.value.publicVersionId
+    ) {
+      return yield* new ReleaseFailure({
+        message: "Recovered upload receipts differ from the interrupted pair",
+      });
+    }
+    yield* successorResources({
+      env,
+      client,
+      release: candidate,
+      fingerprint: yield* expectedFixtureSigner,
+    });
+  }
   yield* writeFile(env.file + ".uploads", encodeJson(candidate));
   yield* stageCapturedPair({ env, client, port, snapshot, candidate });
 });
 const successorResources = Effect.fn(function* (input: {
   env: Config;
   client: HttpClient.HttpClient;
-  release: FallbackStage["release"];
+  release: Pick<FallbackStage["release"], "coreVersionId" | "publicVersionId">;
   fingerprint: string;
 }) {
   const { env, client, release, fingerprint } = input;
@@ -2235,6 +2272,7 @@ const sealSuccessor = Effect.fn(function* (env: Config, client: HttpClient.HttpC
     release,
     verify: verifyStagedSuccessor({ env, client, release, fingerprint, source }),
   });
+  const resume = yield* resumedSuccessor;
   yield* writeFile(
     directory + "/native-fixture-successor-stage.json",
     encodeJson({
@@ -2246,6 +2284,7 @@ const sealSuccessor = Effect.fn(function* (env: Config, client: HttpClient.HttpC
       fixtureMember: "performance-2",
       approval,
       predecessor: source,
+      ...(Option.isSome(resume) ? { resume: resume.value } : {}),
     })
   );
 });

@@ -118,46 +118,60 @@ const verifiedSource = (operation: string, sealed?: string): string =>
   operation === "resume-pairing-stage"
     ? uploadedPair.revision
     : (sealed ?? archivedDormant.revision);
+const interruptedSuccessor = "de04a192c3836be0efb488b170a7b93b9f98f28f";
+const successorWorkflow =
+  "B4rz99/fidy-ai/.github/workflows/native-fixture-successor-plan.yml@refs/heads/trunk";
+const FixtureVerifierEnvironment = Schema.Struct({
+  FIXTURE_STAGED_VERIFIER_SHA: SmokeIdentity.fields.gitRevision,
+  GITHUB_SHA: SmokeIdentity.fields.gitRevision,
+  RELEASE_GIT_SHA: SmokeIdentity.fields.gitRevision,
+  GITHUB_ACTIONS: Schema.Literal("true"),
+  GITHUB_REPOSITORY: Schema.Literal("B4rz99/fidy-ai"),
+  GITHUB_EVENT_NAME: Schema.Literal("workflow_dispatch"),
+  GITHUB_REF: Schema.Literal("refs/heads/trunk"),
+  GITHUB_REF_PROTECTED: Schema.Literal("true"),
+  NATIVE_STORAGE_ADMISSION: Schema.Literal("closed"),
+  NATIVE_STORAGE_HOSTS: Schema.Literal("acceptance"),
+  FIXTURE_RELEASE_OPERATION: Schema.Literals([
+    "stage-fixture-successor",
+    "resume-pairing-stage",
+    "reseal-fixture-fallback",
+    "diagnose-fixture-pairing",
+    "recover-fixture-fallback",
+    "resume-pairing-rollback",
+    "rollout",
+    "verify",
+  ]),
+});
+type FixtureVerifierEnvironment = typeof FixtureVerifierEnvironment.Type;
+const matchesResumedSuccessor = (
+  selected: FixtureVerifierEnvironment,
+  environment: typeof process.env
+): boolean =>
+  selected.RELEASE_GIT_SHA === interruptedSuccessor &&
+  selected.FIXTURE_RELEASE_OPERATION === "stage-fixture-successor" &&
+  environment.FIXTURE_PAIRING_APPLICATION === undefined &&
+  environment.GITHUB_WORKFLOW_REF === successorWorkflow &&
+  environment.GITHUB_RUN_ATTEMPT === "1";
+const matchesFixtureSource = (selected: FixtureVerifierEnvironment, sealed?: string): boolean =>
+  selected.FIXTURE_RELEASE_OPERATION !== "stage-fixture-successor" &&
+  selected.RELEASE_GIT_SHA === verifiedSource(selected.FIXTURE_RELEASE_OPERATION, sealed) &&
+  (sealed === undefined ||
+    ["recover-fixture-fallback", "resume-pairing-rollback", "rollout", "verify"].includes(
+      selected.FIXTURE_RELEASE_OPERATION
+    ));
 const fixtureVerifierIdentity = Effect.sync(() => {
   const environment = process.env;
   if (environment.FIXTURE_STAGED_VERIFIER_SHA === undefined) {
     return Option.none<{ application: string; verifier: string }>();
   }
-  const result = Schema.decodeUnknownOption(
-    Schema.Struct({
-      FIXTURE_STAGED_VERIFIER_SHA: SmokeIdentity.fields.gitRevision,
-      GITHUB_SHA: SmokeIdentity.fields.gitRevision,
-      RELEASE_GIT_SHA: SmokeIdentity.fields.gitRevision,
-      GITHUB_ACTIONS: Schema.Literal("true"),
-      GITHUB_REPOSITORY: Schema.Literal("B4rz99/fidy-ai"),
-      GITHUB_EVENT_NAME: Schema.Literal("workflow_dispatch"),
-      GITHUB_REF: Schema.Literal("refs/heads/trunk"),
-      GITHUB_REF_PROTECTED: Schema.Literal("true"),
-      NATIVE_STORAGE_ADMISSION: Schema.Literal("closed"),
-      NATIVE_STORAGE_HOSTS: Schema.Literal("acceptance"),
-      FIXTURE_RELEASE_OPERATION: Schema.Literals([
-        "resume-pairing-stage",
-        "reseal-fixture-fallback",
-        "diagnose-fixture-pairing",
-        "recover-fixture-fallback",
-        "resume-pairing-rollback",
-        "rollout",
-        "verify",
-      ]),
-    })
-  )(environment);
+  const result = Schema.decodeUnknownOption(FixtureVerifierEnvironment)(environment);
   if (
     Option.isNone(result) ||
     result.value.FIXTURE_STAGED_VERIFIER_SHA !== result.value.GITHUB_SHA ||
-    result.value.RELEASE_GIT_SHA !==
-      verifiedSource(
-        result.value.FIXTURE_RELEASE_OPERATION,
-        environment.FIXTURE_PAIRING_APPLICATION
-      ) ||
-    (environment.FIXTURE_PAIRING_APPLICATION !== undefined &&
-      !["recover-fixture-fallback", "resume-pairing-rollback", "rollout", "verify"].includes(
-        result.value.FIXTURE_RELEASE_OPERATION
-      ))
+    !(environment.FIXTURE_SUCCESSOR_RESUME === "true"
+      ? matchesResumedSuccessor(result.value, environment)
+      : matchesFixtureSource(result.value, environment.FIXTURE_PAIRING_APPLICATION))
   ) {
     throw Error("Unverified staged application source");
   }

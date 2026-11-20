@@ -361,6 +361,45 @@ it.effect(
       expect(yield* port(verifier).trunk().pipe(Effect.exit)).toHaveProperty("_tag", "Failure");
     }).pipe(Effect.ensuring(Effect.sync(() => vi.unstubAllEnvs())))
 );
+it.effect("accepts only the exact interrupted successor under its current protected verifier", () =>
+  Effect.gen(function* () {
+    const application = "de04a192c3836be0efb488b170a7b93b9f98f28f";
+    const verifier = "e".repeat(40);
+    const workflow =
+      "B4rz99/fidy-ai/.github/workflows/native-fixture-successor-plan.yml@refs/heads/trunk";
+    for (const [name, value] of Object.entries({
+      FIXTURE_SUCCESSOR_RESUME: "true",
+      FIXTURE_STAGED_VERIFIER_SHA: verifier,
+      FIXTURE_RELEASE_OPERATION: "stage-fixture-successor",
+      GITHUB_ACTIONS: "true",
+      GITHUB_EVENT_NAME: "workflow_dispatch",
+      GITHUB_REF: "refs/heads/trunk",
+      GITHUB_REF_PROTECTED: "true",
+      GITHUB_REPOSITORY: "B4rz99/fidy-ai",
+      GITHUB_RUN_ATTEMPT: "1",
+      GITHUB_SHA: verifier,
+      GITHUB_WORKFLOW_REF: workflow,
+      NATIVE_STORAGE_ADMISSION: "closed",
+      NATIVE_STORAGE_HOSTS: "acceptance",
+      RELEASE_GIT_SHA: application,
+    })) {
+      vi.stubEnv(name, value);
+    }
+    const { port } = referenceHarness(
+      { ...trunkReference, object: { type: "commit", sha: verifier } },
+      application
+    );
+    expect(yield* port.trunk()).toBe(application);
+    vi.stubEnv("RELEASE_GIT_SHA", revision);
+    expect(yield* port.trunk().pipe(Effect.exit)).toHaveProperty("_tag", "Failure");
+    vi.stubEnv("RELEASE_GIT_SHA", application);
+    vi.stubEnv("GITHUB_RUN_ATTEMPT", "2");
+    expect(yield* port.trunk().pipe(Effect.exit)).toHaveProperty("_tag", "Failure");
+    vi.stubEnv("GITHUB_RUN_ATTEMPT", "1");
+    vi.stubEnv("GITHUB_WORKFLOW_REF", workflow.replace("successor-plan", "workflow-recovery-plan"));
+    expect(yield* port.trunk().pipe(Effect.exit)).toHaveProperty("_tag", "Failure");
+  }).pipe(Effect.ensuring(Effect.sync(() => vi.unstubAllEnvs())))
+);
 it.effect(
   "aborts rejected status and declared oversized native responses before returning release failure",
   () =>

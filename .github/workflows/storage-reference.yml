@@ -22,6 +22,10 @@ on:
         description: Measure mounted Transactions startup and fresh history only
         type: boolean
         default: false
+      full_recurring:
+        description: Measure only the four compact Recurring interactions and full revision HTTP on extreme
+        type: boolean
+        default: false
       setup_idle_ms:
         description: Idle time between authenticated fixture preparation and the first browser journey
         type: choice
@@ -32,7 +36,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: storage-reference-${{ github.ref }}-${{ inputs.dataset || 'production' }}-${{ inputs.network || 'normal' }}-${{ inputs.setup_idle_ms || '0' }}-${{ inputs.transaction_read_only || false }}
+  group: storage-reference-${{ github.ref }}-${{ inputs.dataset || 'production' }}-${{ inputs.network || 'normal' }}-${{ inputs.setup_idle_ms || '0' }}-${{ inputs.transaction_read_only || false }}-${{ inputs.full_recurring || false }}
   cancel-in-progress: false
 
 jobs:
@@ -42,6 +46,7 @@ jobs:
     env:
       DATASET: ${{ inputs.dataset || 'production' }}
       NETWORK: ${{ inputs.network || 'normal' }}
+      RECURRING_FLAG: ${{ inputs.full_recurring && '--full-recurring' || '' }}
       READ_ONLY_FLAG: ${{ inputs.transaction_read_only && '--transaction-read-only' || '' }}
       SETUP_IDLE_MS: ${{ inputs.setup_idle_ms || '0' }}
     steps:
@@ -78,13 +83,14 @@ jobs:
           bun scripts/infra-performance/reference/native-review-pressure.test.mjs
           bun apps/web/scripts/check-transaction-panel.ts
           bun scripts/infra-performance/reference/review-failure.test.mjs
+          bun scripts/infra-performance/reference/recurring-response.test.mjs
           python3 -m unittest discover -s scripts/infra-performance/reference
           python3 scripts/infra-performance/reference/run.py --d1 baseline-d1 --do . \
-            --dataset "$DATASET" --network "$NETWORK" --setup-idle-ms "$SETUP_IDLE_MS" ${READ_ONLY_FLAG:+"$READ_ONLY_FLAG"} --pairs 1 --origin "GitHub-hosted Ubuntu loopback"
+            --dataset "$DATASET" --network "$NETWORK" --setup-idle-ms "$SETUP_IDLE_MS" ${READ_ONLY_FLAG:+"$READ_ONLY_FLAG"} ${RECURRING_FLAG:+"$RECURRING_FLAG"} --pairs 1 --origin "GitHub-hosted Ubuntu loopback"
       - name: Measure 30 alternating pairs
         run: |
           python3 scripts/infra-performance/reference/run.py --d1 baseline-d1 --do . \
-            --dataset "$DATASET" --network "$NETWORK" --setup-idle-ms "$SETUP_IDLE_MS" ${READ_ONLY_FLAG:+"$READ_ONLY_FLAG"} --pairs 30 --origin "GitHub-hosted Ubuntu loopback"
+            --dataset "$DATASET" --network "$NETWORK" --setup-idle-ms "$SETUP_IDLE_MS" ${READ_ONLY_FLAG:+"$READ_ONLY_FLAG"} ${RECURRING_FLAG:+"$RECURRING_FLAG"} --pairs 30 --origin "GitHub-hosted Ubuntu loopback"
       - name: Preserve reference evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

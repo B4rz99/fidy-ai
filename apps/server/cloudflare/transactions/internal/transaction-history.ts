@@ -28,7 +28,6 @@ import {
   effectiveTransactionRelation,
   selectedEffectiveHistoryPage,
 } from "./effective-transaction";
-import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { PrivacyTransactionPage } from "../../../src/shell/processing-consent/contract";
 import {

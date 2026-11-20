@@ -85,6 +85,41 @@ try {
       uploadThroughput: 125000,
     });
   }
+  const eventsPath = process.env.FIDY_REFERENCE_EVENTS.replace("workspace-events","network-events");
+  const events = [];
+  const note = (event) => events.push({ epoch:performance.timeOrigin+performance.now(), ...event });
+  const marks = (type,journey) => note({type,journey});
+  const started = new Map();
+  await cdp.send("Network.enable");
+  await page.addInitScript(() => document.addEventListener("click", () => {
+    console.debug("SYNTHETIC_CLICK_MS "+String(performance.timeOrigin+performance.now()));
+  },true));
+  page.on("console", (message) => {
+    const match = /^SYNTHETIC_CLICK_MS (\d+\.?\d*)$/.exec(message.text());
+    if (match) note({type:"click",epoch:Number(match[1])});
+  });
+  cdp.on("Network.requestWillBeSent", (event) => {
+    const url=new URL(event.request.url);
+    if (url.origin!==api && url.origin!==app) return;
+    const path=url.origin===app ? (url.pathname.startsWith("/assets/") ? "asset" : "web") :
+      (url.pathname.includes("81000000-0000-4000-8000-") ? "/transactions/:fixture" : url.pathname);
+    const frame={method:event.request.method,path,resource:event.type,initiator:event.initiator.type,
+      from:event.wallTime*1000, mono:event.timestamp};
+    started.set(event.requestId,frame);
+  });
+  cdp.on("Network.responseReceived", (event) => {
+    const frame=started.get(event.requestId);
+    if (!frame) return;
+    frame.headers=frame.from+(event.timestamp-frame.mono)*1000;
+    frame.status=event.response.status;
+  });
+  cdp.on("Network.loadingFinished", (event) => {
+    const frame=started.get(event.requestId);
+    if (!frame) return;
+    const {mono,...metadata}=frame;
+    note({type:"network",...metadata,until:frame.from+(event.timestamp-mono)*1000,bytes:event.encodedDataLength});
+    started.delete(event.requestId);
+  });
   const evidence = async () => {
     const reply = setup(await request.get(operator + "/assessment/accountability"));
     return counts(await reply.json());
@@ -136,6 +171,8 @@ try {
     observeStartup: async (reply) =>
       Schema.decodeSync(Schema.fromJsonString(Schema.Unknown))(await reply.text()),
     beforeRefresh: evidence,
+    offered: (journey) => marks("offered",journey),
+    completed: (journey) => marks("completed",journey),
   });
   process.stderr.write("REFERENCE_STAGE accountability-after\n");
   const after = await evidence();
@@ -154,7 +191,7 @@ try {
     const events = process.env.FIDY_REFERENCE_EVENTS;
     assert.ok(events, "Missing reference observation file");
     /** @param {Readonly<Record<string, unknown>>} row Bounded workspace measurement metadata. */
-    const event = (row) => appendFileSync(events, JSON.stringify(row) + "\n");
+    const event = (row) => { marks(row.type,row.journey); appendFileSync(events,JSON.stringify(row)+"\n"); };
     const input = { page, api, browser: app, event };
     views["budgets.month.browser"] = await freshBudgetMonth(input);
     process.stderr.write("REFERENCE_STAGE review-pending\n");
@@ -164,6 +201,7 @@ try {
     process.stderr.write("REFERENCE_STAGE recurring-fresh\n");
     Object.assign(views, await freshRecurring(input));
   }
+  appendFileSync(eventsPath, events.map((event)=>JSON.stringify(event)).join("\n")+"\n");
   process.stdout.write(
     JSON.stringify({
       views,

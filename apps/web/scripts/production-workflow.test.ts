@@ -11,7 +11,7 @@ const profileAction = await source(
 const ordered = (text: string, parts: readonly string[]): void => {
   let previous = -1;
   for (const part of parts) {
-    const next = text.indexOf(part);
+    const next = text.indexOf(part, previous + 1);
     expect(next, part).toBeGreaterThan(previous);
     previous = next;
   }
@@ -61,13 +61,15 @@ describe("protected native releases", () => {
       "native-storage-release.ts verify",
       "steps.promote.outcome == 'success' && steps.verify.outcome == 'failure'",
       "native-storage-release.ts rollback",
+      "- name: Retain native release evidence",
       "actions/upload-artifact@",
+      "name: native-storage-release-",
     ]);
   });
   it("reserves physical erasure for first installation and an explicit erasure dispatch", () => {
     ordered(workflow, [
       "id: verify",
-      "if: inputs.operation != 'plan-first-install' && inputs.operation != 'first-install' && inputs.operation != 'verify-erasure'",
+      "if: inputs.operation != 'plan-fixture-fallback' && inputs.operation != 'plan-first-install' && inputs.operation != 'first-install' && inputs.operation != 'verify-erasure'",
       "run: bun native-storage-release.ts verify\n",
       "if: inputs.operation == 'first-install' || inputs.operation == 'verify-erasure'",
       "run: bun native-storage-release.ts verify-erasure\n",

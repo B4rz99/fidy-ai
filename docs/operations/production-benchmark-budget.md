@@ -465,8 +465,9 @@ the incumbent release and its erasure/fleet qualifications in place while this r
 Use **Plan the closed Transaction fixture successor** from protected trunk after the original
 performance fixture has been disposed. The workflow authenticates the original active rollout,
 its dormant rollback evidence, the original signed cohort receipt and the successful cleanup
-archive. It reads the current active versions, provider, namespaces and support Workers, then
-checks the exact original R2 custody and issuance objects with read-only object credentials.
+archive. It reads both current active versions, the archived dormant versions and their matching
+closed bindings, the provider, namespaces and support Workers. It checks the exact original R2
+custody and issuance objects with read-only object credentials.
 
 The scoped plan requires two Worker uploads at zero traffic and one new revision-owned smoke
 Worker, Queue, Workflow and consumer. Other resources must stay unchanged. The existing smoke

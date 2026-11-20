@@ -1,7 +1,7 @@
 import unittest
 from copy import deepcopy
 
-from successor_source import ORIGINAL_REVISION, verify_live_predecessor, verify_prior_custody
+from successor_source import ORIGINAL_REVISION, live_return_bindings, verify_live_predecessor, verify_prior_custody
 
 
 class SuccessorSourceTests(unittest.TestCase):
@@ -55,3 +55,26 @@ class SuccessorSourceTests(unittest.TestCase):
             verify_live_predecessor(cloudflare, "a"*32, {},
                                     dict(revision=ORIGINAL_REVISION, publicVersionId=original, coreVersionId=original),
                                     "aa")
+
+
+    def test_old_return_pair_still_exists_with_the_same_closed_bindings(self):
+        roles = ("core", "public")
+        release = {"snapshot":{role:{"name":"fidy-native-"+role, "stableVersionId":role+"-dormant"} for role in roles},
+                   **{role+"VersionId":role+"-active" for role in roles}}
+        bindings = [{"name":key, "type":"plain_text", "text":value} for key,value in
+                    (("RELEASE_GIT_SHA", ORIGINAL_REVISION), ("NATIVE_STORAGE_ADMISSION", "closed"),
+                     ("RECOVERY_ISOLATION", "isolated"), ("SMOKE_QUEUE_NAME", "retained-old-smoke"))]
+        versions = {role+"-"+phase:{"id":role+"-"+phase, "resources":{"bindings":deepcopy(bindings)}}
+                    for role in roles for phase in ("active", "dormant")}
+        def read(path):
+            return versions[path.split("/")[-1]]
+        self.assertEqual(live_return_bindings(read, "a"*32, {"release":release})["SMOKE_QUEUE_NAME"], bindings[-1])
+        for target, change in (("core-dormant", {"id":"other"}),
+                               ("public-dormant", {"resources":{"bindings":[*bindings[:-1], {**bindings[-1], "text":"new-smoke"}]}})):
+            original = versions[target]
+            versions[target] = {**original, **change}
+            try:
+                with self.subTest(target=target), self.assertRaisesRegex(ValueError, "dormant rollback"):
+                    live_return_bindings(read, "a"*32, {"release":release})
+            finally:
+                versions[target] = original

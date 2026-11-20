@@ -70,14 +70,34 @@ def verify_prior_custody(proof, cleanup, installed, custody, marker, *, coordina
         raise ValueError("Original performance fixture or erasure custody differs")
 
 
+def live_return_bindings(read, account, promotion):
+    release = promotion["release"]
+    snapshot = release["snapshot"]
+    active = {}
+    for role in ("core", "public"):
+        worker = snapshot[role]
+        path = f"accounts/{account}/workers/scripts/{worker['name']}/versions/"
+        versions = (release[role+"VersionId"], worker["stableVersionId"])
+        reports = [read(path+version) for version in versions]
+        bindings = [{item["name"]:item for item in report["resources"]["bindings"]} for report in reports]
+        if (len(set(versions)) != len(versions) or [report["id"] for report in reports] != list(versions)
+                or any(len(rows) != len(report["resources"]["bindings"]) for rows, report in zip(bindings, reports))
+                or bindings[0] != bindings[1]
+                or any(rows.get(name, {}).get("text") != value for rows in bindings for name, value in (
+                    ("RELEASE_GIT_SHA", ORIGINAL_REVISION), ("NATIVE_STORAGE_ADMISSION", "closed"),
+                    ("RECOVERY_ISOLATION", "isolated")))):
+            raise ValueError("Live dormant rollback versions or bindings differ")
+        active[role] = bindings[0]
+    return active["core"]
+
+
 def verify_live_predecessor(read, account, promotion, installed, public_key):
     versions = {"core": installed["coreVersionId"], "ingress": installed["publicVersionId"]}
     actual = validate_candidate(read, account=account, revision=ORIGINAL_REVISION,
                                 versions=versions, public_key=public_key)
     validate_qualification(actual, promotion, installed)
     serving_graph(read, account, ORIGINAL_REVISION, installed)
-    path = f"accounts/{account}/workers/scripts/fidy-native-storage-core/versions/{versions['core']}"
-    rows = read(path)["resources"]["bindings"]
+    rows = live_return_bindings(read, account, promotion).values()
     owners = {"USER_STORE":"UserStore", "DIRECTORY":"Directory", "PRICING":"Pricing",
               "MAINTENANCE":"Maintenance", "ERASURE":"Erasure"}
     namespaces = {row["name"]:(row.get("class_name"), row.get("namespace_id")) for row in rows

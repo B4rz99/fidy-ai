@@ -79,15 +79,15 @@ const run = Effect.gen(function* () {
       const local = Effect.fnUntraced(function* (item: CohortCommand) {
         const action = item.action;
         if (action === "provider-request") return yield* dispatch(runtime, item.body);
-        if (action === "seed-survivors") {
-          yield* establishSmokeUsers({
+        if (action === "seed-survivors" || action === "mount-original-sessions") {
+          const users = yield* establishSmokeUsers({
             revision: auth.revision,
             proof: Redacted.make(auth.secret),
             origins: installedOrigins.acceptance,
             send,
             erasure: Option.none(),
           });
-          return true;
+          return action === "mount-original-sessions" ? [users[0].headers, users[1].headers] : true;
         }
         if (action === "census") return yield* state(runtime, directory);
         if (action === "marker") return yield* marker(runtime, auth.revision);

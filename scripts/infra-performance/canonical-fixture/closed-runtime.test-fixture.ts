@@ -68,26 +68,29 @@ export const closedRuntime = Effect.fnUntraced(function* (
   directory: string = ""
 ) {
   const privateKey = Redacted.value(yield* Config.Redacted("TEST_FIXTURE_PRIVATE_KEY"));
+  const baseline = yield* Config.Boolean("FIDY_REHEARSAL_BASELINE").pipe(Config.withDefault(false));
+  const entry = (name: string): string =>
+    (baseline ? "../../../closed-baseline/apps/server/cloudflare/" : "./") + name + ".ts";
   const shared = sharedBindings(revision, secret);
   return new Miniflare({
     ...(directory === "" ? {} : { resourcePersistencePath: directory }),
     handleStructuredLogs: (): void => undefined,
     workers: yield* Effect.all([
-      worker("ingress", "./public-worker.ts", {
+      worker("ingress", entry("public-worker"), {
         env: {
           ...shared,
           CORE: { type: "worker", worker: "core" },
           PAT_ADMISSION_KEY: text(deriveSecret(secret, revision, "pat-admission")),
         },
       }),
-      worker("core", "./core-worker.ts", {
+      worker("core", entry("core-worker"), {
         env: {
           ...shared,
           ...nativeOwnerBindings,
           EMAIL_BUCKET: { type: "r2", name: "private-email" },
           STATEMENT_STAGING_BUCKET: { type: "r2", name: "private-statements" },
           SAMPLE_BUCKET: { type: "r2", name: "private-samples" },
-          NATIVE_FIXTURE_SIGNING_KEY: text(privateKey),
+          ...(baseline ? {} : { NATIVE_FIXTURE_SIGNING_KEY: text(privateKey) }),
           SQLITE_STORE_CAPACITY_BYTES: text("1000000000"),
           GOOGLE_CLIENT_ID: text("fidy-native-google"),
           GOOGLE_CLIENT_SECRET: text(deriveSecret(secret, revision, "google")),
@@ -99,7 +102,7 @@ export const closedRuntime = Effect.fnUntraced(function* (
         },
         exports: nativeOwners,
       }),
-      worker("closed-provider", "./release-smoke-worker.ts", {
+      worker("closed-provider", entry("release-smoke-worker"), {
         env: {
           ...shared,
           ACCEPTANCE_CODE_KEY: text(deriveSecret(secret, revision, "oidc-code")),

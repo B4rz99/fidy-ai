@@ -69,6 +69,13 @@ export const trackBrowserClick = async (control) => {
           }
           const request = canonical[0];
           const api = new URL(canonicalUrl).origin;
+          const relatedRequests = new Map([
+            ["/categories", "categories"],
+            ["/dashboard/catalog", "dashboard-catalog"],
+            ["/ingestion/needs-review", "needs-review"],
+            ["/user", "user"],
+            ["/web/session/binding", "binding"],
+          ]);
           return {
             status: "observed",
             windowMs,
@@ -85,11 +92,11 @@ export const trackBrowserClick = async (control) => {
               const url = new URL(entry.name);
               let role;
               if (entry === request) role = "canonical";
-              else if (url.origin === api && url.pathname === "/categories") role = "categories";
-              else if (url.origin === api && url.pathname === "/web/session/binding") role = "binding";
+              else if (url.origin === api) role = relatedRequests.get(url.pathname);
               else if (url.origin === location.origin && /\.(?:js|css)$/u.test(url.pathname)) {
                 role = "script-or-style";
-              } else return [];
+              }
+              if (role === undefined) return [];
               return [
                 {
                   role,

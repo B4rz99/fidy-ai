@@ -200,7 +200,10 @@ try {
       correction: "correction.browser",
     };
     const journey = readOnly ? freshTransactionHistory : freshTransactions;
+    await cdp.send("Profiler.enable");
+    await cdp.send("Profiler.start");
     let startupTrace;
+    let startupCpu;
     const result = await journey({
       page,
       ledger,
@@ -214,11 +217,28 @@ try {
       offered: (stage) => event({ type: "offered", journey: journeys[stage] }),
       completed: (stage, milliseconds) => {
         event({ type: "completed", journey: journeys[stage], milliseconds });
-        if (stage === "startup") startupTrace = startupResources(page);
+        if (stage === "startup") {
+          startupTrace = startupResources(page);
+          startupCpu = cdp.send("Profiler.stop");
+        }
       },
     });
     const { before, startupMs, readMs } = result;
     event({ type: "startup-resources", resources: await startupTrace });
+    const measuredCpu = await startupCpu;
+    if (measuredCpu) {
+      const { nodes, samples = [], timeDeltas = [] } = measuredCpu.profile;
+      const calls = new Map(nodes.map(({ id, callFrame }) => [id, callFrame]));
+      const elapsed = new Map();
+      for (const [index, id] of samples.entries()) {
+        const call = calls.get(id);
+        if (!call) continue;
+        const url = URL.canParse(call.url) ? new URL(call.url).pathname : "";
+        const name = url + " " + call.functionName;
+        elapsed.set(name, (elapsed.get(name) ?? 0) + (timeDeltas[index] ?? 0));
+      }
+      event({ type: "startup-cpu", frames: [...elapsed].sort((a, b) => b[1] - a[1]).slice(0, 60) });
+    }
     event({
       type: "startup-marks",
       documentReady: await page.evaluate(() =>

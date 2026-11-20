@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "08d4d7753334af734b71e2576c0937f0da98534724c7ffc8b7f869253c216f10";
+const expectedEdgePolicyDigest = "2d45c71a27864f788363da48ace5c5e65f8a09bedee986864572d176f1521d0c";
 const securityArtifacts = [
   ...(await Promise.all(
     [
@@ -76,6 +76,7 @@ const securityArtifacts = [
       "../../scripts/infra-performance/cells/browser_assets.py",
       "../../scripts/infra-performance/d1-budget.ts",
       "../../scripts/infra-performance/hosted-browser/origin.mjs",
+      "../../scripts/infra-performance/hosted-browser/contracts.ts",
       "../../scripts/infra-performance/hosted-browser/captured-profile.mjs",
       "../../scripts/infra-performance/hosted-browser/protected-pair.mjs",
       "../../scripts/infra-performance/hosted-browser/scoped-correction.mjs",

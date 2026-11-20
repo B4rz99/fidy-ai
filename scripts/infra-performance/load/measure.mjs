@@ -76,10 +76,11 @@ const authenticate = async (platform, subject) => {
   subject.headers = { cookie, "fidy-session-binding": binding };
 };
 const observe = async ({ runtime, subject }, { row, scheduled }, journey) => {
-  const start = performance.now();
+  let dispatched;
   const responses = [];
   try {
     const call = async (path, options) => {
+      dispatched ??= performance.now();
       const result = await execute({ runtime, subject }, path, options);
       const bytes = new Uint8Array(await result.arrayBuffer());
       responses.push({ status: result.status, bytes, end: performance.now() });
@@ -92,10 +93,10 @@ const observe = async ({ runtime, subject }, { row, scheduled }, journey) => {
       status: responses.at(-1).status,
       bytes: responses.reduce((total, reply) => total + reply.bytes.length, 0),
       digest: responses.map((reply) => hash(reply.bytes)).join("."),
-      dispatchMs: end - start,
+      dispatchMs: end - dispatched,
       scheduledMs: end - scheduled,
       scheduled,
-      dispatched: start,
+      dispatched,
       completedAt: end,
     });
   } catch (error) {
@@ -104,10 +105,15 @@ const observe = async ({ runtime, subject }, { row, scheduled }, journey) => {
       status: responses.at(-1)?.status,
       error: error.name,
       scheduled,
-      dispatched: start,
+      dispatched,
       completedAt: performance.now(),
     });
   }
+  row.responses = responses.map(({ status, bytes, end }) => ({
+    status,
+    bytes: bytes.length,
+    completedAt: end,
+  }));
   record("attempts", row);
 };
 const accountability = async (variant, subject) => {
@@ -263,17 +269,20 @@ const verifyAudit = async (variants, cell, { reads, corrections, rejections = ()
   return ok;
 };
 // Mutations alternate D1-first and DO-first. Each pair starts with the same confirmed target revision on both variants.
-const pairedMutations = (variants, journey) =>
-  inOrder(indices(samples), (sample) =>
-    inOrder(sample % 2 === 0 ? ["d1", "do"] : ["do", "d1"], (variant) => {
+const pairedMutations = async (variants, journey) => {
+  // Ordinary isolated mutations are separate from the offered read-load cell. Respect the live burst limit between pairs.
+  return inOrder(indices(samples), async (sample) => {
+    await delay(secondMs);
+    return inOrder(sample % 2 === 0 ? ["d1", "do"] : ["do", "d1"], (variant) => {
       const platform = variants[variant],
         index = sample % users;
       return journey(
         { runtime: platform.runtime, subject: platform.subjects[index] },
         { variant, user: 0, financialUser: index, sample }
       );
-    })
-  );
+    });
+  });
+};
 const correct = async ({ runtime, subject }, row) => {
   const ordinal = 2;
   const target = id(subject.index, ordinal);
@@ -377,7 +386,7 @@ await write("plan", {
   warmup:
     "one authenticated full-history warm-up for each User and variant; actual User/shared reconstruction unobserved",
   order:
-    "history: two 15-second blocks per variant, D1/DO then DO/D1, one offer/User/second at 50ms offsets; Correction: alternate variant order in 30 pairs",
+    "history: two 15-second blocks per variant, D1/DO then DO/D1, one offer/User/second at 50ms offsets; Correction and rollback: one-second interval between isolated pairs, alternate variant order in 30 pairs",
   boundaries:
     "host scheduled offer and actual dispatch to the last fully buffered Miniflare loopback response body; isolated Correction includes write and fresh history",
   fixture:

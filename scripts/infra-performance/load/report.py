@@ -28,6 +28,7 @@ def summarize(rows, users, samples, audit=True):
         comparable &= len(successful) == len(selected)
         signatures[variant] = {(r["user"], r["sample"]): r["digest"] for r in successful}
         output[variant] = dict(offered=len(selected), expected=len(expected), completed=len(successful),
+                               dispatched=sum(r.get("dispatched") is not None for r in selected),
                                failed=len(selected)-len(successful), incomplete=len(expected - set(signatures[variant])),
                                throttled=sum(r.get("status") == 429 for r in selected),
                                timeouts=sum(r.get("error") == "TimeoutError" for r in selected),

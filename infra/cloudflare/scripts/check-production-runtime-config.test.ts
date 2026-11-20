@@ -116,7 +116,35 @@ describe("Production runtime configuration gate", () => {
     expect(preview).toContain("run: bun native-storage-resources.ts plan-first-install");
     expect(install).toContain("if: inputs.operation == 'first-install'");
     expect(verify).toContain(
-      "if: inputs.operation != 'plan-fixture-fallback' && inputs.operation != 'plan-first-install' && inputs.operation != 'first-install' && inputs.operation != 'verify-erasure'"
+      "if: inputs.operation != 'plan-fixture-repair' && inputs.operation != 'plan-fixture-fallback' && inputs.operation != 'plan-first-install' && inputs.operation != 'first-install' && inputs.operation != 'verify-erasure'"
+    );
+  });
+
+  it("authenticates the interrupted upload before another candidate can be written", async () => {
+    const source = await workflowStep(
+      "Authenticate the original interrupted upload before planning or applying its repair"
+    );
+    for (const operation of ["plan-fixture-repair", "resume-fixture-upload"]) {
+      expect(source).toContain(`inputs.operation == '${operation}'`);
+    }
+    const planning = await workflowStep(
+      "Read the complete dormant resource plan without applying it"
+    );
+    expect(planning).toContain("inputs.operation == 'plan-fixture-repair'");
+    expect(planning).not.toContain("resume-fixture-upload");
+    const mutations = [
+      "Upload the verified native candidates",
+      "Stage the zero-traffic native candidates",
+      "Seal dormant fallback stage before promotion",
+      "Finish only the tested closed forward repair",
+    ];
+    for (const step of await Promise.all(mutations.map(workflowStep))) {
+      expect(step).toContain("inputs.operation == 'resume-fixture-upload'");
+      expect(step).not.toContain("plan-fixture-repair");
+    }
+    const workflow = await readFile(productionWorkflowPath, "utf8");
+    expect(workflow.indexOf(source)).toBeLessThan(
+      workflow.indexOf(await workflowStep("Capture the native stable pair"))
     );
   });
 

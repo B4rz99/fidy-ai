@@ -2182,11 +2182,7 @@ const verifyStagedSuccessor = Effect.fn(function* (input: {
   }
   return { smoke, namespaces, controlsDigest: digest };
 });
-const sealSuccessor = Effect.fn(function* (
-  env: Config,
-  client: HttpClient.HttpClient,
-  port: ReleasePort
-) {
+const sealSuccessor = Effect.fn(function* (env: Config, client: HttpClient.HttpClient) {
   const release = yield* Schema.decodeUnknownEffect(releaseSchemas.staged)(
     yield* readFile(env.file)
   );
@@ -2198,7 +2194,7 @@ const sealSuccessor = Effect.fn(function* (
     })
   )(yield* readFile(directory + "/fixture-successor-approval.json"));
   const verified = yield* verifyUnpromotedFallback({
-    port,
+    port: releasePort({ env, client }),
     release,
     verify: verifyStagedSuccessor({ env, client, release, fingerprint, source }),
   });

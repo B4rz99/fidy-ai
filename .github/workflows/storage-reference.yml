@@ -15,7 +15,7 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: e5ef953abd694481c3eb4a09f2bbf7a6e844b379
+          ref: fe3c541e8916b9480c813bb6a05c55d98858ce24
           path: native-baseline
           persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -33,6 +33,13 @@ jobs:
           google-chrome --version
       - name: Measure eight alternating isolated native pairs
         run: python3 scripts/infra-performance/reference/same-native.py native-baseline native-candidate
+      - name: Verify existing session, privacy, and explicit-month route tests on a faster candidate
+        run: |
+          if ! jq -e '.startup.pairedMedianDelta < 0' apps/web/test-results/reference/same-native-*/report.json; then
+            exit 0
+          fi
+          cd native-candidate/apps/web
+          bun --bun vitest run src/session/initial-session.test.ts src/app/initial-values.test.ts src/app/transaction-entry.test.ts src/app/read-only-navigation.test.ts src/features/transactions/query.test.ts src/features/transactions/scroll-continuation.test.ts
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
         with:

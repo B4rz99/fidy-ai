@@ -78,6 +78,15 @@ jobs:
       - uses: ./.github/actions/bun-install
       - name: Prepare comment-audit formatting and digest
         run: |
+          bun -e '
+            for (const file of ["apps/server/package.json", "apps/web/package.json", "infra/cloudflare/package.json"]) {
+              const content = await Bun.file(file).text();
+              const updated = content.replace(/"wrangler": "4[.]161[.]0"/, `"wrangler": "4.162.0"`);
+              if (content === updated) throw new Error(file);
+              await Bun.write(file, updated);
+            }
+          '
+          bun install --lockfile-only --ignore-scripts
           bun run format
           git diff --binary > "$RUNNER_TEMP/comment-format.patch"
           bun -e 'import { edgePolicyDigest } from "./infra/cloudflare/verify-edge-policy.ts"; console.log(edgePolicyDigest)' > "$RUNNER_TEMP/edge-policy-digest.txt"

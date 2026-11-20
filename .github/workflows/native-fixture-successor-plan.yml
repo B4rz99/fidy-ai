@@ -29,7 +29,7 @@ jobs:
       FIDY_NATIVE_FIXTURE_PUBLIC_KEY: ${{ vars.FIDY_NATIVE_FIXTURE_PUBLIC_KEY }}
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -65,7 +65,7 @@ jobs:
           PRICING_PUBLISH_AUDIENCE: ${{ vars.PRICING_PUBLISH_AUDIENCE }}
         run: bun native-fixture-successor-plan.ts
       - name: Save the verified read-only successor inventory
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: native-fixture-successor-plan-${{ github.run_id }}
           path: ${{ runner.temp }}/native-fixture-successor-plan.json

@@ -34,14 +34,14 @@ def main():
     args.out.mkdir(parents=True, exist_ok=False)
     with tempfile.TemporaryDirectory(prefix="fidy-2259-preparation-") as scratch:
         environment = {"PATH": os.environ["PATH"], "HOME": scratch, "TMPDIR": scratch}
-        for bundle, reason, name in [(args.materialized, "protected_preparation_receipt_missing", "materialized"),
-                                     (args.empty_schema, "experiment_too_large", "empty-schema"),
-                                     (args.historical, "protected_preparation_receipt_missing", "historical")]:
+        for bundle, name in [(args.materialized, "materialized"), (args.empty_schema, "empty-schema"),
+                             (args.historical, "historical")]:
             out = args.out / name
             result = subprocess.run(["/usr/bin/python3", str(HERE / "pilot.py"), "--bundle", str(bundle),
                                      "--out", str(out)], env=environment, timeout=30, check=False)
             report = json.loads((out / "report.json").read_text())
-            if (result.returncode != 1 or report.get("reason") != reason or report["attempts"]
+            if (result.returncode != 1 or report.get("reason") != "protected_preparation_receipt_missing"
+                    or report["attempts"]
                     or report["preparedReceipt"] != "missing"):
                 raise ValueError("The unprepared protected pilot did not report its expected refusal")
         check_materialized_cohort(args.materialized, environment)

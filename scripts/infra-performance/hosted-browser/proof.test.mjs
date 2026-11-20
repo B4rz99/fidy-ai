@@ -160,11 +160,14 @@ try {
     return await Promise.all([
       status("/dashboard/view"),
       status("/recurring-plans?month=2026-11"),
+      status(
+        "/recurring-plans?search=Sin+coincidencia+sint%C3%A9tica&previousMonth=2026-09&month=2026-11&view=compact"
+      ),
       status("/recurring-plans?search=unplanned&month=2026-11&view=compact"),
       status("/dashboard/initialize", "POST"),
     ]);
   }, origins.api);
-  assert.deepEqual(otherViews, [noContent, noContent, 0, 0]);
+  assert.deepEqual(otherViews, [noContent, noContent, noContent, 0, 0]);
 } finally {
   await browser?.close();
   await proxy.stop(true);

@@ -42,7 +42,45 @@ BOUNDARIES = [
     "startup.browser",
 ]
 
-CALIBRATION_VIEWS = ["budgets.month.browser", "review.pending.browser", "dashboard.fresh.browser", "recurring.month.browser", "recurring.previous.browser", "recurring.selective.browser", "recurring.full.http"]
+READ_ONLY_BOUNDARIES = ["read.backend", "read.http", "read.browser", "startup.browser"]
+
+CALIBRATION_VIEWS = ["budgets.month.browser", "review.pending.browser", "dashboard.fresh.browser", "recurring.month.browser", "recurring.previous.browser", "recurring.selective.browser", "recurring.no-match.browser", "recurring.full.http"]
+
+EVENT_CELLS = {"startup.browser", "read.browser", "correction.browser", *CALIBRATION_VIEWS}
+
+
+def observed_work(log):
+    work = {}
+    try:
+        for line in log.read_text().splitlines():
+            event = json.loads(line)
+            journey, kind = event.get("journey"), event.get("type")
+            if journey in EVENT_CELLS and kind in ("offered", "completed"):
+                counts = work.setdefault(journey, {"offered": 0, "completed": 0})
+                counts[kind] += 1
+        return work
+    except (OSError, ValueError, TypeError, KeyError):
+        return None
+
+
+def work_counts(key, rows):
+    offered = completed = unknown = 0
+    for row in rows:
+        if key in row.get("timings", {}):
+            # The verified result proves one dispatch/completion, including on a paired digest mismatch.
+            offered += 1
+            completed += 1
+        elif key in EVENT_CELLS and row.get("work") is not None:
+            counts = row["work"].get(key, {})
+            offered += counts.get("offered", 0)
+            completed += counts.get("completed", 0)
+        else:
+            unknown += 1
+    if unknown:
+        return dict(offered=None, completed=None, confirmedOffered=offered,
+                    confirmedCompleted=completed, attemptsWithUnknownWork=unknown)
+    return dict(offered=offered, completed=completed, incomplete=offered-completed)
+
 
 # Export only controlled stage names, error classes and harness source coordinates.
 STAGES = {
@@ -209,19 +247,24 @@ def observation(path, env, destination, variant="d1"):
         measure.check_returncode()
         result = json.loads(measure.stdout)
         requests = result["attempts"]
-        values = [
-            requests[0]["backendMs"],
-            requests[0]["httpMs"],
-            result["readMs"],
-            requests[1]["backendMs"],
-            requests[1]["httpMs"],
-            requests[2]["backendMs"],
-            requests[2]["httpMs"],
-            requests[2]["startEpochMs"] + requests[2]["httpMs"] - requests[1]["startEpochMs"],
-            result["correctionMs"],
-            result["startupMs"],
-        ]
-        timings = dict(zip(BOUNDARIES, values, strict=True))
+        timings = {
+            "read.backend": requests[0]["backendMs"],
+            "read.http": requests[0]["httpMs"],
+            "read.browser": result["readMs"],
+            "startup.browser": result["startupMs"],
+        }
+        if env.get("FIDY_REFERENCE_READ_ONLY") == "1":
+            if len(requests) != 1 or "correctionMs" in result:
+                raise ValueError("Unexpected mutation in read-only journey")
+        else:
+            timings.update({
+                "correction.backend": requests[1]["backendMs"],
+                "correction.http": requests[1]["httpMs"],
+                "correction.fresh-read.backend": requests[2]["backendMs"],
+                "correction.fresh-read.http": requests[2]["httpMs"],
+                "correction.through-fresh-http": requests[2]["startEpochMs"] + requests[2]["httpMs"] - requests[1]["startEpochMs"],
+                "correction.browser": result["correctionMs"],
+            })
         timings.update({name: evidence["milliseconds"] for name, evidence in result["views"].items()})
         return {**result, "seed": seed, "timings": timings}
 
@@ -242,17 +285,23 @@ def equivalence(row):
     )
 
 
-def compare(samples, rows, variants, *, stress=False, calibration=False):
+def compare(samples, rows, variants, *, stress=False, calibration=False, read_only=False):
     result = {}
-    for key in BOUNDARIES + (CALIBRATION_VIEWS if calibration else []):
+    keys = READ_ONLY_BOUNDARIES if read_only else BOUNDARIES + (CALIBRATION_VIEWS if calibration else [])
+    for key in keys:
+        successful = [{row["pair"] for row in rows if row["variant"] == variant
+                       and row["status"] == "ok" and key in row.get("timings", {})}
+                      for variant in variants]
+        comparable = set.intersection(*successful)
         cell = {}
         for variant in variants:
-            offered = [row for row in rows if row["variant"] == variant]
-            values = [row["timings"][key] for row in offered if row["status"] == "ok"]
+            attempts = [row for row in rows if row["variant"] == variant]
+            values = [row["timings"][key] for row in attempts if row["pair"] in comparable]
             stats = {
-                "offered": len(offered),
-                "completed": len(values),
-                "errors": len(offered) - len(values),
+                "planned": samples,
+                **work_counts(key, attempts),
+                "comparable": len(values),
+                "failedComparisons": sum(row["status"] != "ok" for row in attempts),
             }
             if values:
                 stats.update(
@@ -265,23 +314,30 @@ def compare(samples, rows, variants, *, stress=False, calibration=False):
         status = "missing"
         if any(row["status"] != "ok" for row in rows):
             status = "fail"
-        elif stress and all(cell[v]["completed"] == samples for v in variants):
+        elif stress and all(cell[v]["comparable"] == samples for v in variants):
             status = "stress"
         elif (
             len(variants) == 2
             and samples >= 30
-            and all(cell[v]["completed"] == samples for v in variants)
+            and all(cell[v]["comparable"] == samples for v in variants)
         ):
             ratio = cell["d1"]["p95"] / cell["do"]["p95"]
             cell["ratio"] = ratio
             status = "pass" if ratio >= 1.8 else "fail"
         result[key] = {"status": status, **cell}
-    if calibration:
+    if calibration and not read_only:
         result["recurring.full.browser"] = {"status": "not-exposed", "reason": "The product requests view=compact. Complete revisions are verified on recurring.full.http."}
     return result
 
 
-def browser_workload(dataset):
+def browser_workload(dataset, *, read_only=False):
+    if read_only:
+        return {
+            "boundaries": READ_ONLY_BOUNDARIES,
+            "browserStart": "Document navigation or the loaded Transactions Refresh click.",
+            "browserEnd": "Ordered enabled history rows through two animation frames. Refresh additionally requires its disabled-to-enabled transition and a complete, independently verified history response.",
+            "accountability": "Each refresh must add one successful audited history read, zero Corrections, zero purchased units and zero receipts.",
+        }
     start = "Before document navigation or the loaded Refresh or Save interaction."
     end = ("Refresh requires search to disable then re-enable. Startup, Refresh and Save require "
            "the expected ordered rows to be visible and enabled through two animation frames.")
@@ -293,10 +349,10 @@ def browser_workload(dataset):
         "browserStart": start + " Additional views start before their declared navigation, disclosure or refresh.",
         "browserEnd": end + " Budget navigation requires editable caps and fresh spending totals. "
                       "The pending review inbox requires usable rows with original excerpts. "
-                      "Dashboard and Recurring require their declared populated views. Payload verification follows timing.",
+                      "Dashboard and Recurring require their declared populated views. The no-match Recurring search ends at the visible empty result with an enabled filter reset. Payload verification follows timing.",
         "additionalCalibrationSetup": "Four fixed Dashboard WidgetIds and one forward Recurring edit: the second plan has 3 revisions, including an intermediate revision omitted from compact responses.",
         "dashboardNormalization": ["data.context.calculatedAt"],
-        "recurringHistory": "The product requests compact revisions. Its earlier-month and selective results are visible; complete revision history is checked separately through the bound canonical HTTP API.",
+        "recurringHistory": "The product requests compact revisions. Its earlier-month, selective and no-match results are visible; complete revision history is checked separately through the bound canonical HTTP API.",
     }
 
 
@@ -304,6 +360,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--d1", required=True, type=Path)
     parser.add_argument("--do", dest="candidate", type=Path, help="clean native candidate checkout")
+    parser.add_argument("--transaction-read-only", action="store_true", help="Measure only mounted Transactions startup and fresh Refresh, with real Login and one audited history query")
+    parser.add_argument("--d1-browser-cost", action="store_true", help="Observe local D1 work for complete verified Chromium interactions on each fresh fixture")
     parser.add_argument("--origin", default="local loopback; geographic origin unrecorded")
     parser.add_argument("--pairs", type=int, default=1)
     parser.add_argument(
@@ -317,6 +375,8 @@ def main():
         parser.error("Use the pinned Bun 1.4.4 toolchain")
     if args.pairs < 1:
         parser.error("--pairs must be positive")
+    if args.d1_browser_cost and args.candidate:
+        parser.error("D1 cost observations run independently from timing comparisons")
     paths = {"d1": args.d1.resolve()}
     if args.candidate:
         paths["do"] = args.candidate.resolve()
@@ -333,6 +393,9 @@ def main():
     env = {
         **os.environ,
         "FIDY_REFERENCE": "1",
+        "FIDY_REFERENCE_READ_ONLY": "1" if args.transaction_read_only else "0",
+        "FIDY_REFERENCE_D1_COST": "1" if args.d1_browser_cost else "0",
+        "BROWSER_COST_MEASUREMENT": "1" if args.d1_browser_cost else "0",
         "CLI_ACCEPTANCE_MODE": "cli",
         "FIDY_ASSESSMENT": args.dataset,
         "FIDY_ASSESSMENT_NETWORK": args.network,
@@ -351,8 +414,9 @@ def main():
         "network": args.network,
         "offeredLoad": "one isolated User, sequential",
         "postSetupIdleMs": args.setup_idle_ms,
+        "d1BrowserCost": args.d1_browser_cost,
         "dataset": args.dataset,
-        **browser_workload(args.dataset),
+        **browser_workload(args.dataset, read_only=args.transaction_read_only),
         "stressOnly": args.dataset == "breaking",
         "seedEpochMs": 1794916800000,
         "backendBoundary": {
@@ -366,7 +430,7 @@ def main():
         "harnessRevision": output(["git", "rev-parse", "HEAD"], ROOT),
         "comparisonSourceSha256": {
             f.name: hashlib.sha256(f.read_bytes()).hexdigest()
-            for f in [Path(__file__), BROWSER, HERE / "fresh-transactions.mjs", HERE / "fresh-workspaces.mjs", HERE / "fresh-dashboard.mjs", HERE / "fresh-recurring.mjs", HERE / "preview.mjs"]
+            for f in [Path(__file__), BROWSER, HERE / "fresh-transactions.mjs", HERE / "fresh-workspaces.mjs", HERE / "fresh-dashboard.mjs", HERE / "fresh-recurring.mjs", HERE / "browser-cost.mjs", HERE / "preview.mjs"]
         },
         "pairs": args.pairs,
         "order": "alternate D1-first and DO-first pairs" if args.candidate else "pinned D1 reference",
@@ -422,6 +486,8 @@ def main():
             for variant in (list(paths) if pair % 2 == 0 else list(reversed(paths))):
                 destination = run / f"{pair}-{variant}"
                 destination.mkdir()
+                journal = destination / "workspace-events.jsonl"
+                journal.touch()
                 row = {"variant": variant, "pair": pair, "status": "ok"}
                 try:
                     env_for_variant = {**env, "REFERENCE_WEB_PORT": str(WEB_PORT[variant])}
@@ -436,6 +502,7 @@ def main():
                     if isinstance(exc, RuntimeError):
                         row["detail"] = str(exc)
                     print(f"{variant} pair {pair} failed: {type(exc).__name__} {diagnostics}", flush=True)
+                row["work"] = observed_work(journal)
                 paired.append(row)
             if len(paired) == 2 and all(row["status"] == "ok" for row in paired):
                 if equivalence(paired[0]) != equivalence(paired[1]):
@@ -450,7 +517,7 @@ def main():
     finally:
         key.unlink(missing_ok=True)
         cert.unlink(missing_ok=True)
-        report = compare(args.pairs, rows, paths, stress=args.dataset == "breaking", calibration=args.dataset == "production")
+        report = compare(args.pairs, rows, paths, stress=args.dataset == "breaking", calibration=args.dataset == "production", read_only=args.transaction_read_only)
         (run / "report.json").write_text(json.dumps(report, indent=2))
     if any(row["status"] != "ok" for row in rows) or any(
         cell["status"] == "fail" for cell in report.values()

@@ -1,6 +1,7 @@
 """Exercise the comparison through the pinned D1 and native DO ingress with real WebSessions."""
 import argparse
 from contextlib import ExitStack
+import hashlib
 import http.cookiejar
 import json
 import os
@@ -31,7 +32,8 @@ class LocalSubject:
         self.api = f"https://127.0.0.1:{port + 1}"
         self.origin = f"https://127.0.0.1:{port}"
         self.operator = f"http://127.0.0.1:{port + 2}"
-        self.client = urllib.request.build_opener(NoRedirect(), urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()),
+        self.jar = http.cookiejar.CookieJar()
+        self.client = urllib.request.build_opener(NoRedirect(), urllib.request.HTTPCookieProcessor(self.jar),
                                                  urllib.request.HTTPSHandler(context=tls), urllib.request.ProxyHandler({}))
         self.binding = None
 
@@ -93,6 +95,65 @@ def write(path, value):
     path.write_text(json.dumps(value, indent=2) + "\n")
 
 
+def survey_read(subject, path, *, meter):
+    """Read one complete response. Counter observations surround only its authenticated request."""
+    if meter:
+        before = json.loads(subject.control("/browser-cost"))
+    status, _, body = subject.canonical(path)
+    row = dict(status=status, bytes=len(body), sha256=hashlib.sha256(body).hexdigest())
+    if meter:
+        after = json.loads(subject.control("/browser-cost"))
+        row["cost"] = cost_delta(before, after)
+    if path == READS["dashboard.fresh"] and status == 200:
+        value = json.loads(body)
+        context = value["data"]["context"]
+        if not isinstance(context["calculatedAt"], str):
+            raise ValueError("Dashboard calculation time missing")
+        context["calculatedAt"] = "observation-time"
+        row["comparableSha256"] = hashlib.sha256(json.dumps(value, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+    return row
+
+
+def cost_delta(before, after):
+    keys = ("rowsRead", "rowsWritten")
+    if any(type(observed.get(key)) is not int for observed in (before, after) for key in keys):
+        raise ValueError("D1 row counters unavailable for cost survey")
+    delta = {key: after[key] - before[key] for key in keys}
+    if min(delta.values()) < 0:
+        raise ValueError("D1 row counters regressed during cost survey")
+    return delta
+
+
+def prepare_survey(subject):
+    request = urllib.request.Request(subject.api + "/web/session/binding")
+    subject.jar.add_cookie_header(request)
+    credentials = dict(origin=subject.origin, binding=subject.binding, cookie=request.get_header("Cookie"))
+    # Only the synthetic loopback credentials enter this short-lived child via stdin.
+    subprocess.run(["bun", str(HERE / "survey-setup.mjs")], cwd=reference.ROOT,
+                   input=json.dumps(credentials).encode(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+
+
+def survey_costs(subjects, dest):
+    report = dict(scope="Local fixed-ID fixture with four configured Widgets and five Recurring revisions.",
+                  dashboardNormalization=["data.context.calculatedAt"],
+                  requestsPerShape=2, paths=READS, attempts=[])
+    write(dest, report)
+    before = json.loads(subjects["d1"].control("/browser-cost"))
+    prepare_survey(subjects["d1"])
+    report["d1WorkspaceSetup"] = cost_delta(before, json.loads(subjects["d1"].control("/browser-cost")))
+    write(dest, report)
+    prepare_survey(subjects["do"])
+    for order in [("d1", "do"), ("do", "d1")]:
+        for operation, path in READS.items():
+            started = time.monotonic()
+            for variant in order:
+                row = survey_read(subjects[variant], path, meter=variant == "d1")
+                report["attempts"].append(dict(operation=operation, variant=variant, **row))
+                write(dest, report)
+            # One isolated request per variant per second permits admission between shapes.
+            time.sleep(max(0, 1 - (time.monotonic() - started)))
+
+
 def compare_fixture(root, baseline, dest, scratch):
     verify = {"d1": reference.revision(baseline, "d1"), "do": reference.revision(root, "do")}
     certificate = scratch / "tls.crt"
@@ -150,6 +211,7 @@ def compare_fixture(root, baseline, dest, scratch):
             if row["accountability"] != dict(reads=1, corrections=0, units=0, receipts=0):
                 row["ok"] = False
             write(dest / "attempts.json", rows)
+        survey_costs(subjects, dest / "read-shape-costs.json")
         for variant, subject in subjects.items():
             status, _, _ = subject.canonical("/transactions/81000000-0000-4000-8000-000000000002/source-attestations")
             coverage[variant] = {"sourceAttestationsHttpStatus": status}

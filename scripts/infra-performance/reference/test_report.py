@@ -8,6 +8,16 @@ from run import BOUNDARIES, CALIBRATION_VIEWS, browser_workload, compare, failur
 
 
 class ReferenceReport(unittest.TestCase):
+    def test_read_only_plan_and_report_cover_actual_startup_and_fresh_history(self):
+        expected = {"startup.browser", "read.browser", "read.http", "read.backend"}
+        plan = browser_workload("production", read_only=True)
+        self.assertEqual(set(plan["boundaries"]), expected)
+        self.assertNotIn("additionalCalibrationSetup", plan)
+        report = compare(1, self.rows(1), ["d1", "do"], read_only=True)
+        self.assertEqual(set(report), expected)
+        self.assertEqual(report["read.browser"]["d1"]["completed"], 1)
+        self.assertEqual(report["read.browser"]["status"], "missing")
+
     def test_extreme_manifest_declares_only_the_transaction_journeys_it_runs(self):
         plan = browser_workload("extreme")
         self.assertEqual(plan["boundaries"], BOUNDARIES)
@@ -85,7 +95,7 @@ class ReferenceReport(unittest.TestCase):
 
     def rows(self, samples):
         return [
-            {"variant": variant, "status": "ok", "timings": {k: value for k in BOUNDARIES + CALIBRATION_VIEWS}}
+            {"variant": variant, "pair": value - 1, "status": "ok", "timings": {k: value for k in BOUNDARIES + CALIBRATION_VIEWS}}
             for value in range(1, samples + 1)
             for variant in ["d1", "do"]
         ]
@@ -116,6 +126,53 @@ class ReferenceReport(unittest.TestCase):
             self.assertEqual(report[key]["status"], "missing")
         self.assertEqual(report["recurring.full.browser"]["status"], "not-exposed")
 
+    def test_no_match_recurring_search_has_its_own_browser_gate(self):
+        key = "recurring.no-match.browser"
+        self.assertIn(key, browser_workload("production")["boundaries"])
+        rows = self.rows(30)
+        for row in rows:
+            row["timings"][key] = 190 if row["variant"] == "d1" else 110
+        self.assertEqual(compare(30, rows, ["d1", "do"], calibration=True)[key]["status"], "fail")
+
+    def test_partial_pair_keeps_completed_offered_and_unreached_views_separate(self):
+        from run import observed_work
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory) / "workspace-events.jsonl"
+            log.write_text('{"stage":"post-setup-idle","elapsedMs":1000}\n'
+                           '{"type":"d1-cost","stage":"verified-refresh","rowsWritten":23}\n'
+                           '{"type":"offered","journey":"budgets.month.browser"}\n'
+                           '{"type":"completed","journey":"budgets.month.browser"}\n'
+                           '{"type":"offered","journey":"review.pending.browser"}\n'
+                           '{"type":"failed","journey":"review.pending.browser"}\n')
+            row = {"variant": "do", "pair": 0, "status": "failed", "work": observed_work(log)}
+            report = compare(1, [row], ["do"], calibration=True)
+        for name, offered, completed in [
+            ("budgets.month.browser", 1, 1),
+            ("review.pending.browser", 1, 0),
+            ("recurring.month.browser", 0, 0),
+        ]:
+            self.assertEqual(report[name]["status"], "fail")
+            counts = report[name]["do"]
+            self.assertEqual((counts["planned"], counts["offered"], counts["completed"],
+                              counts["comparable"]), (1, offered, completed, 0))
+
+    def test_verified_timings_prove_completion_when_a_journal_lacks_that_event(self):
+        rows = self.rows(1)
+        for row in rows:
+            row["work"] = {}
+        cell = compare(1, rows, ["d1", "do"])["startup.browser"]
+        self.assertEqual((cell["d1"]["offered"], cell["d1"]["completed"]), (1, 1))
+
+    def test_archived_success_leaves_an_unmeasured_cell_missing(self):
+        key = "recurring.no-match.browser"
+        rows = self.rows(30)
+        for row in rows:
+            del row["timings"][key]
+        cell = compare(30, rows, ["d1", "do"], calibration=True)[key]
+        self.assertEqual(cell["status"], "missing")
+        self.assertIsNone(cell["d1"]["offered"])
+        self.assertEqual(cell["d1"]["comparable"], 0)
+
     def test_every_boundary_requires_the_minimum_paired_count(self):
         summary = compare(29, self.rows(29), ["d1", "do"])
         self.assertEqual(summary["read.http"]["status"], "missing")
@@ -132,7 +189,9 @@ class ReferenceReport(unittest.TestCase):
         rows[-1]["status"] = "failed"
         failed = compare(30, rows, ["d1", "do"])
         self.assertEqual(failed["read.http"]["status"], "fail")
-        self.assertEqual(failed["read.http"]["do"]["completed"], 29)
+        self.assertEqual(failed["read.http"]["d1"]["comparable"], 29)
+        self.assertEqual(failed["read.http"]["do"]["comparable"], 29)
+        self.assertEqual(failed["read.http"]["do"]["completed"], 30)
 
     def test_stress_evidence_uses_no_comparative_gate(self):
         report = compare(30, self.rows(30), ["d1", "do"], stress=True)

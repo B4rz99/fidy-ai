@@ -7,7 +7,8 @@ import { Schema } from "effect";
 import { freshBudgetMonth, freshPendingReview } from "./fresh-workspaces.mjs";
 import { freshDashboard, prepareReferenceDashboard } from "./fresh-dashboard.mjs";
 import { freshRecurring, prepareReferenceRecurring } from "./fresh-recurring.mjs";
-import { freshTransactions } from "./fresh-transactions.mjs";
+import { freshTransactionHistory, freshTransactions } from "./fresh-transactions.mjs";
+import { observeBrowserD1 } from "./browser-cost.mjs";
 
 const { chromium } = await import("@playwright/test");
 
@@ -30,6 +31,7 @@ const port = Number(process.env.REFERENCE_WEB_PORT ?? "4183");
 const app = `https://127.0.0.1:${port}`;
 const api = `https://127.0.0.1:${port + 1}`;
 const operator = `http://127.0.0.1:${port + 2}`;
+const readOnly = process.env.FIDY_REFERENCE_READ_ONLY === "1";
 const ledger = app + "/app/transactions?month=2026-11";
 /** @param {Uint8Array} body Exact response bytes used for comparison. */
 const digest = (body) => createHash("sha256").update(body).digest("hex");
@@ -116,7 +118,7 @@ try {
     assert.ok(backendMs > 0 && timing.responseEnd > 0, "Missing backend or transport timing");
     return Schema.decodeSync(Schema.fromJsonString(Schema.Unknown))(body.toString("utf8"));
   };
-  if (process.env.FIDY_ASSESSMENT === "production") {
+  if (process.env.FIDY_ASSESSMENT === "production" && !readOnly) {
     process.stderr.write("REFERENCE_STAGE dashboard-fixture\n");
     assert.equal(new URL(api).hostname, "127.0.0.1");
     const binding = await request.get(api + "/web/session/binding", { headers: origin });
@@ -128,26 +130,33 @@ try {
     process.stderr.write("REFERENCE_STAGE recurring-fixture\n");
     await prepareReferenceRecurring(request, installation);
   }
+  const events = process.env.FIDY_REFERENCE_EVENTS;
+  assert.ok(events, "Missing reference observation file");
+  /** @param {Readonly<Record<string, unknown>>} row Bounded workspace measurement metadata. */
+  const event = (row) => appendFileSync(events, JSON.stringify(row) + "\n");
+  const checkpoint =
+    process.env.FIDY_REFERENCE_D1_COST === "1"
+      ? observeBrowserD1(page, api, operator, event)
+      : undefined;
+  if (checkpoint) await checkpoint("before-startup");
   const idleMs = Number(process.env.FIDY_REFERENCE_SETUP_IDLE_MS ?? "0");
   const settledSetupMs = 2000;
   assert.ok(idleMs === 0 || idleMs === settledSetupMs);
   if (idleMs > 0) {
-    const events = process.env.FIDY_REFERENCE_EVENTS;
-    assert.ok(events, "Missing reference observation file");
     const started = performance.now();
     // Allow one timer tick for rounding; verify the actual interval before navigation.
     await sleep(idleMs + 1);
     const elapsedMs = performance.now() - started;
     assert.ok(elapsedMs >= idleMs);
-    appendFileSync(
-      events,
-      JSON.stringify({
-        stage: "post-setup-idle",
-        elapsedMs,
-      }) + "\n"
-    );
+    event({ stage: "post-setup-idle", elapsedMs });
   }
-  const { before, startupMs, readMs, correctionMs } = await freshTransactions({
+  const journeys = {
+    startup: "startup.browser",
+    refresh: "read.browser",
+    correction: "correction.browser",
+  };
+  const journey = readOnly ? freshTransactionHistory : freshTransactions;
+  const result = await journey({
     page,
     ledger,
     api,
@@ -156,7 +165,12 @@ try {
     observeStartup: async (reply) =>
       Schema.decodeSync(Schema.fromJsonString(Schema.Unknown))(await reply.text()),
     beforeRefresh: evidence,
+    checkpoint,
+    offered: (stage) => event({ type: "offered", journey: journeys[stage] }),
+    completed: (stage, milliseconds) =>
+      event({ type: "completed", journey: journeys[stage], milliseconds }),
   });
+  const { before, startupMs, readMs } = result;
   process.stderr.write("REFERENCE_STAGE accountability-after\n");
   const after = await evidence();
   const accountability = {
@@ -167,22 +181,27 @@ try {
   };
   process.stderr.write(JSON.stringify(accountability) + "\n");
   // WebSession requests in the pinned baseline write session Audit and carry no external retry key.
-  assert.deepEqual(accountability, { reads: 2, corrections: 1, units: 0, receipts: 0 });
+  assert.deepEqual(accountability, {
+    reads: readOnly ? 1 : 2,
+    corrections: readOnly ? 0 : 1,
+    units: 0,
+    receipts: 0,
+  });
   const views = {};
-  if (process.env.FIDY_ASSESSMENT === "production") {
+  if (process.env.FIDY_ASSESSMENT === "production" && !readOnly) {
     process.stderr.write("REFERENCE_STAGE budgets-month\n");
-    const events = process.env.FIDY_REFERENCE_EVENTS;
-    assert.ok(events, "Missing reference observation file");
-    /** @param {Readonly<Record<string, unknown>>} row Bounded workspace measurement metadata. */
-    const event = (row) => appendFileSync(events, JSON.stringify(row) + "\n");
     const input = { page, api, browser: app, event };
     views["budgets.month.browser"] = await freshBudgetMonth(input);
+    if (checkpoint) await checkpoint("budgets");
     process.stderr.write("REFERENCE_STAGE review-pending\n");
     views["review.pending.browser"] = await freshPendingReview(input);
+    if (checkpoint) await checkpoint("needs-review");
     process.stderr.write("REFERENCE_STAGE dashboard-fresh\n");
     views["dashboard.fresh.browser"] = await freshDashboard(input);
+    if (checkpoint) await checkpoint("dashboard");
     process.stderr.write("REFERENCE_STAGE recurring-fresh\n");
     Object.assign(views, await freshRecurring(input));
+    if (checkpoint) await checkpoint("recurring");
   }
   process.stdout.write(
     JSON.stringify({
@@ -190,7 +209,7 @@ try {
       browser: browser.version(),
       startupMs,
       readMs,
-      correctionMs,
+      ...("correctionMs" in result ? { correctionMs: result.correctionMs } : {}),
       attempts,
       accountability,
     }) + "\n"

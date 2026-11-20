@@ -269,10 +269,26 @@ export const freshRecurring = async (input) => {
     action: () => page.getByRole("button", { name: "Aplicar filtros", exact: true }).click(),
     ready: () => usable(page, month, [1]),
   });
+  const absent = "Sin coincidencia sintética";
+  await page.getByRole("textbox", { name: "Buscar recurrentes", exact: true }).fill(absent);
+  const noMatch = await measure(input, {
+    journey: "recurring.no-match.browser",
+    query: { ...compact, previousMonth: "2026-09", search: absent },
+    selected: [],
+    prior: "2026-09",
+    action: () => page.getByRole("button", { name: "Aplicar filtros", exact: true }).click(),
+    ready: async () => {
+      const empty = page.locator('[data-recurring-slot="empty"]');
+      await empty.getByRole("heading", { name: "Sin resultados para estos filtros" }).waitFor();
+      await empty.getByRole("button", { name: "Limpiar filtros", disabled: false }).waitFor();
+      await painted(page);
+    },
+  });
   return {
     "recurring.month.browser": monthly.result,
     "recurring.previous.browser": prior.result,
     "recurring.selective.browser": selective.result,
+    "recurring.no-match.browser": noMatch.result,
     "recurring.full.http": history,
   };
 };

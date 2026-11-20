@@ -39,6 +39,7 @@ const workspaceQueries = new Set([
   "/recurring-plans?month=2026-11",
   "/recurring-plans?month=2026-11&previousMonth=2026-09&view=compact",
   "/recurring-plans?month=2026-11&previousMonth=2026-09&search=Recurrente+1&view=compact",
+  "/recurring-plans?month=2026-11&previousMonth=2026-09&search=Sin+coincidencia+sint%C3%A9tica&view=compact",
   "/budget-status?month=2026-10&timeZone=America%2FBogota",
   "/budget-status?month=2026-11&timeZone=America%2FBogota",
   "/ingestion/review-workspace?limit=0",

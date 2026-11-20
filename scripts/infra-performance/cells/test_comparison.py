@@ -18,6 +18,37 @@ class ComparisonTests(unittest.TestCase):
         self.assertEqual(boundaries(rows, expected_pairs=30, users=1)["httpMs"]["status"], "fail")
 
 
+class SurveyTests(unittest.TestCase):
+    def test_prepared_dashboard_compares_all_fields_except_its_observation_time(self):
+        from rehearse import survey_read
+        from unittest.mock import Mock
+
+        subject = Mock()
+        subject.canonical.side_effect = [
+            (200, {}, b'{"data":{"context":{"calculatedAt":"first"},"value":7}}'),
+            (200, {}, b'{"data":{"context":{"calculatedAt":"later"},"value":7}}'),
+            (200, {}, b'{"data":{"context":{"calculatedAt":"later"},"value":8}}'),
+        ]
+        first, later, changed = [survey_read(subject, "/dashboard/view", meter=False) for _ in range(3)]
+        self.assertNotEqual(first["sha256"], later["sha256"])
+        self.assertEqual(first["comparableSha256"], later["comparableSha256"])
+        self.assertNotEqual(first["comparableSha256"], changed["comparableSha256"])
+
+    def test_refused_read_retains_its_observed_cost_without_counting_as_success(self):
+        from rehearse import survey_read
+        from unittest.mock import Mock
+
+        subject = Mock()
+        subject.control.side_effect = [b'{"rowsRead":7,"rowsWritten":3}',
+                                       b'{"rowsRead":12,"rowsWritten":4}']
+        subject.canonical.return_value = (429, {}, b'{"error":"rate_limited"}')
+        row = survey_read(subject, "/dashboard/view", meter=True)
+        self.assertEqual(row["status"], 429)
+        self.assertEqual(row["cost"], {"rowsRead": 5, "rowsWritten": 1})
+        self.assertEqual(row["bytes"], 24)
+        self.assertNotIn("body", row)
+
+
 class D1BudgetTests(unittest.TestCase):
     def test_unprepared_entry_reports_missing_evidence_without_credentials(self):
         import json

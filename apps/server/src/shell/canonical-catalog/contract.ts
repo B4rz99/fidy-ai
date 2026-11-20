@@ -1,5 +1,5 @@
 import * as Arr from "effect/Array";
-import { Context, Option, Schema, SchemaAST } from "effect";
+import { Context, Function, Option, Schema, SchemaAST } from "effect";
 import { HttpApi, type HttpApiEndpoint, type HttpApiGroup, OpenApi } from "effect/http-api";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import {
@@ -167,6 +167,21 @@ export const makeOperationCatalog = <Id extends string, Groups extends HttpApiGr
   }
 
   return { operations, byId };
+};
+
+/** Keeps the canonical API usable before a caller inspects its operation metadata. */
+export const deferOperationCatalog = <Id extends string, Groups extends HttpApiGroup.Constraint>(
+  api: HttpApi.HttpApi<Id, Groups>
+): OperationCatalog => {
+  const getCatalog = Function.memoize(makeOperationCatalog<Id, Groups>);
+  return {
+    get operations() {
+      return getCatalog(api).operations;
+    },
+    get byId() {
+      return getCatalog(api).byId;
+    },
+  };
 };
 
 let boundCatalog = Option.none<OperationCatalog>();

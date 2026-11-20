@@ -2,7 +2,7 @@ import { CanonicalTelemetry, ValidationGate } from "~/shell/public-http/contract
 import { HttpApi, type HttpApiGroup, OpenApi } from "effect/http-api";
 import { TokenAuthorization } from "~/shell/authorization/contract";
 
-import { bindOperationCatalog, makeOperationCatalog } from "~/shell/canonical-catalog/contract";
+import { bindOperationCatalog, deferOperationCatalog } from "~/shell/canonical-catalog/contract";
 import { BrowserLoginGroup } from "~/shell/browser-login/contract";
 import { BudgetsGroup } from "~/shell/budgets/contract";
 import { ConnectionsGroup } from "~/shell/connections/contract";
@@ -41,7 +41,7 @@ const OrdinaryFidyApi = HttpApi.make("fidy")
   .add(PATsGroup)
   .add(RecoveryGroup);
 
-const ordinaryOperationCatalog = makeOperationCatalog(OrdinaryFidyApi);
+const ordinaryOperationCatalog = deferOperationCatalog(OrdinaryFidyApi);
 const OperationsGroup = makeOperationsGroup(ordinaryOperationCatalog);
 
 export class FidyApi extends OrdinaryFidyApi.add(OperationsGroup)
@@ -58,7 +58,7 @@ export class FidyApi extends OrdinaryFidyApi.add(OperationsGroup)
  * Canonical ids, routes, inputs, outputs, failures, and callability policy reflected from the
  * assembled API. Adding or renaming an operation updates every catalog-derived guard and registry.
  */
-export const operationCatalog = makeOperationCatalog(FidyApi);
+export const operationCatalog = deferOperationCatalog(FidyApi);
 
 type ApiGroups<Api> = Api extends HttpApi.HttpApi<infer _Identifier, infer Groups> ? Groups : never;
 

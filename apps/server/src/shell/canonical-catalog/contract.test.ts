@@ -1,9 +1,13 @@
 import { expect, it } from "@effect/vitest";
 import { Option, Schema } from "effect";
 import { FidyApi, operationCatalog } from "~/shell/api";
-import { getAtomicBatchCallSchema } from "~/shell/operations/contract";
+import {
+  atomicBatchChildOperations,
+  getAtomicBatchCallSchema,
+  getAtomicBatchChildIds,
+} from "~/shell/operations/contract";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api";
-import { makeOperationCatalog } from "./contract";
+import { deferOperationCatalog, makeOperationCatalog } from "./contract";
 import { getCanonicalOperationInput } from "~/shell/canonical-operations/operations";
 import {
   operationPolicy,
@@ -54,6 +58,21 @@ it("publishes the same decimal, credential and operation-id constraints that wir
       },
     },
   });
+});
+
+it("shares the ordered operation objects and the batch child IDs after the first lookup", () => {
+  const eager = makeOperationCatalog(FidyApi);
+  const byId = operationCatalog.byId;
+  const operations = operationCatalog.operations;
+  expect([...byId.keys()]).toEqual(eager.operations.map(({ id }) => id));
+  expect(operations.map(({ id }) => id)).toEqual([...byId.keys()]);
+  expect(operationCatalog.byId).toBe(byId);
+  expect(operationCatalog.operations).toBe(operations);
+  for (const operation of operations) expect(byId.get(operation.id)).toBe(operation);
+
+  const children = getAtomicBatchChildIds();
+  expect(children).toEqual(atomicBatchChildOperations(eager).map(({ id }) => id));
+  expect(getAtomicBatchChildIds()).toBe(children);
 });
 
 it("keeps optional review paging and the existing UTF-16 search bounds", () => {
@@ -138,6 +157,10 @@ it("rejects an OpenAPI operation id that is not the group-qualified identifier",
   const api = HttpApi.make("operation-id-test").add(HttpApiGroup.make("testing").add(endpoint));
 
   expect(() => makeOperationCatalog(api)).toThrow(
+    "Canonical operations must publish their group-qualified identifier: testing.inspectItems"
+  );
+  const deferred = deferOperationCatalog(api);
+  expect(() => deferred.byId).toThrow(
     "Canonical operations must publish their group-qualified identifier: testing.inspectItems"
   );
 });

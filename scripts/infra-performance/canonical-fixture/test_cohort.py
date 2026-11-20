@@ -86,3 +86,20 @@ class CohortTests(unittest.TestCase):
         self.assertEqual(port.objects, {"a"*64: True, "b"*64: True, "c"*64: False})
         with self.assertRaises(ValueError):
             restored.enroll()
+
+    def test_interruption_before_erasure_dispatch_recovers_with_matching_login_only(self):
+        port, store = Port(), Store()
+        coords = dict(prefix="fidy-2259-0123456789ab", revision="a"*40)
+        owner = Cohort(store, coords, port)
+        owner.enroll()
+        def lost(user):
+            raise IOError("before first erasure dispatch")
+        erase = port.erase
+        port.erase = lost
+        with self.assertRaises(IOError):
+            owner.cleanup()
+        port.erase = erase
+        port.recover_login = port.login
+        Cohort(store, coords, port, sleep=lambda *_: self.fail("Still waiting for unoffered erasure")).cleanup()
+        self.assertEqual(port.operations.count("erase"), 1)
+        self.assertEqual(port.operations.count("signup"), 1)

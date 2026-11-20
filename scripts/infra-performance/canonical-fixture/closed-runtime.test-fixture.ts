@@ -65,7 +65,7 @@ const sharedBindings = (
 });
 export const closedRuntime = Effect.fnUntraced(function* (
   { revision, secret }: { revision: string; secret: string },
-  directory = ""
+  directory: string = ""
 ) {
   const privateKey = Redacted.value(yield* Config.Redacted("TEST_FIXTURE_PRIVATE_KEY"));
   const shared = sharedBindings(revision, secret);

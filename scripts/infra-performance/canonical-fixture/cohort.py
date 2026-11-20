@@ -58,6 +58,7 @@ class Cohort:
         self.port.guard("begin")
         self.state = dict(coordinates=self.coordinates)
         self.save("claimed")
+        self.port.guard("preflight")
         if self.port.marker_owner() is not None:
             raise ValueError("Release already issued its one-use receipt")
         survivors = self.survivor_ids()
@@ -105,7 +106,14 @@ class Cohort:
                 raise ValueError("Cannot attribute the established performance User")
             self.save("owned", physical=physical, user=user)
         current = self.physical_state()
-        if current == "populated" and stage != "erasure-offered":
+        if current == "populated" and stage == "erasure-offered":
+            user = self.port.recover_login()
+            if user is not None:
+                if identity(user) != self.state["user"]:
+                    raise ValueError("A different User authenticated during interrupted cleanup")
+                self.port.renew()
+                self.port.erase(user)
+        elif current == "populated":
             user = self.port.login()
             if identity(user) != self.state["user"]:
                 raise ValueError("Cleanup authenticated another User")

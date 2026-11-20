@@ -1,23 +1,21 @@
 import { Database } from "bun:sqlite";
-import { Effect, Option, Redacted } from "effect";
+import { Config, DateTime, Effect, Option, Redacted } from "effect";
+import type { Miniflare } from "miniflare";
 import { installedOrigins } from "../../../apps/server/src/shell/browser-transport/contract";
 import { establishSmokeUsers } from "../../../infra/cloudflare/native-acceptance";
+import { native } from "../../../apps/server/cloudflare/user-store.test-fixture";
 import { transport } from "./bridge";
 import { closedRuntime } from "./closed-runtime.test-fixture";
-import { serveCohort } from "./cohort-bridge";
+import { cohortAuthority, serveCohort } from "./cohort-bridge";
 
-const revision = process.env.FIDY_NATIVE_REVISION ?? "";
-const secret = process.env.SMOKE_PROOF ?? "";
-const directory = process.env.FIDY_REHEARSAL_STATE;
-if (!directory) throw Error("Missing disposable cohort state");
-const runtime = await Effect.runPromise(closedRuntime({ revision, secret }, directory));
-const send = transport(runtime);
-const readObject = async (id: string): Promise<readonly [string, boolean]> => {
-  if (!/^[0-9a-f]{64}$/u.test(id)) throw Error("Unknown physical object");
-  const files = await Array.fromAsync(
-    new Bun.Glob("**/" + id + ".sqlite").scan({ cwd: directory, absolute: true })
+const readObject = Effect.fnUntraced(function* (directory: string, id: string) {
+  if (!/^[a-f0-9]{64}$/u.test(id)) return yield* Effect.fail(Error("Unknown physical object"));
+  const files = yield* native(() =>
+    Array.fromAsync(new Bun.Glob("**/" + id + ".sqlite").scan({ cwd: directory, absolute: true }))
   );
-  if (files.length !== 1 || files[0] === undefined) throw Error("Physical inventory unavailable");
+  if (files.length !== 1 || files[0] === undefined) {
+    return yield* Effect.fail(Error("Physical inventory unavailable"));
+  }
   const db = new Database(files[0], { readonly: true });
   try {
     return [
@@ -27,42 +25,52 @@ const readObject = async (id: string): Promise<readonly [string, boolean]> => {
   } finally {
     db.close();
   }
-};
-const local = async (action: string): Promise<unknown> => {
-  if (action === "seed-survivors") {
-    await Effect.runPromise(
-      establishSmokeUsers({
-        revision,
-        proof: Redacted.make(secret),
-        origins: installedOrigins.acceptance,
-        send,
-        erasure: Option.none(),
-      })
-    );
-    return true;
-  }
-  if (action === "census") {
-    return Object.fromEntries(
-      await Promise.all((await runtime.listDurableObjectIds("UserStore", "core")).map(readObject))
-    );
-  }
-  if (action === "marker") {
-    const bucket = await runtime.getR2Bucket("SMOKE_BUCKET", "core");
-    const value = await bucket.get(
-      "_release-smoke/" + revision + "/acceptance/transactions/performance-1"
-    );
-    return value === null ? null : value.text();
-  }
-  if (action === "tick") {
-    const core = await runtime.getWorker("core");
-    return (
-      (await core.scheduled({ cron: "* * * * *", scheduledTime: new Date() })).outcome === "ok"
-    );
-  }
-  throw Error("Unrecognized local operation");
-};
-try {
-  await serveCohort({ revision, secret }, () => send, local);
-} finally {
-  await runtime.dispose();
-}
+});
+const state = Effect.fnUntraced(function* (runtime: Miniflare, directory: string) {
+  const ids = yield* native(() => runtime.listDurableObjectIds("UserStore", "core"));
+  return Object.fromEntries(yield* Effect.forEach(ids, (id) => readObject(directory, id)));
+});
+const marker = Effect.fnUntraced(function* (runtime: Miniflare, revision: string) {
+  const bucket = yield* native(() => runtime.getR2Bucket("SMOKE_BUCKET", "core"));
+  const value = yield* native(() =>
+    bucket.get("_release-smoke/" + revision + "/acceptance/transactions/performance-1")
+  );
+  return value === null ? null : yield* native(() => value.text());
+});
+const tick = Effect.fnUntraced(function* (runtime: Miniflare) {
+  const core = yield* native(() => runtime.getWorker("core"));
+  const now = DateTime.toDateUtc(yield* DateTime.now);
+  return (
+    (yield* native(() => core.scheduled({ cron: "* * * * *", scheduledTime: now }))).outcome ===
+    "ok"
+  );
+});
+const run = Effect.gen(function* () {
+  const auth = yield* cohortAuthority;
+  const directory = yield* Config.String("FIDY_REHEARSAL_STATE");
+  yield* Effect.acquireUseRelease(
+    closedRuntime(auth, directory),
+    (runtime) => {
+      const send = transport(runtime);
+      const local = Effect.fnUntraced(function* (action: string) {
+        if (action === "seed-survivors") {
+          yield* establishSmokeUsers({
+            revision: auth.revision,
+            proof: Redacted.make(auth.secret),
+            origins: installedOrigins.acceptance,
+            send,
+            erasure: Option.none(),
+          });
+          return true;
+        }
+        if (action === "census") return yield* state(runtime, directory);
+        if (action === "marker") return yield* marker(runtime, auth.revision);
+        if (action === "tick") return yield* tick(runtime);
+        return yield* Effect.fail(Error("Unknown rehearsal operation"));
+      });
+      return serveCohort(auth, () => send, local);
+    },
+    (runtime) => native(() => runtime.dispose())
+  );
+});
+await Effect.runPromise(run);

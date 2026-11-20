@@ -76,7 +76,13 @@ class BrowserPort:
         return member["outcome"], uuid(member["id"])
 
     def login(self):
-        member = self.command("login")
+        return self.remember(self.command("login"))
+
+    def recover_login(self):
+        member = self.command("cleanup-login")
+        return None if member is None else self.remember(member)
+
+    def remember(self, member):
         if member["outcome"] != "approved":
             raise ValueError("An existing performance User is required for cleanup")
         user = uuid(member["id"])

@@ -1,5 +1,5 @@
 import { createInterface } from "node:readline/promises";
-import { Effect, Redacted, Schema } from "effect";
+import { Config, Data, Effect, Redacted, Schema } from "effect";
 import { performanceCohortBrowser } from "../../../infra/cloudflare/native-acceptance";
 import { performanceReceiptPath } from "../../../apps/server/cloudflare/release-isolation/contract";
 import { installedOrigins } from "../../../apps/server/src/shell/browser-transport/contract";
@@ -17,116 +17,124 @@ const command = Schema.Struct({
   cookie: Schema.optional(Schema.String),
   binding: Schema.optional(Schema.String),
 });
-const io = <A>(run: () => Promise<A>): Effect.Effect<A, Error> =>
-  Effect.tryPromise({ try: run, catch: () => Error("Private cohort transport unavailable") });
+class CohortTransportError extends Data.TaggedError("CohortTransportError") {}
+const io = <A>(run: () => Promise<A>): Effect.Effect<A, CohortTransportError> =>
+  Effect.tryPromise({ try: run, catch: () => new CohortTransportError() });
 const upstream = Schema.Struct({
   status: Schema.Int,
   headers: Schema.Record(Schema.String, Schema.String),
   body: Schema.String,
 });
-// This executable has no network transport. Every protected request returns to the parent
-// for its release, lease, request-count and origin checks before the parent sends it.
-const relay =
-  (read: Read): Transport =>
-  (request) =>
-    io(async () => {
-      output({
-        exchange: {
-          url: request.url,
-          method: request.method,
-          headers: Object.fromEntries(request.headers),
-          body: request.body === null ? null : await request.text(),
-        },
-      });
-      const reply = Schema.decodeSync(Schema.fromJsonString(upstream))(await read());
-      return new Response(reply.body || null, { status: reply.status, headers: reply.headers });
+// The parent checks account custody and release admission before it sends each request.
+const relay = (read: Read): Transport =>
+  Effect.fnUntraced(function* (request: Request) {
+    output({
+      exchange: {
+        url: request.url,
+        method: request.method,
+        headers: Object.fromEntries(request.headers),
+        body: request.body === null ? null : yield* io(() => request.text()),
+      },
     });
-
+    const reply = yield* Schema.decodeEffect(Schema.fromJsonString(upstream))(yield* io(read));
+    return new Response(reply.body === "" ? null : reply.body, {
+      status: reply.status,
+      headers: reply.headers,
+    });
+  });
+type Browser = ReturnType<typeof performanceCohortBrowser>;
+type Item = typeof command.Type;
+type Local = (action: string) => Effect.Effect<unknown, Error>;
+type Action = (item: Item) => Effect.Effect<unknown, Error>;
+const unavailable: Local = () => Effect.fail(new CohortTransportError());
 const fixturePath = (method: string, path: string): boolean =>
   method === "GET"
     ? path === "/transactions?limit=25" || /^\/transactions\/[a-f0-9-]{36}$/u.test(path)
     : ["/operations/atomic-batch", "/transactions/link", performanceReceiptPath].includes(path);
-
-type CohortBrowser = ReturnType<typeof performanceCohortBrowser>;
-type Item = typeof command.Type;
-type Local = (action: string) => Promise<unknown>;
-const unavailable: Local = () => Promise.reject(Error("Unknown cohort action"));
-const headersOf = (item: Item): Record<string, string> => {
-  if (!item.cookie || !item.binding) throw Error("Missing mounted Session");
+const headersOf = Effect.fnUntraced(function* (item: Item) {
+  if (item.cookie === undefined || item.binding === undefined) {
+    return yield* new CohortTransportError();
+  }
   return { cookie: item.cookie, "fidy-session-binding": item.binding };
-};
-const canonical = async (port: CohortBrowser, item: Item): Promise<unknown> => {
-  if (!item.method || !item.path || !fixturePath(item.method, item.path)) {
-    throw Error("Unknown fixture operation");
+});
+const canonical = Effect.fnUntraced(function* (port: Browser, item: Item) {
+  if (
+    item.method === undefined ||
+    item.path === undefined ||
+    !fixturePath(item.method, item.path)
+  ) {
+    return yield* new CohortTransportError();
   }
-  const reply = await Effect.runPromise(
-    port.call(item.path, {
-      method: item.method,
-      headers: {
-        ...headersOf(item),
-        origin: installedOrigins.acceptance.browser,
-        "content-type": "application/json",
-      },
-      ...(item.body == null ? {} : { body: JSON.stringify(item.body) }),
-    })
-  );
-  return { status: reply.status, data: reply.ok ? await reply.json() : null };
-};
-const dispatch = (port: CohortBrowser, local: Local): ((item: Item) => Promise<unknown>) => {
-  const actions = new Map<string, (item: Item) => Promise<unknown>>([
-    ["login", (): Promise<unknown> => Effect.runPromise(port.open("login"))],
-    ["register", (): Promise<unknown> => Effect.runPromise(port.open("signup"))],
-    ["survivors", (): Promise<unknown> => Effect.runPromise(port.survivors())],
-    [
-      "before-signup",
-      (): Promise<unknown> => Effect.runPromise(port.beforeSignup().pipe(Effect.as(true))),
-    ],
-    ["renew", (): Promise<unknown> => Effect.runPromise(port.renew().pipe(Effect.as(true)))],
-    ["refused", (): Promise<unknown> => Effect.runPromise(port.refused())],
-    ["erase", (item: Item): Promise<unknown> => Effect.runPromise(port.erase(headersOf(item)))],
-    [
-      "denied",
-      (item: Item): Promise<unknown> =>
-        Effect.runPromise(port.denied(headersOf(item)).pipe(Effect.as(true))),
-    ],
-    ["canonical", (item: Item): Promise<unknown> => canonical(port, item)],
-  ]);
-  return (item) => actions.get(item.action)?.(item) ?? local(item.action);
-};
-export const serveCohort = async (
-  { revision, secret }: { revision: string; secret: string },
-  network: (read: Read) => Transport = relay,
-  local: Local = unavailable
-): Promise<void> => {
-  const lines = createInterface({ input: process.stdin, terminal: false });
-  const iterator = lines[Symbol.asyncIterator]();
-  const read = async (): Promise<string> => (await iterator.next()).value ?? "";
-  const apply = dispatch(
-    performanceCohortBrowser({ revision, proof: Redacted.make(secret), send: network(read) }),
-    local
-  );
-  const next = async (): Promise<void> => {
-    const line = await read();
-    if (line === "") return;
-    output(await apply(Schema.decodeSync(Schema.fromJsonString(command))(line)));
-    return next();
+  const reply = yield* port.call(item.path, {
+    method: item.method,
+    headers: {
+      ...(yield* headersOf(item)),
+      origin: installedOrigins.acceptance.browser,
+      "content-type": "application/json",
+    },
+    ...(item.body == null ? {} : { body: JSON.stringify(item.body) }),
+  });
+  return { status: reply.status, data: reply.ok ? yield* io(() => reply.json()) : null };
+});
+const dispatch = (port: Browser, local: Local): Action => {
+  const actions: Readonly<Record<string, Action>> = {
+    login: () => port.open("login"),
+    "cleanup-login": () => port.open("login").pipe(Effect.orElseSucceed(() => null)),
+    register: () => port.open("signup"),
+    survivors: () => port.survivors(),
+    "before-signup": () => port.beforeSignup().pipe(Effect.as(true)),
+    renew: () => port.renew().pipe(Effect.as(true)),
+    refused: () => port.refused(),
+    erase: (item) => headersOf(item).pipe(Effect.flatMap(port.erase)),
+    denied: (item) => headersOf(item).pipe(Effect.flatMap(port.denied), Effect.as(true)),
+    canonical: (item) => canonical(port, item),
   };
-  try {
-    await next();
-  } finally {
-    lines.close();
-  }
+  return (item) =>
+    Object.hasOwn(actions, item.action)
+      ? (actions[item.action]?.(item) ?? unavailable(item.action))
+      : local(item.action);
 };
-if (import.meta.main) {
-  const secret = process.env.SMOKE_PROOF ?? "";
-  const revision = process.env.FIDY_NATIVE_REVISION ?? "";
+export const cohortAuthority = Effect.gen(function* () {
+  const secret = Redacted.value(yield* Config.Redacted("SMOKE_PROOF"));
+  const revision = yield* Config.String("FIDY_NATIVE_REVISION");
   const minimumSecret = 32;
   if (secret.length < minimumSecret || !/^[a-f0-9]{40}$/u.test(revision)) {
-    process.exitCode = 1;
-  } else {
-    await serveCohort({ revision, secret }).catch(() => {
+    return yield* new CohortTransportError();
+  }
+  return { revision, secret };
+});
+export const serveCohort = Effect.fn(function* (
+  auth: { revision: string; secret: string },
+  network: (read: Read) => Transport = relay,
+  local: Local = unavailable
+) {
+  const lines = createInterface({ input: process.stdin, terminal: false });
+  const iterator = lines[Symbol.asyncIterator]();
+  const read: Read = () =>
+    iterator.next().then((value) => (value.done === true ? "" : value.value));
+  const apply = dispatch(
+    performanceCohortBrowser({
+      revision: auth.revision,
+      proof: Redacted.make(auth.secret),
+      send: network(read),
+    }),
+    local
+  );
+  yield* Effect.gen(function* () {
+    const line = yield* io(read);
+    if (line === "") return false;
+    output(yield* apply(yield* Schema.decodeEffect(Schema.fromJsonString(command))(line)));
+    return true;
+  }).pipe(
+    Effect.repeat({ while: (continued) => continued }),
+    Effect.ensuring(Effect.sync(() => lines.close()))
+  );
+});
+if (import.meta.main) {
+  await Effect.runPromise(cohortAuthority.pipe(Effect.flatMap((auth) => serveCohort(auth)))).catch(
+    () => {
       process.stderr.write("Closed cohort command refused\n");
       process.exitCode = 1;
-    });
-  }
+    }
+  );
 }

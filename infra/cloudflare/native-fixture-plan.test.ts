@@ -4,6 +4,7 @@ import {
   nativePlanOptions,
   projectFixtureInventory,
   requireFixtureLifecycle,
+  requireSameSuccessorPlan,
   requireSuccessorLifecycle,
 } from "./native-fixture-plan";
 import { nativeResourceInventory } from "./native-graph";
@@ -113,5 +114,28 @@ it("allows only the two existing Workers and four new smoke resources in the suc
         revision,
       })
     ).toThrow();
+  }
+});
+
+it("allows the same plan in provider order and rejects changes before any upload", () => {
+  const plan = {
+    revision,
+    applied: false,
+    member: "performance-2",
+    resources: [...creation, row("Core", "Cloudflare.Worker", "update")],
+  };
+  expect(() =>
+    requireSameSuccessorPlan({
+      approved: plan,
+      observed: { ...plan, resources: [...plan.resources].reverse() },
+    })
+  ).not.toThrow();
+  for (const changed of [
+    { ...plan, revision: provider.revision },
+    { ...plan, applied: true },
+    { ...plan, resources: creation },
+    { ...plan, resources: [...plan.resources, row("Web", "Cloudflare.Worker", "update")] },
+  ]) {
+    expect(() => requireSameSuccessorPlan({ approved: plan, observed: changed })).toThrow();
   }
 });

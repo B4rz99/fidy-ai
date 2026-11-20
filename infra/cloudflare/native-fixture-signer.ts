@@ -9,7 +9,7 @@ export const fixtureBuild = Config.Literals(["ordinary", "fallback"], "NATIVE_FI
 );
 export const fixtureSuccessorPlan = Effect.gen(function* () {
   const operation = yield* Config.String("FIXTURE_RELEASE_OPERATION").pipe(Config.withDefault(""));
-  return operation === "plan-fixture-successor";
+  return operation === "plan-fixture-successor" || operation === "stage-fixture-successor";
 });
 const workerFiles = {
   ordinary: { Core: "core-worker", Ingress: "public-worker" },

@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import type * as Alchemist from "alchemy/Alchemist";
 import { Data, Schema } from "effect";
 import { type Plan, describePlan, describeResource } from "alchemy/Plan";
@@ -45,7 +46,8 @@ export class FixturePlanRefused extends Data.TaggedError("FixturePlanRefused")<{
     | "unexpected change"
     | "missing required update or deferred deletion"
     | "missing deferred original Worker"
-    | "original Worker state or name differs";
+    | "original Worker state or name differs"
+    | "successor differs from reviewed plan";
 }> {}
 export const requireFixtureLifecycle = ({
   rows,
@@ -93,6 +95,20 @@ export const verifyFixturePlan = ({ plan, fallback }: { plan: Plan; fallback: bo
   }
 };
 
+export const SuccessorSource = Schema.Struct({
+  revision: Schema.String,
+  previousRevision: Schema.Literal("0ba692ff68c1d63da1f4a7fdb8d6df5ff1566287"),
+  previousRelease: Schema.Literal("14645515552"),
+  previousCleanup: Schema.Literal("14656121411"),
+  signerSha256: Schema.String,
+  stableCoreVersion: Schema.NonEmptyString,
+  stableCoreDeployment: Schema.NonEmptyString,
+  stableIngressVersion: Schema.NonEmptyString,
+  stableIngressDeployment: Schema.NonEmptyString,
+  oldSmokeVersionId: Schema.NonEmptyString,
+  oldSmokeDeploymentId: Schema.NonEmptyString,
+  namespaces: Schema.Array(Schema.String),
+});
 export const successorPlanSelection = (revision: string): ReadonlyArray<string> => [
   "Core",
   "Ingress",
@@ -125,5 +141,26 @@ export const requireSuccessorLifecycle = ({
   }
   if (expected.size !== 0) {
     throw new FixturePlanRefused({ reason: "missing required update or deferred deletion" });
+  }
+};
+
+type ReviewedSuccessor = Readonly<Record<string, unknown>> & {
+  resources: ReadonlyArray<{ logicalId: string }>;
+};
+export const requireSameSuccessorPlan = ({
+  approved,
+  observed,
+}: {
+  approved: ReviewedSuccessor;
+  observed: ReviewedSuccessor;
+}): void => {
+  const order = (plan: ReviewedSuccessor): ReviewedSuccessor => ({
+    ...plan,
+    resources: plan.resources.toSorted((left, right) =>
+      left.logicalId.localeCompare(right.logicalId)
+    ),
+  });
+  if (!isDeepStrictEqual(order(approved), order(observed))) {
+    throw new FixturePlanRefused({ reason: "successor differs from reviewed plan" });
   }
 };

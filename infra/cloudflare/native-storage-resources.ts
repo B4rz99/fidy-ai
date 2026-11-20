@@ -1,6 +1,8 @@
 import {
+  SuccessorSource,
   nativePlanOptions,
   projectFixtureInventory,
+  requireSameSuccessorPlan,
   requireSuccessorLifecycle,
   successorPlanSelection,
   verifyFixturePlan,
@@ -257,20 +259,28 @@ const publishSite = Effect.gen(function* () {
   );
 });
 
-const SuccessorSource = Schema.Struct({
-  revision: Schema.String,
-  previousRevision: Schema.Literal("0ba692ff68c1d63da1f4a7fdb8d6df5ff1566287"),
-  previousRelease: Schema.Literal("14645515552"),
-  previousCleanup: Schema.Literal("14656121411"),
-  signerSha256: Schema.String,
+const ReviewedSuccessorPlan = Schema.Struct({
+  ...SuccessorSource.fields,
+  member: Schema.Literal("performance-2"),
+  applied: Schema.Literal(false),
+  resources: Schema.Array(
+    Schema.Struct({
+      logicalId: Schema.NonEmptyString,
+      resourceType: Schema.NonEmptyString,
+      action: Schema.Literals(["noop", "update", "create"]),
+    })
+  ),
 });
-const planFixtureSuccessor = Effect.gen(function* () {
+const requireSuccessorSource = Effect.fn(function* (stage: boolean) {
   yield* Config.Literal("true", "GITHUB_ACTIONS");
   yield* Config.Literal("true", "GITHUB_REF_PROTECTED");
   yield* Config.Literal("refs/heads/trunk", "GITHUB_REF");
   yield* Config.Literal("workflow_dispatch", "GITHUB_EVENT_NAME");
   yield* Config.Literal("1", "GITHUB_RUN_ATTEMPT");
-  yield* Config.Literal("plan-fixture-successor", "FIXTURE_RELEASE_OPERATION");
+  yield* Config.Literal(
+    stage ? "stage-fixture-successor" : "plan-fixture-successor",
+    "FIXTURE_RELEASE_OPERATION"
+  );
   yield* Config.Literal("closed", "NATIVE_STORAGE_ADMISSION");
   yield* Config.Literal("acceptance", "NATIVE_STORAGE_HOSTS");
   yield* Config.Literal(
@@ -291,6 +301,10 @@ const planFixtureSuccessor = Effect.gen(function* () {
   ) {
     return yield* Effect.fail(Error("Unqualified closed successor plan source"));
   }
+  return { revision, fingerprint, directory, source };
+});
+const planFixtureSuccessor = Effect.fn(function* (stage: boolean) {
+  const { revision, fingerprint, directory, source } = yield* requireSuccessorSource(stage);
   const profile = yield* Config.String("ALCHEMY_PROFILE");
   const snapshot = yield* Alchemist.Stack.plan({
     ...nativePlanOptions({ profile, preview: true, fingerprint }),
@@ -309,15 +323,28 @@ const planFixtureSuccessor = Effect.gen(function* () {
     resourceType,
     action,
   }));
-  yield* releaseEvidence.writeFile(
-    directory + "/native-fixture-successor-plan.json",
-    releaseEvidence.encodeJson({ ...source, member: "performance-2", applied: false, resources })
+  const observedPlan = { ...source, member: "performance-2", applied: false, resources };
+  if (!stage) {
+    return yield* releaseEvidence.writeFile(
+      directory + "/native-fixture-successor-plan.json",
+      releaseEvidence.encodeJson(observedPlan)
+    );
+  }
+  const approved = yield* Schema.decodeUnknownEffect(ReviewedSuccessorPlan, {
+    onExcessProperty: "error",
+  })(yield* releaseEvidence.readFile(directory + "/fixture-successor-approved.json"));
+  yield* Effect.try(() => requireSameSuccessorPlan({ approved, observed: observedPlan }));
+  yield* Apply.apply(snapshot.native, { deletions: "defer" }).pipe(
+    Effect.provide(snapshot.session.context),
+    Effect.uninterruptible,
+    nativeResourceStage("provider apply")
   );
 });
 
 if (import.meta.main) {
   const program = Effect.gen(function* () {
-    if (process.argv[2] === "plan-fixture-successor") return yield* planFixtureSuccessor;
+    if (process.argv[2] === "plan-fixture-successor") return yield* planFixtureSuccessor(false);
+    if (process.argv[2] === "stage-fixture-successor") return yield* planFixtureSuccessor(true);
     if (process.argv[2] === "publish-site") return yield* publishSite;
     const operation = yield* Schema.decodeUnknownEffect(Operation)(process.argv[2]);
     if (operation === "plan-fixture-fallback") return yield* resourceRelease("upload", true);

@@ -63,7 +63,7 @@ jobs:
           SAMPLE_REVIEWER_EMAIL: ${{ vars.SAMPLE_REVIEWER_EMAIL }}
           BILLING_SUPPORT_AUDIENCE: ${{ vars.BILLING_SUPPORT_AUDIENCE }}
           PRICING_PUBLISH_AUDIENCE: ${{ vars.PRICING_PUBLISH_AUDIENCE }}
-        run: bun native-fixture-successor-plan.ts
+        run: bun native-storage-resources.ts plan-fixture-successor
       - name: Save the verified read-only successor inventory
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:

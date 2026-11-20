@@ -11,6 +11,7 @@ import time
 from uuid import UUID, uuid4
 
 from budget import Refused, admit, counts, today
+import browser_window
 from comparison import FIXTURE, boundaries, observe
 from owner_bundle import MaterializedBundle, verified_batch, LOGIN, HISTORY, sha
 from owner_cloud import Cloud, RejectedControlRequest, ROLES
@@ -138,7 +139,7 @@ def assert_equal(left, right, reason):
         raise Refused(reason)
 
 
-def exercise(owner, cloud, bundle, send, native, versions, key, pairs, report, save):
+def exercise(owner, cloud, bundle, send, native, versions, key, pairs, report, save, browser=None):
     db = owner.active["inventory"]["db"]["id"]
 
     def batch(name, cap, stmts, check=None):
@@ -149,6 +150,9 @@ def exercise(owner, cloud, bundle, send, native, versions, key, pairs, report, s
     cloud.request("PUT", cloud.marker(), b"initial", "application/octet-stream", raw=True)
     assert_equal(cloud.request("GET", cloud.marker(), raw=True), b"initial", "generation_missing")
     now = int(time.time() * 1000)
+    subject = bundle.user["id"] if browser else SUBJECT
+    started = bundle.user["startedAtMs"] if browser else now
+    ends = bundle.user["endsAtMs"] if browser else now + TRIAL_MS
     batch(
         "identity",
         bundle.direct[-3],
@@ -158,14 +162,14 @@ def exercise(owner, cloud, bundle, send, native, versions, key, pairs, report, s
                 "acceptance-portfolio",
                 "CO.Reference",
                 now,
-                now,
-                now + TRIAL_MS,
-                SUBJECT,
+                started,
+                ends,
+                subject,
             ),
             statement(
                 "INSERT INTO consent_history(record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,?,?,?,?,?)",
                 uuid4(),
-                SUBJECT,
+                subject,
                 bundle.disclosure,
                 "disclosure",
                 "decision",
@@ -209,7 +213,7 @@ def exercise(owner, cloud, bundle, send, native, versions, key, pairs, report, s
                 "UPDATE browser_login_pairings SET approval_portfolio_id=?,approval_message_id=?,approval_user_id=? WHERE id=? AND state='pending_approval' AND approval_message_id IS NULL",
                 "acceptance-portfolio",
                 uuid4(),
-                SUBJECT,
+                subject,
                 start["pairingId"],
             )
         ],
@@ -227,6 +231,13 @@ def exercise(owner, cloud, bundle, send, native, versions, key, pairs, report, s
         _, payload = successful("GET /transactions/" + ident)
         assert_equal(payload, expected, "original_inspection_mismatch")
         time.sleep(1)
+
+    if browser:
+        browser_window.run_window(owner,bundle,browser,headers,report,save)
+        batch("audit",bundle.direct[-1],[statement(browser_window.AUDIT,subject,binding["binding"]),
+              statement(browser_window.COMMERCIAL,subject)],lambda rows:browser_window.audit_check(rows,bundle.probe))
+        report.update(scope=browser_window.WORKLOAD,verifiedInspections=8,verifiedHistoryAudits=33)
+        return
 
     def verify(body):
         assert_equal(json.loads(body), bundle.expected["history"], "effective_history_mismatch")
@@ -358,9 +369,7 @@ def main():
     parser.add_argument(
         "--maximum-reads", type=int, help="Explicit approved D1 ceiling for this run"
     )
-    parser.add_argument(
-        "--maximum-writes", type=int, help="Explicit approved D1 ceiling for this run"
-    )
+    parser.add_argument("--browser-workspace", action="store_true")
     parser.add_argument("--pairs", type=int, choices=(1, 30), default=1)
     args = parser.parse_args()
     os.umask(0o077)
@@ -397,6 +406,13 @@ def main():
             ):
                 raise Refused("wrong_native_fixture_scope")
             bundle = MaterializedBundle(args.bundle, args.manifest_sha256, proof, args.pairs)
+            if args.browser_workspace != bundle.browser:
+                raise Refused("wrong_requested_workload")
+            if bundle.browser:
+                native_manifest = json.loads((args.fixture/"manifest.json").read_bytes())
+                if (bundle.expected != {k:native_manifest[k] for k in ("history","inspections","workspace")}
+                    or bundle.user["id"] != native_manifest["workspace"]["profile"]["data"]["id"]):
+                    raise Refused("foreign_browser_workspace")
             session = read_native_session(args.fixture)
             if not all(session.get(k) for k in ("cookie", "binding")):
                 raise Refused("missing_native_session")
@@ -405,8 +421,8 @@ def main():
                 pairs=args.pairs,
                 packageSha256=args.manifest_sha256,
                 costedD1Batches=len(bundle.direct),
-                costedD1Requests=len(LOGIN) + len(bundle.inspections) + args.pairs,
-                batchReservationAndReconciliationPuts=2 * (len(bundle.direct) + len(LOGIN) + len(bundle.inspections) + args.pairs),
+                costedD1Requests=sum(bundle.counts.values()) if bundle.browser else len(LOGIN) + len(bundle.inspections) + args.pairs,
+                batchReservationAndReconciliationPuts=2 * (len(bundle.direct) + len(LOGIN) + len(bundle.inspections) + (1 if bundle.browser else args.pairs)),
                 nativeRevision=args.revision,
                 baseline=PIN,
             )
@@ -425,21 +441,22 @@ def main():
             if args.action == "propose":
                 report["status"] = "verified cost proposal"
                 return 0
-            approved = counts(dict(rowsRead=args.maximum_reads, rowsWritten=args.maximum_writes))
-            if any(bundle.estimate[k] > approved[k] for k in approved):
+            if args.maximum_reads is None or bundle.estimate["rowsRead"] > args.maximum_reads:
                 raise Refused("outside_approved_cost_proposal")
             approved_native = approved_versions(args.core_version, args.ingress_version)
         account = os.environ["CLOUDFLARE_ACCOUNT_ID"]
         if args.action == "run":
             report["nativeCandidate"] = native_installation(account, args.revision, approved_native)
-            from protected_cohort import comparable_native_reads
-            reserve_native = comparable_native_reads(account, report["nativeCandidate"], proof, args.pairs)
+            from protected_cohort import comparable_native_reads, checked_browser_origin
+            if bundle.browser:
+                checked_browser_origin(args.fixture.parent/"origin-before-d1.json",time.time())
+            reserve_native = comparable_native_reads(account, report["nativeCandidate"], proof, args.pairs, browser=bundle.browser)
         cloud = Cloud(account, args.prefix)
         owner = AccountExperiment(CustodyObject(account, cloud), account)
         if args.action == "cleanup":
             report["cleanup"] = cleanup_evidence(owner, cloud, resumed=True)
         else:
-            read = native_read(session, args.revision, reserve_native)
+            read = None if bundle.browser else native_read(session, args.revision, reserve_native)
             observation = usage(account)
             observed_day = observation["utcDate"]
             decision = admit(ROOT, account, observation, owner.full_estimate(bundle.estimate, observed_day))
@@ -456,7 +473,7 @@ def main():
                 active["namespaceIds"] = namespaces
                 owner.save()
                 receipt = dict(resourcePrefix=args.prefix, accountId=account, versions=versions,
-                               databaseId=db, fixture=FIXTURE, baseline=PIN, day=today(), namespaceId=namespaces[0],
+                               databaseId=db, fixture=bundle.fixture, baseline=PIN, day=today(), namespaceId=namespaces[0],
                                packageDigest=bundle.digest, contractDigest=bundle.contract)
                 confirmed(receipt, account, exposed=False)
                 cloud.expose("ingress", True)
@@ -469,7 +486,11 @@ def main():
                         body if method == "GET" or body else b"",
                     )
 
-                exercise(owner, cloud, bundle, send, read, versions, key, args.pairs, report, save)
+                browser = None
+                if bundle.browser:
+                    browser = dict(out=args.out/"browser",reserve=reserve_native,version=versions["ingress"], api=api,
+                        key=key,session=session,revision=args.revision,web=json.loads((args.fixture.parent/"qualified-web.json").read_bytes()))
+                exercise(owner, cloud, bundle, send, read, versions, key, args.pairs, report, save,browser)
                 native_installation(account, args.revision, approved_native)
             except Exception as error:
                 report["runFailure"] = str(error) if isinstance(error, Refused) else type(error).__name__

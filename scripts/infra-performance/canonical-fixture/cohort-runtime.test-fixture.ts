@@ -14,8 +14,23 @@ import { transport } from "./bridge";
 import { closedRuntime } from "./closed-runtime.test-fixture";
 import { type CohortCommand, cohortAuthority, serveCohort } from "./cohort-bridge";
 
-const readObject = Effect.fnUntraced(function* (directory: string, id: string) {
+const readObject = Effect.fnUntraced(function* (runtime: Miniflare, directory: string, id: string) {
   if (!/^[a-f0-9]{64}$/u.test(id)) return yield* Effect.fail(Error("Unknown physical object"));
+  // Close the workerd writer before inspecting its SQLite files during a physical census.
+  yield* native(async () => {
+    try {
+      await runtime.unsafeEvictDurableObject("core", "UserStore", { id });
+    } catch (error) {
+      if (
+        !(
+          error instanceof Error &&
+          error.message === "Cannot evict Durable Object: it is not currently running."
+        )
+      ) {
+        throw error;
+      }
+    }
+  });
   const files = yield* native(() =>
     Array.fromAsync(new Bun.Glob("**/" + id + ".sqlite").scan({ cwd: directory, absolute: true }))
   );
@@ -34,7 +49,7 @@ const readObject = Effect.fnUntraced(function* (directory: string, id: string) {
 });
 const state = Effect.fnUntraced(function* (runtime: Miniflare, directory: string) {
   const ids = yield* native(() => runtime.listDurableObjectIds("UserStore", "core"));
-  return Object.fromEntries(yield* Effect.forEach(ids, (id) => readObject(directory, id)));
+  return Object.fromEntries(yield* Effect.forEach(ids, (id) => readObject(runtime, directory, id)));
 });
 const marker = Effect.fnUntraced(function* (runtime: Miniflare, revision: string) {
   const bucket = yield* native(() => runtime.getR2Bucket("SMOKE_BUCKET", "core"));

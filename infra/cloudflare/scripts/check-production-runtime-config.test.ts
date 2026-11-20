@@ -170,6 +170,32 @@ describe("Production runtime configuration gate", () => {
     );
   });
 
+  it("stages a pairing repair on its real source without promoting or changing hosts", async () => {
+    const source = await workflowStep("Authenticate the predecessor of the pairing repair");
+    expect(source).toContain("unsealed_stage.py replacement");
+    for (const step of await Promise.all(
+      [
+        "Capture the native stable pair",
+        "Upload the verified native candidates",
+        "Stage the zero-traffic native candidates",
+        "Qualify the closed recovery artifacts and their retained controls",
+        "Seal dormant fallback stage before promotion",
+      ].map(workflowStep)
+    )) {
+      expect(step).toContain("inputs.operation == 'stage-pairing-repair'");
+    }
+    for (const step of await Promise.all(
+      [
+        "Bind the protected verifier to the staged application source",
+        "Finish only the tested closed forward repair",
+        "Verify mixed and candidate versions before promoting closed admission",
+        "Stage only canonical Access paths and vacant hostnames on the verified closed release",
+      ].map(workflowStep)
+    )) {
+      expect(step).not.toContain("stage-pairing-repair");
+    }
+  });
+
   it("restricts resealing to archived pair verification and a GitHub evidence upload", async () => {
     const release = (await readFile(productionWorkflowPath, "utf8")).split("\n  site:")[0];
     const source = await workflowStep(

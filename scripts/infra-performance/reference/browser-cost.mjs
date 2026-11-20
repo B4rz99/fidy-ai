@@ -20,11 +20,10 @@ const paths = new Set([
 /**
  * Sample only the isolated native D1 counters. Timing comparisons never install this observer.
  * @param {import("@playwright/test").Page} page Mounted browser.
- * @param {string} api Disposed local D1 authority.
- * @param {string} operator Local fixture observation origin.
+ * @param {{ api: string, operator: string }} origins Disposable D1 and fixture observation origins.
  * @param {(row: Readonly<Record<string, unknown>>) => void} event Journal for this attempt.
  */
-export const observeBrowserD1 = (page, api, operator, event) => {
+export const observeBrowserD1 = (page, { api, operator }, event) => {
   assert.equal(new URL(api).hostname, "127.0.0.1");
   assert.equal(new URL(operator).hostname, "127.0.0.1");
   /** @type {Set<import("@playwright/test").Request>} */
@@ -50,10 +49,9 @@ export const observeBrowserD1 = (page, api, operator, event) => {
   page.on("requestfailed", (request) => active.delete(request));
   return async (/** @type {string} */ stage) => {
     // Finish previously observed in-flight requests before taking the native row-counter sample.
-    for (const request of [...active]) {
-      const reply = await request.response();
-      if (reply) await reply.finished();
-    }
+    await Promise.all(
+      Array.from(active, async (request) => (await request.response())?.finished())
+    );
     const response = await page.context().request.get(operator + "/browser-cost");
     assert.ok(response.ok(), "Missing local D1 browser counters");
     event({

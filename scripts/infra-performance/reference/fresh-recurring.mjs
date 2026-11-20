@@ -229,6 +229,13 @@ export const prepareReferenceRecurring = async (request, { api, headers }) => {
     dateHistory
   );
 };
+/** @param {Page} page Mounted Recurring search with no matching plans. */
+const usableEmptyResult = async (page) => {
+  const empty = page.locator('[data-recurring-slot="empty"]');
+  await empty.getByRole("heading", { name: "Sin resultados para estos filtros" }).waitFor();
+  await empty.getByRole("button", { name: "Limpiar filtros", disabled: false }).waitFor();
+  await painted(page);
+};
 /** @param {Workspace} input Installed origins and evidence sink. */
 export const freshRecurring = async (input) => {
   const { page, browser } = input;
@@ -277,12 +284,7 @@ export const freshRecurring = async (input) => {
     selected: [],
     prior: "2026-09",
     action: () => page.getByRole("button", { name: "Aplicar filtros", exact: true }).click(),
-    ready: async () => {
-      const empty = page.locator('[data-recurring-slot="empty"]');
-      await empty.getByRole("heading", { name: "Sin resultados para estos filtros" }).waitFor();
-      await empty.getByRole("button", { name: "Limpiar filtros", disabled: false }).waitFor();
-      await painted(page);
-    },
+    ready: () => usableEmptyResult(page),
   });
   return {
     "recurring.month.browser": monthly.result,

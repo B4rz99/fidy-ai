@@ -677,16 +677,51 @@ const ownerWindows = Schema.decodeUnknownSync(
       Schema.Struct({
         directoryMs: Schema.optionalKey(Schema.Union([Schema.Number, Schema.Literal("duplicate")])),
         userStoreMs: Schema.optionalKey(Schema.Union([Schema.Number, Schema.Literal("duplicate")])),
+        userStoreStartedAt: Schema.optionalKey(Schema.Number),
+        userStoreReturnedAt: Schema.optionalKey(Schema.Number),
       }),
     ])
   )
 );
-/** @param {Miniflare} runtime Native workerd runtime. */
-const readOwnerWindows = async (runtime) => {
+const userStoreWindows = Schema.decodeUnknownSync(
+  Schema.Array(Schema.Tuple([Schema.String, Schema.Tuple([Schema.Number, Schema.Number])]))
+);
+/**
+ * @param {Miniflare} runtime Native workerd runtime.
+ * @param {string} subject User in the two-tab fixture.
+ */
+const readOwnerWindows = async (runtime, subject) => {
   const core = await runtime.getWorker("core");
+  const user = await runtime.getDurableObjectNamespace("USER_STORE", "core");
   const reply = await core.fetch("https://route-clock.invalid/windows");
+  const scope = await user.getByName(subject).fetch("https://route-clock.invalid/user-store");
   assert.equal(reply.status, success);
-  return new Map(ownerWindows(await reply.json()));
+  assert.equal(scope.status, success);
+  const durations = new Map(userStoreWindows(await scope.json()));
+  return new Map(
+    ownerWindows(await reply.json()).map(([trace, row]) => {
+      const { directoryMs, userStoreMs, userStoreStartedAt, userStoreReturnedAt } = row;
+      const owner = durations.get(trace);
+      if (
+        owner === undefined ||
+        userStoreStartedAt === undefined ||
+        userStoreReturnedAt === undefined
+      ) {
+        return [trace, { directoryMs, userStoreMs }];
+      }
+      const [entered, ready] = owner;
+      return [
+        trace,
+        {
+          directoryMs,
+          userStoreMs,
+          userStoreEntryMs: entered - userStoreStartedAt,
+          userStoreScopeMs: ready - entered,
+          userStoreReturnMs: userStoreReturnedAt - ready,
+        },
+      ];
+    })
+  );
 };
 /**
  * @param {Miniflare} native Native workerd runtime.
@@ -721,7 +756,11 @@ const measure = async (native, d1) => {
   await write("audit", audits);
   if (!twoTabs) await measureMutations(variants, audits);
   await retainedFixtures(variants);
-  const owners = ownerClock ? await readOwnerWindows(native) : undefined;
+  let owners;
+  if (ownerClock) {
+    assert.ok(variants.do);
+    owners = await readOwnerWindows(native, subjectAt(variants.do, 0).id);
+  }
   for (const variant of Object.keys(variants)) {
     const logs = spanLogs[variant],
       calls = spanCalls[variant];

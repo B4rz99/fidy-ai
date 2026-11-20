@@ -141,7 +141,8 @@ class OfferedLoadEvidence(unittest.TestCase):
         spans = [dict(variant="do", cell="history", user=0, sample=0, responses=[
             dict(ingressMs=4, coreMs=3, ingressFinishedClockMs=86_399_999),
             dict(ingressMs=6, coreMs=5, canonicalHistoryMs=4, ingressFinishedClockMs=6,
-                 directoryMs=1, userStoreMs=2),
+                 directoryMs=1, userStoreMs=2, userStoreEntryMs=0,
+                 userStoreScopeMs=1, userStoreReturnMs=1),
         ])]
         output = two_tab_transport(attempts, spans, 86_399_893)["do"]
         self.assertEqual(output["matched"], 1)
@@ -151,5 +152,9 @@ class OfferedLoadEvidence(unittest.TestCase):
         observed = two_tab_transport(attempts, spans, 86_399_893, owner_clock=True)["do"]
         self.assertEqual(observed["pairs"][0]["lastComplete"]["directoryMs"], 1)
         self.assertEqual(observed["pairs"][0]["lastComplete"]["userStoreMs"], 2)
+        self.assertEqual(observed["pairs"][0]["lastComplete"]["userStoreScopeMs"], 1)
+        spans[0]["responses"][1]["userStoreReturnMs"] = 10
+        missing = two_tab_transport(attempts, spans, 86_399_893, owner_clock=True)["do"]
+        self.assertNotIn("userStoreScopeMs", missing["pairs"][0]["lastComplete"])
         spans[0]["responses"][1]["ingressFinishedClockMs"] = 1_000
         self.assertEqual(two_tab_transport(attempts, spans, 86_399_893)["do"]["matched"], 0)

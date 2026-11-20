@@ -194,6 +194,11 @@ def two_tab_transport(rows, spans, time_origin, owner_clock=False):
                     directory, owner = span.get("directoryMs"), span.get("userStoreMs")
                     if all(type(n) in (int, float) and 0 <= n <= core for n in (directory, owner)):
                         measured.update(directoryMs=directory, userStoreMs=owner)
+                        names = ("userStoreEntryMs", "userStoreScopeMs", "userStoreReturnMs")
+                        split = [span.get(name) for name in names]
+                        if all(type(n) in (int, float) and -clock_tolerance_ms <= n <= owner + clock_tolerance_ms
+                               for n in split) and math.isclose(sum(split), owner, rel_tol=0, abs_tol=clock_tolerance_ms):
+                            measured.update(zip(names, split))
                 phases.append(measured)
             if len(phases) == 2:
                 samples.append(dict(sample=row["sample"], pairDispatchMs=row["dispatchMs"],

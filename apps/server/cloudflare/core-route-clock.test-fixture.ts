@@ -1,14 +1,17 @@
 import { Option } from "effect";
-import core from "./core-worker";
+import core, { UserStore as NativeUserStore } from "./core-worker";
 import { workerInternalTraceHeader } from "./runtime/telemetry/contract";
 
 export * from "./core-worker";
 
 type Owner = "directoryMs" | "userStoreMs";
-type Window = Partial<Record<Owner, number | "duplicate">>;
+type Window = Partial<Record<Owner, number | "duplicate">> & {
+  userStoreClock: Option.Option<readonly [started: number, returned: number]>;
+};
 const windows = new Map<string, Window>();
 const maximumWindows = 64;
 const readWindowsUrl = "https://route-clock.invalid/windows";
+const readUserStoreWindowsUrl = "https://route-clock.invalid/user-store";
 const traceParent = /^00-([0-9a-f]{32})-[0-9a-f]{16}-[0-9a-f]{2}$/u;
 
 const timedStub = (stub: DurableObjectStub, window: Window, owner: Owner): DurableObjectStub =>
@@ -17,10 +20,12 @@ const timedStub = (stub: DurableObjectStub, window: Window, owner: Owner): Durab
       if (property !== "fetch") return Reflect.get(target, property, target);
       return async (...args: Parameters<DurableObjectStub["fetch"]>) => {
         const start = performance.now();
+        const started = owner === "userStoreMs" ? Date.now() : 0;
         try {
           return await target.fetch(...args);
         } finally {
           window[owner] = window[owner] === undefined ? performance.now() - start : "duplicate";
+          if (owner === "userStoreMs") window.userStoreClock = Option.some([started, Date.now()]);
         }
       };
     },
@@ -40,7 +45,7 @@ const timedNamespace = (
   });
 
 const historyTrace = (request: Request): Option.Option<string> => {
-  if (request.method !== "GET" || windows.size >= maximumWindows) return Option.none();
+  if (request.method !== "GET") return Option.none();
   const url = new URL(request.url);
   if (url.pathname !== "/transactions" || url.search !== "?limit=25") return Option.none();
   return Option.fromUndefinedOr(
@@ -53,12 +58,28 @@ const observedCore = {
   async fetch(...args: Parameters<typeof core.fetch>): Promise<Response> {
     const [request, environment, context] = args;
     if (request.method === "GET" && request.url === readWindowsUrl) {
-      return Response.json([...windows]);
+      return Response.json(
+        [...windows].map(([trace, { userStoreClock, ...window }]) => [
+          trace,
+          {
+            ...window,
+            ...Option.match(userStoreClock, {
+              onNone: () => ({}),
+              onSome: ([userStoreStartedAt, userStoreReturnedAt]) => ({
+                userStoreStartedAt,
+                userStoreReturnedAt,
+              }),
+            }),
+          },
+        ])
+      );
     }
     const trace = historyTrace(request);
     const { DIRECTORY, USER_STORE } = environment;
-    if (Option.isNone(trace) || !DIRECTORY || !USER_STORE) return core.fetch(...args);
-    const window: Window = {};
+    if (Option.isNone(trace) || !DIRECTORY || !USER_STORE || windows.size >= maximumWindows) {
+      return core.fetch(...args);
+    }
+    const window: Window = { userStoreClock: Option.none() };
     windows.set(trace.value, window);
     return core.fetch(
       request,
@@ -73,3 +94,19 @@ const observedCore = {
 };
 
 export { observedCore as default };
+
+export class UserStore extends NativeUserStore {
+  private readonly requests = new Map<string, readonly [entered: number, ready: number]>();
+
+  override async fetch(request: Request): Promise<Response> {
+    if (request.method === "GET" && request.url === readUserStoreWindowsUrl) {
+      return Response.json([...this.requests]);
+    }
+    const trace = historyTrace(request);
+    if (Option.isNone(trace) || this.requests.size >= maximumWindows) return super.fetch(request);
+    const entered = Date.now();
+    const response = await super.fetch(request);
+    this.requests.set(trace.value, [entered, Date.now()]);
+    return response;
+  }
+}

@@ -6,11 +6,13 @@ import {
   projectSuccessorInventory,
   requireActiveSuccessorLifecycle,
   requireSameSuccessorPlan,
+  requireSmokeConsumerReconciliation,
   requireSuccessorLifecycle,
   successorPlanSelection,
   verifyFixturePlan,
 } from "./native-fixture-plan";
 import {
+  accountingFixture,
   expectedFixtureSigner,
   fixtureArtifacts,
   fixtureBuild,
@@ -26,6 +28,7 @@ import {
   diagnoseSuccessorApply,
 } from "./native-plan-diagnostics";
 import { firstInstallEdge } from "./native-storage-release";
+import { confirmInterruptedSmokeConsumer } from "./native-smoke-consumer-recovery";
 import { requireNativeResourcePlan } from "./native-graph";
 import { type Plan, describePlan, describeResource } from "alchemy/Plan";
 import { Config, Effect, Option, Schema } from "effect";
@@ -373,6 +376,39 @@ const prepareSuccessorPlan = Effect.fn(function* (action: SuccessorAction) {
   return { revision, artifacts, fingerprint, directory, source, generation, snapshot };
 });
 
+const reconcileAccountingSmokeConsumer = Effect.gen(function* () {
+  yield* Config.Literal("true", "FIXTURE_ACCOUNTING_ROLLOUT");
+  yield* Config.Literal("false", "FIXTURE_ACCOUNTING_INSPECTION");
+  const { revision, artifacts, fingerprint } = yield* requireSuccessorSource("rollout");
+  const generation = artifacts.resourceRevision;
+  if (!artifacts.accountingRollout || generation !== accountingFixture.revision) {
+    return yield* Effect.fail(Error("Requires the exact interrupted Smoke generation"));
+  }
+  yield* confirmInterruptedSmokeConsumer;
+  const snapshot = yield* readScopedPlan({
+    profile: yield* Config.String("ALCHEMY_PROFILE"),
+    fingerprint,
+    revision,
+    include: ["ReleaseSmokeConsumer-" + generation],
+    entrypoint: yield* successorEntrypoint(true),
+  });
+  const observed = describePlan(snapshot.native);
+  if (snapshot.native.selectedFqns === undefined || observed.actions.length !== 0) {
+    return yield* Effect.fail(Error("Smoke consumer recovery requires a scoped plan"));
+  }
+  const action = yield* Effect.try(() =>
+    requireSmokeConsumerReconciliation({ rows: observed.resources, revision: generation })
+  );
+  if (action === "noop") return;
+  yield* confirmInterruptedSmokeConsumer;
+  yield* applySuccessorPlan(snapshot.native).pipe(
+    diagnoseSuccessorApply(revision),
+    Effect.provide(snapshot.session.context),
+    Effect.uninterruptible
+  );
+  yield* confirmInterruptedSmokeConsumer;
+});
+
 const inspectAccountingSuccessor = Effect.gen(function* () {
   yield* Config.Literal("true", "FIXTURE_ACCOUNTING_INSPECTION");
   yield* Config.Literal("true", "FIXTURE_ACCOUNTING_ROLLOUT");
@@ -445,7 +481,7 @@ const planFixtureSuccessor = Effect.fn(function* (action: SuccessorAction) {
 });
 
 if (import.meta.main) {
-  const program = Effect.gen(function* () {
+  const ordinary = Effect.gen(function* () {
     if (process.argv[2] === "plan-fixture-successor") return yield* planFixtureSuccessor("plan");
     if (process.argv[2] === "stage-fixture-successor") return yield* planFixtureSuccessor("stage");
     if (process.argv[2] === "rollout-fixture-successor") {
@@ -459,7 +495,12 @@ if (import.meta.main) {
     if (operation === "plan-fixture-fallback") return yield* resourceRelease("upload", true);
     if (operation === "plan-first-install") return yield* resourceRelease("first-install", true);
     return yield* resourceRelease(operation, false);
-  }).pipe(Effect.provide(Alchemist.layer()), Effect.scoped);
+  });
+  const program = (
+    process.argv[2] === "reconcile-accounting-consumer"
+      ? reconcileAccountingSmokeConsumer
+      : ordinary
+  ).pipe(Effect.provide(Alchemist.layer()), Effect.scoped);
   await Effect.runPromise(
     program.pipe(
       Effect.catchCause((cause) =>

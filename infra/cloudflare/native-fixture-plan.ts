@@ -225,3 +225,34 @@ export const requireSuccessorLifecycle = (input: SuccessorInventory): void =>
   requireSuccessorResourceChanges({ ...input, active: false });
 export const requireActiveSuccessorLifecycle = (input: SuccessorInventory): void =>
   requireSuccessorResourceChanges({ ...input, active: true });
+
+export const requireSmokeConsumerReconciliation = ({
+  rows,
+  revision,
+}: SuccessorInventory): "create" | "noop" => {
+  const inventory = nativeResourceInventory(revision);
+  const target = "ReleaseSmokeConsumer-" + revision;
+  const observed = new Set(rows.map((row) => row.logicalId));
+  if (
+    observed.size !== rows.length ||
+    rows.some((row) => inventory.get(row.logicalId) !== row.resourceType)
+  ) {
+    throw new FixturePlanRefused({ reason: "unexpected change" });
+  }
+  if (
+    ![target, "ReleaseSmoke-" + revision, "ReleaseSmokeQueue-" + revision].every((resource) =>
+      observed.has(resource)
+    )
+  ) {
+    throw new FixturePlanRefused({ reason: "missing required update or deferred deletion" });
+  }
+  const changes = rows.filter((row) => row.action !== "noop");
+  if (changes.length === 0) return "noop";
+  if (
+    changes.length === 1 &&
+    changes.every((row) => row.logicalId === target && row.action === "create")
+  ) {
+    return "create";
+  }
+  throw new FixturePlanRefused({ reason: "unexpected change" });
+};

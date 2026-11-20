@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
-import { Clock, Config, Effect, ManagedRuntime, Schema } from "effect";
+import { Clock, Config, Data, Effect, ManagedRuntime, Schema } from "effect";
 import { FetchHttpClient, HttpBody, HttpClient, HttpClientRequest } from "effect/http";
 import { installedOrigins } from "../../../apps/server/src/shell/browser-transport/contract";
 import { signAcceptanceRequest } from "../../../apps/server/cloudflare/release-isolation/operations";
@@ -52,11 +52,10 @@ const algorithm = { name: "ECDSA", namedCurve: "P-256" };
 const digest = (binding: string): string =>
   new Bun.CryptoHasher("sha256").update(binding).digest("hex");
 
-const cryptoOperation = <A>(run: () => Promise<A>): Effect.Effect<A, Error> =>
-  Effect.tryPromise({
-    try: run,
-    catch: () => Error("Native accounting cryptographic operation failed"),
-  });
+class AccountingCryptographyError extends Data.TaggedError("AccountingCryptographyError") {}
+
+const cryptoOperation = <A>(run: () => Promise<A>): Effect.Effect<A, AccountingCryptographyError> =>
+  Effect.tryPromise({ try: run, catch: () => new AccountingCryptographyError() });
 
 export const verifyAccounting = Effect.fn("verifyAccounting")(function* ({
   scope,

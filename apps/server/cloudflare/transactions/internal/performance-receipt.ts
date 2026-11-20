@@ -299,7 +299,6 @@ const witnessAccounting = Effect.fn(function* (input: {
   });
   if (Option.isNone(snapshot)) return denied();
 
-  // Match the harness's canonical JSON for the sealed capture digest.
   const nativeReceiptDigest = yield* fingerprint(
     yield* Schema.encodeEffect(json)({
       iv: capture.iv,

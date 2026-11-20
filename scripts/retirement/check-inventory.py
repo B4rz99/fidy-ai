@@ -1,26 +1,38 @@
 """Rehearse the operator's read-only statement against a disposable frozen D1 schema."""
+from io import BytesIO
 import sqlite3
 import subprocess
 import sys
+import tarfile
 from pathlib import Path
 
 BASELINE = "fb53d9e755c14393048dc945fc0b7f117730d872"
 MIGRATIONS = "apps/server/cloudflare/migrations"
 QUERY = Path(__file__).with_name("legacy-inventory.sql")
 
-# A shallow CI checkout may provide the pinned baseline as a second repository.
-git = ["git", "-C", sys.argv[1] if len(sys.argv) > 1 else "."]
+repo = Path(sys.argv[1]) if len(sys.argv) > 1 else Path.cwd()
 db = sqlite3.connect(":memory:")
-files = subprocess.check_output(
-    [*git, "ls-tree", "-r", "--name-only", BASELINE, MIGRATIONS], text=True
-).splitlines()
-assert files and files[-1].endswith("0015_remove_price_notices.sql")
-for filename in files:
-    migration = subprocess.check_output([*git, "show", f"{BASELINE}:{filename}"], text=True)
-    try:
-        db.executescript(migration)
-    except sqlite3.DatabaseError as error:
-        raise RuntimeError(f"SQLite {sqlite3.sqlite_version} could not apply {filename}") from error
+archive_bytes = subprocess.check_output(
+    ["git", "archive", "--format=tar", BASELINE, MIGRATIONS], cwd=repo, timeout=15
+)
+with tarfile.open(fileobj=BytesIO(archive_bytes), mode="r:") as archive:
+    files = sorted(
+        (member for member in archive.getmembers() if member.isfile() and member.name.endswith(".sql")),
+        key=lambda member: member.name,
+    )
+    if not files or not files[-1].name.endswith("0015_remove_price_notices.sql"):
+        raise ValueError("Missing the final frozen D1 migration")
+    for migration in files:
+        body = archive.extractfile(migration)
+        if body is None:
+            raise ValueError("Missing a frozen D1 migration")
+        try:
+            db.executescript(body.read().decode())
+        except sqlite3.OperationalError as error:
+            raise RuntimeError(
+                f"{migration.name} failed on SQLite {sqlite3.sqlite_version}; "
+                "use SQLite 3.54.0"
+            ) from error
 
 
 def census():

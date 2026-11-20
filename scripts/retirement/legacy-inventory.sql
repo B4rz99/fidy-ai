@@ -1,5 +1,3 @@
--- One read-only snapshot. Limit source rows BEFORE filtering to bound work even
--- when the interesting state is rare. A truncated input has no attention count.
 WITH inventory(source, seen, attention) AS (
   SELECT 'structural_samples', count(*), count(*)
   FROM (SELECT 1 FROM anonymized_email_samples LIMIT 1001)

@@ -28,7 +28,7 @@ const CaptureSource = Schema.Struct({
     Schema.isMaxLength(SourceAttestation.members.length)
   ),
 });
-/** Adds bounded capture kinds without exposing retained source material. */
+
 export const TransactionInspection = FinancialInspection.mapFields(
   (fields) => ({
     ...fields,
@@ -60,7 +60,6 @@ const destructiveWrite = operationPolicy({
 const TransactionQueryParameters = TransactionQueryValues.mapFields(Struct.map(Schema.optionalKey));
 const UpdateTransactionParams = Schema.Struct({ id: TransactionId });
 
-/** Resource bound for one revision-checked group correction, independent of UI selection. */
 export const maximumCorrectionRecords = 4096;
 export const UpdateTransactionsInput = Schema.Struct({
   transactions: Schema.NonEmptyArray(
@@ -80,13 +79,8 @@ export const UpdateTransactionsResult = Schema.Struct({
   updated: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: maximumCorrectionRecords })),
 });
 
-/** Successful create response shared by canonical consumers that present the stored Transaction. */
 export const CreateTransactionResponse = OperationResponse(Transaction);
 
-/**
- * Caller-owned Transaction capture, history, correction, deletion, and retained provenance.
- * Identity comes from authentication; unknown and foreign record ids are indistinguishable.
- */
 export const TransactionListResponse = OperationResponse(Schema.Array(Transaction));
 
 export const TransactionsGroup = HttpApiGroup.make("transactions")

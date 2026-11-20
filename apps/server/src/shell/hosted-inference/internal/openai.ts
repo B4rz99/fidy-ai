@@ -145,8 +145,7 @@ if (operationByWireName.size !== openAiOperationBindings.length) {
 
 const byteLength = (text: string): number => new TextEncoder().encode(text).length;
 
-// Byte-backed text tokenization cannot produce more ordinary input tokens than the UTF-8 bytes;
-// counting bytes is intentionally conservative and never sends content to another tokenizer.
+
 const tokenUpperBound = (value: string): number => byteLength(value);
 
 const promptParts = (
@@ -229,8 +228,6 @@ const projectMessages = (
       const prior = Option.getOrElse(continuation, () => []);
       const tail = projection.continuationTail.flatMap(projectMessage);
       const suffix = projection.suffix.flatMap(projectMessage);
-      // Put host repair feedback after the initial instructions and before the active request.
-      // Preserve continuity framing; late system feedback can be refused as a conversation change.
       const feedbackIndex = prefix.findLastIndex((message) => message.role === "system") + 1;
       return {
         input: [
@@ -438,8 +435,7 @@ const providerRefusal = (response: Response): Effect.Effect<never, HostedInferen
   );
 };
 
-// Hosted-turn orchestration owns the Work span and reports provider failure once. This adapter adds
-// no provider span because model attributes and response details are forbidden telemetry.
+
 const invoke = ({
   model,
   overflow,
@@ -481,7 +477,6 @@ const decodeToolCall = (
     catch: () => invalidProviderOutput("Hosted tool arguments were invalid"),
   }).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(binding.operation.input)),
-    // Canonical Transcript/tool evidence is wire JSON, not decoded DateTime/Option values.
     Effect.flatMap(Schema.encodeEffect(binding.operation.input)),
     Effect.mapError((error) =>
       error instanceof HostedInferenceError

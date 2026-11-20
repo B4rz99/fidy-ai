@@ -33,8 +33,6 @@ it.effect("preserves a small shared-string workbook without expanding the source
   })
 );
 
-// Parsing does not know which evidence will be persisted. Native review-row admission
-// rejects this amplification only when the row requires review; accepted captures stay valid.
 it.effect("characterizes shared-string row evidence above the D1 string limit", () =>
   Effect.gen(function* () {
     const source = yield* bytes("shared-string-row-limit");

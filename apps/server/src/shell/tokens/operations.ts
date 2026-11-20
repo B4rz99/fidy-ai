@@ -49,7 +49,7 @@ type ManualPATInput = Readonly<{
   current: number;
   expires: number;
 }>;
-/** Guard one reviewed User-owned manual PAT against stale authority and both issuance budgets. */
+
 export const issueManualPAT = ({
   session,
   input,
@@ -93,7 +93,7 @@ export const issueManualPAT = ({
 };
 
 type ApprovalInput = Readonly<{ pairingId: string; current: number; expires: number }>;
-/** Bind an approved PATPairing to its reviewed User before the initiating client claims it. */
+
 export const approvePairingGrant = ({
   session,
   input,
@@ -117,7 +117,6 @@ export const approvePairingGrant = ({
   });
 };
 
-/** Consume a single User-bound PATPairing approval under current Consent and issuance limits. */
 export const claimPairingGrant = (
   input: Readonly<{ pairingId: string; userId: string; proofDigest: Uint8Array; current: number }>
 ): OwnedStatement => {
@@ -153,7 +152,6 @@ export const claimPairingGrant = (
   };
 };
 
-/** Recheck bearer, Consent, scope, and lifetime alongside protected canonical work. */
 export const recordLivePATUse = ({
   subject,
   current,
@@ -165,12 +163,6 @@ export const recordLivePATUse = ({
   };
 };
 
-/**
- * The same activity advance built from the exact live-authority gate a consumer already holds, so a
- * caller that is not the subject can still gate PAT activity on its own committed canonical audit.
- * Evidence must be the Audit-owned exact-call proof correlated to this PAT and User; commit it
- * immediately after that successful Audit write in the same atomic unit.
- */
 export const recordAuditedPATUseFromAuthority = ({
   authority,
   current,
@@ -185,7 +177,7 @@ export const recordAuditedPATUseFromAuthority = ({
 });
 
 type RevokeOneInput = Readonly<{ shortId: string; current: number }>;
-/** Revoke a single live User-owned PAT only after matching Consent evidence is in this D1 unit. */
+
 export const revokeOnePAT = ({
   session,
   input,
@@ -205,7 +197,6 @@ export const revokeOnePAT = ({
     evidence: { _tag: "UserPAT", sessionId: session.id, occurredAtMs: Option.some(input.current) },
   });
 
-/** Revoke every live PAT under this fresh User decision and its committed Consent evidence. */
 export const revokeEveryPAT = ({
   session,
   current,
@@ -224,7 +215,6 @@ export const revokeEveryPAT = ({
     evidence: { _tag: "UserPAT", sessionId: session.id, occurredAtMs: Option.none() },
   });
 
-/** Close every approved unclaimed pairing covered by this User's revocation evidence. */
 export const revokeEveryPairing = ({
   session,
   current,
@@ -238,7 +228,6 @@ export const revokeEveryPairing = ({
     evidence: { _tag: "UserPairing", sessionId: session.id },
   });
 
-/** Apply scheduled policy expiry only to approvals backed by their append-only Consent evidence. */
 export const expireApprovedPairings = (current: number): OwnedStatement =>
   protectPATRevocationStatement({
     statement: {
@@ -249,7 +238,6 @@ export const expireApprovedPairings = (current: number): OwnedStatement =>
     evidence: { _tag: "ExpiredPairing" },
   });
 
-/** Apply fixed-lifetime expiry without letting successful use extend the committed instant. */
 export const expireFixedPATs = (current: number): OwnedStatement =>
   protectPATRevocationStatement({
     statement: {
@@ -259,7 +247,6 @@ export const expireFixedPATs = (current: number): OwnedStatement =>
     evidence: { _tag: "ExpiredPAT" },
   });
 
-/** Reclaim anonymous metadata without deleting approved User-bound grant evidence. */
 export const sweepUnapprovedPairings = ({
   current,
   limit,
@@ -270,13 +257,11 @@ export const sweepUnapprovedPairings = ({
   params: [current - pairingMilliseconds, limit],
 });
 
-/** Global recent-pairing capacity is rechecked inside source admission and actual creation. */
 export const pairingCapacityQuery = (current: number): OwnedStatement => ({
   sql: "SELECT 1 WHERE (SELECT count(*) FROM pat_pairings WHERE created_at_ms>?)<?",
   params: [current - pairingMilliseconds, maxPairingsPerWindow],
 });
 
-/** Persist only the private-device-code digest when anonymous source admission succeeded. */
 export const startPairingGrant = (
   input: Readonly<{
     id: string;
@@ -307,7 +292,6 @@ export const startPairingGrant = (
   ],
 });
 
-/** Record a failed private-device-code proof only for the still-matching pairing state. */
 export const recordWrongPairingProof = (
   input: Readonly<{ attempts: number; pairingId: string; state: string; previous: number }>
 ): OwnedStatement => ({
@@ -315,7 +299,6 @@ export const recordWrongPairingProof = (
   params: [input.attempts, input.pairingId, input.state, input.previous],
 });
 
-/** Persist backoff for the specific pairing state; polling cannot change grant authority. */
 export const slowPairingPoll = (
   input: Readonly<{ seconds: number; pairingId: string; state: string }>
 ): OwnedStatement => ({
@@ -323,7 +306,6 @@ export const slowPairingPoll = (
   params: [input.seconds, input.pairingId, input.state],
 });
 
-/** Record a pending poll only before approval and only if the observed poll timestamp is current. */
 export const recordPendingPoll = (
   input: Readonly<{ current: number; pairingId: string; lastPoll: Option.Option<number> }>
 ): OwnedStatement => ({
@@ -337,7 +319,6 @@ export const recordPendingPoll = (
   ],
 });
 
-/** Mint only from the consumed pairing; the raw bearer never enters persistence. */
 export const insertClaimedPAT = (
   input: Readonly<{
     patId: string;
@@ -374,7 +355,6 @@ export const insertClaimedPAT = (
 
 const liveCredentialPredicate = `id = ? AND user_id = ? AND bearer_digest = ? AND revoked_at_ms IS NULL AND expires_at_ms > ?`;
 
-/** The live bearer, lifetime, and Consent decision without a scope clause; classification only. */
 export const livePATCredential = ({
   subject,
   current,
@@ -389,7 +369,6 @@ export const livePATCredential = ({
     requirement: "unrevoked",
   });
 
-/** Guard protected D1 work with the exact live bearer, Consent, and scope decision. */
 export const livePATAuthority = ({
   subject,
   current,
@@ -403,7 +382,6 @@ export const livePATAuthority = ({
   };
 };
 
-/** Load the bounded active grants for one User, excluding all credential and terminal-state material. */
 export const listPATsResponse = (
   userId: UserId
 ): Effect.Effect<
@@ -415,7 +393,6 @@ export const listPATsResponse = (
   SqlClient.SqlClient
 > => readPATs(userId);
 
-/** Prepare safe User-owned metadata under the exact live caller proof; commit Audit in the same snapshot before disclosure. */
 export const preparePATMetadata = (
   input: Readonly<{
     current: number;
@@ -446,7 +423,6 @@ export const preparePATMetadata = (
   };
 };
 
-/** Reject automatic expiry evidence without its corresponding PAT or pairing transition. */
 export const patExpiryCompletion = (current: number): OwnedStatement => {
   const evidence = expiredPATConsentIdentities(current);
   return {
@@ -458,7 +434,7 @@ export const patExpiryCompletion = (current: number): OwnedStatement => {
     params: evidence.params,
   };
 };
-/** Abort the expiry unit if matching unclaimed-pairing evidence has no terminal transition. */
+
 export const pairingExpiryCompletion = (current: number): OwnedStatement => {
   const evidence = expiredPairingConsentIdentities(current);
   return {
@@ -471,7 +447,6 @@ export const pairingExpiryCompletion = (current: number): OwnedStatement => {
   };
 };
 
-/** A revoke-all may succeed with no grants, but cannot leave any active User-owned grant behind. */
 export const patRevokeAllCompletion = `INSERT INTO sql_assertions (scope, accepted) SELECT 'pat_atomic', CASE WHEN NOT EXISTS (
   SELECT 1 FROM pats WHERE user_id = ? AND revoked_at_ms IS NULL AND expires_at_ms > ?
 ) AND NOT EXISTS (
@@ -479,7 +454,6 @@ export const patRevokeAllCompletion = `INSERT INTO sql_assertions (scope, accept
 ) THEN 1 ELSE 0 END
 ON CONFLICT(scope) DO UPDATE SET accepted = excluded.accepted`;
 
-/** Historical ownership only, for Audit attribution; never establishes live PAT authority. */
 export const patOwnershipQuery = (
   input: Readonly<{ patId: string; userId: string }>
 ): OwnedStatement => ({
@@ -487,7 +461,6 @@ export const patOwnershipQuery = (
   params: [input.patId, input.userId],
 });
 
-/** Resolve only id for one User-owned short id; lifecycle and the atomic changes guard remain the caller’s obligation. */
 export const patIdentityQuery = (
   input: Readonly<{ userId: string; shortId: string }>
 ): OwnedStatement => ({
@@ -495,7 +468,6 @@ export const patIdentityQuery = (
   params: [input.userId, input.shortId],
 });
 
-/** Select only safe grant references still live for one User's revocation; no bearer verifier escapes. */
 export const revocablePATGrants = (
   input: Readonly<{ userId: string; current: number; shortId: Option.Option<string> }>
 ): PATGrantSelection => ({
@@ -507,7 +479,6 @@ export const revocablePATGrants = (
   },
 });
 
-/** Select approved unclaimed grants for one User; the caller's fresh decision is guarded in its evidence write. */
 export const revocablePairingGrants = (userId: string): PairingGrantSelection => ({
   _tag: "PairingGrants",
   statement: {
@@ -516,7 +487,6 @@ export const revocablePairingGrants = (userId: string): PairingGrantSelection =>
   },
 });
 
-/** Select the oldest bounded expired grants for symmetric policy evidence in the caller's D1 unit. */
 export const expiredPATGrants = (
   input: Readonly<{ current: number; limit: number }>
 ): PATGrantSelection => ({
@@ -528,7 +498,6 @@ export const expiredPATGrants = (
   },
 });
 
-/** Select the oldest bounded unclaimed approvals at their fixed bootstrap deadline. */
 export const expiredPairingGrants = (
   input: Readonly<{ current: number; limit: number }>
 ): PairingGrantSelection => ({
@@ -540,7 +509,6 @@ export const expiredPairingGrants = (
   },
 });
 
-/** Identify a selected User-owned grant even after expiry or revocation, without exposing credential or internal identity material. */
 export const preparePATActivityMetadata = (
   input: Readonly<{
     userId: string;

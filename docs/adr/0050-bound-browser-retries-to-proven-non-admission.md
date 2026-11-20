@@ -16,3 +16,8 @@ Present refresh and refresh failure separately from the retained successful resu
 failures keep their typed meaning while defects and interruption use closed discriminators rather
 than exposing Causes. A canonical 401 signals the bound browser lifetime once. The ordinary
 binding read requests public session identity without adopting or renewing another cookie.
+
+The native HTTP response adapter transfers ownership of an unlocked body and the resolved request
+signal. The consumer must read, cancel or abort that lifetime using the returned Response.
+Explicit null detaches an inherited signal. Cleanup errors never replace the primary result
+or reopen a terminal resource.

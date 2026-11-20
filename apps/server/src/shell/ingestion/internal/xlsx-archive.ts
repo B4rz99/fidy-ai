@@ -146,7 +146,6 @@ const decodeEntry = ({ bytes, view, offset, remaining }: EntryInput): Entry => {
   const commentLength = view.getUint16(offset + centralCommentLengthOffset, true);
   const local = view.getUint32(offset + centralLocalOffset, true);
   const next = offset + centralBytes + nameLength + extraLength + commentLength;
-  // ZIP64 and encrypted members have no admitted representation in this policy.
   assertZip32(compressedSize, expandedSize);
   if ((flags & encryptedFlag) !== 0 || next > bytes.length) return malformed();
   assertHeader(view, { offset: local, bytes: localBytes, signature: localSignature });
@@ -166,7 +165,6 @@ const decodeEntry = ({ bytes, view, offset, remaining }: EntryInput): Entry => {
   return { name, bytes: expanded, next };
 };
 
-/** Decode actual members under the expansion ceiling; canonical output prevents library ZIP disagreement. */
 export const decodeXlsxArchive = (bytes: Uint8Array): Map<string, Uint8Array> => {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const end = endOffset(view);
@@ -193,6 +191,5 @@ export const decodeXlsxArchive = (bytes: Uint8Array): Map<string, Uint8Array> =>
   return entries;
 };
 
-/** Preserve admitted members in an unambiguous stored ZIP consumed by SheetJS. */
 export const encodeXlsxArchive = (entries: Map<string, Uint8Array>): Uint8Array =>
   zipSync(Object.fromEntries(entries), { level: 0 });

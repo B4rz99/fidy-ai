@@ -39,3 +39,14 @@ account suffix occupy separate namespaces even when the digits match. Account-li
 explicit product labels may be retained as partial evidence. They establish neither account
 identity nor a Transaction match. Capture establishes that a label came from an admissible bounded
 field before applying the formatting codec.
+
+Recognition nominates a candidate and never authorizes incomplete or conflicting evidence.
+Parse bounded inert HTML with no execution or fetching. Overflow or potentially hidden content
+makes recognition unavailable. Truncation could falsely yield a unique match. Numeric and date
+parsing use the evidenced format revision and captured historical zone. Match normalization
+does not rewrite retained financial fields.
+
+The email catalog is produced by `apps/server/tools/email-formats/generate-runtime.ts` and
+checked for freshness by the Workspace Gate. Its checked-in private catalog excludes fixtures.
+Synthetic fixtures represent the structure under test and use fictional transaction or personal
+values. They do not serve as byte-for-byte records of received mail.

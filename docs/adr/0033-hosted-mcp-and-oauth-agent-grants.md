@@ -274,3 +274,13 @@ OAuth Connections use the same atomic Consent evidence rule. The owner's live se
 replay predicate are rechecked at commit. A user-origin revocation appends the exact reviewed
 decision for each live grant, with no new evidence on replay. Automatic replay cleanup consumes
 proof of an existing same-User grant without recreating authority to issue a credential.
+
+Issuer, audience and the code-bearing callback are fixed by configuration and the validated
+initiating request. Host and forwarding headers cannot select them. Registration metadata is a
+bounded hint. The later exact request and User review authorize scopes. Browser approval and
+connection management stay outside tool discovery. Recheck the admitted same-User grant,
+resource, client, expiry and exact scope at execution, including queued work.
+
+Use the canonical allowance and retry codecs at the MCP boundary. Carry private admission
+outside the canonical arguments. Filter inaccessible operation alternatives and their argument
+hints at every envelope depth before publishing the schema.

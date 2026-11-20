@@ -77,7 +77,6 @@ const zero = BigDecimal.make(0n, 0);
 const maximumTransactionNotesLength = 500;
 const maximumCounterpartyLength = 120;
 
-
 const positiveTransactionMoney = Schema.makeFilter<{
   readonly money: { readonly amount: Readonly<BigDecimal.BigDecimal> };
 }>((transaction) =>

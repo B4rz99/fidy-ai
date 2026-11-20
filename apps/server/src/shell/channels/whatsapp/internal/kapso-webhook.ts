@@ -131,7 +131,6 @@ export const RawKapsoEnvelope = Schema.Union([
   }),
 ]);
 
-
 const RawDisclosureStatus = Schema.Struct({
   recipient_user_id: Schema.optionalKey(WhatsAppBusinessScopedUserId),
   recipient_id: Schema.optionalKey(Schema.String.check(Schema.isPattern(/^[1-9][0-9]{7,14}$/u))),

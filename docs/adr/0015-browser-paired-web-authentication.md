@@ -75,3 +75,9 @@ The public pairing and redemption endpoints normalize malformed, foreign, and te
 the same closed refusal. Polling cadence is surfaced through Retry-After. A valid proof before
 approval returns a pending response. Successful redemption discloses the bearer through the
 host-only WebSession cookie and carries no bearer or User payload.
+
+Session-only checks can establish current credential state for privacy and legal receipt reads
+after Processing Consent withdrawal. They do not establish current Consent. First-document
+receipt lookup resolves the same live credential and observed state in one snapshot. Historical
+ownership remains available for accountability. Pairing pruning keeps references from retained
+sessions even after expiry or revocation.

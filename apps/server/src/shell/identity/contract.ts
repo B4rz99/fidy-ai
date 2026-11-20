@@ -7,7 +7,6 @@ import { User, UserPreferences } from "~/core/identity/contract";
 import { operationPolicy, userOwnedAgentScoped } from "~/shell/canonical-policy/contract";
 import { OperationResponse, Unavailable } from "~/shell/public-http/contract";
 
-/** Bounded display metadata; every producer retains its own live authority checks. */
 export const CurrentUserMetadata = Schema.Struct({
   ...OperationResponse(User).fields,
   categories: Schema.OptionFromOptionalKey(Schema.Array(Category)),
@@ -50,14 +49,8 @@ export const IdentityGroup = HttpApiGroup.make("identity").add(
     )
 );
 
-/** Complete canonical User projection, including the original TrialPeriod and no suggested work. */
 export type CurrentUserResponse = Readonly<{ data: User; next: ReadonlyArray<never> }>;
 
-/**
- * One User's canonical read with current Consent grant checked when its statement executes.
- * Decode only that statement's result; absent, malformed or foreign-User state is unavailable. The caller must
- * retain its authenticated User and recheck credential authority before releasing the projection.
- */
 export type PreparedCurrentUserRead = Readonly<{
   statement: OwnedStatement;
   decode: (rows: ReadonlyArray<unknown>) => Effect.Effect<CurrentUserResponse, Unavailable>;

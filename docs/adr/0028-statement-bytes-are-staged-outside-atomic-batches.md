@@ -107,3 +107,22 @@ only the exact structurally evidenced format and explicitly sourced Currency. Un
 mapping or Currency requires review instead of applying a regional default to the statement.
 Use zero-based column indexes, one Currency source, and a closed refusal projection that leaves
 the original bytes and parser internals private.
+
+Before requesting field evidence, admit CSV dimensions with the same grammar and no raw field
+context. This prevents repeated copies of a long raw prefix. Keep raw evidence and the per-row
+retention charge at the review boundary, so already accepted captures do not count as pending
+review material. Tests cover CRLF evidence and bounded decoding work.
+
+Inspect and canonicalize expanded ZIP members before handing them to SheetJS. Admit one
+unambiguous representation without encryption, ZIP64 or binary financial parts. Scan XML
+parts independently of standard names. Reconcile raw XML attributes, entity and Office escapes,
+text fragments and format ids using conservative bounds aligned with SheetJS decoding. Charge
+shared text, future metadata and custom format work before workbook construction. Exclude shared
+formula translation and comment insertion. Accept inert ordinary formula evidence without
+executing it. The content-type part is mandatory because SheetJS otherwise has fallback
+container behavior outside this scan.
+
+The statement parser and staging gate select by content signatures before interpreting claimed
+types. Treat the OLE signature as an unsupported protected Office container. Keep parser engines
+out of ordinary API initialization. Media retrieval accepts only a validated token at the fixed
+Kapso download operation, without project credentials or provider-supplied transport coordinates.

@@ -5,7 +5,7 @@ import { operationPolicy, userOwnedAgentScoped } from "~/shell/canonical-policy/
 import { OperationResponse, ValidationFailed } from "~/shell/public-http/contract";
 
 const maximumCursorLength = 1024;
-/** Browse detected historical monthly charges, not guaranteed active commitments; totals are deliberately absent. */
+
 export const RecurringGroup = HttpApiGroup.make("recurring").add(
   HttpApiEndpoint.get("listRecurringSeries", "/recurring-series", {
     query: Schema.Struct({

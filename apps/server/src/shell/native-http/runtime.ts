@@ -12,12 +12,10 @@ const disposeReader = (
   try {
     if (cancelSource) reader.cancel().catch(() => undefined);
   } catch {
-    // Native cleanup must never replace the primary outcome.
   } finally {
     try {
       reader.releaseLock();
     } catch {
-      // A broken native adapter cannot reopen terminal ownership.
     }
   }
 };
@@ -83,11 +81,6 @@ const ownBody = (
   return body;
 };
 
-/**
- * Transfers one unlocked, unconsumed native Response and its exact resolved request signal.
- * Use only the returned Response, and consume, cancel or abort its scope instead of abandoning it.
- * Cleanup failures stay private and never delay disposal or replace the primary outcome.
- */
 export const ownNativeResponse = ({
   response,
   signal,
@@ -106,7 +99,6 @@ export const ownNativeResponse = ({
   return new Response(ownBody(reader, signal), init);
 };
 
-/** Fetch signal inheritance treats explicit null as detachment and undefined as inheritance. */
 export const ownNativeFetch = (native: typeof globalThis.fetch): typeof globalThis.fetch =>
   Object.assign(
     (input: string | URL | Request, init?: RequestInit): Promise<Response> => {

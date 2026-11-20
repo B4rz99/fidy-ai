@@ -42,7 +42,6 @@ import {
 } from "~/shell/canonical-policy/contract";
 import { type AuditCredentialOperation } from "~/shell/audit/contract";
 
-/** A live browser may read metadata while needing renewed proof for credential issuance. */
 export class ManualPATReauthenticationRequired
   extends Schema.Error<
     ManualPATReauthenticationRequired,
@@ -67,7 +66,6 @@ export class ManualPATReauthenticationRequired
 export const issuanceConsumedMessage =
   "This manual PAT issuance request was already consumed. Start a new reviewed request.";
 
-/** Safe refusal when a retried request cannot redisclose its previously consumed bearer. */
 export class ManualPATIssuanceConsumed
   extends Schema.Error<ManualPATIssuanceConsumed, Brand.Brand<"ManualPATIssuanceConsumed">>(
     "ManualPATIssuanceConsumed"
@@ -90,7 +88,6 @@ export class ManualPATIssuanceConsumed
 export const issuanceLimitedMessage =
   "This User has created too many PATs recently. Wait for the retry interval before trying again.";
 
-/** Cheap User-bound refusal preventing unbounded PAT and Consent evidence creation. */
 export class ManualPATIssuanceRateLimited
   extends Schema.Error<ManualPATIssuanceRateLimited, Brand.Brand<"ManualPATIssuanceRateLimited">>(
     "ManualPATIssuanceRateLimited"
@@ -114,7 +111,6 @@ export class ManualPATIssuanceRateLimited
 export const reviewExpiredMessage =
   "This PAT review is stale or inconsistent. Review the grant again before creating it.";
 
-/** Safe refusal when confirmation no longer matches one recent reviewed absolute expiration. */
 export class ManualPATReviewExpired
   extends Schema.Error<ManualPATReviewExpired, Brand.Brand<"ManualPATReviewExpired">>(
     "ManualPATReviewExpired"
@@ -175,14 +171,12 @@ const listPATs = HttpApiEndpoint.get("listPATs", "/pats", {
     })
   );
 
-/** One selected grant and its bounded, metadata-only retained activity. */
 export const PATActivity = Schema.Struct({
   pat: PATActivityMetadata,
   ...PATActivityHistory.fields,
 }).annotate({ identifier: "PATActivity" });
 export type PATActivity = typeof PATActivity.Type;
 
-/** Safe grant selection for a User-owned activity query. */
 export const PATActivityParams = Schema.Struct({ shortId: TokenShortId });
 
 const getPATActivity = HttpApiEndpoint.get("getPATActivity", "/pats/:shortId/activity", {
@@ -265,7 +259,6 @@ export const patPairingApproveOperation = CanonicalOperationId.make("pats.approv
 export const patPairingGenericMessage =
   "This PAT pairing is invalid or no longer available. Start a new request." as const;
 
-/** One generic non-enumerating refusal for malformed, unknown, expired, or cross-User requests. */
 export class PATPairingReviewRejected
   extends Schema.Error<PATPairingReviewRejected, Brand.Brand<"PATPairingReviewRejected">>(
     "PATPairingReviewRejected"
@@ -285,7 +278,6 @@ export class PATPairingReviewRejected
   readonly canonicalOutcome = "rejected" as const;
 }
 
-/** Bounded review admission failure without revealing whether a submitted code exists. */
 export class PATPairingReviewRateLimited
   extends Schema.Error<PATPairingReviewRateLimited, Brand.Brand<"PATPairingReviewRateLimited">>(
     "PATPairingReviewRateLimited"
@@ -342,7 +334,6 @@ const approvePATPairing = HttpApiEndpoint.post("approvePATPairing", "/pats/pairi
     })
   );
 
-/** Fresh authenticated-web operations for manual and direct-client PAT authority. */
 export const PATsGroup = HttpApiGroup.make("pats")
   .add(listPATs)
   .add(getPATActivity)
@@ -352,20 +343,17 @@ export const PATsGroup = HttpApiGroup.make("pats")
   .add(inspectPATPairing)
   .add(approvePATPairing);
 
-/** One live-authority gate over the `pats` table: its table, predicate, and bindings. */
 export type PATAuthority = Readonly<{
   table: "pats";
   predicate: string;
   bindings: ReadonlyArray<string | number | Uint8Array>;
 }>;
 
-/** Canonical child calls eligible to advance PAT activity; batch envelopes have separate accountability. */
 export type AuditedPATOperation = Exclude<
   AuditCredentialOperation,
   "operations.executeAtomicBatch"
 >;
 
-/** Exact PAT proof and declared scope to recheck inside the protected atomic unit. */
 export type PATSubject = Readonly<{
   patId: string;
   userId: string;
@@ -373,10 +361,6 @@ export type PATSubject = Readonly<{
   requiredScope: Option.Option<CanonicalCapability>;
 }>;
 
-/**
- * Canonical mutations whose successful canonical audit row gates PAT activity. Reads advance
- * activity through `recordLivePATUse` instead, so the closed set stays mutation-only.
- */
 export type AuditedPATMutation = Extract<
   AuditedPATOperation,
   | "ingestion.submitForExtraction"
@@ -446,7 +430,6 @@ const boundedClaimValue = Schema.Unknown.check(
   )
 );
 
-/** Broad but field-bounded proof input so ordinary malformed values receive one generic refusal. */
 export const ClaimPATPairingPayload = Schema.Struct({
   pairingId: Schema.optional(boundedClaimValue),
   privateDeviceCode: Schema.optional(boundedClaimValue),
@@ -480,20 +463,10 @@ export const PATPairingDirectGroup = HttpApiGroup.make("patPairing")
     )
   );
 
-/** Direct no-store API for one User-owned client; it is not the canonical User API. */
 export class PATPairingApi extends HttpApi.make("patPairingApi")
   .add(PATPairingDirectGroup)
   .annotate(OpenApi.Title, "fidy-ai PATPairing API") {}
 
-/**
- * A live SQL projection of safe grant references for symmetric Consent evidence. Its columns are
- * id, user_id, request_id and pairing_id; it carries no bearer verifier or mutable lifecycle row.
- * Execute only inside the same atomic unit as the selected revocation or expiry transition.
- */
 export type PATGrantSelection = Readonly<{ _tag: "PATGrants"; statement: OwnedStatement }>;
 
-/**
- * A live SQL projection of approved unclaimed grants, exposing only id and user_id. The statement
- * remains bound to the User or bounded expiry selection and is consumed in that transition's unit.
- */
 export type PairingGrantSelection = Readonly<{ _tag: "PairingGrants"; statement: OwnedStatement }>;

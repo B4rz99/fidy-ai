@@ -18,14 +18,12 @@ import { SubscriptionOffers, SubscriptionStatus } from "~/core/subscription/cont
 import { type OwnedStatement } from "~/shell/owner-write/contract";
 import { type Unavailable } from "~/shell/public-http/contract";
 
-/** Read the complete immutable published offer set, or fail closed if it is unavailable. */
 export const listSubscriptionOffersResponse: Effect.Effect<
   { readonly data: SubscriptionOffers; readonly next: ReadonlyArray<never> },
   Unavailable,
   SqlClient.SqlClient
 > = Effect.suspend(() => readOffers);
 
-/** Read one User's original trial, settled paid standing and bounded safe BillingAttempts. */
 export const getSubscriptionStatus = (
   userId: UserId
 ): Effect.Effect<
@@ -34,10 +32,6 @@ export const getSubscriptionStatus = (
   SqlClient.SqlClient
 > => readSubscriptionStatus(userId);
 
-/**
- * Recheck settled paid access at the caller's decision instant within its own protected unit.
- * The interval is half-open; another User's Subscription cannot establish this condition.
- */
 export const activePaidSubscriptionCondition = ({
   userId,
   nowEpochMs,
@@ -47,7 +41,6 @@ export const activePaidSubscriptionCondition = ({
     nowEpochMs,
   });
 
-/** Recheck settled paid access for a bounded User selection in the caller's native snapshot. */
 export const activePaidSubscriptionForUserSelection = ({
   users,
   nowEpochMs,
@@ -59,7 +52,6 @@ export const activePaidSubscriptionForUserSelection = ({
   params: [...users.params, nowEpochMs, nowEpochMs],
 });
 
-/** Prepare complete public Prices with a live authority recheck and closed JSON projection. */
 export const prepareSubscriptionOffers = (
   authority: SubscriptionReadAuthority
 ): PreparedSubscriptionRead => ({
@@ -70,7 +62,6 @@ export const prepareSubscriptionOffers = (
     ),
 });
 
-/** Prepare one User's safe standing and attempts at the same decision instant as its protected read. */
 export const prepareSubscriptionStatus = (
   input: Readonly<{
     authority: SubscriptionReadAuthority;

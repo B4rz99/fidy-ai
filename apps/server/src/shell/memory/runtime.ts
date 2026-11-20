@@ -8,6 +8,5 @@ const routes = memoryOperationIds.map((id) => {
   return operation;
 });
 
-/** True only for paths backed by an implemented canonical Memory adapter. */
 export const ownsMemoryPath = (path: string): boolean =>
   routes.some((operation) => matchesRouteTemplate({ template: operation.route, path }));

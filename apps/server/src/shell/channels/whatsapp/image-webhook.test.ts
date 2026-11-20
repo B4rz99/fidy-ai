@@ -2,7 +2,6 @@ import { expect, it } from "@effect/vitest";
 import { DateTime, Effect, Option, Redacted } from "effect";
 import { authenticateWhatsAppInbound } from "./operations";
 
-
 const fixture = await Bun.file(
   new URL("./internal/fixtures/kapso-bsuid-image-v2.json", import.meta.url)
 ).text();

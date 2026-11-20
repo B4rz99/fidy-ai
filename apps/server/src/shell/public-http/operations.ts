@@ -1,11 +1,6 @@
 import { isHttpOrigin } from "~/shell/browser-transport/operations";
 import { Config, Schema } from "effect";
 
-/**
- * Stable public addresses shared by the web, channel, ingestion, and billing adapters.
- * Origins may be overridden for previews or local development; route paths remain one
- * product-level contract so dependent adapters cannot drift onto parallel callback URLs.
- */
 export type ExternalEndpoints = {
   readonly webOrigin: string;
   readonly apiOrigin: string;
@@ -23,10 +18,6 @@ const HttpOrigin = Schema.URL.check(
   )
 );
 
-/**
- * Loads Fidy's public namespace from required process configuration. Missing or malformed
- * values fail before a dependent adapter can advertise an unusable external address.
- */
 export const externalEndpoints: Config.Config<ExternalEndpoints> = Config.all({
   webOrigin: Config.schema(HttpOrigin, "PUBLIC_WEB_ORIGIN"),
   apiOrigin: Config.schema(HttpOrigin, "PUBLIC_API_ORIGIN"),
@@ -41,11 +32,6 @@ export const externalEndpoints: Config.Config<ExternalEndpoints> = Config.all({
   }))
 );
 
-/**
- * Whether one concrete request path matches a canonical route template. `:param` segments match any
- * non-empty segment; every other segment must match exactly. Published slice route modules share
- * this so path ownership cannot drift between their adapters.
- */
 export const matchesRouteTemplate = ({
   template,
   path,

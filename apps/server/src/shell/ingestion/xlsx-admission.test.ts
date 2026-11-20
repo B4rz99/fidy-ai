@@ -155,7 +155,6 @@ it.effect("bounds optional sheet-metadata matching before workbook construction"
 
 it.effect("admits the exact repeated-text work boundary and rejects its next byte", () =>
   Effect.gen(function* () {
-    // Header h costs two bytes; shared index 1 costs one byte in addition to the value.
     const length = statementParserLimits.maximumReferencedTextBytes - 3;
     for (const adjustment of [-1, 0]) {
       const parsed = yield* parseStatementFile(workbook("x".repeat(length + adjustment)));
@@ -278,7 +277,6 @@ it.effect("rejects binary workbook parts despite unrelated admitted XML", () =>
         entries["decoy.xml"] = strToU8("<worksheet/>");
       })
     );
-    // An XML-labelled binary part must not select the suffix-based binary parser either.
     yield* reject(
       modify(workbook("normal"), (entries) =>
         replacePart(entries, "[Content_Types].xml", (xml) =>

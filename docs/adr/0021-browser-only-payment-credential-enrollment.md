@@ -40,3 +40,9 @@ Price snapshots describe the families represented in the terms. Enrollment avail
 which methods can execute now. Preparing DaviPlata admits reviewed query-free destinations. The
 Sandbox adapter owns the fixed operation and token queries. The three enrollment decisions remain
 independently representable so combined acceptance cannot stand in for any one of them.
+
+The Owner recognizes enrollment paths independently of the request method. A wrong method
+therefore receives the owned refusal and cannot fall through to canonical authority. Enrollment
+requires exact browser origin and a fresh cookie-backed WebSession. Prepared submission is
+bounded before provider work. A cleared failed payment source may be replaced only when the
+Subscription and unresolved collection guards permit it.

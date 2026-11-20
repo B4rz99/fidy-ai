@@ -44,3 +44,10 @@ Use rejection sampling when mapping random bytes into public pairing-code symbol
 has equal probability. A browser-generated manual request id makes a confirmed grant retry-safe.
 Pre-approval polling with the correct private proof exposes bounded cadence metadata. Claim
 rechecks the approval, proof and lifecycle in the committing storage guard.
+
+A PAT retry can establish the same issuance outcome without redisclosing a consumed bearer.
+Auth-sensitive refusals for malformed, foreign and expired pairing material remain generic.
+Read activity advances from the live query proof. A mutation advances activity only after its
+exact successful canonical Audit row in the same atomic unit. Historical ownership can support
+activity attribution but never authorizes work. Anonymous pairing cleanup preserves approved
+User-bound grants, and poll/backoff records cannot alter grant authority.

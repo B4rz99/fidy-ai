@@ -6,33 +6,28 @@ import {
   type WhatsAppProviderMessageId,
 } from "~/shell/channels/whatsapp/contract";
 
-/** Closed coordinate-free reason reported by the Outbound HTTP interface. */
 export type OutboundHttpFailureReason =
   | "response-body-failed"
   | "invalid-destination"
   | "response-too-large"
   | "transport-failed";
 
-/** Failure facts safe for provider interpretation, without coordinates, credentials, or causes. */
 export class OutboundHttpFailure extends Data.TaggedError("OutboundHttpFailure")<{
   readonly reason: OutboundHttpFailureReason;
   readonly responseStatus: Option.Option<number>;
   readonly responseHeaders: Readonly<Record<string, string>>;
 }> {}
 
-/** Coordinate-free failure to acquire short-lived operational provider authority. */
 export class OutboundHttpSetupError extends Data.TaggedError("OutboundHttpSetupError")<{
   readonly reason: "unavailable";
 }> {}
 
-/** Response whose body has passed its destination policy's streamed-byte bound. */
 export type OutboundHttpResponse = Readonly<{
   readonly status: number;
   readonly headers: Readonly<Record<string, string>>;
   readonly body: Uint8Array;
 }>;
 
-/** Values needed to encode and sign one Wompi transaction without exposing signing authority. */
 export type WompiTransactionBody = Readonly<{
   readonly amountInCents: number;
   readonly currency: string;
@@ -42,13 +37,6 @@ export type WompiTransactionBody = Readonly<{
   readonly method: EnrollmentMethod;
 }>;
 
-/**
- * One closed provider operation accepted by Outbound HTTP. Its tag selects fixed origins,
- * credentials, response bounds, retained headers, redirect behavior, and trace policy. Wompi
- * transaction signing stays inside the interface because its integrity secret is transport authority;
- * all other
- * provider request bodies remain encoded by their owning adapter.
- */
 export type OutboundHttpRequest =
   | Readonly<{
       readonly _tag: "KapsoMediaMetadata";
@@ -95,7 +83,6 @@ export type OutboundHttpRequest =
   | Readonly<{ readonly _tag: "CloudflareAccessSupportRecovery"; readonly body: string }>
   | Readonly<{ readonly _tag: "CloudflareAccessSigningKeys" }>;
 
-/** Fixed-provider OIDC protocol transport; no request may select destinations, credentials or response limits. */
 export type ProviderOidcHttpService = Readonly<{
   execute: (
     request:
@@ -108,12 +95,10 @@ export type ProviderOidcHttpService = Readonly<{
   ) => Effect.Effect<OutboundHttpResponse, OutboundHttpFailure | Cause.TimeoutError>;
 }>;
 
-/** Anonymous CLI release metadata transport; requests cannot select coordinates or authority. */
 export type CliReleaseHttpService = Readonly<{
   readLatest: () => Effect.Effect<OutboundHttpResponse, OutboundHttpFailure>;
 }>;
 
-/** Fixed sandbox bank operations; no caller-selected destinations or response limits. */
 export type BancolombiaSandboxHttpService = Readonly<{
   execute: (
     request:
@@ -163,7 +148,6 @@ export type BancolombiaSandboxHttpService = Readonly<{
   ) => Effect.Effect<OutboundHttpResponse, OutboundHttpFailure | Cause.TimeoutError>;
 }>;
 
-/** Fixed OpenAI inference destination and credential; returns only byte-bounded response evidence. */
 export type OpenAiHttpService = Readonly<{
   execute: (body: string) => Effect.Effect<OutboundHttpResponse, OutboundHttpFailure>;
 }>;

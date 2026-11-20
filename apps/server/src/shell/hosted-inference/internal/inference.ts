@@ -33,8 +33,7 @@ import type {
 import { maximumActiveRequestTokens, maximumHostedProviderAttempts } from "./limits";
 import { projectHostedStructuredContextInternal, projectHostedTextContextInternal } from "./prompt";
 
-// Structured clone drops Effect DateTime's prototype/identity. Copy semantic instants explicitly
-// before freezing the detached context so proactive Transcript codecs still receive DateTime.Utc.
+
 const copyInstant = (value: DateTime.Utc): DateTime.Utc =>
   DateTime.makeUnsafe(DateTime.toEpochMillis(value));
 const copyTimestampedEntry = <A extends Readonly<{ occurredAt: DateTime.Utc }>>(entry: A): A => ({
@@ -58,8 +57,7 @@ const isolateTextContext = (context: HostedTextContext): HostedTextContext =>
     }),
   });
 
-// `Option` is immutable and not structured-clone-compatible (its `_tag` is an accessor), so only
-// the mutable entry array is cloned; sharing the prior keeps `Option.match` working downstream.
+
 const isolateStructuredContext = (context: HostedStructuredContext): HostedStructuredContext =>
   freezeDeep({
     prior: context.prior,

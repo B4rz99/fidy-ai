@@ -86,3 +86,14 @@ Supporting statement evidence without a credential is recorded separately from a
 canonical calls. Missing and foreign PAT activity requests have the same Audit projection and
 retain no requested grant identifier. Retention is separately authorized maintenance. It removes
 only expired evidence under a short-lived subject permit in the same atomic unit.
+
+Build the batch from the ordinary catalog. Queries and the batch itself cannot appear as child
+operations. Deferred child validators keep unrelated schema setup off read startup. Caller-specific
+presentation may remove forbidden children while execution still uses the full canonical contract.
+A verified WhatsApp attachment and original Turn permit cannot be supplied through the public
+HTTP batch envelope.
+
+D1 assertions use separately owned fixed slots. The read-only-on-success variant sets
+`changes()` to zero, and the acknowledged-write variant sets it to one. Choose according to
+the next statement's guard. Both abort through the same refusal constraints when the assertion
+fails. A slot identifies a caller's assertion and carries no User data or authority.

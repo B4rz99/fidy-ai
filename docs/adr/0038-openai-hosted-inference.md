@@ -28,3 +28,23 @@ compaction uses strict structured output. Every request sets `store: false`.
 
 Timestamp fields in provider-facing structured schemas require complete offset-bearing RFC 3339
 input. Express the pattern without lookaround so the provider's validator can accept it.
+
+## Prepared requests and continuations
+
+A prepared execution owns its detached semantic request and the matching decoder. It has at
+most two attempts and may retry only a typed retryable provider refusal. Invalid text output
+can authorize one separately prepared repair. Put the safe repair feedback after initial
+instructions and before the active request to preserve provider continuation framing.
+Successful preparation consumes a continuation, including its retained provider state and
+remaining tool policy. Failed preparation restores the continuation. Measuring a request
+does not create executable authority.
+
+Snapshot mutable context before executing it, and reconstruct Effect DateTime instants explicitly
+because structured cloning loses their identity. Share the immutable Option for prior context
+and clone its mutable entry array separately. Provider Transcript and tool evidence use the
+encoded JSON representation. The local UTF-8 byte bound is conservative and keeps content out
+of a second tokenizer. The hosted Turn owns the Work span and emits safe provider outcomes once.
+Live conformance returns a closed capability failure instead of provider content.
+
+Provider schema normalization may collapse a homogeneous tuple into its equivalent item schema
+while preserving length bounds. Annotations and literal values are data outside this rewrite.

@@ -74,8 +74,6 @@ const enforceCsvDimensions = (text: string, options: Options): void => {
   let cells = 0;
   parse(text, {
     ...options,
-    // Field context includes a copy of the entire raw prefix when raw is enabled.
-    // Keep dimension admission raw-free and discard each bounded record immediately.
     info: false,
     raw: false,
     cast: (value, context): string => {
@@ -104,8 +102,6 @@ export const parseCsv = (bytes: Uint8Array): ParsedStatementMaterial => {
     max_record_size: maximumCsvRecordBytes,
   };
   enforceCsvDimensions(text, options);
-  // Both passes share the parser's grammar. Evidence is decoded only after admission,
-  // without a field callback that would repeatedly copy a long leading field.
   const records: ReadonlyArray<CsvRecord> = Schema.decodeUnknownSync(Schema.Array(CsvRecord))(
     parse(text, { ...options, info: true, raw: true })
   );

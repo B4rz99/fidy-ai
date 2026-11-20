@@ -30,12 +30,6 @@ const SuggestedOperationHint = Schema.NonEmptyString.check(
     "Addressed to you, the calling agent, and not to the user — act on it rather than reading it out.",
 });
 
-/**
- * The internal carrier for reflected schema members. Handler proposals never
- * use this broad shape: `suggestOperation` binds each operation id to its input
- * at compile time, and this reflected union strictly decodes the same pairing
- * at the untyped response boundary without introducing an API assembly cycle.
- */
 type SuggestedOperationValue =
   | { readonly tool: string; readonly hint: string }
   | {
@@ -70,11 +64,6 @@ const suggestedOperationMember = (
   });
 };
 
-/**
- * A suggested next canonical call. `tool` accepts exactly a published operation
- * id; `args`, when present, is that target operation's schema-derived partial
- * input.
- */
 export const SuggestedOperation = Schema.suspend(() => {
   const members = getBoundOperationCatalog()
     .operations.filter((operation) =>
@@ -90,7 +79,6 @@ export const SuggestedOperation = Schema.suspend(() => {
   .annotate({ identifier: "SuggestedOperation" });
 export type SuggestedOperation = typeof SuggestedOperation.Type;
 
-/** At most three suggested canonical operations, possibly none, on success and failure. */
 export const NextOperations = Schema.Array(SuggestedOperation)
   .check(Schema.isMaxLength(3))
   .annotate({
@@ -100,14 +88,9 @@ export const NextOperations = Schema.Array(SuggestedOperation)
       "an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
   });
 
-/** Supports the reflection guard that prevents endpoints from bypassing the universal envelope. */
 export const isOperationResponse = (schema: Schema.Top): boolean =>
   Schema.resolveAnnotations(schema)?.operationResponse === true;
 
-/**
- * The universal success response. Every canonical operation's success schema
- * is built with this combinator — top-level only, no per-operation opt-out.
- */
 export const OperationResponse = <Data extends Schema.Top>(
   data: Data
 ): Schema.Struct<{
@@ -119,20 +102,12 @@ export const OperationResponse = <Data extends Schema.Top>(
     next: NextOperations,
   }).annotate({ operationResponse: true });
 
-/** Canonical typed-error fragment used to derive the HTTP Retry-After header. */
 export const CanonicalRetryAfterBody = Schema.Struct({
   error: Schema.Struct({
     retryAfterSeconds: Schema.Int.check(Schema.isGreaterThan(0)),
   }),
 });
 
-/**
- * Closed canonical error vocabulary shared by every slice. Callers may branch
- * exhaustively on these codes; slices reuse the published meanings.
- * unauthenticated means unresolved credentials, consent_required means no
- * current onboarding grant, and user_action_required means explicit revocation
- * requiring the User to return to a Fidy-owned surface.
- */
 export const ErrorCode = Schema.Literals([
   "validation_failed",
   "unauthenticated",
@@ -148,7 +123,6 @@ export const ErrorCode = Schema.Literals([
 ]);
 export type ErrorCode = typeof ErrorCode.Type;
 
-/** Shared protocol for expected canonical refusals that audit as rejected rather than failed. */
 export const CanonicalRejectedFailure = Schema.Struct({
   canonicalOutcome: Schema.Literal("rejected"),
 });
@@ -215,7 +189,6 @@ const notFoundTag = "NotFound";
 const unavailableTag = "Unavailable";
 const resourceLimitedTag = "ResourceLimited";
 
-/** A Free capability remains available, but its concrete monthly allowance is exhausted. */
 export class QuotaExhausted extends Schema.Error<QuotaExhausted, Brand.Brand<"QuotaExhausted">>(
   "QuotaExhausted"
 )(
@@ -230,7 +203,6 @@ export class QuotaExhausted extends Schema.Error<QuotaExhausted, Brand.Brand<"Qu
   { httpApiStatus: 429 }
 ) {}
 
-/** Invalid input with attributable field issues; encoding omits the internal _tag. */
 export class ValidationFailed extends Schema.Error<
   ValidationFailed,
   Brand.Brand<"ValidationFailed">
@@ -249,33 +221,22 @@ export class ValidationFailed extends Schema.Error<
   { httpApiStatus: 400 }
 ) {}
 
-/**
- * The request named no caller, or one that could not be resolved to a user.
- * Carries no suggested operation: nothing the API offers changes a PAT.
- */
 export class Unauthenticated extends Schema.Error<Unauthenticated, Brand.Brand<"Unauthenticated">>(
   unauthenticatedTag
 )(errorResponse(unauthenticatedTag, detail("unauthenticated")), {
   httpApiStatus: 401,
 }) {}
 
-/**
- * The bearer is valid but does not grant the scope declared by the attempted operation. PAT
- * changes happen at `/settings/access`, outside this canonical API, so the failure carries no
- * suggested operation.
- */
 export class ScopeMissing extends Schema.Error<ScopeMissing, Brand.Brand<"ScopeMissing">>(
   scopeMissingTag
 )(errorResponse(scopeMissingTag, detail("scope_missing")), { httpApiStatus: 403 }) {}
 
-/** The stable User has no current onboarding grant, so no canonical operation may run. */
 export class ConsentRequired extends Schema.Error<ConsentRequired, Brand.Brand<"ConsentRequired">>(
   consentRequiredTag
 )(errorResponse(consentRequiredTag, detail("consent_required")), {
   httpApiStatus: 403,
 }) {}
 
-/** Explicit revocation requires the User to return to a Fidy-owned surface before PAT work. */
 export class UserActionRequired extends Schema.Error<
   UserActionRequired,
   Brand.Brand<"UserActionRequired">
@@ -283,20 +244,17 @@ export class UserActionRequired extends Schema.Error<
   httpApiStatus: 403,
 }) {}
 
-/** The User has exhausted Free access to a capability that remains available in Pro. */
 export class PaywallRequired extends Schema.Error<PaywallRequired, Brand.Brand<"PaywallRequired">>(
   paywallRequiredTag
 )(errorResponse(paywallRequiredTag, detail("paywall_required")), {
   httpApiStatus: 402,
 }) {}
 
-/** Missing and foreign records share the same caller-visible failure. */
 export class NotFound extends Schema.Error<NotFound, Brand.Brand<"NotFound">>(notFoundTag)(
   errorResponse(notFoundTag, detail("not_found")),
   { httpApiStatus: 404 }
 ) {}
 
-/** The caller's stable-User request or write admission budget is exhausted. No domain write was accepted. */
 export class ResourceLimited extends Schema.Error<ResourceLimited, Brand.Brand<"ResourceLimited">>(
   resourceLimitedTag
 )(
@@ -312,7 +270,6 @@ export class ResourceLimited extends Schema.Error<ResourceLimited, Brand.Brand<"
   { httpApiStatus: 429 }
 ) {}
 
-/** A required private dependency could not complete the canonical operation. */
 export class Unavailable extends Schema.Error<Unavailable, Brand.Brand<"Unavailable">>(
   unavailableTag
 )(
@@ -351,11 +308,6 @@ forwardErrorMessage(
   Unavailable.prototype
 );
 
-/**
- * Declares the canonical validation failure for requests that do not satisfy an operation's
- * schemas. Invalid requests are reported as `ValidationFailed` with request-part field issues,
- * keeping this failure in every derived API surface.
- */
 export class ValidationGate extends HttpApiMiddleware.Service<ValidationGate>()(
   "@fidy/server/shell/public-http/ValidationGate",
   { error: ValidationFailed }
@@ -365,7 +317,6 @@ export const okStatus = 200;
 
 export const createdStatus = 201;
 
-/** The response status for durable work accepted for asynchronous processing. */
 export const acceptedStatus = 202;
 
 export const unauthorizedStatus = 401;
@@ -384,23 +335,13 @@ export const serviceUnavailableStatus = 503;
 
 export const lastServerErrorStatus = 599;
 
-/**
- * Whether a response status describes a briefly unavailable HTTP resource: a request timeout,
- * conflict, rate limit, or any server failure. Callers keep their own retry bounds.
- */
 export const isTransientHttpStatus = (status: number): boolean =>
   status === requestTimeoutStatus ||
   status === conflictStatus ||
   status === tooManyRequestsStatus ||
   status >= firstServerErrorStatus;
 
-/**
- * Reports whether a parsed URL is exactly a credential-free HTTP(S) origin.
- * A root slash is the only accepted path; credentials, query parameters, and
- * fragments are rejected so callers can compare the returned origin exactly.
- */
 
-/** Observes a canonical call without changing its success, failure, interruption, or requirements. */
 export class CanonicalTelemetry extends HttpApiMiddleware.Service<CanonicalTelemetry>()(
   "@fidy/server/shell/public-http/contract/CanonicalTelemetry"
 ) {}

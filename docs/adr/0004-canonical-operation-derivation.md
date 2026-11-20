@@ -76,3 +76,9 @@ response. Empty strict-object parameters use a never-valued record to admit no k
 
 Keyword-rule browser-origin policy derives its stricter route family from the canonical collection
 path so a newly added child inherits the gate.
+
+Canonical success and expected refusal use the common top-level responses. Partial suggestions
+retain the target operation's canonical codecs. Properties can be absent recursively. Arrays
+keep cardinality, atomic declarations remain indivisible, and object checks wait only for omitted
+required input. Browser and provider adapters share declared route patterns with the canonical
+owner so edge policy cannot drift to a second path.

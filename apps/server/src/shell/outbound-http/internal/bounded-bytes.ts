@@ -1,9 +1,5 @@
 import { Effect, Option, Stream } from "effect";
 
-/**
- * Collects at most `maximumBytes` from a stream. Returns `None` after the first overflowing chunk;
- * early termination releases the owned stream through its scope.
- */
 export const collectBoundedBytes = Effect.fn(function* <E, R>(
   stream: Stream.Stream<Uint8Array, E, R>,
   maximumBytes: number

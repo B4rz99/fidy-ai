@@ -8,3 +8,6 @@ consume a Free unit. Commercial allowance and security admission enforce distinc
 A retry reference identifies a prior admission and carries no authority. Its absolute lifetime
 starts at first admission, including across month rollover. The owner consults replay before it
 decides on a new unit and rechecks capacity in the guarded acceptance commit.
+
+Wire meter metadata expresses reset as an absolute UTC instant. Security Retry-After delays
+remain separate. Inspection stays callable when the commercial canonical-call meter is exhausted.

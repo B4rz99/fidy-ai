@@ -18,24 +18,20 @@ import {
 const operationsGroupName = "operations";
 const atomicBatchEndpointName = "executeAtomicBatch";
 
-/** Identity of the canonical mutation that executes one ordered atomic batch. */
 export const atomicBatchOperation = Schema.Literal(
   `${operationsGroupName}.${atomicBatchEndpointName}`
 )
   .pipe(Schema.brand("CanonicalOperationId"))
   .make(`${operationsGroupName}.${atomicBatchEndpointName}`);
 
-/** Maximum child mutations accepted by one atomic batch request. */
 export const maximumAtomicBatchCalls = 12;
 
-/** Admit only the bounded batch envelope; canonical preparation attributes and decodes each raw child. */
 export const AtomicBatchAdmission = Schema.Struct({
   payload: Schema.Struct({
     calls: Schema.NonEmptyArray(Schema.Unknown).check(Schema.isMaxLength(maximumAtomicBatchCalls)),
   }),
 });
 
-/** Stable caller-chosen correlation id for one child mutation and its result. */
 export const AtomicBatchCallId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("AtomicBatchCallId"))
   .annotate({ identifier: "AtomicBatchCallId" });
@@ -57,13 +53,8 @@ export type AtomicBatchResult = Readonly<{
 }>;
 type NonEmptyMutationResults = readonly [AtomicBatchResult, ...ReadonlyArray<AtomicBatchResult>];
 
-/** Ordered child results, each correlated to the submitted id and canonical mutation. */
 export type AtomicBatchOutput = Readonly<{ results: NonEmptyMutationResults }>;
 
-/**
- * Actionable failure of one child mutation. The whole batch has rolled back; `failedCallIndex` and
- * `operation` identify the correction target without retaining any request or response body.
- */
 export class AtomicBatchRejected extends Schema.Error<
   AtomicBatchRejected,
   Brand.Brand<"AtomicBatchRejected">
@@ -86,21 +77,18 @@ let boundAtomicBatchInput = Option.none<AtomicBatchInputSchema>();
 let boundAtomicBatchResult = Option.none<Schema.Codec<AtomicBatchResult, Schema.Json>>();
 let boundAtomicBatchChildren = Option.none<ReadonlyArray<CanonicalOperationId>>();
 
-/** The catalog-derived call schema used to recover exact registry correlation after HTTP decoding. */
 export const getAtomicBatchCallSchema = (): Schema.Codec<AtomicBatchCall, Schema.Json> =>
   Option.getOrThrowWith(
     boundAtomicBatchCall,
     () => new Error("Atomic batch call schema has not been derived")
   );
 
-/** The canonical operation input schema for one ordered atomic mutation batch. */
 export const getAtomicBatchInputSchema = (): AtomicBatchInputSchema =>
   Option.getOrThrowWith(
     boundAtomicBatchInput,
     () => new Error("Atomic batch input schema has not been derived")
   );
 
-/** Revalidates the runtime registry output against the catalog-derived correlated result union. */
 export const decodeAtomicBatchResult = (
   value: unknown
 ): Effect.Effect<AtomicBatchResult, Schema.SchemaError> =>
@@ -113,7 +101,6 @@ export const decodeAtomicBatchResult = (
     )
   )(value);
 
-/** The operation ids the published child-call union covers, bound when the batch group builds. */
 export const getAtomicBatchChildIds = (): ReadonlyArray<CanonicalOperationId> =>
   Option.getOrThrowWith(
     boundAtomicBatchChildren,
@@ -190,7 +177,6 @@ const makeAtomicBatchSchemas = (
   readonly input: AtomicBatchInputSchema;
   readonly output: AtomicBatchOutputSchema;
 } => {
-  // Derive the unchanged child validators when a batch is encoded/decoded, outside read startup.
   const call = Schema.suspend(() =>
     Schema.make<Schema.Codec<AtomicBatchCall, Schema.Json>>(
       catalogUnion(mutations, mutationCallMember).ast
@@ -211,10 +197,6 @@ const makeAtomicBatchSchemas = (
   return { call, result, input, output };
 };
 
-/**
- * A caller-eligible presentation of the canonical child unions and limits. This does not rebind
- * decoding or execution authority: the broad server declaration remains the input/output codec.
- */
 export const projectAtomicBatchSchemas = (
   options: Readonly<{
     catalog: OperationCatalog;
@@ -227,11 +209,6 @@ export const projectAtomicBatchSchemas = (
   return { input: Schema.Struct({ payload: input }), output: OperationResponse(output) };
 };
 
-/**
- * Derives the visible batch operation from the ordinary catalog. Because that catalog is assembled
- * before this group exists, canonical queries and the batch operation itself cannot enter either
- * the child-call or correlated-result tagged union.
- */
 export const makeOperationsGroup = (ordinaryCatalog: OperationCatalog): OperationsGroup => {
   const mutations = mutationOperations(ordinaryCatalog);
   const { call, result, input, output } = makeAtomicBatchSchemas(mutations);

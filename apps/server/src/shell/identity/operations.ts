@@ -14,7 +14,6 @@ import {
 } from "~/shell/identity/internal/user-query";
 import type { CurrentUserResponse, PreparedCurrentUserRead } from "./contract";
 
-/** Commit-time same-User WhatsAppIdentity predicate; a pre-coordination lookup grants no authority. */
 export const whatsAppAssociationQuery = ({
   userId,
   caller,
@@ -29,10 +28,6 @@ const userUnavailable = (): Unavailable =>
     next: [],
   });
 
-/**
- * Prepare the complete canonical projection for one authenticated User. The statement observes
- * that User's current Consent grant at execution; preparation confers no credential authority.
- */
 export const prepareCurrentUser = (
   userId: UserId
 ): Effect.Effect<PreparedCurrentUserRead, Unavailable> =>
@@ -52,10 +47,6 @@ export const prepareCurrentUser = (
     Effect.mapError(userUnavailable)
   );
 
-/**
- * Load the resolved stable User while rechecking Consent in the authoritative read.
- * Missing, inaccessible, or invalid state returns the same safe unavailable response.
- */
 export const getCurrentUser = (
   userId: UserId
 ): Effect.Effect<CurrentUserResponse, Unavailable, SqlClient.SqlClient> =>
@@ -66,7 +57,6 @@ export const getCurrentUser = (
     return yield* read.decode(rows);
   }).pipe(Effect.mapError(userUnavailable));
 
-/** D1 predicate that is re-evaluated with a protected browser canonical read. */
 export const liveWebSessionAuthority = (
   input: Readonly<{ subject: WebSessionSubject; current: number }>
 ): WebSessionAuthority => {
@@ -78,11 +68,6 @@ export const liveWebSessionAuthority = (
   });
 };
 
-/**
- * Select one User's original TrialPeriod for composition inside a caller-owned statement.
- * The bounded projection exposes startedAtMs and endsAtMs as UTC epoch milliseconds;
- * absent state produces no row. The caller retains responsibility for its access authority.
- */
 export const userTrialPeriodQuery = (userId: UserId): OwnedStatement =>
   selectedUserTrialPeriodQuery({ sql: "SELECT ? AS userId", params: [userId] });
 
@@ -92,10 +77,6 @@ export const selectedUserTrialPeriodQuery = (users: OwnedStatement): OwnedStatem
   params: users.params,
 });
 
-/**
- * Recheck the original TrialPeriod's half-open interval inside the caller's protected work.
- * Missing or out-of-window state is false; another User's trial never affects this condition.
- */
 export const activeTrialPeriodCondition = ({
   userId,
   nowEpochMs,
@@ -105,7 +86,6 @@ export const activeTrialPeriodCondition = ({
     nowEpochMs,
   });
 
-/** Recheck TrialPeriod for a bounded User selection in the caller's authoritative native unit. */
 export const activeTrialPeriodForUserSelection = ({
   users,
   nowEpochMs,
@@ -115,7 +95,6 @@ export const activeTrialPeriodForUserSelection = ({
   params: [...users.params, nowEpochMs, nowEpochMs],
 });
 
-/** Canonical metadata selected from an exact caller-owned live User relation. */
 export const prepareSelectedCurrentUser = (users: OwnedStatement): PreparedCurrentUserRead => ({
   statement: selectedCurrentUserQuery(users),
   decode: (rows) =>

@@ -36,10 +36,6 @@ export const TelemetryWorkKindGroup = {
   none: ["canonical_operation", "authorization", "hosted_turn", "model_round", "ci_scenario"],
 } as const;
 
-/**
- * The complete vocabulary permitted to become indexed telemetry. Values are operational metadata,
- * never User, domain, provider-evidence, request, or payload data; additions require sentinel review.
- */
 export const TelemetryRegistry = {
   component: ["browser", "api", "agent", "email", "whatsapp", "kapso", "resend", "wompi", "ci"],
   operation: [
@@ -199,7 +195,6 @@ type Registry = typeof TelemetryRegistry;
 
 export type TelemetryCode<Key extends keyof Registry> = Registry[Key][number];
 
-/** Runtime schemas derived from the same registry that supplies compile-time code unions. */
 export const TelemetryCodeSchema = {
   component: Schema.Literals(TelemetryRegistry.component),
   operation: Schema.Literals(TelemetryRegistry.operation),
@@ -220,7 +215,6 @@ export const TelemetryCodeSchema = {
 
 export const maximumTelemetryCount = 1_000_000;
 
-/** Shared upper bound for every approved telemetry duration, in milliseconds. */
 export const maximumTelemetryDurationMilliseconds = 86_400_000;
 
 export const TelemetryCount = Schema.Int.check(
@@ -231,13 +225,11 @@ export type TelemetryCount = typeof TelemetryCount.Type;
 export const boundedTelemetryCount = (value: number): TelemetryCount =>
   TelemetryCount.make(Math.min(Math.max(0, Math.trunc(value)), maximumTelemetryCount));
 
-/** A one-based attempt number from 1 through 100 for queue, provider, model, or scheduled work. */
 export const TelemetryAttempt = Schema.Int.check(
   Schema.isBetween({ minimum: 1, maximum: 100 })
 ).pipe(Schema.brand("TelemetryAttempt"));
 export type TelemetryAttempt = typeof TelemetryAttempt.Type;
 
-/** An elapsed duration from 0 through 86,400,000 ms; it carries no wall-clock timestamp. */
 export const TelemetryDuration = Schema.Int.check(
   Schema.isBetween({
     minimum: 0,
@@ -251,34 +243,27 @@ export const boundedTelemetryDuration = (value: number): TelemetryDuration =>
     Math.min(Math.max(0, Math.trunc(value)), maximumTelemetryDurationMilliseconds)
   );
 
-/** An immutable lowercase Git revision used to identify one deployed release. */
 export const TelemetryGitRevision = Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/u)).pipe(
   Schema.brand("TelemetryGitRevision")
 );
 export type TelemetryGitRevision = typeof TelemetryGitRevision.Type;
 
-/** Validated release identity, with one bounded fallback for invalid runtime configuration. */
 export const TelemetryRelease = Schema.Union([TelemetryGitRevision, Schema.Literal("unknown")]);
 export type TelemetryRelease = typeof TelemetryRelease.Type;
 
-/** An HTTP response status from 100 through 599 used only as bounded diagnostic metadata. */
 export const TelemetryHttpStatus = Schema.Int.check(
   Schema.isBetween({ minimum: 100, maximum: 599 })
 ).pipe(Schema.brand("TelemetryHttpStatus"));
 export type TelemetryHttpStatus = typeof TelemetryHttpStatus.Type;
 
-/** Low-cardinality class of a validated provider HTTP response status. */
 export const TelemetryHttpStatusClass = Schema.Literals(["1xx", "2xx", "3xx", "4xx", "5xx"]);
 export type TelemetryHttpStatusClass = typeof TelemetryHttpStatusClass.Type;
 
-/** A lowercase 16-hex span identifier; callers obtain it from Telemetry, never application data. */
 export const TelemetrySpanId = Schema.String.check(
   Schema.isPattern(/^(?!0{16}$)[0-9a-f]{16}$/u)
 ).pipe(Schema.brand("TelemetrySpanId"));
 
-/** A server-authored receipt used by clients to correlate diagnostics without sending trace authority. */
 
-/** The exact fields permitted in a completed Work export record. */
 export const TelemetryWorkRecord = Schema.Struct({
   release: TelemetryRelease,
   operation: TelemetryCodeSchema.operation,
@@ -292,7 +277,6 @@ export const TelemetryWorkRecord = Schema.Struct({
 });
 export type TelemetryWorkRecord = typeof TelemetryWorkRecord.Type;
 
-/** Immutable coordinates known before one finite Work execution begins. */
 export const TelemetryWorkDescriptor = Schema.Struct({
   release: TelemetryRelease,
   operation: TelemetryCodeSchema.operation,
@@ -301,27 +285,22 @@ export const TelemetryWorkDescriptor = Schema.Struct({
 });
 export type TelemetryWorkDescriptor = typeof TelemetryWorkDescriptor.Type;
 
-/** A successful Work result projected to its approved completion coordinates. */
 export type TelemetryWorkSuccess = Readonly<{
   outcome: Extract<TelemetryCode<"outcome">, "succeeded" | "rejected" | "failed">;
   statusClass: Option.Option<TelemetryHttpStatusClass>;
 }>;
 
-/** Closed descriptor and successful-result projection for one observed Work. */
 export type TelemetryWorkOptions<A> = Readonly<{
   descriptor: TelemetryWorkDescriptor;
   projectSuccess: (value: A) => TelemetryWorkSuccess;
 }>;
 
-/** Closed transport outcomes emitted by protected external HTTP spans. */
 export const TelemetryTransportOutcome = Schema.Literals(["response", "failure", "interrupted"]);
 export type TelemetryTransportOutcome = typeof TelemetryTransportOutcome.Type;
 
-/** HTTP methods admitted by the assembled canonical API. */
 export const TelemetryHttpMethod = Schema.Literals(["GET", "POST", "PUT", "PATCH", "DELETE"]);
 export type TelemetryHttpMethod = typeof TelemetryHttpMethod.Type;
 
-/** Closed HTTP method vocabulary admitted for external provider requests. */
 export const TelemetryExternalHttpMethod = Schema.Literals([
   "GET",
   "POST",
@@ -359,7 +338,6 @@ const ModelSpanMetadata = Schema.TaggedStruct("Model", {
   model: TelemetryCodeSchema.model,
 });
 
-/** Completion-only counters attached to the active approved model span. */
 export const TelemetryModelUsage = Schema.Struct({
   attempt: TelemetryAttempt,
   inputTokens: TelemetryCount,
@@ -378,10 +356,6 @@ const SpanIdentity = {
   spanOperation: TelemetryCodeSchema.spanOperation,
 } as const;
 
-/**
- * Describes one bounded shell operation. Each work kind admits only its relevant closed metadata
- * shape, preventing unrelated numeric or provider fields from entering a span.
- */
 export const SpanDescriptor = Schema.Union([
   Schema.Struct({
     ...SpanIdentity,
@@ -421,7 +395,6 @@ export const SpanDescriptor = Schema.Union([
 ]);
 export type SpanDescriptor = typeof SpanDescriptor.Type;
 
-/** A caller's classification of an expected or terminal operation result. */
 export const DeclaredOutcome = Schema.Union([
   Schema.Struct({
     outcome: Schema.Literal("succeeded"),
@@ -446,10 +419,6 @@ export const DeclaredOutcome = Schema.Union([
 ]);
 export type DeclaredOutcome = typeof DeclaredOutcome.Type;
 
-/**
- * An already-classified failure. `cause` is source material for stack coordinates only: its message,
- * properties, local variables, source context, and nested application values are never projected.
- */
 export const ClassifiedFailure = Schema.Union([
   Schema.TaggedStruct("Defect", {
     component: TelemetryCodeSchema.component,
@@ -468,10 +437,6 @@ export const ClassifiedFailure = Schema.Union([
 ]);
 export type ClassifiedFailure = typeof ClassifiedFailure.Type;
 
-/**
- * An approved diagnostic breadcrumb. It has no message or arbitrary data map; all optional values
- * are fixed codes or bounded numbers and only attach to the currently active telemetry span.
- */
 export const TelemetryBreadcrumb = Schema.Struct({
   category: TelemetryCodeSchema.breadcrumbCategory,
   action: TelemetryCodeSchema.breadcrumbAction,
@@ -483,10 +448,6 @@ export const TelemetryBreadcrumb = Schema.Struct({
 });
 export type TelemetryBreadcrumb = typeof TelemetryBreadcrumb.Type;
 
-/**
- * Exact propagation data allowed across a trusted Fidy durable boundary. Its millisecond timestamp
- * bounds continuation age without serializing baggage, identities, URLs, or provider metadata.
- */
 export const DurableTraceContext = Schema.Struct({
   version: Schema.Literal(1),
   traceId: TelemetryTraceId,
@@ -496,7 +457,6 @@ export const DurableTraceContext = Schema.Struct({
 });
 export type DurableTraceContext = typeof DurableTraceContext.Type;
 
-/** Opaque adapter-owned state plus the only validated trace coordinates the service may read. */
 export const TelemetrySpan = Schema.Struct({
   traceId: DurableTraceContext.fields.traceId,
   spanId: DurableTraceContext.fields.parentSpanId,
@@ -505,92 +465,65 @@ export const TelemetrySpan = Schema.Struct({
 });
 export type TelemetrySpan = typeof TelemetrySpan.Type;
 
-/**
- * Best-effort adapter contract used to construct a Telemetry layer. Implementations may perform side
- * effects, but the service validates returned spans and contains synchronous throws and failed Effects.
- */
 export type TelemetryAdapter = {
-  /** Allocates adapter state for a root or child; none means the caller's work runs unobserved. */
   readonly startSpan: (
     descriptor: SpanDescriptor,
     parent: Option.Option<DurableTraceContext>
   ) => Effect.Effect<Option.Option<TelemetrySpan>>;
-  /** Completes a span exactly once after its wrapped work exits, using that unchanged Exit. */
   readonly finishSpan: (
     span: TelemetrySpan,
     exit: Exit.Exit<unknown, unknown>
   ) => Effect.Effect<void>;
   readonly recordOutcome: (span: TelemetrySpan, outcome: DeclaredOutcome) => Effect.Effect<void>;
-  /** Adds a validated HTTP response status to an active HTTP or provider span. */
   readonly recordResponseStatus: (
     span: TelemetrySpan,
     status: TelemetryHttpStatus
   ) => Effect.Effect<void>;
-  /** Emits one already-classified failure, optionally attached to the supplied active span. */
   readonly captureFailure: (
     span: Option.Option<TelemetrySpan>,
     failure: ClassifiedFailure
   ) => Effect.Effect<void>;
-  /** Retains one approved breadcrumb on the supplied active span. */
   readonly addBreadcrumb: (
     span: TelemetrySpan,
     breadcrumb: TelemetryBreadcrumb
   ) => Effect.Effect<void>;
-  /** Retains final bounded usage on an active approved model span. */
   readonly recordModelUsage: (
     span: TelemetrySpan,
     usage: TelemetryModelUsage
   ) => Effect.Effect<void>;
-  /** Emits one already-closed Work-span record synchronously, after authoritative Work exits. */
   readonly exportWork: (record: TelemetryWorkRecord) => void;
 };
 
-/**
- * The sole application-facing observability capability. Methods accept closed diagnostic values,
- * are best effort, and span wrappers preserve the wrapped Effect's success, error, and requirements.
- */
 export type TelemetryService = {
-  /** Starts a root or child span; adapter failure runs work unobserved and never changes its exit. */
   readonly span: <A, E, R>(
     descriptor: SpanDescriptor,
     work: Effect.Effect<A, E, R>
   ) => Effect.Effect<A, E, R>;
-  /** Exports one closed Work span while preserving the wrapped Work's exact Exit. */
   readonly observeWork: <A, E, R>(
     options: TelemetryWorkOptions<A>,
     work: Effect.Effect<A, E, R>
   ) => Effect.Effect<A, E, R>;
-  /** Starts an isolated root even when the calling fiber is already inside unrelated observed work. */
   readonly rootSpan: <A, E, R>(
     descriptor: SpanDescriptor,
     work: Effect.Effect<A, E, R>
   ) => Effect.Effect<A, E, R>;
-  /** Continues context no older than 24 hours; malformed, future, or stale input starts a safe root. */
   readonly continueSpan: <A, E, R>(
     savedContext: unknown,
     descriptor: SpanDescriptor,
     work: Effect.Effect<A, E, R>
   ) => Effect.Effect<A, E, R>;
-  /** Replaces the active span's declared outcome; the latest declaration wins. Outside a span, no-op. */
   readonly recordOutcome: (outcome: DeclaredOutcome) => Effect.Effect<void>;
-  /** Adds a bounded response status to the active HTTP or provider span. Outside a span, no-op. */
   readonly recordResponseStatus: (status: TelemetryHttpStatus) => Effect.Effect<void>;
-  /** Captures a classified failure, attaching active trace coordinates when a span exists. */
   readonly captureFailure: (failure: ClassifiedFailure) => Effect.Effect<void>;
-  /** Adds an approved breadcrumb to the active span. Outside a span, no-op. */
   readonly addBreadcrumb: (breadcrumb: TelemetryBreadcrumb) => Effect.Effect<void>;
-  /** Records final bounded counters on the active approved model span. Outside a span, no-op. */
   readonly recordModelUsage: (usage: TelemetryModelUsage) => Effect.Effect<void>;
-  /** Returns only durable trace coordinates for the active span, or none outside a span. */
   readonly captureDurableContext: Effect.Effect<Option.Option<DurableTraceContext>>;
-  /** Proves that coordinates name a currently active in-process span with the expected operation. */
   readonly isActiveSpan: (
     context: DurableTraceContext,
     operation: SpanDescriptor["operation"]
   ) => Effect.Effect<boolean>;
 };
 
-/** A telemetry adapter together with the shutdown effect that drains its accepted work. */
 export type TelemetryResource = Readonly<{
   adapter: TelemetryAdapter;
   close: Effect.Effect<void>;
@@ -604,7 +537,6 @@ const PositiveStackCoordinate = Schema.Int.check(
   Schema.isBetween({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER })
 );
 
-/** Closed stack coordinates that cannot carry exception messages, source context, URLs, or locals. */
 export const ProjectedStackFrame = Schema.Struct({
   module: Schema.String.check(Schema.isPattern(safeSourceModulePattern)),
   filename: Schema.String.check(Schema.isPattern(safeSourceFilePattern)),
@@ -614,7 +546,6 @@ export const ProjectedStackFrame = Schema.Struct({
 });
 export type ProjectedStackFrame = typeof ProjectedStackFrame.Type;
 
-/** The exact breadcrumb fields permitted to enter an SDK event. */
 export const ProjectedBreadcrumb = Schema.Struct({
   category: TelemetryCodeSchema.breadcrumbCategory,
   message: TelemetryCodeSchema.breadcrumbAction,
@@ -637,14 +568,12 @@ const ProjectedTraceCoordinates = {
   op: TelemetryCodeSchema.spanOperation,
 } as const;
 
-// A failure can be captured with no Span in scope, and the SDK then supplies trace coordinates that
-// name no operation. Only the error shape may omit `op`: a transaction always originates in a Span.
+
 const ProjectedErrorTraceCoordinates = {
   ...ProjectedTraceCoordinates,
   op: Schema.optionalKey(TelemetryCodeSchema.spanOperation),
 } as const;
 
-/** Exact allowlisted attributes permitted on a serialized transaction or final SDK span. */
 export const ProjectedTraceData = Schema.Struct({
   "fidy.component": TelemetryCodeSchema.component,
   "fidy.operation": TelemetryCodeSchema.operation,
@@ -669,7 +598,6 @@ export const ProjectedTraceData = Schema.Struct({
 });
 export type ProjectedTraceData = typeof ProjectedTraceData.Type;
 
-/** Exact trace context and approved attributes permitted on a serialized transaction. */
 export const ProjectedTrace = Schema.Struct({
   ...ProjectedTraceCoordinates,
   status: Schema.Literals(["ok", "invalid_argument", "internal_error", "cancelled"]),
@@ -682,7 +610,6 @@ const ProjectedSpanName = Schema.Union([
   TelemetryCodeSchema.httpRequest,
 ]);
 
-/** The exact root/child span shape allowed through the pinned SDK's final span hook. */
 export const ProjectedFinalSpan = Schema.Struct({
   data: ProjectedTrace.fields.data,
   description: ProjectedSpanName,
@@ -697,7 +624,6 @@ export const ProjectedFinalSpan = Schema.Struct({
 });
 export type ProjectedFinalSpan = typeof ProjectedFinalSpan.Type;
 
-/** A complete metadata-only transaction reconstructed before the telemetry export boundary. */
 export const ProjectedTransaction = Schema.Struct({
   type: Schema.Literal("transaction"),
   transaction: ProjectedSpanName,
@@ -718,7 +644,6 @@ export const ProjectedTransaction = Schema.Struct({
 });
 export type ProjectedTransaction = typeof ProjectedTransaction.Type;
 
-/** A classified error event containing only stable codes and sanitized stack coordinates. */
 export const ProjectedErrorEvent = Schema.Struct({
   timestamp: Schema.Finite,
   level: Schema.Literal("error"),
@@ -751,7 +676,6 @@ export const ProjectedErrorEvent = Schema.Struct({
 });
 export type ProjectedErrorEvent = typeof ProjectedErrorEvent.Type;
 
-/** Fail-closed decoding shared by every untrusted Observability projection. */
 export const TelemetryStrictDecoding = { onExcessProperty: "error" } as const;
 
 export type ExternalHttpRequestAttributes = Readonly<{

@@ -19,7 +19,7 @@ const wompiSandboxOrigin = "https://sandbox.wompi.co";
 const wompiProductionOrigin = "https://production.wompi.co";
 const bytesPerKibibyte = 1_024;
 const maximumKapsoResponseKibibytes = 64;
-/** Application safety bound, not Kapso's maximum supported media size. */
+
 const maximumKapsoMediaMebibytes = 10;
 const maximumKapsoMediaResponseBytes =
   maximumKapsoMediaMebibytes * bytesPerKibibyte * bytesPerKibibyte;
@@ -493,11 +493,6 @@ const makeService = (
   execute: (request) => prepare(request).pipe(Effect.flatMap(executePrepared)),
 });
 
-/**
- * Creates fixed-destination provider transport that owns credentials, refuses automatic redirect
- * following, suppresses trace propagation, bounds response bytes, and returns only retained response
- * facts or failures.
- */
 export const makeOutboundHttp = (config: OutboundHttpConfig): PrivateOutboundHttpService => {
   const context: RequestPreparationContext = {
     config,
@@ -510,7 +505,6 @@ export const makeOutboundHttp = (config: OutboundHttpConfig): PrivateOutboundHtt
   };
 };
 
-/** Configuration, never a request-supplied URL, selects one Cloudflare Access team's signing keys. */
 export const makeCloudflareAccessSigningKeysHttp = ({
   issuer,
   httpClient,

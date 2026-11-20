@@ -5,13 +5,12 @@ import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { OAuthClientId, OAuthConnectionId, OAuthCredentialId } from "~/core/oauth-agents/contract";
 import type { CatalogOperation, OperationCatalog } from "~/shell/canonical-catalog/contract";
 
-/** MCP metadata reuses the canonical allowance wire codec and User-bound retry contract. */
 export const mcpCanonicalMetadata = {
   allowance: "co.fidy/canonicalAllowance",
   retryKey: "co.fidy/retryKey",
 } as const;
 const digestLength = 32;
-/** Standard native-client decision carried privately, separate from canonical arguments. */
+
 export const OAuthConfirmationAttempt = Schema.Union([
   Schema.TaggedStruct("Review", {}),
   Schema.TaggedStruct("Decision", {
@@ -20,7 +19,7 @@ export const OAuthConfirmationAttempt = Schema.Union([
   }),
 ]);
 export type OAuthConfirmationAttempt = typeof OAuthConfirmationAttempt.Type;
-/** Private admission facts, not a reusable authorization grant; Core rechecks them at execution. */
+
 export const OAuthCanonicalAdmission = Schema.Struct({
   userId: UserId,
   clientId: OAuthClientId,
@@ -91,7 +90,6 @@ const inaccessibleTarget = (ast: SchemaAST.AST, input: ScopeProjection): boolean
   );
 };
 
-/** Schema-private projection removes inaccessible canonical target alternatives before JSON Schema export, including their hinted arguments at any envelope depth. */
 export const projectMcpSchemas = (
   input: ScopeProjection & Readonly<{ operation: CatalogOperation }>
 ): Readonly<{ input: Schema.Codec<Schema.Json>; output: Schema.Codec<Schema.Json> }> => {

@@ -26,5 +26,4 @@ const rotateBackupRecoveryCode = HttpApiEndpoint.post(
     })
   );
 
-/** Fresh first-party browser operation for replacing consumed or exposed recovery authority. */
 export const RecoveryGroup = HttpApiGroup.make("recovery").add(rotateBackupRecoveryCode);

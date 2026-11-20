@@ -56,9 +56,6 @@ const readSignedToken = (
     return Redacted.make(token.value);
   }).pipe(Effect.mapError(() => new StatementMediaUnavailable()));
 
-/** Provider URLs never become transport coordinates. Only a validated signed token may reach
- * the fixed Kapso download operation, which deliberately carries no project credential headers.
- */
 export const readWhatsAppStatementMedia = ({
   outbound,
   mediaId,

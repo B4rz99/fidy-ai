@@ -11,7 +11,6 @@ import { UserPreferences } from "~/core/identity/contract";
 import { Category } from "~/core/categories/contract";
 import { ResourceLimited } from "~/shell/public-http/contract";
 
-/** A pagination position conveys no authority; every page authenticates the same browser afresh. */
 export const PrivacyTransactionCursor = Schema.Struct({
   occurredAt: Transaction.fields.occurredAt,
   createdAt: Transaction.fields.createdAt,
@@ -20,7 +19,7 @@ export const PrivacyTransactionCursor = Schema.Struct({
 export const PrivacyTransactionRequest = Schema.Struct({
   cursor: Schema.NullOr(PrivacyTransactionCursor),
 });
-/** One bounded owner result for the explicit Transactions scope, with its metadata-only Audit reference. */
+
 export const PrivacyTransactionPage = Schema.Struct({
   reference: Schema.String.check(Schema.isUUID()),
   scope: Schema.Literal("transactions"),
@@ -36,7 +35,6 @@ const publicReceiptTime = Schema.Int.check(
   Schema.isBetween({ minimum: 0, maximum: maximumPublicEpochMs })
 );
 
-/** Exact saved onboarding authorization for this User; historical evidence is not current processing authority. */
 export const ProcessingAuthorization = Schema.Struct({
   authorization: Schema.NullOr(
     Schema.Struct({
@@ -48,7 +46,6 @@ export const ProcessingAuthorization = Schema.Struct({
 });
 export type ProcessingAuthorization = typeof ProcessingAuthorization.Type;
 
-/** Same-User withdrawal receipt; this records processing authority, never physical erasure. */
 export const GrantedProcessingConsent = Schema.Struct({
   status: Schema.Literal("Granted"),
   withdrawal: Schema.Null,
@@ -74,7 +71,6 @@ export type ProcessingConsentStatus = typeof ProcessingConsentStatus.Type;
 
 export const ProcessingConsentWithdrawal = Schema.Struct({ confirm: Schema.Literal(true) });
 
-/** Explicit reacceptance of the saved disclosure, bound to one current withdrawal. */
 export const ProcessingConsentRenewal = Schema.Struct({
   confirm: Schema.Literal(true),
   withdrawalReference: Schema.String.check(Schema.isUUID()),
@@ -92,7 +88,6 @@ export const ProcessingConsentRenewalReceipt = Schema.Struct({
 
 const acceptedStatus = 202;
 
-/** Cookie-only privacy controls, available after withdrawal and outside agent operations. */
 export const ProcessingConsentGroup = HttpApiGroup.make("processingConsent").add(
   HttpApiEndpoint.post("erase", "/web/privacy/erasure", {
     payload: ErasureRequest,

@@ -24,12 +24,16 @@ ORIGIN = "https://app.fidyapp.com"
 TRIAL_MS = 7 * 24 * 60 * 60 * 1000
 
 
+def require_empty_inventory(cloud):
+    if cloud.namespaces() or any(cloud.identity(role) is not None for role in ROLES):
+        raise Refused("disposable_namespace_collision")
+
+
 def prepare_inventory(owner, cloud):
     run = owner.available()
     cloud.ownership = run["ownership"]
     cloud.control = owner.control
-    if cloud.namespaces() or any(cloud.identity(role) is not None for role in ROLES):
-        raise Refused("disposable_namespace_collision")
+    require_empty_inventory(cloud)
     for role in ROLES:
         owner.available()
         run["inventory"][role] = {"id": None}
@@ -359,7 +363,7 @@ def native_installation(account, revision, versions):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("propose", "run", "cleanup"))
+    parser.add_argument("action", choices=("preflight", "propose", "run", "cleanup"))
     parser.add_argument("--core-version", help="Approved deployed native Core version UUID")
     parser.add_argument("--ingress-version", help="Approved deployed native Ingress version UUID")
     for name in ("bundle", "fixture", "out"):
@@ -387,7 +391,7 @@ def main():
 
     save()
     try:
-        if args.action != "cleanup":
+        if args.action in ("propose", "run"):
             sys.path.insert(0, str(HERE.parent / "canonical-fixture"))
             try:
                 from hosted import verify_native_fixture, read_native_session
@@ -453,7 +457,10 @@ def main():
             reserve_native = comparable_native_reads(account, report["nativeCandidate"], proof, args.pairs, browser=bundle.browser)
         cloud = Cloud(account, args.prefix)
         owner = AccountExperiment(CustodyObject(account, cloud), account)
-        if args.action == "cleanup":
+        if args.action == "preflight":
+            owner.require_unclaimed(args.prefix)
+            require_empty_inventory(cloud)
+        elif args.action == "cleanup":
             report["cleanup"] = cleanup_evidence(owner, cloud, resumed=True)
         else:
             read = None if bundle.browser else native_read(session, args.revision, reserve_native)

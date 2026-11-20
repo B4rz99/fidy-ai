@@ -386,8 +386,10 @@ The rollout must contain its tested rollback receipt and full native verificatio
 those records with the live deployment identities of all five Workers, the closed host, the Core
 signer fingerprint and UserStore namespace. It uses the existing protected smoke proof and
 `FIDY_NATIVE_FIXTURE_PUBLIC_KEY` public environment variable. Select one or thirty isolated pairs.
-The workflow builds the frozen comparator on the private runner, checks the 18,194-row read
-ceiling for the isolated history cohort and reserves the measured writes against account headroom.
+Before enrollment, the workflow reads the comparator ledger and verifies a complete provider
+inventory for the exact disposable prefix. The workflow builds the frozen comparator on the
+private runner, checks the 18,194-row read ceiling for the isolated history cohort and reserves
+the measured writes against account headroom.
 
 The native owner shares the production-deployment concurrency group. Before enrolling, it
 requires two existing smoke User logins, a refused login for the unused performance subject,
@@ -417,8 +419,10 @@ artifact. A different runner waits for the 20-minute foreground lease and 90-sec
 grace to expire. The independent runner can recover from the private account ledger without a
 local Session or signup. An ambiguous identity, unexpected physical object or unreconciled cost
 stays fenced. After UTC rollover only one separately metered cleanup reservation is available.
-Its evidence marks the original accounting day incomplete. D1 infrastructure recovery remains
-the responsibility of the comparator owner's `cleanup` command above.
+Its evidence marks the original accounting day incomplete. For D1 infrastructure recovery,
+select **cleanup-comparator** with the original prefix after its 20-minute deadline and 90-second
+in-flight grace period. The protected workflow invokes the comparator owner's `cleanup` command
+above and retains the aggregate receipt.
 
 If enrollment stops before signup was offered, cleanup can report the unoffered signup and
 absent receipt marker without changing custody or attempting erasure. After the original lease

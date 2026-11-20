@@ -4,7 +4,7 @@ import { type CaptureHistoryVersion, ManualCaptureContext } from "./manual-captu
 import { TransactionPeriodControls } from "./period-controls";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import { Toaster, toast } from "sonner";
-import { Suspense, use, useState } from "react";
+import { Suspense, use, useMemo, useState } from "react";
 import { PendingRead } from "@/ui/components/pending-read";
 import type { TransactionCorrections } from "./corrections";
 import { TransactionCorrectionContext } from "./correction-context";
@@ -942,6 +942,39 @@ const usePeriodSelection = (
     ),
   };
 };
+const useWorkspaceRows = (
+  props: WorkspaceProps,
+  localFilters: typeof emptyLocalFilters
+): Pick<WorkspaceContentProps, "filters" | "visible" | "rows"> => {
+  const { search, direction, categoryId } = localFilters;
+  const date = props.dateFilter.value;
+  const { locale, timeZone } = props.currentUser;
+  const filters = useMemo(
+    () => ({ search, direction, categoryId, date }),
+    [search, direction, categoryId, date]
+  );
+  const visible = useMemo(
+    () =>
+      hasFilters(filters)
+        ? props.transactions.filter((transaction) =>
+            matchesTransactionFilters({ transaction, filters, timeZone })
+          )
+        : props.transactions,
+    [props.transactions, filters, timeZone]
+  );
+  const rows = useMemo(
+    () =>
+      presentTransactionRows({
+        transactions: visible,
+        categories: props.categories,
+        locale,
+        timeZone,
+        counterpartyFallback: "Contraparte no identificada",
+      }),
+    [visible, props.categories, locale, timeZone]
+  );
+  return { filters, visible, rows };
+};
 export const TransactionWorkspace = (source: WorkspaceProps): JSX.Element => {
   const [tool, setTool] = useState<FilterTool | "closed">("closed");
   const { panel: activePanel, onPanel } = useWorkspacePanel(source);
@@ -953,24 +986,11 @@ export const TransactionWorkspace = (source: WorkspaceProps): JSX.Element => {
   const { filters: localFilters, change: setFilters } = useTransactionFilters(
     `${props.readOnly ? "privacy" : month}:${props.currentUser.timeZone}`
   );
-  const filters = {
-    ...localFilters,
-    date: props.dateFilter.value,
-  };
+  const { filters, visible, rows } = useWorkspaceRows(props, localFilters);
   const onFilters = (next: WorkspaceFilters): void => {
     setFilters({ search: next.search, direction: next.direction, categoryId: next.categoryId });
     props.dateFilter.onChange(next.date);
   };
-  const visible = props.transactions.filter((transaction) =>
-    matchesTransactionFilters({ transaction, filters, timeZone: props.currentUser.timeZone })
-  );
-  const rows = presentTransactionRows({
-    transactions: visible,
-    categories: props.categories,
-    locale: props.currentUser.locale,
-    timeZone: props.currentUser.timeZone,
-    counterpartyFallback: "Contraparte no identificada",
-  });
   const editing = panelEditing(activePanel);
   return (
     <>

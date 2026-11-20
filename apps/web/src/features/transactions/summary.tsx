@@ -1,5 +1,5 @@
 import { BigDecimal, Option } from "effect";
-import type { JSX } from "react";
+import { type JSX, memo } from "react";
 import { formatMoney } from "@/transport/money";
 import { type Transaction, formatOccurrence } from "./presentation";
 
@@ -121,7 +121,9 @@ const CurrencySummary = ({
   );
 };
 /** Summarizes only the displayed FinancialRecord coverage; Money is aggregated within each Currency. */
-export const TransactionSummary = (props: SummaryProps): JSX.Element => {
+export const TransactionSummary = memo(function TransactionSummary(
+  props: SummaryProps
+): JSX.Element {
   const currencies = Array.from(new Set(props.transactions.map((record) => record.money.currency)));
   const range = dateRange(props);
   return (
@@ -145,4 +147,4 @@ export const TransactionSummary = (props: SummaryProps): JSX.Element => {
       </dl>
     </section>
   );
-};
+});

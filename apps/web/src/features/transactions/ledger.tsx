@@ -179,30 +179,33 @@ const TransactionAmount = ({
   selection,
   onSelect,
 }: Readonly<{ row: TransactionListRow }> &
-  Pick<LedgerProps, "disabled" | "selection" | "onSelect">): JSX.Element => (
-  <TableCell className="text-right font-medium tabular-nums">
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={() => (selection.active ? selection.onToggle(row.id) : onSelect(row.id))}
-      aria-label={`${row.moneyText}, ${row.transactionTypeLabel}; ${transactionAction(row, selection)} ${row.counterpartyLabel}`}
-      aria-pressed={selection.active ? selection.ids.includes(row.id) : undefined}
-      className="flex w-full items-center justify-end gap-2 rounded-md py-1 outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-    >
-      <span className="transaction-amount-direction inline-flex shrink-0 @min-[481px]/ledger:hidden">
-        <DirectionIndicator inflow={row.direction === "inflow"} />
-      </span>
-      <span className="min-w-0 break-words">{row.moneyText}</span>
-      <HugeiconsIcon
-        icon={ArrowRight01Icon}
-        size={16}
-        strokeWidth={1.5}
-        aria-hidden="true"
-        className="shrink-0 text-muted-foreground"
-      />
-    </button>
-  </TableCell>
-);
+  Pick<LedgerProps, "disabled" | "selection" | "onSelect">): JSX.Element => {
+  const moneyText = row.moneyText;
+  return (
+    <TableCell className="text-right font-medium tabular-nums">
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => (selection.active ? selection.onToggle(row.id) : onSelect(row.id))}
+        aria-label={`${moneyText}, ${row.transactionTypeLabel}; ${transactionAction(row, selection)} ${row.counterpartyLabel}`}
+        aria-pressed={selection.active ? selection.ids.includes(row.id) : undefined}
+        className="flex w-full items-center justify-end gap-2 rounded-md py-1 outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+      >
+        <span className="transaction-amount-direction inline-flex shrink-0 @min-[481px]/ledger:hidden">
+          <DirectionIndicator inflow={row.direction === "inflow"} />
+        </span>
+        <span className="min-w-0 break-words">{moneyText}</span>
+        <HugeiconsIcon
+          icon={ArrowRight01Icon}
+          size={16}
+          strokeWidth={1.5}
+          aria-hidden="true"
+          className="shrink-0 text-muted-foreground"
+        />
+      </button>
+    </TableCell>
+  );
+};
 const TransactionRow = ({
   row,
   selected,

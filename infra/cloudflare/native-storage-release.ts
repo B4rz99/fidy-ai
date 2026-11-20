@@ -1301,7 +1301,7 @@ const sealFallback = Effect.fn(function* (env: Config, client: HttpClient.HttpCl
   const controls = yield* Schema.decodeUnknownEffect(
     Schema.Struct({ digest: SmokeIdentity.fields.contractDigest })
   )(yield* readFile(env.file + ".controls"));
-  const stage = yield* Schema.decodeUnknownEffect(FallbackStage)({
+  const stage = yield* Schema.decodeEffect(FallbackStage)({
     revision: env.revision,
     stableRevision: release.snapshot.stableRevision,
     release,

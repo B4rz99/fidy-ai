@@ -629,7 +629,7 @@ export const retainedFinancialControls = Effect.fn(function* (input: Omit<Inputs
         ok
       );
       const body = yield* Effect.tryPromise(() => reply.text());
-      yield* Schema.decodeUnknownEffect(
+      yield* Schema.decodeEffect(
         Schema.fromJsonString(
           Schema.Struct({ data: Schema.Array(Schema.Unknown), next: Schema.Tuple([]) })
         )

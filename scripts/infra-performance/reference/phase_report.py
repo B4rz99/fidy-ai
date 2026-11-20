@@ -17,7 +17,7 @@ BROWSER_PHASES = (
     "responseToControlsReadyMs",
     "controlsReadyToPaintMs",
 )
-RESOURCE_ROLES = ("binding", "categories", "dashboard-catalog", "needs-review", "script-or-style", "user")
+RESOURCE_ROLES = ("binding", "categories", "dashboard-catalog", "review-count", "script-or-style", "user")
 
 
 def read_rows(path):

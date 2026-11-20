@@ -72,7 +72,6 @@ export const trackBrowserClick = async (control) => {
           const relatedRequests = new Map([
             ["/categories", "categories"],
             ["/dashboard/catalog", "dashboard-catalog"],
-            ["/ingestion/needs-review", "needs-review"],
             ["/user", "user"],
             ["/web/session/binding", "binding"],
           ]);
@@ -92,7 +91,12 @@ export const trackBrowserClick = async (control) => {
               const url = new URL(entry.name);
               let role;
               if (entry === request) role = "canonical";
-              else if (url.origin === api) role = relatedRequests.get(url.pathname);
+              else if (url.origin === api) {
+                role =
+                  url.pathname === "/ingestion/review-workspace" && url.searchParams.get("limit") === "0"
+                    ? "review-count"
+                    : relatedRequests.get(url.pathname);
+              }
               else if (url.origin === location.origin && /\.(?:js|css)$/u.test(url.pathname)) {
                 role = "script-or-style";
               }

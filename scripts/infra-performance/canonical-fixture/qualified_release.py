@@ -50,11 +50,15 @@ def artifact(account_revision, artifact_id, expected_digest):
         return document("native-release.json.promoted"), document("native-verification.json")
 
 
+def retained_provider():
+    return json.loads((Path(__file__).resolve().parents[3] / "infra/cloudflare/native-retained-provider.json").read_bytes())
+
+
 def serving_graph(read, account, revision, installed):
     if not re.fullmatch("[0-9a-f]{64}", installed.get("fixtureControlsDigest", "")):
         raise ValueError("Protected release has no retained financial control evidence")
     recorded_provider = installed["retainedProvider"]
-    pin = json.loads((Path(__file__).resolve().parents[3] / "infra/cloudflare/native-retained-provider.json").read_bytes())
+    pin = retained_provider()
     if recorded_provider != pin:
         raise ValueError("The qualified release does not retain the original closed provider")
     name = "fidy-native-smoke-" + pin["revision"]

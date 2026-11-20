@@ -3,6 +3,8 @@ import hashlib
 import re
 from uuid import UUID
 
+from qualified_release import retained_provider
+
 HOST = "storage-acceptance.fidyapp.com"
 BROWSER = "https://storage-web-acceptance.fidyapp.com"
 SCRIPTS = {"core": "fidy-native-storage-core", "ingress": "fidy-native-storage-ingress"}
@@ -12,6 +14,7 @@ def validate_candidate(read, *, account, revision, versions, public_key):
     if not re.fullmatch(r"[a-f0-9]{32}", account) or not re.fullmatch(r"[a-f0-9]{40}", revision):
         raise ValueError("Invalid protected native candidate identity")
     fingerprint = hashlib.sha256(bytes.fromhex(public_key)).hexdigest()
+    provider_revision = retained_provider()["revision"]
     base = "accounts/" + account + "/workers/"
     host, = read(base + "domains?hostname=" + HOST)
     if (host["hostname"] != HOST or host["service"] != SCRIPTS["ingress"]
@@ -36,6 +39,10 @@ def validate_candidate(read, *, account, revision, versions, public_key):
         bindings = {binding["name"]: binding for binding in rows}
         if len(bindings)!=len(rows) or any(row["type"]=="d1" for row in rows):
             raise ValueError("Unexpected native storage bindings")
+        provider = bindings.get("RELEASE_FIXTURE", {})
+        if (provider.get("type") != "service" or provider.get("service") != "fidy-native-smoke-" + provider_revision
+                or provider.get("entrypoint") is not None):
+            raise ValueError("Candidate targets a different private fixture provider")
         expected_text = {
             "NATIVE_STORAGE_ADMISSION": "closed", "RECOVERY_ISOLATION": "isolated",
             "RELEASE_GIT_SHA": revision, "BROWSER_ORIGIN": BROWSER,
@@ -48,6 +55,7 @@ def validate_candidate(read, *, account, revision, versions, public_key):
                     or bindings.get("SMOKE_BUCKET", {}).get("bucket_name") != "fidy-native-release-smoke"):
                 raise ValueError("Native User or receipt storage owner differs")
             expected_text["NATIVE_FIXTURE_SIGNER_SHA256"] = fingerprint
+            expected_text["ACCEPTANCE_PROVIDER_REVISION"] = provider_revision
             if bindings.get("NATIVE_FIXTURE_SIGNING_KEY",{}).get("type") != "secret_text":
                 raise ValueError("The closed Core has no receipt signing secret")
         elif ("NATIVE_FIXTURE_SIGNING_KEY" in bindings or "NATIVE_FIXTURE_SIGNER_SHA256" in bindings

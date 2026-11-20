@@ -11,7 +11,7 @@ import {
 
 const fingerprint = "a".repeat(64);
 const account = "b".repeat(32);
-const approval = Schema.decodeUnknownSync(WorkflowPlanEvidence)({
+const approval = Schema.decodeSync(WorkflowPlanEvidence)({
   verifierRevision: "c".repeat(40),
   candidateRevision: interruptedRevision,
   failedRun: "44806738835",

@@ -67,7 +67,7 @@ describe("protected native releases", () => {
   it("reserves physical erasure for first installation and an explicit erasure dispatch", () => {
     ordered(workflow, [
       "id: verify",
-      "if: inputs.operation != 'plan-fixture-repair' && inputs.operation != 'plan-fixture-fallback' && inputs.operation != 'plan-first-install' && inputs.operation != 'first-install' && inputs.operation != 'verify-erasure'",
+      "if: inputs.operation != 'plan-fixture-fallback' && inputs.operation != 'plan-first-install' && inputs.operation != 'first-install' && inputs.operation != 'verify-erasure'",
       "run: bun native-storage-release.ts verify\n",
       "if: inputs.operation == 'first-install' || inputs.operation == 'verify-erasure'",
       "run: bun native-storage-release.ts verify-erasure\n",

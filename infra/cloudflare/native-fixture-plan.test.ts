@@ -13,26 +13,31 @@ const row = (logicalId: string, resourceType: string, action: Row["action"]): Ro
   fqn: logicalId,
   bindings: [],
 });
-const validate = (rows: readonly Row[], fallback: boolean): void =>
-  requireFixtureLifecycle({ rows, revision, fallback });
+const validate = (rows: readonly Row[], fallback = false): void =>
+  requireFixtureLifecycle(rows, fallback);
 const retained = [...nativeResourceInventory(provider.revision)]
   .filter(([id]) => id.includes(provider.revision))
   .map(([id, type]) => row(id, type, "delete"));
 const creation = [...nativeResourceInventory(revision)]
   .filter(([id]) => id.includes(revision))
   .map(([id, type]) => row(id, type, "create"));
-it("prepares only this generation's four smoke resources and holds the original generation", () => {
-  const approved = [...creation, ...retained, row("Core", "Cloudflare.Worker", "update")];
+it("updates only the repaired pair and its existing smoke executor on the captured installation", () => {
+  const approved = [
+    ...retained,
+    row("ReleaseSmoke-aa447b8b781cdda48e021c1332f4377eae00f179", "Cloudflare.Worker", "update"),
+    row("Core", "Cloudflare.Worker", "update"),
+    row("Ingress", "Cloudflare.Worker", "update"),
+  ];
   expect(() => validate(approved, true)).not.toThrow();
   for (const foreign of [
-    row("ReleaseSmokeQueue-" + revision, "Cloudflare.Queues.Queue", "replace"),
+    ...creation,
+    row("Web", "Cloudflare.Worker", "update"),
+    row("ForwardedEmail", "Cloudflare.Worker", "update"),
     row("ForwardedEmailQueue", "Cloudflare.Queues.Queue", "update"),
-    row("ApprovedIngestSamples", "Cloudflare.R2.Bucket", "delete"),
-    row("AnotherCore", "Cloudflare.Worker", "create"),
   ]) {
     expect(() => validate([...approved, foreign], true)).toThrow();
   }
-  for (const missing of [...creation, ...retained]) {
+  for (const missing of approved) {
     expect(() =>
       validate(
         approved.filter((item) => item !== missing),
@@ -47,9 +52,9 @@ it("uploads only code to the prepared pair and refuses a new provider or resourc
     row("Core", "Cloudflare.Worker", "update"),
     row("Ingress", "Cloudflare.Worker", "update"),
   ];
-  expect(() => validate(active, false)).not.toThrow();
+  expect(() => validate(active)).not.toThrow();
   for (const extra of [...creation, row("Web", "Cloudflare.Worker", "update")]) {
-    expect(() => validate([...active, extra], false)).toThrow();
+    expect(() => validate([...active, extra])).toThrow();
   }
 });
 

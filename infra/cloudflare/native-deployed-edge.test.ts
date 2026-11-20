@@ -2,7 +2,8 @@ import { it } from "@effect/vitest";
 import { ConfigProvider, Effect, Result } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { expect } from "vitest";
-import { inspectDeployedEdge } from "./native-deployed-edge";
+import { nativeIngressHost } from "./storage-installation";
+import { inspectDeployedEdge, requireClosedIngressDomains } from "./native-deployed-edge";
 
 const account = "a".repeat(32);
 const zone = {
@@ -88,5 +89,31 @@ it.effect("refuses a trigger that can deploy trunk even with the dedicated read 
     expect(yield* Effect.flip(operation)).toEqual(
       Error("A Worker Build may deploy trunk to fidy-web")
     );
+  })
+);
+
+it.effect("refuses an extra Ingress domain before reconciling the closed version upload", () =>
+  Effect.gen(function* () {
+    const attachment = {
+      hostname: "native-api.fidyapp.com",
+      service: "fidy-native-storage-ingress",
+      zone_id: zone.id,
+      enabled: true,
+      previews_enabled: false,
+    };
+    const approved = { ...attachment, hostname: nativeIngressHost };
+    for (const rows of [
+      [approved],
+      [approved, { ...attachment, hostname: "api.fidyapp.com" }],
+      [{ ...approved, previews_enabled: true }],
+    ]) {
+      const accepted = yield* requireClosedIngressDomains((path) => {
+        expect(path).toContain("service=fidy-native-storage-ingress");
+        return Effect.succeed({ success: true, result: rows });
+      }).pipe(Effect.result);
+      expect(Result.isSuccess(accepted)).toBe(
+        rows.length === 1 && rows[0]?.previews_enabled === false
+      );
+    }
   })
 );

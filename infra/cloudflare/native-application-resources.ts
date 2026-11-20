@@ -80,7 +80,7 @@ export const nativeSmokeExecutor = Effect.fn(function* (input: {
   queues: NativeQueues;
   buckets: Effect.Success<typeof nativeBuckets>;
 }) {
-  const revision = input.release.release.gitRevision,
+  const revision = input.release.resourceRevision,
     workflowName = "fidy-native-smoke-" + revision;
   const smoke = yield* Cloudflare.Worker("ReleaseSmoke-" + revision, {
     name: "fidy-native-smoke-" + revision,
@@ -92,15 +92,15 @@ export const nativeSmokeExecutor = Effect.fn(function* (input: {
       SMOKE_BUCKET: input.buckets.SMOKE_BUCKET,
       NATIVE_STORAGE_ADMISSION: input.release.shared.NATIVE_STORAGE_ADMISSION,
       ACCEPTANCE_API_ORIGIN: input.release.origin.api,
-      ACCEPTANCE_CODE_KEY: input.release.fixtureSecret("oidc-code"),
-      ACCEPTANCE_GOOGLE_SECRET: input.release.fixtureSecret("google"),
-      ACCEPTANCE_MICROSOFT_SECRET: input.release.fixtureSecret("microsoft"),
+      ACCEPTANCE_CODE_KEY: input.release.fixtureSecret("oidc-code", "", revision),
+      ACCEPTANCE_GOOGLE_SECRET: input.release.fixtureSecret("google", "", revision),
+      ACCEPTANCE_MICROSOFT_SECRET: input.release.fixtureSecret("microsoft", "", revision),
       SMOKE_WORKFLOW: Cloudflare.Workflow("ReleaseSmokeWorkflowV2-" + revision, {
         workflowName,
         className: "ReleaseSmokeWorkflowV2",
       }),
       CF_VERSION_METADATA: Cloudflare.Workers.VersionMetadata(),
-      RELEASE_GIT_SHA: revision,
+      RELEASE_GIT_SHA: input.release.release.gitRevision,
       CONTRACT_DIGEST: input.release.release.contractDigest,
     },
   });

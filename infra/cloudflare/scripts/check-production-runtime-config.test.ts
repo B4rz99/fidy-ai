@@ -115,8 +115,9 @@ describe("Production runtime configuration gate", () => {
     expect(preview).toContain("if: inputs.operation == 'plan-first-install'");
     expect(preview).toContain("run: bun native-storage-resources.ts plan-first-install");
     expect(install).toContain("if: inputs.operation == 'first-install'");
+    expect(verify).toContain("inputs.operation != 'plan-fixture-repair'");
     expect(verify).toContain(
-      "if: inputs.operation != 'plan-fixture-repair' && inputs.operation != 'plan-fixture-fallback' && inputs.operation != 'plan-first-install' && inputs.operation != 'first-install' && inputs.operation != 'verify-erasure'"
+      "if: inputs.operation != 'plan-fixture-fallback' && inputs.operation != 'plan-first-install' && inputs.operation != 'first-install' && inputs.operation != 'verify-erasure'"
     );
   });
 

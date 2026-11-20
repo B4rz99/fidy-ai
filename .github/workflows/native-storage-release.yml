@@ -230,7 +230,7 @@ jobs:
           bun native-storage-release.ts attach-hosts
       - name: Verify the installed application and retained schema markers
         id: verify
-        if: inputs.operation != 'plan-fixture-repair' && inputs.operation != 'plan-fixture-fallback' && inputs.operation != 'plan-first-install' && inputs.operation != 'first-install' && inputs.operation != 'verify-erasure' && inputs.operation != 'continue-erasure' && inputs.operation != 'fleet-pilot' && inputs.operation != 'continue-fleet-cleanup' && inputs.operation != 'ten-hosted' && inputs.operation != 'continue-ten-cleanup'
+        if: inputs.operation != 'plan-fixture-fallback' && inputs.operation != 'plan-first-install' && inputs.operation != 'first-install' && inputs.operation != 'verify-erasure' && inputs.operation != 'continue-erasure' && inputs.operation != 'fleet-pilot' && inputs.operation != 'continue-fleet-cleanup' && inputs.operation != 'ten-hosted' && inputs.operation != 'continue-ten-cleanup' && inputs.operation != 'plan-fixture-repair'
         env:
           EXPECTED_INSTALLED_REVISION: ${{ inputs.installed_revision }}
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}

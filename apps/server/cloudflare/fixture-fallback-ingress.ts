@@ -4,6 +4,8 @@ import ingress from "./public-worker";
 import { isPerformanceReceipt } from "./release-isolation/operations";
 import { isStorageCompatibility } from "./storage-bootstrap/contract";
 
+export * from "./public-worker";
+
 export default {
   fetch: (request, environment): Promise<Response> =>
     Effect.runPromise(

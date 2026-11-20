@@ -309,8 +309,9 @@ use `plan-fixture-repair` on the repair commit with the signer enabled. The prot
 authenticates the source run, archive, original deployments and financial control digest.
 Review the plan for reuse of the four previously created smoke resources. On that same
 revision, `resume-fixture-upload` captures the current stable pair and revalidates the
-installation before uploading replacement Core and Ingress versions. It then follows the
-existing zero-traffic staging, sealed forward recovery and dormant verification steps. The
+installation before uploading replacement Core and Ingress versions and updating the existing
+Smoke executor to their revision. The Queue, Workflow and consumer keep their original identities.
+The sealed stage records the new Smoke version and deployment for the forward recovery checks. The
 one-off workflow admits only the immediate protected trunk successor of the original upload.
 The signed Web verification builds the retained Web revision to compare its actual serving assets.
 

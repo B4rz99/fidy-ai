@@ -1,5 +1,5 @@
 import { nativePlanOptions, verifyFixturePlan } from "./native-fixture-plan";
-import { expectedFixtureSigner, fixtureBuild } from "./native-fixture-signer";
+import { expectedFixtureSigner, fixtureBuild, resourceRevision } from "./native-fixture-signer";
 import { productionTopology } from "../../apps/server/cloudflare/runtime/contract";
 import { requireHostPlan, stagedAccessApplications } from "./native-host-plan";
 import * as Alchemist from "alchemy/Alchemist";
@@ -84,17 +84,18 @@ const verifyResourcePlan = Effect.fn(function* ({
     const fingerprint = yield* expectedFixtureSigner;
     const fallback = (yield* fixtureBuild) === "fallback";
     if (fingerprint !== "") {
-      yield* Effect.try(() => verifyFixturePlan({ plan, revision, fallback })).pipe(
+      yield* Effect.try(() => verifyFixturePlan(plan, fallback)).pipe(
         nativeResourceStage("resource inventory")
       );
     }
+    const generation = resourceRevision(revision, fingerprint !== "");
     yield* Effect.sync(() =>
-      requireNativeBindings({ plan, revision, hosts, fingerprint, fallback })
+      requireNativeBindings({ plan, revision: generation, hosts, fingerprint, fallback })
     ).pipe(nativeResourceStage("Worker bindings"));
     yield* Effect.sync(() =>
       requireNativeResourcePlan({
         plan: describePlan(plan),
-        revision,
+        revision: generation,
         first: phase === "first-install",
       })
     ).pipe(nativeResourceStage("resource inventory"));

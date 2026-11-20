@@ -26,7 +26,6 @@ export const TaxTreatment = Schema.Literal("not-taxable").annotate({
 });
 export type TaxTreatment = typeof TaxTreatment.Type;
 
-/** Families represented by immutable Price terms, not a promise of current executable availability. */
 export const LaunchPaymentMethods = Schema.Tuple([
   Schema.Literal("card"),
   Schema.Literal("nequi"),
@@ -34,7 +33,6 @@ export const LaunchPaymentMethods = Schema.Tuple([
 ]).annotate({ identifier: "LaunchPaymentMethods" });
 export type LaunchPaymentMethods = typeof LaunchPaymentMethods.Type;
 
-/** Immutable renewal and cancellation terms disclosed before payment-method entry. */
 export const RenewalTerms = Schema.Struct({
   automaticRenewal: Schema.Literal(true),
   renewalReminder: Schema.Literal("none"),
@@ -64,7 +62,6 @@ const colombiaPaidOffer = Schema.makeFilter<{
       };
 });
 
-/** One immutable authoritative version of Subscription price and renewal terms. */
 export const Price = Schema.Struct({
   id: PriceId,
   money: Money,
@@ -102,7 +99,6 @@ const authoritativeOfferSet = Schema.makeFilter<
       };
 });
 
-/** Exact authoritative offer set in weekly, monthly, yearly presentation order. */
 export const SubscriptionOffers = Schema.Tuple([Price, Price, Price])
   .check(authoritativeOfferSet)
   .annotate({ identifier: "SubscriptionOffers" });
@@ -113,13 +109,11 @@ export const SubscriptionId = Schema.String.check(Schema.isUUID())
   .annotate({ identifier: "SubscriptionId" });
 export type SubscriptionId = typeof SubscriptionId.Type;
 
-/** Browser-generated identity of one intentional payment action, scoped by User in persistence. */
 export const PaymentRequestId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("PaymentRequestId"))
   .annotate({ identifier: "PaymentRequestId" });
 export type PaymentRequestId = typeof PaymentRequestId.Type;
 
-/** Stable Fidy identity of one attempt to collect Subscription Money and its successful period. */
 export const BillingAttemptId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("BillingAttemptId"))
   .annotate({ identifier: "BillingAttemptId" });
@@ -136,18 +130,17 @@ const BillingAttemptSnapshot = {
   createdAt: UtcTimestamp,
 };
 
-/** Browser-safe projection of an unsettled BillingAttempt. */
 export const PendingBillingAttempt = Schema.Struct({
   status: Schema.Literal("pending"),
   ...BillingAttemptSnapshot,
 });
-/** Browser-safe projection of a BillingAttempt settled by verified negative evidence. */
+
 export const FailedBillingAttempt = Schema.Struct({
   status: Schema.Literal("failed"),
   ...BillingAttemptSnapshot,
   failedAt: UtcTimestamp,
 });
-/** Browser-safe projection of a BillingAttempt settled by verified approval. */
+
 export const SucceededBillingAttempt = Schema.Struct({
   status: Schema.Literal("succeeded"),
   ...BillingAttemptSnapshot,
@@ -156,7 +149,6 @@ export const SucceededBillingAttempt = Schema.Struct({
   renewalAnchor: UtcTimestamp,
 });
 
-/** Browser-safe BillingAttempt projection; all provider and payment-source references are absent. */
 export const BillingAttempt = Schema.Union([
   PendingBillingAttempt,
   FailedBillingAttempt,
@@ -164,7 +156,6 @@ export const BillingAttempt = Schema.Union([
 ]).annotate({ identifier: "BillingAttempt" });
 export type BillingAttempt = typeof BillingAttempt.Type;
 
-/** Current paid period, retaining the exact Price snapshot that was charged. */
 export const PaidSubscription = Schema.Struct({
   priceId: PriceId,
   money: Money,
@@ -176,7 +167,6 @@ export const PaidSubscription = Schema.Struct({
   renewalAnchor: UtcTimestamp,
 }).annotate({ identifier: "PaidSubscription" });
 
-/** Retained cancellation stops future collection while preserving the already-paid interval. */
 export const SubscriptionCancellation = Schema.Struct({
   cancelledAt: UtcTimestamp,
   paidThrough: UtcTimestamp,
@@ -186,7 +176,6 @@ export type SubscriptionCancellation = typeof SubscriptionCancellation.Type;
 
 const maximumRecentBillingAttempts = 10;
 
-/** Standing at one decision instant, including expired evidence without hiding existing data. */
 export const SubscriptionStatus = Schema.Struct({
   accessTier: AccessTier,
   hasProGrant: Schema.Boolean,
@@ -204,7 +193,6 @@ export const EnrollmentMethod = Schema.Literals(["card", "nequi", "daviplata"]).
 });
 export type EnrollmentMethod = typeof EnrollmentMethod.Type;
 
-/** Current executable methods, independent of the methods represented by immutable Price terms. */
 export const EnrollmentAvailability = Schema.Struct({
   enabledMethods: Schema.UniqueArray(EnrollmentMethod).check(Schema.isMaxLength(3)),
 }).annotate({ identifier: "EnrollmentAvailability" });
@@ -216,16 +204,14 @@ const DaviplataOtpEndpoint = Schema.String.check(
   )
 );
 
-/** Reviewed query-free destinations. The known Sandbox service binds token/operation queries in its adapter. */
 export const DaviplataOtpPolicy = Schema.Struct({
   sendUrl: DaviplataOtpEndpoint,
   confirmUrl: DaviplataOtpEndpoint,
 }).annotate({ identifier: "DaviplataOtpPolicy" });
 export type DaviplataOtpPolicy = typeof DaviplataOtpPolicy.Type;
 
-/** Maximum safe displayed-term snapshot retained with one payment enrollment. */
 export const maximumEnrollmentEvidenceCharacters = 4096;
-/** Maximum opaque transient provider token admitted at the browser-only boundary. */
+
 export const maximumTransientPaymentTokenCharacters = 4096;
 const sha256Hex = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u));
 const providerContentHash = Schema.String.check(Schema.isPattern(/^[0-9a-f]{32,128}$/u));
@@ -239,7 +225,6 @@ export const PaymentEnrollmentId = Schema.String.check(Schema.isUUID())
   .annotate({ identifier: "PaymentEnrollmentId" });
 export type PaymentEnrollmentId = typeof PaymentEnrollmentId.Type;
 
-/** Billing destination selected explicitly for Wompi and later automatic charges. */
 export const BillingEmail = Schema.Trim.pipe(
   Schema.decodeTo(
     Schema.String.check(...canonicalEmailAddressChecks).pipe(Schema.brand("BillingEmail")),
@@ -258,32 +243,29 @@ const wompiContractEvidenceFields = {
   providerContentHash,
   observedAt: UtcTimestamp,
 } as const;
-/** Immutable safe snapshot of Wompi's end-user policy shown before enrollment. */
+
 export const EndUserPolicyEvidence = Schema.Struct({
   kind: Schema.Literal("end-user-policy"),
   ...wompiContractEvidenceFields,
 });
-/** Immutable safe snapshot of Wompi's personal-data authorization shown before enrollment. */
+
 export const PersonalDataAuthorizationEvidence = Schema.Struct({
   kind: Schema.Literal("personal-data-authorization"),
   ...wompiContractEvidenceFields,
 });
 
-/** One safe immutable snapshot of a linked Wompi contract as displayed by Fidy. */
 export const WompiContractEvidence = Schema.Union([
   EndUserPolicyEvidence,
   PersonalDataAuthorizationEvidence,
 ]).annotate({ identifier: "WompiContractEvidence" });
 export type WompiContractEvidence = typeof WompiContractEvidence.Type;
 
-/** Both semantically distinct Wompi contracts, named so duplicates are unrepresentable. */
 export const WompiContractEvidenceSet = Schema.Struct({
   endUserPolicy: EndUserPolicyEvidence,
   personalDataAuthorization: PersonalDataAuthorizationEvidence,
 }).annotate({ identifier: "WompiContractEvidenceSet" });
 export type WompiContractEvidenceSet = typeof WompiContractEvidenceSet.Type;
 
-/** Fidy-owned recurring-charge disclosure bound to one immutable Price. */
 export const RecurringDisclosure = Schema.Struct({
   revision: Schema.Literals([
     "wompi-card-enrollment-v1",
@@ -296,7 +278,6 @@ export const RecurringDisclosure = Schema.Struct({
 }).annotate({ identifier: "RecurringDisclosure" });
 export type RecurringDisclosure = typeof RecurringDisclosure.Type;
 
-/** Exactly three independent decisions; a combined consent cannot satisfy this contract. */
 export const EnrollmentDecisions = Schema.Struct({
   acceptedEndUserPolicy: Schema.Literal(true),
   acceptedPersonalDataAuthorization: Schema.Literal(true),
@@ -308,7 +289,6 @@ const PreparedEnrollmentFields = {
   status: Schema.Literal("prepared"),
   enrollmentId: PaymentEnrollmentId,
   price: Price,
-  /** Empty when no billing contact is available; submission always requires a BillingEmail. */
   billingEmail: Schema.Union([BillingEmail, Schema.Literal("")]),
   contracts: WompiContractEvidenceSet,
   recurringDisclosure: RecurringDisclosure,
@@ -317,7 +297,6 @@ const PreparedEnrollmentFields = {
   expiresAt: UtcTimestamp,
 } as const;
 
-/** Every displayed term before method entry, with exact OTP destinations required for DaviPlata. */
 export const PreparedPaymentEnrollment = Schema.Union([
   Schema.Struct({ ...PreparedEnrollmentFields, method: Schema.Literals(["card", "nequi"]) }),
   Schema.Struct({
@@ -359,7 +338,6 @@ const VerifyingPaymentEnrollment = Schema.Struct({
   priceId: PriceId,
 });
 
-/** Closed browser-visible enrollment lifecycle; provider source identity is intentionally absent. */
 export const PaymentEnrollment = Schema.Union([
   PreparedPaymentEnrollment,
   CreatingPaymentEnrollment,
@@ -385,19 +363,16 @@ export const PaymentSubmission = Schema.Union([
 ]).annotate({ identifier: "PaymentSubmission" });
 export type PaymentSubmission = typeof PaymentSubmission.Type;
 
-/** Stable identity of one asynchronous billing correction; provider identities remain private. */
 export const RefundAttemptId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("RefundAttemptId"))
   .annotate({ identifier: "RefundAttemptId" });
 export type RefundAttemptId = typeof RefundAttemptId.Type;
 
-/** Caller-selected retry identity scoped to one User; changing the intent requires a new identity. */
 export const RefundRequestId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("RefundRequestId"))
   .annotate({ identifier: "RefundRequestId" });
 export type RefundRequestId = typeof RefundRequestId.Type;
 
-/** A correction moves positive exact Money; zero never reserves refundable capacity. */
 export const RefundMoney = Money.check(
   Schema.makeFilter<ReadonlyMoney>(
     (money) => BigDecimal.Order(money.amount, zero) > 0 || "Refund Money must be greater than zero"
@@ -405,21 +380,18 @@ export const RefundMoney = Money.check(
 ).annotate({ identifier: "RefundMoney" });
 export type RefundMoney = typeof RefundMoney.Type;
 
-/** Closed support reason; arbitrary support notes never become retained payment evidence. */
 export const RefundReason = Schema.Literals([
   "user-request",
   "duplicate-collection",
   "service-error",
 ]).annotate({ identifier: "RefundReason" });
 
-/** Card voids always address the complete charge; a partial void cannot be requested. */
 export const RefundIntent = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("refund"), money: RefundMoney }),
   Schema.Struct({ kind: Schema.Literal("card-void") }),
 ]).annotate({ identifier: "RefundIntent" });
 export type RefundIntent = typeof RefundIntent.Type;
 
-/** Support addresses Fidy identities; neither a User credential nor a provider id grants this authority. */
 export const StartRefundInput = Schema.Struct({
   userId: UserId,
   billingAttemptId: BillingAttemptId,
@@ -429,7 +401,6 @@ export const StartRefundInput = Schema.Struct({
 }).annotate({ identifier: "StartRefundInput" });
 export type StartRefundInput = typeof StartRefundInput.Type;
 
-/** Sandbox evidence is explicitly provisional, never a legal determination for a real sale. */
 export const CorrectionTreatment = Schema.Struct({
   policyId: Schema.Literal("refund-ends-paid-period-v1"),
   taxTreatment: TaxTreatment,
@@ -453,7 +424,6 @@ const RefundSnapshot = {
   createdAt: UtcTimestamp,
 };
 
-/** Safe retained correction history; submission ambiguity remains pending and reserves its Money. */
 export const RefundAttempt = Schema.Union([
   Schema.Struct({
     ...RefundSnapshot,
@@ -474,7 +444,6 @@ export const RefundAttempt = Schema.Union([
 ]).annotate({ identifier: "RefundAttempt" });
 export type RefundAttempt = typeof RefundAttempt.Type;
 
-/** Closed support failures contain neither provider payloads nor persistence diagnostics. */
 export const RefundStartFailure = Schema.Literals([
   "unsupported",
   "charge-unavailable",
@@ -486,5 +455,4 @@ export const RefundStartFailure = Schema.Literals([
 ]).annotate({ identifier: "RefundStartFailure" });
 export type RefundStartFailure = typeof RefundStartFailure.Type;
 
-/** Fixed post-boundary Pro continuation for an unstopped Subscription; paid history is unchanged. */
 export const renewalGraceMs = 259_200_000;

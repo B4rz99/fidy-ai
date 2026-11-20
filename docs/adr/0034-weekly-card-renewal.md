@@ -56,3 +56,9 @@ Historical financial facts, evidence and cancellation remain retained.
 
 Source: [Wompi payment-source cancellation](https://docs.wompi.co/docs/colombia/fuentes-de-pago/#cuentas-daviplata).
 This is development behavior; production/provider enablement remains separately gated.
+
+Monthly and yearly periods preserve the original local calendar anchor across month-end and
+leap-day clamps. Renewal execution advances by one period from the paid boundary even if
+collection is late. Support correction uses Fidy attempt identities and a closed reason
+vocabulary. A card void addresses the whole charge. An ambiguous submission remains pending and
+continues to reserve its amount. Sandbox treatment is provisional evidence.

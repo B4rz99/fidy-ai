@@ -3,7 +3,6 @@ import { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
 
 const maximumInterpretationRevisionLength = 80;
 
-/** User and regional interpretation facts frozen when evidence is admitted. */
 export const CapturedInterpretationContext = Schema.Struct({
   serviceMarket: ServiceMarket,
   locale: Locale,

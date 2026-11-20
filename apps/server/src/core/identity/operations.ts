@@ -11,7 +11,6 @@ export const isTrialPeriodActive = Effect.fn("isTrialPeriodActive")(function* (
   );
 });
 
-/** Creates a Colombian User and its one immutable 168-hour TrialPeriod at createdAt. */
 export const makeColombianUser = ({
   userId,
   createdAt,

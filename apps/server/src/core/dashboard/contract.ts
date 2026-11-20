@@ -133,7 +133,6 @@ export const Widget = Schema.Union([
   .pipe(Schema.toTaggedUnion("type"));
 export type Widget = typeof Widget.Type;
 
-// `mapFields` keeps no struct-level annotation, so each template renames itself.
 const SpendingChartTemplate = SpendingChartWidget.mapFields(Struct.omit(["id"])).annotate({
   identifier: "SpendingChartTemplate",
 });

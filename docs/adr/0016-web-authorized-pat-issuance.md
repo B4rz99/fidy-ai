@@ -32,3 +32,15 @@ Each PAT receives one absolute expiration at issuance from the reviewed 7, 30, 9
 - **WhatsApp URL button or magic-link delivery:** rejected because hiding a Secret from visible text does not remove it from the provider transport.
 - **Web-only manual copy:** rejected as the sole path because first-party CLI and local-agent clients can receive a PAT directly without human copy/paste.
 - **OAuth authorization server:** rejected for the MVP; local clients need only PATPairing, and remote MCP remains out of scope.
+
+## Credential and pairing details
+
+The short id names a grant. Use it for safe activity and management metadata. Resolution records
+the successful use before returning the authentication facts. An active listing carries no stable
+User id, terminal state, or credential material. The bearer is redacted as a value and is exposed
+as raw text by the issuance JSON codec at its one authorized delivery seam.
+
+Use rejection sampling when mapping random bytes into public pairing-code symbols so each symbol
+has equal probability. A browser-generated manual request id makes a confirmed grant retry-safe.
+Pre-approval polling with the correct private proof exposes bounded cadence metadata. Claim
+rechecks the approval, proof and lifecycle in the committing storage guard.

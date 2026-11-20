@@ -48,3 +48,8 @@ or the visible member can rank.
 The decision stores only the pair and its visible member, never the current fact authorities.
 Authorities move when a member is corrected, and a stored copy would need a refresh hook on every
 fact-changing write path — the exact drift this relation exists to prevent.
+
+An explicit authorized link still requires equal exact Money, Currency and direction. The User's
+decision resolves timing ambiguity. A field decision includes intentionally clearing Counterparty
+or notes, so automatic fact selection cannot replace that absence with an older value. The
+inspection surface reads the effective Transaction and its retained originals in one snapshot.

@@ -33,3 +33,9 @@ Build generation and freshness/collision checks replace manual registration. Fin
 remains ordinary reviewed TypeScript, not a speculative template language. New formats still require
 evidence, adversarial fixtures, review, and deployment. Shared interpretation changes require a new
 revision; generated discovery removes central editing, not the cost of maintaining formats.
+
+Capture freezes ServiceMarket, locale and time zone when admitting the evidence. Card suffix and
+account suffix occupy separate namespaces even when the digits match. Account-like hints and
+explicit product labels may be retained as partial evidence. They establish neither account
+identity nor a Transaction match. Capture establishes that a label came from an admissible bounded
+field before applying the formatting codec.

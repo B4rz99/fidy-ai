@@ -10,7 +10,6 @@ import {
   type BudgetStatus,
 } from "./contract";
 
-/** Derives one calendar month's half-open UTC bounds from an explicit instant and IANA zone. */
 export const deriveCurrentBudgetMonth = ({
   now,
   timeZone,
@@ -47,13 +46,6 @@ const threshold80 = 80;
 const threshold100 = 100;
 const thresholds = [threshold80, threshold100] as const;
 
-/**
- * Advance the monotone reached threshold for one Budget and applied month. The caller must
- * supply the latch belonging to this Budget and period. The adapter must commit durable,
- * versioned evaluation intent with the Transaction change, drain it before any later correction,
- * and persist marks with unique per-threshold occurrences; a correction never reopens a mark.
- * Spending in another Currency fails without comparison or conversion.
- */
 export const advanceBudgetLatch = ({
   budget,
   spent,
@@ -86,7 +78,6 @@ export const advanceBudgetLatch = ({
     };
   });
 
-/** Compares exact same-Currency spending with a cap and returns its closed monthly status. */
 export const calculateBudgetStatus: (
   input: BudgetStatusInput
 ) => Effect.Effect<BudgetStatus, CurrencyMismatch> = Effect.fnUntraced(function* (

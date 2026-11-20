@@ -24,7 +24,6 @@ export const ConsentRecordId = Schema.String.check(Schema.isUUID())
   .annotate({ identifier: "ConsentRecordId" });
 export type ConsentRecordId = typeof ConsentRecordId.Type;
 
-/** Immutable source-control identifier of one full policy version. */
 export const PolicyRevision = Schema.String.check(
   Schema.isTrimmed(),
   Schema.isPattern(/^[a-z0-9][a-z0-9._-]{0,63}$/u)
@@ -33,7 +32,6 @@ export const PolicyRevision = Schema.String.check(
   .annotate({ identifier: "PolicyRevision" });
 export type PolicyRevision = typeof PolicyRevision.Type;
 
-/** Immutable identifier of the shorter disclosure presented in chat. */
 export const DisclosureRevision = Schema.String.check(
   Schema.isTrimmed(),
   Schema.isPattern(/^[a-z0-9][a-z0-9._-]{0,63}$/u)
@@ -42,7 +40,6 @@ export const DisclosureRevision = Schema.String.check(
   .annotate({ identifier: "DisclosureRevision" });
 export type DisclosureRevision = typeof DisclosureRevision.Type;
 
-/** Lowercase SHA-256 digest that pins exact source-controlled content bytes. */
 export const Sha256Digest = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u))
   .pipe(Schema.brand("Sha256Digest"))
   .annotate({ identifier: "Sha256Digest" });
@@ -66,7 +63,6 @@ export const PolicyUrl = Schema.String.check(
   .annotate({ identifier: "PolicyUrl" });
 export type PolicyUrl = typeof PolicyUrl.Type;
 
-/** Exact public policy version represented by Fidy's stable policy URL. */
 export const PolicySnapshot = Schema.Struct({
   publicUrl: PolicyUrl,
   revision: PolicyRevision,
@@ -74,10 +70,6 @@ export const PolicySnapshot = Schema.Struct({
 }).annotate({ identifier: "PolicySnapshot" });
 export type PolicySnapshot = typeof PolicySnapshot.Type;
 
-/**
- * Exact aviso de privacidad presented before onboarding. Structured legal facts
- * remain independently queryable while `text` preserves what the User saw.
- */
 export const DisclosureSnapshot = Schema.Struct({
   serviceMarket: ServiceMarket,
   locale: Locale,
@@ -95,7 +87,6 @@ export const DisclosureSnapshot = Schema.Struct({
 }).annotate({ identifier: "DisclosureSnapshot" });
 export type DisclosureSnapshot = typeof DisclosureSnapshot.Type;
 
-/** Capability authorized by one grant, using references owned by the named slice. */
 export const ConsentGrant = Schema.Union([
   Schema.TaggedStruct("Onboarding", {}),
   Schema.TaggedStruct("PAT", { tokenId: PATId }),
@@ -103,7 +94,6 @@ export const ConsentGrant = Schema.Union([
 ]);
 export type ConsentGrant = typeof ConsentGrant.Type;
 
-/** Append-only grant or symmetric revocation; an existing grant is never updated. */
 export const ConsentEvent = Schema.Union([
   Schema.TaggedStruct("Granted", { grant: ConsentGrant }),
   Schema.TaggedStruct("Revoked", { grantId: ConsentRecordId }),
@@ -127,10 +117,6 @@ export const ConsentDecisionEvidence = Schema.Union([
 ]).annotate({ identifier: "ConsentDecisionEvidence" });
 export type ConsentDecisionEvidence = typeof ConsentDecisionEvidence.Type;
 
-/**
- * Immutable evidence tying one decision to a stable User, exact legal context,
- * and the honest origin that made the decision interpretable.
- */
 export const ConsentRecord = Schema.Struct({
   id: ConsentRecordId,
   subjectUserId: UserId,
@@ -141,11 +127,6 @@ export const ConsentRecord = Schema.Struct({
 }).annotate({ identifier: "ConsentRecord" });
 export type ConsentRecord = typeof ConsentRecord.Type;
 
-/**
- * Temporary pre-User state. Outbound evidence is impossible before delivery and
- * mandatory while a decision is pending. Both variants retain only the provider
- * key that initiated the exchange, never its financial content.
- */
 export const PendingConsentExchange = Schema.Union([
   Schema.TaggedStruct("AwaitingDisclosureDelivery", {
     id: PendingConsentExchangeId,
@@ -197,7 +178,6 @@ type ReadonlyDisclosureSnapshot = Omit<
   readonly dataCategories: ReadonlyArray<DisclosureSnapshot["dataCategories"][number]>;
 };
 
-/** Caller-independent authenticated initiation and the exact disclosure to present. */
 export type PendingConsentInput = Omit<
   Readonly<AwaitingDisclosureDelivery>,
   "_tag" | "caller" | "disclosure" | "expiresAt"
@@ -205,10 +185,8 @@ export type PendingConsentInput = Omit<
   readonly disclosure: ReadonlyDisclosureSnapshot;
 };
 
-/** Pending legal exchange before its caller association is attached by the ingress owner. */
 export type PendingConsentDraft = Omit<AwaitingDisclosureDelivery, "caller">;
 
-/** Temporary Consent evidence; delivery and settlement phases carry the proof each decision requires. */
 export const ConsentIngressExchange = Schema.Struct({
   initiatingMessageId: WhatsAppProviderMessageId,
   initiatingBodySha256: Sha256Digest,
@@ -234,7 +212,6 @@ export const ConsentIngressExchange = Schema.Struct({
 });
 export type ConsentIngressExchange = typeof ConsentIngressExchange.Type;
 
-/** Provider-qualified message facts supplied by ingress after authentication and bounded decoding. */
 export type ConsentIngressMessage = Readonly<{
   providerMessageId: WhatsAppProviderMessageId;
   bodySha256: Sha256Digest;
@@ -243,7 +220,6 @@ export type ConsentIngressMessage = Readonly<{
   receivedAtMs: number;
 }>;
 
-/** Closed origins for symmetric PAT Consent revocations; only expiry is automatic. */
 export const PATRevocationOrigin = Schema.Literals([
   "user-revoke-one",
   "user-revoke-all",
@@ -269,19 +245,16 @@ export type PATRevocationDisclosure<Origin extends PATRevocationOrigin = PATRevo
       }>;
     }[Origin];
 
-/** Existing onboarding evidence uses the WhatsApp exchange UUID or the web provider attempt's
- * 256-bit base64url reference. Neither format grants authority without the same-User stored grant. */
 export const WebOnboardingConsentGrantId = Schema.String.check(
   Schema.isPattern(/^[A-Za-z0-9_-]{43}$/u)
 ).pipe(Schema.brand("WebOnboardingConsentGrantId"));
-/** Retained native onboarding identity, validated before resolving the exact same-User legal grant. */
+
 export const OnboardingConsentGrantId = Schema.Union([
   ConsentRecordId,
   WebOnboardingConsentGrantId,
 ]);
 export type OnboardingConsentGrantId = typeof OnboardingConsentGrantId.Type;
 
-/** Exact immutable onboarding grant and legal revisions authorizing a protected decision. */
 export const OnboardingConsentBasis = Schema.Struct({
   grantId: OnboardingConsentGrantId,
   disclosureRevision: DisclosureRevision,

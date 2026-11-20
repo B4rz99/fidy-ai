@@ -38,3 +38,15 @@ The completion unit rechecks its exact attempt, private browser pairing, caller,
 freshness and native decision before initial association. Provider retries invalidate earlier reviews.
 The original page retains private proof while WhatsApp opens separately; no private verifier or
 recovery code enters the return link. This simplifies interaction without removing either proof.
+
+## Consent evidence before a User exists
+
+The short disclosure keeps its structured legal facts and the exact text shown to the User. The
+pending exchange binds a provider-qualified initiating message and expires at the 24-hour boundary.
+It keeps only the initiating provider key and legal exchange evidence. Financial content remains
+outside the exchange. A decision must follow proven delivery and use the closed consent grammar.
+A bare “sí” is ambiguous. An older message cannot open a replacement exchange after expiry.
+
+The delivery owner generates an unpredictable callback token for each exchange. Its UUID shape
+validates representation. Correlation binds the callback to delivery evidence without making
+provider ids or tokens reusable User authority.

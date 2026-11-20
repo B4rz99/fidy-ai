@@ -136,3 +136,8 @@ Portfolio/BSUID and business endpoint, after review issuance and for the exact c
 attempt. A forwarded link or browser action alone cannot establish WhatsAppIdentity. The initiating
 page keeps the independent private verifier in memory until completion and session redemption.
 New Users still receive their one-time recovery disclosure only on the first-party page.
+
+The one-time recovery code uses 25 unambiguous base32 symbols. Recovery persists its SHA-256 digest.
+Support operators come from the dedicated Access application after origin verification. Recovery
+rejections keep metadata-only evidence with no reason or matching fact. Automatic expiry records
+the policy revision that made the decision.

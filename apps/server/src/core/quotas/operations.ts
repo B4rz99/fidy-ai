@@ -11,7 +11,6 @@ import {
 const bogota = DateTime.zoneMakeNamedUnsafe("America/Bogota");
 const limits = freeAllowanceLimits;
 
-/** Returns the commercial period containing now; midnight Bogotá is 05:00 UTC at launch. */
 export const allowancePeriod = (now: DateTime.Utc): AllowancePeriod => {
   const start = DateTime.startOf(DateTime.setZone(now, bogota), "month");
   return {
@@ -20,7 +19,6 @@ export const allowancePeriod = (now: DateTime.Utc): AllowancePeriod => {
   };
 };
 
-/** Projects four decoded counts under one calendar period, without granting authority or capacity. */
 export const projectQuotaStatus = (
   input: Readonly<{
     accessTier: AccessTier;
@@ -54,7 +52,6 @@ export const projectQuotaStatus = (
   };
 };
 
-/** Decides one new unit after replay handling. A caller must recheck the cap with its guarded acceptance commit. */
 export const decideConsumption = (
   input: Readonly<{
     allowance: AllowanceKind;

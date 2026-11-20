@@ -8,11 +8,9 @@ const sha256DigestLength = Schema.makeFilter<{ readonly length: number }>((diges
   digest.length === sha256ByteLength ? undefined : "Expected a 32-byte SHA-256 digest"
 );
 
-/** Checked digest accepted by Recovery persistence; raw BackupRecoveryCodes never cross this seam. */
 export const BackupRecoveryDigest = Schema.Uint8Array.check(sha256DigestLength);
 export type BackupRecoveryDigest = typeof BackupRecoveryDigest.Type;
 
-/** Stable identity asserted by the dedicated Cloudflare Access application and verified at origin. */
 export const SupportOperatorId = Schema.Struct({
   issuer: Schema.String.check(Schema.isNonEmpty()),
   subject: Schema.String.check(Schema.isNonEmpty()),
@@ -53,13 +51,11 @@ const validCredentialTimes = Schema.makeFilter<BackupRecoveryCredentialTimeView>
     : { path: ["consumedAt"], issue: "Expected an instant at or after createdAt" }
 );
 
-/** Credential authority is active exactly while its checked digest exists. */
 export const BackupRecoveryCredentialLifecycle = BackupRecoveryCredentialVariants.check(
   validCredentialTimes
 ).annotate({ identifier: "BackupRecoveryCredentialLifecycle" });
 export type BackupRecoveryCredentialLifecycle = typeof BackupRecoveryCredentialLifecycle.Type;
 
-/** Recovery-owned one-time credential for one stable User. */
 export const BackupRecoveryCredential = BackupRecoveryCredentialLifecycle.annotate({
   identifier: "BackupRecoveryCredential",
 });
@@ -98,7 +94,6 @@ const validCaseTimes = Schema.makeFilter<typeof SupportRecoveryCaseVariants.Type
   }
 );
 
-/** Metadata-only tracked decision bounded by the selected BrowserLoginPairing expiry. */
 export const SupportRecoveryCase = SupportRecoveryCaseVariants.check(validCaseTimes).annotate({
   identifier: "SupportRecoveryCase",
 });
@@ -115,10 +110,6 @@ const ExpiryActor = Schema.TaggedStruct("Policy", {
   policyRevision: Schema.Literal("support-recovery-expiry-v1"),
 });
 
-/**
- * Closed relational evidence vocabulary. Rejections deliberately retain no reason or matching fact;
- * automatic expiry names its fixed policy revision instead of inventing an operator.
- */
 export const SupportRecoveryCaseEvent = Schema.Union([
   Schema.Struct({
     ...EventIdentity,

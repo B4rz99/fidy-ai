@@ -81,3 +81,7 @@ use normalized plain decimal text to preserve exact precision across JSON, inclu
 which the underlying decimal formatter uses exponent notation. Reject malformed text through
 decoding. A valid zero does not by itself prove that a financial movement occurred. Group inflows
 and outflows independently by Currency and omit empty groups.
+
+ServiceMarket changes carry jurisdictional consequences, so ordinary presentation preferences
+can change locale and time zone only. The User's channel, phone number and Currency do not
+derive any of those stored context values.

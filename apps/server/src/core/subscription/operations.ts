@@ -3,7 +3,6 @@ import { type ReadonlyMoney, encodeMoneyAmount } from "~/core/_shared/money";
 import type { IanaTimeZone } from "~/core/_shared/context";
 import { type BillingPeriod, type PriceId } from "./contract";
 
-/** Exact COP minor units accepted by the provider and SQLite; unsafe integers fail closed. */
 export const refundMinorUnits = (money: ReadonlyMoney): Option.Option<number> => {
   if (money.currency !== "COP" || BigDecimal.Order(money.amount, BigDecimal.make(0n, 0)) <= 0) {
     return Option.none();
@@ -15,14 +14,12 @@ export const refundMinorUnits = (money: ReadonlyMoney): Option.Option<number> =>
   return cents <= BigInt(Number.MAX_SAFE_INTEGER) ? Option.some(Number(cents)) : Option.none();
 };
 
-/** Calendar paid-period facts derived from verified settlement in the captured named time zone. */
 export type PaidPeriodWindow = Readonly<{
   startsAt: DateTime.Utc;
   endsAt: DateTime.Utc;
   renewalAnchor: DateTime.Utc;
 }>;
 
-/** Derives a calendar period from verified finalization in the captured named time zone. */
 export const paidPeriodFor: {
   (
     timeZone: IanaTimeZone,
@@ -50,11 +47,6 @@ export const paidPeriodFor: {
   }
 );
 
-/**
- * Advances one adjacent calendar period from its paid boundary. originalStartsAt is the first
- * paid period's start and preserves its local day and time through month-end and leap-day clamps.
- * Delayed execution never skips periods or moves the original calendar anchor.
- */
 export const renewalPeriod = (
   input: Readonly<{
     billingPeriod: BillingPeriod;
@@ -82,7 +74,6 @@ export const renewalPeriod = (
   return Effect.succeed({ startsAt: input.previousEndsAt, endsAt, renewalAnchor: endsAt });
 };
 
-/** Portable input to enrollment decisions; it does not describe the native durable schema. */
 export type EnrollmentCheckpoint =
   | Readonly<{ status: "prepared"; priceId: PriceId; expiresAt: DateTime.Utc }>
   | Readonly<{
@@ -90,7 +81,6 @@ export type EnrollmentCheckpoint =
       priceId: PriceId;
     }>;
 
-/** Closed action for one replay-safe submission attempt. */
 export const decideEnrollmentSubmission: {
   (
     now: DateTime.Utc
@@ -114,7 +104,6 @@ export const decideEnrollmentSubmission: {
   }
 );
 
-/** Decides whether Price selection can reuse an intent or an already-available source. */
 export const decideEnrollmentPreparation: {
   (requestedPriceId: PriceId): (
     checkpoint: Readonly<Pick<EnrollmentCheckpoint, "status" | "priceId">>

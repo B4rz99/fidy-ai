@@ -35,3 +35,8 @@ is submitted automatically. Immutable source and billing identities remain retai
 changes use forward D1 migrations that preserve authorization and billing history.
 The [Sandbox proof runbook](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/operations/daviplata-sandbox-proof.md) distinguishes synthetic fixtures,
 the opt-in real-provider check and unresolved browser/native/recovery release gates.
+
+Price snapshots describe the families represented in the terms. Enrollment availability reports
+which methods can execute now. Preparing DaviPlata admits reviewed query-free destinations. The
+Sandbox adapter owns the fixed operation and token queries. The three enrollment decisions remain
+independently representable so combined acceptance cannot stand in for any one of them.

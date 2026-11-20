@@ -407,7 +407,7 @@ try {
     assert.deepEqual(browserRoutes.sort(),expectedRoutes.sort());
     const check=await db.batch([
       db.prepare("SELECT operation,outcome,count(*) AS entries FROM audit_entries WHERE user_id=? AND session_id=? GROUP BY operation,outcome ORDER BY operation,outcome").bind(subject,binding),
-      db.prepare("SELECT (SELECT COALESCE(sum(units),0) FROM commercial_allowance_consumptions WHERE user_id=?1 AND allowance='canonical_call') AS units,(SELECT count(*) FROM canonical_request_receipts WHERE user_id=?1) AS receipts").bind(subject)
+      db.prepare("SELECT (SELECT COALESCE(sum(units),0) FROM commercial_allowance_consumptions WHERE user_id=?1 AND allowance='canonical_call') AS units,(SELECT count(*) FROM canonical_request_replays WHERE user_id=?1 AND state='completed') AS receipts").bind(subject)
     ]);
     account("audit",check);metadata.sessionAudit=check[0].results;
     assert.equal(check[0].results.find(r=>r.operation==="transactions.listTransactions"&&r.outcome==="success")?.entries,31);

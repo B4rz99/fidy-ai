@@ -131,6 +131,7 @@ export const fixtureVerifier = Effect.sync(() => {
       NATIVE_STORAGE_HOSTS: Schema.Literal("acceptance"),
       FIXTURE_RELEASE_OPERATION: Schema.Literals([
         "reseal-fixture-fallback",
+        "diagnose-fixture-pairing",
         "recover-fixture-fallback",
         "rollout",
         "verify",

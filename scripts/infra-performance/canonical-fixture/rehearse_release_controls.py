@@ -92,7 +92,9 @@ def main():
                                   cookie=headers["cookie"],binding=headers["fidy-session-binding"])
                 if capture["status"] // 100 != 2:
                     raise ValueError("Original release could not capture the preexisting financial data")
-            original_ids = runtime("survivors")
+            original_controls = runtime("controls")
+            if len(original_controls) != 2 or len({row["id"] for row in original_controls}) != 2:
+                raise ValueError("The control did not reopen both original Users")
             original = observations(runtime, sessions)
             inventory = runtime("census")
             if len(sessions) != 2 or len({row["bodyDigest"] for row in original}) != 2 or any(row["status"] != 200 for row in original):
@@ -101,7 +103,7 @@ def main():
         os.environ["FIDY_NATIVE_FIXTURE_PROVIDER_REVISION"] = baseline
         with commands(candidate, "cohort-runtime.test-fixture.ts") as runtime:
             advanced = observations(runtime, sessions)
-            resumed_identity = runtime("survivors") == original_ids
+            resumed_identity = runtime("streamed-controls") == original_controls
             same_inventory = inventory == runtime("census")
         os.environ["FIDY_REHEARSAL_BASELINE"] = "true"
         with commands(baseline, "cohort-runtime.test-fixture.ts") as runtime:

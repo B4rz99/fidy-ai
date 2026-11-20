@@ -170,6 +170,49 @@ describe("Production runtime configuration gate", () => {
     );
   });
 
+  it("restricts resealing to archived pair verification and a GitHub evidence upload", async () => {
+    const release = (await readFile(productionWorkflowPath, "utf8")).split("\n  site:")[0];
+    const source = await workflowStep(
+      "Bind the protected verifier to the staged application source"
+    );
+    const restore = await workflowStep("Authenticate the unsealed zero-traffic pair");
+    const qualify = await workflowStep(
+      "Requalify the archived zero-traffic pair without moving traffic"
+    );
+    const seal = await workflowStep("Seal dormant fallback stage before promotion");
+    const steps = release.split("\n      - name: ").slice(1);
+    const admitted = steps.filter((step) =>
+      step
+        .split("\n")
+        .find((line) => line.startsWith("        if:"))
+        ?.includes("inputs.operation == 'reseal-fixture-fallback'")
+    );
+    expect(admitted.map((step) => step.split("\n")[0])).toEqual([
+      "Bind the protected verifier to the staged application source",
+      "Authenticate the unsealed zero-traffic pair",
+      "Requalify the archived zero-traffic pair without moving traffic",
+      "Seal dormant fallback stage before promotion",
+    ]);
+    expect(source).toContain("unsealed_stage.py source");
+    expect(restore).toContain("unsealed_stage.py restore");
+    expect(qualify).toContain("bun native-storage-release.ts reseal-fallback");
+    expect(qualify).not.toContain("NATIVE_FIXTURE_SIGNING_KEY");
+    expect(seal).toContain("if-no-files-found: error");
+    const installed = await workflowStep(
+      "Verify the installed application and retained schema markers"
+    );
+    expect(installed).toContain("inputs.operation != 'reseal-fixture-fallback'");
+    for (const step of steps.filter((item) => item.includes("run: bun native-storage-"))) {
+      expect(step).toContain("        if:");
+    }
+    const recover = await workflowStep("Authenticate the interrupted dormant stage");
+    expect(recover).toContain("if: inputs.operation == 'recover-fixture-fallback'");
+    expect(recover).toContain("fallback_stage.py");
+    expect(release.indexOf(recover)).toBeLessThan(
+      release.indexOf(await workflowStep("Finish only the tested closed forward repair"))
+    );
+  });
+
   it("keeps real payment secrets out of closed first installation", async () => {
     const first = await workflowStep("Install the verified fresh native application");
     expect(first).toContain("bun native-storage-resources.ts first-install");

@@ -7,6 +7,8 @@ import re
 import subprocess
 from zipfile import ZipFile
 
+from staged_application import APPLICATION, STAGED_IDS, git_read, require_steps, verify_tree
+
 REPO = "B4rz99/fidy-ai"
 BASE = "repos/" + REPO + "/actions/"
 
@@ -38,16 +40,51 @@ def protected_archive(account_revision, artifact_id, expected_digest, *, prefix,
     return run_id, data
 
 
-def artifact(account_revision, artifact_id, expected_digest):
-    _, data = protected_archive(account_revision, artifact_id, expected_digest,
-                                prefix="native-storage-release-", conclusions={"success"})
+def archive_verifier(artifact_id, checkout, get, git):
+    if not re.fullmatch("[1-9][0-9]{0,19}", artifact_id or ""):
+        raise ValueError("Invalid protected artifact ID")
+    source = json.loads(get("artifacts/" + artifact_id))["workflow_run"]["head_sha"]
+    verify_tree(source, git)
+    if git("merge-base", source, checkout) != source:
+        raise ValueError("Protected evidence came from a different verifier lineage")
+    return source
+
+
+def artifact(account_revision, artifact_id, expected_digest, get=actions_get, git=git_read):
+    if account_revision != APPLICATION:
+        raise ValueError("Unexpected signed application revision")
+    source = archive_verifier(artifact_id, git("rev-parse", "HEAD"), get, git)
+    run, data = protected_archive(source, artifact_id, expected_digest,
+                                  prefix="native-storage-release-", conclusions={"success"}, get=get)
+    require_steps(get, run, "success", {
+        "Bind the protected verifier to the staged application source": "success",
+        "Upload the verified native candidates": "success",
+        "Stage the zero-traffic native candidates": "success",
+        "Requalify the archived zero-traffic pair without moving traffic": "skipped",
+        "Finish only the tested closed forward repair": "skipped",
+        "Verify mixed and candidate versions before promoting closed admission": "success",
+        "Verify the installed application and retained schema markers": "success",
+        "Exercise the tested code-only rollback": "skipped",
+        "Retain native release evidence": "success",
+    })
     with ZipFile(BytesIO(data)) as archive:
         def document(name):
             items = [item for item in archive.infolist() if item.filename == name]
             if len(items) != 1 or items[0].file_size > 2_000_000:
                 raise ValueError("Missing unique protected release evidence")
             return json.loads(archive.read(items[0]))
-        return document("native-release.json.promoted"), document("native-verification.json")
+        promotion = document("native-release.json.promoted")
+        installed = document("native-verification.json")
+    release = promotion["release"]
+    snapshot = release["snapshot"]
+    if (snapshot["revision"] != APPLICATION or snapshot["stableRevision"] != APPLICATION
+            or installed["revision"] != APPLICATION or promotion["rollbackTested"] is not True):
+        raise ValueError("Active release did not exercise the dormant application build as its rollback")
+    for role in ("public", "core"):
+        version = role + "VersionId"
+        if snapshot[role]["stableVersionId"] != STAGED_IDS[version] or release[version] == STAGED_IDS[version]:
+            raise ValueError("Active rollout did not start from the authenticated dormant versions")
+    return promotion, installed
 
 
 def retained_provider():

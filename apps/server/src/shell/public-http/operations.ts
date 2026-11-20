@@ -50,6 +50,7 @@ export const matchesRouteTemplate = ({
   template,
   path,
 }: Readonly<{ template: string; path: string }>): boolean => {
+  if (!template.includes(":")) return path === template;
   const expected = template.split("/");
   const actual = path.split("/");
   return (

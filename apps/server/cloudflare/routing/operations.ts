@@ -4,9 +4,16 @@ import { operationCatalog } from "../../src/shell/api";
 import { Option } from "effect";
 
 const routes = operationCatalog.operations;
+const literalPaths = new Set(
+  routes.filter(({ route }) => !route.includes(":")).map(({ route }) => route)
+);
+const parameterizedRoutes = routes.filter(({ route }) => route.includes(":"));
 /** A public Worker path exists only when the assembled canonical HttpApi declares it. */
 export const canonicalRoute = (path: string): boolean =>
-  routes.some((operation) => matchesRouteTemplate({ template: operation.route, path }));
+  literalPaths.has(path) ||
+  parameterizedRoutes.some((operation) =>
+    matchesRouteTemplate({ template: operation.route, path })
+  );
 /** Allowed verbs for a declared path (including any parameter), empty for unknown paths. */
 export const canonicalMethods = (path: string): ReadonlyArray<string> =>
   Array.from(

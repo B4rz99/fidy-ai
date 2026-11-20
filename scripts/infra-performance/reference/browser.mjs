@@ -37,6 +37,8 @@ const browser = await chromium.launch({
   ...(process.env.ASSESSMENT_CHROMIUM ? { executablePath: process.env.ASSESSMENT_CHROMIUM } : {}),
   args: ["--ignore-certificate-errors"],
 });
+const eventsPath = process.env.FIDY_REFERENCE_EVENTS.replace("workspace-events","network-events");
+const events = [];
 try {
   const context = await browser.newContext({
     ignoreHTTPSErrors: true,
@@ -85,10 +87,19 @@ try {
       uploadThroughput: 125000,
     });
   }
-  const eventsPath = process.env.FIDY_REFERENCE_EVENTS.replace("workspace-events","network-events");
-  const events = [];
+  await cdp.send("Performance.enable");
   const note = (event) => events.push({ epoch:performance.timeOrigin+performance.now(), ...event });
   const marks = (type,journey) => note({type,journey});
+  const measureStage = async (type, journey) => {
+    const [options, cpu] = await Promise.all([
+      page.evaluate(() => window.__referenceChoiceOptions ?? 0),
+      cdp.send("Performance.getMetrics"),
+    ]);
+    const metrics = Object.fromEntries(cpu.metrics.filter((metric) =>
+      ["TaskDuration", "ScriptDuration", "LayoutDuration", "RecalcStyleDuration"].includes(metric.name)
+    ).map((metric) => [metric.name, metric.value]));
+    note({ type, journey, options, metrics });
+  };
   const started = new Map();
   await cdp.send("Network.enable");
   await page.addInitScript(() => document.addEventListener("click", () => {
@@ -171,8 +182,8 @@ try {
     observeStartup: async (reply) =>
       Schema.decodeSync(Schema.fromJsonString(Schema.Unknown))(await reply.text()),
     beforeRefresh: evidence,
-    offered: (journey) => marks("offered",journey),
-    completed: (journey) => marks("completed",journey),
+    offered: (journey) => measureStage("offered",journey),
+    completed: (journey) => measureStage("completed",journey),
   });
   process.stderr.write("REFERENCE_STAGE accountability-after\n");
   const after = await evidence();
@@ -201,7 +212,6 @@ try {
     process.stderr.write("REFERENCE_STAGE recurring-fresh\n");
     Object.assign(views, await freshRecurring(input));
   }
-  appendFileSync(eventsPath, events.map((event)=>JSON.stringify(event)).join("\n")+"\n");
   process.stdout.write(
     JSON.stringify({
       views,
@@ -214,5 +224,6 @@ try {
     }) + "\n"
   );
 } finally {
+  appendFileSync(eventsPath, events.map((event)=>JSON.stringify(event)).join("\n")+"\n");
   await browser.close();
 }

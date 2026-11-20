@@ -1,8 +1,8 @@
-name: Attribute browser request timing
+name: Count work in closed Category menus
 
 on:
   push:
-    branches: [test/2260-browser-menu-trace]
+    branches: [test/2260-browser-menu-work]
 
 permissions:
   contents: read
@@ -13,6 +13,10 @@ concurrency:
 
 jobs:
   compare:
+    strategy:
+      fail-fast: false
+      matrix:
+        product: [5b5efae4a6996760a7266c0fe7a8823db5349d34, dc66809f9354cc87394a08468e4860b99e8f10af]
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
@@ -34,6 +38,11 @@ jobs:
           path: baseline-fixtures
           persist-credentials: false
           sparse-checkout: apps/server/cloudflare
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ matrix.product }}
+          path: native-product
+          persist-credentials: false
       - uses: ./.github/actions/bun-runtime
       - name: Prepare both frozen checkouts and the common browser
         run: |
@@ -47,20 +56,28 @@ jobs:
           (cd baseline-d1 && bash scripts/install-workspace.sh --ignore-scripts)
           echo "ASSESSMENT_CHROMIUM=$(command -v google-chrome)" >> "$GITHUB_ENV"
           google-chrome --version
-      - name: Check live choice menus, Recurring navigation and Correction recovery
-        working-directory: apps/web
+      - name: Count radio option elements in the actual rendered native bundle
+        working-directory: native-product
         run: |
-          bun ../../node_modules/vitest/vitest.mjs run src/ui/components/choice-dropdown.test.ts src/features/recurring/feature.test.ts src/features/transactions/corrections.test.ts src/transport/workspace-query.test.ts --coverage.enabled=false --maxWorkers=1
-          bun run typecheck
-      - name: Trace three ordinary matched pairs
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          p = Path("apps/web/src/ui/components/choice-dropdown.tsx")
+          s = p.read_text()
+          tag = "<DropdownMenuRadioItem key={option.value}"
+          assert s.count(tag) == 1
+          p.write_text(s.replace(tag, "<DropdownMenuRadioItem key={(window.__referenceChoiceOptions = (window.__referenceChoiceOptions ?? 0) + 1, option.value)}"))
+          PYCODE
+          git -c user.name='Local fixture' -c user.email=fixture@example.invalid commit -am 'Count radio option elements in the disposable diagnostic build'
+          bash scripts/install-workspace.sh --ignore-scripts
+      - name: Trace three small-fixture pairs
         run: |
-          python3 scripts/infra-performance/reference/run.py --d1 baseline-d1 --do . \
-            --dataset production --network normal --pairs 3 --origin "GitHub-hosted Ubuntu loopback"
+          python3 scripts/infra-performance/reference/run.py --d1 baseline-d1 --do native-product \
+            --dataset small --network normal --pairs 3 --origin "GitHub-hosted Ubuntu loopback"
       - name: Preserve reference evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: storage-reference-${{ github.run_id }}-${{ github.run_attempt }}
+          name: menu-observations-${{ matrix.product }}-${{ github.run_id }}
           path: |
             apps/web/test-results/reference/*/plan.json
             apps/web/test-results/reference/*/attempts.jsonl

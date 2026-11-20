@@ -155,7 +155,7 @@ const startApplication = async (input) => {
     }
   };
   page.on("response", captureStartup);
-  offered?.("startup");
+  await offered?.("startup");
   const booting = performance.now();
   await page.goto(ledger, { waitUntil: "commit" });
   await ready(input, "Evaluación 2");
@@ -167,7 +167,7 @@ const startApplication = async (input) => {
   const context = await observeStartup(reply);
   const startup = historyPage(direct ? context : bootstrap(context).initial.transactions.page);
   verifySeededPage(startup, calibration);
-  completed?.("startup", startupMs);
+  await completed?.("startup", startupMs);
   return { startup, startupMs };
 };
 
@@ -215,7 +215,7 @@ const refreshHistory = async (input, startup) => {
   process.stderr.write("REFERENCE_STAGE read\n");
   const refreshCycle = await watchRefresh(page);
   const list = responseFor(input, "GET", "/transactions");
-  offered?.("refresh");
+  await offered?.("refresh");
   const started = performance.now();
   await page.getByRole("button", { name: "Actualizar transacciones", exact: true }).click();
   const initialResponse = await list;
@@ -229,7 +229,7 @@ const refreshHistory = async (input, startup) => {
   const initial = historyPage(await observe(initialResponse));
   assert.deepEqual(initial, startup, "Refresh changed the seeded history");
   const target = verifySeededPage(initial, calibration);
-  completed?.("refresh", readMs);
+  await completed?.("refresh", readMs);
   return { initial, target, readMs };
 };
 /**
@@ -248,7 +248,7 @@ const correctHistory = async (input, { initial, target }) => {
   process.stderr.write("REFERENCE_STAGE save\n");
   const save = responseFor(input, "PUT", "/transactions/" + targetId);
   const refresh = responseFor(input, "GET", "/transactions");
-  offered?.("correction");
+  await offered?.("correction");
   const saving = performance.now();
   await page.getByRole("button", { name: "Guardar", exact: true }).click();
   const saveResponse = await save;
@@ -265,7 +265,7 @@ const correctHistory = async (input, { initial, target }) => {
     ...initial,
     data: initial.data.map((row) => (row.id === targetId ? corrected : row)),
   });
-  completed?.("correction", correctionMs);
+  await completed?.("correction", correctionMs);
   return correctionMs;
 };
 /**

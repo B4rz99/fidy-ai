@@ -63,8 +63,8 @@ import {
   closedHostEnvironment,
   isAcceptanceReceipt,
   isAcceptanceWindow,
-  isPerformanceReceipt,
-  receiptAdmitted,
+  isPerformanceEvidence,
+  performanceEvidenceAdmitted,
   releaseAdmission,
   signAcceptanceRequest,
 } from "./release-isolation/operations";
@@ -966,14 +966,14 @@ const forwardStorageProbe = Effect.fn(function* (request: Request, environment: 
   return new Response(result.body, { status: result.status, headers });
 });
 
-const forwardPerformanceReceipt = Effect.fn(function* (
+const forwardPerformanceEvidence = Effect.fn(function* (
   request: Request,
   environment: PublicEnvironment,
   deadline: Option.Option<number>
 ) {
   if (
     Option.isNone(deadline) ||
-    !(yield* receiptAdmitted({
+    !(yield* performanceEvidenceAdmitted({
       request,
       environment,
       boundary: "ingress",
@@ -1001,8 +1001,8 @@ const privateForward = (
   environment: PublicEnvironment,
   deadline: Option.Option<number>
 ): Effect.Effect<Response> =>
-  isPerformanceReceipt(request)
-    ? forwardPerformanceReceipt(request, environment, deadline).pipe(
+  isPerformanceEvidence(request)
+    ? forwardPerformanceEvidence(request, environment, deadline).pipe(
         Effect.orElseSucceed(() => new Response(null, { status: 503 }))
       )
     : forwardStorageProbe(request, environment);
@@ -1010,7 +1010,7 @@ const privateReleaseRequest = (request: Request): boolean =>
   isStorageProbe(request) ||
   isAcceptanceWindow(request) ||
   isAcceptanceReceipt(request) ||
-  isPerformanceReceipt(request);
+  isPerformanceEvidence(request);
 const fetchEffect = (
   request: Request,
   environment: PublicEnvironment,

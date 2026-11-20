@@ -10,6 +10,7 @@ import { evaluate } from "alchemy/Output";
 import { FetchHttpClient } from "effect/http";
 import { ConfigProvider, Effect, Schema } from "effect";
 import { nativeApplication } from "./native-application";
+import { accountingFixture, fixtureArtifacts } from "./native-fixture-signer";
 import { type NativeBinding, NativeBindings, requireSuccessorCoreBindings } from "./native-graph";
 import { requireClosedBindings } from "./storage-installation";
 
@@ -46,11 +47,36 @@ const rehearsalKey = Effect.gen(function* () {
   };
 });
 const testSigner = await Effect.runPromise(rehearsalKey);
-it.effect.each(["unsigned", "original", "successor-dormant", "successor-active"] as const)(
+const accountingConfiguration = {
+  FIXTURE_ACCOUNTING_ROLLOUT: "true",
+  FIXTURE_RELEASE_OPERATION: "rollout-fixture-successor",
+  NATIVE_STORAGE_ADMISSION: "closed",
+  NATIVE_STORAGE_HOSTS: "acceptance",
+  GITHUB_ACTIONS: "true",
+  GITHUB_REF_PROTECTED: "true",
+  GITHUB_REF: "refs/heads/trunk",
+  GITHUB_REPOSITORY: "B4rz99/fidy-ai",
+  GITHUB_SHA: "1".repeat(40),
+  NATIVE_FIXTURE_SIGNER_SHA256: testSigner.fingerprint,
+  CONTRACT_DIGEST: accountingFixture.contractDigest,
+} as const;
+const accountingMain = {
+  Smoke: accountingFixture.smokeMain,
+  Core: "../../apps/server/cloudflare/core-worker.ts",
+  Ingress: "../../apps/server/cloudflare/public-worker.ts",
+};
+it.effect.each([
+  "unsigned",
+  "original",
+  "successor-dormant",
+  "successor-active",
+  "successor-accounting",
+] as const)(
   "declares exactly the requested Core and smoke bindings before resources exist (%s)",
   (mode) => {
     const enabled = mode !== "unsigned";
     const successorPlan = mode.startsWith("successor-");
+    const accounting = mode === "successor-accounting";
     const operation =
       mode === "successor-active" ? "rollout-fixture-successor" : "plan-fixture-successor";
     const revision = "1".repeat(40);
@@ -73,22 +99,56 @@ it.effect.each(["unsigned", "original", "successor-dormant", "successor-active"]
       RECOVERY_OPERATOR_EMAIL: "operator@example.com",
       BETA_PRO_OPERATOR_EMAIL: "obarboza@fidyapp.com",
       SAMPLE_REVIEWER_EMAIL: "obarboza@fidyapp.com",
+      ...(accounting ? accountingConfiguration : {}),
     });
     const stack = Alchemy.Stack(
       "NativePlanFixture",
       { providers: Cloudflare.providers(), state: Alchemy.inMemoryState() },
       nativeApplication.pipe(Effect.provideService(ConfigProvider.ConfigProvider, configuration))
     );
-    const assertBindings = (
-      worker: "Core" | "Smoke",
-      observed: ReadonlyArray<NativeBinding>
-    ): void => {
+    const assertWorker = ({
+      worker,
+      observed,
+      props,
+    }: {
+      worker: "Core" | "Ingress" | "Smoke";
+      observed: ReadonlyArray<NativeBinding>;
+      props: unknown;
+    }): void => {
       if (successorPlan && worker === "Core") {
         requireSuccessorCoreBindings({ bindings: observed, fingerprint });
       } else requireClosedBindings({ worker, bindings: observed, fingerprint });
+      const source = accounting && worker === "Smoke" ? accountingFixture.revision : revision;
+      expect(observed).toContainEqual(
+        expect.objectContaining({ name: "RELEASE_GIT_SHA", text: source })
+      );
+      if (accounting) {
+        expect(observed).toContainEqual(
+          expect.objectContaining({
+            name: "CONTRACT_DIGEST",
+            text: accountingFixture.contractDigest,
+          })
+        );
+        expect(props).toMatchObject({ main: accountingMain[worker] });
+      }
+      expect(observed.some((item) => item.name === "NATIVE_FIXTURE_SIGNING_KEY")).toBe(
+        expectedSigner(worker, enabled)
+      );
+      if (expectedSigner(worker, enabled)) {
+        expect(
+          observed.find((binding) => binding.name === "ACCEPTANCE_PROVIDER_REVISION")?.text
+        ).toBe("8dd3b0d47d655868c1ab4f16b6145a06d99bd721");
+        expect(() =>
+          requireClosedBindings({ worker, bindings: observed, fingerprint: "" })
+        ).toThrow();
+        expect(() =>
+          requireClosedBindings({ worker, bindings: observed, fingerprint: "0".repeat(64) })
+        ).toThrow();
+      }
     };
-    const generation =
-      enabled && !successorPlan ? "aa447b8b781cdda48e021c1332f4377eae00f179" : revision;
+    const regularGeneration =
+      mode === "original" ? "aa447b8b781cdda48e021c1332f4377eae00f179" : revision;
+    const generation = accounting ? accountingFixture.revision : regularGeneration;
     return evalStack(
       stack,
       (compiled) =>
@@ -112,8 +172,8 @@ it.effect.each(["unsigned", "original", "successor-dormant", "successor-active"]
             ).toEqual([pinId]);
           }
           const bindings = Schema.Struct({ bindings: Schema.optional(NativeBindings) });
-          for (const worker of ["Core", "Smoke"] as const) {
-            const id = worker === "Core" ? "Core" : "ReleaseSmoke-" + generation;
+          for (const worker of ["Core", "Ingress", "Smoke"] as const) {
+            const id = worker === "Smoke" ? "ReleaseSmoke-" + generation : worker;
             const resource = Object.values(compiled.resources).find(
               (node) => node.LogicalId === id
             );
@@ -122,27 +182,32 @@ it.effect.each(["unsigned", "original", "successor-dormant", "successor-active"]
             const observed = rows.flatMap(
               (row) => Schema.decodeUnknownSync(bindings)(row.data).bindings ?? []
             );
-            expect(observed).toContainEqual(
-              expect.objectContaining({ name: "RELEASE_GIT_SHA", text: revision })
-            );
-            assertBindings(worker, observed);
-            expect(observed.some((item) => item.name === "NATIVE_FIXTURE_SIGNING_KEY")).toBe(
-              expectedSigner(worker, enabled)
-            );
-            if (expectedSigner(worker, enabled)) {
-              expect(
-                observed.find((binding) => binding.name === "ACCEPTANCE_PROVIDER_REVISION")?.text
-              ).toBe("8dd3b0d47d655868c1ab4f16b6145a06d99bd721");
-              expect(() =>
-                requireClosedBindings({ worker, bindings: observed, fingerprint: "" })
-              ).toThrow();
-              expect(() =>
-                requireClosedBindings({ worker, bindings: observed, fingerprint: "0".repeat(64) })
-              ).toThrow();
-            }
+            assertWorker({ worker, observed, props: resource.Props });
           }
         }),
       { stage: "production" }
     ).pipe(Effect.provide([Alchemist.layer(), Alchemy.inMemoryState()]));
   }
+);
+
+it.effect.each([
+  { NATIVE_STORAGE_ADMISSION: "open" },
+  { NATIVE_STORAGE_HOSTS: "staged" },
+  { FIXTURE_RELEASE_OPERATION: "stage-fixture-successor" },
+  { GITHUB_REF_PROTECTED: "false" },
+  { GITHUB_REPOSITORY: "unreviewed/fidy-ai" },
+  { GITHUB_SHA: "2".repeat(40) },
+  { NATIVE_FIXTURE_SIGNER_SHA256: "" },
+  { CONTRACT_DIGEST: "0".repeat(64) },
+])(
+  "refuses the retained accounting graph outside its closed reviewed coordinates (%j)",
+  (override) =>
+    Effect.gen(function* () {
+      const configuration = ConfigProvider.fromUnknown({ ...accountingConfiguration, ...override });
+      const exit = yield* fixtureArtifacts(accountingConfiguration.GITHUB_SHA).pipe(
+        Effect.provideService(ConfigProvider.ConfigProvider, configuration),
+        Effect.exit
+      );
+      expect(exit._tag).toBe("Failure");
+    })
 );

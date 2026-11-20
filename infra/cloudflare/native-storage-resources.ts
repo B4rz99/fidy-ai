@@ -9,7 +9,12 @@ import {
   successorPlanSelection,
   verifyFixturePlan,
 } from "./native-fixture-plan";
-import { expectedFixtureSigner, fixtureBuild, resourceRevision } from "./native-fixture-signer";
+import {
+  expectedFixtureSigner,
+  fixtureArtifacts,
+  fixtureBuild,
+  resourceRevision,
+} from "./native-fixture-signer";
 import { productionTopology } from "../../apps/server/cloudflare/runtime/contract";
 import { requireHostPlan, stagedAccessApplications } from "./native-host-plan";
 import * as Alchemist from "alchemy/Alchemist";
@@ -22,7 +27,7 @@ import {
 import { firstInstallEdge } from "./native-storage-release";
 import { requireNativeResourcePlan } from "./native-graph";
 import { type Plan, describePlan, describeResource } from "alchemy/Plan";
-import { Config, Effect, Schema } from "effect";
+import { Config, Effect, Option, Schema } from "effect";
 import { HttpClient, HttpClientRequest } from "effect/http";
 import { releaseCommand, releaseEvidence } from "./production-release";
 import { readRecoveryPin } from "./native-recovery-identity";
@@ -296,6 +301,7 @@ const requireSuccessorSource = Effect.fn(function* (action: SuccessorAction) {
     "GITHUB_WORKFLOW_REF"
   );
   const revision = yield* Config.String("RELEASE_GIT_SHA");
+  const artifacts = yield* fixtureArtifacts(revision);
   const fingerprint = yield* expectedFixtureSigner;
   const directory = yield* Config.String("RUNNER_TEMP");
   const raw = yield* releaseEvidence.readFile(directory + "/fixture-successor-source.json");
@@ -304,12 +310,12 @@ const requireSuccessorSource = Effect.fn(function* (action: SuccessorAction) {
     !/^[a-f0-9]{40}$/u.test(revision) ||
     !/^[a-f0-9]{64}$/u.test(fingerprint) ||
     source.signerSha256 !== fingerprint ||
-    source.revision !== revision ||
+    source.revision !== artifacts.resourceRevision ||
     source.previousRevision === revision
   ) {
     return yield* Effect.fail(Error("Unqualified closed successor plan source"));
   }
-  return { revision, fingerprint, directory, source };
+  return { revision, artifacts, fingerprint, directory, source };
 });
 export const readNativeScopedPlan = Effect.fn("readNativeScopedPlan")(function* ({
   profile,
@@ -332,14 +338,16 @@ export const readNativeScopedPlan = Effect.fn("readNativeScopedPlan")(function* 
 });
 
 const planFixtureSuccessor = Effect.fn(function* (action: SuccessorAction) {
-  const { revision, fingerprint, directory, source } = yield* requireSuccessorSource(action);
+  const { revision, artifacts, fingerprint, directory, source } =
+    yield* requireSuccessorSource(action);
+  const generation = artifacts.resourceRevision;
   const active = action === "rollout";
   const profile = yield* Config.String("ALCHEMY_PROFILE");
   const snapshot = yield* readNativeScopedPlan({
     profile,
     fingerprint,
     revision,
-    include: successorPlanSelection(revision),
+    include: successorPlanSelection(generation),
   });
   const observed = describePlan(snapshot.native);
   if (snapshot.native.selectedFqns === undefined || observed.actions.length !== 0) {
@@ -347,12 +355,13 @@ const planFixtureSuccessor = Effect.fn(function* (action: SuccessorAction) {
   }
   yield* Effect.try(() => {
     const verify = active ? requireActiveSuccessorLifecycle : requireSuccessorLifecycle;
-    verify({ rows: observed.resources, revision });
+    verify({ rows: observed.resources, revision: generation });
     requireSuccessorPlanBindings({
       plan: snapshot.native,
-      revision,
+      revision: generation,
       fingerprint,
       fallback: !active,
+      accountingRevision: artifacts.accountingRollout ? Option.some(revision) : Option.none(),
     });
   });
   const resources = observed.resources.map(({ logicalId, resourceType, action }) => ({

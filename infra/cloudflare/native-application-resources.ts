@@ -2,6 +2,8 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import { Effect } from "effect";
 import { freeTierWorkerObservability } from "./worker-observability";
 import { type NativeRelease, bindPlannedText } from "./native-application-bindings";
+import { accountingFixture } from "./native-fixture-signer";
+import { fileURLToPath } from "node:url";
 
 export const nativeBuckets = Effect.all({
   STATEMENT_STAGING_BUCKET: Cloudflare.R2.Bucket("StatementStagingBucket", {
@@ -75,6 +77,19 @@ export const nativeWorkflows = Effect.sync(() => ({
     workflowName: "fidy-native-login-email",
   }),
 }));
+const smokeIdentity = (
+  release: NativeRelease
+): Pick<NativeRelease["shared"], "RELEASE_GIT_SHA" | "CONTRACT_DIGEST"> =>
+  release.accountingRollout
+    ? {
+        RELEASE_GIT_SHA: accountingFixture.revision,
+        CONTRACT_DIGEST: accountingFixture.contractDigest,
+      }
+    : {
+        RELEASE_GIT_SHA: release.release.gitRevision,
+        CONTRACT_DIGEST: release.release.contractDigest,
+      };
+
 export const nativeSmokeExecutor = Effect.fn(function* (input: {
   release: NativeRelease;
   queues: NativeQueues;
@@ -82,12 +97,22 @@ export const nativeSmokeExecutor = Effect.fn(function* (input: {
 }) {
   const revision = input.release.resourceRevision,
     workflowName = "fidy-native-smoke-" + revision;
-  const smoke = yield* Cloudflare.Worker("ReleaseSmoke-" + revision, {
+  const retained = input.release.accountingRollout ? accountingFixture : undefined;
+  const logicalId = "ReleaseSmoke-" + revision;
+  const historicalBuild = {
+    output: {
+      dir: fileURLToPath(
+        new URL("../../interrupted/infra/cloudflare/.alchemy/bundles/" + logicalId, import.meta.url)
+      ),
+    },
+  };
+  const smoke = yield* Cloudflare.Worker(logicalId, {
     name: "fidy-native-smoke-" + revision,
-    main: "../../apps/server/cloudflare/release-smoke-worker.ts",
+    main: retained?.smokeMain ?? "../../apps/server/cloudflare/release-smoke-worker.ts",
     compatibility: { date: "2026-09-08" },
     workersDev: false,
     observability: freeTierWorkerObservability,
+    ...(retained ? { build: historicalBuild } : {}),
     env: {
       SMOKE_BUCKET: input.buckets.SMOKE_BUCKET,
       NATIVE_STORAGE_ADMISSION: input.release.shared.NATIVE_STORAGE_ADMISSION,
@@ -100,8 +125,7 @@ export const nativeSmokeExecutor = Effect.fn(function* (input: {
         className: "ReleaseSmokeWorkflowV2",
       }),
       CF_VERSION_METADATA: Cloudflare.Workers.VersionMetadata(),
-      RELEASE_GIT_SHA: input.release.release.gitRevision,
-      CONTRACT_DIGEST: input.release.release.contractDigest,
+      ...smokeIdentity(input.release),
     },
   });
   yield* bindPlannedText(smoke, { SMOKE_QUEUE_NAME: input.queues.SMOKE_QUEUE.queueName });

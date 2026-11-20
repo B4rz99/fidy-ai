@@ -242,12 +242,22 @@ def run(args):
         return actual
 
     if args.mode != "cleanup" and args.browser_workspace:
+        if installed.get("nativeAccountingWitness") is not True:
+            raise ValueError("Hosted browser requires the qualified native accounting witness")
         checked_browser_origin(args.out/"origin-before-enrollment.json",time.time())
     candidate = verify()
     os.environ["FIDY_NATIVE_FIXTURE_PROVIDER_REVISION"] = installed["retainedProvider"]["revision"]
     coords = dict(**candidate, account=account, prefix=prefix, archive=args.archive_sha256)
     cloud = Cloud(account,prefix)
     member = candidate.get("fixtureMember", "performance-1")
+    if args.mode != "cleanup" and installed.get("nativeAccountingWitness") is True:
+        for receipt_marker in (False, True):
+            previous = CustodyObject(
+                account, cloud, native_revision=installed["resourceRevision"],
+                member=member, receipt_marker=receipt_marker, read_only=True,
+            )
+            if previous.read()[1] is not None:
+                raise ValueError("The historical performance member already held cohort custody")
     store = CustodyObject(account, cloud, native_revision=revision, member=member)
     marker = CustodyObject(account, cloud, native_revision=revision, member=member, receipt_marker=True)
     directory = args.out / "fixture"

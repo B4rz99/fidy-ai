@@ -6,11 +6,11 @@ import {
   requireRoleBindings,
   requireSuccessorCoreBindings,
 } from "./native-graph";
-import { receiptWorkerMain } from "./native-fixture-signer";
+import { accountingFixture, receiptWorkerMain } from "./native-fixture-signer";
 import { installedOrigins } from "@fidy/server/browser-transport";
 import { type Plan, describeResource } from "alchemy/Plan";
 import * as Cloudflare from "alchemy/Cloudflare";
-import { Effect, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { namespaceClasses } from "./storage-release";
 
 export const nativeStack = "FidyNativeStorage";
@@ -167,6 +167,29 @@ type NativePlanBindings = {
   fingerprint: string;
   fallback: boolean;
 };
+const requireAccountingBindings = (
+  role: NativeRole,
+  revision: string,
+  bindings: ReadonlyArray<NativeBinding>
+): void => {
+  const expected = {
+    RELEASE_GIT_SHA: role === "Smoke" ? accountingFixture.revision : revision,
+    CONTRACT_DIGEST: accountingFixture.contractDigest,
+    NATIVE_STORAGE_ADMISSION: "closed",
+    ...(role === "Ingress"
+      ? {}
+      : { SMOKE_QUEUE_NAME: "fidy-native-smoke-" + accountingFixture.revision }),
+  };
+  for (const [name, text] of Object.entries(expected)) {
+    if (
+      !bindings.some(
+        (binding) => binding.name === name && binding.type === "plain_text" && binding.text === text
+      )
+    ) {
+      throw Error("Accounting rollout binding differs for " + role + " " + name);
+    }
+  }
+};
 const requirePlannedRoleBindings = ({
   role,
   bindings,
@@ -188,8 +211,12 @@ const requirePlannedBindings = ({
   hosts,
   fingerprint,
   fallback,
+  accountingRevision,
   successorPlan,
-}: NativePlanBindings & { successorPlan: boolean }): void => {
+}: NativePlanBindings & {
+  successorPlan: boolean;
+  accountingRevision: Option.Option<string>;
+}): void => {
   requireSignerHost(fingerprint, hosts);
   const resources = Object.values(plan.resources);
   const verifiedRoles = successorPlan
@@ -208,13 +235,17 @@ const requirePlannedBindings = ({
     requireFixtureService(role, bindings, fingerprint);
     requireSiteAsset(role, props, bindings);
     requirePlannedRoleBindings({ role, bindings, fingerprint, successorPlan });
+    if (Option.isSome(accountingRevision)) {
+      requireAccountingBindings(role, accountingRevision.value, bindings);
+    }
     if (role === "Core") requireNativeClasses(bindings);
   }
 };
 export const requireNativeBindings = (input: NativePlanBindings): void =>
-  requirePlannedBindings({ ...input, successorPlan: false });
-export const requireSuccessorPlanBindings = (input: Omit<NativePlanBindings, "hosts">): void =>
-  requirePlannedBindings({ ...input, hosts: "acceptance", successorPlan: true });
+  requirePlannedBindings({ ...input, successorPlan: false, accountingRevision: Option.none() });
+export const requireSuccessorPlanBindings = (
+  input: Omit<NativePlanBindings, "hosts"> & { accountingRevision: Option.Option<string> }
+): void => requirePlannedBindings({ ...input, hosts: "acceptance", successorPlan: true });
 const requireNativeClasses = (bindings: ReadonlyArray<NativeBinding>): void => {
   const classes = bindings.filter((binding) => binding.type === "durable_object_namespace");
   const verified = Object.entries(namespaceClasses).every(([name, expected]) =>

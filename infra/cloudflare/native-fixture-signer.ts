@@ -13,6 +13,14 @@ const successorOperations: ReadonlySet<string> = new Set([
   "recover-fixture-successor",
   "rollout-fixture-successor",
 ]);
+export const accountingFixture = {
+  revision: "de04a192c3836be0efb488b170a7b93b9f98f28f",
+  contractDigest: "7a998d31ff69335d7c90bef16407af1a772cf00aab9e44e23d6c2c357857618f",
+  smokeMain: "../../interrupted/apps/server/cloudflare/release-smoke-worker.ts",
+} as const;
+const accountingRolloutEnabled = Config.Boolean("FIXTURE_ACCOUNTING_ROLLOUT").pipe(
+  Config.withDefault(false)
+);
 const workerFiles = {
   ordinary: { Core: "core-worker", Ingress: "public-worker" },
   fallback: { Core: "fixture-fallback-core", Ingress: "fixture-fallback-ingress" },
@@ -94,9 +102,32 @@ export const fixtureSignerBindings = Effect.fn(function* (release: {
   };
 });
 
+const requireAccountingRollout = Effect.fn(function* (revision: string) {
+  yield* Config.Literal("rollout-fixture-successor", "FIXTURE_RELEASE_OPERATION");
+  yield* Config.Literal("closed", "NATIVE_STORAGE_ADMISSION");
+  yield* Config.Literal("acceptance", "NATIVE_STORAGE_HOSTS");
+  yield* Config.Literal(accountingFixture.contractDigest, "CONTRACT_DIGEST");
+  yield* Config.Literal("true", "GITHUB_ACTIONS");
+  yield* Config.Literal("true", "GITHUB_REF_PROTECTED");
+  yield* Config.Literal("refs/heads/trunk", "GITHUB_REF");
+  yield* Config.Literal("B4rz99/fidy-ai", "GITHUB_REPOSITORY");
+  const verifier = yield* Config.String("GITHUB_SHA");
+  if (
+    !/^[a-f0-9]{40}$/u.test(verifier) ||
+    revision !== verifier ||
+    revision === accountingFixture.revision
+  ) {
+    return yield* Effect.fail(
+      Error("Accounting rollout requires the current verifier as app source")
+    );
+  }
+});
+
 export const fixtureArtifacts = Effect.fn(function* (revision: string) {
   const retainProvider = (yield* expectedFixtureSigner) !== "";
   const operation = yield* Config.String("FIXTURE_RELEASE_OPERATION").pipe(Config.withDefault(""));
+  const accountingRollout = yield* accountingRolloutEnabled;
+  if (accountingRollout) yield* requireAccountingRollout(revision);
   const successorPlan = successorOperations.has(operation);
   const fallback = successorPlan
     ? operation !== "rollout-fixture-successor"
@@ -104,13 +135,14 @@ export const fixtureArtifacts = Effect.fn(function* (revision: string) {
   if ((fallback || successorPlan) && !retainProvider) {
     return yield* Effect.die(Error("Dormant fixture requires the protected retained provider"));
   }
+  const supportRevision = resourceRevision({ revision, signed: retainProvider });
+  const generation = successorPlan ? revision : supportRevision;
   return {
     fallback,
     retainProvider,
     successorPlan,
-    resourceRevision: successorPlan
-      ? revision
-      : resourceRevision({ revision, signed: retainProvider }),
-    supportRevision: resourceRevision({ revision, signed: retainProvider }),
+    accountingRollout,
+    resourceRevision: accountingRollout ? accountingFixture.revision : generation,
+    supportRevision,
   };
 });

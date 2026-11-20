@@ -44,15 +44,33 @@ export const performanceReceiptPaths = {
 } as const;
 export type PerformanceMember = keyof typeof performanceReceiptPaths;
 export const performanceReceiptPath = performanceReceiptPaths["performance-1"];
+const performanceAccountingPaths = {
+  "performance-1":
+    "/internal/release-smoke?acceptance=transaction-accounting&cohort=performance&ordinal=1",
+  "performance-2":
+    "/internal/release-smoke?acceptance=transaction-accounting&cohort=performance&ordinal=2",
+} as const;
 
-export const performanceReceiptMember = (request: Request): Option.Option<PerformanceMember> => {
+const performanceMember = (
+  request: Request,
+  paths: Readonly<Record<PerformanceMember, string>>
+): Option.Option<PerformanceMember> => {
   if (request.method !== "POST") return Option.none();
   const url = new URL(request.url);
   const path = url.pathname + url.search;
-  if (path === performanceReceiptPath) return Option.some("performance-1");
-  if (path === performanceReceiptPaths["performance-2"]) return Option.some("performance-2");
+  if (path === paths["performance-1"]) return Option.some("performance-1");
+  if (path === paths["performance-2"]) return Option.some("performance-2");
   return Option.none();
 };
+export const performanceReceiptMember = (request: Request): Option.Option<PerformanceMember> =>
+  performanceMember(request, performanceReceiptPaths);
+export const performanceAccountingMember = (request: Request): Option.Option<PerformanceMember> =>
+  performanceMember(request, performanceAccountingPaths);
+export const performanceReceiptMarker = ({
+  nativeRevision,
+  member,
+}: Readonly<{ nativeRevision: string; member: PerformanceMember }>): string =>
+  "_release-smoke/" + nativeRevision + "/acceptance/transactions/" + member;
 const sha = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u));
 export const ReceiptRequest = Schema.Struct({
   resourcePrefix: Schema.String.check(Schema.isPattern(/^fidy-2259-[a-f0-9]{12}$/u)),
@@ -70,4 +88,9 @@ export const SealedTransactionReceipt = Schema.Struct({
   iv: Schema.String.check(Schema.isPattern(/^[a-f0-9]{24}$/u)),
   sealed: Schema.String.check(Schema.isPattern(/^(?:[a-f0-9]{2}){16,24000}$/u)),
   signature: Schema.String.check(Schema.isPattern(/^[a-f0-9]{128}$/u)),
+});
+
+export const PerformanceAccountingRequest = Schema.Struct({
+  phase: Schema.Literals(["before", "after"]),
+  capture: SealedTransactionReceipt,
 });

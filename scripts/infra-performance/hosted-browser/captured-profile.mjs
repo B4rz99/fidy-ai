@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { join, resolve, sep } from "node:path";
 
-import { fields, isRecord } from "./contracts";
+import { Predicate } from "effect";
+import { fields } from "./contracts";
 import { mountCapturedTransactionHistory } from "../reference/fresh-transactions.mjs";
 
 const { chromium } = await import("@playwright/test");
@@ -20,7 +21,7 @@ const sum = (value) => createHash("sha256").update(JSON.stringify(value)).digest
 /** @param {unknown} value Observed field. @returns {unknown} Observed result. */
 const sorted = (value) => {
   if (Array.isArray(value)) return value.map(sorted);
-  if (!isRecord(value)) return value;
+  if (!Predicate.isObject(value)) return value;
   return Object.fromEntries(
     Object.keys(value)
       .sort()

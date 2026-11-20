@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Predicate, Schema } from "effect";
 
 const extras = Schema.Record(Schema.String, Schema.Unknown);
 const cost = Schema.Struct({ rowsRead: Schema.Int, rowsWritten: Schema.Int });
@@ -49,7 +49,7 @@ const event = Schema.StructWithRest(
   Schema.Struct({
     stage: Schema.optional(Schema.String),
     complete: Schema.optional(Schema.Boolean),
-    milliseconds: Schema.optional(Schema.Number),
+    milliseconds: Schema.optional(Schema.Finite),
     bodyBytes: Schema.optional(Schema.Int),
     status: Schema.optional(Schema.Int),
     failed: Schema.optional(Schema.String),
@@ -61,21 +61,23 @@ export const parseConfig = (input: unknown): PairConfig => {
   Schema.asserts(config, input);
   return input;
 };
-export const parseCost = Schema.decodeUnknownSync(Schema.fromJsonString(cost));
-export const parseDeployment = Schema.decodeUnknownSync(
+const decoder = <Value>(schema: Schema.ConstraintDecoder<Value>): ((input: unknown) => Value) =>
+  Schema.decodeUnknownSync(schema);
+export const parseCost = decoder(Schema.fromJsonString(cost));
+export const parseDeployment = decoder(
   Schema.Struct({ gitRevision: Schema.String, contractDigest: Schema.String })
 );
-export const parseReport = Schema.decodeUnknownSync(
+export const parseReport = decoder(
   Schema.Struct({
     variant: Schema.Literals(["d1", "do"]),
     snapshots: extras,
     events: Schema.Array(event),
   })
 );
-export const parseAck = Schema.decodeUnknownSync(
+export const parseAck = decoder(
   Schema.Struct({ data: Schema.Struct({ id: Schema.String, revision: Schema.Int }) })
 );
-export const parseRefusal = Schema.decodeUnknownSync(
+export const parseRefusal = decoder(
   Schema.Struct({
     error: Schema.Struct({
       failedCallIndex: Schema.Int,
@@ -121,6 +123,5 @@ export type ProfileEvidence = {
   snapshots: Snapshots;
   report: () => Promise<number>;
 };
-export const isRecord = (value: unknown): value is Record<string, unknown> =>
-  value !== null && typeof value === "object" && !Array.isArray(value);
-export const fields = (value: unknown): Record<string, unknown> => (isRecord(value) ? value : {});
+export const fields = (value: unknown): Record<string, unknown> =>
+  Predicate.isObject(value) ? value : {};

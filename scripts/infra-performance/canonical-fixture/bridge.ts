@@ -170,91 +170,97 @@ const authority = Effect.gen(function* () {
   }
   return { secret, revision };
 });
-const nativeMeters = async (runtime: Miniflare): Promise<unknown> => {
-  const core = await runtime.getWorker("core");
-  const sql: unknown = await (await core.fetch("https://offline.invalid/native-row-counts")).json();
-  const r2 = Object.fromEntries(
-    await Promise.all(
-      ["core", "ingress", "closed-provider"].map(async (name) => {
-        const worker = await runtime.getWorker(name);
-        const counters: unknown = await (
-          await worker.fetch("https://offline.invalid/r2-counts")
-        ).json();
-        return [name, counters] as const;
-      })
-    )
+const nativeMeters = Effect.fnUntraced(function* (runtime: Miniflare) {
+  const read = Effect.fnUntraced(function* (name: string, path: string) {
+    const worker = yield* io(() => runtime.getWorker(name));
+    const response = yield* io(() => worker.fetch("https://offline.invalid/" + path));
+    const counters: unknown = yield* io(() => response.json());
+    return counters;
+  });
+  const sql = yield* read("core", "native-row-counts");
+  const counters = yield* Effect.forEach(
+    ["core", "ingress", "closed-provider"],
+    (name) => read(name, "r2-counts").pipe(Effect.map((value) => [name, value] as const)),
+    { concurrency: 3 }
   );
-  return { sql, r2 };
-};
-const signedForward = async (
-  runtime: Miniflare
-): Promise<(request: Request) => Promise<Response>> => {
-  const environment = environmentOf(await Effect.runPromise(authority));
-  const forward = async (request: Request): Promise<Response> => {
+  return { sql, r2: Object.fromEntries(counters) };
+});
+
+const signedForward = Effect.fnUntraced(function* (runtime: Miniflare) {
+  const environment = environmentOf(yield* authority);
+  const send = transport(runtime);
+  return Effect.fnUntraced(function* (request: Request) {
     request.headers.set(
       acceptanceProofHeader,
-      await Effect.runPromise(
-        signAcceptanceRequest({
-          request,
-          boundary: "ingress",
-          environment,
-          deadline: Date.now() + acceptanceLifetimeMs,
-        })
-      )
+      yield* signAcceptanceRequest({
+        request,
+        boundary: "ingress",
+        environment,
+        deadline: (yield* Clock.currentTimeMillis) + acceptanceLifetimeMs,
+      })
     );
-    return Effect.runPromise(transport(runtime)(request));
-  };
-  return forward;
-};
-const runMountedWorkspace = (
-  runtime: Miniflare,
-  active: Session
-): Effect.Effect<void, FixtureTransportError> =>
-  io(async () => {
-    const { runBrowser } = await import("../hosted-browser/captured-profile.mjs");
-    const manifest: unknown = await Bun.file(
-      process.env.FIDY_DIAGNOSTIC_DIR + "/native/fixture/manifest.json"
-    ).json();
-    if (!Schema.is(mountedManifest)(manifest)) throw new FixtureTransportError();
-    const forward = await signedForward(runtime);
-    const before = await nativeMeters(runtime);
-    await runBrowser({
+    return yield* send(request);
+  });
+});
+
+const runMountedWorkspace = Effect.fnUntraced(function* (runtime: Miniflare, active: Session) {
+  const { runBrowser } = yield* io(() => import("../hosted-browser/captured-profile.mjs"));
+  const directory = yield* Config.String("FIDY_DIAGNOSTIC_DIR");
+  const manifest: unknown = yield* io(() =>
+    Bun.file(directory + "/native/fixture/manifest.json").json()
+  );
+  if (!Schema.is(mountedManifest)(manifest)) return yield* new FixtureTransportError();
+  const forward = yield* signedForward(runtime);
+  const before = yield* nativeMeters(runtime);
+  yield* io(() =>
+    runBrowser({
       variant: "do",
       origins: api,
       cookie: active.cookie,
       expected: manifest.history,
       workspace: manifest.workspace,
-      forward,
-    });
-    const afterReads = await nativeMeters(runtime);
-    const { proveScopedCorrection } = await import("../hosted-browser/scoped-correction.mjs");
-    const mutation = await proveScopedCorrection(
-      manifest.history,
-      async (method: string, path: string, body?: unknown) => {
-        await Bun.sleep(caseIntervalMs);
-        return forward(
-          new Request(api.api + path, {
-            method,
-            headers: {
-              origin: api.browser,
-              ...sessionHeaders(active),
-              "content-type": "application/json",
-            },
-            ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-          })
-        );
-      }
+      forward: (request) => Effect.runPromise(forward(request)),
+    })
+  );
+  const afterReads = yield* nativeMeters(runtime);
+  const { proveScopedCorrection } = yield* io(
+    () => import("../hosted-browser/scoped-correction.mjs")
+  );
+  const mutate = Effect.fnUntraced(function* (method: string, path: string, body?: unknown) {
+    yield* Effect.sleep(caseIntervalMs);
+    return yield* forward(
+      new Request(api.api + path, {
+        method,
+        headers: {
+          origin: api.browser,
+          ...sessionHeaders(active),
+          "content-type": "application/json",
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      })
     );
-    await Bun.write(
-      process.env.FIDY_DIAGNOSTIC_DIR + "/ordinary-native-mutation.json",
-      JSON.stringify(mutation)
-    );
-    await Bun.write(
-      process.env.FIDY_DIAGNOSTIC_DIR + "/ordinary-native-accounting.json",
-      JSON.stringify({ before, afterReads, afterMutations: await nativeMeters(runtime) })
-    );
-    offer({ status: 200 });
   });
+  const mutation = yield* io(() =>
+    proveScopedCorrection(manifest.history, (method, path, body) =>
+      Effect.runPromise(mutate(method, path, body))
+    )
+  );
+  const afterMutations = yield* nativeMeters(runtime);
+  yield* io(() =>
+    Bun.write(directory + "/ordinary-native-mutation.json", JSON.stringify(mutation))
+  );
+  yield* io(() =>
+    Bun.write(
+      directory + "/ordinary-native-accounting.json",
+      JSON.stringify({
+        before,
+        afterReads,
+        afterMutations,
+      })
+    )
+  );
+  offer({ status: 200 });
+});
 export const serveFixture = Effect.fn(function* (runtime: Miniflare) {
   const service = client(yield* authority, transport(runtime));
   const active = yield* start(service);

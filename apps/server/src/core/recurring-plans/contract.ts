@@ -1,4 +1,5 @@
-import { BigDecimal, type Brand, DateTime, Option, Schema } from "effect";
+import { BigDecimal, type Brand, Schema } from "effect";
+import { isExistingCalendarDate } from "~/core/_shared/time";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { Currency, Money, type ReadonlyMoney } from "~/core/_shared/money";
 
@@ -11,9 +12,7 @@ const maximumDay = 31;
 export const RecurringDate = Schema.String.check(
   Schema.isPattern(/^20\d{2}-\d{2}-\d{2}$/u),
   Schema.makeFilter(
-    (value: string) =>
-      Option.exists(DateTime.make(value), (date) => DateTime.formatIsoDateUtc(date) === value) ||
-      "Expected a valid local calendar date"
+    (value: string) => isExistingCalendarDate(value) || "Expected a valid local calendar date"
   )
 );
 export const RecurringMonth = Schema.String.check(Schema.isPattern(/^20\d{2}-(0[1-9]|1[0-2])$/u));

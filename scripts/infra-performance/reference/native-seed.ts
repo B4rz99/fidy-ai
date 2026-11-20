@@ -25,7 +25,7 @@ const execute = (
   Effect.tryPromise(() => db.exec(...args));
 const everyHundred = 100;
 // Match the immutable D1 fixture's IDs, facts and dates. Bound each native SQLite statement.
-type FinancialFixture = { subject: string; segment: string; d1: boolean };
+type FinancialFixture = { subject: string; segment: string; d1: boolean; retainedReview: number };
 const transactions = Effect.fn(function* (
   db: Owner,
   size: Size,
@@ -124,69 +124,66 @@ const planning = Effect.fn(function* (
     );
   }
 });
-const reviews = Effect.fn(function* (
+const reviewSubmission = Effect.fn(function* (
   db: Owner,
-  size: Size,
-  { subject, segment }: FinancialFixture
+  { subject, segment }: FinancialFixture,
+  { start, end, expired }: { start: number; end: number; expired: boolean }
 ) {
-  const staging = `84000000-0000-4000-${segment}-000000000000`;
-  const submission = `85000000-0000-4000-${segment}-000000000000`;
+  const suffix = String(start).padStart(idDigits, "0");
+  const staging = `84000000-0000-4000-${segment}-${suffix}`;
+  const submission = `85000000-0000-4000-${segment}-${suffix}`;
   const retentionMs = retentionDays * dayMs;
-  const expires = epoch + retentionMs;
+  const created = expired ? epoch - retentionMs : epoch;
+  const expires = created + retentionMs;
   yield* execute(
     db,
     `INSERT INTO statement_staging_objects(id,user_id,object_key,byte_length,sha256,source_format,status,created_at_ms,expires_at_ms,published_submission_id)
-    VALUES(?1,?2,'synthetic-assessment-original-' || ?2,1,?3,'csv','published',?,?,?)`,
+    VALUES(?1,?2,'synthetic-assessment-original-' || ?1,1,?3,'csv','published',?,?,?)`,
     staging,
     subject,
     "a".repeat(digestCharacters),
-    epoch,
+    created,
     expires,
     submission
   );
   yield* execute(
     db,
     `INSERT INTO statement_submissions(id,user_id,idempotency_key,staging_id,submitted_at_ms,source_format,parser_revision,service_market,locale,time_zone,status,retention_expires_at_ms)
-    VALUES(?,?,'86000000-0000-4000-${segment}-000000000000',?,?,'csv','statement-parser-v1','CO','es-CO','America/Bogota','queued',?)`,
+    VALUES(?,?,'86000000-0000-4000-${segment}-${suffix}',?,?,'csv','statement-parser-v1','CO','es-CO','America/Bogota','queued',?)`,
     submission,
     subject,
     staging,
-    epoch,
+    created,
     expires
   );
   yield* execute(
     db,
-    `WITH RECURSIVE items(i) AS (VALUES(0) UNION ALL SELECT i+1 FROM items WHERE i+1<?1)
+    `WITH RECURSIVE items(i) AS (VALUES(CAST(?6 AS INTEGER)) UNION ALL SELECT i+1 FROM items WHERE i+1<?1)
     INSERT INTO ingestion_review_items(source_kind,id,user_id,statement_submission_id,record_number,reason,original_evidence,issues_json,evidence_state,evidence_expires_at_ms,created_at_ms,service_market,locale,time_zone,source_format,parser_revision,extractor_revision)
-    SELECT 'statement',printf('87000000-0000-4000-${segment}-%012d',i),?2,?3,i+1,'mapping-unavailable',
-    'Original sintético ' || i || ': 2026-10-01,25000,Mercado','[]','retained',?4,?5,'CO','es-CO','America/Bogota','csv','statement-parser-v1','statement-mechanical-v1' FROM items`,
-    size.review,
+    SELECT 'statement',printf('87000000-0000-4000-${segment}-%012d',i),?2,?3,i+1-?6,'mapping-unavailable',
+    CASE WHEN ?7=0 THEN 'Original sintético ' || i || ': 2026-10-01,25000,Mercado' END,'[]',CASE WHEN ?7=0 THEN 'retained' ELSE 'expired' END,?4,?5,'CO','es-CO','America/Bogota','csv','statement-parser-v1','statement-mechanical-v1' FROM items`,
+    end,
     subject,
     submission,
     expires,
-    epoch
+    created,
+    start,
+    Number(expired)
   );
 });
-export const seed = Effect.fn(function* (
-  db: Owner,
-  dataset: string,
-  user: string = subject,
-  index = 0,
-  d1 = false
-) {
-  if (!Number.isInteger(index) || index < 0 || index >= 256)
-    return yield* Effect.die("Invalid fixture User index");
-  const fixture = { subject: user, segment: "80" + index.toString(16).padStart(2, "0"), d1 };
-  if (
-    dataset !== "small" &&
-    dataset !== "production" &&
-    dataset !== "extreme" &&
-    dataset !== "breaking"
-  ) {
-    return yield* Effect.die("Unknown fixture size");
+const reviews = Effect.fn(function* (db: Owner, size: Size, fixture: FinancialFixture) {
+  if (fixture.retainedReview > 0) {
+    yield* reviewSubmission(db, fixture, { start: 0, end: fixture.retainedReview, expired: false });
   }
-  const size = sizes[dataset];
-  const start = performance.now();
+  if (fixture.retainedReview < size.review) {
+    yield* reviewSubmission(db, fixture, {
+      start: fixture.retainedReview,
+      end: size.review,
+      expired: true,
+    });
+  }
+});
+const prepareStanding = Effect.fn(function* (db: Owner, { subject: user, d1 }: FinancialFixture) {
   // The pinned D1 journey grants this User an active trial before browser approval.
   yield* execute(
     db,
@@ -203,6 +200,28 @@ export const seed = Effect.fn(function* (
       position
     );
   }
+});
+const maxUsers = 256,
+  hexRadix = 16;
+const validSize = (dataset: string): dataset is keyof typeof sizes => Object.hasOwn(sizes, dataset);
+const defaultUser = { subject, index: 0, d1: false, mixedReview: false };
+export const seed = Effect.fn(function* (db: Owner, dataset: string, config = defaultUser) {
+  const { subject: user, index, d1 } = config;
+  if (!Number.isInteger(index) || index < 0 || index >= maxUsers) {
+    return yield* Effect.die("Invalid fixture User index");
+  }
+  if (!validSize(dataset)) return yield* Effect.die("Unknown fixture size");
+  const size = sizes[dataset];
+  const cohortSize = 20;
+  const retainedReview = config.mixedReview ? Math.floor(size.review / cohortSize) : size.review;
+  const fixture = {
+    retainedReview,
+    subject: user,
+    segment: "80" + index.toString(hexRadix).padStart(2, "0"),
+    d1,
+  };
+  const start = performance.now();
+  yield* prepareStanding(db, fixture);
   process.stdout.write("REFERENCE_STAGE transactions\n");
   yield* transactions(db, size, fixture);
   process.stdout.write("REFERENCE_STAGE planning\n");

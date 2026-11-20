@@ -28,7 +28,7 @@ def summarize(rows, users, samples, audit=True):
         comparable &= len(successful) == len(selected)
         signatures[variant] = {(r["user"], r["sample"]): r["digest"] for r in successful}
         output[variant] = dict(offered=len(selected), expected=len(expected), completed=len(successful),
-                               failed=len(selected)-len(successful),
+                               failed=len(selected)-len(successful), incomplete=len(expected - set(signatures[variant])),
                                throttled=sum(r.get("status") == 429 for r in selected),
                                timeouts=sum(r.get("error") == "TimeoutError" for r in selected),
                                **{k: stats([r[k] for r in successful]) for k in ("bytes", "scheduledMs", "dispatchMs")})
@@ -43,10 +43,11 @@ def summarize(rows, users, samples, audit=True):
 
 if __name__ == "__main__":
     directory = Path(sys.argv[1])
+    plan = json.loads((directory / "plan.json").read_text())
     rows = [json.loads(line) for line in (directory / "attempts.jsonl").read_text().splitlines()]
     audits = json.loads((directory / "audit.json").read_text()) if (directory / "audit.json").exists() else {}
     result = {cell: summarize([r for r in rows if r["cell"] == cell], users, 30, audits.get(cell) is True)
-              for cell, users in (("history", 20), ("correction", 1))}
+              for cell, users in (("history", plan["users"]), ("correction", 1), ("rollback", 1))}
     (directory / "report.json").write_text(json.dumps(result, indent=2))
     for cell, report in result.items():
         print(cell, report["scheduledMs"], report["dispatchMs"])

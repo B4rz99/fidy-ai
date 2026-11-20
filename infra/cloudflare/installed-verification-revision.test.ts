@@ -94,3 +94,21 @@ it.effect(
       }
     })
 );
+
+it.effect("allows only the reviewed Workers declaration refresh across the exact Git blobs", () =>
+  Effect.gen(function* () {
+    const paths = "apps/server/package.json\0bun.lock\0infra/cloudflare/package.json\0";
+    const raw = [
+      ":100644 100644 bd090a37f14232d15dda4e39ec82a7958a110e8b 5d310aa462a7c4d16853e2ce49e5009cd4086047 M\tapps/server/package.json",
+      ":100644 100644 761257790873b34b8a9bf8a1e07c428d6248fe3d 211379fd87e4a55a39bb498d5f65fea72e50fe6c M\tbun.lock",
+      ":100644 100644 4b4d2769d45666eb66d57a071f63767a4c3a981e ade98affc69e6e3801f078d80541f4b9cf0b4847 M\tinfra/cloudflare/package.json",
+    ].join("\n");
+    const verify = (blobs: string): ReturnType<typeof verificationRevision> =>
+      verificationRevision(trunk, installed, (args) => {
+        if (args.includes("--raw")) return Effect.succeed(blobs);
+        return Effect.succeed(args.includes("--name-only") ? paths : "");
+      });
+    expect(yield* verify(raw)).toBe(installed);
+    expect(yield* Effect.isFailure(verify(raw.replace("211379fd", "ffffffff")))).toBe(true);
+  })
+);

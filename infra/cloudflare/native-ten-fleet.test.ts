@@ -155,3 +155,40 @@ it.effect("stops before erasure when fresh login identifies a different User", (
     expect(rows.get("object2")).toBe(true);
   })
 );
+
+it.effect(
+  "cleans positively bound peers and leaves an unlisted signup unresolved after a failed login",
+  () =>
+    Effect.gen(function* () {
+      const { port, state, calls, rows } = fixture();
+      rows.set("object2", true);
+      state.members.push(
+        { ordinal: 2, user: "user2", physical: "object2" },
+        { ordinal: 3, user: "", physical: "" }
+      );
+      const result = yield* runTenFleet(
+        state,
+        {
+          ...port,
+          login: (ordinal) =>
+            ordinal === 3
+              ? Effect.fail(Error("login temporarily unavailable"))
+              : port.login(ordinal),
+        },
+        "cleanup"
+      ).pipe(Effect.result);
+      expect(calls).toEqual(["erase2"]);
+      expect(result._tag).toBe("Failure");
+      expect(
+        state.events
+          .filter((event) => event.stage === "member-erased")
+          .map((event) => event["ordinal"])
+      ).toEqual([2]);
+      expect(
+        state.events
+          .filter((event) => event.stage === "member-unresolved")
+          .map((event) => event["ordinal"])
+      ).toEqual([3]);
+      expect(state.events.some((event) => event.stage === "cleanup-verified")).toBe(false);
+    })
+);

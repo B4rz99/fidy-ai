@@ -103,7 +103,7 @@ export const prepareTen = Effect.fn(function* (release: Release) {
 });
 const restore = Effect.fn(function* (release: Release, source: Source) {
   const fs = yield* FileSystem.FileSystem;
-  const saved = yield* Schema.decodeUnknownEffect(
+  const saved = yield* Schema.decodeEffect(
     Schema.fromJsonString(
       Schema.Struct({
         ...Store.fields,

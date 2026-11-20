@@ -2,9 +2,13 @@ import { Clock, Effect, Option, Schedule } from "effect";
 import type { UserObjects } from "./native-erasure-evidence";
 import type { FleetPilotBrowser } from "./native-fleet-pilot";
 
-// oxlint-disable-next-line no-magic-numbers -- The approved public cohort consists exactly of these signed ordinals.
-export const fleetOrdinals = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11] as const;
-export type FleetOrdinal = (typeof fleetOrdinals)[number];
+const firstOrdinal = 2,
+  lastOrdinal = 11;
+export const fleetOrdinals = Array.from(
+  { length: lastOrdinal - firstOrdinal + 1 },
+  (_, index) => firstOrdinal + index
+);
+export type FleetOrdinal = number;
 type Browser = Effect.Success<ReturnType<FleetPilotBrowser["login"]>>;
 type Event = { stage: string; at: number } & Readonly<Record<string, string | number>>;
 type Member = { ordinal: FleetOrdinal; user: string; physical: string };
@@ -129,9 +133,15 @@ const restoreIdentities = Effect.fn(function* (trial: Trial) {
   }
   yield* bind(trial);
 });
+const retainedTarget = (state: TenState, entry: Member): boolean =>
+  state.survivors.includes(entry.user) || state.baseline.some(([id]) => id === entry.physical);
+
 const submit = Effect.fn(function* (trial: Trial, entry: Member) {
   const { state, port } = trial;
   if (entry.physical === "") return Option.none<Browser>();
+  if (retainedTarget(state, entry)) {
+    return yield* Effect.fail(Error("Fleet cleanup target is a retained owner"));
+  }
   const rows = yield* port.inventory();
   yield* Effect.try(() => unchanged(state, rows));
   if (rows.get(entry.physical) !== true) return Option.none<Browser>();
@@ -148,7 +158,7 @@ const submit = Effect.fn(function* (trial: Trial, entry: Member) {
   } else yield* note(trial, "erasure-reply-unconfirmed", { ordinal: entry.ordinal });
   return session;
 });
-const disposed = Effect.fn(function* (trial: Trial) {
+const disposed = Effect.fn(function* (trial: Trial, final: boolean) {
   const { state, port } = trial;
   const rows = yield* port.inventory();
   yield* Effect.try(() => unchanged(state, rows));
@@ -156,17 +166,19 @@ const disposed = Effect.fn(function* (trial: Trial) {
     ...state.baseline.map(([id]) => id),
     ...state.members.map((item) => item.physical),
   ]);
-  if ([...rows.keys()].some((id) => !known.has(id))) {
+  if (final && [...rows.keys()].some((id) => !known.has(id))) {
     return yield* Effect.fail(Error("Unidentified physical object during cohort cleanup"));
   }
-  return state.members.every((item) => rows.get(item.physical) !== true);
+  return state.members
+    .filter((item) => item.physical !== "")
+    .every((item) => rows.get(item.physical) !== true);
 });
-const cleanup = Effect.fn(function* (trial: Trial) {
+const disposeMembers = Effect.fn(function* (trial: Trial) {
   const { state, port } = trial;
-  yield* port.renewCleanup();
-  yield* restoreIdentities(trial);
   const sessions = yield* Effect.forEach(state.members, (entry) => submit(trial, entry));
-  yield* Effect.suspend(() => port.renewCleanup().pipe(Effect.andThen(disposed(trial)))).pipe(
+  yield* Effect.suspend(() =>
+    port.renewCleanup().pipe(Effect.andThen(disposed(trial, false)))
+  ).pipe(
     Effect.repeat({
       while: (done) => !done,
       schedule: Schedule.spaced("30 seconds"),
@@ -181,13 +193,27 @@ const cleanup = Effect.fn(function* (trial: Trial) {
   }
   const expiry = yield* Effect.forEach(state.members, (member) => port.refused(member.ordinal));
   yield* Effect.all(expiry, { concurrency: 1, discard: true }).pipe(Effect.timeout("12 minutes"));
+});
+const cleanup = Effect.fn(function* (trial: Trial) {
+  const { state, port } = trial;
+  yield* port.renewCleanup();
+  const restored = yield* Effect.exit(restoreIdentities(trial));
+  const unresolved = state.members.filter((member) => member.physical === "" || member.user === "");
+  for (const member of unresolved) {
+    yield* note(trial, "member-unresolved", { ordinal: member.ordinal });
+  }
+  yield* disposeMembers(trial);
   const survivors = yield* port.survivors();
   if (
     survivors.length !== 2 ||
     survivors.some((id, index) => id !== state.survivors[index]) ||
-    !(yield* disposed(trial))
+    !(yield* disposed(trial, true))
   ) {
     return yield* Effect.fail(Error("Original fleet survivors or physical erasure regressed"));
+  }
+  if (restored._tag === "Failure") return yield* Effect.failCause(restored.cause);
+  if (unresolved.length > 0) {
+    return yield* Effect.fail(Error("Fleet signup identity remains unresolved"));
   }
   yield* note(trial, "cleanup-verified");
 });

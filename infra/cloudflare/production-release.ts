@@ -116,8 +116,9 @@ export type ProductionReleaseConfig = Readonly<{
 type Config = ProductionReleaseConfig;
 const fixtureVerifierIdentity = Effect.sync(() => {
   const environment = process.env;
-  if (environment.FIXTURE_STAGED_VERIFIER_SHA === undefined)
-    {return Option.none<{ application: string; verifier: string }>();}
+  if (environment.FIXTURE_STAGED_VERIFIER_SHA === undefined) {
+    return Option.none<{ application: string; verifier: string }>();
+  }
   const result = Schema.decodeUnknownOption(
     Schema.Struct({
       FIXTURE_STAGED_VERIFIER_SHA: SmokeIdentity.fields.gitRevision,

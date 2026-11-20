@@ -1,4 +1,7 @@
 from copy import deepcopy
+import json
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest import TestCase
 from unittest.mock import patch
 from uuid import UUID
@@ -89,3 +92,23 @@ class PairingStage(TestCase):
                 (installed["workers"][0], {"versionId":str(UUID(int=99))})):
             with self.subTest(mutation=mutation), patch.dict(obj, mutation), self.assertRaises(ValueError):
                 collect()
+
+    def test_recovery_publishes_only_the_source_from_the_independently_validated_seal(self):
+        with TemporaryDirectory() as temp:
+            env = {"GITHUB_SHA":self.archive.verifier, "STAGE_ARTIFACT":"34", "STAGE_SHA256":"e"*64,
+                   "EXPECTED_INSTALLED_REVISION":self.archive.source, "FIXTURE_RELEASE_OPERATION":"recover-fixture-fallback",
+                   "RUNNER_TEMP":temp, "GITHUB_ENV":str(Path(temp)/"env")}
+            with patch.object(pairing_stage, "sealed_pair", return_value=(self.stage, self.prior)), \
+                    patch.object(pairing_stage, "verify_dispatch") as check:
+                with patch.dict(env, EXPECTED_INSTALLED_REVISION=APPLICATION), self.assertRaises(ValueError):
+                    pairing_stage.bind(env)
+                self.assertEqual(list(Path(temp).iterdir()), [])
+                pairing_stage.bind(env)
+                check.assert_called_with(env, application=self.archive.source)
+            self.assertEqual(json.loads((Path(temp)/"native-fallback-stage.json").read_bytes()), self.stage)
+            self.assertEqual(json.loads((Path(temp)/"native-release.json.predecessor").read_bytes()), self.prior)
+            self.assertEqual(json.loads((Path(temp)/"native-release.json.seal").read_bytes()),
+                             {"artifactId":"34","sha256":"e"*64})
+            self.assertEqual((Path(temp)/"env").read_text().splitlines(), [
+                "RELEASE_GIT_SHA="+self.archive.source, "FIXTURE_PAIRING_APPLICATION="+self.archive.source,
+                "FIXTURE_STAGED_VERIFIER_SHA="+self.archive.verifier])

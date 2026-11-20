@@ -18,7 +18,7 @@ BUCKET = "fidy-native-release-smoke"
 LIFETIME = 20 * 60
 
 
-def custody_credentials(account, key, parent_id, token):
+def custody_credentials(account, key, parent_id, token, *, read_only=False):
     if not re.fullmatch("[a-f0-9]{32}", parent_id) or not token:
         raise Refused("invalid_parent_credential")
     def encoded(value):
@@ -26,7 +26,7 @@ def custody_credentials(account, key, parent_id, token):
         return base64.urlsafe_b64encode(raw).rstrip(b"=")
     now = int(time.time())
     claims = dict(sub=account, iss=parent_id, aud=f"{account}.r2.cloudflarestorage.com", iat=now,
-                  exp=now+2*LIFETIME, bucket=BUCKET, actions=["GetObject", "PutObject"],
+                  exp=now+2*LIFETIME, bucket=BUCKET, actions=["GetObject"] if read_only else ["GetObject", "PutObject"],
                   paths=dict(prefixPaths=[], objectPaths=[key]))
     unsigned = encoded(dict(alg="HS256", typ="JWT")) + b"." + encoded(claims)
     parent_secret = hashlib.sha256(token.encode()).hexdigest().encode()
@@ -37,10 +37,18 @@ def custody_credentials(account, key, parent_id, token):
 
 
 class CustodyObject:
-    def __init__(self, account, cloud):
+    def __init__(self, account, cloud, *, native_revision=None, receipt_marker=False):
         if not re.fullmatch("[a-f0-9]{32}", account):
             raise Refused("missing_account_binding")
         self.key = f"protected-storage/account/{account}/d1-ledger.json"
+        if native_revision is not None:
+            if not re.fullmatch("[0-9a-f]{40}", native_revision):
+                raise Refused("invalid_native_custody_revision")
+            self.key = (f"_release-smoke/{native_revision}/acceptance/transactions/performance-1" if receipt_marker
+                        else f"protected-storage/account/{account}/performance-1/{native_revision}.json")
+        elif receipt_marker:
+            raise Refused("invalid_native_custody_revision")
+        self.read_only = receipt_marker
         self.command = [
             "aws",
             "--endpoint-url",
@@ -58,7 +66,7 @@ class CustodyObject:
         if token.get("status") != "active":
             raise Refused("inactive_account_credential")
         self.env = dict(PATH=os.environ["PATH"], AWS_MAX_ATTEMPTS="1", AWS_EC2_METADATA_DISABLED="true",
-                        **custody_credentials(account, self.key, token["id"], cloud.auth))
+                        **custody_credentials(account, self.key, token["id"], cloud.auth, read_only=receipt_marker))
 
     def call(self, operation, *args):
         return subprocess.run(
@@ -76,9 +84,11 @@ class CustodyObject:
                 if b"(NoSuchKey)" in reply.stderr:
                     return None, None
                 raise Refused("account_ledger_unavailable")
-            return json.loads(reply.stdout)["ETag"], json.loads(path.read_text())
+            return json.loads(reply.stdout)["ETag"], (path.read_text() if self.read_only else json.loads(path.read_text()))
 
     def replace(self, version, value):
+        if self.read_only:
+            raise Refused("one_use_marker_is_read_only")
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp, "ledger")
             path.write_text(json.dumps(value))

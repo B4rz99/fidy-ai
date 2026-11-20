@@ -163,9 +163,8 @@ def bridge(mode, revision, session):
                 child.kill()
 
 
-def collect(mode, revision, prefix, out):
-    if mode != "rehearse":
-        raise ValueError("Hosted collection requires native row admission and an independent protected cleanup owner")
+def rehearse(revision, prefix, out):
+    mode = "rehearse"
     directory=out/"fixture"
     directory.mkdir(mode=0o700, exist_ok=True)
     # Serialize Session creation and receipt issuance separately from the canonical mutation journal.
@@ -211,12 +210,14 @@ def collect(mode, revision, prefix, out):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode",choices=("rehearse","hosted"))
+    parser.add_argument("mode",choices=("rehearse","hosted","cleanup"))
     parser.add_argument("--out",type=Path,required=True)
     parser.add_argument("--native-revision")
     parser.add_argument("--resource-prefix")
     parser.add_argument("--core-version")
     parser.add_argument("--ingress-version")
+    parser.add_argument("--release-artifact")
+    parser.add_argument("--archive-sha256")
     args=parser.parse_args()
     os.umask(0o077)
     args.out.mkdir(mode=0o700,parents=True,exist_ok=True)
@@ -229,10 +230,11 @@ def main():
         os.environ["TEST_FIXTURE_PRIVATE_KEY"],os.environ["FIDY_NATIVE_FIXTURE_PUBLIC_KEY"]=pair
         write(args.out/"rehearsal-verifier.json", {name:os.environ[name] for name in ("SMOKE_PROOF","FIDY_NATIVE_FIXTURE_PUBLIC_KEY")})
     else:
-        raise ValueError("Hosted collection requires native row admission and an independent protected cleanup owner")
+        from protected_cohort import run
+        return run(args)
     if not re.fullmatch(r"[a-f0-9]{40}",revision) or not re.fullmatch(r"fidy-2259-[a-f0-9]{12}",prefix):
         raise ValueError("Missing exact native revision or allocated comparison prefix")
-    verified=collect(args.mode,revision,prefix,args.out)
+    verified=rehearse(revision,prefix,args.out)
     if args.mode=="rehearse":
         envelope=private_file(args.out/"fixture","native-receipt.json")
         damaged={**envelope, "signature":("0" if envelope["signature"][0]!="0" else "1")+envelope["signature"][1:]}
@@ -242,7 +244,7 @@ def main():
             pass
         else:
             raise ValueError("Modified owner signature was accepted")
-        if collect(args.mode,revision,prefix,args.out)!=verified:
+        if rehearse(revision,prefix,args.out)!=verified:
             raise ValueError("Protected resume changed the signed fixture")
     write(args.out/"summary.json",{"scope":args.mode,"nativeRevision":revision,"member":"performance-1",
         "originals":8,"effective":7,"sourceAttestations":8,"linkedPairs":1,"verified":True,

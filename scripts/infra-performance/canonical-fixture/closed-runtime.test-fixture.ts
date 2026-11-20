@@ -47,28 +47,30 @@ const worker = Effect.fnUntraced(function* (
 });
 const deriveSecret = (secret: string, revision: string, purpose: string): string =>
   new Bun.CryptoHasher("sha256", secret).update(revision + "/" + purpose).digest("hex");
-const closedRuntime = Effect.fnUntraced(function* ({
-  revision,
-  secret,
-}: {
-  revision: string;
-  secret: string;
-}) {
+const api = installedOrigins.acceptance;
+const digestWidth = 64;
+const sharedBindings = (
+  revision: string,
+  secret: string
+): NonNullable<MiniflareWorkerConfig["env"]> => ({
+  RELEASE_GIT_SHA: text(revision),
+  RECOVERY_ISOLATION: text("isolated"),
+  NATIVE_STORAGE_ADMISSION: text("closed"),
+  BROWSER_ORIGIN: text(api.browser),
+  SMOKE_PROOF: text(secret),
+  CONTRACT_DIGEST: text("a".repeat(digestWidth)),
+  CF_VERSION_METADATA: { type: "version-metadata" as const },
+  RELEASE_FIXTURE: { type: "worker" as const, worker: "closed-provider" },
+  SMOKE_BUCKET: { type: "r2" as const, name: "private-receipt-rehearsal" },
+});
+export const closedRuntime = Effect.fnUntraced(function* (
+  { revision, secret }: { revision: string; secret: string },
+  directory: string = ""
+) {
   const privateKey = Redacted.value(yield* Config.Redacted("TEST_FIXTURE_PRIVATE_KEY"));
-  const api = installedOrigins.acceptance;
-  const digestWidth = 64;
-  const shared = {
-    RELEASE_GIT_SHA: text(revision),
-    RECOVERY_ISOLATION: text("isolated"),
-    NATIVE_STORAGE_ADMISSION: text("closed"),
-    BROWSER_ORIGIN: text(api.browser),
-    SMOKE_PROOF: text(secret),
-    CONTRACT_DIGEST: text("a".repeat(digestWidth)),
-    CF_VERSION_METADATA: { type: "version-metadata" as const },
-    RELEASE_FIXTURE: { type: "worker" as const, worker: "closed-provider" },
-    SMOKE_BUCKET: { type: "r2" as const, name: "private-receipt-rehearsal" },
-  };
+  const shared = sharedBindings(revision, secret);
   return new Miniflare({
+    ...(directory === "" ? {} : { resourcePersistencePath: directory }),
     handleStructuredLogs: (): void => undefined,
     workers: yield* Effect.all([
       worker("ingress", "./public-worker.ts", {
@@ -82,6 +84,9 @@ const closedRuntime = Effect.fnUntraced(function* ({
         env: {
           ...shared,
           ...nativeOwnerBindings,
+          EMAIL_BUCKET: { type: "r2", name: "private-email" },
+          STATEMENT_STAGING_BUCKET: { type: "r2", name: "private-statements" },
+          SAMPLE_BUCKET: { type: "r2", name: "private-samples" },
           NATIVE_FIXTURE_SIGNING_KEY: text(privateKey),
           SQLITE_STORE_CAPACITY_BYTES: text("1000000000"),
           GOOGLE_CLIENT_ID: text("fidy-native-google"),

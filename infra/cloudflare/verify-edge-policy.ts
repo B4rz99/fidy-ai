@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "12e0d0fd501f9e89c0f63aaa8080e61967982a3531781cf8992ee78c0582bfbe";
+const expectedEdgePolicyDigest = "d48d69b49012e1b31ae968135b248d61865b16d5f3bb7ec26d51ffcc3842b790";
 const securityArtifacts = [
   ...(await Promise.all(
     [
@@ -44,6 +44,20 @@ const securityArtifacts = [
       "./native-fleet-pilot.ts",
       "./native-ten-fleet.ts",
       "./native-ten-release.ts",
+      "../../.github/workflows/native-transaction-cohort.yml",
+      "../../scripts/infra-performance/canonical-fixture/cohort-bridge.ts",
+      "../../scripts/infra-performance/canonical-fixture/cohort.py",
+      "../../scripts/infra-performance/canonical-fixture/cohort_runner.py",
+      "../../scripts/infra-performance/canonical-fixture/hosted.py",
+      "../../scripts/infra-performance/canonical-fixture/installation.py",
+      "../../scripts/infra-performance/canonical-fixture/native_budget.py",
+      "../../scripts/infra-performance/canonical-fixture/protected_cohort.py",
+      "../../scripts/infra-performance/canonical-fixture/qualified_release.py",
+      "../../scripts/infra-performance/cells/owner.py",
+      "../../scripts/infra-performance/cells/owner_state.py",
+      "../../scripts/infra-performance/cells/owner_transport.py",
+      "../../scripts/infra-performance/cells/owner_cloud.py",
+      "../../scripts/infra-performance/cells/owner_bundle.py",
       "../../scripts/infra-performance/deployed-fleet/ten-source.sh",
       "../../scripts/infra-performance/deployed-fleet/ten.py",
       "../../scripts/infra-performance/deployed-fleet/pilot.py",

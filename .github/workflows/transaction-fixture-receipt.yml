@@ -6,7 +6,7 @@ permissions:
 jobs:
   receipt:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -22,10 +22,12 @@ jobs:
           python3 -m unittest discover -s scripts/infra-performance/canonical-fixture
           python3 scripts/infra-performance/canonical-fixture/direct_bridge_check.py
           python3 scripts/infra-performance/canonical-fixture/hosted.py rehearse --out apps/server/test-results/closed-native-fixture
+      - name: Reopen native custody and prove physical disposal on fresh workerd
+        run: python3 scripts/infra-performance/canonical-fixture/rehearse_cohort.py --out apps/server/test-results/closed-native-cohort
       - name: Check receipt policy code
         if: always()
         run: |
-          bun x oxlint --deny-warnings --config .oxlintrc.json --type-aware --threads=1 apps/server/cloudflare/release-isolation/{internal/performance-receipt,operations}.ts apps/server/cloudflare/transactions/{internal/performance-receipt,operations}.ts apps/server/cloudflare/{core-http/runtime,user-store/runtime,public-worker,user-store.test-fixture}.ts scripts/infra-performance/canonical-fixture/{bridge,closed-runtime.test-fixture}.ts infra/cloudflare/{native-fixture-signer,native-application,native-graph,native-deployed-graph,native-storage-release,native-storage-resources,storage-installation}.ts
+          bun x oxlint --deny-warnings --config .oxlintrc.json --type-aware --threads=1 apps/server/cloudflare/release-isolation/{internal/performance-receipt,operations}.ts apps/server/cloudflare/transactions/{internal/performance-receipt,operations}.ts apps/server/cloudflare/{core-http/runtime,user-store/runtime,public-worker,user-store.test-fixture}.ts scripts/infra-performance/canonical-fixture/{bridge,closed-runtime.test-fixture,cohort-bridge,cohort-runtime.test-fixture}.ts infra/cloudflare/{native-fixture-signer,native-application,native-graph,native-deployed-graph,native-storage-release,native-storage-resources,storage-installation}.ts
       - name: Check owned modules and application types
         if: always()
         run: |
@@ -41,4 +43,6 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: closed-native-fixture-${{ github.run_id }}
-          path: apps/server/test-results/closed-native-fixture/summary.json
+          path: |
+            apps/server/test-results/closed-native-fixture/summary.json
+            apps/server/test-results/closed-native-cohort/summary.json

@@ -105,7 +105,7 @@ def main():
                     "--outfile", "bounded-ingress.mjs"], cwd=out, check=True)
     (out / "meter.mjs").write_bytes((HERE / "meter.mjs").read_bytes())
     (out / "limits.json").write_text("null")
-    for mode in ("train",):
+    for mode in ("train", "bounded"):
         limits = {} if mode == "train" else json.loads((out / "limits.json").read_text())
         if mode == "refuse":
             limits["GET /transactions?limit=25"]["maximum"] = {"rowsRead": 0, "rowsWritten": 0}

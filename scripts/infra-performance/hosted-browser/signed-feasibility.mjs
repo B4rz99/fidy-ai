@@ -6,7 +6,7 @@ import { chromium } from "@playwright/test";
 
 const sum = (v) => createHash("sha256").update(JSON.stringify(v)).digest("hex");
 const sort = (v) => v === null || typeof v !== "object" ? v : Array.isArray(v) ? v.map(sort) : Object.fromEntries(Object.keys(v).sort().map(k=>[k,sort(v[k])]));
-export async function runBrowser({variant, origins, cookie, expected, forward, afterRequest}) {
+export async function runBrowser({variant, origins, cookie, expected, forward, afterRequest, observations=3}) {
   const tls={ cert:Bun.file(process.env.BROWSER_TLS_CERT),key:Bun.file(process.env.BROWSER_TLS_KEY) };
   const dir=resolve(process.env.FIDY_DIAGNOSTIC_DIR);
   const events=[], snapshots={};
@@ -38,9 +38,10 @@ export async function runBrowser({variant, origins, cookie, expected, forward, a
       if(url.pathname==="/web/session/binding"&&url.search) {
         snapshots.contextTopLevel=Object.keys(data).sort();
         snapshots.initial=Object.keys(data.initial??{}).sort();
+        capture("initialFields",data.initial);
         assert.deepEqual(data.initial?.transactions?.page,expected);
       }
-      if(url.pathname==="/user") capture("profile",data.data);
+      if(url.pathname==="/user") {capture("profile",data.data);capture("profileEnvelope",data);}
       if(url.pathname==="/transactions") assert.deepEqual(data,expected);
       if(url.pathname==="/ingestion/review-workspace") {capture("review",data); snapshots.reviewCount=data.pendingCount??data.data?.pendingCount;}
     }
@@ -65,7 +66,7 @@ export async function runBrowser({variant, origins, cookie, expected, forward, a
     await page.goto(origins.browser+"/app/transactions?month=2026-11",{waitUntil:"commit"});
     await Promise.all([ready(),counts]);
     events.push({stage:"startup",complete:true});
-    for(let i=0;i<3;i++){
+    for(let i=0;i<observations;i++){
       const read=page.waitForResponse(r=>r.request().method()==="GET"&&new URL(r.url()).pathname==="/transactions");
       const profile=page.waitForResponse(r=>r.request().method()==="GET"&&new URL(r.url()).pathname==="/user");
       await page.getByRole("button",{name:"Actualizar transacciones",exact:true}).click();

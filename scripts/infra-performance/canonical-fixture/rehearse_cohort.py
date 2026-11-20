@@ -104,7 +104,7 @@ def session_accounts(db, session, user):
     return {**audit,"canonicalUnits":units,"receipts":receipts}
 
 
-def prove_accounting_witness(port, directory, proof, revision):
+def prove_accounting_witness(port, directory, proof, revision, survivor):
     capture = json.loads((directory / "native-receipt.json").read_bytes())
     session = json.loads((directory / "native-session.json").read_bytes())
     member = capture["member"]
@@ -124,7 +124,6 @@ def prove_accounting_witness(port, directory, proof, revision):
     forged = {**capture, "signature": "0" * 128}
     other_member = "1" if ordinal == "2" else "2"
     wrong_binding = {**headers, "fidy-session-binding": "00000000-0000-4000-8000-000000000000"}
-    survivor, _ = port.runtime("mount-original-sessions")
     foreign_cookie = {**headers, "cookie": survivor["cookie"]}
     for denied in (witness("before", envelope=forged), witness("before", offered=other_member),
                    witness("invalid"), witness("before", auth=wrong_binding),
@@ -192,11 +191,15 @@ def main():
         subprocess.check_output(["bun", "-e", key], text=True))
     path = out / "custody.json"
     with controller(directory, coords, path) as port:
-        port.runtime("seed-survivors")
+        survivor = None
+        if args.d1:
+            port.runtime("seed-survivors")
+        else:
+            survivor, _ = port.runtime("mount-original-sessions")
         port.owner.enroll()
         proof = collect_owned(port.owner, port, browser=bool(args.d1))
-        if not args.d1:
-            prove_accounting_witness(port, directory, proof, revision)
+        if survivor is not None:
+            prove_accounting_witness(port, directory, proof, revision, survivor)
     if args.d1:
         import sys
         sys.path.insert(0,str(ROOT/"scripts/infra-performance/cells"))

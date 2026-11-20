@@ -30,8 +30,12 @@ const RootJson = Schema.fromJsonString(Schema.toCodecJson(Root));
 const maximumChunkBytes = 900_000;
 const maximumRowBytes = 1_998_976;
 const JsonRow = Schema.Struct({ body: Schema.fromJsonString(Schema.Unknown) });
-const rowBodies = (rows: ReadonlyArray<typeof JsonRow.Type>): ReadonlyArray<unknown> =>
-  rows.map((row) => row.body);
+const decodeWrappedRows = (
+  raw: unknown
+): Effect.Effect<ReadonlyArray<unknown>, Schema.SchemaError> =>
+  Schema.decodeUnknownEffect(Schema.Array(JsonRow))(raw).pipe(
+    Effect.map((rows) => rows.map((row) => row.body))
+  );
 const Plans = Schema.Struct({
   id: Schema.String,
   position: Schema.Int,
@@ -44,6 +48,12 @@ const Revisions = Schema.Struct({
   from: Schema.String,
   plan: Schema.Unknown,
 });
+
+const RevisionColumns = Schema.Array(
+  Schema.Struct({ ...Revisions.fields, plan: Schema.fromJsonString(Schema.Unknown) })
+);
+const localFullRevisions =
+  "SELECT plan_id AS planId,position,from_date AS 'from',plan_json AS plan FROM recurring_plan_revisions WHERE user_id=? ORDER BY position LIMIT 10001";
 
 const selections = [
   "SELECT json_object('id',id,'position',position,'pauses',json(pauses_json),'stoppedOn',stopped_on) AS body FROM recurring_plans WHERE user_id=? ORDER BY position LIMIT 101",
@@ -75,14 +85,12 @@ type StoredSelection = Readonly<{
   related: ReadonlyArray<Readonly<{ results: ReadonlyArray<unknown> }>>;
 }>;
 const decodeRows = (
-  snapshot: StoredSelection
+  snapshot: StoredSelection,
+  revisionFormat: "wrapped" | "columns" = "wrapped"
 ): Effect.Effect<PlanningRows, RecurringPlanningUnavailable> =>
   Effect.gen(function* () {
-    const rows = yield* Effect.forEach(snapshot.related, (result) =>
-      Schema.decodeUnknownEffect(Schema.Array(JsonRow))(result.results).pipe(Effect.map(rowBodies))
-    );
     if (Option.isNone(snapshot.document)) {
-      if (rows.some((entries) => entries.length !== 0)) {
+      if (snapshot.related.some(({ results }) => results.length !== 0)) {
         return yield* new RecurringPlanningUnavailable();
       }
       return {
@@ -94,15 +102,29 @@ const decodeRows = (
         fulfillments: [],
       };
     }
+    const [plans, revisions, exceptions, fulfillments] = snapshot.related.map(
+      ({ results }) => results
+    );
     return {
       revision: snapshot.document.value.revision,
       root: yield* Schema.decodeEffect(RootJson)(snapshot.document.value.encoded, {
         onExcessProperty: "error",
       }),
-      plans: yield* Schema.decodeUnknownEffect(Schema.Array(Plans))(rows[0]),
-      revisions: yield* Schema.decodeUnknownEffect(Schema.Array(Revisions))(rows[1]),
-      exceptions: yield* Schema.decodeUnknownEffect(Schema.Array(ExceptionRow))(rows[2]),
-      fulfillments: yield* Schema.decodeUnknownEffect(Schema.Array(FulfillmentRow))(rows[3]),
+      plans: yield* Schema.decodeUnknownEffect(Schema.Array(Plans))(
+        yield* decodeWrappedRows(plans)
+      ),
+      revisions:
+        revisionFormat === "columns"
+          ? yield* Schema.decodeUnknownEffect(RevisionColumns)(revisions)
+          : yield* Schema.decodeUnknownEffect(Schema.Array(Revisions))(
+              yield* decodeWrappedRows(revisions)
+            ),
+      exceptions: yield* Schema.decodeUnknownEffect(Schema.Array(ExceptionRow))(
+        yield* decodeWrappedRows(exceptions)
+      ),
+      fulfillments: yield* Schema.decodeUnknownEffect(Schema.Array(FulfillmentRow))(
+        yield* decodeWrappedRows(fulfillments)
+      ),
     };
   }).pipe(Effect.mapError(() => new RecurringPlanningUnavailable()));
 
@@ -132,9 +154,10 @@ const planningValue = (rows: PlanningRows): unknown => {
   };
 };
 const decodeDocument = (
-  snapshot: StoredSelection
+  snapshot: StoredSelection,
+  revisionFormat?: "columns"
 ): Effect.Effect<RecurringDocument, RecurringPlanningUnavailable> =>
-  decodeRows(snapshot).pipe(
+  decodeRows(snapshot, revisionFormat).pipe(
     Effect.flatMap((rows) => Schema.decodeUnknownEffect(JsonDocument)(planningValue(rows))),
     Effect.mapError(() => new RecurringPlanningUnavailable())
   );
@@ -432,10 +455,7 @@ export const writeDocument = ({
   }).pipe(Effect.mapError(() => new RecurringPlanningUnavailable()));
 
 const LocalRoot = Schema.Struct({ encoded: Schema.String, revision: Schema.Int });
-const localStoredSelection = Effect.fn(function* (
-  user: string,
-  revisions: Option.Option<OwnedStatement>
-) {
+const localStoredSelection = Effect.fn(function* (user: string, revisions: OwnedStatement) {
   const sql = yield* SqliteClient;
   const [root] =
     yield* sql`SELECT document_json AS encoded, revision FROM user_documents WHERE user_id=${user} AND kind='recurring-plan'`;
@@ -444,23 +464,24 @@ const localStoredSelection = Effect.fn(function* (
       ? Option.none()
       : Option.some(yield* Schema.decodeUnknownEffect(LocalRoot)(root));
   const related = yield* Effect.forEach(selections, (selection, index) => {
-    const query =
-      index === 1 && Option.isSome(revisions)
-        ? revisions.value
-        : { sql: selection, params: [user] };
+    const query = index === 1 ? revisions : { sql: selection, params: [user] };
     return sql.unsafe(query.sql, query.params).pipe(Effect.map((results) => ({ results })));
   });
   return { document, related };
 });
 export const readLocalDocument = Effect.fn(function* (user: string) {
-  return yield* decodeDocument(yield* localStoredSelection(user, Option.none()));
+  const selection = yield* localStoredSelection(user, {
+    sql: localFullRevisions,
+    params: [user],
+  });
+  return yield* decodeDocument(selection, "columns");
 });
 export const readLocalCompactProjection = Effect.fn(function* (
   user: string,
   revisions: OwnedStatement,
   now: DateTime.Utc
 ) {
-  const rows = yield* decodeRows(yield* localStoredSelection(user, Option.some(revisions)));
+  const rows = yield* decodeRows(yield* localStoredSelection(user, revisions));
   return yield* decodeReadProjection({ rows, now });
 });
 

@@ -360,6 +360,14 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(
           yield* native(() => db.exec("SELECT count(*) AS marks FROM recurring_plan_fulfillments"))
         ).toEqual([{ marks: 2 }]);
+        yield* native(() =>
+          db.exec(
+            "UPDATE recurring_plan_revisions SET plan_json=json_remove(plan_json,'$.name') WHERE user_id=? AND plan_id=? AND position=1",
+            alice.user,
+            mark.planId
+          )
+        );
+        expect((yield* native(() => db.browser(0, month))).status).toBe(503);
       })
   );
 });

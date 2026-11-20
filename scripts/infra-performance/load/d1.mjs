@@ -47,8 +47,11 @@ const worker = async (root, { name, entry, env, exports = {} }) => {
     },
   };
 };
-const runtimeFor = async (root) =>
+const runtimeFor = async (root, logs) =>
   new Miniflare({
+    handleStructuredLogs: (log) => {
+      logs.push(log.message);
+    },
     workers: [
       await worker(root, {
         name: "ingress",
@@ -152,7 +155,8 @@ export const d1Platform = async (root) => {
   const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
   assert.equal(git("rev-parse", "HEAD"), baseline);
   assert.equal(git("diff", "HEAD", "--name-only"), "");
-  const runtime = await runtimeFor(root);
+  // Match the native browser fixture’s host-side structured log sink.
+  const runtime = await runtimeFor(root, []);
   try {
     return await prepareStorage(runtime, root);
   } catch (error) {

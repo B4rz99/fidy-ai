@@ -197,7 +197,7 @@ const handleProfileMessage = (
   context: InspectorContext<ProfileResult> & {
     readonly sendRequest: (signal: AbortSignal) => Promise<Response>;
     readonly response: Option.Option<Response>;
-    readonly onProfile?: (profile: CpuSamples) => void;
+    readonly onProfile: (profile: CpuSamples) => void;
     readonly setResponse: (value: Response) => void;
   }
 ): void => {
@@ -223,7 +223,7 @@ const handleProfileMessage = (
     const {
       result: { profile },
     } = Schema.decodeSync(Schema.fromJsonString(CpuProfileResponse))(message);
-    context.onProfile?.(profile);
+    context.onProfile(profile);
     const cpuMilliseconds = activeCpuMilliseconds(profile);
     if (Option.isNone(response)) {
       fail(new Error("Worker CPU profile completed without an HTTP response"));
@@ -232,17 +232,18 @@ const handleProfileMessage = (
 };
 
 /** Profiles one supplied HTTP request and returns its response plus sampled non-idle V8 time. */
-export const profileWorkerRequest = ({
-  debuggerUrl,
-  sendRequest,
-  signal,
-  onProfile,
-}: Readonly<{
-  onProfile?: (profile: CpuSamples) => void;
-  debuggerUrl: string;
-  sendRequest: (signal: AbortSignal) => Promise<Response>;
-  signal: Option.Option<AbortSignal>;
-}>): Promise<ProfileResult> => {
+export const profileWorkerRequest = (
+  {
+    debuggerUrl,
+    sendRequest,
+    signal,
+  }: Readonly<{
+    debuggerUrl: string;
+    sendRequest: (signal: AbortSignal) => Promise<Response>;
+    signal: Option.Option<AbortSignal>;
+  }>,
+  onProfile: (profile: CpuSamples) => void = () => undefined
+): Promise<ProfileResult> => {
   let response = Option.none<Response>();
   const releaseResponse = (): void => {
     if (Option.isSome(response)) cancelResponse(response.value);
@@ -256,7 +257,7 @@ export const profileWorkerRequest = ({
           handleProfileMessage(message, {
             ...context,
             sendRequest,
-            ...(onProfile === undefined ? {} : { onProfile }),
+            onProfile,
             response,
             setResponse: (value) => {
               response = Option.some(value);

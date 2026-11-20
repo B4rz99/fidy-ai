@@ -47,8 +47,12 @@ const admitted = async (request, env, paths) => {
  * @param {ReadonlyArray<string>} inspectionIds Synthetic Transaction IDs verified at bundle time.
  * @param {{mutationTarget:string|null, assets:Record<string,[string,string]>}} browser Bounded browser fixture and web bundle.
  */
-export const privateIngress = (ingress, inspectionIds = [], browser = {mutationTarget:null,assets:{}}) => {
-  const {mutationTarget,assets} = browser;
+export const privateIngress = (
+  ingress,
+  inspectionIds = [],
+  browser = { mutationTarget: null, assets: {} }
+) => {
+  const { mutationTarget, assets } = browser;
   const paths = new Set([...fixed, ...inspectionIds.map((id) => "GET /transactions/" + id)]);
   if (mutationTarget && inspectionIds.includes(mutationTarget)) {
     for (const path of Object.keys(assets)) paths.add("GET /_comparison_web/" + path);

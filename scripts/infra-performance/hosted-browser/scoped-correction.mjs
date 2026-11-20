@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 
 /** @param {unknown} value Verified JSON. */
+const success = 200,
+  invalid = 400;
 const hash = (value) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 /** @param {Response} response Canonical result. @param {number} status Expected HTTP status. */
 const completed = async (response, status) => {
@@ -14,7 +16,7 @@ const change = (notes) => ({ expectedRevision: 0, changes: { notes } });
 
 /** @param {{data: Array<{id:string, counterparty:string,revision:number}>}} before Verified effective history.
  * @param {(method:string,path:string,body?:unknown)=>Promise<Response>} send Original, bound WebSession transport. */
-export async function proveScopedCorrection(before, send) {
+export const proveScopedCorrection = async (before, send) => {
   const target = before.data.find((row) => row.counterparty === "Evaluación 2");
   const untouched = before.data.find((row) => row.counterparty === "Evaluación 3");
   assert.ok(target && untouched && target.revision === 0 && untouched.revision === 0);
@@ -25,19 +27,22 @@ export async function proveScopedCorrection(before, send) {
   };
   const result = await completed(
     await send("PUT", "/transactions/" + target.id, change(notes)),
-    200
+    success
   );
   assert.equal(result.data.id, target.id);
   assert.equal(result.data.revision, 1);
-  const read = async () => completed(await send("GET", "/transactions?limit=25"), 200);
+  const read = async () => completed(await send("GET", "/transactions?limit=25"), success);
   const committed = await read();
   assert.deepEqual(committed, after);
-  const calls = [untouched, target].map((row, i) => ({
-    callId: "99000000-0000-4000-8000-00000000000" + (i + 1),
+  const calls = [untouched, target].map((row, index) => ({
+    callId: "99000000-0000-4000-8000-00000000000" + (index + 1),
     operation: "transactions.updateTransaction",
     input: { params: { id: row.id }, payload: change("No debe persistir") },
   }));
-  const refusal = await completed(await send("POST", "/operations/atomic-batch", { calls }), 400);
+  const refusal = await completed(
+    await send("POST", "/operations/atomic-batch", { calls }),
+    invalid
+  );
   assert.equal(refusal.error.failedCallIndex, 1);
   assert.equal(refusal.error.operation, "transactions.updateTransaction");
   assert.equal(refusal.error.code, "validation_failed");
@@ -50,4 +55,4 @@ export async function proveScopedCorrection(before, send) {
     failedCallIndex: 1,
     committedCorrections: 1,
   };
-}
+};

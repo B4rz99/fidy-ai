@@ -59,8 +59,9 @@ const meteredManifest = Effect.fnUntraced(function* (module: string, name: strin
   };
 });
 const observedManifest = Effect.fnUntraced(function* (module: string, name: string) {
-  if (yield* Config.Boolean("FIDY_BROWSER_METER").pipe(Config.withDefault(false)))
-    {return yield* meteredManifest(module, name);}
+  if (yield* Config.Boolean("FIDY_BROWSER_METER").pipe(Config.withDefault(false))) {
+    return yield* meteredManifest(module, name);
+  }
   const manifest = yield* workerManifest(module);
   if (name !== "ingress") return manifest;
   const entrypoints = new Bun.Transpiler({ loader: "js" }).scan(

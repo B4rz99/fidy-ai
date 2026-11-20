@@ -1,9 +1,11 @@
 // No account credentials or User state are available during the browser-origin preflight.
 import assert from "node:assert/strict";
-import { chromium } from "@playwright/test";
 import { installedOrigins } from "../../../apps/server/src/shell/browser-transport/contract";
 
-export function parseTrace(lines) {
+const { chromium } = await import("@playwright/test");
+const success = 200;
+
+export const parseTrace = (lines) => {
   const field = (name) =>
     lines
       .split(/\r?\n/u)
@@ -15,12 +17,12 @@ export function parseTrace(lines) {
   assert.match(country ?? "", /^[A-Z]{2}$/u);
   assert.match(colo ?? "", /^[A-Z]{3}$/u);
   return { country, colo, warp: warp ?? "unknown" };
-}
+};
 
 export const isColombianEgress = (origins) =>
   origins.api.country === "CO" && origins.browser.country === "CO";
 
-export async function inspectBrowserOrigin() {
+export const inspectBrowserOrigin = async () => {
   const browser = await chromium.launch({
     executablePath: process.env.ASSESSMENT_CHROMIUM,
     env: { HOME: process.env.HOME, PATH: process.env.PATH, TMPDIR: process.env.RUNNER_TEMP },
@@ -28,13 +30,14 @@ export async function inspectBrowserOrigin() {
   });
   try {
     const page = await browser.newPage({ serviceWorkers: "block" });
-    const origins = {};
-    for (const [name, host] of Object.entries(installedOrigins.acceptance)) {
+    const inspect = async (host) => {
       const reply = await page.goto(host + "/cdn-cgi/trace", { waitUntil: "load", timeout: 15000 });
-      assert.equal(reply.status(), 200);
+      assert.equal(reply.status(), success);
       assert.equal(reply.url(), host + "/cdn-cgi/trace");
-      origins[name] = parseTrace(await reply.text());
-    }
+      return parseTrace(await reply.text());
+    };
+    const { api, browser: web } = installedOrigins.acceptance;
+    const origins = { api: await inspect(api), browser: await inspect(web) };
     return {
       observedAt: new Date().toISOString(),
       chromium: browser.version(),
@@ -44,7 +47,7 @@ export async function inspectBrowserOrigin() {
   } finally {
     await browser.close();
   }
-}
+};
 
 if (import.meta.main) {
   const report = await inspectBrowserOrigin();

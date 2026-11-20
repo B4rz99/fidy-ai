@@ -20,8 +20,9 @@ const readObject = Effect.fnUntraced(function* (runtime: Miniflare, directory: s
           error instanceof Error &&
           error.message === "Cannot evict Durable Object: it is not currently running."
         )
-      )
-        {throw error;}
+      ) {
+        throw error;
+      }
     }
   });
   const files = yield* native(() =>

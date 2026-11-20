@@ -14,7 +14,7 @@ const empty = () => ({
 });
 const owners = new Map();
 
-function observedCursor(cursor, counts) {
+const observedCursor = (cursor, counts) => {
   let reads = 0,
     writes = 0;
   const observe = () => {
@@ -25,7 +25,7 @@ function observedCursor(cursor, counts) {
   };
   // Native counters grow as the application consumes each result, including native raw iterators.
   observe();
-  function wrap(source) {
+  const wrap = (source) => {
     return new Proxy(source, {
       get(target, property) {
         const value = Reflect.get(target, property, target);
@@ -40,11 +40,11 @@ function observedCursor(cursor, counts) {
         };
       },
     });
-  }
+  };
   return wrap(cursor);
-}
+};
 
-function observeStorage(storage, counts) {
+const observeStorage = (storage, counts) => {
   const sql = storage.sql,
     exec = sql.exec.bind(sql);
   Object.defineProperty(sql, "exec", {
@@ -76,12 +76,12 @@ function observeStorage(storage, counts) {
       },
     });
   }
-}
+};
 
 const bucketCalls = new Map();
 const names = ["SMOKE_BUCKET", "EMAIL_BUCKET", "STATEMENT_STAGING_BUCKET", "SAMPLE_BUCKET"];
 const methods = ["get", "head", "list", "put", "delete"];
-export function observedBindings(environment) {
+export const observedBindings = (environment) => {
   const env = { ...environment };
   for (const name of names) {
     const bucket = env[name];
@@ -101,11 +101,11 @@ export function observedBindings(environment) {
     });
   }
   return env;
-}
-export function buckets() {
+};
+export const buckets = () => {
   return Response.json(Object.fromEntries(bucketCalls));
-}
-export function observed(name, Owner) {
+};
+export const observed = (name, Owner) => {
   const counts = empty();
   owners.set(name, counts);
   return class extends Owner {
@@ -122,8 +122,8 @@ export function observed(name, Owner) {
       return super.alarm(...args);
     }
   };
-}
+};
 
-export function totals() {
+export const totals = () => {
   return Response.json(Object.fromEntries(owners));
-}
+};

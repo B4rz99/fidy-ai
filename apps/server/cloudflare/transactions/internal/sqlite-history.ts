@@ -28,7 +28,6 @@ import {
   localHistoryPage,
   parseQuery,
   presentHistory,
-  selectedHistoryPage,
 } from "./transaction-history";
 
 const HistoryCategoryReference = Schema.Struct({
@@ -85,7 +84,9 @@ export const readUserHistory = Effect.fn(function* (
     }
     let response = invalid();
     if (Option.isSome(query)) {
-      const page = selectedHistoryPage({ authority, query: query.value, userSelection: users });
+      // The live bound Session was resolved inside this SQLite transaction. Use its
+      // User for history selection and retain the live authority guard for Audit.
+      const page = localHistoryPage({ query: query.value, user });
       const rows = yield* sql.unsafe(page.sql, page.bindings);
       response = presentRetainedHistory({
         rows: { results: rows },

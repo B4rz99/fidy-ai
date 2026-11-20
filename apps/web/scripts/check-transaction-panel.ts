@@ -1,10 +1,11 @@
 // A tall Correction must remain reachable alongside a longer desktop Transaction history.
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { chromium } from "@playwright/test";
+
+const { chromium } = await import("@playwright/test");
 
 const css = await readFile(
-  new URL("../../../apps/web/src/ui/components/transactions.css", import.meta.url),
+  new URL("../src/ui/components/transactions.css", import.meta.url),
   "utf8"
 );
 const browser = await chromium.launch({ executablePath: process.env.ASSESSMENT_CHROMIUM });
@@ -29,19 +30,22 @@ try {
       </div>
     </main>`);
   await page.addStyleTag({ content: css });
-  for (const control of [
-    page.getByRole("button", { name: "Guardar" }),
-    page.getByRole("textbox"),
-  ]) {
-    const reachable = await control.evaluate((element) => {
+  const reachable = (control: ReturnType<typeof page.getByRole>): Promise<boolean> =>
+    control.evaluate((element) => {
       element.scrollIntoView({ block: "center", behavior: "instant" });
       const rect = element.getBoundingClientRect();
       return element.contains(
         document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)
       );
     });
-    assert.ok(reachable, "The Correction control must be reachable in one scroll");
-  }
+  assert.ok(
+    await reachable(page.getByRole("button", { name: "Guardar" })),
+    "Save must be reachable in one scroll"
+  );
+  assert.ok(
+    await reachable(page.getByRole("textbox")),
+    "The user must be able to scroll back to Counterparty"
+  );
 } finally {
   await browser.close();
 }

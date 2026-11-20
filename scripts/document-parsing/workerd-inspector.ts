@@ -232,18 +232,17 @@ const handleProfileMessage = (
 };
 
 /** Profiles one supplied HTTP request and returns its response plus sampled non-idle V8 time. */
-export const profileWorkerRequest = (
-  {
-    debuggerUrl,
-    sendRequest,
-    signal,
-  }: Readonly<{
-    debuggerUrl: string;
-    sendRequest: (signal: AbortSignal) => Promise<Response>;
-    signal: Option.Option<AbortSignal>;
-  }>,
-  onProfile: (profile: CpuSamples) => void = () => undefined
-): Promise<ProfileResult> => {
+export const profileWorkerRequest = ({
+  debuggerUrl,
+  sendRequest,
+  signal,
+  onProfile = () => undefined,
+}: Readonly<{
+  debuggerUrl: string;
+  sendRequest: (signal: AbortSignal) => Promise<Response>;
+  signal: Option.Option<AbortSignal>;
+}> &
+  Partial<Readonly<{ onProfile: (profile: CpuSamples) => void }>>): Promise<ProfileResult> => {
   let response = Option.none<Response>();
   const releaseResponse = (): void => {
     if (Option.isSome(response)) cancelResponse(response.value);

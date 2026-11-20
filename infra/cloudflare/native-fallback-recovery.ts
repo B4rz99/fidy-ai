@@ -1,6 +1,6 @@
 import uploadedPair from "./native-pairing-upload.json" with { type: "json" };
 import { isDeepStrictEqual } from "node:util";
-import { Effect, Schema } from "effect";
+import { Effect, Array as EffectArray, Option, Schema } from "effect";
 import { gitRevisionPattern } from "../../apps/server/cloudflare/runtime/contract";
 import { SmokeIdentity } from "../../apps/server/cloudflare/runtime/release-smoke/contract";
 import {
@@ -26,6 +26,13 @@ export const archivedDormant = {
     versionId: "87f4baef-8e77-4093-86d0-cd075cf62601",
   },
 } as const;
+const archivedPairing = {
+  revision: uploadedPair.revision,
+  publicVersionId: uploadedPair.publicVersionId,
+  coreVersionId: uploadedPair.coreVersionId,
+  publicDeploymentId: uploadedPair.failedStage.publicDeploymentId,
+  coreDeploymentId: uploadedPair.failedStage.coreDeploymentId,
+};
 const Namespace = Schema.String.check(Schema.isPattern(/^[a-f0-9]{32}$/u));
 const Version = SmokeIdentity.fields.workerVersionId;
 export const FallbackStage = Schema.Struct({
@@ -77,49 +84,75 @@ const matchesStage = (deployment: Deployment, release: Release, role: Role): boo
   deployment.id === release[`${role}DeploymentId`] &&
   hasZeroCandidate(deployment, release.snapshot[role].stableVersionId, release[`${role}VersionId`]);
 
-export const matchesArchivedStage = (value: Release): boolean =>
-  value.snapshot.revision === archivedDormant.revision &&
+type ArchivedPair = typeof archivedPairing;
+const matchesArchivedPair = (value: Release, archive: ArchivedPair): boolean =>
+  value.snapshot.revision === archive.revision &&
   (["public", "core"] as const).every(
     (role) =>
-      value[`${role}VersionId`] === archivedDormant[`${role}VersionId`] &&
-      value[`${role}DeploymentId`] === archivedDormant[`${role}DeploymentId`]
+      value[`${role}VersionId`] === archive[`${role}VersionId`] &&
+      value[`${role}DeploymentId`] === archive[`${role}DeploymentId`]
   );
+export const matchesArchivedStage = (value: Release): boolean =>
+  matchesArchivedPair(value, archivedDormant);
 type StageReader = Pick<FallbackRepairPort, "recentDeployments" | "trunk">;
-const matchesOriginalStage = (observed: Deployment, role: Role): boolean =>
-  observed.id === archivedDormant[`${role}DeploymentId`] &&
-  observed.versions.length === 2 &&
-  observed.versions.some(
-    (row) => row.id === archivedDormant[`${role}VersionId`] && row.percentage === 0
-  ) &&
-  observed.versions.some(
-    (row) => row.id === archivedDormant.original[role] && row.percentage === 100
+const matchesOriginalStage = (
+  observed: Deployment,
+  role: Role,
+  archive: ArchivedPair = archivedDormant
+): boolean =>
+  observed.id === archive[`${role}DeploymentId`] &&
+  hasZeroCandidate(observed, archivedDormant.original[role], archive[`${role}VersionId`]);
+
+const archivedSource = (source: Release["snapshot"]): Option.Option<ArchivedPair> =>
+  EffectArray.findFirst([archivedDormant, archivedPairing], (archive) =>
+    (["core", "public"] as const).every(
+      (role) =>
+        source[role].deploymentId === archive[`${role}DeploymentId`] &&
+        source[role].stableVersionId === archivedDormant.original[role]
+    )
   );
+export const fromArchivedStage = (source: Release["snapshot"]): boolean =>
+  Option.isSome(archivedSource(source));
+
+export const matchesReplacementPredecessor = ({
+  prior,
+  snapshot,
+}: {
+  prior: Release;
+  snapshot: Release["snapshot"];
+}): boolean => {
+  const archive = archivedSource(snapshot);
+  return (
+    Option.isSome(archive) &&
+    matchesArchivedPair(prior, archive.value) &&
+    isDeepStrictEqual(snapshot, {
+      ...prior.snapshot,
+      revision: snapshot.revision,
+      core: { ...prior.snapshot.core, deploymentId: prior.coreDeploymentId },
+      public: { ...prior.snapshot.public, deploymentId: prior.publicDeploymentId },
+    })
+  );
+};
 /** A replacement may supersede only the identified failed zero-traffic versions. */
 export const requireDormantReplacementSource = Effect.fn(function* (
   port: FallbackRepairPort,
   snapshot: Release["snapshot"]
 ) {
   yield* releaseController.requireTrunk(port, snapshot.revision);
+  const archive = archivedSource(snapshot);
+  if (Option.isNone(archive)) {
+    return yield* Effect.fail(Error("Closed replacement source is not an archived pair"));
+  }
   for (const role of ["core", "public"] as const) {
     const captured = snapshot[role];
     const [active] = yield* port.recentDeployments(captured.name);
-    if (
-      active === undefined ||
-      !matchesOriginalStage(active, role) ||
-      captured.deploymentId !== active.id ||
-      captured.stableVersionId !== archivedDormant.original[role]
-    ) {
+    if (active === undefined || !matchesOriginalStage(active, role, archive.value)) {
       return yield* Effect.fail(
         Error("Closed replacement source differs from the archived deployment")
       );
     }
   }
 });
-export const fromArchivedStage = (source: Release["snapshot"]): boolean =>
-  source.core.deploymentId === archivedDormant.coreDeploymentId &&
-  source.public.deploymentId === archivedDormant.publicDeploymentId &&
-  source.core.stableVersionId === archivedDormant.original.core &&
-  source.public.stableVersionId === archivedDormant.original.public;
 
 /** One interrupted upload may advance only the exact new zero-traffic pair over its original history. */
 const uploadedPosition = Effect.fn(function* (
@@ -169,7 +202,10 @@ export const stageUploadedPair = Effect.fn(function* <E, R>(
   snapshot: Release["snapshot"],
   verify: Effect.Effect<void, E, R>
 ) {
-  if (snapshot.revision !== uploadedPair.revision || !fromArchivedStage(snapshot)) {
+  if (
+    snapshot.revision !== uploadedPair.revision ||
+    !Option.contains(archivedSource(snapshot), archivedDormant)
+  ) {
     return yield* Effect.fail(Error("Unexpected interrupted pairing upload snapshot"));
   }
   let positions = yield* uploadedAssignments(port, snapshot);
@@ -236,14 +272,15 @@ const requireUnpromotedHistory = Effect.fn(function* (port: StageReader, release
   if ((yield* port.trunk()) !== release.snapshot.revision) {
     return yield* Effect.fail(Error("Staged release verifier is no longer protected trunk"));
   }
+  const archive = archivedSource(release.snapshot);
   for (const role of ["core", "public"] as const) {
     const snapshot = release.snapshot[role];
     const [active, original] = yield* port.recentDeployments(snapshot.name);
     if (
       active === undefined ||
       !matchesStage(active, release, role) ||
-      (fromArchivedStage(release.snapshot)
-        ? original === undefined || !matchesOriginalStage(original, role)
+      (Option.isSome(archive)
+        ? original === undefined || !matchesOriginalStage(original, role, archive.value)
         : !isDeepStrictEqual(original, {
             id: snapshot.deploymentId,
             versions: [{ id: snapshot.stableVersionId, percentage: 100 }],

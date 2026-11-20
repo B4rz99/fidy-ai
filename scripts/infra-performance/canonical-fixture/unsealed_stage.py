@@ -109,7 +109,9 @@ def main():
     parser.add_argument("action", choices=("source", "restore", "replacement"))
     args = parser.parse_args()
     if args.action == "replacement":
+        from pairing_stage import replacement_documents, upload_pin
         env = os.environ
+        predecessor = upload_pin()["failedStage"]["verifier"]
         if (env.get("FIXTURE_RELEASE_OPERATION") not in ("plan-pairing-repair", "stage-pairing-repair")
                 or env.get("GITHUB_REPOSITORY") != REPO or env.get("GITHUB_ACTIONS") != "true"
                 or env.get("GITHUB_WORKFLOW_REF") != f"{REPO}/.github/workflows/native-storage-release.yml@refs/heads/trunk"
@@ -120,9 +122,10 @@ def main():
                 or env.get("NATIVE_FIXTURE_SIGNER_SHA256") != fixture_upload()["fingerprint"]
                 or env.get("GITHUB_SHA") != git_read("rev-parse", "HEAD")
                 or env.get("RELEASE_GIT_SHA") != env["GITHUB_SHA"]
-                or git_read("merge-base", PAIRING_REPAIR, env["GITHUB_SHA"]) != PAIRING_REPAIR):
+                or env["GITHUB_SHA"] == predecessor
+                or git_read("merge-base", predecessor, env["GITHUB_SHA"]) != predecessor):
             raise ValueError("Replacement requires the new protected application source and closed acceptance hosts")
-        staged, controls = staged_documents()
+        staged, controls = replacement_documents()
         for name, value in [("native-release.json.predecessor", staged), ("native-release.json.source.controls", controls)]:
             with os.fdopen(os.open(Path(env["RUNNER_TEMP"]) / name, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600), "w") as file:
                 json.dump(value, file)

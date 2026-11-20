@@ -4,6 +4,7 @@ import {
   archivedDormant,
   fromArchivedStage,
   matchesArchivedStage,
+  matchesReplacementPredecessor,
   recoverFixtureFallback,
   requireDormantReplacementSource,
   requirePromotedDormantSource,
@@ -271,17 +272,14 @@ const readReplacementPredecessor = Effect.fn(function* (
   const prior = yield* Schema.decodeUnknownEffect(releaseSchemas.staged)(
     yield* readFile(env.file + ".predecessor")
   );
-  if (
-    !matchesArchivedStage(prior) ||
-    !fromArchivedStage(snapshot) ||
-    snapshot.stableRevision !== prior.snapshot.stableRevision ||
-    snapshot.stableContractDigest !== prior.snapshot.stableContractDigest
-  ) {
+  if (!matchesReplacementPredecessor({ prior, snapshot })) {
     return yield* new ReleaseFailure({
       message: "Replacement source differs from the protected stage",
     });
   }
-  yield* Effect.try(() => requireOriginalFallbackSource(prior.snapshot));
+  if (prior.snapshot.revision === archivedDormant.revision) {
+    yield* Effect.try(() => requireOriginalFallbackSource(prior.snapshot));
+  }
   return prior;
 });
 const verifyReplacementSource = Effect.fn(function* (
@@ -292,7 +290,14 @@ const verifyReplacementSource = Effect.fn(function* (
   const prior = yield* readReplacementPredecessor(env, snapshot);
   const port = releasePort({ env, client });
   yield* requireDormantReplacementSource(port, snapshot);
-  yield* requireCapturedSupport(port, archivedDormant.smoke);
+  yield* Schema.decodeUnknownEffect(
+    Schema.Struct({ digest: Schema.Literal(fixtureUpload.controlsDigest) })
+  )(yield* readFile(env.file + ".source.controls"));
+  if (prior.snapshot.revision === uploadedPair.revision) {
+    yield* verifyUploadedSupport(env, client);
+  } else {
+    yield* requireCapturedSupport(port, archivedDormant.smoke);
+  }
   const saved = yield* nativeWorkerReceipts("completed");
   if (
     !Option.contains(saved.core.versionId, prior.coreVersionId) ||

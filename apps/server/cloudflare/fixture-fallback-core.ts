@@ -1,3 +1,4 @@
+import { AcceptanceProofUnavailable } from "./release-isolation/contract";
 import { Effect, Schema } from "effect";
 import core, { UserStore as ApplicationUserStore } from "./core-worker";
 import { isPerformanceReceipt } from "./release-isolation/operations";
@@ -23,19 +24,19 @@ export default {
         if (isPerformanceReceipt(request)) return new Response(null, { status: 404 });
         const response = yield* Effect.tryPromise({
           try: () => core.fetch(request, environment, context),
-          catch: () => Error("Recovery Core unavailable"),
+          catch: () => new AcceptanceProofUnavailable(),
         });
         if (!response.ok || !isStorageCompatibility(request)) return response;
         const evidence = yield* Schema.decodeUnknownEffect(compatibility)(
           yield* Effect.tryPromise({
             try: () => response.json(),
-            catch: () => Error("Recovery identity unavailable"),
+            catch: () => new AcceptanceProofUnavailable(),
           })
         );
         return Response.json(
           { ...evidence, fixtureFallbackCoreVersion: evidence.core.workerVersionId },
           { headers: { "cache-control": "no-store" } }
         );
-      })
+      }).pipe(Effect.orElseSucceed(() => new Response(null, { status: 503 })))
     ),
 } satisfies typeof core;

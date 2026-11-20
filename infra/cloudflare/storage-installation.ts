@@ -146,7 +146,7 @@ const requireFixtureMain = (
 ): void => {
   if (fingerprint !== "" && (role === "Core" || role === "Ingress")) {
     Schema.decodeUnknownSync(
-      Schema.Struct({ main: Schema.Literal(receiptWorkerMain(role, fallback)) })
+      Schema.Struct({ main: Schema.Literal(receiptWorkerMain({ role, fallback })) })
     )(props);
   }
 };

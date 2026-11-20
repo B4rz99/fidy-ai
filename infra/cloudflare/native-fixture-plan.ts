@@ -10,11 +10,12 @@ const smokeResources = [
 ];
 const original = new Set(smokeResources.map((prefix) => prefix + retainedProvider.revision));
 
-export const requireFixtureLifecycle = (
-  rows: ReturnType<typeof describePlan>["resources"],
-  revision: string,
-  fallback: boolean
-): void => {
+type FixtureLifecycle = Readonly<{ revision: string; fallback: boolean }>;
+export const requireFixtureLifecycle = ({
+  rows,
+  revision,
+  fallback,
+}: FixtureLifecycle & { rows: ReturnType<typeof describePlan>["resources"] }): void => {
   const creates = new Set(fallback ? smokeResources.map((prefix) => prefix + revision) : []);
   const retained = new Set(original);
   const updates = new Set(
@@ -27,7 +28,7 @@ export const requireFixtureLifecycle = (
   ]);
   for (const row of rows) {
     if (row.action === "noop") continue;
-    if (!allowed.get(row.action)?.delete(row.logicalId)) {
+    if (allowed.get(row.action)?.delete(row.logicalId) !== true) {
       throw Error("Closed fixture lifecycle differs for " + row.logicalId);
     }
   }
@@ -37,8 +38,12 @@ export const requireFixtureLifecycle = (
 };
 
 /** A same-stack Worker.ref reads the retained Alchemy generation. Only a deferred delete may hold it. */
-export const verifyFixturePlan = (plan: Plan, revision: string, fallback: boolean): void => {
-  requireFixtureLifecycle(describePlan(plan).resources, revision, fallback);
+export const verifyFixturePlan = ({
+  plan,
+  revision,
+  fallback,
+}: FixtureLifecycle & { plan: Plan }): void => {
+  requireFixtureLifecycle({ rows: describePlan(plan).resources, revision, fallback });
   const originalId = "ReleaseSmoke-" + retainedProvider.revision;
   const [worker] = Object.values(plan.deletions).filter(
     (row) => row !== undefined && describeResource(row).logicalId === originalId

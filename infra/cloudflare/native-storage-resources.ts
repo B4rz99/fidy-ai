@@ -84,8 +84,8 @@ const verifyResourcePlan = Effect.fn(function* ({
     const fingerprint = yield* expectedFixtureSigner;
     const fallback = (yield* fixtureBuild) === "fallback";
     if (fingerprint !== "") {
-      yield* Effect.try(() => verifyFixturePlan(plan, revision, fallback)).pipe(
-        nativeResourceStage("retained fixture generation")
+      yield* Effect.try(() => verifyFixturePlan({ plan, revision, fallback })).pipe(
+        nativeResourceStage("resource inventory")
       );
     }
     yield* Effect.sync(() =>

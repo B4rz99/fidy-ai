@@ -10,7 +10,13 @@ const workerFiles = {
   ordinary: { Core: "core-worker", Ingress: "public-worker" },
   fallback: { Core: "fixture-fallback-core", Ingress: "fixture-fallback-ingress" },
 };
-export const receiptWorkerMain = (role: "Core" | "Ingress", fallback: boolean): string =>
+export const receiptWorkerMain = ({
+  role,
+  fallback,
+}: {
+  role: "Core" | "Ingress";
+  fallback: boolean;
+}): string =>
   "../../apps/server/cloudflare/" + workerFiles[fallback ? "fallback" : "ordinary"][role] + ".ts";
 
 export const expectedFixtureSigner = Config.String("NATIVE_FIXTURE_SIGNER_SHA256").pipe(

@@ -257,6 +257,8 @@ their own protected observations.
 
 ### Obtain the closed native Transaction fixture receipt
 
+The eight-original Transaction history comparison covers that financial view only. The browser,
+Budget, Recurring and Needs Review comparisons require their own fixture parity and observations.
 The protected Transaction comparison requires a tracked receipt-capable native revision on the
 closed acceptance hosts. The release builder adds one Core signing secret, its public-key fingerprint and the verified
 closed provider revision when the protected release selects `transaction_fixture_signer`.

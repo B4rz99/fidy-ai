@@ -248,7 +248,9 @@ const verifyStorageUpload = Effect.fn(function* (
   yield* proveRecoveryCorePrivate(env, client, installationNames.Core);
   yield* verifyInstalledNamespaces({ env, client, storage: stored, workers: [ingress, core] });
   const candidate = yield* buildStorageRelease();
-  if (!storageOverlap({ stable: stored.description, candidate }).forward) {
+  const overlap = storageOverlap({ stable: stored.description, candidate });
+  const signed = (yield* expectedFixtureSigner) !== "";
+  if (!overlap.forward || (signed && !overlap.rollback)) {
     return yield* new ReleaseFailure({
       message: "Incompatible native history or protocol before upload",
     });

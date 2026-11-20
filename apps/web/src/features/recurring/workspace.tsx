@@ -7,6 +7,7 @@ import {
   type Dispatch,
   type JSX,
   type ReactNode,
+  type RefCallback,
   type SetStateAction,
   Suspense,
   useState,
@@ -74,6 +75,7 @@ type Props = Readonly<{
   applyFilters: (filters: Filters) => void;
   month: (step: number) => void;
   earlier: (month: string) => void;
+  revealEarlier: RefCallback<HTMLDetailsElement>;
   timeZone: PlanInput["timeZone"];
 }>;
 const selectedOccurrence = (
@@ -246,12 +248,20 @@ const Monthly = ({
   calendar,
   open,
   earlier,
+  revealEarlier,
   categories,
   save,
   disabled,
 }: Pick<
   Props,
-  "view" | "save" | "disabled" | "earlier" | "categories" | "filters" | "applyFilters"
+  | "view"
+  | "save"
+  | "disabled"
+  | "earlier"
+  | "revealEarlier"
+  | "categories"
+  | "filters"
+  | "applyFilters"
 > &
   Readonly<{ calendar: boolean; open: (item: Occurrence) => void }>): JSX.Element => (
   <>
@@ -269,6 +279,7 @@ const Monthly = ({
     <PreviousItems
       view={view}
       earlier={earlier}
+      revealEarlier={revealEarlier}
       open={open}
       categories={categories}
       save={save}
@@ -279,13 +290,14 @@ const Monthly = ({
 const PreviousItems = ({
   view,
   earlier,
+  revealEarlier,
   open,
   categories,
   save,
   disabled,
-}: Pick<Props, "view" | "earlier" | "categories" | "save" | "disabled"> &
+}: Pick<Props, "view" | "earlier" | "revealEarlier" | "categories" | "save" | "disabled"> &
   Readonly<{ open: (item: Occurrence) => void }>): JSX.Element => (
-  <details data-recurring-slot="previous" className="group/previous min-w-0">
+  <details ref={revealEarlier} data-recurring-slot="previous" className="group/previous min-w-0">
     <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-medium [&::-webkit-details-marker]:hidden">
       <HugeiconsIcon
         icon={ArrowDown01Icon}

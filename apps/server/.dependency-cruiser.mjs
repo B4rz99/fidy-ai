@@ -10,19 +10,21 @@ export default {
         path: "^(src|cloudflare)/",
         pathNot: [
           "\\.test\\.ts$",
-          "^cloudflare/(agent/hosted-alarm|core-http/lost-read|maintenance/native-monitor|transactions/addressed-read|user-clock|ingestion/private-email)\\.test-fixture\\.ts$",
+          "^cloudflare/(agent/hosted-alarm|core-http/lost-read|maintenance/native-(monitor|fleet)|transactions/addressed-read|user-clock|ingestion/private-email)\\.test-fixture\\.ts$",
           "^cloudflare/capacity-worker\\.test-fixture\\.ts$",
           "^cloudflare/connection-worker\\.test-fixture\\.ts$",
           "^cloudflare/erasure-worker\\.test-fixture\\.ts$",
           "^cloudflare/login-email-worker\\.test-fixture\\.ts$",
           "^cloudflare/storage-forward-repair\\.test-fixture\\.ts$",
+          // The exact two permitted fallback-to-application edges are checked by published-only.
+          "^cloudflare/fixture-fallback-(core|ingress)\\.ts$",
           "^cloudflare/(core-worker|public-worker|operational-canary-workflow)\\.ts$",
           "^cloudflare/ingestion/email-worker\\.ts$",
           "\\.d\\.mts$",
         ],
       },
       to: {
-        path: "^cloudflare/((core-worker|public-worker|operational-canary-workflow)\\.ts|ingestion/email-worker\\.ts)$",
+        path: "^cloudflare/((core-worker|public-worker|operational-canary-workflow|fixture-fallback-core|fixture-fallback-ingress)\\.ts|ingestion/email-worker\\.ts)$",
       },
     },
     {
@@ -69,7 +71,10 @@ export default {
         "Maintenance composes published owner runtimes and declarations only; SQL, policies, admission and lifecycle implementations remain with their owners (#614).",
       from: {
         path: "^cloudflare/maintenance/",
-        pathNot: ["\\.test\\.ts$", "^cloudflare/maintenance/native-monitor\\.test-fixture\\.ts$"],
+        pathNot: [
+          "\\.test\\.ts$",
+          "^cloudflare/maintenance/native-(monitor|fleet)\\.test-fixture\\.ts$",
+        ],
       },
       to: {
         path: ["^cloudflare/", "^src/(core|shell)/"],

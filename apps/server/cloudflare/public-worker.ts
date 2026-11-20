@@ -38,7 +38,7 @@ import {
   type WorkerTelemetryEnvironment,
   workerInternalTraceHeader,
 } from "./runtime/telemetry/contract";
-import { Cause, Effect, Option, Schema } from "effect";
+import { Cause, Clock, Effect, Option, Schema } from "effect";
 import { cloudflareWorkerTelemetry, observeWorkerRequest } from "./runtime/telemetry/operations";
 import { browserOrigins, productionTopology } from "./runtime/contract";
 import {
@@ -63,10 +63,16 @@ import {
   closedHostEnvironment,
   isAcceptanceReceipt,
   isAcceptanceWindow,
+  isPerformanceReceipt,
+  receiptAdmitted,
   releaseAdmission,
   signAcceptanceRequest,
 } from "./release-isolation/operations";
-import { acceptanceApiHeader, acceptanceProofHeader } from "./release-isolation/contract";
+import {
+  acceptanceApiHeader,
+  acceptanceProofHeader,
+  performanceReceiptPath,
+} from "./release-isolation/contract";
 
 type PublicEnvironment = WorkerTelemetryEnvironment & {
   readonly BROWSER_ORIGIN: string;
@@ -968,8 +974,50 @@ const forwardStorageProbe = Effect.fn(function* (request: Request, environment: 
   return new Response(result.body, { status: result.status, headers });
 });
 
+const forwardPerformanceReceipt = Effect.fn(function* (
+  request: Request,
+  environment: PublicEnvironment,
+  deadline: Option.Option<number>
+) {
+  if (
+    Option.isNone(deadline) ||
+    !(yield* receiptAdmitted({
+      request,
+      environment,
+      boundary: "ingress",
+      now: yield* Clock.currentTimeMillis,
+    }))
+  ) {
+    return new Response(null, { status: 404 });
+  }
+  const headers = new Headers();
+  for (const name of ["origin", "cookie", "fidy-session-binding", "content-type"]) {
+    headers.set(name, request.headers.get(name) ?? "");
+  }
+  const forwarded = new Request("https://core.internal" + performanceReceiptPath, {
+    method: "POST",
+    headers,
+    body: request.body,
+    signal: request.signal,
+  });
+  yield* bindCoreAcceptance(forwarded, environment, deadline);
+  return yield* Effect.tryPromise(() => environment.CORE.fetch(forwarded));
+});
+const privateForward = (
+  request: Request,
+  environment: PublicEnvironment,
+  deadline: Option.Option<number>
+): Effect.Effect<Response> =>
+  isPerformanceReceipt(request)
+    ? forwardPerformanceReceipt(request, environment, deadline).pipe(
+        Effect.orElseSucceed(() => new Response(null, { status: 503 }))
+      )
+    : forwardStorageProbe(request, environment);
 const privateReleaseRequest = (request: Request): boolean =>
-  isStorageProbe(request) || isAcceptanceWindow(request) || isAcceptanceReceipt(request);
+  isStorageProbe(request) ||
+  isAcceptanceWindow(request) ||
+  isAcceptanceReceipt(request) ||
+  isPerformanceReceipt(request);
 const fetchEffect = (
   request: Request,
   environment: PublicEnvironment,
@@ -994,7 +1042,7 @@ const fetchEffect = (
       return applyApiPolicy(admitted.denial.value, browserOrigin.value, origin);
     }
     if (privateReleaseRequest(request)) {
-      return yield* forwardStorageProbe(request, environment);
+      return yield* privateForward(request, environment, admitted.deadline);
     }
     const distributionResponse = yield* cliDistributionResponse(request);
     if (Option.isSome(distributionResponse)) {

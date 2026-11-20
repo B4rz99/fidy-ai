@@ -136,7 +136,7 @@ it("requires all four buckets, eight exact Workflow owners and nine consumers wi
   ));
 it("refuses a correct binding label connected to an incumbent or a foreign Worker", () => {
   const bindings = Object.fromEntries(
-    [...nativeBindingInventory("Ingress")].map(([name, type]) => [
+    [...nativeBindingInventory({ fingerprint: "", role: "Ingress" })].map(([name, type]) => [
       name,
       {
         name,
@@ -146,10 +146,13 @@ it("refuses a correct binding label connected to an incumbent or a foreign Worke
       },
     ])
   );
-  expect(() => requireDeployedRole({ role: "Ingress", revision, bindings })).not.toThrow();
+  expect(() =>
+    requireDeployedRole({ fingerprint: "", role: "Ingress", revision, bindings })
+  ).not.toThrow();
   for (const name of ["CORE", "RELEASE_FIXTURE"]) {
     expect(() =>
       requireDeployedRole({
+        fingerprint: "",
         role: "Ingress",
         revision,
         bindings: { ...bindings, [name]: { ...bindings[name], service: "incumbent" } },
@@ -173,6 +176,7 @@ it("verifies the exact serving assets-only version independently of executable W
   };
   const check = (resources: unknown, id = versionId, role: "Web" | "Ingress" = "Web"): void =>
     verifyDeployedVersion({
+      fingerprint: "",
       raw: { success: true, result: { id, resources } },
       versionId,
       revision,
@@ -224,7 +228,14 @@ it("requires all five pinned Alchemy runtime bindings alongside only the declare
         },
       },
     };
-    verifyDeployedVersion({ raw, versionId, revision, account, role: "ForwardedEmail" });
+    verifyDeployedVersion({
+      fingerprint: "",
+      raw,
+      versionId,
+      revision,
+      account,
+      role: "ForwardedEmail",
+    });
   };
   expect(() => check(entries)).not.toThrow();
   for (const name of Object.keys(entries)) {

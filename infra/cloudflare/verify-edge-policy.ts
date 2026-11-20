@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "b6e24e4d458b74806f52c6fbaae098285182ba9678f067340ee5d5cb76d60de3";
+const expectedEdgePolicyDigest = "5f650cf6dda8a7388bcc9d6d340d7baf220b212f91e21bb1e1c90dbd4534d3e7";
 const securityArtifacts = [
   ...(await Promise.all(
     [
@@ -23,6 +23,17 @@ const securityArtifacts = [
       "../../apps/server/cloudflare/release-isolation/contract.ts",
       "../../apps/server/cloudflare/release-isolation/internal/deployment.ts",
       "../../apps/server/cloudflare/release-isolation/internal/request-proof.ts",
+      "../../apps/server/cloudflare/release-isolation/internal/performance-receipt.ts",
+      "../../apps/server/cloudflare/transactions/internal/performance-receipt.ts",
+      "./native-fixture-signer.ts",
+      "./native-retained-provider.json",
+      "./native-fallback-probe.ts",
+      "./native-fixture-plan.ts",
+      "./native-fallback-recovery.ts",
+      "./production-release.ts",
+      "../../scripts/infra-performance/canonical-fixture/fallback_stage.py",
+      "../../apps/server/cloudflare/fixture-fallback-core.ts",
+      "../../apps/server/cloudflare/fixture-fallback-ingress.ts",
       "../../apps/server/cloudflare/release-isolation/runtime.ts",
       "../../apps/server/cloudflare/runtime/release-smoke/internal/platform.ts",
       "./installed-verification-revision.ts",
@@ -41,6 +52,20 @@ const securityArtifacts = [
       "./native-fleet-pilot.ts",
       "./native-ten-fleet.ts",
       "./native-ten-release.ts",
+      "../../.github/workflows/native-transaction-cohort.yml",
+      "../../scripts/infra-performance/canonical-fixture/cohort-bridge.ts",
+      "../../scripts/infra-performance/canonical-fixture/cohort.py",
+      "../../scripts/infra-performance/canonical-fixture/cohort_runner.py",
+      "../../scripts/infra-performance/canonical-fixture/hosted.py",
+      "../../scripts/infra-performance/canonical-fixture/installation.py",
+      "../../scripts/infra-performance/canonical-fixture/native_budget.py",
+      "../../scripts/infra-performance/canonical-fixture/protected_cohort.py",
+      "../../scripts/infra-performance/canonical-fixture/qualified_release.py",
+      "../../scripts/infra-performance/cells/owner.py",
+      "../../scripts/infra-performance/cells/owner_state.py",
+      "../../scripts/infra-performance/cells/owner_transport.py",
+      "../../scripts/infra-performance/cells/owner_cloud.py",
+      "../../scripts/infra-performance/cells/owner_bundle.py",
       "../../scripts/infra-performance/deployed-fleet/ten-source.sh",
       "../../scripts/infra-performance/deployed-fleet/ten.py",
       "../../scripts/infra-performance/deployed-fleet/pilot.py",

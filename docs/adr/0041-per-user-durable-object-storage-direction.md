@@ -406,6 +406,12 @@ Record failed and partial attempts, errors, throttling and completed versus offe
 dispatch or reduced throughput cannot manufacture a latency pass. Cold cohorts need observed
 lifecycle evidence, with unknown runtime state reported as missing evidence.
 
+Compare both deployed variants on Cloudflare with the small fixture containing eight original
+Transactions and one Reconciliation link. Run the 100,000-Transaction fixture on both variants
+in workerd, including its 100 RecurringPlans with 100 revisions each and 5,000 NeedsReviewItems.
+Report each environment separately. Prioritize the browser journeys that missed 1.8× and time
+each through its complete fresh usable view. [Fixture decision](https://github.com/B4rz99/fidy-ai/issues/2226)
+
 Keep network and provider delays inside the timing boundary that includes them. A case that cannot
 reach 1.8× has not passed; subtracting those delays or substituting server-only gains would change
 the decision. New DO-only probes without comparable D1 behavior retain their accepted absolute

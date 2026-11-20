@@ -1,3 +1,5 @@
+import retainedProvider from "./native-retained-provider.json" with { type: "json" };
+import { fixtureArtifacts } from "./native-fixture-signer";
 import { Hex } from "effect/encoding";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { type Output, map } from "alchemy/Output";
@@ -55,11 +57,16 @@ export const nativeReleaseContext = Effect.fn(function* (development: boolean, s
   );
   const closed = admission === "closed",
     origin = pairedOrigin(closed, hosts);
-  const fixtureSecret = (name: string, prefix = ""): Redacted.Redacted<string> =>
+  const artifacts = yield* fixtureArtifacts;
+  const fixtureSecret = (
+    name: string,
+    prefix = "",
+    generation = release.gitRevision
+  ): Redacted.Redacted<string> =>
     Redacted.make(
       prefix +
         new Bun.CryptoHasher("sha256", Redacted.value(proof))
-          .update(release.gitRevision + "/" + name)
+          .update(generation + "/" + name)
           .digest("hex")
     );
   const shared = {
@@ -72,7 +79,7 @@ export const nativeReleaseContext = Effect.fn(function* (development: boolean, s
     CF_VERSION_METADATA: Cloudflare.Workers.VersionMetadata(),
     SMOKE_PROOF: proof,
   };
-  return { release, development, closed, hosts, origin, shared, fixtureSecret };
+  return { release, development, closed, hosts, origin, shared, fixtureSecret, ...artifacts };
 });
 export type NativeRelease = Effect.Success<ReturnType<typeof nativeReleaseContext>>;
 
@@ -153,7 +160,13 @@ const fixtureProviders = (
 });
 export const providerBindings = Effect.fn(function* (release: NativeRelease) {
   const selected = release.closed
-    ? fixtureProviders(release.fixtureSecret)
+    ? fixtureProviders((name, prefix) =>
+        release.fixtureSecret(
+          name,
+          prefix,
+          release.retainProvider ? retainedProvider.revision : release.release.gitRevision
+        )
+      )
     : yield* liveProviders(release.development);
   return {
     ...selected,

@@ -1,11 +1,41 @@
 import { Option } from "effect";
 import { UserStore as NativeUserStore } from "../core-worker";
 
+const statusUnavailable = 503;
+const statusNoContent = 204;
+
 export { default } from "../core-worker";
 export * from "../core-worker";
 
 /** Simulate loss of a committed alarm delivery, then let the real watchdog and alarm recover it. */
 export class UserStore extends NativeUserStore {
+  private holdChecks = false;
+  private readonly checks = { admitted: 0, aborted: 0, active: 0 };
+  private heldCheck(request: Request): Option.Option<Promise<Response>> {
+    if (request.url === "https://fixture.invalid/hold-check") {
+      this.holdChecks = true;
+      return Option.some(Promise.resolve(new Response(null, { status: statusNoContent })));
+    }
+    if (request.url === "https://fixture.invalid/held-checks") {
+      return Option.some(Promise.resolve(Response.json(this.checks)));
+    }
+    if (!this.holdChecks || request.url !== "https://owner.internal/work/check") {
+      return Option.none();
+    }
+    const held = Promise.withResolvers<Response>();
+    this.checks.admitted++;
+    this.checks.active++;
+    request.signal.addEventListener(
+      "abort",
+      () => {
+        this.checks.aborted++;
+        this.checks.active--;
+        held.resolve(new Response(null, { status: statusUnavailable }));
+      },
+      { once: true }
+    );
+    return Option.some(held.promise);
+  }
   private pausePath = "";
   private arrived = false;
   private disconnected = false;
@@ -68,6 +98,8 @@ export class UserStore extends NativeUserStore {
     return Option.none();
   }
   override fetch(request: Request): Promise<Response> {
+    const held = this.heldCheck(request);
+    if (Option.isSome(held)) return held.value;
     const clocked = this.clockRequest(request);
     if (Option.isSome(clocked)) return clocked.value;
     const paused = this.pausedRequest(request);

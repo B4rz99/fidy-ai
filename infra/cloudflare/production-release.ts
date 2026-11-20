@@ -719,28 +719,31 @@ export const releasePort = ({
 }: {
   env: Config;
   client: HttpClient.HttpClient;
-}): ReleasePort => {
+}): ReleasePort & {
+  recentDeployments(name: string): Effect.Effect<readonly Deployment[], Error>;
+} => {
   const json = (request: HttpClientRequest.HttpClientRequest): Effect.Effect<unknown, Error> =>
     providerJson(request, request.method === "POST").pipe(
       Effect.provideService(HttpClient.HttpClient, client)
     );
   const url = (name: string): string =>
     `https://api.cloudflare.com/client/v4/accounts/${env.account}/workers/scripts/${encodeURIComponent(name)}/deployments`;
-  const current: ReleasePort["current"] = (name) =>
-    Effect.gen(function* () {
-      const raw = yield* json(
-        HttpClientRequest.get(url(name), {
-          headers: { authorization: `Bearer ${env.token}` },
-        })
-      );
-      const response = yield* Schema.decodeUnknownEffect(ListResponse)(raw);
-      const active = response.result.deployments[0];
-      if (active === undefined) return yield* Effect.fail(Error(`No active deployment: ${name}`));
-      return asDeployment(active);
-    });
+  const recentDeployments = Effect.fn(function* (name: string) {
+    const raw = yield* json(
+      HttpClientRequest.get(url(name), { headers: { authorization: `Bearer ${env.token}` } })
+    );
+    const response = yield* Schema.decodeUnknownEffect(ListResponse)(raw);
+    return response.result.deployments.map(asDeployment);
+  });
+  const current: ReleasePort["current"] = Effect.fn(function* (name) {
+    const [active] = yield* recentDeployments(name);
+    if (active === undefined) return yield* Effect.fail(Error(`No active deployment: ${name}`));
+    return active;
+  });
   return {
     trunk: () => readTrunk(env).pipe(Effect.provideService(HttpClient.HttpClient, client)),
     current,
+    recentDeployments,
     deploy: (name, versions) =>
       Effect.gen(function* () {
         if (versions.some((version) => version.percentage === 0)) {

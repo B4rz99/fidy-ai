@@ -80,6 +80,6 @@ jobs:
       - name: Run profiler and evidence regressions
         if: matrix.check == 'profiler'
         run: |
-          bun test scripts/document-parsing/workerd-inspector.test.ts
+          bun node_modules/vitest/vitest.mjs run --config scripts/vitest.config.ts scripts/document-parsing/workerd-inspector.test.ts
           bun scripts/infra-performance/load/trace.test.mjs
           python3 -m unittest discover -s scripts/infra-performance/load

@@ -1,6 +1,7 @@
 import type * as Alchemist from "alchemy/Alchemist";
-import { Schema } from "effect";
+import { Data, Schema } from "effect";
 import { type Plan, describePlan, describeResource } from "alchemy/Plan";
+import { nativeResourceInventory } from "./native-graph";
 import fixtureUpload from "./native-fixture-upload.json" with { type: "json" };
 import retainedProvider from "./native-retained-provider.json" with { type: "json" };
 
@@ -26,6 +27,26 @@ const smokeResources = [
 ];
 const original = new Set(smokeResources.map((prefix) => prefix + retainedProvider.revision));
 
+type PlanRows = ReturnType<typeof describePlan>["resources"];
+const knownResources = new Map([
+  ...nativeResourceInventory(fixtureUpload.revision),
+  ...nativeResourceInventory(retainedProvider.revision),
+]);
+type ObservedResource = Pick<PlanRows[number], "logicalId" | "resourceType" | "action">;
+export const projectFixtureInventory = (rows: PlanRows): ReadonlyArray<ObservedResource> =>
+  rows.map(({ logicalId, resourceType, action }) =>
+    knownResources.has(logicalId) && knownResources.get(logicalId) === resourceType
+      ? { logicalId, resourceType, action }
+      : { logicalId: "unrecognized", resourceType: "unrecognized", action }
+  );
+
+export class FixturePlanRefused extends Data.TaggedError("FixturePlanRefused")<{
+  reason:
+    | "unexpected change"
+    | "missing required update or deferred deletion"
+    | "missing deferred original Worker"
+    | "original Worker state or name differs";
+}> {}
 export const requireFixtureLifecycle = ({
   rows,
   fallback,
@@ -43,12 +64,10 @@ export const requireFixtureLifecycle = ({
   for (const row of rows) {
     if (row.action === "noop") continue;
     if (changes.get(row.action)?.delete(row.logicalId) === true) continue;
-    throw Error("Closed fixture lifecycle differs for " + row.logicalId);
+    throw new FixturePlanRefused({ reason: "unexpected change" });
   }
   if (retained.size !== 0 || candidates.size !== 0) {
-    throw Error(
-      "Closed fixture requires both Worker updates and its exact retained provider generation"
-    );
+    throw new FixturePlanRefused({ reason: "missing required update or deferred deletion" });
   }
 };
 
@@ -60,14 +79,17 @@ export const verifyFixturePlan = ({ plan, fallback }: { plan: Plan; fallback: bo
     (row) => row !== undefined && describeResource(row).logicalId === originalId
   );
   if (worker?.action !== "delete") {
-    throw Error("Missing deferred original provider");
+    throw new FixturePlanRefused({ reason: "missing deferred original Worker" });
   }
-  Schema.decodeUnknownSync(
+  const retainedWorker = Schema.is(
     Schema.Struct({
       status: Schema.Literals(["created", "updated"]),
       attr: Schema.Struct({
         workerName: Schema.Literal("fidy-native-smoke-" + retainedProvider.revision),
       }),
     })
-  )(worker.state);
+  );
+  if (!retainedWorker(worker.state)) {
+    throw new FixturePlanRefused({ reason: "original Worker state or name differs" });
+  }
 };

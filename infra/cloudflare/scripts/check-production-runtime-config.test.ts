@@ -64,6 +64,27 @@ const runConfigurationGate = (
 };
 
 describe("Production runtime configuration gate", () => {
+  it("rebuilds the retained Web output before signed planning and saves refused read-only evidence", async () => {
+    const workflow = await readFile(productionWorkflowPath, "utf8");
+    const build = await workflowStep(
+      "Build the expected browser artifact for independent verification"
+    );
+    for (const operation of ["plan-fixture-repair", "resume-fixture-upload", "rollout"]) {
+      expect(build).toContain(operation);
+    }
+    expect(build).toContain("env.FIXTURE_WEB_REVISION");
+    expect(workflow.indexOf(build)).toBeLessThan(
+      workflow.indexOf(
+        await workflowStep("Read the complete dormant resource plan without applying it")
+      )
+    );
+    expect(workflow.indexOf(build)).toBeLessThan(
+      workflow.indexOf(await workflowStep("Upload the verified native candidates"))
+    );
+    const archive = await workflowStep("Save the observed read-only fallback inventory");
+    expect(archive).toContain("always()");
+    expect(archive).toContain("steps.dormant_plan.outcome == 'failure'");
+  });
   it("accepts a complete runtime configuration without printing values", () => {
     const result = runConfigurationGate();
 

@@ -1,5 +1,6 @@
 import { Cause, Data, Effect, Option, Schema } from "effect";
 import { HttpClientError } from "effect/http";
+import { FixturePlanRefused } from "./native-fixture-plan";
 import { RecoveryPinUnavailable } from "./native-recovery-identity";
 
 const maximumRefusalReasons = 16;
@@ -72,6 +73,7 @@ const StateRefusal = Schema.TaggedStruct("StateStoreError", {
 });
 
 const refusalCategory = (error: unknown, failure: boolean): string => {
+  if (error instanceof FixturePlanRefused) return "closed fixture " + error.reason;
   if (error instanceof RecoveryPinUnavailable) return "account recovery PIN " + error.reason;
   const state = Schema.decodeUnknownOption(StateRefusal)(error);
   if (Option.isSome(state)) return "StateStoreError; HTTP " + state.value.http.status;

@@ -27,7 +27,28 @@ STEPS = {
 }
 
 
-def verify_dispatch(env, parents):
+REPAIR_REVISION = "4becc649ec41d8c8215b481d86f3b488762625f9"
+VERIFIER_FILES = {
+    ".github/workflows/native-storage-release.yml",
+    "docs/operations/production-benchmark-budget.md",
+    "infra/cloudflare/native-fixture-plan.ts",
+    "infra/cloudflare/native-fixture-plan.test.ts",
+    "infra/cloudflare/native-storage-resources.ts",
+    "infra/cloudflare/resource-failure.ts",
+    "infra/cloudflare/resource-failure.test.ts",
+    "infra/cloudflare/retained-web-build.test.ts",
+    "infra/cloudflare/verify-edge-policy.ts",
+    "infra/cloudflare/scripts/check-production-runtime-config.test.ts",
+    "scripts/infra-performance/canonical-fixture/interrupted_upload.py",
+    "scripts/infra-performance/canonical-fixture/test_interrupted_upload.py",
+}
+
+
+def git_read(*args):
+    return subprocess.check_output(["git", *args]).decode().removesuffix("\n")
+
+
+def verify_dispatch(env, git=git_read):
     revision = env.get("GITHUB_SHA", "")
     if (env.get("GITHUB_REPOSITORY") != REPO or env.get("GITHUB_REF") != "refs/heads/trunk"
             or env.get("GITHUB_REF_PROTECTED") != "true" or env.get("GITHUB_EVENT_NAME") != "workflow_dispatch"
@@ -35,8 +56,12 @@ def verify_dispatch(env, parents):
             or env.get("NATIVE_STORAGE_HOSTS") != "acceptance" or env.get("NATIVE_FIXTURE_BUILD") != "fallback"
             or env.get("FIXTURE_RELEASE_OPERATION") not in ("plan-fixture-repair", "resume-fixture-upload")
             or not re.fullmatch("[a-f0-9]{64}", env.get("NATIVE_FIXTURE_SIGNER_SHA256", ""))
-            or not re.fullmatch("[a-f0-9]{40}", revision) or parents != [revision, REVISION]):
-        raise ValueError("The interrupted upload requires its immediate protected repair revision")
+            or not re.fullmatch("[a-f0-9]{40}", revision) or git("rev-parse", "HEAD") != revision
+            or git("merge-base", REPAIR_REVISION, revision) != REPAIR_REVISION):
+        raise ValueError("The interrupted upload requires its protected repair source")
+    changed = set(git("diff", "--name-only", "--no-renames", "-z", REPAIR_REVISION, revision, "--").split("\0")) - {""}
+    if not changed <= VERIFIER_FILES:
+        raise ValueError("Protected Worker, Web or dependency source differs from the reviewed repair")
 
 
 def source_documents(get=actions_get):
@@ -62,8 +87,7 @@ def source_documents(get=actions_get):
 
 
 def main():
-    parents = subprocess.check_output(["git", "rev-list", "--parents", "-n", "1", "HEAD"], text=True).split()
-    verify_dispatch(os.environ, parents)
+    verify_dispatch(os.environ)
     snapshot, controls = source_documents()
     directory = Path(os.environ["RUNNER_TEMP"])
     for filename, value in [("native-release.json.source", snapshot), ("native-release.json.source.controls", controls)]:

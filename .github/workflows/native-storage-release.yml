@@ -131,6 +131,12 @@ jobs:
       - name: Check the reviewed release policy
         working-directory: infra/cloudflare
         run: bun verify-edge-policy.ts
+      - name: Build the expected browser artifact for independent verification
+        if: inputs.operation == 'plan-fixture-repair' || inputs.operation == 'verify' || inputs.operation == 'verify-erasure' || inputs.operation == 'continue-erasure' || inputs.operation == 'fleet-pilot' || inputs.operation == 'continue-fleet-cleanup' || inputs.operation == 'ten-hosted' || inputs.operation == 'continue-ten-cleanup' || inputs.operation == 'stage-hosts' || inputs.operation == 'recover-fixture-fallback' || inputs.operation == 'resume-fixture-upload' || (inputs.transaction_fixture_signer && inputs.operation == 'rollout')
+        env:
+          RELEASE_GIT_SHA: ${{ env.FIXTURE_WEB_REVISION || inputs.installed_revision || github.sha }}
+        working-directory: apps/web
+        run: bun run build:production
       - name: Verify the fresh native plan against the existing state store
         if: inputs.operation == 'plan-first-install'
         env:
@@ -155,13 +161,14 @@ jobs:
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts capture
       - name: Read the complete dormant resource plan without applying it
+        id: dormant_plan
         if: inputs.operation == 'plan-fixture-fallback' || inputs.operation == 'plan-fixture-repair'
         working-directory: infra/cloudflare
         env:
           NATIVE_FIXTURE_SIGNING_KEY: ${{ secrets.NATIVE_FIXTURE_SIGNING_KEY }}
         run: bun native-storage-resources.ts plan-fixture-fallback
-      - name: Save the verified read-only fallback inventory
-        if: inputs.operation == 'plan-fixture-fallback' || inputs.operation == 'plan-fixture-repair'
+      - name: Save the observed read-only fallback inventory
+        if: always() && (steps.dormant_plan.outcome == 'success' || steps.dormant_plan.outcome == 'failure')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: native-fixture-plan-${{ github.run_id }}
@@ -214,12 +221,6 @@ jobs:
         if: inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback'
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts promote
-      - name: Build the expected browser artifact for independent verification
-        if: inputs.operation == 'verify' || inputs.operation == 'verify-erasure' || inputs.operation == 'continue-erasure' || inputs.operation == 'fleet-pilot' || inputs.operation == 'continue-fleet-cleanup' || inputs.operation == 'ten-hosted' || inputs.operation == 'continue-ten-cleanup' || inputs.operation == 'stage-hosts' || inputs.operation == 'recover-fixture-fallback' || inputs.operation == 'resume-fixture-upload' || (inputs.transaction_fixture_signer && inputs.operation == 'rollout')
-        env:
-          RELEASE_GIT_SHA: ${{ env.FIXTURE_WEB_REVISION || inputs.installed_revision || github.sha }}
-        working-directory: apps/web
-        run: bun run build:production
       - name: Stage only canonical Access paths and vacant hostnames on the verified closed release
         if: inputs.operation == 'stage-hosts'
         env:

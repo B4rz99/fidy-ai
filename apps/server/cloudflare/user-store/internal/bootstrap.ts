@@ -1,3 +1,4 @@
+import { acceptanceProviderRevision } from "../../release-isolation/contract";
 import { acceptanceSubject } from "../../release-isolation/operations";
 import type { NativeAcceptanceSettings } from "../../release-isolation/contract";
 import { proofPolicy } from "../../browser-login/contract";
@@ -254,7 +255,7 @@ const failedLookup = (status: number): Response =>
 const admittedHandoff = (handoff: Handoff, env: Environment): boolean =>
   env.NATIVE_STORAGE_ADMISSION !== "closed" ||
   acceptanceSubject({
-    revision: env.RELEASE_GIT_SHA ?? "",
+    revision: acceptanceProviderRevision(env),
     issuer: handoff.issuer,
     subject: handoff.subject,
   });

@@ -71,30 +71,33 @@ export const ChoiceDropdown = ({
           aria-hidden="true"
         />
       </DropdownMenuTrigger>
-      <ChoiceMenuOptions value={value} options={options} onChange={onChange} />
+      <ChoiceMenu value={value} getOptions={() => options} onChange={onChange} />
     </DropdownMenu>
   );
 };
 
-export const ChoiceMenuOptions = ({
-  value,
-  options,
-  onChange,
-}: Pick<DropdownProps, "value" | "options" | "onChange">): JSX.Element => (
+type ChoiceMenuProps = Pick<DropdownProps, "value" | "onChange"> &
+  Readonly<{ getOptions: () => DropdownProps["options"] }>;
+
+const ChoiceMenu = (props: ChoiceMenuProps): JSX.Element => (
   <DropdownMenuContent align="start" className="min-w-0 max-w-(--available-width)">
-    <DropdownMenuRadioGroup
-      value={value}
-      onValueChange={(next: unknown) => {
-        if (typeof next === "string") onChange(next);
-      }}
-    >
-      {options.map((option) => (
-        <DropdownMenuRadioItem key={option.value} value={option.value} closeOnClick>
-          <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{option.label}</span>
-        </DropdownMenuRadioItem>
-      ))}
-    </DropdownMenuRadioGroup>
+    <ChoiceMenuOptions {...props} />
   </DropdownMenuContent>
+);
+
+const ChoiceMenuOptions = ({ value, getOptions, onChange }: ChoiceMenuProps): JSX.Element => (
+  <DropdownMenuRadioGroup
+    value={value}
+    onValueChange={(next: unknown) => {
+      if (typeof next === "string") onChange(next);
+    }}
+  >
+    {getOptions().map((option) => (
+      <DropdownMenuRadioItem key={option.value} value={option.value} closeOnClick>
+        <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{option.label}</span>
+      </DropdownMenuRadioItem>
+    ))}
+  </DropdownMenuRadioGroup>
 );
 
 /** Selection effects belong to the caller. */
@@ -104,9 +107,10 @@ export const InlineChoiceDropdown = ({
   leading,
   children,
   value,
-  options,
+  getOptions,
   onChange,
-}: Pick<DropdownProps, "label" | "disabled" | "leading" | "value" | "options" | "onChange"> &
+}: ChoiceMenuProps &
+  Pick<DropdownProps, "label" | "disabled" | "leading"> &
   Readonly<{ children: ReactNode }>): JSX.Element => (
   <DropdownMenu>
     <DropdownMenuTrigger
@@ -123,6 +127,6 @@ export const InlineChoiceDropdown = ({
       {leading}
       <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{children}</span>
     </DropdownMenuTrigger>
-    <ChoiceMenuOptions value={value} options={options} onChange={onChange} />
+    <ChoiceMenu value={value} getOptions={getOptions} onChange={onChange} />
   </DropdownMenu>
 );

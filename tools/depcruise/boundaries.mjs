@@ -151,8 +151,15 @@ const directionRules = [
   },
 ];
 
+// These separately compiled closed entrypoints reuse exactly the ordinary handler they protect.
+const recoveryWorker = new Map([
+  ["cloudflare/fixture-fallback-core.ts", "cloudflare/core-worker.ts"],
+  ["cloudflare/fixture-fallback-ingress.ts", "cloudflare/public-worker.ts"],
+]);
+
 /** @param {Edge} edge - Resolved architectural dependency. */
 const isSharedComposition = ({ from, to }) =>
+  recoveryWorker.get(from) === to ||
   (sharedTestSupport.has(to) && (testSource.test(from) || sharedTestSupport.has(from))) ||
   (compositionRoots.has(to) &&
     (compositionRoots.has(from) || testSource.test(from) || sharedTestSupport.has(from)));

@@ -1,3 +1,4 @@
+import { routeSessionRequest } from "../directory/operations";
 import { isStorageBootstrap, isStorageCompatibility } from "../storage-bootstrap/contract";
 import { initializeSharedStores } from "../storage-bootstrap/operations";
 import { smokeManifest, smokePath, smokeProofAccepted } from "../runtime/release-smoke/contract";
@@ -27,6 +28,8 @@ import {
   fixtureChargeReceipt,
   isAcceptanceReceipt,
   isAcceptanceWindow,
+  isPerformanceReceipt,
+  receiptAdmitted,
   releaseAdmission,
   renewAcceptanceWindow,
 } from "../release-isolation/operations";
@@ -67,14 +70,30 @@ const sharedReadiness = Effect.fn(function* (request: Request, environment: Core
     Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
   );
 });
+const performanceProbe = Effect.fn(function* (request: Request, environment: CoreHttpEnvironment) {
+  const valid = yield* receiptAdmitted({
+    request,
+    environment,
+    boundary: "core",
+    now: yield* Clock.currentTimeMillis,
+  });
+  return Option.some(
+    valid
+      ? yield* routeSessionRequest({ request, environment })
+      : new Response(null, { status: 404 })
+  );
+});
+const readinessPath = (request: Request, url: URL): boolean =>
+  isStorageCompatibility(request) ||
+  isStorageBootstrap(request) ||
+  (request.method === "GET" && url.pathname === smokePath && url.search === "?readiness=1");
 const storageProbe = Effect.fn(function* (request: Request, environment: CoreHttpEnvironment) {
+  if (isPerformanceReceipt(request)) return yield* performanceProbe(request, environment);
   const url = new URL(request.url);
   if (
     environment.RECOVERY_ISOLATION === "isolated" &&
     environment.MAINTENANCE !== undefined &&
-    (isStorageCompatibility(request) ||
-      isStorageBootstrap(request) ||
-      (request.method === "GET" && url.pathname === smokePath && url.search === "?readiness=1"))
+    readinessPath(request, url)
   ) {
     return Option.some(yield* sharedReadiness(request, environment));
   }

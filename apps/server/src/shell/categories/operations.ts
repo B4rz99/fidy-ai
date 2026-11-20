@@ -1,6 +1,6 @@
 import { categoryResponseFromRows, categoryRowsQuery } from "~/shell/categories/internal/query";
 import { Effect, Option } from "effect";
-import { SqlClient } from "effect/sql";
+import { listLaunchCategories } from "~/core/categories/operations";
 import type { CategoryReadInput, ListCategoriesResponse } from "./contract";
 import {
   type CategoryFailure,
@@ -116,18 +116,9 @@ export const categoryUnavailable = (): Unavailable =>
     next: [],
   });
 
-/** The bounded canonical Category read shared by portable HTTP and hosted execution. */
-export const listCategoriesResponse: Effect.Effect<
-  typeof ListCategoriesResponse.Type,
-  Unavailable,
-  SqlClient.SqlClient
-> = Effect.flatMap(SqlClient.SqlClient, (sql) => {
-  const query = categoryRowsQuery();
-  return sql.unsafe<Record<string, unknown>>(query.sql, query.params);
-}).pipe(
-  Effect.mapError(categoryUnavailable),
-  Effect.flatMap((rows) => Effect.fromOption(categoryResponseFromRows(rows), categoryUnavailable))
-);
+/** The release owns the validated, bounded display taxonomy. Callers own authority and Audit. */
+export const listCategoriesResponse: Effect.Effect<typeof ListCategoriesResponse.Type> =
+  Effect.sync(() => ({ data: listLaunchCategories(), next: [] }));
 
 /**
  * Prepare the canonical bounded, ordered Category projection in a caller-owned native unit.

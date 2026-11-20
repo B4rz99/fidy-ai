@@ -69,10 +69,12 @@ const CategoryCorrection = (props: CategoryProps): JSX.Element => {
         disabled={props.disabled || corrections.locked}
         leading={<CategoryVisual label={props.row.categoryLabel} bubble large={false} />}
         value={props.transaction.categoryId}
-        options={props.categories.map((category) => ({
-          value: category.id,
-          label: category.label,
-        }))}
+        getOptions={() =>
+          props.categories.map((category) => ({
+            value: category.id,
+            label: category.label,
+          }))
+        }
         onChange={change}
       >
         {props.row.categoryLabel}

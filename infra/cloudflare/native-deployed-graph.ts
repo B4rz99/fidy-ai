@@ -1,3 +1,4 @@
+import retainedProvider from "./native-retained-provider.json" with { type: "json" };
 import { Effect, Schema } from "effect";
 import {
   type NativeBinding,
@@ -73,15 +74,27 @@ const requireService = (binding: NativeBinding, revision: string): void => {
   const worker = binding.name === "CORE" ? installationNames.Core : smokeName(revision);
   requireTarget(binding.service === worker && binding.entrypoint === undefined, binding.name);
 };
+const requireQueueName = (
+  binding: NativeBinding,
+  queues: ReturnType<typeof queueTargets>
+): void => {
+  if (binding.type === "plain_text" && binding.name.endsWith("_QUEUE_NAME")) {
+    requireTarget(
+      binding.text === prefix + queues[binding.name.slice(0, -"_NAME".length)],
+      binding.name
+    );
+  }
+};
 /** Assert actual provider metadata for each consuming Worker, including its independently deployed private service targets. */
 export const requireDeployedRole = (input: {
   role: Exclude<NativeRole, "Web">;
   revision: string;
   bindings: Readonly<Record<string, unknown>>;
+  fingerprint: string;
 }): void => {
   const { role, revision } = input,
     bindings = Schema.decodeUnknownSync(NativeBindings)(Object.values(input.bindings));
-  requireRoleBindings({ role, bindings });
+  requireRoleBindings({ role, bindings, fingerprint: input.fingerprint });
   const queues = queueTargets(revision);
   for (const binding of bindings) {
     if (binding.type === "r2_bucket") {
@@ -91,13 +104,10 @@ export const requireDeployedRole = (input: {
       requireTarget(binding.queue_name === prefix + queues[binding.name], binding.name);
     }
     if (binding.type === "workflow") requireWorkflowBinding(binding, role, revision);
-    if (binding.type === "service") requireService(binding, revision);
-    if (binding.type === "plain_text" && binding.name.endsWith("_QUEUE_NAME")) {
-      requireTarget(
-        binding.text === prefix + queues[binding.name.slice(0, -"_NAME".length)],
-        binding.name
-      );
+    if (binding.type === "service") {
+      requireService(binding, input.fingerprint === "" ? revision : retainedProvider.revision);
     }
+    requireQueueName(binding, queues);
   }
 };
 const noHandlers = Schema.Tuple([]);
@@ -131,6 +141,7 @@ export const verifyDeployedVersion = (input: {
   account: string;
   versionId: string;
   revision: string;
+  fingerprint: string;
 }): void => {
   if (input.role === "Web") {
     const { result } = Schema.decodeUnknownSync(staticSiteVersion)(input.raw);
@@ -156,7 +167,7 @@ export const verifyDeployedVersion = (input: {
     requireTarget(Schema.is(coordinate)(bindings[name]), name);
     delete bindings[name];
   }
-  requireDeployedRole({ role, revision, bindings });
+  requireDeployedRole({ role, revision, bindings, fingerprint: input.fingerprint });
 };
 const limit = 100;
 const buckets = Effect.fn(function* (read: Read) {

@@ -9,7 +9,17 @@ import { RefreshButton } from "@/ui/components/refresh-button";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { Atom } from "effect/reactivity";
-import { type ComponentType, type JSX, type ReactNode, Suspense, lazy, useState } from "react";
+import {
+  type ComponentType,
+  type JSX,
+  type ReactNode,
+  type RefCallback,
+  Suspense,
+  lazy,
+  useCallback,
+  useRef,
+  useState,
+} from "react";
 import { CaptureEditorContext, type CaptureEditorProps } from "./capture-context";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { RecurringQueryFailure } from "./query-failure";
@@ -78,6 +88,37 @@ const Resources = (props: Props): JSX.Element => {
     </div>
   );
 };
+const noRequestedDisclosure = Option.none<string>();
+const useEarlierDisclosure = ({
+  month,
+  filters,
+  previous,
+  earlier,
+}: Props): Readonly<{
+  key: string;
+  request: Props["earlier"];
+  reveal: RefCallback<HTMLDetailsElement>;
+}> => {
+  const scope = `${month}:${JSON.stringify(filters)}:`;
+  const key = scope + Option.getOrElse(previous, () => "");
+  const requested = useRef(noRequestedDisclosure);
+  const reveal = useCallback<RefCallback<HTMLDetailsElement>>(
+    (element) => {
+      if (element === null) return;
+      if (Option.contains(requested.current, key)) element.open = true;
+      requested.current = noRequestedDisclosure;
+    },
+    [key]
+  );
+  return {
+    key,
+    reveal,
+    request: (next) => {
+      requested.current = Option.some(scope + next);
+      earlier(next);
+    },
+  };
+};
 const ResourceContent = ({
   props,
   planning,
@@ -93,6 +134,7 @@ const ResourceContent = ({
   tab: string;
   setTab: (value: string) => void;
 }>): JSX.Element => {
+  const disclosure = useEarlierDisclosure(props);
   const { state, categoryState, waiting, retry } = planning;
   if (state._tag === "Failure" || categoryState._tag === "Failure") {
     return (
@@ -107,7 +149,7 @@ const ResourceContent = ({
   return (
     <Suspense fallback={<PendingRead label="Cargando recurrentes" />}>
       <PreviewWorkspace
-        key={`${props.month}:${JSON.stringify(props.filters)}:${Option.getOrElse(props.previous, () => "")}`}
+        key={disclosure.key}
         calendar={calendar}
         setCalendar={setCalendar}
         notice={<SaveNotice {...planning} />}
@@ -123,7 +165,8 @@ const ResourceContent = ({
         previous={props.previous}
         applyFilters={props.applyFilters}
         month={(step) => props.selectMonth(shiftMonth({ month: props.month, step }))}
-        earlier={props.earlier}
+        earlier={disclosure.request}
+        revealEarlier={disclosure.reveal}
         timeZone={props.timeZone}
       />
       {props.children}

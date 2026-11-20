@@ -43,11 +43,13 @@ def valid_usage(usage, now):
         raise ValueError("Invalid Durable Object SQLite row counters")
 
 
-def admit(usage, now):
+def admit(usage, now, *, reads=PILOT_READS, writes=PILOT_WRITES):
     valid_usage(usage, now)
+    if not (0 < reads <= PILOT_READS and 0 < writes <= PILOT_WRITES):
+        raise ValueError("Invalid native experiment reservation")
     if (DAY - now % DAY <= MAX_SECONDS
-            or usage.reads + PILOT_READS + RESERVE_READS > DAILY_READS
-            or usage.writes + PILOT_WRITES + RESERVE_WRITES > DAILY_WRITES):
+            or usage.reads + reads + RESERVE_READS > DAILY_READS
+            or usage.writes + writes + RESERVE_WRITES > DAILY_WRITES):
         raise ValueError("Insufficient same-day Durable Object row headroom")
 
 

@@ -1,7 +1,14 @@
 // Each invocation owns an isolated browser context and one newly seeded local installation.
 import assert from "node:assert/strict";
+import { appendFileSync } from "node:fs";
 import { createHash } from "node:crypto";
+import { setTimeout as sleep } from "node:timers/promises";
 import { Schema } from "effect";
+import { freshBudgetMonth, freshPendingReview } from "./fresh-workspaces.mjs";
+import { freshDashboard, prepareReferenceDashboard } from "./fresh-dashboard.mjs";
+import { freshRecurring, prepareReferenceRecurring } from "./fresh-recurring.mjs";
+import { freshTransactionHistory, freshTransactions } from "./fresh-transactions.mjs";
+import { observeBrowserD1 } from "./browser-cost.mjs";
 
 const { chromium } = await import("@playwright/test");
 
@@ -20,32 +27,15 @@ const counts = Schema.decodeUnknownSync(
     receipts: Schema.Int,
   })
 );
-const extraFields = Schema.Record(Schema.String, Schema.Unknown);
-const transaction = Schema.StructWithRest(
-  Schema.Struct({
-    id: Schema.String,
-    revision: Schema.Int,
-    counterparty: Schema.NullOr(Schema.String),
-  }),
-  [extraFields]
-);
-const historyPage = Schema.decodeUnknownSync(
-  Schema.StructWithRest(Schema.Struct({ data: Schema.Array(transaction) }), [extraFields])
-);
-const changedTransaction = Schema.decodeUnknownSync(
-  Schema.Struct({
-    data: Schema.Struct({ id: Schema.String, revision: Schema.Int }),
-  })
-);
-
-const app = "https://127.0.0.1:4183";
-const api = "https://127.0.0.1:4184";
-const operator = "http://127.0.0.1:4185";
+const port = Number(process.env.REFERENCE_WEB_PORT ?? "4183");
+const app = `https://127.0.0.1:${port}`;
+const api = `https://127.0.0.1:${port + 1}`;
+const operator = `http://127.0.0.1:${port + 2}`;
+const readOnly = process.env.FIDY_REFERENCE_READ_ONLY === "1";
 const ledger = app + "/app/transactions?month=2026-11";
-const fixedId = "81000000-0000-4000-8000-000000000002";
-const afterName = "Referencia corregida";
 /** @param {Uint8Array} body Exact response bytes used for comparison. */
 const digest = (body) => createHash("sha256").update(body).digest("hex");
+process.stderr.write("REFERENCE_STAGE launch\n");
 const browser = await chromium.launch({
   ...(process.env.ASSESSMENT_CHROMIUM ? { executablePath: process.env.ASSESSMENT_CHROMIUM } : {}),
   args: ["--ignore-certificate-errors"],
@@ -68,19 +58,20 @@ try {
   const origin = { origin: app };
   /** @param {import("@playwright/test").APIResponse} reply Fixture or Login response. */
   const setup = (reply) => {
-    assert.ok(
-      reply.ok(),
-      `Setup returned HTTP ${reply.status()} for ${new URL(reply.url()).pathname}`
-    );
+    if (!reply.ok()) process.stderr.write(`REFERENCE_HTTP ${reply.status()}\n`);
+    assert.ok(reply.ok(), "Setup request failed");
     return reply;
   };
+  process.stderr.write("REFERENCE_STAGE pairing\n");
   const pairingResponse = setup(await request.post(api + "/web/pairings", { headers: origin }));
   const pairing = pairingProof(await pairingResponse.json());
+  process.stderr.write("REFERENCE_STAGE approval\n");
   setup(
     await request.post(operator + "/approve", {
       params: { code: pairing.publicCode, navigationDashboard: "true" },
     })
   );
+  process.stderr.write("REFERENCE_STAGE redeem\n");
   setup(
     await request.post(api + "/web/pairings/redeem", {
       headers: origin,
@@ -103,14 +94,6 @@ try {
   };
   /** @type {Array<{ status: number, bytes: number, backendMs: number, httpMs: number, startEpochMs: number, payload: string }>} */
   const attempts = [];
-  /**
-   * @param {string} method Expected HTTP method.
-   * @param {string} path Expected canonical route.
-   */
-  const responseFor = (method, path) =>
-    page.waitForResponse(
-      (reply) => reply.request().method() === method && new URL(reply.url()).pathname === path
-    );
   /** @param {import("@playwright/test").Response} response Measured canonical response. */
   const observe = async (response) => {
     const body = await response.body();
@@ -128,65 +111,67 @@ try {
     });
     process.stderr.write(JSON.stringify(attempts.at(-1)) + "\n");
     const success = 200;
+    if (status !== success) {
+      process.stderr.write(`REFERENCE_HTTP ${response.request().method()} ${status}\n`);
+    }
     assert.equal(status, success, `Canonical request failed with HTTP ${status}`);
     assert.ok(backendMs > 0 && timing.responseEnd > 0, "Missing backend or transport timing");
     return Schema.decodeSync(Schema.fromJsonString(Schema.Unknown))(body.toString("utf8"));
   };
-  // ResponseEnd is measured from Chromium request start through body completion. It never subtracts RTT.
-  /** @param {string} label Expected visible counterparty. */
-  const ready = async (label) => {
-    const control = page.locator('[id="transaction-' + fixedId + '"]:enabled');
-    await control.filter({ hasText: label }).waitFor();
-    await page.evaluate(
-      () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+  if (process.env.FIDY_ASSESSMENT === "production" && !readOnly) {
+    process.stderr.write("REFERENCE_STAGE dashboard-fixture\n");
+    assert.equal(new URL(api).hostname, "127.0.0.1");
+    const binding = await request.get(api + "/web/session/binding", { headers: origin });
+    const observed = Schema.decodeUnknownSync(Schema.Struct({ binding: Schema.NonEmptyString }))(
+      await setup(binding).json()
     );
+    const installation = { api, headers: { ...origin, "fidy-session-binding": observed.binding } };
+    await prepareReferenceDashboard(request, installation);
+    process.stderr.write("REFERENCE_STAGE recurring-fixture\n");
+    await prepareReferenceRecurring(request, installation);
+  }
+  const events = process.env.FIDY_REFERENCE_EVENTS;
+  assert.ok(events, "Missing reference observation file");
+  /** @param {Readonly<Record<string, unknown>>} row Bounded workspace measurement metadata. */
+  const event = (row) => appendFileSync(events, JSON.stringify(row) + "\n");
+  const checkpoint =
+    process.env.FIDY_REFERENCE_D1_COST === "1"
+      ? observeBrowserD1(page, { api, operator }, event)
+      : undefined;
+  if (checkpoint) await checkpoint("before-startup");
+  const idleMs = Number(process.env.FIDY_REFERENCE_SETUP_IDLE_MS ?? "0");
+  const settledSetupMs = 2000;
+  assert.ok(idleMs === 0 || idleMs === settledSetupMs);
+  if (idleMs > 0) {
+    const started = performance.now();
+    // Allow one timer tick for rounding; verify the actual interval before navigation.
+    await sleep(idleMs + 1);
+    const elapsedMs = performance.now() - started;
+    assert.ok(elapsedMs >= idleMs);
+    event({ stage: "post-setup-idle", elapsedMs });
+  }
+  const journeys = {
+    startup: "startup.browser",
+    refresh: "read.browser",
+    correction: "correction.browser",
   };
-  await page.goto(ledger);
-  await ready("Evaluación 2");
-  const before = await evidence();
-  const list = responseFor("GET", "/transactions");
-  const started = performance.now();
-  await page.getByRole("button", { name: "Actualizar transacciones", exact: true }).click();
-  const initial = historyPage(await observe(await list));
-  await ready("Evaluación 2");
-  const readMs = performance.now() - started;
-  const productionPage = 7;
-  const ordinaryPage = 25;
-  assert.equal(
-    initial.data.length,
-    process.env.FIDY_ASSESSMENT === "production" ? productionPage : ordinaryPage
-  );
-  const ids = initial.data.map((record) => record.id);
-  const expectedIds = initial.data.map((_, index) => {
-    const ordinal = index === 0 ? 0 : index + 1;
-    return "81000000-0000-4000-8000-" + String(ordinal).padStart("000000000000".length, "0");
+  const journey = readOnly ? freshTransactionHistory : freshTransactions;
+  const result = await journey({
+    page,
+    ledger,
+    api,
+    calibration: process.env.FIDY_ASSESSMENT === "production",
+    observe,
+    observeStartup: async (reply) =>
+      Schema.decodeSync(Schema.fromJsonString(Schema.Unknown))(await reply.text()),
+    beforeRefresh: evidence,
+    checkpoint,
+    offered: (stage) => event({ type: "offered", journey: journeys[stage] }),
+    completed: (stage, milliseconds) =>
+      event({ type: "completed", journey: journeys[stage], milliseconds }),
   });
-  assert.deepEqual(ids, expectedIds);
-  const target = initial.data.find((row) => row.id === fixedId);
-  assert.ok(target, "Seeded Transaction missing from initial page");
-  assert.equal(target.counterparty, "Evaluación 2");
-  assert.equal(target.revision, 0);
-  await page.locator('[id="transaction-' + fixedId + '"]').click();
-  const counterparty = page.getByRole("textbox", { name: "Contraparte", exact: true });
-  const edit = page.getByRole("button", { name: "Editar transacción", exact: true });
-  await counterparty.or(edit).first().waitFor({ state: "visible" });
-  if (!(await counterparty.isVisible())) await edit.click();
-  await counterparty.fill(afterName);
-  const save = responseFor("PUT", "/transactions/" + fixedId);
-  const refresh = responseFor("GET", "/transactions");
-  const saving = performance.now();
-  await page.getByRole("button", { name: "Guardar", exact: true }).click();
-  const result = changedTransaction(await observe(await save));
-  const fresh = historyPage(await observe(await refresh));
-  await ready(afterName);
-  const correctionMs = performance.now() - saving;
-  const corrected = { ...target, counterparty: afterName, revision: 1 };
-  assert.equal(result.data.id, fixedId);
-  assert.equal(result.data.revision, 1);
-  assert.deepEqual(fresh, {
-    ...initial,
-    data: initial.data.map((row) => (row.id === fixedId ? corrected : row)),
-  });
+  const { before, startupMs, readMs } = result;
+  process.stderr.write("REFERENCE_STAGE accountability-after\n");
   const after = await evidence();
   const accountability = {
     reads: after.reads - before.reads,
@@ -196,10 +181,38 @@ try {
   };
   process.stderr.write(JSON.stringify(accountability) + "\n");
   // WebSession requests in the pinned baseline write session Audit and carry no external retry key.
-  assert.deepEqual(accountability, { reads: 2, corrections: 1, units: 0, receipts: 0 });
+  assert.deepEqual(accountability, {
+    reads: readOnly ? 1 : 2,
+    corrections: readOnly ? 0 : 1,
+    units: 0,
+    receipts: 0,
+  });
+  const views = {};
+  if (process.env.FIDY_ASSESSMENT === "production" && !readOnly) {
+    process.stderr.write("REFERENCE_STAGE budgets-month\n");
+    const input = { page, api, browser: app, event };
+    views["budgets.month.browser"] = await freshBudgetMonth(input);
+    if (checkpoint) await checkpoint("budgets");
+    process.stderr.write("REFERENCE_STAGE review-pending\n");
+    views["review.pending.browser"] = await freshPendingReview(input);
+    if (checkpoint) await checkpoint("needs-review");
+    process.stderr.write("REFERENCE_STAGE dashboard-fresh\n");
+    views["dashboard.fresh.browser"] = await freshDashboard(input);
+    if (checkpoint) await checkpoint("dashboard");
+    process.stderr.write("REFERENCE_STAGE recurring-fresh\n");
+    Object.assign(views, await freshRecurring(input));
+    if (checkpoint) await checkpoint("recurring");
+  }
   process.stdout.write(
-    JSON.stringify({ browser: browser.version(), readMs, correctionMs, attempts, accountability }) +
-      "\n"
+    JSON.stringify({
+      views,
+      browser: browser.version(),
+      startupMs,
+      readMs,
+      ...("correctionMs" in result ? { correctionMs: result.correctionMs } : {}),
+      attempts,
+      accountability,
+    }) + "\n"
   );
 } finally {
   await browser.close();

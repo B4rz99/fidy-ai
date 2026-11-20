@@ -1,3 +1,9 @@
+import {
+  receiptAdmitted as admitsReceipt,
+  isPerformanceReceipt as matchesPerformanceReceipt,
+  openTransactionReceipt as openReceipt,
+  sealTransactionReceipt as sealReceipt,
+} from "./internal/performance-receipt";
 import { installedOrigins } from "../../src/shell/browser-transport/contract";
 import { browserOrigins } from "../runtime/contract";
 import { Clock, Effect, Option, Schema } from "effect";
@@ -8,6 +14,7 @@ import {
   type NativeAcceptanceSettings,
   acceptanceApiHeader,
   acceptanceLifetimeMs,
+  acceptanceProviderRevision,
   acceptanceReceiptKind,
   acceptanceWindowQuery,
 } from "./contract";
@@ -224,7 +231,7 @@ export const fixtureChargeReceipt = Effect.fn(function* (
   ) {
     return isolatedResponse();
   }
-  const revision = settings.RELEASE_GIT_SHA ?? "",
+  const revision = acceptanceProviderRevision(settings),
     params = new URL(request.url).searchParams;
   const subject = `fidy-acceptance-${revision}-${params.get("cohort")}-${params.get("ordinal")}`;
   if (!acceptanceSubject({ revision, issuer: "https://accounts.google.com", subject })) {
@@ -240,3 +247,9 @@ export const fixtureChargeReceipt = Effect.fn(function* (
   );
   return Response.json(data, { headers: { "cache-control": "no-store" } });
 });
+
+export const isPerformanceReceipt: typeof matchesPerformanceReceipt = (request) =>
+  matchesPerformanceReceipt(request);
+export const receiptAdmitted: typeof admitsReceipt = (input) => admitsReceipt(input);
+export const sealTransactionReceipt: typeof sealReceipt = (input) => sealReceipt(input);
+export const openTransactionReceipt: typeof openReceipt = (input) => openReceipt(input);

@@ -15,7 +15,17 @@ import {
   pricePublicationPath,
   refundSupportBasePath,
 } from "../../apps/server/cloudflare/subscription/contract";
-import { Clock, DateTime, Duration, Effect, Option, Redacted, Schedule, Schema } from "effect";
+import {
+  Clock,
+  Config,
+  DateTime,
+  Duration,
+  Effect,
+  Option,
+  Redacted,
+  Schedule,
+  Schema,
+} from "effect";
 import { installedOrigins } from "@fidy/server/browser-transport";
 import { ProcessingAuthorization } from "../../apps/server/src/shell/processing-consent/contract";
 import { webSignupDisclosure } from "../../apps/server/src/shell/consent/operations";
@@ -26,6 +36,9 @@ import {
 } from "../../apps/server/cloudflare/release-isolation/contract";
 import { acceptancePaymentToken } from "../../apps/server/cloudflare/release-fixture/contract";
 import { issueAcceptanceProviderCode } from "../../apps/server/cloudflare/release-fixture/operations";
+
+const configuredProviderRevision = (revision: string): Config.Config<string> =>
+  Config.String("FIDY_NATIVE_FIXTURE_PROVIDER_REVISION").pipe(Config.withDefault(revision));
 
 type Inputs = {
   revision: string;
@@ -135,7 +148,13 @@ const verifyOriginalDisclosure = Effect.fn(function* (
     return yield* Effect.fail(Error("Missing original provider signup disclosure"));
   }
 });
-type Member = "smoke-1" | "smoke-2" | "erasure-1" | `fleet-${FleetOrdinal}`;
+type Member =
+  | "smoke-1"
+  | "smoke-2"
+  | "erasure-1"
+  | "performance-1"
+  | "performance-2"
+  | `fleet-${FleetOrdinal}`;
 const verifyProvider = Effect.fn(function* (
   input: Inputs,
   member: Member,
@@ -159,9 +178,10 @@ const verifyProvider = Effect.fn(function* (
     auth = new URL(
       (yield* result(start, Schema.Struct({ authorizationUrl: Schema.String }))).authorizationUrl
     );
-  const subject = `fidy-acceptance-${input.revision}-${member}`;
+  const generation = yield* configuredProviderRevision(input.revision);
+  const subject = `fidy-acceptance-${generation}-${member}`;
   const key = new Bun.CryptoHasher("sha256", Redacted.value(input.proof))
-    .update(input.revision + "/oidc-code")
+    .update(generation + "/oidc-code")
     .digest("hex");
   if (auth.searchParams.get("redirect_uri") !== input.origins.api + "/providers/google/callback") {
     return yield* Effect.fail(Error("Protected signup selected another callback origin"));
@@ -215,6 +235,17 @@ const boot = Effect.fn(function* (
   yield* consume(yield* call("/transactions", { headers }), ok);
   yield* consume(yield* call("/transactions", { headers }, false), isolated);
   return { headers, subject, outcome: complete.status };
+});
+/** The browser receives only the WebSession of the exact closed synthetic User it just proved. */
+export const openPerformanceBrowser = Effect.fn(function* (
+  input: Pick<Inputs, "revision" | "proof" | "send">,
+  member: "performance-1" | "performance-2"
+) {
+  const user = yield* boot(
+    { ...input, origins: installedOrigins.acceptance, erasure: Option.none() },
+    member
+  );
+  return Redacted.make(user.headers.cookie.slice("__Host-fidy_session=".length));
 });
 const receipt = Effect.fn(function* (input: Inputs) {
   const { call } = runner(input);
@@ -294,7 +325,7 @@ const deliverCallback = Effect.fn(function* (
     secret =
       "test_events_" +
       new Bun.CryptoHasher("sha256", Redacted.value(input.proof))
-        .update(input.revision + "/wompi-events")
+        .update((yield* configuredProviderRevision(input.revision)) + "/wompi-events")
         .digest("hex");
   const checksum = new Bun.CryptoHasher("sha256")
     .update(saved.id + "APPROVED" + stamp + secret)
@@ -476,7 +507,7 @@ const completionOutcome = Effect.fn(function* (completion: Response) {
 });
 const refusedPairing = Effect.fn(function* (
   input: Inputs,
-  member: "erasure-1" | FleetSubject,
+  member: "erasure-1" | "performance-1" | FleetSubject,
   record: ErasureProgress
 ) {
   const privateLogin = {
@@ -529,6 +560,85 @@ const refusedPairing = Effect.fn(function* (
     }),
   };
 });
+/** Fixed-subject actions for the protected Transaction comparison. Only register can create a User. */
+type CohortBrowser = {
+  open: (
+    intent: "signup" | "login"
+  ) => Effect.Effect<
+    { id: string; outcome: string; headers: Readonly<Record<string, string>> },
+    Error
+  >;
+  survivors: () => Effect.Effect<ReadonlyArray<string>, Error>;
+  beforeSignup: () => Effect.Effect<void, Error>;
+  erase: (headers: Readonly<Record<string, string>>) => Effect.Effect<string, Error>;
+  denied: (headers: Readonly<Record<string, string>>) => Effect.Effect<void, Error>;
+  refused: () => Effect.Effect<string, Error>;
+  renew: () => Effect.Effect<void, Error>;
+  call: Driver["call"];
+};
+export const performanceCohortBrowser = (
+  input: Omit<Inputs, "erasure" | "origins">
+): CohortBrowser => {
+  const closed = {
+    ...input,
+    origins: installedOrigins.acceptance,
+    erasure: Option.none<ErasureObservation>(),
+  };
+  const { call, post } = runner(closed);
+  const open = Effect.fn(function* (intent: "signup" | "login") {
+    const user = yield* boot(closed, "performance-1", intent);
+    return { id: yield* identity(call, user), outcome: user.outcome, headers: user.headers };
+  });
+  return {
+    open,
+    survivors: admittedErasureLogins({ ...input, origins: installedOrigins.acceptance }).logins,
+    beforeSignup: Effect.fn(function* () {
+      const { proof } = yield* verifyProvider(closed, "performance-1", "login");
+      const response = yield* validStatus(
+        yield* post("/web/providers/google/complete", proof),
+        invalid
+      );
+      yield* Schema.decodeUnknownEffect(Schema.Struct({ status: Schema.Literal("invalid") }))(
+        yield* Effect.tryPromise(() => response.json())
+      );
+    }),
+    erase: (headers: Readonly<Record<string, string>>) => admitBrowserErasure(closed, { headers }),
+    denied: (headers: Readonly<Record<string, string>>) =>
+      call("/transactions", { headers }).pipe(
+        Effect.flatMap((reply) => consume(reply, unauthorized))
+      ),
+    refused: () =>
+      refusedPairing(closed, "performance-1", () => Effect.void).pipe(
+        Effect.flatMap((pending) => pending.finish)
+      ),
+    renew: () => renewWork(closed),
+    call,
+  };
+};
+/** Compare each original User and its complete small financial history in provider-subject order. */
+export const retainedFinancialControls = Effect.fn(function* (input: Omit<Inputs, "erasure">) {
+  const transport = { ...input, erasure: Option.none<ErasureObservation>() };
+  const { call } = runner(transport);
+  return yield* Effect.forEach(
+    ["smoke-1", "smoke-2"] as const,
+    Effect.fn(function* (member) {
+      const user = yield* boot(transport, member, "login");
+      const id = yield* identity(call, user);
+      const reply = yield* validStatus(
+        yield* call("/transactions?limit=25", { headers: user.headers }),
+        ok
+      );
+      const body = yield* Effect.tryPromise(() => reply.text());
+      yield* Schema.decodeEffect(
+        Schema.fromJsonString(
+          Schema.Struct({ data: Schema.Array(Schema.Unknown), next: Schema.Tuple([]) })
+        )
+      )(body);
+      return { id, historyDigest: new Bun.CryptoHasher("sha256").update(body).digest("hex") };
+    })
+  );
+});
+
 /** The continuation authenticates the installed revision's existing subjects with login intent only. */
 export const admittedErasureLogins = (
   input: Omit<Inputs, "erasure">
@@ -551,6 +661,9 @@ export const admittedErasureLogins = (
       ),
   };
 };
+export const establishSmokeUsers = Effect.fn(function* (input: Inputs) {
+  return [yield* boot(input, "smoke-1"), yield* boot(input, "smoke-2")] as const;
+});
 /** Exercise actual auth, private provider exchange and native financial callback through the installed protected release.
  * Callers verify the deterministic callback Workflow and the User-facing final projections before accepting its receipt.
  */
@@ -576,8 +689,7 @@ export const exerciseClosedUsers = Effect.fn(function* (input: Inputs) {
     yield* consume(reply, unauthorized);
     deniedStatuses.push(reply.status);
   }
-  const first = yield* boot(input, "smoke-1"),
-    second = yield* boot(input, "smoke-2");
+  const [first, second] = yield* establishSmokeUsers(input);
   const callback = yield* charge(input, first, second);
   return {
     signup: [first.outcome, second.outcome],

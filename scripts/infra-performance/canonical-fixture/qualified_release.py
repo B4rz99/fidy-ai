@@ -78,7 +78,7 @@ def artifact(account_revision, artifact_id, expected_digest, get=actions_get, gi
     release = promotion["release"]
     snapshot = release["snapshot"]
     if (snapshot["revision"] != APPLICATION or snapshot["stableRevision"] != APPLICATION
-            or installed["revision"] != APPLICATION or promotion["rollbackTested"] is not True):
+            or installed["revision"] != APPLICATION or installed.get("verifierRevision") != source or promotion["rollbackTested"] is not True):
         raise ValueError("Active release did not exercise the dormant application build as its rollback")
     for role in ("public", "core"):
         version = role + "VersionId"

@@ -90,11 +90,16 @@ class VerifiedFallback(unittest.TestCase):
                     "core": {"stableVersionId": stage.STAGED_IDS["coreVersionId"]}}
         release = {"snapshot": snapshot, "publicVersionId": "new-public", "coreVersionId": "new-core"}
         self.docs = {"native-release.json.promoted": {"rollbackTested": True, "release": release},
-                     "native-verification.json": {"revision": APPLICATION}}
+                     "native-verification.json": {"revision": APPLICATION, "verifierRevision": self.source}}
         self.seal()
         def collect(revision=APPLICATION):
             return qualified_release.artifact(revision, "34", self.digest, self.get, self.git)
         self.assertEqual(collect(), tuple(self.docs.values()))
+        with patch.dict(self.docs["native-verification.json"], verifierRevision=self.verifier):
+            self.seal()
+            with self.assertRaises(ValueError):
+                collect()
+        self.seal()
         with self.assertRaises(ValueError):
             collect(self.verifier)
         for item in self.jobs["jobs"][0]["steps"]:

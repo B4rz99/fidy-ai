@@ -579,10 +579,7 @@ const decodedHistoryPage = (
               : "transactions.listTransactions",
         })
       : [];
-  return Option.map(Schema.decodeOption(TransactionListResponse.fields.next)(next), (next) => ({
-    data: visible,
-    next,
-  }));
+  return Option.some({ data: visible, next });
 };
 
 export const decodeLocalHistoryPage = ({

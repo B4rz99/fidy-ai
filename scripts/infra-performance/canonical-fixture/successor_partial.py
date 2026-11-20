@@ -16,6 +16,7 @@ FAILED_RUN = "44806738835"
 DIAGNOSTICS = "14662658924", "182f15ae44cd6639ce70e4a70e74b11f31b92aecf1d9c7dbf722cb267e89f2bd"
 PLAN_RUN = "44806470332"
 PLAN = "14662931893", "f8573c959938abf153b851fb82459758c598a080686c23dcd4117be2baadb994"
+COMPATIBILITY_REVIEW = "b5b4b8149af0aad6cbd5d6f657c949d03d1f5e7d"
 SMOKE = "fidy-native-smoke-" + REVISION
 CORE = "fidy-native-storage-core"
 INGRESS = "fidy-native-storage-ingress"
@@ -152,7 +153,7 @@ def require_workers(read, account, snapshot, source):
     if (stable["histories"] != candidate["histories"]
             or stable["protocol"] != {"write": STABLE_PROTOCOL, "readers": [STABLE_PROTOCOL]}
             or candidate["protocol"] != {"write": CANDIDATE_PROTOCOL, "readers": [CANDIDATE_PROTOCOL]}):
-        raise ValueError("Storage releases differ from the audited protocol blocker")
+        raise ValueError("Storage releases differ from the audited raw protocol declarations")
     exposure = read_result(read, base + SMOKE + "/subdomain")
     if exposure.get("enabled") is not False or exposure.get("previews_enabled") is not False:
         raise ValueError("Partial smoke Worker exposure differs")
@@ -208,9 +209,9 @@ def require_support(read, account):
 
 def main():
     verifier = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-    if verifier == REVISION or subprocess.run(["git", "merge-base", "--is-ancestor", REVISION, verifier],
-                                               check=False).returncode != 0:
-        raise ValueError("Requires a descendant of the interrupted successor source")
+    if any(subprocess.run(["git", "merge-base", "--is-ancestor", revision, verifier],
+                          check=False).returncode != 0 for revision in (REVISION, COMPATIBILITY_REVIEW)):
+        raise ValueError("Requires the interrupted source and reviewed verifier lineage")
     account, public_key = os.environ["CLOUDFLARE_ACCOUNT_ID"], os.environ["FIDY_NATIVE_FIXTURE_PUBLIC_KEY"]
     snapshot = archived_partial()
     plan = approved_plan(REVISION, *PLAN, expected_run=PLAN_RUN)
@@ -228,7 +229,8 @@ def main():
                       "failedRun": FAILED_RUN, "planRun": PLAN_RUN,
                       "applied": False, "recoveryReady": False, "candidateTraffic": 0,
                       "missing": ["Smoke Workflow"],
-                      "blocked": ["SQLite storage releases lack mutual protocol readers"]}))
+                      "rawProtocolReadersOverlap": False,
+                      "compatibilityReviewRevision": COMPATIBILITY_REVIEW}))
 
 
 if __name__ == "__main__":

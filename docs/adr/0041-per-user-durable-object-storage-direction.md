@@ -345,6 +345,10 @@ every reachable schema, protocol and taxonomy state; otherwise repair forward. N
 down-migration or backup restoration is part of rollback. Preserve directory pairing creation order,
 original reservation deadlines and anchored limiter windows through deployment and cleanup.
 
+The release verifier may identify two exact published protocol fingerprints as equivalent when a review of
+the pinned sources proves the same contract syntax. The #2305 comment changes produced one such pair.
+Workers retain their published fingerprints, and migration history and namespace checks still govern overlap.
+
 Keep one object per User and measure actual SQLite size. The initial policy warns at 70% of the
 configured storage ceiling and restricts ordinary growth at 80%, preserving validated headroom for
 accountability, security actions, retained obligations, cleanup and erasure. Apply the same capacity

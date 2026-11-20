@@ -63,6 +63,37 @@ describe("release compatibility for native retained stores", () => {
   );
 });
 
+it.effect("recognizes only the reviewed comment-only protocol pair", () =>
+  Effect.gen(function* () {
+    const storage = yield* buildStorageRelease();
+    const predecessor = "87d29c622bb96d493a602d18741fa4b8532871914bc956c0560d909e4377c4f5";
+    const reformatted = "176dcf18c895cce04e5abe6dde4cc541c46bdd189b4ecfc85fec8621c672b3e3";
+    const describeProtocol = (write: string): typeof storage => ({
+      ...storage,
+      protocol: { write, readers: [write] },
+    });
+    const stable = describeProtocol(predecessor);
+    const candidate = describeProtocol(reformatted);
+    expect(storageOverlap({ stable, candidate })).toEqual({ forward: true, rollback: true });
+    expect(storageOverlap({ stable: candidate, candidate: stable })).toEqual({
+      forward: true,
+      rollback: true,
+    });
+    const foreign = describeProtocol(reformatted.slice(0, -1) + "4");
+    expect(storageOverlap({ stable, candidate: foreign }).forward).toBe(false);
+    const newWriter = {
+      ...foreign,
+      protocol: { ...foreign.protocol, readers: [reformatted] },
+    };
+    expect(storageOverlap({ stable, candidate: newWriter }).forward).toBe(false);
+    const rewritten = {
+      ...candidate,
+      histories: { ...candidate.histories, pricing: ["e".repeat(64)] },
+    };
+    expect(storageOverlap({ stable, candidate: rewritten }).forward).toBe(false);
+  })
+);
+
 it.effect("checks exact immutable namespace IDs, access and Worker pair descriptors", () =>
   Effect.gen(function* () {
     const description = yield* buildStorageRelease();

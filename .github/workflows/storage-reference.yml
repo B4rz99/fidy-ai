@@ -27,9 +27,9 @@ jobs:
           from pathlib import Path
 
           chunks = {}
-          for source_map in sorted(Path("assets").glob("*.js.map")):
-              code = source_map.with_suffix("")
-              sources = json.loads(source_map.read_text())["sources"]
+          for code in sorted(Path("assets").glob("*.js")):
+              source_map = code.with_suffix(".js.map")
+              sources = json.loads(source_map.read_text())["sources"] if source_map.is_file() else []
               chunks[code.as_posix()] = {"bytes": code.stat().st_size, "sources": sources}
           assert chunks, "Expected compiled browser assets"
           Path("chunk-sources.json").write_text(json.dumps(chunks, indent=2) + "\n")
@@ -59,6 +59,7 @@ jobs:
           print(json.dumps({"files": files, "bytes": sum(chunks[file]["bytes"] for file in files)}))
           PY
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
         with:
           name: startup-module-graph
           path: |

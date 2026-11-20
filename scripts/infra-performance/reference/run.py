@@ -507,6 +507,8 @@ def main():
                         "build",
                         "--mode",
                         "production",
+                        "--sourcemap",
+                        "hidden",
                         "--outDir",
                         "playwright-dist",
                     ],

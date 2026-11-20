@@ -975,7 +975,7 @@ export const TransactionWorkspace = (source: WorkspaceProps): JSX.Element => {
   return (
     <>
       {confirmation}
-      <Toaster position="bottom-right" richColors />
+      <Toaster position="bottom-right" richColors dir="ltr" />
       <TransactionSurface panelOpen={panelEditing(activePanel) || activePanel._tag === "Detail"}>
         <WorkspaceHeader
           disabled={editing || (!props.editable && !props.readOnly)}

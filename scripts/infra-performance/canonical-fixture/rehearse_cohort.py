@@ -1,13 +1,15 @@
 """Interrupt the native collector after issuance, discard the controller, then recover against workerd."""
 import argparse
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from email.message import Message
 import json
 import os
 from pathlib import Path
 import secrets
+from shutil import copyfile
 import sqlite3
 import subprocess
+from tempfile import TemporaryDirectory
 import time
 
 from cohort import Cohort
@@ -81,12 +83,24 @@ def controller(directory, coords, path):
 
 def native_accounts(directory, physical, session, user):
     database, = directory.rglob(physical + ".sqlite")
-    with sqlite3.connect(database.resolve().as_uri() + "?mode=ro", uri=True) as db:
-        audit = dict((operation+"."+outcome, count) for operation,outcome,count in db.execute(
+    # Both readings occur with workerd stopped. The independent SQLite reader gets its own
+    # WAL index and never opens a shared-memory file in the actual persistence directory.
+    with TemporaryDirectory() as temporary:
+        snapshot = Path(temporary) / "audit.sqlite"
+        copyfile(database, snapshot)
+        wal = Path(str(database) + "-wal")
+        if wal.exists():
+            copyfile(wal, str(snapshot) + "-wal")
+        with closing(sqlite3.connect(snapshot)) as db:
+            return session_accounts(db, session, user)
+
+
+def session_accounts(db, session, user):
+    audit = dict((operation+"."+outcome, count) for operation,outcome,count in db.execute(
             "SELECT operation,outcome,count(*) FROM audit_entries WHERE user_id=? AND session_id=? AND operation IS NOT NULL GROUP BY operation,outcome",
             (user,session["binding"])))
-        units,receipts = db.execute("SELECT (SELECT coalesce(sum(units),0) FROM commercial_allowance_consumptions WHERE user_id=?1 AND allowance='canonical_call'),(SELECT count(*) FROM canonical_request_receipts WHERE user_id=?1)",(user,)).fetchone()
-        return {**audit,"canonicalUnits":units,"receipts":receipts}
+    units,receipts = db.execute("SELECT (SELECT coalesce(sum(units),0) FROM commercial_allowance_consumptions WHERE user_id=?1 AND allowance='canonical_call'),(SELECT count(*) FROM canonical_request_receipts WHERE user_id=?1)",(user,)).fetchone()
+    return {**audit,"canonicalUnits":units,"receipts":receipts}
 
 
 def main():

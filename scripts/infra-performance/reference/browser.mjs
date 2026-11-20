@@ -129,19 +129,21 @@ try {
     await prepareReferenceRecurring(request, installation);
   }
   const idleMs = Number(process.env.FIDY_REFERENCE_SETUP_IDLE_MS ?? "0");
-  assert.ok(idleMs === 0 || idleMs === 2000);
+  const settledSetupMs = 2000;
+  assert.ok(idleMs === 0 || idleMs === settledSetupMs);
   if (idleMs > 0) {
     const events = process.env.FIDY_REFERENCE_EVENTS;
     assert.ok(events, "Missing reference observation file");
     const started = performance.now();
-    while (performance.now() - started < idleMs) {
-      await sleep(Math.ceil(started + idleMs - performance.now()));
-    }
+    // Allow one timer tick for rounding; verify the actual interval before navigation.
+    await sleep(idleMs + 1);
+    const elapsedMs = performance.now() - started;
+    assert.ok(elapsedMs >= idleMs);
     appendFileSync(
       events,
       JSON.stringify({
         stage: "post-setup-idle",
-        elapsedMs: performance.now() - started,
+        elapsedMs,
       }) + "\n"
     );
   }

@@ -101,26 +101,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-typegraph-v1-${{ hashFiles('bun.lock', 'tsconfig*.json', 'apps/*/tsconfig*.json', 'infra/*/tsconfig*.json', 'tools/astro/tsconfig.json', 'tools/astro/bun.lock') }}-
             ${{ runner.os }}-typegraph-v1-
-      - name: Calculate the rebased comment baseline
-        run: |
-          bun run lint:comments --inventory > "$RUNNER_TEMP/fidy-comments.json"
-          bun -e '
-            const comments = await Bun.file(process.env.RUNNER_TEMP + "/fidy-comments.json").json();
-            const paths = Map.groupBy(comments, ({ file }) => file);
-            const hash = (text) =>
-              new Bun.CryptoHasher("sha256").update(text.replaceAll("\r\n", "\n")).digest("base64url");
-            const rows = [...paths.keys()].sort().map((file) =>
-              [JSON.stringify(file), ...paths.get(file).map(({ text }) => hash(text)).sort()].join("\t")
-            );
-            await Bun.write("scripts/comment-baseline.txt", rows.join("\n") + "\n");
-          '
-      - name: Preserve the rebased comment baseline
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: rebased-comment-baseline
-          path: scripts/comment-baseline.txt
-          if-no-files-found: error
-          retention-days: 1
       - name: Static repository validation
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}

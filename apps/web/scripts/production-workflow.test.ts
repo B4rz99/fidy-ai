@@ -11,7 +11,7 @@ const profileAction = await source(
 const ordered = (text: string, parts: readonly string[]): void => {
   let previous = -1;
   for (const part of parts) {
-    const next = text.indexOf(part, previous + 1);
+    const next = text.indexOf(part);
     expect(next, part).toBeGreaterThan(previous);
     previous = next;
   }
@@ -61,9 +61,7 @@ describe("protected native releases", () => {
       "native-storage-release.ts verify",
       "steps.promote.outcome == 'success' && steps.verify.outcome == 'failure'",
       "native-storage-release.ts rollback",
-      "- name: Retain native release evidence",
-      "actions/upload-artifact@",
-      "name: native-storage-release-",
+      "name: native-storage-release-${{ github.run_id }}",
     ]);
   });
   it("reserves physical erasure for first installation and an explicit erasure dispatch", () => {

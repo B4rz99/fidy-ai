@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import re
+import sys
 from uuid import UUID
 from zipfile import ZipFile
 
@@ -46,27 +47,91 @@ STEPS = {
 }
 
 
+RESUME = "Resume the exact uploaded Workers at zero traffic"
+RESTORE_UPLOAD = "Authenticate the interrupted pairing upload and its original controls"
+INTERRUPTED_STEPS = {**STEPS, STAGE: "failure",
+    "Persist and read back private observability on the installed application Workers": "skipped",
+    QUALIFY_ORIGINAL: "skipped", "Seal dormant fallback stage before promotion": "skipped"}
+RESUME_STEPS = {}
+for name, result in STEPS.items():
+    RESUME_STEPS[name] = ("skipped" if name in (UPLOAD, STAGE, "Capture the native stable pair",
+                          "Authenticate the predecessor of the pairing repair") else result)
+    if name == "Bind the protected verifier to the staged application source":
+        RESUME_STEPS[RESTORE_UPLOAD] = "success"
+    if name == STAGE:
+        RESUME_STEPS[RESUME] = "success"
+
+
+def upload_pin():
+    return json.loads((Path(__file__).resolve().parents[3] / "infra/cloudflare/native-pairing-upload.json").read_bytes())
+
+
+def original_snapshot(application, prior):
+    snapshot = {**prior["snapshot"], "revision": application}
+    for role in ("core", "public"):
+        snapshot[role] = {**snapshot[role], "deploymentId": prior[role + "DeploymentId"]}
+    return snapshot
+
+
+def upload_documents(prior, controls, get=actions_get):
+    pin = upload_pin()
+    run, data = protected_archive(pin["revision"], pin["artifact"], pin["sha256"], prefix="native-storage-release-",
+                                  conclusions={"failure"}, get=get)
+    if run != pin["run"]:
+        raise ValueError("Interrupted pairing upload run differs")
+    require_steps(get, run, "failure", INTERRUPTED_STEPS)
+    documents = {"native-release.json":original_snapshot(pin["revision"], prior), "native-release.json.controls":controls,
+                 "native-release.json.predecessor":prior, "native-release.json.source.controls":controls}
+    with ZipFile(BytesIO(data)) as archive:
+        if (sorted(archive.namelist()) != sorted(documents)
+                or any(not 0 < item.file_size <= 65_536 or json.loads(archive.read(item)) != documents[item.filename]
+                       for item in archive.infolist())):
+            raise ValueError("Interrupted upload changed the captured assignments, controls or staging outcome")
+    return documents
+
+
+def restore_upload(env):
+    application = upload_pin()["revision"]
+    verify_dispatch(env, application=application)
+    if env["FIXTURE_RELEASE_OPERATION"] != "resume-pairing-stage" or env["RELEASE_GIT_SHA"] != env["GITHUB_SHA"]:
+        raise ValueError("The interrupted upload requires its protected resume operation")
+    documents = upload_documents(*staged_documents())
+    for name, value in documents.items():
+        with os.fdopen(os.open(Path(env["RUNNER_TEMP"]) / name, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600), "w") as file:
+            json.dump(value, file)
+    with open(env["GITHUB_ENV"], "a") as handle:
+        handle.write(f"RELEASE_GIT_SHA={application}\nFIXTURE_STAGED_VERIFIER_SHA={env['GITHUB_SHA']}\n")
+
+
 def sealed_pair(verifier, artifact_id, digest, get=actions_get, git=git_read):
     if not re.fullmatch("[1-9][0-9]{0,19}", artifact_id or ""):
         raise ValueError("Missing protected replacement artifact")
-    application = json.loads(get("artifacts/" + artifact_id))["workflow_run"]["head_sha"]
-    if (not re.fullmatch("[a-f0-9]{40}", application)
-            or git("merge-base", PAIRING_REPAIR, application) != PAIRING_REPAIR):
+    issuer = json.loads(get("artifacts/" + artifact_id))["workflow_run"]["head_sha"]
+    if (not re.fullmatch("[a-f0-9]{40}", issuer)
+            or git("merge-base", PAIRING_REPAIR, issuer) != PAIRING_REPAIR):
         raise ValueError("Unexpected replacement source lineage")
-    run, data = protected_archive(application, artifact_id, digest, prefix="native-fixture-fallback-",
+    run, data = protected_archive(issuer, artifact_id, digest, prefix="native-fixture-fallback-",
                                   conclusions={"success"}, get=get)
-    require_steps(get, run, "success", STEPS)
-    verify_tree(verifier, git, application)
+    verify_tree(verifier, git, issuer)
     with ZipFile(BytesIO(data)) as archive:
         member, = archive.infolist()
         if member.filename != "native-fallback-stage.json" or not 0 < member.file_size <= 65_536:
             raise ValueError("Unexpected replacement seal archive")
         stage = json.loads(archive.read(member))
     prior, controls = staged_documents(get)
-    snapshot = {**prior["snapshot"], "revision": application}
-    for role in ("core", "public"):
-        snapshot[role] = {**snapshot[role], "deploymentId": prior[role + "DeploymentId"]}
     release = stage["release"]
+    application = stage["revision"]
+    if application == issuer:
+        require_steps(get, run, "success", STEPS)
+    else:
+        pin = upload_pin()
+        if (application != pin["revision"] or stage["smoke"] != pin["smoke"]
+                or any(release[k] != pin[k] for k in ("coreVersionId", "publicVersionId"))):
+            raise ValueError("Resumed seal differs from the exact uploaded Workers")
+        verify_tree(issuer, git, application)
+        require_steps(get, run, "success", RESUME_STEPS)
+        upload_documents(prior, controls, get)
+    snapshot = original_snapshot(application, prior)
     ids = [release[role + kind] for role in ("public", "core") for kind in ("VersionId", "DeploymentId")]
     original = {prior[role + kind] for role in ("public", "core") for kind in ("VersionId", "DeploymentId")}
     original.update(snapshot[role]["stableVersionId"] for role in ("public", "core"))
@@ -100,4 +165,9 @@ def bind(env):
 
 
 if __name__ == "__main__":
-    bind(os.environ)
+    if sys.argv[1:] == ["resume-upload"]:
+        restore_upload(os.environ)
+    elif not sys.argv[1:]:
+        bind(os.environ)
+    else:
+        raise ValueError("Unknown pairing stage operation")

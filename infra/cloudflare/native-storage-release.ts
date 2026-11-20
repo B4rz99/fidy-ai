@@ -7,6 +7,7 @@ import {
   recoverFixtureFallback,
   requireDormantReplacementSource,
   requirePromotedDormantSource,
+  stageUploadedPair,
   verifyUnpromotedFallback,
 } from "./native-fallback-recovery";
 import {
@@ -17,6 +18,7 @@ import {
   requireOriginalFallbackSource,
 } from "./native-fallback-probe";
 import { requireInterruptedUpload } from "./native-upload-recovery";
+import uploadedPair from "./native-pairing-upload.json" with { type: "json" };
 import fixtureUpload from "./native-fixture-upload.json" with { type: "json" };
 import retainedProvider from "./native-retained-provider.json" with { type: "json" };
 import { expectedFixtureSigner, fixtureBuild, resourceRevision } from "./native-fixture-signer";
@@ -68,6 +70,7 @@ import { ReleaseHttpLive } from "./release-http";
 import {
   type ProductionReleaseConfig as Config,
   ReleaseFailure,
+  WorkerVersionReadUnavailable,
   configureReleaseObservability,
   fixtureVerifier,
   releaseCommand,
@@ -1365,6 +1368,12 @@ const storageProbeOwners = (
   ]);
 type SealCheck =
   | "archive"
+  | "completed upload receipts"
+  | "pre-stage controls"
+  | "stage assignments"
+  | "taxonomy"
+  | "version resources"
+  | "rollback source"
   | "storage versions"
   | "support Workers"
   | "candidate storage"
@@ -1468,8 +1477,28 @@ const storageCompatibility = Effect.fn(function* (
   phase: "stage" | "promote" | "rollback"
 ) {
   yield* Effect.try(() => requireNativeTarget(release.snapshot));
-  yield* verifyTaxonomyOverlap(release.snapshot);
-  const { ingress, core, descriptions } = yield* deployedStorage({ env, client, release });
+  yield* verifyTaxonomyOverlap(release.snapshot).pipe(sealCheck("taxonomy"));
+  const versions = deployedStorage({ env, client, release });
+  const { ingress, core, descriptions } = yield* (
+    phase === "stage"
+      ? versions.pipe(
+          Effect.retry({
+            while: (error) => error instanceof WorkerVersionReadUnavailable,
+            times: 4,
+            schedule: Schedule.spaced("2 seconds"),
+          })
+        )
+      : versions
+  ).pipe(
+    Effect.mapError((error) =>
+      error instanceof WorkerVersionReadUnavailable
+        ? new ReleaseFailure({
+            message: "Immutable Worker version read returned HTTP " + error.status,
+          })
+        : error
+    ),
+    sealCheck("version resources")
+  );
   yield* requireClosedWorkers([ingress.stable, core.stable, ingress.candidate, core.candidate]);
   if (
     (yield* expectedFixtureSigner) !== "" &&
@@ -1485,7 +1514,7 @@ const storageCompatibility = Effect.fn(function* (
       message: "Incompatible store history, namespace or internal protocol",
     });
   }
-  const source = yield* rollbackSource(release.snapshot);
+  const source = yield* rollbackSource(release.snapshot).pipe(sealCheck("rollback source"));
 
   const rollback =
     overlap.rollback && [ingress, core].every((pair) => rollbackCompatible({ ...pair, ...source }));
@@ -1497,7 +1526,7 @@ const storageCompatibility = Effect.fn(function* (
 const confirmFallbackVersions = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
-  release: FallbackStage["release"]
+  release: StorageTransition
 ) {
   const fingerprint = yield* expectedFixtureSigner;
   for (const [role, worker, id] of [
@@ -1527,11 +1556,18 @@ const repairedSmoke = Effect.fn(function* (
   if (smoke === undefined) return yield* Effect.fail(Error("Missing repaired smoke executor"));
   const coordinates = { deploymentId: smoke.deploymentId, versionId: smoke.versionId };
   const seal = yield* pairingSeal();
+  const resuming =
+    (yield* ReleaseConfig.String("FIXTURE_RELEASE_OPERATION").pipe(
+      ReleaseConfig.withDefault("")
+    )) === "resume-pairing-stage";
   if (
     Option.isSome(yield* fixtureVerifier) &&
     !isDeepStrictEqual(
       coordinates,
-      Option.match(seal, { onSome: (stage) => stage.smoke, onNone: () => archivedDormant.smoke })
+      Option.match(seal, {
+        onSome: (stage) => stage.smoke,
+        onNone: () => (resuming ? uploadedPair.smoke : archivedDormant.smoke),
+      })
     )
   ) {
     return yield* new ReleaseFailure({
@@ -1752,7 +1788,14 @@ const forwardFallback = Effect.fn(function* (env: Config, client: HttpClient.Htt
   yield* writeFile(env.file + ".fallback", encodeJson({ stage, promoted, rollbackTested: false }));
 });
 const nativeWorkerReceipts = Effect.fn(function* (mode: "capture" | "completed") {
-  const receipts = yield* workersFromState(mode, nativeStack);
+  const op = yield* ReleaseConfig.String("FIXTURE_RELEASE_OPERATION").pipe(
+    ReleaseConfig.withDefault("")
+  );
+  const receipts = yield* workersFromState(
+    mode,
+    nativeStack,
+    mode === "completed" && op === "resume-pairing-stage"
+  );
   if (
     receipts.public.workerName !== installationNames.Ingress ||
     receipts.core.workerName !== installationNames.Core ||
@@ -1803,6 +1846,79 @@ const captureNative = Effect.fn(function* (
     return yield* new ReleaseFailure({ message: "Native traffic changed during capture" });
   }
   yield* writeFile(env.file, encodeJson(snapshot));
+});
+
+const verifyUploadedSupport = Effect.fn(function* (env: Config, client: HttpClient.HttpClient) {
+  const port = releasePort({ env, client });
+  yield* requireCapturedSupport(port, uploadedPair.smoke);
+  const name = "fidy-native-smoke-" + fixtureUpload.revision;
+  const [, previous] = yield* port.recentDeployments(name);
+  if (
+    !isDeepStrictEqual(previous, {
+      id: archivedDormant.smoke.deploymentId,
+      versions: [{ id: archivedDormant.smoke.versionId, percentage: 100 }],
+    })
+  ) {
+    return yield* new ReleaseFailure({ message: "Uploaded technical Smoke predecessor differs" });
+  }
+  const id = uploadedPair.smoke.versionId;
+  const raw = yield* releaseEvidence.readWorkerVersion(env, client, { name, id });
+  yield* Effect.try(() =>
+    verifyDeployedVersion({
+      role: "Smoke",
+      raw,
+      account: env.account,
+      revision: uploadedPair.revision,
+      versionId: id,
+      fingerprint: fixtureUpload.fingerprint,
+    })
+  );
+});
+const resumePairingStage = Effect.fn(function* (env: Config, client: HttpClient.HttpClient) {
+  const port = releasePort({ env, client });
+  const snapshot = yield* Schema.decodeUnknownEffect(releaseSchemas.snapshot)(
+    yield* readFile(env.file)
+  );
+  if (
+    env.revision !== uploadedPair.revision ||
+    Option.isNone(yield* fixtureVerifier) ||
+    (yield* expectedFixtureSigner) !== fixtureUpload.fingerprint ||
+    (yield* fixtureBuild) !== "fallback"
+  ) {
+    return yield* new ReleaseFailure({
+      message: "Interrupted pairing upload is outside its protected verifier",
+    });
+  }
+  const verify = Effect.gen(function* () {
+    yield* readReplacementPredecessor(env, snapshot).pipe(sealCheck("archive"));
+    yield* nativeWorkerReceipts("completed").pipe(sealCheck("completed upload receipts"));
+    yield* verifyUploadedSupport(env, client).pipe(sealCheck("support Workers"));
+    yield* verifyRetainedProvider(env, client, port).pipe(sealCheck("provider"));
+    yield* requireClosedAdmission(client).pipe(sealCheck("closed admission"));
+    yield* requireClosedIngressDomains(accountReader(env, client));
+    const release = {
+      snapshot,
+      publicVersionId: uploadedPair.publicVersionId,
+      coreVersionId: uploadedPair.coreVersionId,
+    };
+    yield* storageCompatibility({ env, client }, release, "stage");
+    yield* confirmFallbackVersions(env, client, release).pipe(
+      sealCheck("candidate Worker metadata")
+    );
+    yield* recordSourceControls(env, client, {
+      pair: {
+        revision: snapshot.stableRevision,
+        ingress: snapshot.public.stableVersionId,
+        core: snapshot.core.stableVersionId,
+        proof: env.smokeProof,
+      },
+      replacing: true,
+    }).pipe(sealCheck("pre-stage controls"));
+  });
+  const staged = yield* stageUploadedPair(port, snapshot, verify).pipe(
+    sealCheck("stage assignments")
+  );
+  yield* writeFile(env.file, encodeJson(staged));
 });
 
 const stageNative = Effect.fn(function* (
@@ -2213,6 +2329,7 @@ const tenCommand =
   (env, client, port) =>
     tenFleet(env, client, { port, action });
 const commands = {
+  "resume-pairing-stage": resumePairingStage,
   "seal-fallback": sealFallback,
   "reseal-fallback": resealFallback,
   "diagnose-pairing": diagnosePairing,
@@ -2239,6 +2356,7 @@ if (import.meta.main) {
   const program = Effect.gen(function* () {
     const command = yield* Schema.decodeUnknownEffect(
       Schema.Literals([
+        "resume-pairing-stage",
         "seal-fallback",
         "reseal-fallback",
         "diagnose-pairing",

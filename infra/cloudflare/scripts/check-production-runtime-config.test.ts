@@ -196,6 +196,37 @@ describe("Production runtime configuration gate", () => {
     }
   });
 
+  it("restores the protected pairing upload before staging, checking controls and sealing at zero traffic", async () => {
+    const workflow = await readFile(productionWorkflowPath, "utf8");
+    let position = 0;
+    for (const step of await Promise.all(
+      [
+        "Authenticate the interrupted pairing upload and its original controls",
+        "Resume the exact uploaded Workers at zero traffic",
+        "Persist and read back private observability on the installed application Workers",
+        "Qualify the closed recovery artifacts and their retained controls",
+        "Seal dormant fallback stage before promotion",
+      ].map(workflowStep)
+    )) {
+      expect(step).toContain("inputs.operation == 'resume-pairing-stage'");
+      expect(workflow.indexOf(step)).toBeGreaterThan(position);
+      position = workflow.indexOf(step);
+    }
+    for (const step of await Promise.all(
+      [
+        "Capture the native stable pair",
+        "Upload the verified native candidates",
+        "Stage the zero-traffic native candidates",
+        "Finish only the tested closed forward repair",
+        "Verify mixed and candidate versions before promoting closed admission",
+        "Exercise the tested code-only rollback",
+        "Stage only canonical Access paths and vacant hostnames on the verified closed release",
+      ].map(workflowStep)
+    )) {
+      expect(step).not.toContain("inputs.operation == 'resume-pairing-stage'");
+    }
+  });
+
   it("restricts resealing to archived pair verification and a GitHub evidence upload", async () => {
     const release = (await readFile(productionWorkflowPath, "utf8")).split("\n  site:")[0];
     const source = await workflowStep(

@@ -18,6 +18,7 @@ VERIFIER_FILES = {
     "infra/cloudflare/native-fallback-probe.ts",
     "infra/cloudflare/native-fallback-recovery.test.ts",
     "infra/cloudflare/native-fallback-recovery.ts",
+    "infra/cloudflare/native-pairing-upload.json",
     "infra/cloudflare/native-storage-release.ts",
     "infra/cloudflare/production-release.test.ts",
     "infra/cloudflare/production-release.ts",

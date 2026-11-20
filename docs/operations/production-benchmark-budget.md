@@ -337,7 +337,14 @@ HTTP request proofs, technical smoke Queue and Workflow delivery, receipt signat
 leases remain bound to the current application revision. The initial forward repair's stage artifact
 and the final promoted rollout's qualification artifact serve different operations.
 
-For a successful `stage-pairing-repair`, record its protected run's application SHA, the
+If the pinned pairing-repair upload completed and stopped before assigning the new versions,
+dispatch `resume-pairing-stage` with the signer enabled on protected trunk. The verifier
+authenticates the interrupted archive, the three Worker receipts and the original 100/0 history.
+It rechecks the source controls, stages the same Core and Ingress at zero traffic, and publishes
+a seal only after ordinary financial controls and compatibility pass. A retry recognizes only
+those exact assignments over their archived predecessors.
+
+For a successful `stage-pairing-repair` or `resume-pairing-stage`, record the sealed application SHA, the
 `native-fixture-fallback-<run-id>` artifact ID, and its independently approved archive SHA-256.
 Pass these as `installed_revision`, `fallback_artifact`, and `fallback_sha256` with the signer
 enabled for `recover-fixture-fallback`. After that recovery succeeds, supply the same three

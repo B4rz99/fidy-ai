@@ -1,3 +1,4 @@
+import uploadedPair from "./native-pairing-upload.json" with { type: "json" };
 import { Effect } from "effect";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
@@ -9,6 +10,7 @@ import {
   recoverFixtureFallback,
   requireDormantReplacementSource,
   requirePromotedDormantSource,
+  stageUploadedPair,
   verifyUnpromotedFallback,
 } from "./native-fallback-recovery";
 
@@ -303,5 +305,57 @@ it.effect(
       expect(
         yield* requirePromotedDormantSource(port, snapshot, stage.release).pipe(Effect.isFailure)
       ).toBe(true);
+    })
+);
+
+it.effect(
+  "reuses the uploaded versions over the exact 100/0 predecessor and resumes only missing zero-traffic assignments",
+  () =>
+    Effect.gen(function* () {
+      const { port: base, deployments, writes } = harness();
+      const port: FallbackRepairPort = {
+        ...base,
+        trunk: () => Effect.succeed(uploadedPair.revision),
+      };
+      const snapshot = { ...stage.release.snapshot, revision: uploadedPair.revision };
+      for (const role of ["core", "public"] as const) {
+        snapshot[role] = {
+          ...snapshot[role],
+          deploymentId: archivedDormant[`${role}DeploymentId`],
+          stableVersionId: archivedDormant.original[role],
+        };
+        deployments(snapshot[role].name).splice(0, 1, {
+          id: snapshot[role].deploymentId,
+          versions: [
+            { id: archivedDormant.original[role], percentage: 100 },
+            { id: archivedDormant[`${role}VersionId`], percentage: 0 },
+          ],
+        });
+      }
+      expect(
+        yield* stageUploadedPair(port, snapshot, Effect.fail(Error("missing receipt"))).pipe(
+          Effect.isFailure
+        )
+      ).toBe(true);
+      expect(writes).toEqual([]);
+      const staged = yield* stageUploadedPair(port, snapshot, Effect.void);
+      expect(staged).toMatchObject({
+        coreVersionId: uploadedPair.coreVersionId,
+        publicVersionId: uploadedPair.publicVersionId,
+      });
+      expect(writes).toEqual([ingress, core]);
+      expect(yield* stageUploadedPair(port, snapshot, Effect.void)).toEqual(staged);
+      expect(writes).toEqual([ingress, core]);
+      deployments(core).shift();
+      expect(yield* stageUploadedPair(port, snapshot, Effect.void)).toEqual(staged);
+      expect(writes).toEqual([ingress, core, core]);
+      deployments(ingress)[0] = {
+        id: staged.publicDeploymentId,
+        versions: [{ id: uploadedPair.publicVersionId, percentage: 100 }],
+      };
+      expect(yield* stageUploadedPair(port, snapshot, Effect.void).pipe(Effect.isFailure)).toBe(
+        true
+      );
+      expect(writes).toEqual([ingress, core, core]);
     })
 );

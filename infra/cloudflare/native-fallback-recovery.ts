@@ -97,7 +97,7 @@ const matchesOriginalStage = (observed: Deployment, role: Role): boolean =>
   );
 /** A replacement may supersede only the identified failed zero-traffic versions. */
 export const requireDormantReplacementSource = Effect.fn(function* (
-  port: StageReader,
+  port: FallbackRepairPort,
   snapshot: Release["snapshot"]
 ) {
   yield* releaseController.requireTrunk(port, snapshot.revision);

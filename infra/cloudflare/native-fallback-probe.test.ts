@@ -2,7 +2,7 @@ import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { Clock, Context, Effect, Layer } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
-import { acceptanceSend } from "./native-storage-release";
+import { acceptanceSend, bufferedAcceptanceSend } from "./native-storage-release";
 import { ReleaseHttpLive } from "./release-http";
 import { controlsDigest, observePairingStart } from "./native-fallback-probe";
 import { acceptanceRequestAdmitted } from "../../apps/server/cloudflare/release-isolation/operations";
@@ -97,10 +97,9 @@ it.live(
         expect(yield* observePairingStart(pair, body, send)).toBe("HTTP 503");
       }
       yield* controlsDigest(pair, (request) =>
-        acceptanceSend(
-          client,
-          "bytes"
-        )(request).pipe(Effect.provideService(FetchHttpClient.Fetch, receive))
+        bufferedAcceptanceSend(client)(request).pipe(
+          Effect.provideService(FetchHttpClient.Fetch, receive)
+        )
       ).pipe(Effect.ignore);
       expect(calls).toHaveLength(4);
       expect(calls[3]).toEqual(calls[0]);

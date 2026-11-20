@@ -315,7 +315,7 @@ const recordSourceControls = Effect.fn(function* (
   const { pair, replacing } = input;
   const digest = yield* controlsDigest(
     pair,
-    acceptanceSend(client, replacing ? "bytes" : "stream")
+    replacing ? bufferedAcceptanceSend(client) : acceptanceSend(client)
   );
   if (digest !== fixtureUpload.controlsDigest) {
     return yield* new ReleaseFailure({ message: "Original financial control identities changed" });
@@ -562,9 +562,9 @@ const erasureObservation = ({
       }),
   };
 };
-export const acceptanceSend = (
+const sendClosedRequest = (
   client: HttpClient.HttpClient,
-  body: "bytes" | "stream" = "stream"
+  body: "bytes" | "stream"
 ): Parameters<typeof admittedErasureLogins>[0]["send"] =>
   Effect.fn(function* (request: Request) {
     // FromWeb drops Content-Type on an empty body. The Ingress proof binds the explicit headers.
@@ -591,6 +591,12 @@ export const acceptanceSend = (
     }
     return native.value;
   });
+export const acceptanceSend = (
+  client: HttpClient.HttpClient
+): ReturnType<typeof sendClosedRequest> => sendClosedRequest(client, "stream");
+export const bufferedAcceptanceSend = (
+  client: HttpClient.HttpClient
+): ReturnType<typeof sendClosedRequest> => sendClosedRequest(client, "bytes");
 const verifySyntheticUsers = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,

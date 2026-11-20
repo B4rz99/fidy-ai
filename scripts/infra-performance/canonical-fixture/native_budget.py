@@ -24,17 +24,28 @@ def epoch(stamp):
     return int(datetime.fromisoformat(stamp.replace("Z", "+00:00")).timestamp())
 
 
-def class_a_upper_bound(groups, total):
+def operations_by_action(groups):
+    if not isinstance(groups, list) or not 0 < len(groups) < 100:
+        raise ValueError("Incomplete R2 operation breakdown")
     counts = {}
     for group in groups:
         name, count = group["dimensions"]["actionType"], group["sum"]["requests"]
         if not isinstance(name, str) or not name or name in counts or type(count) is not int or count < 0:
             raise ValueError("Invalid R2 operation breakdown")
         counts[name] = count
-    if not 0 < len(counts) < 100 or sum(counts.values()) != total:
-        raise ValueError("Incomplete R2 operation breakdown")
-    # GetObject is Class B. Charge every other action, including unknown actions, against A.
-    return total - counts.get("GetObject", 0)
+    return counts
+
+
+def aggregate_requests(rows):
+    if not isinstance(rows, list) or len(rows) != 1:
+        raise ValueError("Missing R2 operation aggregate")
+    try:
+        count = rows[0]["sum"]["requests"]
+    except (KeyError, TypeError) as error:
+        raise ValueError("Malformed R2 operation aggregate") from error
+    if type(count) is not int or count < 0:
+        raise ValueError("Invalid R2 operation count")
+    return count
 
 
 def r2_usage(query, account, now):
@@ -44,26 +55,31 @@ def r2_usage(query, account, now):
       query($account:String!,$start:Time!,$day:Time!,$end:Time!){viewer{accounts(filter:{accountTag:$account}){
         accountTag
         total:r2OperationsAdaptiveGroups(limit:1,%s){sum{requests}}
+        classA:r2OperationsAdaptiveGroups(limit:1,filter:{datetime_geq:$start,datetime_leq:$end,actionType_neq:"GetObject"}){sum{requests}}
         byAction:r2OperationsAdaptiveGroups(limit:100,%s){dimensions{actionType} sum{requests}}
         today:r2OperationsAdaptiveGroups(limit:1,filter:{datetime_geq:$day,datetime_leq:$end}){sum{requests}}
         latest:r2OperationsAdaptiveGroups(limit:1,%s,orderBy:[datetime_DESC]){dimensions{datetime}}
         storage:r2StorageAdaptiveGroups(limit:100,%s){dimensions{bucketName} max{payloadSize metadataSize}}
       }}}""" % (filters, filters, filters, filters)})
     row, = result["viewer"]["accounts"]
-    count, = row["total"]
-    daily, = row["today"]
-    today_requests = daily["sum"]["requests"]
+    total = aggregate_requests(row.get("total"))
+    filtered = aggregate_requests(row.get("classA"))
+    today_requests = aggregate_requests(row.get("today"))
+    actions = operations_by_action(row["byAction"])
+    grouped_total = sum(actions.values())
+    # Adaptive totals and grouped estimates can diverge. Only GetObject is excluded from Class A.
+    class_a = max(filtered, grouped_total - actions.get("GetObject", 0))
+    requests = max(total, grouped_total, class_a, today_requests)
     latest, = row["latest"]
     storage = row["storage"]
-    requests = count["sum"]["requests"]
     buckets = [item["dimensions"]["bucketName"] for item in storage]
     sizes = [value for item in storage for value in [item["max"]["payloadSize"],item["max"]["metadataSize"]]]
     if (row["accountTag"] != account or not 0 <= now-epoch(latest["dimensions"]["datetime"]) <= MAX_AGE
             or not 0 < len(buckets) < 100 or len(buckets) != len(set(buckets))
             or "fidy-native-release-smoke" not in buckets
-            or any(type(n) is not int or n < 0 for n in [requests, today_requests, *sizes])):
+            or any(type(n) is not int or n < 0 for n in sizes)):
         raise ValueError("Missing fresh, bounded account R2 observations")
-    return dict(requests=requests, upperBoundClassA=class_a_upper_bound(row["byAction"], requests),
+    return dict(requests=requests, upperBoundClassA=class_a,
                 todayRequests=today_requests, upperBoundBytes=sum(sizes), sampled=now,
                 latest=epoch(latest["dimensions"]["datetime"]))
 

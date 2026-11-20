@@ -30,7 +30,7 @@ const bootstrapCodeModule = (id: string): boolean => {
 const sharedRuntimeModule = (id: string): boolean => {
   const path = id.replaceAll("\\", "/").replace(/\?.*$/u, "");
   if (bootstrapModules.some((suffix) => path.endsWith(suffix))) return false;
-  return /\/apps\/server\/src\/|node_modules\/(?:effect|@effect|react|react-dom|scheduler|use-sync-external-store|@tanstack\/(?:react-router|router-core|history|react-store|store))\//u.test(
+  return /node_modules\/(?:effect|@effect|react|react-dom|scheduler|use-sync-external-store|@tanstack\/(?:react-router|router-core|history|react-store|store))\//u.test(
     path
   );
 };
@@ -107,8 +107,7 @@ export default defineConfig(({ mode }) => ({
             },
             {
               name: "shared-runtime",
-              // Keep library initialization together, including React compiler dependencies.
-              minShareCount: 1,
+              minShareCount: 2,
               // Recursive capture would pull the dependency-free bootstrap into this chunk.
               includeDependenciesRecursively: false,
               test: sharedRuntimeModule,

@@ -27,17 +27,25 @@ it.effect("erases its one new physical User if metering stops during observation
             stored = true;
             registrations++;
             return {
+              id: "original",
               outcome: "created",
-              erase: (): Effect.Effect<string> =>
-                Effect.sync(() => {
-                  erased++;
-                  stored = false;
-                  return "reference";
-                }),
+              erase: (): Effect.Effect<never, Error> =>
+                Effect.fail(Error("signup session is stale")),
               denied: (): Effect.Effect<void> => Effect.void,
             };
           }),
-        login: () => Effect.die("Unexpected login after successful signup"),
+        login: () =>
+          Effect.succeed({
+            id: "original",
+            outcome: "approved",
+            erase: () =>
+              Effect.sync(() => {
+                erased++;
+                stored = false;
+                return "reference";
+              }),
+            denied: () => Effect.void,
+          }),
         beforeSignup: () => Effect.void,
         renewCleanup: () => Effect.void,
         renew: () => Effect.void,
@@ -67,6 +75,7 @@ it.effect("recovers an established pilot session for cleanup after a lost signup
           }).pipe(Effect.andThen(Effect.fail(Error("reply lost")))),
         login: () =>
           Effect.succeed({
+            id: "original",
             outcome: "approved",
             erase: (): Effect.Effect<string> =>
               Effect.sync(() => {
@@ -102,16 +111,24 @@ it.effect(
           Effect.sync(() => {
             signups++;
             return {
+              id: "original",
               outcome: "created",
-              erase: (): Effect.Effect<string> =>
-                Effect.sync(() => {
-                  erasures++;
-                  return "original";
-                }),
+              erase: (): Effect.Effect<never, Error> =>
+                Effect.fail(Error("signup session is stale")),
               denied: (): Effect.Effect<void> => Effect.void,
             };
           }),
-        login: () => Effect.die("Unexpected pilot login"),
+        login: () =>
+          Effect.succeed({
+            id: "original",
+            outcome: "approved",
+            erase: () =>
+              Effect.sync(() => {
+                erasures++;
+                return "original";
+              }),
+            denied: () => Effect.void,
+          }),
         beforeSignup: () => Effect.void,
         renewCleanup: () => Effect.void,
         renew: () => Effect.void,
@@ -175,4 +192,35 @@ it.effect(
       expect(result._tag).toBe("Failure");
       expect(stages).not.toContain("signup-started");
     })
+);
+
+it.effect("refuses to erase a different User returned by login", () =>
+  Effect.gen(function* () {
+    let registered = false;
+    let erased = false;
+    const browser = {
+      erase: (): Effect.Effect<string> =>
+        Effect.sync(() => {
+          erased = true;
+          return "reference";
+        }),
+      denied: (): Effect.Effect<void> => Effect.void,
+    };
+    const verdict = yield* runFleetPilot({
+      register: () =>
+        Effect.sync(() => {
+          registered = true;
+          return { ...browser, id: "original", outcome: "created" };
+        }),
+      login: () => Effect.succeed({ ...browser, id: "other", outcome: "approved" }),
+      inventory: () => Effect.succeed(listed(registered)),
+      beforeSignup: () => Effect.void,
+      renew: () => Effect.void,
+      renewCleanup: () => Effect.void,
+      record: () => Effect.void,
+      watch: () => Effect.void,
+    }).pipe(Effect.result);
+    expect(verdict._tag).toBe("Failure");
+    expect(erased).toBe(false);
+  })
 );

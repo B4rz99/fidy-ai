@@ -1,4 +1,4 @@
-import { Clock, Config, Effect, FileSystem, Schema } from "effect";
+import { Clock, Config, Effect, FileSystem, Schedule, Schema } from "effect";
 import { type FleetOrdinal, type TenState, fleetOrdinals, runTenFleet } from "./native-ten-fleet";
 import type { FleetPilotBrowser } from "./native-fleet-pilot";
 import type { UserObjects } from "./native-erasure-evidence";
@@ -153,6 +153,34 @@ const holdWindows = Effect.fn(function* (
     yield* Effect.sleep("25 seconds");
   }
 });
+// Directory admits 30 exchanges per source per minute. Each browser flow charges four.
+const pacedBrowser = (): (<A>(flow: Effect.Effect<A, Error>) => Effect.Effect<A, Error>) => {
+  let nextStart = 0;
+  const cooldownMs = 12_000;
+  return Effect.fn(function* <A>(flow: Effect.Effect<A, Error>) {
+    yield* Effect.sleep(Math.max(0, nextStart - (yield* Clock.currentTimeMillis)));
+    return yield* flow.pipe(
+      Effect.ensuring(
+        Effect.gen(function* () {
+          nextStart = (yield* Clock.currentTimeMillis) + cooldownMs;
+        })
+      )
+    );
+  });
+};
+const admitNext = Effect.fn(function* (release: Release, ordinal: FleetOrdinal) {
+  const status = yield* release.meter("ten-signup", String(ordinal)).pipe(
+    Effect.map((output) => output.trim()),
+    Effect.repeat({
+      while: (value) => value === "pending",
+      schedule: Schedule.spaced("15 seconds"),
+    }),
+    Effect.timeout("4 minutes")
+  );
+  if (status !== "admitted") {
+    return yield* Effect.fail(Error("Next fleet enrollment is not admitted"));
+  }
+});
 const tenSource = Effect.fn(function* (continued: boolean, release: Release) {
   return continued
     ? {
@@ -180,6 +208,7 @@ export const executeTen = Effect.fn(function* (release: Release, continued: bool
     yield* save();
   });
   const active = release.browser(activeOrdinal);
+  const paced = pacedBrowser();
   const browser = (id: FleetOrdinal): Browser =>
     id === activeOrdinal ? active : release.browser(id);
   const work = yield* Effect.exit(
@@ -193,16 +222,16 @@ export const executeTen = Effect.fn(function* (release: Release, continued: bool
           release
             .meter("ten-objects", release.userNamespace, String(state.at))
             .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Mapping))),
-        beforeSignup: (ordinal) => release.meter("ten-signup", String(ordinal)).pipe(Effect.asVoid),
+        beforeSignup: (ordinal) => admitNext(release, ordinal),
         renewCleanup: () => release.meter("ten-cleanup").pipe(Effect.andThen(active.renew)),
-        signup: (ordinal) => browser(ordinal).register(),
-        login: (ordinal) => browser(ordinal).login(),
+        signup: (ordinal) => paced(browser(ordinal).register()),
+        login: (ordinal) => paced(browser(ordinal).login()),
         refused: (ordinal) =>
           release
             .meter("ten-cleanup")
             .pipe(
               Effect.andThen(() =>
-                browser(ordinal).beginRefusal((stage) => journal(stage, ordinal))
+                paced(browser(ordinal).beginRefusal((stage) => journal(stage, ordinal)))
               )
             ),
         watch: () => holdWindows(release, active, () => journal("foreground-read", activeOrdinal)),

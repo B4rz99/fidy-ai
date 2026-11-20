@@ -85,6 +85,22 @@ class TenMeter(unittest.TestCase):
             with self.assertRaises(ValueError):
                 require_ten_room("ten-resume", current, delta, now, [], {}, resumed=True)
 
+    def test_next_signup_can_wait_for_known_completions_but_not_real_exhaustion(self):
+        from ten import AwaitWatermark
+        now = 20_000
+        enrolled = list(ORDINALS[:5])
+        evidence = {"events": [{"stage":"signup-created", "at":(now-40)*1000, "ordinal":ordinal}
+                               for ordinal in enrolled]}
+        with patch.dict(os.environ, {"FLEET_PILOT_STARTED_AT": str(now-600)}):
+            delta = {"reads":420_000,"writes":14_000}
+            with self.assertRaises(AwaitWatermark):
+                require_ten_room("ten-signup",Usage(now,now-80,420_100,14_010),delta,now,enrolled,evidence)
+            require_ten_room("ten-signup",Usage(now+30,now+30,420_100,14_010),delta,now+30,enrolled,evidence)
+            with self.assertRaises(ValueError) as refused:
+                require_ten_room("ten-signup",Usage(now,now-80,1_500_000,60_000),
+                                 {"reads":1_500_000,"writes":60_000},now,enrolled,evidence)
+            self.assertFalse(isinstance(refused.exception, AwaitWatermark))
+
     def test_physical_graphql_includes_unrelated_uuid_users_and_refuses_truncation(self):
         obj = {"dimensions":{"objectId":"a"*64,"name":"00000000-0000-4000-8000-000000000002"},
                "sum":{"rowsWritten":2161}}

@@ -135,7 +135,7 @@ const verifyOriginalDisclosure = Effect.fn(function* (
     return yield* Effect.fail(Error("Missing original provider signup disclosure"));
   }
 });
-type Member = "smoke-1" | "smoke-2" | "erasure-1" | `fleet-${FleetOrdinal | 1}`;
+type Member = "smoke-1" | "smoke-2" | "erasure-1" | `fleet-${FleetOrdinal}`;
 const verifyProvider = Effect.fn(function* (
   input: Inputs,
   member: Member,
@@ -404,7 +404,7 @@ const identity = Effect.fn(function* (call: Driver["call"], user: User) {
   return current.data.id;
 });
 
-type FleetSubject = `fleet-${FleetOrdinal | 1}`;
+type FleetSubject = `fleet-${FleetOrdinal}`;
 export const fleetBrowser = (
   input: Inputs & { subject: FleetSubject }
 ): FleetPilotBrowser & {

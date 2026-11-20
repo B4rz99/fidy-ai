@@ -124,6 +124,10 @@ def latest_for(events, stage, current):
             and row["at"] // 1000 + WATERMARK_DELAY <= current.latest}
 
 
+class AwaitWatermark(ValueError):
+    """Known completed enrollments still have their conservative provisional reservations."""
+
+
 def require_ten_room(phase, current, delta, now, enrolled, evidence, resumed=False, source_finished=None):
     events = evidence.get("events", [])
     confirmed = latest_for(events, "signup-created", current)
@@ -143,13 +147,20 @@ def require_ten_room(phase, current, delta, now, enrolled, evidence, resumed=Fal
     remaining = len((potentially_enrolled | future) - erased)
     available = (min(PILOT_READS - delta["reads"], DAILY_READS - RESERVE_READS - current.reads),
                  min(PILOT_WRITES - delta["writes"], DAILY_WRITES - RESERVE_WRITES - current.writes))
-    if any(have < pending * enroll + remaining * dispose + tail
-           for have, enroll, dispose, tail in zip(available, ENROLL, DISPOSE, TAIL)):
-        raise ValueError("Insufficient same-day fleet budget for outstanding work and cleanup")
     minimum = (SIGNUP_SECONDS if phase in ("ten-begin", "ten-signup") else
                CLEANUP_SECONDS if phase in ("ten-check", "ten-resume") else 7 * 60)
     if remaining_seconds(now, MAX_SECONDS) < minimum:
         raise ValueError("Insufficient same-day time for remaining fleet work")
+
+    def fits(pending_count):
+        return all(have >= pending_count * enroll + remaining * dispose + tail
+                   for have, enroll, dispose, tail in zip(available, ENROLL, DISPOSE, TAIL))
+    if not fits(pending):
+        completed = {event["ordinal"] for event in events if event["stage"] == "signup-created"
+                     and 0 < event["at"] <= now * 1000 and event["ordinal"] in enrolled}
+        if phase == "ten-signup" and fits(pending - len(completed - confirmed)):
+            raise AwaitWatermark("Await original signup accounting")
+        raise ValueError("Insufficient same-day fleet budget for outstanding work and cleanup")
 
 
 def read_ledger(path):
@@ -289,6 +300,10 @@ def sample_ten(phase, revisions, args):
         return
     try:
         require_ten_room(phase, current, delta, now, enrolled, evidence, resumed, source_finished)
+    except AwaitWatermark:
+        append("ten-await-watermark", **values)
+        print("pending")
+        return
     except ValueError:
         # Preserve sampled refusal evidence without admitting an ordinal or replacing its origin.
         with (directory / "native-fleet-refusal.jsonl").open("a") as out:
@@ -301,3 +316,5 @@ def sample_ten(phase, revisions, args):
         values.update(sourceRun=provenance["runId"], sourceVerifierRevision=provenance["sourceRevision"],
                       sourceWindowSha256=source_window(evidence), sourceFinishedAt=source_finished)
     append(phase, **values)
+    if phase == "ten-signup":
+        print("admitted")

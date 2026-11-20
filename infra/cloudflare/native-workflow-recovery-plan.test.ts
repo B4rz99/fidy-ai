@@ -94,3 +94,18 @@ it("refuses untracked Workflow state and a plan bound to a different Smoke Worke
     })
   ).toThrow("Missing exact interrupted Workflow state");
 });
+
+it("refuses any plan that could adopt the Workflow", () => {
+  const observed = observedPlan();
+  const tracked = observed.resources[workflow];
+  if (tracked === undefined) throw Error("Missing Workflow in test inventory");
+  expect(() =>
+    qualifyWorkflowRecoveryPlan({
+      ...observed,
+      resources: {
+        ...observed.resources,
+        [workflow]: { ...tracked, deferredAdoption: { adopt: true } },
+      },
+    })
+  ).toThrow("Missing exact interrupted Workflow state");
+});

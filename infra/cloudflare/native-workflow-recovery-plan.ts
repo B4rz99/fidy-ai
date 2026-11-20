@@ -8,11 +8,11 @@ import { releaseEvidence } from "./production-release";
 import { nativeResourceFailureMessage } from "./resource-failure";
 
 export const interruptedRevision = "de04a192c3836be0efb488b170a7b93b9f98f28f";
-const workflowId = "ReleaseSmokeWorkflowV2-" + interruptedRevision;
+export const workflowId = "ReleaseSmokeWorkflowV2-" + interruptedRevision;
 const hostId = "ReleaseSmoke-" + interruptedRevision;
-const smokeName = "fidy-native-smoke-" + interruptedRevision;
+export const smokeName = "fidy-native-smoke-" + interruptedRevision;
 const workflowType = "Cloudflare.Workflow";
-class WorkflowRecoveryRefused extends Data.TaggedError("WorkflowRecoveryRefused")<{
+export class WorkflowRecoveryRefused extends Data.TaggedError("WorkflowRecoveryRefused")<{
   message: string;
 }> {}
 const WorkflowProperties = Schema.Struct({
@@ -35,6 +35,7 @@ const RecoveryNode = Schema.Struct({
   bindings: Schema.Array(Schema.Struct({ data: Schema.Unknown })),
   downstream: Schema.Array(Schema.String),
   renamedFrom: Schema.optional(Schema.Array(Schema.String)),
+  deferredAdoption: Schema.optional(Schema.Struct({ adopt: Schema.Boolean })),
   props: Schema.optional(Schema.Unknown),
   state: Schema.optional(
     Schema.Struct({
@@ -71,6 +72,7 @@ const exactProperties = Schema.decodeUnknownOption(WorkflowProperties, {
 const workflowNodeIsInterrupted = (node: Node): boolean =>
   node.action === "create" &&
   Schema.is(InterruptedRow)(node.state) &&
+  node.deferredAdoption?.adopt !== true &&
   Option.isSome(exactProperties(node.state.props)) &&
   Option.isSome(exactProperties(node.props)) &&
   Schema.is(Schema.Tuple([Schema.Struct({ data: WorkflowBinding })]))(node.bindings);
@@ -191,6 +193,41 @@ const ReviewedPartial = Schema.Struct({
   rawProtocolReadersOverlap: Schema.Literal(false),
   compatibilityReviewRevision: Schema.Literal("b5b4b8149af0aad6cbd5d6f657c949d03d1f5e7d"),
 });
+const ProofDigest = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u));
+export const WorkflowPlanEvidence = Schema.Struct({
+  ...ReviewedPartial.fields,
+  change: Schema.Struct({
+    logicalId: Schema.Literal(workflowId),
+    resourceType: Schema.Literal(workflowType),
+    action: Schema.Literal("create"),
+  }),
+  unchanged: Schema.Tuple([
+    Schema.Literal(hostId),
+    Schema.Literal("ReleaseSmokeBucket"),
+    Schema.Literal("ReleaseSmokeQueue-" + interruptedRevision),
+  ]),
+  stateProof: ProofDigest,
+  instanceProof: ProofDigest,
+});
+
+export const instanceProof = (id: string): string =>
+  new Bun.CryptoHasher("sha256").update(id).digest("hex");
+const stateProof = (plan: WorkflowPlan): string =>
+  instanceProof(
+    releaseEvidence.encodeJson(
+      Object.entries(plan.resources)
+        .toSorted(([left], [right]) => left.localeCompare(right))
+        .map(([fqn, node]) => [
+          fqn,
+          node.action,
+          node.state?.instanceId,
+          node.state?.status,
+          node.state?.resourceType,
+          node.state?.removalPolicy,
+          [...node.downstream].toSorted((left, right) => left.localeCompare(right)),
+        ])
+    )
+  );
 
 const requireProtectedInvocation = Effect.gen(function* () {
   yield* Config.Literal("true", "GITHUB_ACTIONS");
@@ -203,13 +240,9 @@ const requireProtectedInvocation = Effect.gen(function* () {
   yield* Config.Literal("stage-fixture-successor", "FIXTURE_RELEASE_OPERATION");
   yield* Config.Literal(interruptedRevision, "RELEASE_GIT_SHA");
   yield* Config.Literal("44806738835-1", "RELEASE_ATTEMPT_ID");
-  yield* Config.Literal(
-    "B4rz99/fidy-ai/.github/workflows/native-fixture-workflow-recovery-plan.yml@refs/heads/trunk",
-    "GITHUB_WORKFLOW_REF"
-  );
 });
 
-const readWorkflowRecoveryPlan = Effect.fn("readWorkflowRecoveryPlan")(function* () {
+export const readQualifiedWorkflowPlan = Effect.fn("readQualifiedWorkflowPlan")(function* () {
   yield* requireProtectedInvocation;
   const verifierRevision = yield* Config.String("GITHUB_SHA");
   const path = yield* Path.Path;
@@ -230,14 +263,14 @@ const readWorkflowRecoveryPlan = Effect.fn("readWorkflowRecoveryPlan")(function*
       message: "Unexpected interrupted application checkout or read-only proof",
     });
   }
-  const { native } = yield* readNativeScopedPlan({
+  const snapshot = yield* readNativeScopedPlan({
     profile,
     fingerprint,
     revision: interruptedRevision,
     include: [workflowId],
   });
   const unchanged = yield* Effect.try({
-    try: () => qualifyWorkflowRecoveryPlan(native),
+    try: () => qualifyWorkflowRecoveryPlan(snapshot.native),
     catch: (error) =>
       error instanceof WorkflowRecoveryRefused
         ? error
@@ -245,13 +278,36 @@ const readWorkflowRecoveryPlan = Effect.fn("readWorkflowRecoveryPlan")(function*
             message: "Unexpected Workflow plan qualification failure",
           }),
   });
+  const row = snapshot.native.resources[workflowId]?.state;
+  if (row === undefined) {
+    return yield* new WorkflowRecoveryRefused({ message: "The tracked Workflow FQN differs" });
+  }
+  const evidence = yield* Schema.decodeUnknownEffect(WorkflowPlanEvidence)({
+    ...reviewed,
+    change: { logicalId: workflowId, resourceType: workflowType, action: "create" },
+    unchanged,
+    stateProof: stateProof(snapshot.native),
+    instanceProof: instanceProof(row.instanceId),
+  });
+  return { snapshot, evidence, directory };
+});
+
+export const workflowRecoveryFailureMessage = (cause: Cause.Cause<unknown>): string => {
+  const failure = Cause.findErrorOption(cause);
+  return Option.isSome(failure) && failure.value instanceof WorkflowRecoveryRefused
+    ? failure.value.message
+    : nativeResourceFailureMessage(cause);
+};
+
+const readWorkflowRecoveryPlan = Effect.gen(function* () {
+  yield* Config.Literal(
+    "B4rz99/fidy-ai/.github/workflows/native-fixture-workflow-recovery-plan.yml@refs/heads/trunk",
+    "GITHUB_WORKFLOW_REF"
+  );
+  const { evidence, directory } = yield* readQualifiedWorkflowPlan();
   yield* releaseEvidence.writeFile(
     directory + "/native-workflow-recovery-plan.json",
-    releaseEvidence.encodeJson({
-      ...reviewed,
-      change: { logicalId: workflowId, resourceType: workflowType, action: "create" },
-      unchanged,
-    })
+    releaseEvidence.encodeJson(evidence)
   );
 });
 
@@ -259,16 +315,11 @@ if (import.meta.main) {
   const runtime = ManagedRuntime.make(Alchemist.layer());
   try {
     await runtime.runPromise(
-      readWorkflowRecoveryPlan().pipe(
+      readWorkflowRecoveryPlan.pipe(
         Effect.scoped,
         Effect.catchCause((cause) =>
           Effect.sync(() => {
-            const failure = Cause.findErrorOption(cause);
-            const message =
-              Option.isSome(failure) && failure.value instanceof WorkflowRecoveryRefused
-                ? failure.value.message
-                : nativeResourceFailureMessage(cause);
-            process.stderr.write(message + "\n");
+            process.stderr.write(workflowRecoveryFailureMessage(cause) + "\n");
             process.exitCode = 1;
           })
         )

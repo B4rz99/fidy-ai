@@ -260,22 +260,9 @@ export const decodeReadProjection = ({
   RecurringPlanningUnavailable
 > =>
   Effect.gen(function* () {
-    const schedule = yield* Schema.decodeUnknownEffect(
-      Schema.toCodecJson(
-        Schema.Struct({
-          plans: RecurringDocument.fields.plans,
-          exceptions: RecurringDocument.fields.exceptions,
-          fulfillments: RecurringDocument.fields.fulfillments,
-          excludedTransactionIds: RecurringDocument.fields.excludedTransactionIds,
-        })
-      )
-    )(planningValue(rows));
-    const editing = yield* Schema.decodeEffect(Schema.toType(RecurringDocument))({
-      ...rows.root,
-      ...schedule,
-      revision: rows.revision,
-      plans: schedule.plans,
-    });
+    const editing = yield* Schema.decodeUnknownEffect(JsonDocument)(planningValue(rows));
+    const { plans, exceptions, fulfillments, excludedTransactionIds } = editing;
+    const schedule = { plans, exceptions, fulfillments, excludedTransactionIds };
     return { editing: displayDocument({ document: editing, compact: true, now }), schedule };
   }).pipe(Effect.mapError(() => new RecurringPlanningUnavailable()));
 

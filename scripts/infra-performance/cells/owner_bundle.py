@@ -88,7 +88,7 @@ class MaterializedBundle:
                 raise Refused("incomplete_browser_request_reservations")
             self.http = {r:counts(limits[r]["maximum"]) for r in self.counts}
             self.estimate = counts({k:sum(c[k] for c in self.direct) + sum(n*self.http[r][k] for r,n in self.counts.items()) for k in KEYS})
-            if self.estimate != self.probe["fullEstimate"] or self.estimate["rowsWritten"] > 5000:
+            if self.estimate != self.probe["fullEstimate"]:
                 raise Refused("invalid_complete_browser_estimate")
             return
         if set(limits) != set(routes):

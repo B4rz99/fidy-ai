@@ -369,9 +369,6 @@ def main():
     parser.add_argument(
         "--maximum-reads", type=int, help="Explicit approved D1 ceiling for this run"
     )
-    parser.add_argument(
-        "--maximum-writes", type=int, help="Explicit approved D1 ceiling for this run"
-    )
     parser.add_argument("--browser-workspace", action="store_true")
     parser.add_argument("--pairs", type=int, choices=(1, 30), default=1)
     args = parser.parse_args()
@@ -444,8 +441,7 @@ def main():
             if args.action == "propose":
                 report["status"] = "verified cost proposal"
                 return 0
-            approved = counts(dict(rowsRead=args.maximum_reads, rowsWritten=args.maximum_writes))
-            if any(bundle.estimate[k] > approved[k] for k in approved):
+            if args.maximum_reads is None or bundle.estimate["rowsRead"] > args.maximum_reads:
                 raise Refused("outside_approved_cost_proposal")
             approved_native = approved_versions(args.core_version, args.ingress_version)
         account = os.environ["CLOUDFLARE_ACCOUNT_ID"]

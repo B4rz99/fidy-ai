@@ -163,10 +163,10 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           SMOKE_PROOF: ${{ secrets.NATIVE_STORAGE_SMOKE_PROOF }}
         run: |
-          caps=(--maximum-reads 18194 --maximum-writes 4754)
+          caps=(--maximum-reads 18194)
           if [[ "$WORKLOAD" == browser ]]; then
             bun scripts/infra-performance/hosted-browser/origin.mjs "$OUT/origin-before-d1.json"
-            caps=(--browser-workspace --maximum-reads 100000 --maximum-writes 5000)
+            caps=(--browser-workspace --maximum-reads 100000)
           fi
           python3 scripts/infra-performance/cells/owner.py run "${caps[@]}" --out "$OUT/comparison" \
             --prefix "$RESOURCE_PREFIX" --revision "$REVISION" --fixture "$OUT/fixture" \

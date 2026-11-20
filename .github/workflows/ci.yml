@@ -76,6 +76,15 @@ jobs:
           BASE_BRANCH: ${{ github.event.pull_request.base.ref || github.event.repository.default_branch }}
         run: git fetch --no-tags --depth=1 origin "+refs/heads/$BASE_BRANCH:refs/remotes/origin/$BASE_BRANCH"
       - uses: ./.github/actions/bun-install
+      - name: Measure the synced Cloudflare digest
+        run: bun -e 'import { edgePolicyDigest } from "./infra/cloudflare/verify-edge-policy.ts"; console.log(edgePolicyDigest)' > "$RUNNER_TEMP/edge-policy-digest.txt"
+      - name: Preserve the synced Cloudflare digest
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: synced-edge-policy
+          path: ${{ runner.temp }}/edge-policy-digest.txt
+          if-no-files-found: error
+          retention-days: 1
       - name: Restore every declared upstream reference
         run: |
           bun -e '

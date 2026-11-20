@@ -1,8 +1,7 @@
-import { resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import * as Alchemist from "alchemy/Alchemist";
 import type { Plan } from "alchemy/Plan";
-import { Cause, Config, Data, Effect, Option, Schema } from "effect";
+import { Cause, Config, Data, Effect, ManagedRuntime, Option, Path, Schema } from "effect";
 import { nativePlanOptions } from "./native-fixture-plan";
 import { nativeResourceInventory } from "./native-graph";
 import { diagnoseNativePlan } from "./native-plan-diagnostics";
@@ -194,7 +193,7 @@ const ReviewedPartial = Schema.Struct({
   compatibilityReviewRevision: Schema.Literal("b5b4b8149af0aad6cbd5d6f657c949d03d1f5e7d"),
 });
 
-const readWorkflowRecoveryPlan = Effect.fn("readWorkflowRecoveryPlan")(function* () {
+const requireProtectedInvocation = Effect.gen(function* () {
   yield* Config.Literal("true", "GITHUB_ACTIONS");
   yield* Config.Literal("true", "GITHUB_REF_PROTECTED");
   yield* Config.Literal("refs/heads/trunk", "GITHUB_REF");
@@ -209,7 +208,12 @@ const readWorkflowRecoveryPlan = Effect.fn("readWorkflowRecoveryPlan")(function*
     "B4rz99/fidy-ai/.github/workflows/native-fixture-workflow-recovery-plan.yml@refs/heads/trunk",
     "GITHUB_WORKFLOW_REF"
   );
+});
+
+const readWorkflowRecoveryPlan = Effect.fn("readWorkflowRecoveryPlan")(function* () {
+  yield* requireProtectedInvocation;
   const verifierRevision = yield* Config.String("GITHUB_SHA");
+  const path = yield* Path.Path;
   const workspace = yield* Config.String("GITHUB_WORKSPACE");
   const directory = yield* Config.String("RUNNER_TEMP");
   const fingerprint = yield* Config.String("NATIVE_FIXTURE_SIGNER_SHA256");
@@ -221,18 +225,25 @@ const readWorkflowRecoveryPlan = Effect.fn("readWorkflowRecoveryPlan")(function*
     reviewed.verifierRevision !== verifierRevision ||
     !/^[a-f0-9]{40}$/u.test(verifierRevision) ||
     !/^[a-f0-9]{64}$/u.test(fingerprint) ||
-    process.cwd() !== resolve(workspace, "interrupted/infra/cloudflare")
+    process.cwd() !== path.resolve(workspace, "interrupted/infra/cloudflare")
   ) {
-    return yield* Effect.fail(
-      new WorkflowRecoveryRefused({
-        message: "Unexpected interrupted application checkout or read-only proof",
-      })
-    );
+    return yield* new WorkflowRecoveryRefused({
+      message: "Unexpected interrupted application checkout or read-only proof",
+    });
   }
   const { native } = yield* Alchemist.Stack.plan({
     ...nativePlanOptions({ profile, preview: true, fingerprint }),
     include: [workflowId],
-  }).pipe(diagnoseNativePlan(interruptedRevision));
+  }).pipe(
+    diagnoseNativePlan(interruptedRevision),
+    Effect.catchCause((cause) =>
+      Effect.fail(
+        new WorkflowRecoveryRefused({
+          message: nativeResourceFailureMessage(cause),
+        })
+      )
+    )
+  );
   const unchanged = yield* Effect.try({
     try: () => qualifyWorkflowRecoveryPlan(native),
     catch: (error) =>
@@ -253,20 +264,25 @@ const readWorkflowRecoveryPlan = Effect.fn("readWorkflowRecoveryPlan")(function*
 });
 
 if (import.meta.main) {
-  const program = readWorkflowRecoveryPlan().pipe(Effect.provide(Alchemist.layer()), Effect.scoped);
-  await Effect.runPromise(
-    program.pipe(
-      Effect.catchCause((cause) =>
-        Effect.sync(() => {
-          const failure = Cause.findErrorOption(cause);
-          const message =
-            Option.isSome(failure) && failure.value instanceof WorkflowRecoveryRefused
-              ? failure.value.message
-              : nativeResourceFailureMessage(cause);
-          process.stderr.write(message + "\n");
-          process.exitCode = 1;
-        })
+  const runtime = ManagedRuntime.make(Alchemist.layer());
+  try {
+    await runtime.runPromise(
+      readWorkflowRecoveryPlan().pipe(
+        Effect.scoped,
+        Effect.catchCause((cause) =>
+          Effect.sync(() => {
+            const failure = Cause.findErrorOption(cause);
+            const message =
+              Option.isSome(failure) && failure.value instanceof WorkflowRecoveryRefused
+                ? failure.value.message
+                : nativeResourceFailureMessage(cause);
+            process.stderr.write(message + "\n");
+            process.exitCode = 1;
+          })
+        )
       )
-    )
-  );
+    );
+  } finally {
+    await runtime.dispose();
+  }
 }

@@ -54,6 +54,7 @@ it("qualifies one Workflow create with the existing exact hosting Worker untouch
 it("refuses a host update, metadata change, or unexpected selected cycle", () => {
   const observed = observedPlan();
   const same = observed.resources[host];
+  if (same === undefined) throw Error("Missing host in test inventory");
   for (const edit of [
     { ...same, action: "update" },
     { ...same, downstream: [] },
@@ -73,6 +74,7 @@ it("refuses a host update, metadata change, or unexpected selected cycle", () =>
 it("refuses untracked Workflow state and a plan bound to a different Smoke Worker", () => {
   const observed = observedPlan();
   const same = observed.resources[workflow];
+  if (same === undefined) throw Error("Missing Workflow in test inventory");
   expect(() =>
     qualifyWorkflowRecoveryPlan({
       ...observed,

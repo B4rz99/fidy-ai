@@ -2,8 +2,10 @@ import { resourceFailureMessage } from "./resource-failure";
 import {
   FallbackStage,
   archivedDormant,
+  fromArchivedStage,
   matchesArchivedStage,
   recoverFixtureFallback,
+  requireDormantReplacementSource,
   requirePromotedDormantSource,
   verifyUnpromotedFallback,
 } from "./native-fallback-recovery";
@@ -201,12 +203,15 @@ const verifyRetainedProvider = Effect.fn(function* (
   return retainedProvider;
 });
 
-const requireCapturedSupport = Effect.fn(function* (port: ReleasePort) {
+const requireCapturedSupport = Effect.fn(function* (
+  port: ReleasePort,
+  smoke: Readonly<{ deploymentId: string; versionId: string }> = fixtureUpload.support.Smoke
+) {
   for (const role of ["Smoke", "Web", "ForwardedEmail"] as const) {
     const name =
       role === "Smoke" ? "fidy-native-smoke-" + fixtureUpload.revision : installationNames[role];
     const active = yield* port.current(name);
-    const expected = fixtureUpload.support[role];
+    const expected = role === "Smoke" ? smoke : fixtureUpload.support[role];
     if (
       active.id !== expected.deploymentId ||
       active.versions.length !== 1 ||
@@ -256,6 +261,67 @@ const verifyInterruptedUpload = Effect.fn(function* (
   yield* inspectNativeResources(accountReader(env, client), fixtureUpload.revision, true);
 });
 
+const readReplacementPredecessor = Effect.fn(function* (
+  env: Config,
+  snapshot: typeof releaseSchemas.snapshot.Type
+) {
+  const prior = yield* Schema.decodeUnknownEffect(releaseSchemas.staged)(
+    yield* readFile(env.file + ".predecessor")
+  );
+  if (
+    !matchesArchivedStage(prior) ||
+    !fromArchivedStage(snapshot) ||
+    snapshot.stableRevision !== prior.snapshot.stableRevision ||
+    snapshot.stableContractDigest !== prior.snapshot.stableContractDigest
+  ) {
+    return yield* new ReleaseFailure({
+      message: "Replacement source differs from the protected stage",
+    });
+  }
+  yield* Effect.try(() => requireOriginalFallbackSource(prior.snapshot));
+  return prior;
+});
+const verifyReplacementSource = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  snapshot: typeof releaseSchemas.snapshot.Type
+) {
+  const prior = yield* readReplacementPredecessor(env, snapshot);
+  const port = releasePort({ env, client });
+  yield* requireDormantReplacementSource(port, snapshot);
+  yield* requireCapturedSupport(port, archivedDormant.smoke);
+  const saved = yield* nativeWorkerReceipts("completed");
+  if (
+    !Option.contains(saved.core.versionId, prior.coreVersionId) ||
+    !Option.contains(saved.public.versionId, prior.publicVersionId)
+  ) {
+    return yield* new ReleaseFailure({
+      message: "Replacement does not own the staged Worker versions",
+    });
+  }
+  yield* confirmFallbackVersions(env, client, prior);
+  yield* inspectNativeResources(accountReader(env, client), fixtureUpload.revision, true);
+});
+const replacingPair = (operation: string): boolean =>
+  ["stage-pairing-repair", "plan-pairing-repair"].includes(operation);
+const recordSourceControls = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  input: {
+    pair: Parameters<typeof controlsDigest>[0];
+    replacing: boolean;
+  }
+) {
+  const { pair, replacing } = input;
+  const digest = yield* controlsDigest(
+    pair,
+    replacing ? bufferedAcceptanceSend(client) : acceptanceSend(client)
+  );
+  if (digest !== fixtureUpload.controlsDigest) {
+    return yield* new ReleaseFailure({ message: "Original financial control identities changed" });
+  }
+  yield* writeFile(env.file + ".controls", encodeJson({ digest }));
+});
 const preflightSignedSource = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
@@ -276,7 +342,10 @@ const preflightSignedSource = Effect.fn(function* (
       message: "Closed fixture signer differs from its protected upload",
     });
   }
-  if ((yield* fixtureBuild) === "fallback") {
+  const replacing = replacingPair(operation);
+  if (replacing) {
+    yield* verifyReplacementSource(env, client, snapshot);
+  } else if ((yield* fixtureBuild) === "fallback") {
     yield* Effect.try(() => requireOriginalFallbackSource(snapshot));
     if (operation !== "plan-fixture-repair" && operation !== "resume-fixture-upload") {
       return yield* new ReleaseFailure({ message: "Dormant repair requires the archived upload" });
@@ -292,11 +361,7 @@ const preflightSignedSource = Effect.fn(function* (
     yield* requirePromotedDormantSource(releasePort({ env, client }), snapshot);
     yield* observeDormantPair(client, pair, true);
   }
-  const digest = yield* controlsDigest(pair, acceptanceSend(client));
-  if (digest !== fixtureUpload.controlsDigest) {
-    return yield* new ReleaseFailure({ message: "Original financial control identities changed" });
-  }
-  yield* writeFile(env.file + ".controls", encodeJson({ digest }));
+  yield* recordSourceControls(env, client, { pair, replacing });
 });
 const verifyStorageUpload = Effect.fn(function* (
   env: Config,
@@ -497,8 +562,9 @@ const erasureObservation = ({
       }),
   };
 };
-export const acceptanceSend = (
-  client: HttpClient.HttpClient
+const sendClosedRequest = (
+  client: HttpClient.HttpClient,
+  body: "bytes" | "stream"
 ): Parameters<typeof admittedErasureLogins>[0]["send"] =>
   Effect.fn(function* (request: Request) {
     // FromWeb drops Content-Type on an empty body. The Ingress proof binds the explicit headers.
@@ -506,8 +572,16 @@ export const acceptanceSend = (
       HttpClientRequest.fromWeb(request),
       request.headers
     );
+    const wire =
+      body === "bytes" && request.body !== null
+        ? HttpClientRequest.bodyUint8Array(
+            outbound,
+            new Uint8Array(yield* Effect.tryPromise(() => request.arrayBuffer())),
+            request.headers.get("content-type") ?? undefined
+          )
+        : outbound;
     const reply = yield* client
-      .execute(outbound)
+      .execute(wire)
       .pipe(Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }));
     const native = HttpClientResponse.toWeb(reply);
     if (Option.isNone(native)) {
@@ -517,6 +591,12 @@ export const acceptanceSend = (
     }
     return native.value;
   });
+export const acceptanceSend = (
+  client: HttpClient.HttpClient
+): ReturnType<typeof sendClosedRequest> => sendClosedRequest(client, "stream");
+export const bufferedAcceptanceSend = (
+  client: HttpClient.HttpClient
+): ReturnType<typeof sendClosedRequest> => sendClosedRequest(client, "bytes");
 const verifySyntheticUsers = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
@@ -1362,12 +1442,12 @@ const storageCompatibility = Effect.fn(function* (
 const confirmFallbackVersions = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
-  stage: FallbackStage
+  release: FallbackStage["release"]
 ) {
   const fingerprint = yield* expectedFixtureSigner;
   for (const [role, worker, id] of [
-    ["Core", installationNames.Core, stage.release.coreVersionId],
-    ["Ingress", installationNames.Ingress, stage.release.publicVersionId],
+    ["Core", installationNames.Core, release.coreVersionId],
+    ["Ingress", installationNames.Ingress, release.publicVersionId],
   ] as const) {
     const raw = yield* releaseEvidence.readWorkerVersion(env, client, { name: worker, id });
     yield* Effect.try(() =>
@@ -1375,7 +1455,7 @@ const confirmFallbackVersions = Effect.fn(function* (
         role,
         raw,
         versionId: id,
-        revision: env.revision,
+        revision: release.snapshot.revision,
         account: env.account,
         fingerprint,
       })
@@ -1425,7 +1505,9 @@ const checkedFixtureStage = Effect.fn(function* (
   client: HttpClient.HttpClient,
   stage: FallbackStage
 ) {
-  yield* Effect.try(() => requireOriginalFallbackSource(stage.release.snapshot));
+  if (fromArchivedStage(stage.release.snapshot)) {
+    yield* readReplacementPredecessor(env, stage.release.snapshot);
+  } else yield* Effect.try(() => requireOriginalFallbackSource(stage.release.snapshot));
   const port = releasePort({ env, client });
   const provider = yield* verifyRetainedProvider(env, client, port).pipe(sealCheck("provider"));
   const edge = yield* hostMode;
@@ -1455,7 +1537,9 @@ const checkedFixtureStage = Effect.fn(function* (
   yield* checkStagedNamespaces({ env, client, stage, core, ingress, descriptions }).pipe(
     sealCheck("namespace identities")
   );
-  yield* confirmFallbackVersions(env, client, stage).pipe(sealCheck("candidate Worker metadata"));
+  yield* confirmFallbackVersions(env, client, stage.release).pipe(
+    sealCheck("candidate Worker metadata")
+  );
   yield* proveRecoveryCorePrivate(env, client, installationNames.Core).pipe(
     sealCheck("private Core")
   );

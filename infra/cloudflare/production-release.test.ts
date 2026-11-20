@@ -340,16 +340,20 @@ it.effect(
       })) {
         vi.stubEnv(name, value);
       }
-      const port = (head: string): ReleasePort =>
-        referenceHarness(
-          { ...trunkReference, object: { type: "commit", sha: head } },
-          archivedDormant.revision
-        ).port;
+      const port = (head: string, application: string = archivedDormant.revision): ReleasePort =>
+        referenceHarness({ ...trunkReference, object: { type: "commit", sha: head } }, application)
+          .port;
       for (const operation of ["reseal-fixture-fallback", "diagnose-fixture-pairing"]) {
         vi.stubEnv("FIXTURE_RELEASE_OPERATION", operation);
         expect(yield* port(verifier).trunk()).toBe(archivedDormant.revision);
       }
       expect(yield* port(revision).trunk().pipe(Effect.isFailure)).toBe(true);
+      vi.stubEnv("FIXTURE_PAIRING_APPLICATION", revision);
+      vi.stubEnv("RELEASE_GIT_SHA", revision);
+      vi.stubEnv("FIXTURE_RELEASE_OPERATION", "rollout");
+      const replacement = port(verifier, revision);
+      expect(yield* replacement.trunk()).toBe(revision);
+      expect(yield* port(verifier).trunk().pipe(Effect.isFailure)).toBe(true);
       vi.stubEnv("FIXTURE_STAGED_VERIFIER_SHA", revision);
       expect(yield* port(verifier).trunk().pipe(Effect.exit)).toHaveProperty("_tag", "Failure");
     }).pipe(Effect.ensuring(Effect.sync(() => vi.unstubAllEnvs())))

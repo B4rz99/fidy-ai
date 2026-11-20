@@ -136,7 +136,9 @@ export const requirePromotedDormantSource = Effect.fn(function* (
     };
     const ownsStage =
       staged !== undefined &&
-      (sealed ? matchesStage(staged, sealed, role) : matchesOriginalStage(staged, role));
+      (sealed !== undefined
+        ? matchesStage(staged, sealed, role)
+        : matchesOriginalStage(staged, role));
     if (
       !isDeepStrictEqual(active, expected) ||
       snapshot[role].stableVersionId !== version ||

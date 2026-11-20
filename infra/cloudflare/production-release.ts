@@ -114,9 +114,10 @@ export type ProductionReleaseConfig = Readonly<{
   smokeAttestationFile: string;
 }>;
 type Config = ProductionReleaseConfig;
-export const fixtureVerifier = Effect.sync(() => {
+const fixtureVerifierIdentity = Effect.sync(() => {
   const environment = process.env;
-  if (environment.FIXTURE_STAGED_VERIFIER_SHA === undefined) return Option.none<string>();
+  if (environment.FIXTURE_STAGED_VERIFIER_SHA === undefined)
+    {return Option.none<{ application: string; verifier: string }>();}
   const result = Schema.decodeUnknownOption(
     Schema.Struct({
       FIXTURE_STAGED_VERIFIER_SHA: SmokeIdentity.fields.gitRevision,
@@ -150,8 +151,15 @@ export const fixtureVerifier = Effect.sync(() => {
   ) {
     throw Error("Unverified staged application source");
   }
-  return Option.some(result.value.GITHUB_SHA);
+  return Option.some({
+    application: result.value.RELEASE_GIT_SHA,
+    verifier: result.value.GITHUB_SHA,
+  });
 });
+export const fixtureVerifier = Effect.map(
+  fixtureVerifierIdentity,
+  Option.map((identity) => identity.verifier)
+);
 const config = (): Config => {
   const environment = process.env;
   const decoded = Schema.decodeUnknownOption(
@@ -748,9 +756,12 @@ const readTrunk = Effect.fn(function* (env: Config) {
       }),
     })
   )(raw);
-  const verifier = yield* fixtureVerifier;
+  const verifier = yield* fixtureVerifierIdentity;
   if (Option.isNone(verifier)) return response.object.sha;
-  if (response.object.sha !== verifier.value || env.revision !== process.env.RELEASE_GIT_SHA) {
+  if (
+    response.object.sha !== verifier.value.verifier ||
+    env.revision !== verifier.value.application
+  ) {
     return yield* new ReleaseFailure({
       message: "Current protected verifier differs from the qualified staged release",
     });

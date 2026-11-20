@@ -56,7 +56,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [types, lint, runtime]
+        check: [types, lint, runtime, smoke]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -69,9 +69,12 @@ jobs:
         run: |
           bun install --cwd tools/astro --frozen-lockfile
           bun run typecheck
+          bun tools/astro/node_modules/typescript/bin/tsc -p scripts/infra-performance/load/tsconfig.json
       - name: Check formatting and type-aware lint
         if: matrix.check == 'lint'
         run: |
+          bun install --cwd tools/depcruise --frozen-lockfile
+          bun install --cwd tools/mcp-inspector --frozen-lockfile
           bun run lint:type-aware
           bunx oxfmt --check scripts/dev-browser-api.ts scripts/document-parsing/workerd-inspector.ts scripts/infra-performance/load scripts/infra-performance/reference/native-seed.ts apps/server/cloudflare/{user-store.test-fixture.ts,routing/operations.ts,bancolombia-authentication/runtime.ts,transactions/internal/{sqlite-history.ts,transaction-history.ts}} apps/server/src/{shell/{public-http,transactions},core/quotas}/operations.ts
       - name: Exercise the source and public runtime paths
@@ -81,3 +84,34 @@ jobs:
           bun scripts/infra-performance/load/trace.test.mjs
           bun run --cwd apps/server test:core src/core/quotas/operations.test.ts --coverage.enabled=false
           bun run --cwd apps/server test:cloudflare cloudflare/transactions/user-store.test.ts --coverage.enabled=false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        if: matrix.check == 'smoke'
+        with:
+          ref: fb53d9e755c14393048dc945fc0b7f117730d872
+          path: baseline-d1
+          persist-credentials: false
+      - name: Exercise both benchmark fixtures and inspect all raw outcomes
+        if: matrix.check == 'smoke'
+        run: |
+          (cd baseline-d1 && bash scripts/install-workspace.sh --ignore-scripts)
+          dest=apps/server/test-results/load-smoke
+          mkdir -p "$dest"
+          bun scripts/infra-performance/load/measure.mjs baseline-d1 "$dest" production single
+          python3 scripts/infra-performance/load/report.py "$dest" || test "$?" -eq 1
+          python3 - <<'PY'
+          import json, pathlib
+          dest=pathlib.Path("apps/server/test-results/load-smoke")
+          report=json.loads((dest/"report.json").read_text())
+          for result in report.values():
+            assert result["sampleCountsComplete"] and result["pairedPayloadsMatch"] and result["fixtureVerified"]
+            assert all(result[v]["completed"] == 30 and result[v]["failed"] == 0 for v in ("d1","do"))
+          assert report["history"]["offeredScheduleVerified"]
+          assert report["history"]["auditMatches"] and report["correction"]["auditMatches"]
+          assert not report["rollback"]["auditMatches"]
+          assert all(report["history"]["workerSpans"][v]["matched"] == 30 for v in ("d1","do"))
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always() && matrix.check == 'smoke'
+        with:
+          name: functional-workerd-evidence
+          path: apps/server/test-results/load-smoke

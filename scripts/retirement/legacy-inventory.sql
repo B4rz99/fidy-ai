@@ -12,9 +12,11 @@ WITH material(source, seen, attention) AS (
   SELECT 'statement_staging', count(*), count(*) FILTER (WHERE object_deleted_at_ms IS NULL)
   FROM (SELECT object_deleted_at_ms FROM statement_staging_objects LIMIT 1001)
   UNION ALL
-  SELECT 'admission_events', count(*),
-         count(*) FILTER (WHERE policy_key = 'ingestion.upload.outstanding.v1' AND released_at_epoch_ms IS NULL)
-  FROM (SELECT policy_key, released_at_epoch_ms FROM resource_admission_events LIMIT 1001)
+  SELECT 'upload_admission_events', count(*), count(*) FILTER (WHERE released_at_epoch_ms IS NULL)
+  FROM (
+    SELECT released_at_epoch_ms FROM resource_admission_events
+    WHERE policy_key = 'ingestion.upload.outstanding.v1' LIMIT 1001
+  )
 ),
 billing(source, seen, attention) AS (
   SELECT 'wompi_callback_candidates', count(*),

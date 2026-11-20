@@ -60,9 +60,20 @@ db.executemany("""
     (transaction_id,event_received_at_ms,event_signed_at,event_signed_status,
      event_lookup_attempts,event_resolved_at_ms) VALUES (?,1,1,'PENDING',0,?)
 """, [("received", None), ("settled", 2)])
+db.executemany("""
+    INSERT INTO resource_admission_events (
+        grant_id, policy_key, dimension, scope_key, policy_kind, units,
+        admitted_at_epoch_ms, expires_at_epoch_ms, released_at_epoch_ms
+    ) VALUES (?, ?, 'outstanding_work', 'synthetic', 'outstanding', 1, 1, 2, ?)
+""", [
+    *((f"other-{n}", "unrelated.outstanding", None) for n in range(1001)),
+    ("held", "ingestion.upload.outstanding.v1", None),
+    ("released", "ingestion.upload.outstanding.v1", 2),
+])
 seen = census()
 assert seen["structural_samples"] == (1, 1, 1)
 assert seen["issued_r2_writers"] == (1, 1, 1)
+assert seen["upload_admission_events"] == (2, 1, 1)
 assert seen["wompi_callback_candidates"] == (2, 1, 1)
 db.executemany(
     "INSERT INTO erasure_writers VALUES (?,'synthetic','statement','private',1)",

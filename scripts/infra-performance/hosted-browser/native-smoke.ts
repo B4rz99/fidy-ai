@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { BunServices } from "@effect/platform-bun";
-import { Clock, Config, Data, Effect, Path } from "effect";
+import { Clock, Config, Data, Effect, Path, Schema } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { installedOrigins } from "../../../apps/server/src/shell/browser-transport/contract";
 import {
@@ -15,6 +15,7 @@ import { proveScopedCorrection } from "./scoped-correction.mjs";
 type Smoke = ReturnType<typeof parseNativeSmoke>;
 type Send = (request: string | Request, init: RequestInit) => Promise<Response>;
 const origins = installedOrigins.acceptance;
+const encodeJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown));
 const requestTimeoutMs = 30_000;
 const success = 200;
 const mutationIntervalMs = 750;
@@ -141,6 +142,7 @@ export const runNativeSmoke = Effect.fnUntraced(function* (config: Smoke) {
   assert.equal(deployed.gitRevision, config.native.web.revision);
   assert.equal(deployed.contractDigest, config.native.web.contractDigest);
   const transport = nativeTransport(config, send, proof);
+  const run = Effect.runPromiseWith(yield* Effect.context<never>());
   yield* fromBrowser(() =>
     runBrowser({
       variant: "do",
@@ -149,8 +151,8 @@ export const runNativeSmoke = Effect.fnUntraced(function* (config: Smoke) {
       expected: config.expected.history,
       workspace: config.expected.workspace,
       observations: 1,
-      forward: (request) => Effect.runPromise(transport.forward(request)),
-      forwardWeb: (request) => Effect.runPromise(deployedWeb(config, request, send)),
+      forward: (request) => run(transport.forward(request)),
+      forwardWeb: (request) => run(deployedWeb(config, request, send)),
     })
   );
   const correct = Effect.fnUntraced(function* (method: string, path: string, body: unknown) {
@@ -164,13 +166,13 @@ export const runNativeSmoke = Effect.fnUntraced(function* (config: Smoke) {
           "fidy-session-binding": config.native.session.binding,
           "content-type": "application/json",
         },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        ...(body === undefined ? {} : { body: yield* encodeJson(body) }),
       })
     );
   });
   const mutation = yield* fromBrowser(() =>
     proveScopedCorrection(config.expected.history, (method, path, body) =>
-      Effect.runPromise(correct(method, path, body))
+      run(correct(method, path, body))
     )
   );
   transport.verifyReservation();
@@ -184,7 +186,8 @@ if (import.meta.main) {
     const input: unknown = yield* fromBrowser(() => Bun.stdin.json());
     const config = parseNativeSmoke(input);
     const result = yield* runNativeSmoke(config);
-    yield* fromBrowser(() => Bun.write(path.join(directory, "smoke.json"), JSON.stringify(result)));
+    const evidence = yield* encodeJson(result);
+    yield* fromBrowser(() => Bun.write(path.join(directory, "smoke.json"), evidence));
   });
   try {
     await Effect.runPromise(run.pipe(Effect.provide(BunServices.layer)));

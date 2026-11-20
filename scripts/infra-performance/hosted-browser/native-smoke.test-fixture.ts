@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { BunServices } from "@effect/platform-bun";
-import { Config, Effect, Path } from "effect";
+import { Config, Effect, Path, Schema } from "effect";
 import { native } from "../../../apps/server/cloudflare/user-store.test-fixture";
 import { FetchHttpClient } from "effect/http";
 import { installedOrigins } from "../../../apps/server/src/shell/browser-transport/contract";
 import { transport } from "../canonical-fixture/bridge";
 import { closedRuntime } from "../canonical-fixture/closed-runtime.test-fixture";
-import { parseNativeSmoke } from "./contracts";
+import { fields, parseNativeSmoke } from "./contracts";
 import { nativeAccountingSnapshot } from "./native-accounting";
 import { runNativeSmoke } from "./native-smoke";
 
@@ -27,14 +27,7 @@ const readLocalAsset = Effect.fnUntraced(function* (
 });
 
 const run = Effect.gen(function* () {
-  const input: unknown = yield* native(() => Bun.stdin.json());
-  assert.ok(
-    typeof input === "object" &&
-      input !== null &&
-      "config" in input &&
-      "capture" in input &&
-      "captureDigest" in input
-  );
+  const input = fields(yield* native<unknown>(() => Bun.stdin.json()));
   const config = parseNativeSmoke(input.config);
   const origins = installedOrigins.acceptance;
   const path = yield* Path.Path;
@@ -42,6 +35,7 @@ const run = Effect.gen(function* () {
   const secret = yield* Config.String("SMOKE_PROOF");
   const directory = yield* Config.String("FIDY_REHEARSAL_STATE");
   const network = yield* FetchHttpClient.Fetch;
+  const resolvePromise = Effect.runPromiseWith(yield* Effect.context<never>());
   yield* Effect.acquireUseRelease(
     closedRuntime({ revision: config.native.revision, secret }, directory, "performance-2"),
     (runtime) => {
@@ -59,7 +53,11 @@ const run = Effect.gen(function* () {
       });
       const client: typeof network = Object.assign(
         (input: Parameters<typeof network>[0], init?: Parameters<typeof network>[1]) =>
-          Effect.runPromise(read(new Request(input, init))),
+          resolvePromise(
+            read(
+              input instanceof Request ? new Request(input, init) : new Request(String(input), init)
+            )
+          ),
         { preconnect: network.preconnect }
       );
       const witness = Effect.fnUntraced(function* (phase: "before" | "after") {
@@ -69,17 +67,22 @@ const run = Effect.gen(function* () {
           captureDigest: input.captureDigest,
           deadline: config.deadline,
           ...config.native.session,
-        }).pipe(Effect.provide(FetchHttpClient.layer));
+        });
       });
       return Effect.gen(function* () {
         const before = yield* witness("before");
         const smoke = yield* runNativeSmoke(config);
         const after = yield* witness("after");
-        process.stdout.write(JSON.stringify({ before, smoke, after }));
+        const evidence = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+          before,
+          smoke,
+          after,
+        });
+        process.stdout.write(evidence);
       }).pipe(Effect.provideService(FetchHttpClient.Fetch, client));
     },
     (runtime) => native(() => runtime.dispose())
   );
 });
 
-await Effect.runPromise(run.pipe(Effect.provide(BunServices.layer)));
+await Effect.runPromise(run.pipe(Effect.provide([BunServices.layer, FetchHttpClient.layer])));

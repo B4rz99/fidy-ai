@@ -322,6 +322,43 @@ const recordSourceControls = Effect.fn(function* (
   }
   yield* writeFile(env.file + ".controls", encodeJson({ digest }));
 });
+const pairingSeal = Effect.fn(function* () {
+  const application = yield* ReleaseConfig.String("FIXTURE_PAIRING_APPLICATION").pipe(
+    ReleaseConfig.option
+  );
+  if (Option.isNone(application)) return Option.none<FallbackStage>();
+  const stage = yield* Schema.decodeUnknownEffect(FallbackStage)(yield* readFile(yield* stagePath));
+  if (
+    stage.revision !== application.value ||
+    !fromArchivedStage(stage.release.snapshot) ||
+    stage.controlsDigest !== fixtureUpload.controlsDigest ||
+    !isDeepStrictEqual(stage.provider, retainedProvider)
+  ) {
+    return yield* new ReleaseFailure({ message: "Protected replacement seal differs" });
+  }
+  return Option.some(stage);
+});
+const verifyDormantRollbackSource = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  { port, snapshot }: { port: ReleasePort; snapshot: FallbackStage["release"]["snapshot"] }
+) {
+  if (snapshot.stableRevision !== env.revision) {
+    return yield* Effect.fail(
+      Error("Active receipt requires the dormant build of this exact revision")
+    );
+  }
+  const seal = yield* pairingSeal();
+  if (Option.isSome(seal)) {
+    yield* requireCapturedSupport(port, seal.value.smoke);
+    yield* confirmFallbackVersions(env, client, seal.value.release);
+  }
+  yield* requirePromotedDormantSource(
+    port,
+    snapshot,
+    Option.getOrUndefined(Option.map(seal, (stage) => stage.release))
+  );
+});
 const preflightSignedSource = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
@@ -353,12 +390,7 @@ const preflightSignedSource = Effect.fn(function* (
     yield* verifyInterruptedUpload(env, client, { port, snapshot });
     if (operation === "plan-fixture-repair") return;
   } else {
-    if (snapshot.stableRevision !== env.revision) {
-      return yield* Effect.fail(
-        Error("Active receipt requires the dormant build of this exact revision")
-      );
-    }
-    yield* requirePromotedDormantSource(releasePort({ env, client }), snapshot);
+    yield* verifyDormantRollbackSource(env, client, { port, snapshot });
     yield* observeDormantPair(client, pair, true);
   }
   yield* recordSourceControls(env, client, { pair, replacing });
@@ -395,6 +427,15 @@ const verifyStorageUpload = Effect.fn(function* (
   const stored = yield* Effect.try(() =>
     verifiedStoragePair({ ingress: ingress.bindings, core: core.bindings })
   );
+  const seal = yield* pairingSeal();
+  if (
+    Option.isSome(seal) &&
+    !isDeepStrictEqual(fallbackNamespaces(stored.namespaces), seal.value.namespaces)
+  ) {
+    return yield* new ReleaseFailure({
+      message: "Serving namespace identities differ from the protected stage",
+    });
+  }
   yield* proveRecoveryCorePrivate(env, client, installationNames.Core);
   yield* verifyInstalledNamespaces({ env, client, storage: stored, workers: [ingress, core] });
   const candidate = yield* buildStorageRelease();
@@ -1471,9 +1512,13 @@ const repairedSmoke = Effect.fn(function* (
   const smoke = support.find(({ role }) => role === "Smoke");
   if (smoke === undefined) return yield* Effect.fail(Error("Missing repaired smoke executor"));
   const coordinates = { deploymentId: smoke.deploymentId, versionId: smoke.versionId };
+  const seal = yield* pairingSeal();
   if (
     Option.isSome(yield* fixtureVerifier) &&
-    !isDeepStrictEqual(coordinates, archivedDormant.smoke)
+    !isDeepStrictEqual(
+      coordinates,
+      Option.match(seal, { onSome: (stage) => stage.smoke, onNone: () => archivedDormant.smoke })
+    )
   ) {
     return yield* new ReleaseFailure({
       message: "Repaired Smoke differs from its authenticated staged deployment",
@@ -1674,7 +1719,9 @@ const diagnosePairing = Effect.fn(function* (env: Config, client: HttpClient.Htt
 });
 const forwardFallback = Effect.fn(function* (env: Config, client: HttpClient.HttpClient) {
   const stage = yield* Schema.decodeUnknownEffect(FallbackStage)(yield* readFile(yield* stagePath));
+  const seal = yield* pairingSeal();
   if (
+    Option.isNone(seal) &&
     Option.isSome(yield* fixtureVerifier) &&
     (!matchesArchivedStage(stage.release) ||
       stage.controlsDigest !== fixtureUpload.controlsDigest ||

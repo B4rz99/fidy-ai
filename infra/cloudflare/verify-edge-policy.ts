@@ -37,6 +37,7 @@ const securityArtifacts = [
       "../../scripts/infra-performance/canonical-fixture/interrupted_upload.py",
       "../../scripts/infra-performance/canonical-fixture/unsealed_stage.py",
       "../../scripts/infra-performance/canonical-fixture/staged_application.py",
+      "../../scripts/infra-performance/canonical-fixture/pairing_stage.py",
       "../../apps/server/cloudflare/fixture-fallback-core.ts",
       "../../apps/server/cloudflare/fixture-fallback-ingress.ts",
       "../../apps/server/cloudflare/release-isolation/runtime.ts",

@@ -121,7 +121,7 @@ export const fixtureVerifier = Effect.sync(() => {
     Schema.Struct({
       FIXTURE_STAGED_VERIFIER_SHA: SmokeIdentity.fields.gitRevision,
       GITHUB_SHA: SmokeIdentity.fields.gitRevision,
-      RELEASE_GIT_SHA: Schema.Literal(archivedDormant.revision),
+      RELEASE_GIT_SHA: SmokeIdentity.fields.gitRevision,
       GITHUB_ACTIONS: Schema.Literal("true"),
       GITHUB_REPOSITORY: Schema.Literal("B4rz99/fidy-ai"),
       GITHUB_EVENT_NAME: Schema.Literal("workflow_dispatch"),
@@ -140,7 +140,13 @@ export const fixtureVerifier = Effect.sync(() => {
   )(environment);
   if (
     Option.isNone(result) ||
-    result.value.FIXTURE_STAGED_VERIFIER_SHA !== result.value.GITHUB_SHA
+    result.value.FIXTURE_STAGED_VERIFIER_SHA !== result.value.GITHUB_SHA ||
+    result.value.RELEASE_GIT_SHA !==
+      (environment.FIXTURE_PAIRING_APPLICATION ?? archivedDormant.revision) ||
+    (environment.FIXTURE_PAIRING_APPLICATION !== undefined &&
+      !["recover-fixture-fallback", "rollout", "verify"].includes(
+        result.value.FIXTURE_RELEASE_OPERATION
+      ))
   ) {
     throw Error("Unverified staged application source");
   }
@@ -744,7 +750,7 @@ const readTrunk = Effect.fn(function* (env: Config) {
   )(raw);
   const verifier = yield* fixtureVerifier;
   if (Option.isNone(verifier)) return response.object.sha;
-  if (response.object.sha !== verifier.value || env.revision !== archivedDormant.revision) {
+  if (response.object.sha !== verifier.value || env.revision !== process.env.RELEASE_GIT_SHA) {
     return yield* new ReleaseFailure({
       message: "Current protected verifier differs from the qualified staged release",
     });

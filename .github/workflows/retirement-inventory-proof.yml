@@ -19,5 +19,18 @@ jobs:
           path: baseline
           persist-credentials: false
           sparse-checkout: apps/server/cloudflare/migrations
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: sqlite/sqlite
+          ref: 6932c59ee5c280599dfae9e7b431698a7cab9687
+          path: sqlite
+          persist-credentials: false
+      - name: Build pinned SQLite 3.54.0 for the historical migrations
+        working-directory: sqlite
+        run: |
+          ./configure
+          make -j2 libsqlite3.so
       - name: Observe populated, empty, over-limit and missing-schema outcomes
+        env:
+          LD_PRELOAD: ${{ github.workspace }}/sqlite/libsqlite3.so
         run: python3 scripts/retirement/check-inventory.py baseline

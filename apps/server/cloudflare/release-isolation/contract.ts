@@ -66,8 +66,11 @@ export const performanceReceiptMember = (request: Request): Option.Option<Perfor
   performanceMember(request, performanceReceiptPaths);
 export const performanceAccountingMember = (request: Request): Option.Option<PerformanceMember> =>
   performanceMember(request, performanceAccountingPaths);
-export const performanceReceiptMarker = (revision: string, member: PerformanceMember): string =>
-  "_release-smoke/" + revision + "/acceptance/transactions/" + member;
+export const performanceReceiptMarker = ({
+  nativeRevision,
+  member,
+}: Readonly<{ nativeRevision: string; member: PerformanceMember }>): string =>
+  "_release-smoke/" + nativeRevision + "/acceptance/transactions/" + member;
 const sha = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u));
 export const ReceiptRequest = Schema.Struct({
   resourcePrefix: Schema.String.check(Schema.isPattern(/^fidy-2259-[a-f0-9]{12}$/u)),

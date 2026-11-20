@@ -6,7 +6,7 @@ import {
   performanceReceiptMarker,
   performanceReceiptMember,
 } from "../../release-isolation/contract";
-import { Clock, Effect, Option, Schema } from "effect";
+import { Clock, Effect, Option, type PlatformError, Schema } from "effect";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Hex } from "effect/encoding";
 import { localPreparationSubject } from "../../canonical-admission/operations";
@@ -38,21 +38,23 @@ const accountingPolicy = Schema.decodeSync(RequestBodyPolicy)({
 const expectedCount = 8;
 const maximumAccountingGroups = 16;
 const maximumAccountingRows = 256;
+const maximumOperationLength = 96;
+const maximumOutcomeLength = 32;
 const nonnegative = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const AccountingRows = Schema.Array(
   Schema.Struct({
-    operation: Schema.String.check(Schema.isMaxLength(96)),
-    outcome: Schema.String.check(Schema.isMaxLength(32)),
+    operation: Schema.String.check(Schema.isMaxLength(maximumOperationLength)),
+    outcome: Schema.String.check(Schema.isMaxLength(maximumOutcomeLength)),
     count: nonnegative,
   })
 );
-const AccountingTotals = Schema.Tuple(
+const AccountingTotals = Schema.Tuple([
   Schema.Struct({
     canonicalUnits: nonnegative,
     allowanceRows: nonnegative,
     receipts: nonnegative,
-  })
-);
+  }),
+]);
 const epoch = 1794916800000;
 const minuteMs = 60000;
 const uuid = Schema.String.check(Schema.isUUID());
@@ -200,7 +202,7 @@ const boundUser = Effect.fn(function* (request: Request, owns: (user: string) =>
     ? yield* localPreparationSubject(request, owns, operation.value)
     : Option.none();
 });
-const fingerprint = (text: string) =>
+const fingerprint = (text: string): Effect.Effect<string, PlatformError.PlatformError> =>
   digestBytes(new TextEncoder().encode(text)).pipe(Effect.map(Hex.encode));
 
 const accountingSnapshot = Effect.fn(function* (input: {
@@ -247,6 +249,30 @@ const accountingSnapshot = Effect.fn(function* (input: {
   );
 });
 
+const captureMarkerMatches = Effect.fn(function* (input: {
+  capture: typeof SealedTransactionReceipt.Type;
+  environment: FixtureEnvironment;
+  binding: string;
+  signer: FixtureCredentials;
+}) {
+  const { capture, environment, binding, signer } = input;
+  const { nativeRevision, member, resourcePrefix, sessionBindingSha256 } = capture;
+  if (nativeRevision !== environment.RELEASE_GIT_SHA || member !== signer.member) return false;
+  const boundDigest = yield* fingerprint(binding);
+  if (
+    boundDigest !== sessionBindingSha256 ||
+    !(yield* verifyIssuedCapture(signer.privateKey, capture))
+  ) {
+    return false;
+  }
+  const marker = yield* Effect.tryPromise(() =>
+    signer.bucket.get(performanceReceiptMarker(capture))
+  );
+  if (marker === null || marker.size !== resourcePrefix.length) return false;
+  return (yield* Effect.tryPromise(() => marker.text())) === resourcePrefix;
+});
+
+const json = Schema.fromJsonString(Schema.Json);
 const witnessAccounting = Effect.fn(function* (input: {
   request: Request;
   environment: FixtureEnvironment;
@@ -262,21 +288,9 @@ const witnessAccounting = Effect.fn(function* (input: {
   });
   if (Option.isNone(command)) return denied();
   const { phase, capture } = command.value;
+  if (!(yield* captureMarkerMatches({ capture, environment, binding, signer }))) return denied();
   const { nativeRevision, member, resourcePrefix, nativeManifestDigest, sessionBindingSha256 } =
     capture;
-  if (nativeRevision !== environment.RELEASE_GIT_SHA || member !== signer.member) return denied();
-  const boundDigest = yield* fingerprint(binding);
-  if (
-    boundDigest !== sessionBindingSha256 ||
-    !(yield* verifyIssuedCapture(signer.privateKey, capture))
-  ) {
-    return denied();
-  }
-  const marker = yield* Effect.tryPromise(() =>
-    signer.bucket.get(performanceReceiptMarker(nativeRevision, member))
-  );
-  if (marker === null || marker.size !== resourcePrefix.length) return denied();
-  if ((yield* Effect.tryPromise(() => marker.text())) !== resourcePrefix) return denied();
   const snapshot = yield* accountingSnapshot({
     request,
     owns,
@@ -287,7 +301,7 @@ const witnessAccounting = Effect.fn(function* (input: {
 
   // Match the harness's canonical JSON for the sealed capture digest.
   const nativeReceiptDigest = yield* fingerprint(
-    JSON.stringify({
+    yield* Schema.encodeEffect(json)({
       iv: capture.iv,
       member,
       nativeManifestDigest,
@@ -311,7 +325,10 @@ const witnessAccounting = Effect.fn(function* (input: {
     canonicalUnits,
     receipts,
   ] as const;
-  const signature = yield* signPerformanceAccounting(signer.privateKey, JSON.stringify(statement));
+  const signature = yield* signPerformanceAccounting({
+    privateKey: signer.privateKey,
+    statement: yield* Schema.encodeEffect(json)(statement),
+  });
   return Response.json({ statement, signature }, { headers: { "cache-control": "no-store" } });
 });
 
@@ -319,8 +336,8 @@ const issueOnce = Effect.fnUntraced(function* (input: {
   bucket: Pick<R2Bucket, "put">;
   receipt: typeof SealedTransactionReceipt.Type;
 }) {
-  const { nativeRevision, member, resourcePrefix } = input.receipt;
-  const key = performanceReceiptMarker(nativeRevision, member);
+  const { resourcePrefix } = input.receipt;
+  const key = performanceReceiptMarker(input.receipt);
   const stored = yield* Effect.tryPromise(() =>
     input.bucket.put(key, resourcePrefix, { onlyIf: { etagDoesNotMatch: "*" } })
   );
@@ -328,6 +345,38 @@ const issueOnce = Effect.fnUntraced(function* (input: {
     ? denied()
     : Response.json(input.receipt, { headers: { "cache-control": "no-store" } });
 });
+const offerCapture = Effect.fn(function* (input: {
+  request: Request;
+  environment: FixtureEnvironment;
+  owns: (user: string) => boolean;
+  binding: string;
+  signer: FixtureCredentials;
+}) {
+  const { request, environment, owns, binding, signer } = input;
+  const command = yield* boundedJsonBody({ request, policy, schema: ReceiptRequest });
+  if (Option.isNone(command)) return denied();
+  const user = yield* boundUser(request, owns);
+  if (Option.isNone(user)) return denied();
+  const { secret, privateKey, bucket, member } = signer;
+  const evidence = yield* readEvidence({
+    user: user.value,
+    revision: acceptanceProviderRevision(environment),
+    member,
+    binding,
+  });
+  if (Option.isNone(evidence)) return denied();
+  const sessionBindingSha256 = yield* fingerprint(binding);
+  const coordinates = {
+    ...command.value,
+    nativeRevision: environment.RELEASE_GIT_SHA,
+    member,
+    sessionBindingSha256,
+  };
+  const data = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))(evidence.value);
+  const box = yield* sealTransactionReceipt({ secret, privateKey, coordinates, data });
+  return yield* issueOnce({ bucket, receipt: box });
+});
+
 export const ownPerformanceEvidence = Effect.fn(function* (
   request: Request,
   environment: FixtureEnvironment,
@@ -346,26 +395,5 @@ export const ownPerformanceEvidence = Effect.fn(function* (
   if (Option.isSome(performanceAccountingMember(request))) {
     return yield* witnessAccounting({ request, environment, owns, binding, signer: signer.value });
   }
-  const command = yield* boundedJsonBody({ request, policy, schema: ReceiptRequest });
-  if (Option.isNone(command)) return denied();
-  const user = yield* boundUser(request, owns);
-  if (Option.isNone(user)) return denied();
-  const { secret, privateKey, bucket, member } = signer.value;
-  const evidence = yield* readEvidence({
-    user: user.value,
-    revision: acceptanceProviderRevision(environment),
-    member,
-    binding,
-  });
-  if (Option.isNone(evidence)) return denied();
-  const sessionBindingSha256 = yield* fingerprint(binding);
-  const coordinates = {
-    ...command.value,
-    nativeRevision: environment.RELEASE_GIT_SHA,
-    member,
-    sessionBindingSha256,
-  };
-  const data = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))(evidence.value);
-  const box = yield* sealTransactionReceipt({ secret, privateKey, coordinates, data });
-  return yield* issueOnce({ bucket, receipt: box });
+  return yield* offerCapture({ request, environment, owns, binding, signer: signer.value });
 }, Effect.orElseSucceed(denied));

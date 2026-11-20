@@ -90,8 +90,13 @@ const signEvidence = Effect.fnUntraced(function* (
   );
 });
 
-export const signPerformanceAccounting = (privateKey: string, statement: string) =>
-  signEvidence(privateKey, bytes.encode(statement));
+export const signPerformanceAccounting = ({
+  privateKey,
+  statement,
+}: Readonly<{ privateKey: string; statement: string }>): Effect.Effect<
+  string,
+  AcceptanceProofUnavailable
+> => signEvidence(privateKey, bytes.encode(statement));
 
 export const verifyIssuedCapture = Effect.fnUntraced(function* (
   privateKey: string,

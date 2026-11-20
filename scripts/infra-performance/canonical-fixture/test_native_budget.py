@@ -39,12 +39,27 @@ class NativeBudgetTests(unittest.TestCase):
     def test_r2_shared_account_requires_storage_and_operations_headroom(self):
         now, account = 1795107000, "a"*32
         row = dict(accountTag=account, total=[dict(sum=dict(requests=100))], today=[dict(sum=dict(requests=30))],
+                   byAction=[dict(dimensions=dict(actionType="GetObject"),sum=dict(requests=100))],
                    latest=[dict(dimensions=dict(datetime=iso(now)))],
                    storage=[dict(dimensions=dict(bucketName="fidy-native-release-smoke"),
                                  max=dict(payloadSize=1,metadataSize=2))])
         def sample(example):
             return r2_usage(lambda *_: {"viewer":{"accounts":[example]}},account,now)
         self.assertEqual(sample(row)["upperBoundBytes"], 3)
+        def action(name, count):
+            return {"dimensions": {"actionType": name}, "sum": {"requests": count}}
+        groups = [action("GetObject", 1_600_000), action("ListObjects", 100_000), action("Other", 10)]
+        mixed = {**row, "total": [{"sum": {"requests": 1_700_010}}], "byAction": groups}
+        observed = sample(mixed)
+        self.assertEqual(observed["upperBoundClassA"], 100_010)
+        r2_room(observed, R2_OPERATIONS, 1_048_576)
+        for invalid in (groups[:2], [*groups, groups[0]], [action("GetObject", -1)]):
+            with self.assertRaises(ValueError):
+                sample({**mixed, "byAction": invalid})
+        with self.assertRaises(ValueError):
+            r2_room({**observed, "requests": 10_000_000}, R2_OPERATIONS, 1_048_576)
+        with self.assertRaises(ValueError):
+            r2_room({**observed, "upperBoundClassA": 1_000_000}, R2_OPERATIONS, 1_048_576)
         for field, value in [
             ("accountTag", "b"*32), ("storage", []), ("total", []),
             ("total", [dict(sum=dict(requests=MAX_R2_OPERATIONS-R2_OPERATIONS+1))]),

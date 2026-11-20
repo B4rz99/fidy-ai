@@ -292,8 +292,10 @@ no existing one-use marker and a complete physical census. For this eight-origin
 experiment it caps the account delta at 750,000 SQLite reads and 30,000 writes. That includes
 250,000 reads and 10,000 writes held for cleanup, in addition to the standing production
 reserve. Other native workloads retain their own calibrated ceilings. It checks fresh account-wide SQLite
-analytics and a rolling 31-day R2 usage window. The R2 check counts all operations against the
-lower Class A allowance and sums maximum observed payload and metadata sizes for each bucket.
+analytics and a rolling 31-day R2 usage window. The R2 check reconciles counts by action to
+the account total. It charges every action except `GetObject` against the Class A limit and
+the entire total against the Class B limit. It sums maximum observed payload and metadata
+sizes for each bucket. [R2 operation classes and allowances](https://developers.cloudflare.com/r2/pricing/)
 It holds 4,096 operations and one MiB for the experiment. These are conservative headroom checks.
 Cloudflare analytics and settlement can lag. [R2 account datasets](https://developers.cloudflare.com/r2/platform/metrics-analytics/)
 

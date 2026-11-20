@@ -16,11 +16,25 @@ COHORT_WRITES = 20_000 + CLEANUP_WRITES
 R2_OPERATIONS = 4096
 R2_BYTES = 1_048_576
 MAX_R2_OPERATIONS = 1_000_000
+MAX_R2_CLASS_B = 10_000_000
 MAX_R2_BYTES = 10_000_000_000
 
 
 def epoch(stamp):
     return int(datetime.fromisoformat(stamp.replace("Z", "+00:00")).timestamp())
+
+
+def class_a_upper_bound(groups, total):
+    counts = {}
+    for group in groups:
+        name, count = group["dimensions"]["actionType"], group["sum"]["requests"]
+        if not isinstance(name, str) or not name or name in counts or type(count) is not int or count < 0:
+            raise ValueError("Invalid R2 operation breakdown")
+        counts[name] = count
+    if not 0 < len(counts) < 100 or sum(counts.values()) != total:
+        raise ValueError("Incomplete R2 operation breakdown")
+    # GetObject is Class B. Charge every other action, including unknown actions, against A.
+    return total - counts.get("GetObject", 0)
 
 
 def r2_usage(query, account, now):
@@ -30,10 +44,11 @@ def r2_usage(query, account, now):
       query($account:String!,$start:Time!,$day:Time!,$end:Time!){viewer{accounts(filter:{accountTag:$account}){
         accountTag
         total:r2OperationsAdaptiveGroups(limit:1,%s){sum{requests}}
+        byAction:r2OperationsAdaptiveGroups(limit:100,%s){dimensions{actionType} sum{requests}}
         today:r2OperationsAdaptiveGroups(limit:1,filter:{datetime_geq:$day,datetime_leq:$end}){sum{requests}}
         latest:r2OperationsAdaptiveGroups(limit:1,%s,orderBy:[datetime_DESC]){dimensions{datetime}}
         storage:r2StorageAdaptiveGroups(limit:100,%s){dimensions{bucketName} max{payloadSize metadataSize}}
-      }}}""" % (filters, filters, filters)})
+      }}}""" % (filters, filters, filters, filters)})
     row, = result["viewer"]["accounts"]
     count, = row["total"]
     daily, = row["today"]
@@ -48,7 +63,8 @@ def r2_usage(query, account, now):
             or "fidy-native-release-smoke" not in buckets
             or any(type(n) is not int or n < 0 for n in [requests, today_requests, *sizes])):
         raise ValueError("Missing fresh, bounded account R2 observations")
-    return dict(requests=requests, todayRequests=today_requests, upperBoundBytes=sum(sizes), sampled=now,
+    return dict(requests=requests, upperBoundClassA=class_a_upper_bound(row["byAction"], requests),
+                todayRequests=today_requests, upperBoundBytes=sum(sizes), sampled=now,
                 latest=epoch(latest["dimensions"]["datetime"]))
 
 
@@ -57,7 +73,10 @@ def observe(query, account):
 
 
 def r2_room(sample, operations, storage):
-    if sample["requests"] + operations > MAX_R2_OPERATIONS or sample["upperBoundBytes"] + storage > MAX_R2_BYTES:
+    class_a = sample.get("upperBoundClassA", sample["requests"])
+    if (class_a + operations > MAX_R2_OPERATIONS
+            or sample["requests"] + operations > MAX_R2_CLASS_B
+            or sample["upperBoundBytes"] + storage > MAX_R2_BYTES):
         raise ValueError("Insufficient Standard R2 free headroom")
 
 

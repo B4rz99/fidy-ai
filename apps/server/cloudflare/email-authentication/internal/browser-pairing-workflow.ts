@@ -78,7 +78,6 @@ const publishWork = (
     );
   });
 
-/** Offer at most 32 unexpired, secret-free email-work identities per scheduled tick. */
 export const dispatchBrowserPairingEmail = (
   environment: DispatchEnvironment & { readonly identity: Option.Option<string> }
 ): Effect.Effect<void, void> =>
@@ -117,11 +116,9 @@ export const dispatchBrowserPairingEmail = (
     if (failed) return yield* Effect.fail(undefined);
   });
 
-/** Identify browser-pairing Queue batches without trusting or interpreting their payload as authority. */
 export const isBrowserPairingEmailWork = (value: unknown): boolean =>
   Option.isSome(Schema.decodeUnknownOption(Schema.Struct({ kind: Work.fields.kind }))(value));
 
-/** Resolve only bounded work identities; the Activity and Queue never retain raw proof material. */
 export const receiveBrowserPairingEmail =
   (environment: { DB: D1Database; BROWSER_PAIRING_EMAIL_WORKFLOW: Workflow }) =>
   (batch: MessageBatch<unknown>): Effect.Effect<void, void> =>
@@ -213,7 +210,6 @@ const settlePairingDelivery = (
   );
 };
 
-/** Claim one generation before any provider call, never retrying an ambiguous send with a new code. */
 export const deliverBrowserPairingEmail =
   ({ db, send, environment }: { db: D1Database; send: Send; environment: unknown }) =>
   (id: string, parent?: unknown): Promise<void> =>
@@ -289,7 +285,6 @@ type DeliveryActivity = (
   run: () => Promise<void>
 ) => Promise<void>;
 
-/** Validate the Queue payload again at the Workflow boundary before accessing D1. */
 export const runBrowserPairingEmailWorkflow = ({
   environment,
   payload,
@@ -313,7 +308,6 @@ export const runBrowserPairingEmailWorkflow = ({
   );
 };
 
-/** Abandon interrupted claimed sends without ever reusing their unobservable raw proof. */
 export const reconcileBrowserPairingEmail = (db: D1Database): Effect.Effect<void, void> =>
   Effect.gen(function* () {
     const current = yield* Clock.currentTimeMillis;

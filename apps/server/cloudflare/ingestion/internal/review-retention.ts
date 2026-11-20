@@ -3,7 +3,7 @@ import { Effect } from "effect";
 
 const maximumSweep = 512;
 const historyLifetimeMilliseconds = 31_536_000_000;
-/** Draft retention ends at the immutable original deadline, including skipped and created items. */
+
 export const sweepReviewDrafts = ({
   db,
   current,

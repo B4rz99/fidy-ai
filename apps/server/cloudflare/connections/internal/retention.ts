@@ -4,7 +4,6 @@ import { ConnectionRetentionUnavailable } from "../contract";
 const attemptRetentionMilliseconds = 86400000;
 const maximumRetentionRows = 128;
 
-/** Erase expired continuation metadata independently of User activity or current Consent. */
 export const retentionStatements = (
   current: number
 ): ReadonlyArray<{ sql: string; params: ReadonlyArray<number> }> => [

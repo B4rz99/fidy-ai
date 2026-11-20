@@ -7,7 +7,6 @@ import { SmokeIdentity } from "./runtime/release-smoke/contract";
 
 export * from "./core-worker";
 
-/** The return target runs the ordinary application without giving its UserStore the receipt key. */
 export class UserStore extends ApplicationUserStore {
   constructor(...[state, environment]: ConstructorParameters<typeof ApplicationUserStore>) {
     const { NATIVE_FIXTURE_SIGNING_KEY: _unused, ...ordinary } = environment;

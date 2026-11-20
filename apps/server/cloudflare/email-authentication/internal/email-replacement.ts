@@ -91,7 +91,6 @@ const readProof = <A, Encoded>(
   );
 };
 
-/** Start a candidate-mailbox proof for a fresh WebSession, without disclosing collisions. */
 export const requestEmailReplacement = ({
   request,
   db,
@@ -215,7 +214,6 @@ const recordMalformedInput = (
     }
   });
 
-/** Consume a candidate-mailbox proof only while the initiating User still has fresh browser authority. */
 export const completeEmailReplacement = ({
   request,
   db,

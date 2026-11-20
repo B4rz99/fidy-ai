@@ -42,7 +42,7 @@ export const auditReplacement = Effect.fn(function* ({
     yield* sql`INSERT INTO audit_entries(id,user_id,session_id,record_type,operation,outcome,occurred_at_ms) VALUES(${newId()},${user},${session},'session_call',${name},${outcome},${now}) RETURNING 1`;
   if (rows.length !== 1) return yield* new MailboxWriteUnavailable();
 });
-/** Only a proof previously compared by this User can activate the globally reserved candidate. */
+
 export const activateMailbox = Effect.fn(function* (change: typeof ReservedIdentity.Type) {
   const sql = yield* SqliteClient;
   const now = yield* Clock.currentTimeMillis;

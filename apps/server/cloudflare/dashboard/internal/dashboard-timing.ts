@@ -4,7 +4,6 @@ const successfulStatus = 200;
 
 type DashboardPhase = "source" | "projection" | "audit";
 
-/** Request-local elapsed I/O phases; production clocks cannot resolve CPU-only work. */
 export const makeDashboardTiming = (
   enabled: boolean
 ): Readonly<{

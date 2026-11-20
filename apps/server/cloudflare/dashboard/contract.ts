@@ -7,7 +7,6 @@ import type {
 } from "../../src/shell/dashboard/contract";
 import type { QueryCaller, TransactionCaller } from "../canonical-work/contract";
 
-/** Canonical operation names derived from Dashboard's one published declaration. */
 export type DashboardOperation = `dashboard.${keyof typeof DashboardGroup.endpoints}`;
 export type DashboardMutationOperation = Extract<
   DashboardOperation,
@@ -20,7 +19,6 @@ type DashboardInputs = {
   "dashboard.applyDashboardEdit": typeof ApplyDashboardEditCanonicalInput.Type;
 };
 
-/** A decoded individual call; absent input asks the owner to record its canonical refusal. */
 export type DashboardMutationCall = {
   [Operation in keyof DashboardInputs]: Readonly<{
     operation: Operation;
@@ -28,10 +26,6 @@ export type DashboardMutationCall = {
   }>;
 }[keyof DashboardInputs];
 
-/**
- * Queries retain live caller authority and native snapshot consistency. Mutations additionally
- * require the same User's coordinator through committed readback.
- */
 export type DashboardRequest = Readonly<{
   db: D1Database;
   request: Request;

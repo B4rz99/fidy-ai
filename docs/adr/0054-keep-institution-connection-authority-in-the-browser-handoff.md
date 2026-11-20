@@ -18,3 +18,10 @@ registered signing key separate. The bounded support Sandbox flow can request an
 token and push the exact already-created consent request once. Application token verification
 cannot authorize the customer's account, and token revocation does not cancel bank consent.
 Cleanup stays available after the admission window closes.
+
+Authorization preparation claims one original User-owned attempt before bank egress. Never
+retry uncertain submission. Browser admission, review and its Audit use the same live
+authority. Account discovery commits exact read-only page work before scheduling it. A
+recurring schedule is a prompt to recheck authority, and a Queue message alone cannot admit work.
+Held bank-authority cleanup remains independent of browser login, Consent and the test window.
+Connection-derived data still needs its own completed suppression before whole-User erasure.

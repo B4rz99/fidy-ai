@@ -13,7 +13,6 @@ import { type OwnedStatement } from "../../src/shell/owner-write/contract";
 
 const digestLength = 32;
 
-/** Continuation of one durable item originally queued under active processing Consent. The owner supplies a same-User user_id projection for its exact unexpired, unfinished item, never a transport claim or a recurring schedule. */
 export type QueuedConsentAction = Readonly<{
   db: D1Database;
   userId: string;
@@ -21,7 +20,6 @@ export type QueuedConsentAction = Readonly<{
   statement: OwnedStatement;
 }>;
 
-/** Short-lived private withdrawal admission, rechecked against the coordinator User and live credential. */
 export const ConsentWithdrawalAdmission = Schema.Struct({
   userId: UserId,
   sessionId: WebSessionId,
@@ -31,13 +29,11 @@ export const ConsentWithdrawalAdmission = Schema.Struct({
   deadlineMilliseconds: Schema.Int,
 });
 
-/** Private fresh-browser admission bound to the exact disclosed withdrawal. */
 export const ConsentRenewalAdmission = Schema.Struct({
   ...ConsentWithdrawalAdmission.fields,
   renewal: ProcessingConsentRenewal,
 });
 
-/** Established authenticated native channel and explicit category, never model or PAT decision authority. */
 export type ProactivityConsentContext = Readonly<{
   db: D1Database;
   userId: UserId;
@@ -46,7 +42,6 @@ export type ProactivityConsentContext = Readonly<{
   now: DateTime.Utc;
 }>;
 
-/** Delivered exact disclosure with exchange-qualified explicit choices. */
 export type ProactivityConsentOffer = Readonly<{
   id: ConsentRecordId;
   expiresAt: DateTime.Utc;
@@ -56,7 +51,6 @@ export type ProactivityConsentOffer = Readonly<{
   revokeChoice: string;
 }>;
 
-/** Compose legal evidence with the same category's execution standing in one caller-owned User-coordinated atomic unit. */
 export type PreparedProactivityConsentDecision = Readonly<{
   kind: ProactivityOptInKind;
   statements: ReadonlyArray<D1PreparedStatement>;
@@ -66,7 +60,6 @@ export type PreparedProactivityConsentDecision = Readonly<{
     | Readonly<{ decision: "decline" }>
   );
 
-/** Protect a caller-owned statement with the exact live category grant and processing Consent. */
 export type ProactivityConsentAction = Readonly<{
   db: D1Database;
   userId: UserId;
@@ -75,7 +68,6 @@ export type ProactivityConsentAction = Readonly<{
   statement: OwnedStatement;
 }>;
 
-/** Offer purpose and retry identity are explicit; short offers have no durable governor source. */
 export type WeeklyConsentOfferRequest =
   | Readonly<{ _tag: "ShortOffer"; origin: "proactive" }>
   | (Readonly<{ _tag: "GovernorQuestion"; sourceId: string }> &
@@ -88,7 +80,6 @@ export type WeeklyConsentOfferRequest =
           }>
       ));
 
-/** Opaque exchange identity binds a fixed explicit choice to one exact delivered disclosure. */
 export const WeeklyConsentOffer = Schema.Struct({
   id: ConsentRecordId,
   disclosure: DisclosureSnapshot,
@@ -98,7 +89,6 @@ export const WeeklyConsentOffer = Schema.Struct({
 });
 export type WeeklyConsentOffer = typeof WeeklyConsentOffer.Type;
 
-/** Authenticated native channel context; never exposed as a canonical tool or PAT operation. */
 export type WeeklyConsentContext = Readonly<{
   db: D1Database;
   userId: UserId;
@@ -106,7 +96,6 @@ export type WeeklyConsentContext = Readonly<{
   now: DateTime.Utc;
 }>;
 
-/** An owner action ending at its WHERE condition; protected standing is re-evaluated at commit. */
 export type WeeklyConsentAction = Readonly<{
   db: D1Database;
   userId: UserId;
@@ -114,28 +103,22 @@ export type WeeklyConsentAction = Readonly<{
   statement: OwnedStatement;
 }>;
 
-/** Prepared same-User decision. The orchestrator must commit these statements and schedule enable/disable atomically under User coordination. */
 export type PreparedWeeklyConsentDecision = Readonly<{
   decision: "accept" | "continue" | "decline" | "revoke";
   grantId: Option.Option<ConsentRecordId>;
   statements: ReadonlyArray<D1PreparedStatement>;
 }>;
 
-/** A current decision for one explicit User; absence never borrows another User's grant. */
 export type ConsentStatus = "Missing" | "Granted" | "Revoked";
 
-/** The exact historical grant remains available for admission even after its revocation. */
 export type ConsentStanding =
   | Readonly<{ _tag: "Missing"; subjectUserId: string }>
   | Readonly<{ _tag: "Granted" | "Revoked"; subjectUserId: string; basis: OnboardingConsentBasis }>;
 
-/** A closed Consent boundary failure; no private row, statement or provider data escapes. */
 export class ConsentUnavailable extends Data.TaggedError("ConsentUnavailable")<{}> {}
 
-/** The current purpose does not authorize this action; no content or private evidence escapes. */
 export class ConsentEgressRefused extends Data.TaggedError("ConsentEgressRefused")<{}> {}
 
-/** A bounded provider action run under the existing User coordinator's serialized work. */
 export type ConsentEgressAction<A, E, R> = Readonly<{
   db: D1Database;
   userId: string;
@@ -143,14 +126,12 @@ export type ConsentEgressAction<A, E, R> = Readonly<{
   action: Effect.Effect<A, E, R>;
 }>;
 
-/** Stable subject and accepted pre-User exchange composed in verified onboarding. */
 export type OnboardingConsentInput = Readonly<{
   db: D1Database;
   userId: string;
   exchangeId: string;
 }>;
 
-/** Authenticated withdrawal evidence; credentials are checked with the append, never retained. */
 export type ConsentRevocationInput = Readonly<{
   db: D1Database;
   subject: Readonly<{ id: string; userId: string; digest: Uint8Array }>;
@@ -158,7 +139,6 @@ export type ConsentRevocationInput = Readonly<{
   current: number;
 }>;
 
-/** Native owner proof permits replacing an undisclosed, definitively rejected offer only. */
 export type ProactivityOfferReplacement = Readonly<{
   offerId: ConsentRecordId;
   proof: OwnedStatement;

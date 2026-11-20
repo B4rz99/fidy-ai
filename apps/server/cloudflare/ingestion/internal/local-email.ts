@@ -405,7 +405,7 @@ const activeForwardingRoute = Effect.fn(function* (
   if (typeof row.id !== "string" || typeof row.local_part !== "string") return false;
   return Option.isSome(yield* address(user, row.id, row.local_part));
 });
-/** Resolve the retained Email writer after a lost final acknowledgement using its original address and SHA. */
+
 export const recoverEmailStages = Effect.fn(function* (
   current: number,
   env: LocalIngestionEnvironment

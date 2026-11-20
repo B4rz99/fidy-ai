@@ -87,8 +87,6 @@ const put = (
       );
       return objectMetadata({ key, value, etag, uploaded });
     });
-    // Storage sync confirms publication before a caller can checkpoint a separate database.
-    // https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/#sync
     return storage.sync().then(() => written);
   });
 const afterKey = (

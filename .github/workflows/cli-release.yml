@@ -15,7 +15,7 @@ jobs:
       changed: ${{ steps.plan.outputs.changed }}
       version: ${{ steps.plan.outputs.version }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
@@ -29,7 +29,7 @@ jobs:
           current=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/trunk" --jq .object.sha)
           [[ "$current" == "$SOURCE_SHA" ]] || { echo 'Superseded revision; leaving the default unchanged.' >&2; exit 1; }
           python3 scripts/cli-release/release.py plan --sha "$SOURCE_SHA" --output cli-plan.json
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: steps.plan.outputs.changed == 'true'
         with:
           name: cli-plan
@@ -48,7 +48,7 @@ jobs:
     env:
       FIDY_CLI_VERSION: ${{ needs.plan.outputs.version }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
@@ -80,7 +80,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./scripts/cli-release/test-install.ps1
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: cli-release-${{ runner.os }}
           path: |
@@ -102,18 +102,18 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/bun-install
         with:
           save-cache: "false"
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: cli-plan
           path: dist/cli-plan
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           pattern: cli-release-*
           path: dist/cli-publication

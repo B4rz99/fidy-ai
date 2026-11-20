@@ -1,6 +1,5 @@
 import type { ErasureProjection } from "../../erasure-store/contract";
 
-/** A logical Consent purpose keeps its dependency order and exact erasure permit in the shared store. */
 const historyProjection = ({
   id,
   recordType,

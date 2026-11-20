@@ -72,7 +72,6 @@ const appendTimings = (response: Response, measured: RecoveryDurations): Respons
   });
 };
 
-/** Request-local measurements only. R2 includes generation body consumption; D1 includes its private assertion. */
 export const makeRecoveryMeasurement = (): RecoveryMeasurement => {
   const measured: RecoveryDurations = {
     r2: 0,

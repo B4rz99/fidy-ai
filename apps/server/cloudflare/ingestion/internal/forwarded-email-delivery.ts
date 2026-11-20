@@ -10,10 +10,6 @@ class ForwardedEmailDeliveryUnavailable extends Data.TaggedError(
   readonly cause: unknown;
 }> {}
 
-/** Route only decoded work to its User coordinator. No Queue identity conveys authority: the
- * coordinator rechecks ownership, Consent, retention, and the outcome before reading R2.
- * A failed coordinator call rejects for Queue redelivery; cron also reoffers unsettled receipts.
- */
 export const receiveForwardedEmailWork = ({
   messages,
   coordinator,
@@ -69,6 +65,5 @@ export const receiveForwardedEmailWork = ({
     throw error;
   });
 
-/** Recognize a versioned identity-only Queue message before routing to User coordination. */
 export const isForwardedEmailWork = (body: unknown): boolean =>
   Option.isSome(Schema.decodeUnknownOption(ForwardedEmailWork)(body));

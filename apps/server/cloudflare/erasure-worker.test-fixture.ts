@@ -11,7 +11,6 @@ export * from "./core-worker";
 type UserEnvironment = ConstructorParameters<typeof NativeUser>[1];
 const marker = "private-fixture";
 
-/** Delay the actual bound R2 create after its production User writer commits. */
 const heldBucket = (bucket: R2Bucket, storage: DurableObjectStorage): R2Bucket =>
   new Proxy(bucket, {
     get(target, property) {
@@ -41,7 +40,6 @@ const heldBucket = (bucket: R2Bucket, storage: DurableObjectStorage): R2Bucket =
     },
   });
 
-/** Fixture-only inspection reads the native KV and alarm even when SQL has been deallocated. */
 export class UserStore extends NativeUser {
   constructor(state: DurableObjectState, env: UserEnvironment) {
     super(state, {
@@ -87,7 +85,6 @@ export class UserStore extends NativeUser {
   }
 }
 
-/** The fixture invokes the production case alarm/commands at a chosen instant in its own test isolate. */
 export class Erasure extends NativeErasure {
   override fetch(request: Request): Promise<Response> {
     const instant = request.headers.get("fixture-erasure-clock");

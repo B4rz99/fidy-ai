@@ -9,7 +9,7 @@ export type ErasureScope = Readonly<{ userId: string; reference: string }>;
 export type ErasureOriginals = Readonly<{
   discard: (scope: ErasureScope) => Effect.Effect<"Done" | "Continue", ErasureUnavailable>;
 }>;
-/** Every configured private bucket is swept under the canonical User prefix; absent bindings refuse completion. */
+
 export type ErasureOriginalConfiguration = Readonly<{
   db: D1Database;
   email: Option.Option<R2Bucket>;
@@ -25,7 +25,7 @@ export type ErasureStore = Readonly<{
     input: Readonly<{ statement: OwnedStatement; scope: ErasureScope; current: number }>
   ) => OwnedStatement;
 }>;
-/** Caller-owned deletion projections expose opaque row references; values remain bound, never executable SQL. */
+
 export type ErasureProjection = Readonly<{
   id: string;
   dataClass: ErasureClass;
@@ -43,7 +43,6 @@ export type ErasureProjection = Readonly<{
   remaining: (userId: string) => OwnedStatement;
 }>;
 
-/** The named owners exchange only the exact erasure identity and its original admission time. */
 export const ErasureHandoff = Schema.Struct({
   userId: UserId,
   reference: ErasureReference,

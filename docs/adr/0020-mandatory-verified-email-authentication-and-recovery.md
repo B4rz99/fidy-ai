@@ -146,3 +146,9 @@ Email login start uses one fixed acceptance body whether delivery is attempted o
 Completion proves both mailbox possession and the same browser pairing and only makes that
 pairing redeemable. Bound refusals use the same non-enumerating body. A failed send response can
 follow acceptance, so a retry may not bypass deduplication with a different proof or key.
+
+Email proof delivery persists and schedules only bounded work identities. Revalidate the
+identity at the Workflow boundary and claim its exact generation before the one provider send.
+Mailbox and raw proof stay outside Queue and Activity history. An ambiguous or interrupted
+send cannot rediscover the original proof and cannot generate another for that claim. The
+owner alarm can retire expired proof independently of the provider.

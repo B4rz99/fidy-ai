@@ -21,3 +21,8 @@ The native HTTP response adapter transfers ownership of an unlocked body and the
 signal. The consumer must read, cancel or abort that lifetime using the returned Response.
 Explicit null detaches an inherited signal. Cleanup errors never replace the primary result
 or reopen a terminal resource.
+
+For streamed requests, install cleanup before a synchronous Effect callback can resume.
+Cancellation must leave the reader lock releasable even when the runtime throws during cancel.
+Limit and deadline failures disclose no request bytes. A caller interruption stays interruption,
+including at a boundary that maps malformed JSON and normal read failures to absence.

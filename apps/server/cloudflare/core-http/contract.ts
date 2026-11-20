@@ -3,7 +3,6 @@ import type { UserStoreBindings } from "../directory/contract";
 import type { ProviderConfiguration } from "../provider-authentication/contract";
 import type { SmokeEnvironment } from "../runtime/release-smoke/contract";
 
-/** Private HTTP binding boundary; no model execution or scheduled maintenance authority. */
 export type CoreHttpEnvironment = ProviderConfiguration &
   Partial<UserStoreBindings> &
   SharedBindings &
@@ -48,7 +47,6 @@ export type CoreHttpEnvironment = ProviderConfiguration &
     }>
   >;
 
-/** One private request, including an optional bounded post-commit publication lifetime. */
 export type CoreHttpHandler = (
   request: Request,
   environment: CoreHttpEnvironment,

@@ -171,7 +171,6 @@ const readBoundStatus = (input: PrivacyRequest, current: number): Effect.Effect<
     )
   );
 
-/** Resolve cookie-only privacy authority without demanding withdrawn Consent or a purchased plan. */
 export const handleProcessingConsentRequest = (input: PrivacyRequest): Effect.Effect<Response> =>
   Effect.gen(function* () {
     if (input.request.headers.get("origin") !== input.browserOrigin) {
@@ -217,7 +216,6 @@ export const handleProcessingConsentRequest = (input: PrivacyRequest): Effect.Ef
     });
   }).pipe(Effect.orElseSucceed(() => consentResponse(unavailableStatus)));
 
-/** Execute the fixed undecided-offer retention policy against the bound Core database and authoritative runtime clock. Maintenance cannot choose legal-evidence deletion or another retention period. */
 export const sweepProactivityConsentOffers = (
   db: D1Database
 ): Effect.Effect<void, ConsentUnavailable> =>

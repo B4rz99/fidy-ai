@@ -122,7 +122,7 @@ const reviewOAuth = ({
     : Option.none();
 const futureReview = (command: ReviewCommand, current: number): boolean =>
   command._tag === "Create" && DateTime.toEpochMillis(command.extraction.occurredAt) > current;
-/** Every reference rechecks its revision, original expiry and caller in the same D1 unit. */
+
 export const prepareReviewEdit = ({
   work,
   command,

@@ -86,7 +86,7 @@ const claimSlot = Effect.fn(function* (
   yield* preserveStoreAlarm(storage, expires);
   return status(applied);
 });
-/** An offer is advisory. Its exact generation is consumed by either the claim or a release fence. */
+
 export const ingestionCapacityRequest = Effect.fn(function* (
   request: Request,
   storage: DurableObjectStorage

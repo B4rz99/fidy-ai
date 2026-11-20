@@ -160,7 +160,6 @@ export const dispatchLocalForwarding = Effect.fn(
   Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
 );
 
-/** Directory registration precedes the atomic batch. Its route never conveys access to material. */
 export const reserveBatchForwarding = Effect.fn(function* (
   user: UserId,
   directory: UserStoreBindings["DIRECTORY"]

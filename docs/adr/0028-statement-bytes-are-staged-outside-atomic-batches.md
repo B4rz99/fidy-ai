@@ -126,3 +126,20 @@ The statement parser and staging gate select by content signatures before interp
 types. Treat the OLE signature as an unsupported protected Office container. Keep parser engines
 out of ordinary API initialization. Media retrieval accepts only a validated token at the fixed
 Kapso download operation, without project credentials or provider-supplied transport coordinates.
+
+Keep raw originals behind the live browser review boundary. Materialize the bounded page
+before fetching excerpts, and bound raw row fragments inside the query. Recheck locator,
+eligibility, caller authority and accounting after an external read. Preserve the original
+deadline for reversible workspace decisions. Conversation settlement can discard resolved
+material. Canonical metadata, Queue and Workflow history never carry originals or passwords.
+
+Queue publication is an offer of the exact versioned identity. Lost acknowledgments can
+repeat that identity but cannot create new authority. Workflow existence does not prove
+completion. An ambiguous create must resolve the same instance before Queue acknowledgment.
+The owner alarm and scheduled reconciliation recover admitted work when a wake is lost.
+
+The verified conversation binds document admission and publication to the same Turn, Hosted
+Agent Session and message. An exact retry cannot extend a deadline or restore expired media.
+One native unit composes publication, capacity, accountability and visible review. Original
+media and unpublished work expire after thirty days; metadata-only accountability may be
+retained for one year.

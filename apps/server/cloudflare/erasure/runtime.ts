@@ -23,17 +23,14 @@ import { registryClient, registryRequest } from "./internal/registry-transport";
 
 import { registryOwner } from "./internal/registry-owner";
 
-/** Host existing reads beside independent recovery metadata; authority remains in canonical HTTP. */
 export const makeErasureRegistryOwner = <Environment extends ErasureRegistryOwnerEnvironment>(
   input: ErasureRegistryOwnerConfiguration<Environment>
 ): Pick<Fetcher, "fetch"> => registryOwner(input);
 
-/** Uses the supplied independent authority; never initializes a generation or stores private bytes. */
 export const makeSqliteErasureRegistry = (
   storage: Pick<DurableObjectStorage, "sql" | "transactionSync" | "sync">
 ): ErasureRegistry => registryStorage(storage);
 
-/** The target is a private native binding; its responses never grant User or application authority. */
 export const makeRemoteErasureRegistry = (target: Pick<Fetcher, "fetch">): ErasureRegistry =>
   registryClient(target);
 
@@ -53,12 +50,10 @@ type RecoveryEnvironment = Readonly<{ DB: D1Database }> &
     }>
   >;
 
-/** Select metadata authority without wrapping D1; deletion and recovery also need its raw binding. */
 export const withErasureRegistry = <Environment extends RecoveryEnvironment>(
   environment: Environment
 ): Environment => {
   if (environment.ERASURE_REGISTRY !== undefined) return environment;
-  // Native namespaces can prove the reserved object's identity when its name is absent.
   const original =
     environment.ERASURE_REQUIRED === "true" ? environment.USER_TRANSACTION_COORDINATOR : undefined;
   const namespace =
@@ -79,7 +74,6 @@ export const withErasureRegistry = <Environment extends RecoveryEnvironment>(
   };
 };
 
-/** Native entrypoints supply the required private registry binding in the deployed topology. Missing required configuration fails closed when a data unit executes. */
 const wrapRecovery = <Environment extends RecoveryEnvironment>(
   original: Environment,
   measurement: Option.Option<RecoveryMeasurement>
@@ -105,7 +99,6 @@ export const withErasureRecovery = <Environment extends RecoveryEnvironment>(
   environment: Environment
 ): Environment => wrapRecovery(environment, Option.none());
 
-/** Measure the foreground request's existing recovery units without retaining their data or changing their execution. */
 export const measureErasureRecovery = <Environment extends RecoveryEnvironment>(
   environment: Environment
 ): Readonly<{ environment: Environment; respond: (response: Response) => Response }> => {
@@ -215,7 +208,6 @@ export const handleErasureOperator = (
     });
   });
 
-/** Only the independent Erasure namespace may continue or attest an admitted native case. */
 export const handleNativeErasureOperator = Effect.fn(function* (
   request: Request,
   environment: Parameters<typeof nativeOperatorRequest>[0]["environment"]

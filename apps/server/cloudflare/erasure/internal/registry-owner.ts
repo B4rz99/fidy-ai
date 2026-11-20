@@ -48,7 +48,6 @@ const migrate = (
     );
   }).pipe(Effect.orElseSucceed(unavailable));
 
-/** One independent metadata authority, with no queue held across calls to a User coordinator. */
 export const registryOwner = <Bound extends ErasureRegistryOwnerEnvironment>(
   input: ErasureRegistryOwnerConfiguration<Bound>
 ): Pick<Fetcher, "fetch"> => {

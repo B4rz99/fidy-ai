@@ -48,7 +48,6 @@ export const ErasureContinuation = Schema.Struct({
 });
 export type ErasureContinuation = typeof ErasureContinuation.Type;
 
-/** Independent recovery metadata only. This capability never owns private original material. */
 export type ErasureRegistry = Readonly<{
   get: (key: string) => ReturnType<R2Bucket["get"]>;
   head: R2Bucket["head"];
@@ -158,7 +157,6 @@ export type ErasureOperatorEnvironment = Readonly<{
     }>
   >;
 
-/** Private same-User operations; every call requires a fresh validated admission. */
 export type ErasureOwner = Readonly<{
   admit: (candidate: unknown, signal: AbortSignal) => Effect.Effect<Response>;
   continue: (candidate: unknown) => Effect.Effect<Response>;

@@ -61,7 +61,6 @@ const sweepBucket = (input: ControlSweep): Effect.Effect<void, ErasureUnavailabl
     );
   }).pipe(Effect.mapError(() => new ErasureUnavailable()));
 
-/** Reconcile expired control-only placeholders/nonces, including late ambiguous writes whose owner row has gone. Financial payloads and held records are never swept by this metadata-only path. */
 export const sweepControlObjects = (
   input: Readonly<{
     db: D1Database;

@@ -19,3 +19,10 @@ missing Category metadata and keeps all Currency groups. Empty history advances 
 without generating a report or send. Preserve immutable recurring confirmation facts, including
 Counterparty, in the historical report. For reminder attention, a pending question pauses only
 the additional-ignore counter. Delivery pause leaves legal Consent independent.
+
+Category revocation still prevents delivery from a historically eligible alert. An exact
+qualified privacy choice can be reported on replay without granting authority again or
+depending on a provider or model. An older requested prompt cannot bypass a later rejection.
+A replacement offer needs native proof that its predecessor was both undisclosed and
+definitively rejected. Persist the authenticated exact delivery before enabling choices.
+Commit the chosen category evidence and matching schedule update together.

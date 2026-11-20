@@ -499,3 +499,27 @@ cannot deny other local canonical commands. Categories persists stable taxonomy 
 and reads labels and order from the release. Owner writes recheck a referenced Category and their
 live User predicate together. Keyword instructions affect future captures without rewriting
 retained Transactions. Capture interprets them in the same protected snapshot as retention.
+
+Directory lookup and reservations route to the named User. Neither a PAT route nor a bank
+callback establishes local authority. Recheck the credential, mounted binding when present,
+and any required original browser session there. Generation-scoped reservations are fenced
+until their exact terminal result is known. Retire descendants of the original binding only.
+Callback cleanup and expiry cannot unbind a different generation or the shared source budgets.
+
+### Erasure recovery and external writers
+
+The independent Erasure registry records the case identity, original admission and phase
+acknowledgments. A participant checks the exact case and phase before serializing a local
+purge. Local row absence proves disposal only after the independent case records the required
+prior acknowledgments. An acknowledgment lost in transit retries just that phase. Directory
+and Pricing retain their attributed registrations until their own cleanup acknowledgment.
+A missing registry after any accepted case requires recovery and cannot be initialized
+through ordinary data access. Native units assert the external generation in the same
+transaction using a read-only rollback assertion. Independent control-marker retention stays
+outside a restored D1 and extends past supported backup restore.
+
+Retain each R2 writer's specific nonce until a returned decision or matching positive evidence
+proves settlement. Absence cannot settle an ambiguous issued create. Erasure sweeps the whole
+canonical User prefix in bounded continuations even when inventory rows are missing. An
+independent sealed marker proves the original drain across restore and keeps old attempts from
+becoming new external instructions. Native registry publication uses [the Durable Object storage synchronization boundary](https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/#sync).

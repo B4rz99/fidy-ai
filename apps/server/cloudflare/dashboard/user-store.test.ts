@@ -766,7 +766,6 @@ scenario(
         yield* native(() => store.exec("CREATE TABLE storage_pressure (padding BLOB)"));
         const healthyBytes = yield* readBytes();
         expect(healthyBytes).toBeLessThan(warning);
-        // Padding crosses the restricted band while leaving room for required replay accounting.
         const target = Math.ceil(ceiling * 0.85);
         const chunk = 256 * 1024;
         const padding = target - healthyBytes;
@@ -894,7 +893,6 @@ scenario.each(["/dashboard/view", "/dashboard/view?"])(
         expect(next[1].status).toBe(200);
         expect([[[firstDay, "10"]], [[secondDay, "10"]]]).toContainEqual(next[0]);
         expect(yield* chart()).toEqual([[secondDay, "10"]]);
-        // New evidence can change the effective movement instant only when an explicit correction has not settled it.
         const freshA = yield* capture(first);
         const freshB = yield* capture(second);
         const linked = yield* native(() =>

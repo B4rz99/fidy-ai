@@ -50,3 +50,10 @@ A bare “sí” is ambiguous. An older message cannot open a replacement exchan
 The delivery owner generates an unpredictable callback token for each exchange. Its UUID shape
 validates representation. Correlation binds the callback to delivery evidence without making
 provider ids or tokens reusable User authority.
+
+Processing Consent withdrawal and exact reacceptance append to the current same-User basis.
+Operational cleanup removes expired undecided offers, while accepted or rejected legal
+evidence stays retained. Original queued work can finish only with its exact unexpired admitted
+identity and the owner's remaining guards. Category-specific authority and physical erasure
+remain separate. Consent rechecks immediately before egress under User coordination, without
+holding a D1 transaction open across provider work.

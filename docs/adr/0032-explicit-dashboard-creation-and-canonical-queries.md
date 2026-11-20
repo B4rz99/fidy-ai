@@ -66,3 +66,8 @@ calculation. Budget bars observe exact outflows in the selected Category and Cur
 A missing Dashboard is an observed result. It grants no authority to create or repair one.
 A view is released only after the full authorized snapshot, including every leaf's exact totals,
 passes validation.
+
+Dashboard initialization and edits are explicit owner mutations. Repeated initialization preserves
+the existing content and revision. Invalid retained state does not reset the document. Each
+dependent financial view reads its complete revision, captured calendar and disclosure fence in
+one native snapshot.

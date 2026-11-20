@@ -50,3 +50,10 @@ The email catalog is produced by `apps/server/tools/email-formats/generate-runti
 checked for freshness by the Workspace Gate. Its checked-in private catalog excludes fixtures.
 Synthetic fixtures represent the structure under test and use fictional transaction or personal
 values. They do not serve as byte-for-byte records of received mail.
+
+Only a deterministic allowlisted versioned structural transform can produce long-lived
+retained evidence. It includes no original text, variable HTML names or attributes, URLs,
+dimensions or content-dependent lengths. Human-reviewed publication reserves the exact
+placeholder and checks its independent marker after reservation. Withdrawal fences any
+late write before the owner can release its writer. Retry revalidates the original grammar
+and digest. Malformed publication follows the same withdrawal boundary.

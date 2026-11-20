@@ -141,7 +141,6 @@ const admitUnresolved = Effect.fn(function* (source: string) {
   );
 });
 
-/** Pressure buckets use the original virtual time. Only the owner alarm drains a bounded expired page. */
 const inspectPressure = Effect.fnUntraced(function* (
   storage: DurableObjectStorage,
   drain: boolean

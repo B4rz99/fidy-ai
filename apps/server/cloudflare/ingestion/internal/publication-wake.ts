@@ -5,7 +5,6 @@ export const StatementPublicationWake = Context.Reference<Effect.Effect<void>>(
   { defaultValue: () => Effect.void }
 );
 
-/** Publication remains durable without a wake-up; the owning coordinator supplies only an alarm. */
 export const withPublicationWake =
   (schedule: (dueAtMs: number) => Promise<void>) =>
   <A, E, R>(work: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>

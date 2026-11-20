@@ -78,7 +78,7 @@ const routeCookie = ({
 
 export const routeSessionRequest = (input: SessionRequest): Effect.Effect<Response> =>
   routeCookie({ ...input, browserHandoff: false });
-/** The institution redirect cannot attach a mounted-session header. The User rechecks the exact cookie and original session. */
+
 export const routeConnectionCallback = (input: SessionRequest): Effect.Effect<Response> =>
   routeCookie({ ...input, browserHandoff: true });
 const includesMountedSession = (request: Request): boolean =>
@@ -86,7 +86,6 @@ const includesMountedSession = (request: Request): boolean =>
     .split(";")
     .some((cookie) => cookie.trim().startsWith("__Host-fidy_session="));
 
-/** A Directory PAT lookup cannot grant authority. Forward the exact record reference for the User's local check. */
 export const routePATRequest = Effect.fn(
   function* ({
     request,
@@ -94,7 +93,6 @@ export const routePATRequest = Effect.fn(
   }: Readonly<{ request: Request; environment: Partial<UserStoreBindings> }>) {
     const { DIRECTORY, USER_STORE } = environment;
     if (DIRECTORY === undefined || USER_STORE === undefined) return canonicalAdmissionUnavailable();
-    // Public ingress selects the browser credential when a session cookie is present.
     if (includesMountedSession(request)) return noAuthority();
     const directory = DIRECTORY.getByName(directoryName);
     const refused = Effect.gen(function* () {
@@ -126,7 +124,6 @@ export const routePATRequest = Effect.fn(
   Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
 );
 
-/** Forward a declared independent proof path to the unique pre-User owner. */
 export const routeBootstrapRequest = ({
   request,
   environment,
@@ -164,7 +161,7 @@ const matchesMountedRoute = (request: Request, session: string): boolean => {
     (expected === null && new URL(request.url).pathname === "/web/session/binding")
   );
 };
-/** Resolve the bearer for bootstrap and logout. The named User checks the exact current cookie and optional mounted binding. */
+
 export const routeBrowserSession = Effect.fn(
   function* (
     request: Request,
@@ -200,7 +197,6 @@ export const routeBrowserSession = Effect.fn(
   Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
 );
 
-/** Fence ancillary routes carrying a mounted cookie before contacting the independent owner. */
 export const currentMountedBinding = Effect.fn(
   function* (
     request: Request,

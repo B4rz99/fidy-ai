@@ -174,7 +174,7 @@ const redirectedIssuerResponse = (url: string): Option.Option<Response> => {
   if (url === redirectedKeyTarget) redirectedKeys += 1;
   return Option.none();
 };
-/** Local signed responses exercise production provider, nonce, lifetime and browser proof checks. */
+
 export class BrowserOidcFixture extends WorkerEntrypoint {
   override fetch(request: Request): Promise<Response> {
     return Effect.runPromise(

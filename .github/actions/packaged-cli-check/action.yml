@@ -19,7 +19,7 @@ runs:
         mkdir -p /tmp/fidy-native-package-archives
     - name: Restore Linux native package downloads
       if: runner.os == 'Linux'
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
       with:
         path: /tmp/fidy-native-package-archives/*.deb
         key: ${{ runner.os }}-${{ runner.arch }}-native-packages-v2-${{ steps.native-packages.outputs.image }}

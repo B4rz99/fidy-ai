@@ -51,7 +51,6 @@ const digest = (value: string): Promise<Uint8Array> =>
 const attempt = <A>(run: () => Promise<A>): Effect.Effect<A, void> =>
   Effect.tryPromise({ try: run, catch: () => undefined });
 
-/** Publish bounded durable work identities; no mailbox or proof leaves D1 in the Queue. */
 export const dispatchEmailReplacement = (
   environment: Readonly<{ DB: D1Database; EMAIL_REPLACEMENT_QUEUE: EmailReplacementPublisher }> & {
     readonly identity: Option.Option<string>;
@@ -98,11 +97,9 @@ export const dispatchEmailReplacement = (
     }
   });
 
-/** Identify the dedicated replacement Queue without interpreting its payload as authority. */
 export const isEmailReplacementWork = (value: unknown): boolean =>
   Option.isSome(Schema.decodeUnknownOption(Schema.Struct({ kind: Work.fields.kind }))(value));
 
-/** Recheck D1 state before starting the durable delivery Activity. */
 export const receiveEmailReplacement =
   (environment: Pick<EmailReplacementEnvironment, "DB" | "EMAIL_REPLACEMENT_WORKFLOW">) =>
   (batch: MessageBatch<unknown>): Effect.Effect<void, void> =>
@@ -188,7 +185,6 @@ const settleReplacementDelivery = (
       .run()
   );
 
-/** Claim one candidate generation before the provider call; an ambiguous send never retries its proof. */
 export const deliverEmailReplacement =
   ({ db, send, environment }: { db: D1Database; send: Send; environment: unknown }) =>
   (id: string, parent?: unknown): Promise<void> =>
@@ -246,7 +242,6 @@ export const deliverEmailReplacement =
       )
     );
 
-/** Validate versioned identity-only work before entering the non-retrying provider Activity. */
 export const runEmailReplacementWorkflow = ({
   environment,
   payload,
@@ -275,7 +270,6 @@ export const runEmailReplacementWorkflow = ({
   );
 };
 
-/** Bound retention and abandon interrupted sends without reusing unobservable raw proofs. */
 export const reconcileEmailReplacement = (db: D1Database): Effect.Effect<void, void> =>
   Effect.gen(function* () {
     const current = yield* Clock.currentTimeMillis;

@@ -146,7 +146,6 @@ const commitRenewal = (
     });
   });
 
-/** Append reacceptance that settles only its exact current cutoff in one User-coordinated unit. */
 export const renewProcessingConsent = (
   input: Readonly<{
     db: D1Database;

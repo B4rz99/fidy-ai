@@ -10,14 +10,13 @@ const pendingQueries: Readonly<Record<"statement" | "forwardedEmail", string>> =
     ORDER BY r.received_at_ms LIMIT ?`,
 };
 
-/** Bound metadata observation to the same oldest eight pending owner records. */
 export const pendingIngestionWork = (
   input: Readonly<{ db: D1Database; operation: "statement" | "forwardedEmail"; limit: number }>
 ): D1PreparedStatement =>
   input.db
     .prepare(pendingQueries[input.operation])
     .bind(Schema.decodeSync(SampleSize)(input.limit));
-/** Observe only due retention instants, never raw material or identities. */
+
 export const overdueIngestionRetention = (
   input: Readonly<{ db: D1Database; now: number; limit: number }>
 ): D1PreparedStatement =>

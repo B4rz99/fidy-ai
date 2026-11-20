@@ -48,23 +48,23 @@ import {
   reconcileEmailReplacement as reconcileReplacement,
   runEmailReplacementWorkflow as runReplacement,
 } from "./internal/replacement-workflow";
-/** Offer bounded BrowserPairingEmail intents; a missed Queue offer remains durably recoverable. */
+
 export const dispatchBrowserPairingEmail = (
   input: Readonly<{ DB: D1Database; BROWSER_PAIRING_EMAIL_QUEUE: BrowserPairingEmailPublisher }> &
     EmailPublication
 ): Effect.Effect<void, void> => dispatchPairing(input);
-/** Validate each Queue identity, recheck its current owner state and hand it to the deterministic Workflow. */
+
 export const receiveBrowserPairingEmail =
   (environment: Pick<BrowserPairingEmailEnvironment, "DB" | "BROWSER_PAIRING_EMAIL_WORKFLOW">) =>
   (batch: MessageBatch<unknown>): Effect.Effect<void, void> =>
     receivePairing(environment)(batch);
-/** Recover interrupted sends as ambiguous and perform only the owner's bounded retention. */
+
 export const reconcileBrowserPairingEmail = (db: D1Database): Effect.Effect<void, void> =>
   reconcilePairing(db);
-/** Execute a versioned identity-only Workflow; the private Activity retains no raw proof or mailbox. */
+
 export const runBrowserPairingEmailWorkflow = (input: EmailWorkflowInput): Promise<void> =>
   runPairing(input);
-/** Select this Queue protocol without interpreting it as authority. */
+
 export const isBrowserPairingEmailWork = (value: unknown): boolean => recognizesPairing(value);
 export const offerLoginEmail: typeof offerLogin = (...args) => offerLogin(...args);
 export const repairLoginAlarm: typeof repairLogin = (...args) => repairLogin(...args);
@@ -115,23 +115,23 @@ export class BrowserPairingEmailWorkflowV1 extends WorkflowEntrypoint<
     );
   }
 }
-/** Offer bounded EmailReplacement intents; a missed Queue offer remains durably recoverable. */
+
 export const dispatchEmailReplacement = (
   input: Readonly<{ DB: D1Database; EMAIL_REPLACEMENT_QUEUE: EmailReplacementPublisher }> &
     EmailPublication
 ): Effect.Effect<void, void> => dispatchReplacement(input);
-/** Validate each Queue identity, recheck its current owner state and hand it to the deterministic Workflow. */
+
 export const receiveEmailReplacement =
   (environment: Pick<EmailReplacementEnvironment, "DB" | "EMAIL_REPLACEMENT_WORKFLOW">) =>
   (batch: MessageBatch<unknown>): Effect.Effect<void, void> =>
     receiveReplacement(environment)(batch);
-/** Recover interrupted sends as ambiguous and perform only the owner's bounded retention. */
+
 export const reconcileEmailReplacement = (db: D1Database): Effect.Effect<void, void> =>
   reconcileReplacement(db);
-/** Execute a versioned identity-only Workflow; the private Activity retains no raw proof or mailbox. */
+
 export const runEmailReplacementWorkflow = (input: EmailWorkflowInput): Promise<void> =>
   runReplacement(input);
-/** Select this Queue protocol without interpreting it as authority. */
+
 export const isEmailReplacementWork = (value: unknown): boolean => recognizesReplacement(value);
 export const makeEmailAuthenticationErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
   erasureProjections.map((projection) => makeErasureStore({ db, projection }));

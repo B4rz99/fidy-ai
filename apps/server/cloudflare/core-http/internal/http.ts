@@ -196,7 +196,6 @@ const ownedCorePath = (path: string): boolean =>
   ownsWebAuthenticationPath(path) ||
   canonicalRoute(path);
 
-/** Statement bytes enter only through verified WhatsApp document admission. */
 const statementUploadResponse = (request: Request): Effect.Effect<Response> =>
   Effect.succeed(
     request.method === "POST"
@@ -411,7 +410,6 @@ const supportCoreResponse = (
   return Option.none();
 };
 
-/** Consent combines expected binding with its live subject lookup; its protected work rechecks authority. */
 const reservedBindingResponse = <E, R>(
   request: Request,
   environment: CoreHttpEnvironment,
@@ -532,7 +530,6 @@ const nativeIdentityResponse = (
   return Option.none();
 };
 
-/** Each owner validates browser binding before dispatch; canonical admission combines it with pressure. */
 export const executeCoreHttp = (
   input: RequestExecution
 ): Effect.Effect<Response, never, HttpClient.HttpClient> =>

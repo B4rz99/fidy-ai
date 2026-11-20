@@ -5,7 +5,7 @@ import { ConnectionAttemptReference } from "../../src/shell/connections/contract
 
 const digestLength = 32;
 const maximumByte = 255;
-/** Private browser admission; never sufficient without the coordinator's live credential recheck. */
+
 export const ConnectionBrowserAdmission = Schema.Struct({
   attempt: ConnectionAttemptReference,
   userId: UserId,
@@ -22,12 +22,10 @@ export type ConnectionQueryOperation =
   | "connections.listAccounts"
   | "connections.getConnection";
 
-/** Private operator-configured sandbox window; never supplied by a browser or canonical input. */
 export const ConnectionSandboxAdmission = Context.Reference<
   Option.Option<Readonly<{ userId: string; startsAt: number; expiresAt: number }>>
 >("@fidy/cloudflare/connections/SandboxAdmission", { defaultValue: Option.none });
 
-/** Connection continuation cleanup could not complete; no private storage detail is exposed. */
 export class ConnectionRetentionUnavailable extends Data.TaggedError(
   "ConnectionRetentionUnavailable"
 ) {}
@@ -55,7 +53,6 @@ export const ConnectionConsentIntent = Schema.Struct({
 });
 export type ConnectionConsentIntent = typeof ConnectionConsentIntent.Type;
 
-/** Private preparation after durable admission; a failed or uncertain submission is never retried. */
 export type ConnectionBankPreparation = Readonly<{
   intent: ConnectionConsentIntent;
   prepare: (
@@ -126,7 +123,6 @@ export const ConnectionGrantKey = Context.Reference<Option.Option<Redacted.Redac
   { defaultValue: Option.none }
 );
 
-/** Cleanup only held bank authority, independently of browser login, Consent standing or sandbox admission. */
 export type ConnectionBankCleanup = Readonly<{
   clientId: string;
   revoke: (
@@ -146,7 +142,7 @@ export const SynchronizationWork = Schema.Struct({
   jobId: Schema.String.check(Schema.isUUID()),
 });
 export type SynchronizationWork = typeof SynchronizationWork.Type;
-/** Only replay-safe, read-only pages at the exact cursor may implement this capability. */
+
 export type SynchronizationProvider = {
   clientId: string;
   refreshIntervalMs: number;

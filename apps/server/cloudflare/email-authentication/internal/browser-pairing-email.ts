@@ -170,7 +170,6 @@ const startPairingEmailIntent = ({
     );
   });
 
-/** Start one bounded email proof only after the browser proves ownership of a pending pairing. */
 export const startBrowserPairingEmail = (input: {
   request: Request;
   db: D1Database;
@@ -270,7 +269,6 @@ const EmailProofRow = Schema.Struct({
   work_id: Schema.String.check(Schema.isUUID()),
 });
 
-/** Consume a mailbox proof and bind only its credential's stable User to the same browser challenge. */
 export const completeBrowserPairingEmail = (input: {
   request: Request;
   db: D1Database;

@@ -51,7 +51,6 @@ const liveGrant = `SELECT g.id FROM (SELECT * FROM consent_history WHERE record_
  AND NOT EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='weekly_grant') r WHERE r.user_id = g.user_id AND r.grant_id = g.id)
  AND NOT EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='weekly_revocation') r WHERE r.user_id = g.user_id AND r.grant_id = g.id)`;
 
-/** Current weekly grant identity for atomic owner evidence correlation. */
 export const currentGrantQuery = (input: Readonly<{ userId: UserId }>): OwnedStatement =>
   protectConsentStatement({
     subject: { _tag: "User", userId: input.userId },
@@ -106,7 +105,7 @@ export const guardedAction = ({
   });
   return db.prepare(guard.sql).bind(...guard.params);
 };
-/** Category revocation still wins over historical processing Consent. */
+
 export const queuedAction = (
   input: WeeklyConsentAction & Readonly<{ queued: QueuedConsentAction["queued"] }>
 ): D1PreparedStatement => {
@@ -144,7 +143,6 @@ const channelAction = (
   return input.db.prepare(protectedStatement.sql).bind(...protectedStatement.params);
 };
 
-/** Identity-bound privacy control and public-disclosure audit; never used to grant financial authority. */
 const privacyChannelAction = (
   input: WeeklyConsentContext,
   statement: WeeklyConsentAction["statement"]
@@ -349,7 +347,6 @@ export const discloseOffer = (
     return result.meta.changes === 1;
   }).pipe(Effect.mapError(() => new ConsentUnavailable()));
 
-/** Privacy control receipts are independent of provider availability and do not authorize sending. */
 export const hasChoiceReceipt = (
   input: WeeklyConsentContext & Readonly<{ choice: string; decisionMessageId: string }>
 ): Effect.Effect<boolean, ConsentUnavailable> =>

@@ -50,7 +50,6 @@ export const browseReviewItem = ({
     return Response.json({ data, next: [] }, { headers: transactionNoStore });
   }).pipe(Effect.orElseSucceed(transactionUnavailable));
 
-/** Detail and its request-local Category interpretation join the complete browser snapshot. */
 export const prepareBoundReviewItem =
   (request: Request): CanonicalBrowserRead =>
   ({ db, authority, reservation: users, current }) => {

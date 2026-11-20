@@ -17,7 +17,6 @@ import {
   type GuardRefusalWork,
 } from "../../canonical-operations/contract";
 
-/** Keep a commit-time forwarding Audit refusal on its existing unavailable response path. */
 
 const forwardingAddressGuardRefusal = ({
   db,
@@ -44,7 +43,6 @@ const forwardingAddressGuardRefusal = ({
       ),
   });
 
-/** Prepare the issued address without a nested D1 unit, for individual calls and atomic batches. */
 export const prepareForwardingAddress = Effect.fn(function* (work: CanonicalPreparationWork) {
   const existing = yield* Effect.tryPromise(() =>
     prepareConsentAction({
@@ -81,7 +79,6 @@ export const prepareForwardingAddress = Effect.fn(function* (work: CanonicalPrep
   } as const;
 });
 
-/** The issued address is immutable; enabling it is an audited, composable idempotent mutation. */
 export const forwardingAddressMutationAdapter = {
   prepare: prepareForwardingAddress,
   present: (value: CommittedMutationValue): Effect.Effect<Response> =>

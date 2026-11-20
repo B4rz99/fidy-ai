@@ -105,7 +105,6 @@ const storageProbe = Effect.fn(function* (request: Request, environment: CoreHtt
   return Option.none<Response>();
 });
 
-/** Cloudflare has already selected Core; named objects follow their own deployment assignment. */
 const consumeVersionOverride = (request: Request): Request => {
   if (!request.headers.has(smokeVersionHeader)) return request;
   const headers = new Headers(request.headers);

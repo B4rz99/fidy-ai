@@ -6,7 +6,7 @@ import type { ErasureRecoveryConfiguration } from "../contract";
 const maximumCaseBytes = 512;
 const io = <A>(run: () => Promise<A>): Effect.Effect<A, ErasureUnavailable> =>
   Effect.tryPromise({ try: run, catch: () => new ErasureUnavailable() });
-/** Persist independent evidence of the native drain before deleting source rows. An older D1's pending work must not be mistaken for a new provider instruction after recovery. */
+
 export const sealRecoveryCase = (
   input: Readonly<{ configuration: ErasureRecoveryConfiguration; scope: ErasureScope }>
 ): Effect.Effect<void, ErasureUnavailable> =>

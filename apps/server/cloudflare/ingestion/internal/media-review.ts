@@ -11,7 +11,7 @@ const MediaReviewRow = Schema.Struct({
   locale: Schema.String,
   time_zone: Schema.String,
 });
-/** User-visible review is metadata-only; media locators and captions never become canonical query output. */
+
 export const loadMediaItems = ({
   db,
   userId,

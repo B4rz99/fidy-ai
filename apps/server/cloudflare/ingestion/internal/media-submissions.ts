@@ -223,7 +223,7 @@ const refusal = (cause: unknown, current: number): Response => {
   }
   return failure("unavailable", HTTP_UNAVAILABLE);
 };
-/** Publication, independent consumption, accountability, visible review and capacity reservation commit together. No bytes or provider work are accepted on refusal. */
+
 const replayMedia = ({
   input,
   id,
@@ -252,7 +252,6 @@ const mediaDigest = ({
       )
   );
 
-/** Publication, independent consumption, accountability, visible review and capacity reservation commit together. No bytes or provider work are accepted on refusal. */
 export const admitMedia = (input: MediaAdmissionInput): Effect.Effect<Response> =>
   Effect.gen(function* () {
     const { event } = input;

@@ -220,7 +220,6 @@ export const StatusLookupCoordinates = Schema.Struct({
 
 export const whatsappOwnerUrl = "https://directory.invalid/whatsapp/owner";
 
-/** Private shared capacity. A slot generation is spent once; it conveys no User authority. */
 export const emailCapacityUrl = "https://directory.invalid/forwarded-email/capacity";
 export const mediaCapacityUrl = "https://directory.invalid/ingestion/media-capacity";
 export const retainedMediaLimit = 2_500;
@@ -245,7 +244,7 @@ export const EmailCapacityCommand = Schema.Union([
 
 const routeReservationTransportMs = 60_000;
 export const routeIssuedHeader = "fidy-route-issued-ms";
-/** Long-lived credentials have a separate short window for their original Directory reservation call. */
+
 export const currentRouteReservation = ({
   request,
   now,

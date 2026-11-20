@@ -97,7 +97,6 @@ export const localReviewPage = Effect.fn(function* (
   );
 });
 
-/** Staging and publication share a native commit. A tool retry may observe only that exact attached file and Turn. */
 export const observeDocumentPublication = Effect.fn(function* (
   input: SubmitForExtractionInput,
   { user, turn, current }: { user: UserId; turn: Option.Option<string>; current: number }

@@ -52,7 +52,6 @@ const HTTP_NOT_FOUND = 404;
 const HTTP_BAD_REQUEST = 400;
 const operation = "connections.connectInstitution";
 
-/** Decide and audit an initiation refusal under the caller's live authority. */
 export const connectionInputRefusal = ({
   work,
   code,
@@ -101,7 +100,6 @@ export const connectionInputRefusal = ({
         ),
 });
 
-/** Prepare a stable Connection and short-lived browser attempt inside the shared canonical unit. */
 export const prepareConnectInstitution = (
   work: CanonicalPreparationWork
 ): Effect.Effect<CanonicalMutationPreparation> =>
@@ -150,7 +148,6 @@ export const prepareConnectInstitution = (
     return prepared;
   }).pipe(Effect.orElseSucceed(() => ({ _tag: "Unavailable" }) as const));
 
-/** Read caller-owned lifecycle facts with credential use and Audit in the same D1 snapshot. */
 export const browseConnections = ({
   db,
   subject,
@@ -285,7 +282,6 @@ const queryAudit = ({
         afterOwnerWrite: false,
       });
 
-/** Admit preparation only to the original stable User's coordinator, with live guards at commit. */
 export const executeConnectionBrowserAdmission = (
   input: Readonly<{ db: D1Database; candidate: unknown; userId: string; signal: AbortSignal }>
 ): Effect.Effect<Response> => {
@@ -315,7 +311,6 @@ export const executeConnectionCallbackAdmission = (
   );
 };
 
-/** Until #313 publishes completed suppression, an enabled institution's Connection blocks whole-User erasure. */
 export const requiresErasureSuppression = (
   input: Readonly<{ db: D1Database; userId: string }>
 ): Effect.Effect<boolean, ConnectionRetentionUnavailable> =>

@@ -104,7 +104,7 @@ const prepareInvitation = Effect.fn(function* (event: typeof WhatsAppBootstrapTe
     return Response.json({ invitation: id });
   }).pipe(withStoreCapacity("growth"));
 });
-/** Keep the original message fenced until the entire signed replay window expires. */
+
 export const rejectInvitationSend = Effect.fn(function* (request: Request) {
   const { id, message } = yield* Schema.decodeUnknownEffect(
     Schema.Struct({ id: Schema.String, message: Schema.String })

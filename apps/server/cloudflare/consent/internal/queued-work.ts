@@ -2,7 +2,6 @@ import { protectConsentStatement } from "../../../src/shell/consent/operations";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import type { QueuedConsentAction } from "../contract";
 
-/** Recheck the exact native item and stable User together with its historical Consent. */
 export const protectQueuedStatement = (input: QueuedConsentAction): OwnedStatement =>
   protectConsentStatement({
     subject: { _tag: "User", userId: input.userId },

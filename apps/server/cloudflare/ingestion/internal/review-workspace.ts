@@ -111,7 +111,6 @@ const prepareWorkspace = ({
   };
 };
 
-/** Compose the bounded inbox and interpretation with exact browser admission. */
 export const prepareBoundReviewWorkspace =
   (request: Request): CanonicalBrowserRead =>
   ({ db, authority, reservation, current }) => {
@@ -134,7 +133,6 @@ export const prepareBoundReviewWorkspace =
     };
   };
 
-/** Original material never enters metadata queries or immutable agent transcripts. */
 export const browseReviewWorkspace = ({
   db,
   subject,

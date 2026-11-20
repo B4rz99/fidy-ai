@@ -35,7 +35,6 @@ export const writeReviewState = ({
       ...guard.params
     );
 
-/** Conversation settlement discards resolved originals; reversible workspace decisions retain their original deadline. */
 export const settleStatementReview = ({
   db,
   userId,

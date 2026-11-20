@@ -170,11 +170,6 @@ const fetch = (request: Request, bindings: DocumentExtractionBindings): Promise<
   );
 };
 
-/**
- * Accepts `POST /extract` with a signature-valid PDF or bounded-dimension PNG. It sends one bounded
- * document to Workers AI, accepts at most 1 MiB of Markdown, and returns only byte counts or a
- * closed failure reason. Request cancellation races both streamed collection and conversion.
- */
 export const documentExtractionWorker = { fetch };
 
 export default documentExtractionWorker;

@@ -9,3 +9,11 @@ A deferral expires at its exclusive UTC instant. An advisory acceptance must nam
 scanner lockfile path, and the scanner exclusion must match. This prevents one installation's
 review from granting an exception to a different lockfile. Missing or invalid scanner inputs fail
 the check before evaluating policy.
+
+GitHub Actions use immutable commit SHAs. The corresponding release can be resolved from the
+upstream repository without making branch or tag resolution part of execution. Retained Gitleaks
+exceptions identify specific historical findings in a public upstream Effect import and copies of
+a recorded OpenAPI artifact digest. Keep exceptions scoped to the exact rule, commit, path and line.
+
+Alchemy hashes the site from the app directory. That package retains a local ignore file for
+generated Astro output and test artifacts because root-relative ignore rules do not rebase there.

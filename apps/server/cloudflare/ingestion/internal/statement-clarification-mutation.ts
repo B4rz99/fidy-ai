@@ -138,7 +138,6 @@ const accountability = (
   ];
 };
 
-/** Refusals are attributed without revealing whether a foreign or stale review exists. */
 export const heldClarificationRefusal = ({
   work,
   operation,
@@ -167,7 +166,6 @@ export const heldClarificationRefusal = ({
     ),
 });
 
-/** Resolve the credential owner's exact live authority before sharing the owner decision. */
 export const clarificationRefusal = ({
   work,
   operation,
@@ -419,7 +417,6 @@ const discloseCaptureCategory = (
     }),
   });
 
-/** One atomic row decision, independent of the caller's credential kind. The caller commits its unit. */
 const prepareReviewDecision = ({
   operation,
   work,
@@ -481,7 +478,6 @@ const prepareReviewDecision = ({
     } satisfies CanonicalMutationPreparation;
   }).pipe(Effect.orElseSucceed(failedPreparation));
 
-/** Held conversation authority preserves its existing confirmation and settlement semantics. */
 export const prepareHeldStatementReviewDecision = (
   input: Readonly<{
     operation: ReviewOperation;
@@ -502,7 +498,6 @@ export const prepareStatementReviewDecision = ({
     oauth: needsOAuthReview({ subject: work.subject, operation }),
   });
 
-/** Permanent cancellation preserves captures and erases all remaining clarification evidence. */
 const eligibleAbandonment = (
   work: StatementDecisionWork,
   id: string,

@@ -3,7 +3,6 @@ import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Effect } from "effect";
 import type { UserId } from "../../../src/core/identity/contract";
 
-/** The verified recipient can continue only documents admitted into this still-live Hosted Agent Session. */
 export const hostedStatementSelection = ({
   turn,
   user,

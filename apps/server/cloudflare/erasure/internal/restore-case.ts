@@ -122,8 +122,6 @@ const importCase = (input: CaseImport): Effect.Effect<void, ErasureUnavailable> 
             input.record.requestedAtMs,
             admission.generation
           ),
-        // The independently read, same-User sealed marker proves these restored
-        // attempts had settled before deletion. An unsealed case never clears them.
         db
           .prepare(`DELETE FROM erasure_writers WHERE user_id=? AND ?=1
           AND EXISTS(SELECT 1 FROM erasure_requests WHERE id=? AND user_id=?

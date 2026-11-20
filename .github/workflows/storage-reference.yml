@@ -1,153 +1,67 @@
-name: Compare the storage reference
+name: Map the installed browser chunks for startup
 
-on:
-  pull_request:
-    paths:
-      - ".github/workflows/storage-reference.yml"
-      - "scripts/infra-performance/reference/**"
-      - "scripts/dev-browser-api.ts"
-  workflow_dispatch:
-    inputs:
-      dataset:
-        description: FinancialRecord fixture
-        type: choice
-        options: [production, small, extreme]
-        default: production
-      network:
-        description: Browser network
-        type: choice
-        options: [normal, poor]
-        default: normal
-      workerd_profile:
-        description: User count and review population for the workerd load
-        type: choice
-        options: [original, native-original, mixed-review, single, cpu]
-        default: original
-      workerd_load:
-        description: Run 20 authenticated financial Users and 30 paired Corrections in workerd
-        type: boolean
-        default: false
-      transaction_read_only:
-        description: Measure mounted Transactions startup and fresh history only
-        type: boolean
-        default: false
-      full_recurring:
-        description: Measure only the four compact Recurring interactions and full revision HTTP on extreme
-        type: boolean
-        default: false
-      setup_idle_ms:
-        description: Idle time between authenticated fixture preparation and the first browser journey
-        type: choice
-        options: ["0", "2000"]
-        default: "0"
+on: workflow_dispatch
 
 permissions:
   contents: read
 
-concurrency:
-  group: storage-reference-${{ github.ref }}-${{ inputs.workerd_profile }}-${{ inputs.dataset || 'production' }}-${{ inputs.network || 'normal' }}-${{ inputs.setup_idle_ms || '0' }}-${{ inputs.transaction_read_only || false }}-${{ inputs.full_recurring || false }}
-  cancel-in-progress: false
-
 jobs:
-  compare:
-    if: ${{ !inputs.workerd_load }}
+  graph:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
-    env:
-      DATASET: ${{ inputs.dataset || 'production' }}
-      NETWORK: ${{ inputs.network || 'normal' }}
-      RECURRING_FLAG: ${{ inputs.full_recurring && '--full-recurring' || '' }}
-      READ_ONLY_FLAG: ${{ inputs.transaction_read_only && '--transaction-read-only' || '' }}
-      SETUP_IDLE_MS: ${{ inputs.setup_idle_ms || '0' }}
+    timeout-minutes: 6
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          ref: fb53d9e755c14393048dc945fc0b7f117730d872
-          path: baseline-d1
-          persist-credentials: false
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          ref: 972ecaa22bb58ab472de2e9458c76290c72aa09d
-          path: baseline-fixtures
-          persist-credentials: false
-          sparse-checkout: apps/server/cloudflare
       - uses: ./.github/actions/bun-runtime
-      - name: Prepare both frozen checkouts and the common browser
+      - name: Build the proposed admission split
         run: |
-          export GIT_ALTERNATE_OBJECT_DIRECTORIES="$GITHUB_WORKSPACE/baseline-fixtures/.git/objects"
-          echo "GIT_ALTERNATE_OBJECT_DIRECTORIES=$GIT_ALTERNATE_OBJECT_DIRECTORIES" >> "$GITHUB_ENV"
-          git -C baseline-d1 restore --source=972ecaa22bb58ab472de2e9458c76290c72aa09d --worktree -- \
-            apps/server/cloudflare/browser-assessment.test-fixture.ts \
-            apps/server/cloudflare/browser-acceptance-preview.ts \
-            apps/server/cloudflare/browser-acceptance-seed.ts
           bash scripts/install-workspace.sh --ignore-scripts
-          (cd baseline-d1 && bash scripts/install-workspace.sh --ignore-scripts)
-          echo "ASSESSMENT_CHROMIUM=$(command -v google-chrome)" >> "$GITHUB_ENV"
-          google-chrome --version
-      - name: Verify one equivalent pair before collecting timings
+          cd apps/web
+          VITE_API_ORIGIN=https://127.0.0.1:4174 bun ../../node_modules/vite/bin/vite.js build --mode production --outDir playwright-dist --sourcemap hidden --manifest
+      - name: Record chunk membership without source content
         run: |
-          bun scripts/infra-performance/reference/native-review-pressure.test.mjs
-          bun apps/web/scripts/check-transaction-panel.ts
-          bun scripts/infra-performance/reference/review-failure.test.mjs
-          bun scripts/infra-performance/reference/recurring-response.test.mjs
-          python3 -m unittest discover -s scripts/infra-performance/reference
-          python3 scripts/infra-performance/reference/run.py --d1 baseline-d1 --do . \
-            --dataset "$DATASET" --network "$NETWORK" --setup-idle-ms "$SETUP_IDLE_MS" ${READ_ONLY_FLAG:+"$READ_ONLY_FLAG"} ${RECURRING_FLAG:+"$RECURRING_FLAG"} --pairs 1 --origin "GitHub-hosted Ubuntu loopback"
-      - name: Measure 30 alternating pairs
-        run: |
-          python3 scripts/infra-performance/reference/run.py --d1 baseline-d1 --do . \
-            --dataset "$DATASET" --network "$NETWORK" --setup-idle-ms "$SETUP_IDLE_MS" ${READ_ONLY_FLAG:+"$READ_ONLY_FLAG"} ${RECURRING_FLAG:+"$RECURRING_FLAG"} --pairs 30 --origin "GitHub-hosted Ubuntu loopback"
-      - name: Preserve reference evidence
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: storage-reference-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            apps/web/test-results/reference/*/plan.json
-            apps/web/test-results/reference/*/attempts.jsonl
-            apps/web/test-results/reference/*/*/workspace-events.jsonl
-            apps/web/test-results/reference/*/report.json
-          if-no-files-found: warn
+          cd apps/web/playwright-dist
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
 
-  workerd-load:
-    if: inputs.workerd_load
-    runs-on: ubuntu-latest
-    timeout-minutes: 150
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          ref: fb53d9e755c14393048dc945fc0b7f117730d872
-          path: baseline-d1
-          persist-credentials: false
-      - uses: ./.github/actions/bun-runtime
-      - name: Prepare both immutable application checkouts
+          chunks = {}
+          for source_map in sorted(Path("assets").glob("*.js.map")):
+              code = source_map.with_suffix("")
+              sources = json.loads(source_map.read_text())["sources"]
+              chunks[code.as_posix()] = {"bytes": code.stat().st_size, "sources": sources}
+          assert chunks, "Expected compiled browser assets"
+          Path("chunk-sources.json").write_text(json.dumps(chunks, indent=2) + "\n")
+          PY
+          cp .vite/manifest.json chunk-manifest.json
+      - name: Verify the admission dependency closure
         run: |
-          bash scripts/install-workspace.sh --ignore-scripts
-          (cd baseline-d1 && bash scripts/install-workspace.sh --ignore-scripts)
-          bun scripts/infra-performance/load/trace.test.mjs
-          python3 -m unittest discover -s scripts/infra-performance/load
-      - name: Measure complete workerd requests and confirmed Corrections
-        env:
-          DATASET: ${{ inputs.dataset }}
-          PROFILE: ${{ inputs.workerd_profile }}
-          FIDY_WORKERD_CPU: ${{ inputs.workerd_profile == 'cpu' && '1' || '0' }}
-        run: |
-          mkdir -p apps/server/test-results/load
-          touch apps/server/test-results/load/attempts.jsonl
-          bun scripts/infra-performance/load/measure.test-fixture.mjs baseline-d1 apps/server/test-results/load "$DATASET" "$PROFILE"
-      - name: Evaluate every planned boundary
-        if: always() && inputs.workerd_profile != 'cpu'
-        run: python3 scripts/infra-performance/load/report.py apps/server/test-results/load
-      - name: Preserve fixture counts, attempts, accountability and comparison
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+          cd apps/web/playwright-dist
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          manifest = json.loads(Path("chunk-manifest.json").read_text())
+          chunks = json.loads(Path("chunk-sources.json").read_text())
+          pending = ["src/transport/initial-session.ts"]
+          closure = set()
+          while pending:
+              entry = pending.pop()
+              if entry in closure:
+                  continue
+              closure.add(entry)
+              pending.extend(manifest[entry].get("imports", []))
+          files = sorted(manifest[entry]["file"] for entry in closure)
+          sources = [source for file in files for source in chunks[file]["sources"]]
+          assert not any("shared-presentation" in file for file in files), files
+          assert not any(source.endswith("/src/shell/api.ts") for source in sources), files
+          print(json.dumps({"files": files, "bytes": sum(chunks[file]["bytes"] for file in files)}))
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: workerd-load-${{ github.run_id }}-${{ github.run_attempt }}
-          path: apps/server/test-results/load
+          name: startup-module-graph
+          path: |
+            apps/web/playwright-dist/chunk-manifest.json
+            apps/web/playwright-dist/chunk-sources.json
+            apps/web/playwright-dist/index.html

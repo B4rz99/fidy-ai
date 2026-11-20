@@ -3,10 +3,28 @@ import unittest
 from unittest.mock import patch
 
 from protected_cohort import protected_runner
-from native_budget import Usage, R2_OPERATIONS, MAX_R2_OPERATIONS, PILOT_WRITES, check, r2_usage, r2_room, iso
+from native_budget import Usage, R2_OPERATIONS, MAX_R2_OPERATIONS, COHORT_WRITES, check, r2_usage, r2_room, iso
 
 
 class NativeBudgetTests(unittest.TestCase):
+    def test_small_fixture_reserves_its_foreground_and_cleanup_inside_the_daily_limit(self):
+        now = 1795107000
+        def sample(reads, writes):
+            return {"sqlite": asdict(Usage(now, now, reads, writes)), "r2": {
+                "requests": 10, "todayRequests": 10, "upperBoundBytes": 100}}
+        # 5M daily minus 2.5M reserved for other work and 750k for this fixture.
+        # 100k daily minus 10k for other work and 30k for this fixture.
+        base = sample(1_750_000, 60_000)
+        check(base, base, "begin", now)
+        for over in (sample(1_750_001, 60_000), sample(1_750_000, 60_001)):
+            with self.assertRaises(ValueError):
+                check(over, over, "begin", now)
+        check(base, sample(2_250_000, 80_000), "foreground", now)
+        for over in (sample(2_250_001, 80_000), sample(2_250_000, 80_001)):
+            with self.assertRaises(ValueError):
+                check(base, over, "foreground", now)
+        check(base, sample(2_500_000, 90_000), "finish", now)
+
     def test_no_protected_workflow_or_no_fresh_account_rows_refuses(self):
         with patch.dict("os.environ", clear=True), self.assertRaisesRegex(ValueError, "protected"):
             protected_runner()
@@ -14,7 +32,7 @@ class NativeBudgetTests(unittest.TestCase):
         base = {"sqlite": asdict(Usage(now, now, 100, 100)), "r2":{"todayRequests":100,"requests":200,"upperBoundBytes":100}}
         check(base, base, "begin", now)
         for current in [Usage(now, now-601, 100, 100), Usage(now, now, 100, 95),
-                        Usage(now, now, 100, PILOT_WRITES)]:
+                        Usage(now, now, 100, COHORT_WRITES)]:
             with self.subTest(current=current), self.assertRaises(ValueError):
                 check(base, {**base, "sqlite": asdict(current)}, "foreground", now)
 

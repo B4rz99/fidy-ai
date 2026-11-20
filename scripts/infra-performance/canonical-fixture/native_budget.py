@@ -4,9 +4,14 @@ from datetime import datetime
 import time
 
 # This path is set by protected_cohort before importing the existing native fleet meter.
-from pilot import (DAY, DAILY_READS, DAILY_WRITES, MAX_AGE, PILOT_READS, PILOT_WRITES, RESERVE_READS,
+from pilot import (DAY, DAILY_READS, DAILY_WRITES, MAX_AGE, RESERVE_READS,
                    RESERVE_WRITES, CLEANUP_READS, CLEANUP_WRITES, Usage, admit, check_delta, iso, usage)
 
+# The eight-original fixture, 30 history reads and physical erasure measured 173,511
+# cursor reads, 5,919 cursor writes and 31 alarm writes on workerd. Allow 500k/20k
+# for foreground work and account-meter lag, plus the independent recovery reserve.
+COHORT_READS = 500_000 + CLEANUP_READS
+COHORT_WRITES = 20_000 + CLEANUP_WRITES
 # Reserve for both controller lifetimes, census delay, R2 custody, leases, and final settlement.
 R2_OPERATIONS = 4096
 R2_BYTES = 1_048_576
@@ -60,7 +65,7 @@ def check(initial, current, phase, now):
     rows = Usage(**current["sqlite"])
     if phase == "begin":
         r2_room(current["r2"], R2_OPERATIONS, R2_BYTES)
-        admit(rows, now)
+        admit(rows, now, reads=COHORT_READS, writes=COHORT_WRITES)
         return
     baseline = Usage(**initial["sqlite"])
     if baseline.sampled // DAY != now // DAY:
@@ -74,8 +79,8 @@ def check(initial, current, phase, now):
     r2_room(current["r2"], R2_OPERATIONS - r2_delta, R2_BYTES - growth)
     if not 0 <= r2_delta <= (R2_OPERATIONS if clean else R2_OPERATIONS // 2):
         raise ValueError("Additional account R2 requests exceeded the native reserve or regressed")
-    if (delta["reads"] + (0 if clean else CLEANUP_READS) > PILOT_READS
-            or delta["writes"] + (0 if clean else CLEANUP_WRITES) > PILOT_WRITES
+    if (delta["reads"] + (0 if clean else CLEANUP_READS) > COHORT_READS
+            or delta["writes"] + (0 if clean else CLEANUP_WRITES) > COHORT_WRITES
             or rows.reads + RESERVE_READS + (0 if clean else CLEANUP_READS) > DAILY_READS
             or rows.writes + RESERVE_WRITES + (0 if clean else CLEANUP_WRITES) > DAILY_WRITES):
         raise ValueError("Remaining native allowance reserved for cleanup")

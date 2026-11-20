@@ -6,7 +6,7 @@ import {
   SharedStoreMarkers,
   compatibilityQuery,
 } from "../../apps/server/cloudflare/storage-bootstrap/contract";
-import { admittedErasureLogins } from "./native-acceptance";
+import { retainedFinancialControls } from "./native-acceptance";
 import { FallbackStage } from "./native-fallback-recovery";
 import type { ReleaseSnapshot } from "./release-controller";
 import { smokeHeaders } from "./smoke-exchange";
@@ -64,10 +64,10 @@ export const observeDormantPair = Effect.fn(function* (
 
 export const controlsDigest = Effect.fn(function* (
   pair: Coordinates,
-  send: Parameters<typeof admittedErasureLogins>[0]["send"]
+  send: Parameters<typeof retainedFinancialControls>[0]["send"]
 ) {
   const route = fallbackHeaders(pair);
-  const ids = yield* admittedErasureLogins({
+  const controls = yield* retainedFinancialControls({
     revision: pair.revision,
     origins: installedOrigins.acceptance,
     proof: Redacted.make(pair.proof),
@@ -75,11 +75,11 @@ export const controlsDigest = Effect.fn(function* (
       for (const [name, value] of Object.entries(route)) request.headers.set(name, value);
       return send(request);
     },
-  }).logins();
-  if (ids.length !== 2 || new Set(ids).size !== 2) {
+  });
+  if (controls.length !== 2 || new Set(controls.map((control) => control.id)).size !== 2) {
     return yield* Effect.fail(Error("Original controls are not distinct"));
   }
-  return new Bun.CryptoHasher("sha256").update(ids.join("\n")).digest("hex");
+  return new Bun.CryptoHasher("sha256").update(JSON.stringify(controls)).digest("hex");
 });
 
 /** Source artifact 14571027939 identifies the exact proven installation before its one-way repair. */

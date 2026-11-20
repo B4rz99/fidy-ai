@@ -279,7 +279,7 @@ from the same commit. Keep ordinary admission closed and the hosts set to accept
    repair starts only from the recorded original deployment. The dormant UserStore runs without
    access to the receipt key. Ordinary financial reads and current-release admission continue
    through the real application. The runner checks the original private provider's exact deployment
-   and version, the five SQLite namespace IDs, the two original financial Users and the candidate
+   and version, the five SQLite namespace IDs, an ordered digest of each original User ID and complete financial history, and the candidate
    and mixed-pair smoke probes. It uploads `native-fixture-fallback-<run-id>` before moving traffic.
    Retain the artifact ID and independently pin its GitHub archive SHA-256.
 3. If forward promotion is interrupted after that upload, select `recover-fixture-fallback`

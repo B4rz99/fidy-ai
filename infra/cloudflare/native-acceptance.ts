@@ -615,6 +615,30 @@ export const performanceCohortBrowser = (
     call,
   };
 };
+/** Compare each original User and its complete small financial history in provider-subject order. */
+export const retainedFinancialControls = Effect.fn(function* (input: Omit<Inputs, "erasure">) {
+  const transport = { ...input, erasure: Option.none<ErasureObservation>() };
+  const { call } = runner(transport);
+  return yield* Effect.forEach(
+    ["smoke-1", "smoke-2"] as const,
+    Effect.fn(function* (member) {
+      const user = yield* boot(transport, member, "login");
+      const id = yield* identity(call, user);
+      const reply = yield* validStatus(
+        yield* call("/transactions?limit=25", { headers: user.headers }),
+        ok
+      );
+      const body = yield* Effect.tryPromise(() => reply.text());
+      yield* Schema.decodeUnknownEffect(
+        Schema.fromJsonString(
+          Schema.Struct({ data: Schema.Array(Schema.Unknown), next: Schema.Tuple([]) })
+        )
+      )(body);
+      return { id, historyDigest: new Bun.CryptoHasher("sha256").update(body).digest("hex") };
+    })
+  );
+});
+
 /** The continuation authenticates the installed revision's existing subjects with login intent only. */
 export const admittedErasureLogins = (
   input: Omit<Inputs, "erasure">

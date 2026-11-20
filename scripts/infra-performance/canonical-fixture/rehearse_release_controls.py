@@ -9,7 +9,7 @@ import tempfile
 import time
 
 from cohort_runner import BrowserPort, commands
-from fixture import digest, prepare, write
+from fixture import digest, facts, prepare, write
 from hosted import RECEIPT_PATH, ROOT, verify_native_fixture
 
 BASELINE = "8dd3b0d47d655868c1ab4f16b6145a06d99bd721"
@@ -85,10 +85,17 @@ def main():
         os.environ["FIDY_REHEARSAL_BASELINE"] = "true"
         with commands(baseline, "cohort-runtime.test-fixture.ts") as runtime:
             sessions = runtime("mount-original-sessions")
+            for index, headers in enumerate(sessions):
+                call = {"calls":[{"callId":f"99000000-0000-4000-8000-{index:012d}",
+                        "operation":"transactions.createTransaction","input":{"payload":facts(index+2)}}]}
+                capture = runtime("canonical", method="POST", path="/operations/atomic-batch", body=call,
+                                  cookie=headers["cookie"],binding=headers["fidy-session-binding"])
+                if capture["status"] // 100 != 2:
+                    raise ValueError("Original release could not capture the preexisting financial data")
             original_ids = runtime("survivors")
             original = observations(runtime, sessions)
             inventory = runtime("census")
-            if len(sessions) != 2 or any(row["status"] != 200 for row in original):
+            if len(sessions) != 2 or len({row["bodyDigest"] for row in original}) != 2 or any(row["status"] != 200 for row in original):
                 raise ValueError("Original deployed-source workerd controls unavailable")
         os.environ["FIDY_REHEARSAL_BASELINE"] = "false"
         os.environ["FIDY_NATIVE_FIXTURE_PROVIDER_REVISION"] = baseline

@@ -14,16 +14,11 @@ import type { ProcessingConsentStatus } from "@/transport/client";
 import { Button } from "@/ui/components/button";
 import { AccessRefused, SignedInContent } from "@/features/signed-in/feature";
 import { HostedAgentFeature } from "@/features/agent/feature";
-import {
-  PrivacyTransactionFeature,
-  TransactionListFeature,
-  type TransactionSearch,
-} from "@/features/transactions/feature";
+import { PrivacyTransactionFeature, type TransactionSearch } from "@/features/transactions/feature";
 import { preparationActive, prepareQuery } from "@/transport/query-preparation";
 import type { WebRouterContext } from "./router-context";
 
-// Fetch presentation with this route's code while its unchanged query owners check live access.
-TransactionListFeature.preload().catch(() => undefined);
+import { TransactionListFeature } from "@/features/transactions/list-feature";
 
 const currentConsent = <E,>(
   state: CanonicalQueryState<ProcessingConsentStatus, E>

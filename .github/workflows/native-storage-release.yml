@@ -43,6 +43,7 @@ on:
             plan-fixture-repair,
             plan-pairing-repair,
             stage-pairing-repair,
+            resume-pairing-stage,
             resume-fixture-upload,
             plan-fixture-fallback,
             prepare-fixture-fallback,
@@ -65,14 +66,14 @@ jobs:
   release:
     if: ${{ github.ref == 'refs/heads/trunk' && inputs.operation != 'publish-site' }}
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ (inputs.operation == 'fleet-pilot' || inputs.operation == 'ten-hosted' || inputs.operation == 'continue-ten-cleanup') && 110 || inputs.operation == 'continue-fleet-cleanup' && 55 || (inputs.operation == 'first-install' || inputs.operation == 'verify-erasure' || inputs.operation == 'continue-erasure' || inputs.operation == 'resume-fixture-upload' || (inputs.operation == 'prepare-fixture-fallback' || inputs.operation == 'stage-pairing-repair') || inputs.operation == 'reseal-fixture-fallback' || inputs.operation == 'diagnose-fixture-pairing' || inputs.operation == 'recover-fixture-fallback') && 90 || 30 }}
+    timeout-minutes: ${{ (inputs.operation == 'fleet-pilot' || inputs.operation == 'ten-hosted' || inputs.operation == 'continue-ten-cleanup') && 110 || inputs.operation == 'continue-fleet-cleanup' && 55 || (inputs.operation == 'first-install' || inputs.operation == 'verify-erasure' || inputs.operation == 'continue-erasure' || inputs.operation == 'resume-fixture-upload' || (inputs.operation == 'prepare-fixture-fallback' || (inputs.operation == 'stage-pairing-repair' || inputs.operation == 'resume-pairing-stage')) || inputs.operation == 'reseal-fixture-fallback' || inputs.operation == 'diagnose-fixture-pairing' || inputs.operation == 'recover-fixture-fallback') && 90 || 30 }}
     environment: production
     permissions:
       actions: read
       contents: read
     env:
       FIXTURE_RELEASE_OPERATION: ${{ inputs.operation }}
-      NATIVE_FIXTURE_BUILD: ${{ (inputs.operation == 'plan-fixture-fallback' || (inputs.operation == 'plan-fixture-repair' || inputs.operation == 'plan-pairing-repair' || inputs.operation == 'stage-pairing-repair') || inputs.operation == 'resume-fixture-upload' || inputs.operation == 'prepare-fixture-fallback' || inputs.operation == 'reseal-fixture-fallback' || inputs.operation == 'diagnose-fixture-pairing' || inputs.operation == 'recover-fixture-fallback') && 'fallback' || 'ordinary' }}
+      NATIVE_FIXTURE_BUILD: ${{ (inputs.operation == 'plan-fixture-fallback' || (inputs.operation == 'plan-fixture-repair' || inputs.operation == 'plan-pairing-repair' || (inputs.operation == 'stage-pairing-repair' || inputs.operation == 'resume-pairing-stage')) || inputs.operation == 'resume-fixture-upload' || inputs.operation == 'prepare-fixture-fallback' || inputs.operation == 'reseal-fixture-fallback' || inputs.operation == 'diagnose-fixture-pairing' || inputs.operation == 'recover-fixture-fallback') && 'fallback' || 'ordinary' }}
       NATIVE_FIXTURE_SIGNER_SHA256: ${{ inputs.transaction_fixture_signer && vars.NATIVE_FIXTURE_SIGNER_SHA256 || '' }}
       NATIVE_STORAGE_HOSTS: ${{ vars.NATIVE_STORAGE_HOSTS || 'acceptance' }}
       CLOUDFLARE_ACCESS_ISSUER: ${{ secrets.CLOUDFLARE_ACCESS_ISSUER }}
@@ -139,6 +140,11 @@ jobs:
           else
             python3 scripts/infra-performance/canonical-fixture/unsealed_stage.py source
           fi
+      - name: Authenticate the interrupted pairing upload and its original controls
+        if: inputs.operation == 'resume-pairing-stage'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/infra-performance/canonical-fixture/pairing_stage.py resume-upload
       - uses: ./.github/actions/bun-runtime
       - run: bash scripts/install-workspace.sh --ignore-scripts
       - uses: ./.github/actions/configure-alchemy-cloudflare-profile
@@ -156,7 +162,7 @@ jobs:
         working-directory: infra/cloudflare
         run: bun verify-edge-policy.ts
       - name: Build the expected browser artifact for independent verification
-        if: inputs.operation == 'plan-fixture-repair' || inputs.operation == 'verify' || inputs.operation == 'verify-erasure' || inputs.operation == 'continue-erasure' || inputs.operation == 'fleet-pilot' || inputs.operation == 'continue-fleet-cleanup' || inputs.operation == 'ten-hosted' || inputs.operation == 'continue-ten-cleanup' || inputs.operation == 'stage-hosts' || inputs.operation == 'recover-fixture-fallback' || inputs.operation == 'resume-fixture-upload' || (inputs.transaction_fixture_signer && inputs.operation == 'rollout') || inputs.operation == 'plan-pairing-repair' || inputs.operation == 'stage-pairing-repair'
+        if: inputs.operation == 'plan-fixture-repair' || inputs.operation == 'verify' || inputs.operation == 'verify-erasure' || inputs.operation == 'continue-erasure' || inputs.operation == 'fleet-pilot' || inputs.operation == 'continue-fleet-cleanup' || inputs.operation == 'ten-hosted' || inputs.operation == 'continue-ten-cleanup' || inputs.operation == 'stage-hosts' || inputs.operation == 'recover-fixture-fallback' || inputs.operation == 'resume-fixture-upload' || (inputs.transaction_fixture_signer && inputs.operation == 'rollout') || inputs.operation == 'plan-pairing-repair' || (inputs.operation == 'stage-pairing-repair' || inputs.operation == 'resume-pairing-stage')
         env:
           RELEASE_GIT_SHA: ${{ env.FIXTURE_WEB_REVISION || inputs.installed_revision || github.sha }}
         working-directory: apps/web
@@ -218,12 +224,16 @@ jobs:
         if: inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback' || inputs.operation == 'resume-fixture-upload' || inputs.operation == 'prepare-fixture-fallback' || inputs.operation == 'stage-pairing-repair'
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts stage
+      - name: Resume the exact uploaded Workers at zero traffic
+        if: inputs.operation == 'resume-pairing-stage'
+        working-directory: infra/cloudflare
+        run: bun native-storage-release.ts resume-pairing-stage
       - name: Persist and read back private observability on the installed application Workers
-        if: inputs.operation == 'first-install' || inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback' || inputs.operation == 'resume-fixture-upload' || inputs.operation == 'prepare-fixture-fallback' || inputs.operation == 'stage-pairing-repair'
+        if: inputs.operation == 'first-install' || inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback' || inputs.operation == 'resume-fixture-upload' || inputs.operation == 'prepare-fixture-fallback' || (inputs.operation == 'stage-pairing-repair' || inputs.operation == 'resume-pairing-stage')
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts prepare-diagnostics
       - name: Qualify the closed recovery artifacts and their retained controls
-        if: inputs.operation == 'resume-fixture-upload' || inputs.operation == 'prepare-fixture-fallback' || inputs.operation == 'stage-pairing-repair'
+        if: inputs.operation == 'resume-fixture-upload' || inputs.operation == 'prepare-fixture-fallback' || (inputs.operation == 'stage-pairing-repair' || inputs.operation == 'resume-pairing-stage')
         env:
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
         working-directory: infra/cloudflare
@@ -241,7 +251,7 @@ jobs:
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts diagnose-pairing
       - name: Seal dormant fallback stage before promotion
-        if: inputs.operation == 'reseal-fixture-fallback' || inputs.operation == 'resume-fixture-upload' || inputs.operation == 'prepare-fixture-fallback' || inputs.operation == 'stage-pairing-repair'
+        if: inputs.operation == 'reseal-fixture-fallback' || inputs.operation == 'resume-fixture-upload' || inputs.operation == 'prepare-fixture-fallback' || (inputs.operation == 'stage-pairing-repair' || inputs.operation == 'resume-pairing-stage')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: native-fixture-fallback-${{ github.run_id }}
@@ -277,7 +287,7 @@ jobs:
           bun native-storage-release.ts attach-hosts
       - name: Verify the installed application and retained schema markers
         id: verify
-        if: inputs.operation != 'plan-fixture-fallback' && inputs.operation != 'plan-first-install' && inputs.operation != 'first-install' && inputs.operation != 'verify-erasure' && inputs.operation != 'continue-erasure' && inputs.operation != 'fleet-pilot' && inputs.operation != 'continue-fleet-cleanup' && inputs.operation != 'ten-hosted' && inputs.operation != 'continue-ten-cleanup' && inputs.operation != 'plan-fixture-repair' && inputs.operation != 'reseal-fixture-fallback' && inputs.operation != 'diagnose-fixture-pairing' && inputs.operation != 'plan-pairing-repair' && inputs.operation != 'stage-pairing-repair'
+        if: inputs.operation != 'plan-fixture-fallback' && inputs.operation != 'plan-first-install' && inputs.operation != 'first-install' && inputs.operation != 'verify-erasure' && inputs.operation != 'continue-erasure' && inputs.operation != 'fleet-pilot' && inputs.operation != 'continue-fleet-cleanup' && inputs.operation != 'ten-hosted' && inputs.operation != 'continue-ten-cleanup' && inputs.operation != 'plan-fixture-repair' && inputs.operation != 'reseal-fixture-fallback' && inputs.operation != 'diagnose-fixture-pairing' && inputs.operation != 'plan-pairing-repair' && inputs.operation != 'stage-pairing-repair' && inputs.operation != 'resume-pairing-stage'
         env:
           EXPECTED_INSTALLED_REVISION: ${{ inputs.installed_revision }}
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}

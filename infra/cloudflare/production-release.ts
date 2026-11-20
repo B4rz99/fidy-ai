@@ -1,3 +1,5 @@
+import uploadedPair from "./native-pairing-upload.json" with { type: "json" };
+import fixtureUpload from "./native-fixture-upload.json" with { type: "json" };
 import { archivedDormant } from "./native-fallback-recovery";
 import { CategoryTaxonomyRelease } from "../../apps/server/src/core/categories/contract";
 import { compatibleCategoryReleases } from "../../apps/server/src/core/categories/operations";
@@ -114,6 +116,10 @@ export type ProductionReleaseConfig = Readonly<{
   smokeAttestationFile: string;
 }>;
 type Config = ProductionReleaseConfig;
+const verifiedSource = (operation: string, sealed?: string): string =>
+  operation === "resume-pairing-stage"
+    ? uploadedPair.revision
+    : (sealed ?? archivedDormant.revision);
 const fixtureVerifierIdentity = Effect.sync(() => {
   const environment = process.env;
   if (environment.FIXTURE_STAGED_VERIFIER_SHA === undefined) {
@@ -132,6 +138,7 @@ const fixtureVerifierIdentity = Effect.sync(() => {
       NATIVE_STORAGE_ADMISSION: Schema.Literal("closed"),
       NATIVE_STORAGE_HOSTS: Schema.Literal("acceptance"),
       FIXTURE_RELEASE_OPERATION: Schema.Literals([
+        "resume-pairing-stage",
         "reseal-fixture-fallback",
         "diagnose-fixture-pairing",
         "recover-fixture-fallback",
@@ -144,7 +151,10 @@ const fixtureVerifierIdentity = Effect.sync(() => {
     Option.isNone(result) ||
     result.value.FIXTURE_STAGED_VERIFIER_SHA !== result.value.GITHUB_SHA ||
     result.value.RELEASE_GIT_SHA !==
-      (environment.FIXTURE_PAIRING_APPLICATION ?? archivedDormant.revision) ||
+      verifiedSource(
+        result.value.FIXTURE_RELEASE_OPERATION,
+        environment.FIXTURE_PAIRING_APPLICATION
+      ) ||
     (environment.FIXTURE_PAIRING_APPLICATION !== undefined &&
       !["recover-fixture-fallback", "rollout", "verify"].includes(
         result.value.FIXTURE_RELEASE_OPERATION
@@ -238,15 +248,38 @@ const boundedJson = Effect.fn(function* (
   }
   return yield* decodeJson(text);
 });
+export class WorkerVersionReadUnavailable extends Data.TaggedError("WorkerVersionReadUnavailable")<{
+  status: number;
+}> {}
+const notFound = 404,
+  requestTimeout = 408,
+  rateLimited = 429,
+  serverError = 500,
+  badGateway = 502,
+  unavailable = 503,
+  gatewayTimeout = 504;
+const transientVersionRead = new Set([
+  notFound,
+  requestTimeout,
+  rateLimited,
+  serverError,
+  badGateway,
+  unavailable,
+  gatewayTimeout,
+]);
 const providerJson = Effect.fn(
   function* (
     request: HttpClientRequest.HttpClientRequest,
-    reportDeploymentRejection: boolean = false
+    reportDeploymentRejection: boolean = false,
+    immutableVersion: boolean = false
   ) {
     const client = yield* HttpClient.HttpClient;
     const response = yield* HttpClient.withScope(client)
       .execute(request)
       .pipe(Effect.mapError(() => Error("Provider request failed; inspect traffic state")));
+    if (immutableVersion && request.method === "GET" && transientVersionRead.has(response.status)) {
+      return yield* new WorkerVersionReadUnavailable({ status: response.status });
+    }
     return yield* boundedJson(response, reportDeploymentRejection);
   },
   Effect.scoped,
@@ -661,7 +694,42 @@ export const decodeWorkerReceipts = (output: string): WorkerReceipts =>
 export const decodeCaptureWorkerReceipts = (output: string): WorkerReceipts =>
   decodeWorkerReceiptsWithMode(output, "capture");
 
-const workersFromState = Effect.fn(function* (mode: "capture" | "completed", stack: string) {
+/** Require the completed state entries from the interrupted upload, including the technical Smoke Worker. */
+export const decodePairingUploadReceipts = (output: string): WorkerReceipts => {
+  const receipts = decodeWorkerReceipts(output);
+  const logicalId = "ReleaseSmoke-" + fixtureUpload.revision;
+  const entries = Object.values(decodeStateMap(output)).filter((value) =>
+    Option.exists(
+      Schema.decodeUnknownOption(ResourceIdentity)(value),
+      (item) => item.logicalId === logicalId
+    )
+  );
+  const support = Schema.decodeUnknownOption(
+    Schema.Struct({
+      logicalId: Schema.Literal(logicalId),
+      status: StateEntry.fields.status,
+      attr: Schema.Struct({
+        workerName: Schema.Literal("fidy-native-smoke-" + fixtureUpload.revision),
+        versionId: Schema.optionalKey(Schema.Literal(uploadedPair.smoke.versionId)),
+      }),
+    })
+  )(entries[0]);
+  if (
+    entries.length !== 1 ||
+    Option.isNone(support) ||
+    !Option.contains(receipts.public.versionId, uploadedPair.publicVersionId) ||
+    !Option.contains(receipts.core.versionId, uploadedPair.coreVersionId)
+  ) {
+    throw Error("Alchemy completed Worker versions differ from the interrupted pairing upload");
+  }
+  return receipts;
+};
+
+const workersFromState = Effect.fn(function* (
+  mode: "capture" | "completed",
+  stack: string,
+  requirePairingUpload: boolean = false
+) {
   const rawState = yield* shell([
     "bun",
     "../../node_modules/alchemy/bin/alchemy.js",
@@ -676,8 +744,12 @@ const workersFromState = Effect.fn(function* (mode: "capture" | "completed", sta
     "error",
   ]);
   return yield* Effect.try({
-    try: () =>
-      mode === "capture" ? decodeCaptureWorkerReceipts(rawState) : decodeWorkerReceipts(rawState),
+    try: () => {
+      if (requirePairingUpload) return decodePairingUploadReceipts(rawState);
+      return mode === "capture"
+        ? decodeCaptureWorkerReceipts(rawState)
+        : decodeWorkerReceipts(rawState);
+    },
     catch: (cause) =>
       new ReleaseFailure({
         message:
@@ -971,7 +1043,9 @@ const readWorkerVersion = Effect.fn(function* (
   return yield* providerJson(
     HttpClientRequest.get(url, {
       headers: { authorization: `Bearer ${env.token}` },
-    })
+    }),
+    false,
+    true
   ).pipe(Effect.provideService(HttpClient.HttpClient, client));
 });
 const versionResources = Effect.fn(function* (

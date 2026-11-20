@@ -112,3 +112,50 @@ class PairingStage(TestCase):
             self.assertEqual((Path(temp)/"env").read_text().splitlines(), [
                 "RELEASE_GIT_SHA="+self.archive.source, "FIXTURE_PAIRING_APPLICATION="+self.archive.source,
                 "FIXTURE_STAGED_VERIFIER_SHA="+self.archive.verifier])
+
+    def test_only_the_archived_unstaged_upload_and_its_unchanged_controls_can_resume(self):
+        pin = pairing_stage.upload_pin()
+        snapshot = {**self.snapshot, "revision": pin["revision"]}
+        documents = {"native-release.json": snapshot, "native-release.json.controls": {"digest":self.stage_digest},
+                     "native-release.json.predecessor":self.prior, "native-release.json.source.controls":{"digest":self.stage_digest}}
+        original_steps = inventory(pairing_stage.INTERRUPTED_STEPS, "failure")
+        def get(path):
+            return json.dumps(original_steps)
+        def verify_archive(source, artifact_id, digest, *, prefix, conclusions, get):
+            self.assertEqual((source, artifact_id, digest, prefix, conclusions),
+                             (pin["revision"], pin["artifact"], pin["sha256"], "native-storage-release-", {"failure"}))
+            from test_unsealed_stage import archive
+            return pin["run"], archive(documents)
+        def restore():
+            with patch.object(pairing_stage, "protected_archive", verify_archive):
+                return pairing_stage.upload_documents(self.prior, {"digest":self.stage_digest}, get)
+        self.assertEqual(restore(), documents)
+        for key in ("native-release.json", "native-release.json.controls", "native-release.json.predecessor",
+                    "native-release.json.source.controls", "native-fallback-stage.json"):
+            with self.subTest(key=key), patch.dict(documents, {key:{}}), self.assertRaises(ValueError):
+                restore()
+        for step in original_steps["jobs"][0]["steps"]:
+            with self.subTest(step=step["name"]), patch.dict(step, conclusion="cancelled"), self.assertRaises(ValueError):
+                restore()
+
+    def test_resumed_seal_authenticates_its_verifier_and_original_upload_independently(self):
+        pin = pairing_stage.upload_pin()
+        self.archive.jobs = inventory(pairing_stage.RESUME_STEPS, "success")
+        self.stage.update(revision=pin["revision"], smoke=pin["smoke"])
+        self.snapshot["revision"] = pin["revision"]
+        for kind in ("publicVersionId", "coreVersionId"):
+            self.stage["release"][kind] = pin[kind]
+        def lineage(command, *args):
+            return args[0] if command == "merge-base" else self.git(command, *args)
+        def verify():
+            self.archive.seal()
+            with patch.object(pairing_stage, "upload_documents") as upload, \
+                    patch.object(pairing_stage, "staged_documents", return_value=(self.prior, {"digest":self.stage_digest})):
+                result = pairing_stage.sealed_pair(self.archive.verifier, "34", self.archive.digest, self.archive.get, lineage)
+                upload.assert_called_once_with(self.prior, {"digest":self.stage_digest}, self.archive.get)
+                return result
+        self.assertEqual(verify(), (self.stage,self.prior))
+        for obj, mutation in ((self.stage, {"revision":self.archive.source}), (self.stage, {"smoke":{}}),
+                              (self.stage["release"], {"coreVersionId":str(UUID(int=900))})):
+            with self.subTest(change=mutation), patch.dict(obj,mutation), self.assertRaises(ValueError):
+                verify()

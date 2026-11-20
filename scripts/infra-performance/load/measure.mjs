@@ -7,7 +7,7 @@ import { BunFileSystem } from "@effect/platform-bun";
 import { Effect } from "effect";
 import { makeBrowserRuntime, prepareBrowserUser } from "../../dev-browser-api";
 import { signedChat } from "../../../apps/server/cloudflare/signed-whatsapp.test-fixture";
-import { seed } from "../reference/native-seed";
+import { financialFixtureCounts, seed } from "../reference/native-seed";
 import { baseline, d1Platform, origin } from "./d1.mjs";
 
 import { inOrder, indices } from "./sequence.mjs";
@@ -179,7 +179,22 @@ const prepareFixture = async ({ native, d1, variants }, index) => {
       profile === "mixed-review" ? Math.floor(state.review / cohortSize) : state.review
     );
     record("fixtures", { variant, user, index, ...state, retainedReview: review.retained });
-    platform.subjects.push({ id: user, index, caller, owner });
+    platform.subjects.push({
+      id: user,
+      index,
+      caller,
+      owner,
+      expectedCounts: {
+        transactions: state.transactions,
+        currencies: state.currencies,
+        effectiveTransactions: state.effectiveTransactions,
+        links: state.links,
+        plans: state.plans,
+        revisions: state.revisions,
+        review: state.review,
+        retainedReview: review.retained,
+      },
+    });
   });
 };
 const warmUser = async (variant, platform, subject) => {
@@ -344,6 +359,26 @@ const rollback = async ({ runtime, subject }, row) => {
     }
   );
 };
+const retainedFixtures = async (variants) => {
+  let verified = true;
+  await inOrder(Object.entries(variants), ([variant, platform]) =>
+    inOrder(platform.subjects, async (subject) => {
+      const counts = await run(financialFixtureCounts(subject.owner, subject.id));
+      const correct = Object.entries(subject.expectedCounts).every(
+        ([key, value]) => counts[key] === value
+      );
+      record("retained-fixtures", {
+        variant,
+        user: subject.id,
+        index: subject.index,
+        counts,
+        correct,
+      });
+      verified &&= correct;
+    })
+  );
+  await write("retention", { verified });
+};
 const measure = async (native, d1) => {
   const variants = platformsFor(native, d1);
   await inOrder(indices(users), (index) => prepareFixture({ native, d1, variants }, index));
@@ -383,6 +418,7 @@ const measure = async (native, d1) => {
     rejections: perUser,
   });
   await write("audit", audits);
+  await retainedFixtures(variants);
 };
 await write("plan", {
   baseline,

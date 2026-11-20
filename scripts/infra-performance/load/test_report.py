@@ -36,3 +36,12 @@ class OfferedLoadEvidence(unittest.TestCase):
         self.assertEqual(report["pairedPayloadsMatch"], True)
         self.assertEqual(report["auditMatches"], False)
         self.assertEqual(report["scheduledMs"]["status"], "fail")
+
+    def test_missing_retained_fixture_verification_withholds_a_latency_pass(self):
+        rows = [dict(variant=variant, user=0, sample=sample, ok=True, status=200,
+                     dispatchMs=6 if variant == "d1" else 2, scheduledMs=6 if variant == "d1" else 2,
+                     bytes=100, digest="history")
+                for sample in range(30) for variant in ("d1", "do")]
+        result = summarize(rows, 1, 30, fixture=False)
+        self.assertFalse(result["fixtureVerified"])
+        self.assertEqual(result["dispatchMs"]["status"], "fail")

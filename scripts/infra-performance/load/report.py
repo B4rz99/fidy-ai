@@ -19,7 +19,7 @@ def stats(values):
     )
 
 
-def summarize(rows, users, samples, audit=True):
+def summarize(rows, users, samples, audit=True, fixture=True):
     expected = {(user, sample) for user in range(users) for sample in range(samples)}
     output, signatures = {}, {}
     complete = samples >= 30
@@ -43,11 +43,11 @@ def summarize(rows, users, samples, audit=True):
             **{key: stats([row[key] for row in successful]) for key in ("bytes", "scheduledMs", "dispatchMs")},
         )
     payloads_match = signatures["d1"] == signatures["do"] and set(signatures["d1"]) == expected
-    output.update(pairedPayloadsMatch=payloads_match, auditMatches=audit, sampleCountsComplete=complete)
+    output.update(pairedPayloadsMatch=payloads_match, auditMatches=audit, fixtureVerified=fixture, sampleCountsComplete=complete)
     for key in ("dispatchMs", "scheduledMs"):
         d1, native = (output[variant][key] for variant in ("d1", "do"))
         ratio = d1["p95"] / native["p95"] if d1 and native and native["p95"] > 0 else None
-        passed = audit and payloads_match and all_successful and ratio is not None and ratio >= 1.8
+        passed = fixture and audit and payloads_match and all_successful and ratio is not None and ratio >= 1.8
         status = "missing" if not complete else "pass" if passed else "fail"
         output[key] = dict(ratio=ratio, status=status)
     return output
@@ -59,8 +59,10 @@ if __name__ == "__main__":
     rows = [json.loads(line) for line in (directory / "attempts.jsonl").read_text().splitlines()]
     audit_path = directory / "audit.json"
     audits = json.loads(audit_path.read_text()) if audit_path.exists() else {}
+    retention = directory / "retention.json"
+    fixture = retention.exists() and json.loads(retention.read_text())["verified"] is True
     result = {
-        cell: summarize([row for row in rows if row["cell"] == cell], users, plan["samples"], audits.get(cell) is True)
+        cell: summarize([row for row in rows if row["cell"] == cell], users, plan["samples"], audits.get(cell) is True, fixture)
         for cell, users in (("history", plan["users"]), ("correction", 1), ("rollback", 1))
     }
     (directory / "report.json").write_text(json.dumps(result, indent=2))

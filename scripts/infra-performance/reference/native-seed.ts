@@ -205,6 +205,21 @@ const maxUsers = 256,
   hexRadix = 16;
 const validSize = (dataset: string): dataset is keyof typeof sizes => Object.hasOwn(sizes, dataset);
 const defaultUser = { subject, index: 0, d1: false, mixedReview: false };
+export const financialFixtureCounts = Effect.fn(function* (db: Owner, user: string) {
+  const [counts] = yield* execute(
+    db,
+    `SELECT (SELECT count(*) FROM transactions WHERE user_id=?1) AS transactions,
+    (SELECT count(DISTINCT currency) FROM transactions WHERE user_id=?1) AS currencies,
+    (SELECT count(*) FROM transaction_projection_leaf WHERE user_id=?1) AS effectiveTransactions,
+    (SELECT count(*) FROM transaction_reconciliation_decisions WHERE user_id=?1 AND state='linked') AS links,
+    (SELECT count(*) FROM recurring_plans WHERE user_id=?1) AS plans,
+    (SELECT count(*) FROM recurring_plan_revisions WHERE user_id=?1) AS revisions,
+    (SELECT count(*) FROM ingestion_review_items WHERE user_id=?1) AS review,
+    (SELECT count(*) FROM ingestion_review_items WHERE user_id=?1 AND evidence_state='retained') AS retainedReview`,
+    user
+  );
+  return counts;
+});
 export const seed = Effect.fn(function* (db: Owner, dataset: string, config = defaultUser) {
   const { subject: user, index, d1 } = config;
   if (!Number.isInteger(index) || index < 0 || index >= maxUsers) {
@@ -229,17 +244,7 @@ export const seed = Effect.fn(function* (db: Owner, dataset: string, config = de
   process.stdout.write("REFERENCE_STAGE reviews\n");
   yield* reviews(db, size, fixture);
   process.stdout.write("REFERENCE_STAGE counts\n");
-  const [counts] = yield* execute(
-    db,
-    `SELECT (SELECT count(*) FROM transactions WHERE user_id=?1) AS transactions,
-    (SELECT count(DISTINCT currency) FROM transactions WHERE user_id=?1) AS currencies,
-    (SELECT count(*) FROM transaction_projection_leaf WHERE user_id=?1) AS effectiveTransactions,
-    (SELECT count(*) FROM transaction_reconciliation_decisions WHERE user_id=?1 AND state='linked') AS links,
-    (SELECT count(*) FROM recurring_plans WHERE user_id=?1) AS plans,
-    (SELECT count(*) FROM recurring_plan_revisions WHERE user_id=?1) AS revisions,
-    (SELECT count(*) FROM ingestion_review_items WHERE user_id=?1) AS review`,
-    user
-  );
+  const counts = yield* financialFixtureCounts(db, user);
   const links = Math.ceil(size.transactions / everyHundred);
   const verified = yield* Schema.decodeUnknownEffect(
     Schema.Struct({

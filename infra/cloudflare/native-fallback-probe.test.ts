@@ -70,6 +70,7 @@ it.live(
         const headers = new Headers(request.headers);
         headers.delete("x-fidy-acceptance-proof");
         headers.delete("traceparent");
+        headers.delete("b3");
         return {
           headers: Object.fromEntries(headers),
           body: request.body === null ? null : yield* Effect.tryPromise(() => request.text()),

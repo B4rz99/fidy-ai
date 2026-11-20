@@ -85,7 +85,7 @@ class ReferenceReport(unittest.TestCase):
 
     def rows(self, samples):
         return [
-            {"variant": variant, "status": "ok", "timings": {k: value for k in BOUNDARIES + CALIBRATION_VIEWS}}
+            {"variant": variant, "pair": value - 1, "status": "ok", "timings": {k: value for k in BOUNDARIES + CALIBRATION_VIEWS}}
             for value in range(1, samples + 1)
             for variant in ["d1", "do"]
         ]
@@ -124,6 +124,26 @@ class ReferenceReport(unittest.TestCase):
             row["timings"][key] = 190 if row["variant"] == "d1" else 110
         self.assertEqual(compare(30, rows, ["d1", "do"], calibration=True)[key]["status"], "fail")
 
+    def test_partial_pair_keeps_completed_offered_and_unreached_views_separate(self):
+        from run import observed_work
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory) / "workspace-events.jsonl"
+            log.write_text('{"type":"offered","journey":"budgets.month.browser"}\n'
+                           '{"type":"completed","journey":"budgets.month.browser"}\n'
+                           '{"type":"offered","journey":"review.pending.browser"}\n'
+                           '{"type":"failed","journey":"review.pending.browser"}\n')
+            row = {"variant": "do", "pair": 0, "status": "failed", "work": observed_work(log)}
+            report = compare(1, [row], ["do"], calibration=True)
+        for name, offered, completed in [
+            ("budgets.month.browser", 1, 1),
+            ("review.pending.browser", 1, 0),
+            ("recurring.month.browser", 0, 0),
+        ]:
+            self.assertEqual(report[name]["status"], "fail")
+            counts = report[name]["do"]
+            self.assertEqual((counts["planned"], counts["offered"], counts["completed"],
+                              counts["comparable"]), (1, offered, completed, 0))
+
     def test_every_boundary_requires_the_minimum_paired_count(self):
         summary = compare(29, self.rows(29), ["d1", "do"])
         self.assertEqual(summary["read.http"]["status"], "missing")
@@ -140,7 +160,9 @@ class ReferenceReport(unittest.TestCase):
         rows[-1]["status"] = "failed"
         failed = compare(30, rows, ["d1", "do"])
         self.assertEqual(failed["read.http"]["status"], "fail")
-        self.assertEqual(failed["read.http"]["do"]["completed"], 29)
+        self.assertEqual(failed["read.http"]["d1"]["comparable"], 29)
+        self.assertEqual(failed["read.http"]["do"]["comparable"], 29)
+        self.assertEqual(failed["read.http"]["do"]["completed"], 30)
 
     def test_stress_evidence_uses_no_comparative_gate(self):
         report = compare(30, self.rows(30), ["d1", "do"], stress=True)

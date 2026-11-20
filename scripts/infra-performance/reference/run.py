@@ -44,6 +44,42 @@ BOUNDARIES = [
 
 CALIBRATION_VIEWS = ["budgets.month.browser", "review.pending.browser", "dashboard.fresh.browser", "recurring.month.browser", "recurring.previous.browser", "recurring.selective.browser", "recurring.no-match.browser", "recurring.full.http"]
 
+EVENT_CELLS = {"startup.browser", "read.browser", "correction.browser", *CALIBRATION_VIEWS}
+
+
+def observed_work(log):
+    work = {}
+    try:
+        for line in log.read_text().splitlines():
+            event = json.loads(line)
+            journey, kind = event["journey"], event["type"]
+            if journey in EVENT_CELLS and kind in ("offered", "completed"):
+                counts = work.setdefault(journey, {"offered": 0, "completed": 0})
+                counts[kind] += 1
+        return work
+    except (OSError, ValueError, TypeError, KeyError):
+        return None
+
+
+def work_counts(key, rows):
+    offered = completed = unknown = 0
+    for row in rows:
+        if key in EVENT_CELLS and row.get("work") is not None:
+            counts = row["work"].get(key, {})
+            offered += counts.get("offered", 0)
+            completed += counts.get("completed", 0)
+        elif key in row.get("timings", {}):
+            # A complete observation proves dispatch and completion even if its paired digest differs.
+            offered += 1
+            completed += 1
+        else:
+            unknown += 1
+    if unknown:
+        return dict(offered=None, completed=None, confirmedOffered=offered,
+                    confirmedCompleted=completed, attemptsWithUnknownWork=unknown)
+    return dict(offered=offered, completed=completed, incomplete=offered-completed)
+
+
 # Export only controlled stage names, error classes and harness source coordinates.
 STAGES = {
     "runtime", "user", "transactions", "planning", "reviews", "counts", "launch",
@@ -244,15 +280,19 @@ def equivalence(row):
 
 def compare(samples, rows, variants, *, stress=False, calibration=False):
     result = {}
+    successful = {v: {row["pair"] for row in rows if row["variant"] == v and row["status"] == "ok"}
+                  for v in variants}
+    comparable = set.intersection(*successful.values())
     for key in BOUNDARIES + (CALIBRATION_VIEWS if calibration else []):
         cell = {}
         for variant in variants:
-            offered = [row for row in rows if row["variant"] == variant]
-            values = [row["timings"][key] for row in offered if row["status"] == "ok"]
+            attempts = [row for row in rows if row["variant"] == variant]
+            values = [row["timings"][key] for row in attempts if row["pair"] in comparable]
             stats = {
-                "offered": len(offered),
-                "completed": len(values),
-                "errors": len(offered) - len(values),
+                "planned": samples,
+                **work_counts(key, attempts),
+                "comparable": len(values),
+                "failedComparisons": sum(row["status"] != "ok" for row in attempts),
             }
             if values:
                 stats.update(
@@ -265,12 +305,12 @@ def compare(samples, rows, variants, *, stress=False, calibration=False):
         status = "missing"
         if any(row["status"] != "ok" for row in rows):
             status = "fail"
-        elif stress and all(cell[v]["completed"] == samples for v in variants):
+        elif stress and all(cell[v]["comparable"] == samples for v in variants):
             status = "stress"
         elif (
             len(variants) == 2
             and samples >= 30
-            and all(cell[v]["completed"] == samples for v in variants)
+            and all(cell[v]["comparable"] == samples for v in variants)
         ):
             ratio = cell["d1"]["p95"] / cell["do"]["p95"]
             cell["ratio"] = ratio
@@ -418,6 +458,8 @@ def main():
             for variant in (list(paths) if pair % 2 == 0 else list(reversed(paths))):
                 destination = run / f"{pair}-{variant}"
                 destination.mkdir()
+                journal = destination / "workspace-events.jsonl"
+                journal.touch()
                 row = {"variant": variant, "pair": pair, "status": "ok"}
                 try:
                     env_for_variant = {**env, "REFERENCE_WEB_PORT": str(WEB_PORT[variant])}
@@ -432,6 +474,7 @@ def main():
                     if isinstance(exc, RuntimeError):
                         row["detail"] = str(exc)
                     print(f"{variant} pair {pair} failed: {type(exc).__name__} {diagnostics}", flush=True)
+                row["work"] = observed_work(journal)
                 paired.append(row)
             if len(paired) == 2 and all(row["status"] == "ok" for row in paired):
                 if equivalence(paired[0]) != equivalence(paired[1]):

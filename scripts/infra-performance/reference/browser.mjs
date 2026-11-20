@@ -127,6 +127,15 @@ try {
     process.stderr.write("REFERENCE_STAGE recurring-fixture\n");
     await prepareReferenceRecurring(request, installation);
   }
+  const events = process.env.FIDY_REFERENCE_EVENTS;
+  assert.ok(events, "Missing reference observation file");
+  /** @param {Readonly<Record<string, unknown>>} row Bounded workspace measurement metadata. */
+  const event = (row) => appendFileSync(events, JSON.stringify(row) + "\n");
+  const journeys = {
+    startup: "startup.browser",
+    refresh: "read.browser",
+    correction: "correction.browser",
+  };
   const { before, startupMs, readMs, correctionMs } = await freshTransactions({
     page,
     ledger,
@@ -136,6 +145,9 @@ try {
     observeStartup: async (reply) =>
       Schema.decodeSync(Schema.fromJsonString(Schema.Unknown))(await reply.text()),
     beforeRefresh: evidence,
+    offered: (stage) => event({ type: "offered", journey: journeys[stage] }),
+    completed: (stage, milliseconds) =>
+      event({ type: "completed", journey: journeys[stage], milliseconds }),
   });
   process.stderr.write("REFERENCE_STAGE accountability-after\n");
   const after = await evidence();
@@ -151,10 +163,6 @@ try {
   const views = {};
   if (process.env.FIDY_ASSESSMENT === "production") {
     process.stderr.write("REFERENCE_STAGE budgets-month\n");
-    const events = process.env.FIDY_REFERENCE_EVENTS;
-    assert.ok(events, "Missing reference observation file");
-    /** @param {Readonly<Record<string, unknown>>} row Bounded workspace measurement metadata. */
-    const event = (row) => appendFileSync(events, JSON.stringify(row) + "\n");
     const input = { page, api, browser: app, event };
     views["budgets.month.browser"] = await freshBudgetMonth(input);
     process.stderr.write("REFERENCE_STAGE review-pending\n");

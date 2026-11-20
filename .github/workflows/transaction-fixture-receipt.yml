@@ -6,7 +6,7 @@ permissions:
 jobs:
   receipt:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -22,6 +22,8 @@ jobs:
           python3 -m unittest discover -s scripts/infra-performance/canonical-fixture
           python3 scripts/infra-performance/canonical-fixture/direct_bridge_check.py
           python3 scripts/infra-performance/canonical-fixture/hosted.py rehearse --out apps/server/test-results/closed-native-fixture
+      - name: Reopen native custody and prove physical disposal on fresh workerd
+        run: python3 scripts/infra-performance/canonical-fixture/rehearse_cohort.py --out apps/server/test-results/closed-native-cohort
       - name: Check receipt policy code
         if: always()
         run: |
@@ -41,4 +43,6 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: closed-native-fixture-${{ github.run_id }}
-          path: apps/server/test-results/closed-native-fixture/summary.json
+          path: |
+            apps/server/test-results/closed-native-fixture/summary.json
+            apps/server/test-results/closed-native-cohort/summary.json

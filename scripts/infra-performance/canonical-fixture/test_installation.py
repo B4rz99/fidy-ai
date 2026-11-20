@@ -14,12 +14,14 @@ class ClosedNativeCandidateTests(unittest.TestCase):
                 return [{"hostname":HOST,"service":SCRIPTS["ingress"],"enabled":True,"previews_enabled":False}]
             role="core" if SCRIPTS["core"] in path else "ingress"
             if path.endswith("/deployments"):
-                return {"deployments":[{"versions":[{"version_id":versions[role],"percentage":100}]}]}
+                return {"deployments":[{"id":versions[role],"versions":[{"version_id":versions[role],"percentage":100}]}]}
             fields={"NATIVE_STORAGE_ADMISSION":"closed","RECOVERY_ISOLATION":"isolated","RELEASE_GIT_SHA":revision,"BROWSER_ORIGIN":BROWSER}
             extra=[{"name":"CORE","type":"service","service":SCRIPTS["core"]}]
             if role=="core":
                 fields["NATIVE_FIXTURE_SIGNER_SHA256"]=fingerprint
-                extra=[{"name":"NATIVE_FIXTURE_SIGNING_KEY","type":"secret_text"}]
+                extra=[{"name":"NATIVE_FIXTURE_SIGNING_KEY","type":"secret_text"},
+                       {"name":"USER_STORE","type":"durable_object_namespace","class_name":"UserStore","namespace_id":"e"*32},
+                       {"name":"SMOKE_BUCKET","type":"r2_bucket","bucket_name":"fidy-native-release-smoke"}]
             return {"id":versions[role],"resources":{"bindings":extra+[{"name":k,"type":"plain_text","text":v} for k,v in fields.items()]}}
         args=dict(account="c"*32,revision=revision,versions=versions,public_key=pub)
         self.assertEqual(validate_candidate(inspect,**args)["signerSha256"],fingerprint)

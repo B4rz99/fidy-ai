@@ -37,7 +37,7 @@ const sessionHeaders = (value: Session): Record<string, string> => ({
   cookie: value.cookie,
   "fidy-session-binding": value.binding,
 });
-const transport = (runtime: Miniflare): Transport =>
+export const transport = (runtime: Miniflare): Transport =>
   Effect.fnUntraced(function* (request: Request) {
     const body = request.body === null ? undefined : yield* io(() => request.arrayBuffer());
     const reply = yield* io(() =>

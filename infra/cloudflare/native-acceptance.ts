@@ -470,7 +470,7 @@ const completionOutcome = Effect.fn(function* (completion: Response) {
 });
 const ungrantedPairing = Effect.fn(function* (
   input: Inputs,
-  member: "erasure-1" | "fleet-1",
+  member: "erasure-1" | "fleet-1" | "performance-1",
   record: ErasureProgress
 ) {
   const privateLogin = {
@@ -518,6 +518,58 @@ const ungrantedPairing = Effect.fn(function* (
   yield* record("pairing-expired");
   return outcome;
 });
+/** Fixed-subject actions for the protected Transaction comparison. Only register can create a User. */
+type CohortBrowser = {
+  open: (
+    intent: "signup" | "login"
+  ) => Effect.Effect<
+    { id: string; outcome: string; headers: Readonly<Record<string, string>> },
+    Error
+  >;
+  survivors: () => Effect.Effect<ReadonlyArray<string>, Error>;
+  beforeSignup: () => Effect.Effect<void, Error>;
+  erase: (headers: Readonly<Record<string, string>>) => Effect.Effect<string, Error>;
+  denied: (headers: Readonly<Record<string, string>>) => Effect.Effect<void, Error>;
+  refused: () => Effect.Effect<string, Error>;
+  renew: () => Effect.Effect<void, Error>;
+  call: Driver["call"];
+};
+export const performanceCohortBrowser = (
+  input: Omit<Inputs, "erasure" | "origins">
+): CohortBrowser => {
+  const closed = {
+    ...input,
+    origins: installedOrigins.acceptance,
+    erasure: Option.none<ErasureObservation>(),
+  };
+  const { call, post } = runner(closed);
+  const open = Effect.fn(function* (intent: "signup" | "login") {
+    const user = yield* boot(closed, "performance-1", intent);
+    return { id: yield* identity(call, user), outcome: user.outcome, headers: user.headers };
+  });
+  return {
+    open,
+    survivors: admittedErasureLogins({ ...input, origins: installedOrigins.acceptance }).logins,
+    beforeSignup: Effect.fn(function* () {
+      const { proof } = yield* verifyProvider(closed, "performance-1", "login");
+      const response = yield* validStatus(
+        yield* post("/web/providers/google/complete", proof),
+        invalid
+      );
+      yield* Schema.decodeUnknownEffect(Schema.Struct({ status: Schema.Literal("invalid") }))(
+        yield* Effect.tryPromise(() => response.json())
+      );
+    }),
+    erase: (headers: Readonly<Record<string, string>>) => admitBrowserErasure(closed, { headers }),
+    denied: (headers: Readonly<Record<string, string>>) =>
+      call("/transactions", { headers }).pipe(
+        Effect.flatMap((reply) => consume(reply, unauthorized))
+      ),
+    refused: () => ungrantedPairing(closed, "performance-1", () => Effect.void),
+    renew: () => renewWork(closed),
+    call,
+  };
+};
 /** The continuation authenticates the installed revision's existing subjects with login intent only. */
 export const admittedErasureLogins = (
   input: Omit<Inputs, "erasure">
@@ -537,6 +589,9 @@ export const admittedErasureLogins = (
     refused: (record) => ungrantedPairing(transport, "erasure-1", record),
   };
 };
+export const establishSmokeUsers = Effect.fn(function* (input: Inputs) {
+  return [yield* boot(input, "smoke-1"), yield* boot(input, "smoke-2")] as const;
+});
 /** Exercise actual auth, private provider exchange and native financial callback through the installed protected release.
  * Callers verify the deterministic callback Workflow and the User-facing final projections before accepting its receipt.
  */
@@ -562,8 +617,7 @@ export const exerciseClosedUsers = Effect.fn(function* (input: Inputs) {
     yield* consume(reply, unauthorized);
     deniedStatuses.push(reply.status);
   }
-  const first = yield* boot(input, "smoke-1"),
-    second = yield* boot(input, "smoke-2");
+  const [first, second] = yield* establishSmokeUsers(input);
   const callback = yield* charge(input, first, second);
   return {
     signup: [first.outcome, second.outcome],

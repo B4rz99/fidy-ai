@@ -304,6 +304,13 @@ const measurePendingReview = async (input, count, offset) => {
     assert.deepEqual(unselected.items, []);
     await page.getByRole("button", { name: "Historial", pressed: true, exact: true }).waitFor();
   }
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Performance.enable");
+  const counters = async () => {
+    const { metrics } = await cdp.send("Performance.getMetrics");
+    return new Map(metrics.map(({ name, value }) => [name, value]));
+  };
+  const before = await counters();
   const query = { status: "pending", limit: null, offset: offset ? String(offset) : null };
   const workspace = responseFor(input, inbox, query);
   const source = responseFor(input, inbox + "/context", query);
@@ -316,6 +323,8 @@ const measurePendingReview = async (input, count, offset) => {
   const [reply, context] = await Promise.all([workspace, source, control.click()]);
   await usableReviews(page, expected);
   const milliseconds = performance.now() - start;
+  const after = await counters();
+  await cdp.detach();
   const [summary, original] = await Promise.all([consumeSuccess(reply), consumeSuccess(context)]);
   verifyPending(summary.value, original.value, { count, expected });
   const summaryTiming = reply.request().timing();
@@ -328,6 +337,11 @@ const measurePendingReview = async (input, count, offset) => {
     http: summary.http,
     context: original.http,
     phases: {
+      ...Object.fromEntries(
+        ["ScriptDuration", "LayoutDuration", "RecalcStyleDuration", "TaskDuration", "LayoutCount", "Nodes"].map(
+          (name) => [name, (after.get(name) ?? 0) - (before.get(name) ?? 0)]
+        )
+      ),
       actionToSummaryRequestMs: summaryTiming.startTime - actionEpochMs,
       summaryEndToContextRequestMs: contextTiming.startTime - summaryEnd,
       responsesEndToPaintMs: actionEpochMs + milliseconds - Math.max(summaryEnd, contextEnd),

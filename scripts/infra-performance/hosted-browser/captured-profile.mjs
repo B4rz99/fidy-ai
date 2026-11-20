@@ -50,6 +50,7 @@ export async function runBrowser({
     hostname: "127.0.0.1",
     error: () => new Response(null, { status: 502 }),
     port: 0,
+    idleTimeout: 45,
     tls,
     fetch: async (request) => {
       const u = new URL(request.url);
@@ -89,6 +90,7 @@ export async function runBrowser({
     hostname: "127.0.0.1",
     error: () => new Response(null, { status: 502 }),
     port: 0,
+    idleTimeout: 45,
     tls,
     fetch: async (request) => {
       const url = new URL(request.url);

@@ -44,6 +44,7 @@ export async function comparePair(config, http, environment) {
     environment,
     verified: false,
     origin: null,
+    dispatches: [],
     observations: [],
     actualD1: { rowsRead: 0, rowsWritten: 0 },
     network: "ordinary",
@@ -100,6 +101,12 @@ export async function comparePair(config, http, environment) {
       ? incoming.headers.get("access-control-request-method")
       : incoming.method;
     const route = routeFor(method, url);
+    const observed = {
+      variant,
+      method: incoming.method,
+      path: url.pathname.startsWith("/transactions/") ? "/transactions/:original" : url.pathname,
+    };
+    evidence.dispatches.push(observed);
     assert.ok(Object.hasOwn(config.allowed, route), "Unquoted browser route");
     if (isPreflight) {
       assert.equal(method, "GET");
@@ -143,6 +150,7 @@ export async function comparePair(config, http, environment) {
       decompress: true,
       signal: AbortSignal.timeout(30000),
     });
+    observed.status = reply.status;
     if (variant === "d1") {
       assert.equal(reply.headers.get("x-fidy-comparison-worker"), config.d1.version);
       if (!isPreflight) {
@@ -295,6 +303,25 @@ export async function comparePair(config, http, environment) {
     });
   } catch (error) {
     evidence.failure = error.name;
+    // Preserve the failing source location without serializing an assertion's actual or expected values.
+    evidence.failureLocation =
+      /(?:protected-pair|fresh-transactions|captured-profile|scoped-correction)\.mjs:\d+:\d+/u.exec(
+        error.stack ?? ""
+      )?.[0];
+    for (const variant of ["d1", "do"]) {
+      const file = Bun.file(join(dir, "ordinary-" + variant + ".json"));
+      if (await file.exists()) {
+        const partial = await file.json();
+        evidence[variant + "Progress"] = partial.events.filter(
+          (e) =>
+            e.stage === "incomplete" ||
+            e.stage === "refresh" ||
+            e.status >= 400 ||
+            e.failed ||
+            e.rejected
+        );
+      }
+    }
   } finally {
     await save();
   }

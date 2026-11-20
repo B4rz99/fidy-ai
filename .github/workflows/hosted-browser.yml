@@ -127,19 +127,6 @@ jobs:
           export NATIVE_WEB_ASSETS="$RUNNER_TEMP/native-web" D1_WEB_ASSETS="$RUNNER_TEMP/d1-web"
           (cd apps/web && VITE_API_ORIGIN=installed bun ../../node_modules/vite/bin/vite.js build --mode production --outDir "$NATIVE_WEB_ASSETS")
           (cd baseline-d1/apps/web && VITE_API_ORIGIN=https://api.fidyapp.com bun ../../node_modules/vite/bin/vite.js build --mode production --outDir "$D1_WEB_ASSETS")
-          python3 scripts/infra-performance/canonical-fixture/hosted.py rehearse --browser-workspace --out "$RUNNER_TEMP/native"
-          export SMOKE_PROOF="$(jq -r .SMOKE_PROOF "$RUNNER_TEMP/native/rehearsal-verifier.json")"
-          export FIDY_NATIVE_FIXTURE_PUBLIC_KEY="$(jq -r .FIDY_NATIVE_FIXTURE_PUBLIC_KEY "$RUNNER_TEMP/native/rehearsal-verifier.json")"
-          python3 scripts/infra-performance/cells/prepare.py --d1 baseline-d1 --calibration baseline-calibration \
-            --canonical-fixture "$RUNNER_TEMP/native/fixture" --materialized --browser-workspace --out "$RUNNER_TEMP/bulk"
-          python3 - <<'VERIFY'
-          import json, os
-          from pathlib import Path
-          directory = Path(os.environ["RUNNER_TEMP"])
-          read = lambda name: json.loads((directory/name).read_bytes())
-          assert read("ordinary-do.json")["snapshots"] == read("ordinary-d1.json")["snapshots"], "Canonical startup, profile or pending Review differs"
-          assert read("ordinary-native-mutation.json") == read("bulk/probe.json")["mutation"], "Committed or rolled-back state differs"
-          VERIFY
       - name: Rehearse both protected browser owners and physical disposal
         run: |
           source scripts/infra-performance/hosted-browser/tls.sh
@@ -153,9 +140,9 @@ jobs:
         with:
           name: closed-browser-calibration-${{ github.run_id }}
           path: |
-            ${{ runner.temp }}/bulk/snapshot-proof.json
-            ${{ runner.temp }}/bulk/probe.json
-            ${{ runner.temp }}/ordinary-*.json
+            ${{ runner.temp }}/full/package/snapshot-proof.json
+            ${{ runner.temp }}/full/package/probe.json
+            ${{ runner.temp }}/full/paired/ordinary-*.json
             ${{ runner.temp }}/full/paired.json
             ${{ runner.temp }}/full/summary.json
             ${{ runner.temp }}/full/native-window-audit.json

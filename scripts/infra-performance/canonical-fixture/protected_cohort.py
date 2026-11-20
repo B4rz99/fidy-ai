@@ -1,4 +1,5 @@
 """Protected native fixture admission, collection and independent, cohort-only physical disposal."""
+from datetime import datetime
 import json
 import os
 import re
@@ -30,6 +31,14 @@ def protected_runner():
             and env.get("GITHUB_REF") == "refs/heads/trunk" and env.get("GITHUB_REPOSITORY") == "B4rz99/fidy-ai"
             and env.get("GITHUB_WORKFLOW_REF") == "B4rz99/fidy-ai/.github/workflows/native-transaction-cohort.yml@refs/heads/trunk"):
         raise ValueError("Closed protected native cohort dispatch required")
+
+
+def checked_browser_origin(path, now):
+    origin = json.loads(path.read_bytes())
+    if (origin.get("colombianEgress") is not True
+            or any(origin["origins"][name]["country"] != "CO" for name in ("api","browser"))
+            or not 0 <= now - datetime.fromisoformat(origin["observedAt"].replace("Z","+00:00")).timestamp() <= 120):
+        raise ValueError("Missing fresh Colombia egress from both actual browser hosts")
 
 
 def admitted_route(method, url, body, stage, cleaning, browser=False):
@@ -169,9 +178,7 @@ def run(args):
 
     if args.mode != "cleanup" and args.browser_workspace:
         # The protected workflow writes this from real Chromium before touching cohort custody.
-        origin = json.loads((args.out/"origin.json").read_bytes())
-        if origin.get("colombianEgress") is not True or any(origin["origins"][name]["country"] != "CO" for name in ("api","browser")):
-            raise ValueError("Colombian browser egress has not been verified for both actual hosts")
+        checked_browser_origin(args.out/"origin-before-enrollment.json",time.time())
     candidate = verify()
     os.environ["FIDY_NATIVE_FIXTURE_PROVIDER_REVISION"] = installed["retainedProvider"]["revision"]
     coords = dict(**candidate, account=account, prefix=prefix, archive=args.archive_sha256)

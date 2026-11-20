@@ -451,7 +451,9 @@ def main():
         account = os.environ["CLOUDFLARE_ACCOUNT_ID"]
         if args.action == "run":
             report["nativeCandidate"] = native_installation(account, args.revision, approved_native)
-            from protected_cohort import comparable_native_reads
+            from protected_cohort import comparable_native_reads, checked_browser_origin
+            if bundle.browser:
+                checked_browser_origin(args.fixture.parent/"origin-before-d1.json",time.time())
             reserve_native = comparable_native_reads(account, report["nativeCandidate"], proof, args.pairs, browser=bundle.browser)
         cloud = Cloud(account, args.prefix)
         owner = AccountExperiment(CustodyObject(account, cloud), account)

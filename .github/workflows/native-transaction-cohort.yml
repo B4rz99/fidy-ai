@@ -137,7 +137,10 @@ jobs:
           SMOKE_PROOF: ${{ secrets.NATIVE_STORAGE_SMOKE_PROOF }}
         run: |
           scope=()
-          if [[ "$WORKLOAD" == browser ]]; then scope=(--browser-workspace); fi
+          if [[ "$WORKLOAD" == browser ]]; then
+            bun scripts/infra-performance/hosted-browser/origin.mjs "$OUT/origin-before-enrollment.json"
+            scope=(--browser-workspace)
+          fi
           python3 scripts/infra-performance/canonical-fixture/hosted.py hosted "${scope[@]}" --out "$OUT" \
             --native-revision "$REVISION" --core-version "$CORE" --ingress-version "$INGRESS" \
             --resource-prefix "$RESOURCE_PREFIX" --release-artifact "$RELEASE_ARTIFACT" --archive-sha256 "$ARCHIVE_SHA256"
@@ -161,7 +164,10 @@ jobs:
           SMOKE_PROOF: ${{ secrets.NATIVE_STORAGE_SMOKE_PROOF }}
         run: |
           caps=(--maximum-reads 18194 --maximum-writes 4754)
-          if [[ "$WORKLOAD" == browser ]]; then caps=(--browser-workspace --maximum-reads 100000 --maximum-writes 5000); fi
+          if [[ "$WORKLOAD" == browser ]]; then
+            bun scripts/infra-performance/hosted-browser/origin.mjs "$OUT/origin-before-d1.json"
+            caps=(--browser-workspace --maximum-reads 100000 --maximum-writes 5000)
+          fi
           python3 scripts/infra-performance/cells/owner.py run "${caps[@]}" --out "$OUT/comparison" \
             --prefix "$RESOURCE_PREFIX" --revision "$REVISION" --fixture "$OUT/fixture" \
             --bundle "$OUT/package" --manifest-sha256 "$PACKAGE_SHA256" --pairs "$PAIRS" \
@@ -182,7 +188,7 @@ jobs:
         with:
           name: closed-native-comparison-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            ${{ runner.temp }}/native-comparison/origin.json
+            ${{ runner.temp }}/native-comparison/origin*.json
             ${{ runner.temp }}/native-comparison/summary.json
             ${{ runner.temp }}/native-comparison/cleanup.json
             ${{ runner.temp }}/native-comparison/comparison/report.json

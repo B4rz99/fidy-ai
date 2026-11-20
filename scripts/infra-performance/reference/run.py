@@ -42,6 +42,8 @@ BOUNDARIES = [
     "startup.browser",
 ]
 
+READ_ONLY_BOUNDARIES = ["read.backend", "read.http", "read.browser", "startup.browser"]
+
 CALIBRATION_VIEWS = ["budgets.month.browser", "review.pending.browser", "dashboard.fresh.browser", "recurring.month.browser", "recurring.previous.browser", "recurring.selective.browser", "recurring.no-match.browser", "recurring.full.http"]
 
 EVENT_CELLS = {"startup.browser", "read.browser", "correction.browser", *CALIBRATION_VIEWS}
@@ -245,19 +247,24 @@ def observation(path, env, destination, variant="d1"):
         measure.check_returncode()
         result = json.loads(measure.stdout)
         requests = result["attempts"]
-        values = [
-            requests[0]["backendMs"],
-            requests[0]["httpMs"],
-            result["readMs"],
-            requests[1]["backendMs"],
-            requests[1]["httpMs"],
-            requests[2]["backendMs"],
-            requests[2]["httpMs"],
-            requests[2]["startEpochMs"] + requests[2]["httpMs"] - requests[1]["startEpochMs"],
-            result["correctionMs"],
-            result["startupMs"],
-        ]
-        timings = dict(zip(BOUNDARIES, values, strict=True))
+        timings = {
+            "read.backend": requests[0]["backendMs"],
+            "read.http": requests[0]["httpMs"],
+            "read.browser": result["readMs"],
+            "startup.browser": result["startupMs"],
+        }
+        if env.get("FIDY_REFERENCE_READ_ONLY") == "1":
+            if len(requests) != 1 or "correctionMs" in result:
+                raise ValueError("Unexpected mutation in read-only journey")
+        else:
+            timings.update({
+                "correction.backend": requests[1]["backendMs"],
+                "correction.http": requests[1]["httpMs"],
+                "correction.fresh-read.backend": requests[2]["backendMs"],
+                "correction.fresh-read.http": requests[2]["httpMs"],
+                "correction.through-fresh-http": requests[2]["startEpochMs"] + requests[2]["httpMs"] - requests[1]["startEpochMs"],
+                "correction.browser": result["correctionMs"],
+            })
         timings.update({name: evidence["milliseconds"] for name, evidence in result["views"].items()})
         return {**result, "seed": seed, "timings": timings}
 
@@ -278,9 +285,10 @@ def equivalence(row):
     )
 
 
-def compare(samples, rows, variants, *, stress=False, calibration=False):
+def compare(samples, rows, variants, *, stress=False, calibration=False, read_only=False):
     result = {}
-    for key in BOUNDARIES + (CALIBRATION_VIEWS if calibration else []):
+    keys = READ_ONLY_BOUNDARIES if read_only else BOUNDARIES + (CALIBRATION_VIEWS if calibration else [])
+    for key in keys:
         successful = [{row["pair"] for row in rows if row["variant"] == variant
                        and row["status"] == "ok" and key in row.get("timings", {})}
                       for variant in variants]
@@ -317,12 +325,19 @@ def compare(samples, rows, variants, *, stress=False, calibration=False):
             cell["ratio"] = ratio
             status = "pass" if ratio >= 1.8 else "fail"
         result[key] = {"status": status, **cell}
-    if calibration:
+    if calibration and not read_only:
         result["recurring.full.browser"] = {"status": "not-exposed", "reason": "The product requests view=compact. Complete revisions are verified on recurring.full.http."}
     return result
 
 
-def browser_workload(dataset):
+def browser_workload(dataset, *, read_only=False):
+    if read_only:
+        return {
+            "boundaries": READ_ONLY_BOUNDARIES,
+            "browserStart": "Document navigation or the loaded Transactions Refresh click.",
+            "browserEnd": "Ordered enabled history rows through two animation frames. Refresh additionally requires its disabled-to-enabled transition and a complete, independently verified history response.",
+            "accountability": "Each refresh must add one successful audited history read, zero Corrections, zero purchased units and zero receipts.",
+        }
     start = "Before document navigation or the loaded Refresh or Save interaction."
     end = ("Refresh requires search to disable then re-enable. Startup, Refresh and Save require "
            "the expected ordered rows to be visible and enabled through two animation frames.")
@@ -345,6 +360,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--d1", required=True, type=Path)
     parser.add_argument("--do", dest="candidate", type=Path, help="clean native candidate checkout")
+    parser.add_argument("--transaction-read-only", action="store_true", help="Measure only mounted Transactions startup and fresh Refresh, with real Login and one audited history query")
     parser.add_argument("--d1-browser-cost", action="store_true", help="Observe local D1 work for complete verified Chromium interactions on each fresh fixture")
     parser.add_argument("--origin", default="local loopback; geographic origin unrecorded")
     parser.add_argument("--pairs", type=int, default=1)
@@ -375,6 +391,7 @@ def main():
     env = {
         **os.environ,
         "FIDY_REFERENCE": "1",
+        "FIDY_REFERENCE_READ_ONLY": "1" if args.transaction_read_only else "0",
         "FIDY_REFERENCE_D1_COST": "1" if args.d1_browser_cost else "0",
         "BROWSER_COST_MEASUREMENT": "1" if args.d1_browser_cost else "0",
         "CLI_ACCEPTANCE_MODE": "cli",
@@ -395,7 +412,7 @@ def main():
         "offeredLoad": "one isolated User, sequential",
         "d1BrowserCost": args.d1_browser_cost,
         "dataset": args.dataset,
-        **browser_workload(args.dataset),
+        **browser_workload(args.dataset, read_only=args.transaction_read_only),
         "stressOnly": args.dataset == "breaking",
         "seedEpochMs": 1794916800000,
         "backendBoundary": {
@@ -496,7 +513,7 @@ def main():
     finally:
         key.unlink(missing_ok=True)
         cert.unlink(missing_ok=True)
-        report = compare(args.pairs, rows, paths, stress=args.dataset == "breaking", calibration=args.dataset == "production")
+        report = compare(args.pairs, rows, paths, stress=args.dataset == "breaking", calibration=args.dataset == "production", read_only=args.transaction_read_only)
         (run / "report.json").write_text(json.dumps(report, indent=2))
     if any(row["status"] != "ok" for row in rows) or any(
         cell["status"] == "fail" for cell in report.values()

@@ -6,7 +6,7 @@ import { Schema } from "effect";
 import { freshBudgetMonth, freshPendingReview } from "./fresh-workspaces.mjs";
 import { freshDashboard, prepareReferenceDashboard } from "./fresh-dashboard.mjs";
 import { freshRecurring, prepareReferenceRecurring } from "./fresh-recurring.mjs";
-import { freshTransactions } from "./fresh-transactions.mjs";
+import { freshTransactionHistory, freshTransactions } from "./fresh-transactions.mjs";
 import { observeBrowserD1 } from "./browser-cost.mjs";
 
 const { chromium } = await import("@playwright/test");
@@ -30,6 +30,7 @@ const port = Number(process.env.REFERENCE_WEB_PORT ?? "4183");
 const app = `https://127.0.0.1:${port}`;
 const api = `https://127.0.0.1:${port + 1}`;
 const operator = `http://127.0.0.1:${port + 2}`;
+const readOnly = process.env.FIDY_REFERENCE_READ_ONLY === "1";
 const ledger = app + "/app/transactions?month=2026-11";
 /** @param {Uint8Array} body Exact response bytes used for comparison. */
 const digest = (body) => createHash("sha256").update(body).digest("hex");
@@ -116,7 +117,7 @@ try {
     assert.ok(backendMs > 0 && timing.responseEnd > 0, "Missing backend or transport timing");
     return Schema.decodeSync(Schema.fromJsonString(Schema.Unknown))(body.toString("utf8"));
   };
-  if (process.env.FIDY_ASSESSMENT === "production") {
+  if (process.env.FIDY_ASSESSMENT === "production" && !readOnly) {
     process.stderr.write("REFERENCE_STAGE dashboard-fixture\n");
     assert.equal(new URL(api).hostname, "127.0.0.1");
     const binding = await request.get(api + "/web/session/binding", { headers: origin });
@@ -142,7 +143,8 @@ try {
     refresh: "read.browser",
     correction: "correction.browser",
   };
-  const { before, startupMs, readMs, correctionMs } = await freshTransactions({
+  const journey = readOnly ? freshTransactionHistory : freshTransactions;
+  const result = await journey({
     page,
     ledger,
     api,
@@ -156,6 +158,7 @@ try {
     completed: (stage, milliseconds) =>
       event({ type: "completed", journey: journeys[stage], milliseconds }),
   });
+  const { before, startupMs, readMs } = result;
   process.stderr.write("REFERENCE_STAGE accountability-after\n");
   const after = await evidence();
   const accountability = {
@@ -166,9 +169,14 @@ try {
   };
   process.stderr.write(JSON.stringify(accountability) + "\n");
   // WebSession requests in the pinned baseline write session Audit and carry no external retry key.
-  assert.deepEqual(accountability, { reads: 2, corrections: 1, units: 0, receipts: 0 });
+  assert.deepEqual(accountability, {
+    reads: readOnly ? 1 : 2,
+    corrections: readOnly ? 0 : 1,
+    units: 0,
+    receipts: 0,
+  });
   const views = {};
-  if (process.env.FIDY_ASSESSMENT === "production") {
+  if (process.env.FIDY_ASSESSMENT === "production" && !readOnly) {
     process.stderr.write("REFERENCE_STAGE budgets-month\n");
     const input = { page, api, browser: app, event };
     views["budgets.month.browser"] = await freshBudgetMonth(input);
@@ -189,7 +197,7 @@ try {
       browser: browser.version(),
       startupMs,
       readMs,
-      correctionMs,
+      ...("correctionMs" in result ? { correctionMs: result.correctionMs } : {}),
       attempts,
       accountability,
     }) + "\n"

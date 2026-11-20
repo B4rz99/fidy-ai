@@ -8,6 +8,16 @@ from run import BOUNDARIES, CALIBRATION_VIEWS, browser_workload, compare, failur
 
 
 class ReferenceReport(unittest.TestCase):
+    def test_read_only_plan_and_report_cover_actual_startup_and_fresh_history(self):
+        expected = {"startup.browser", "read.browser", "read.http", "read.backend"}
+        plan = browser_workload("production", read_only=True)
+        self.assertEqual(set(plan["boundaries"]), expected)
+        self.assertNotIn("additionalCalibrationSetup", plan)
+        report = compare(1, self.rows(1), ["d1", "do"], read_only=True)
+        self.assertEqual(set(report), expected)
+        self.assertEqual(report["read.browser"]["d1"]["completed"], 1)
+        self.assertEqual(report["read.browser"]["status"], "missing")
+
     def test_extreme_manifest_declares_only_the_transaction_journeys_it_runs(self):
         plan = browser_workload("extreme")
         self.assertEqual(plan["boundaries"], BOUNDARIES)

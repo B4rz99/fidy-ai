@@ -273,12 +273,21 @@ const correctHistory = async (input, { initial, target }) => {
  * @template Evidence
  * @param {Journey & {beforeRefresh: () => Promise<Evidence>}} input Journey and its pre-refresh accountability observation.
  */
-export const freshTransactions = async (input) => {
+export const freshTransactionHistory = async (input) => {
   const { startup, startupMs } = await startApplication(input);
   if (input.checkpoint) await input.checkpoint("startup");
   const before = await input.beforeRefresh();
   const history = await refreshHistory(input, startup);
   if (input.checkpoint) await input.checkpoint("refresh");
+  return { before, startupMs, readMs: history.readMs, history };
+};
+
+/**
+ * @template Evidence
+ * @param {Journey & {beforeRefresh: () => Promise<Evidence>}} input Complete Correction journey.
+ */
+export const freshTransactions = async (input) => {
+  const { before, startupMs, history } = await freshTransactionHistory(input);
   const correctionMs = await correctHistory(input, history);
   if (input.checkpoint) await input.checkpoint("save-through-fresh-view");
   return { before, startupMs, readMs: history.readMs, correctionMs };

@@ -31,14 +31,27 @@ await test("a Trio filename under another owner's internals is still private", (
 });
 
 await test("closed fixture recovery entrypoints may reuse only their corresponding production Worker", () => {
+  /** @type {Array<[string, string, string]>} */
   const paired = [
-    ["cloudflare/fixture-fallback-core.ts","cloudflare/core-worker.ts","cloudflare/public-worker.ts"],
-    ["cloudflare/fixture-fallback-ingress.ts","cloudflare/public-worker.ts","cloudflare/core-worker.ts"],
+    [
+      "cloudflare/fixture-fallback-core.ts",
+      "cloudflare/core-worker.ts",
+      "cloudflare/public-worker.ts",
+    ],
+    [
+      "cloudflare/fixture-fallback-ingress.ts",
+      "cloudflare/public-worker.ts",
+      "cloudflare/core-worker.ts",
+    ],
   ];
   for (const [from, own, other] of paired) {
-    assert.deepEqual(inspect(from,own), []);
-    assert.ok(inspect(from,other).some((violation) => violation.name === "published-only"));
-    assert.ok(inspect("cloudflare/source/operations.ts",from).some((violation) => violation.name === "published-only"));
+    assert.deepEqual(inspect(from, own), []);
+    assert.ok(inspect(from, other).some((violation) => violation.name === "published-only"));
+    assert.ok(
+      inspect("cloudflare/source/operations.ts", from).some(
+        (violation) => violation.name === "published-only"
+      )
+    );
   }
 });
 

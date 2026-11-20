@@ -17,20 +17,16 @@ import { type CohortCommand, cohortAuthority, serveCohort } from "./cohort-bridg
 const readObject = Effect.fnUntraced(function* (runtime: Miniflare, directory: string, id: string) {
   if (!/^[a-f0-9]{64}$/u.test(id)) return yield* Effect.fail(Error("Unknown physical object"));
   // Close the workerd writer before inspecting its SQLite files during a physical census.
-  yield* native(async () => {
-    try {
-      await runtime.unsafeEvictDurableObject("core", "UserStore", { id });
-    } catch (error) {
+  yield* native(() =>
+    runtime.unsafeEvictDurableObject("core", "UserStore", { id }).catch((error: unknown) => {
       if (
-        !(
-          error instanceof Error &&
-          error.message === "Cannot evict Durable Object: it is not currently running."
-        )
-      ) {
-        throw error;
-      }
-    }
-  });
+        error instanceof Error &&
+        error.message === "Cannot evict Durable Object: it is not currently running."
+      )
+        {return;}
+      throw error;
+    })
+  );
   const files = yield* native(() =>
     Array.fromAsync(new Bun.Glob("**/" + id + ".sqlite").scan({ cwd: directory, absolute: true }))
   );

@@ -12,6 +12,31 @@ import { observeBrowserD1 } from "./browser-cost.mjs";
 
 const { chromium } = await import("@playwright/test");
 
+/** @param {import("@playwright/test").Page} page Browser under the production-readiness checkpoint. */
+const startupResources = (page) =>
+  page.evaluate(() =>
+    performance
+      .getEntriesByType("resource")
+      .flatMap((entry) => {
+        if (!(entry instanceof PerformanceResourceTiming)) return [];
+        const pathname = new URL(entry.name).pathname;
+        if (
+          !/\.(?:m?js|css)$/.test(pathname) &&
+          !["/web/session/binding", "/transactions", "/user"].includes(pathname)
+        )
+          return [];
+        return [
+          {
+            path: pathname,
+            start: entry.startTime,
+            end: entry.responseEnd,
+            transferred: entry.transferSize,
+          },
+        ];
+      })
+      .slice(0, 100)
+  );
+
 const pairingProof = Schema.decodeUnknownSync(
   Schema.Struct({
     publicCode: Schema.String,
@@ -175,6 +200,7 @@ try {
       correction: "correction.browser",
     };
     const journey = readOnly ? freshTransactionHistory : freshTransactions;
+    let startupTrace;
     const result = await journey({
       page,
       ledger,
@@ -186,10 +212,13 @@ try {
       beforeRefresh: evidence,
       checkpoint,
       offered: (stage) => event({ type: "offered", journey: journeys[stage] }),
-      completed: (stage, milliseconds) =>
-        event({ type: "completed", journey: journeys[stage], milliseconds }),
+      completed: (stage, milliseconds) => {
+        event({ type: "completed", journey: journeys[stage], milliseconds });
+        if (stage === "startup") startupTrace = startupResources(page);
+      },
     });
     const { before, startupMs, readMs } = result;
+    event({ type: "startup-resources", resources: await startupTrace });
     process.stderr.write("REFERENCE_STAGE accountability-after\n");
     const after = await evidence();
     const accountability = {

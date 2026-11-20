@@ -1,7 +1,12 @@
 import { routeSessionRequest } from "../directory/operations";
 import { isStorageBootstrap, isStorageCompatibility } from "../storage-bootstrap/contract";
 import { initializeSharedStores } from "../storage-bootstrap/operations";
-import { smokeManifest, smokePath, smokeProofAccepted } from "../runtime/release-smoke/contract";
+import {
+  smokeManifest,
+  smokePath,
+  smokeProofAccepted,
+  smokeVersionHeader,
+} from "../runtime/release-smoke/contract";
 import {
   bancolombiaSandboxAdmission,
   verifyBancolombiaSandboxAuthentication,
@@ -100,6 +105,14 @@ const storageProbe = Effect.fn(function* (request: Request, environment: CoreHtt
   return Option.none<Response>();
 });
 
+/** Cloudflare has already selected Core; named objects follow their own deployment assignment. */
+const consumeVersionOverride = (request: Request): Request => {
+  if (!request.headers.has(smokeVersionHeader)) return request;
+  const headers = new Headers(request.headers);
+  headers.delete(smokeVersionHeader);
+  return new Request(request, { headers });
+};
+
 export const makeCoreHttp = ({ telemetry, institutions }: CoreComposition): CoreHttpHandler => {
   const observeRejections = makeCoreRejectionObserver();
   return (incoming, installed) => {
@@ -110,8 +123,8 @@ export const makeCoreHttp = ({ telemetry, institutions }: CoreComposition): Core
     });
     return Effect.gen(function* () {
       const admission = yield* releaseAdmission(incoming, environment, "core");
-      const request = admission.request;
       if (Option.isSome(admission.denial)) return admission.denial.value;
+      const request = consumeVersionOverride(admission.request);
       if (isAcceptanceReceipt(request)) return yield* fixtureChargeReceipt(request, environment);
       if (isAcceptanceWindow(request)) return yield* renewAcceptanceWindow(request, environment);
       const storage = yield* storageProbe(request, environment);

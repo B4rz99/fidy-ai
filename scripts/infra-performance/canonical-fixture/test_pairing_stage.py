@@ -159,3 +159,58 @@ class PairingStage(TestCase):
                               (self.stage["release"], {"coreVersionId":str(UUID(int=900))})):
             with self.subTest(change=mutation), patch.dict(obj,mutation), self.assertRaises(ValueError):
                 verify()
+
+    def test_failed_resume_replacement_requires_the_exact_staged_history_and_financial_controls(self):
+        from test_unsealed_stage import archive
+        pin = pairing_stage.upload_pin()
+        failed = pin["failedStage"]
+        controls = {"digest": self.stage_digest}
+        uploaded = {"native-release.json": pairing_stage.original_snapshot(pin["revision"], self.prior),
+                    "native-release.json.predecessor": self.prior, "native-release.json.controls": controls,
+                    "native-release.json.source.controls": controls}
+        staged = {"snapshot": uploaded["native-release.json"], **{role + kind: source[role + kind]
+                  for role in ("core", "public") for kind, source in (("VersionId", pin), ("DeploymentId", failed))}}
+        docs = {**uploaded, "native-release.json": staged}
+        jobs = inventory(pairing_stage.FAILED_RESUME_STEPS, "failure")
+        def read_archive(source, artifact, digest, *, prefix, conclusions, get):
+            self.assertEqual((source, artifact, digest, prefix, conclusions),
+                (failed["verifier"], failed["artifact"], failed["sha256"], "native-storage-release-", {"failure"}))
+            return failed["run"], archive(docs)
+        def restore():
+            with patch.object(pairing_stage, "staged_documents", return_value=(self.prior, controls)), \
+                    patch.object(pairing_stage, "upload_documents", return_value=uploaded), \
+                    patch.object(pairing_stage, "protected_archive", read_archive):
+                return pairing_stage.replacement_documents(lambda path: json.dumps(jobs),
+                        lambda cmd, *args: args[0] if cmd == "merge-base" else self.archive.git(cmd, *args))
+        self.assertEqual(restore(), (staged, controls))
+        for key in tuple(docs) + ("native-fallback-stage.json",):
+            with self.subTest(key=key), patch.dict(docs, {key:{}}), self.assertRaises(ValueError):
+                restore()
+        for step in jobs["jobs"][0]["steps"]:
+            with self.subTest(step=step["name"]), patch.dict(step, conclusion="cancelled"), self.assertRaises(ValueError):
+                restore()
+
+    def test_current_seal_requires_the_failed_resume_deployments_as_predecessors(self):
+        pin = pairing_stage.upload_pin()
+        failed = pin["failedStage"]
+        prior = {"snapshot": pairing_stage.original_snapshot(pin["revision"], self.prior),
+                 **{role + kind: source[role + kind] for role in ("core", "public")
+                    for kind, source in (("VersionId", pin), ("DeploymentId", failed))}}
+        self.stage["release"]["snapshot"] = pairing_stage.original_snapshot(self.archive.source, prior)
+
+        def lineage(cmd, *args):
+            if cmd == "merge-base" and args == (failed["verifier"], self.archive.source):
+                return failed["verifier"]
+            return self.git(cmd, *args)
+
+        def recover():
+            self.archive.seal()
+            with patch.object(pairing_stage, "replacement_documents",
+                              return_value=(prior, {"digest": self.stage_digest})):
+                return pairing_stage.sealed_pair(self.archive.verifier, "34", self.archive.digest,
+                                                 self.archive.get, lineage)
+
+        self.assertEqual(recover(), (self.stage, prior))
+        self.stage["release"]["snapshot"] = self.snapshot
+        with self.assertRaises(ValueError):
+            recover()

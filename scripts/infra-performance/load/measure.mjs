@@ -14,9 +14,9 @@ import { inOrder, indices } from "./sequence.mjs";
 
 const [root, directory, size = "extreme", profile = "original"] = process.argv.slice(2);
 assert.ok(["extreme", "production"].includes(size));
-assert.ok(["original", "mixed-review", "single"].includes(profile));
+assert.ok(["original", "mixed-review", "single", "cpu"].includes(profile));
 const cohortSize = 20;
-const users = profile === "single" ? 1 : cohortSize,
+const users = ["single", "cpu"].includes(profile) ? 1 : cohortSize,
   samples = 30;
 const success = 200,
   badRequest = 400,
@@ -348,6 +348,20 @@ const measure = async (native, d1) => {
   const variants = platformsFor(native, d1);
   await inOrder(indices(users), (index) => prepareFixture({ native, d1, variants }, index));
   await warm(variants);
+  if (profile === "cpu") {
+    const { profileHistory } = await import("./profile.mjs");
+    await profileHistory(
+      native,
+      async () => {
+        const subject = variants.do.subjects[0];
+        const response = await execute({ runtime: native, subject }, history);
+        assert.equal(response.status, success);
+        assert.equal(hash(new Uint8Array(await response.arrayBuffer())), subject.digest);
+      },
+      write
+    );
+    return;
+  }
   const audits = {};
   await offeredLoad(variants);
   audits.history = await verifyAudit(variants, "history", {

@@ -545,6 +545,7 @@ const createUserPlatform = Effect.fnUntraced(function* (mode: NativeFixture) {
   ): Miniflare =>
     new Miniflare({
       ...ingressOptions,
+      ...(mode === "browser" && Bun.env.FIDY_WORKERD_CPU === "1" ? { inspectorPort: 0 } : {}),
       ...(capture ? captureLogs(logs) : {}),
       unsafeInspectDurableObjects: true,
       resourcePersistencePath: directory,

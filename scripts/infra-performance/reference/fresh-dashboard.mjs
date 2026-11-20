@@ -191,6 +191,52 @@ const verifiedWidgets = (value) => {
     }))
   );
 };
+/** @param {import("@playwright/test").Page} page Mounted Transactions page. */
+const watchDashboard = (page) =>
+  page.evaluateHandle((rows) => {
+    let readyAt;
+    let frame = 0;
+    const visible = (element) => Boolean(element?.getClientRects().length);
+    const query = (selector) => document.querySelector(selector);
+    const ready = () => {
+      const chart = '[data-widget-type="spending-chart"]';
+      if (!visible(query(chart + ' [aria-label="Serie COP"]'))) return false;
+      if (!visible(query(chart + ' [aria-label="Serie USD"]'))) return false;
+      const budget = query('[data-widget-type="budget-bar"] .dashboard-budget-values');
+      const metric = query('[data-widget-type="custom-metric"]');
+      return (
+        visible(budget) &&
+        /2[.]?000/u.test(budget?.textContent ?? "") &&
+        visible(metric) &&
+        /4[.]?000/u.test(metric?.textContent ?? "") &&
+        /3[.]?000/u.test(metric?.textContent ?? "") &&
+        rows.every(({ id, name }) =>
+          [...document.querySelectorAll('a[href*="' + id + '"]')].some(
+            (link) => visible(link) && link.textContent.includes(name)
+          )
+        )
+      );
+    };
+    const observer = new MutationObserver(() => {
+      if (frame !== 0) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        if (ready()) {
+          readyAt = performance.now();
+          observer.disconnect();
+        }
+      });
+    });
+    observer.observe(document.body, { subtree: true, childList: true, characterData: true });
+    return {
+      stop: () => {
+        observer.disconnect();
+        if (frame !== 0) cancelAnimationFrame(frame);
+        return readyAt;
+      },
+    };
+  }, expectedRows);
+
 /** @param {Workspace} input Installed origins, mounted browser and evidence sink. */
 export const freshDashboard = async (input) => {
   const { page, browser, event } = input;
@@ -203,6 +249,7 @@ export const freshDashboard = async (input) => {
   const journey = "dashboard.fresh.browser";
   const control = page.locator('a[href="/app/dashboard"]:visible').first();
   const recordPhases = input.recordPhases ? await trackBrowserClick(control) : undefined;
+  const dashboardReady = input.recordPhases ? await watchDashboard(page) : undefined;
   event({ type: "offered", journey });
   const start = performance.now();
   await control.click();
@@ -244,8 +291,10 @@ export const freshDashboard = async (input) => {
     },
   };
   event({ type: "completed", journey, ...result });
-  if (recordPhases) {
-    const phases = await recordPhases(reply, paintedAt);
+  if (recordPhases && dashboardReady) {
+    const readyAt = await dashboardReady.evaluate(({ stop }) => stop());
+    await dashboardReady.dispose();
+    const phases = await recordPhases(reply, paintedAt, readyAt);
     event({ type: "phases", journey, ...phases });
   }
   return result;

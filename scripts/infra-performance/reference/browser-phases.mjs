@@ -50,7 +50,7 @@ export const trackBrowserClick = async (control) => {
   /**
    * @param {import("@playwright/test").Response} reply Completed canonical response.
    * @param {number} paintedAt Browser time of the second frame callback.
-   * @param {number} [controlsReadyAt] Browser time when the observed fresh controls became enabled.
+   * @param {number} [controlsReadyAt] Browser time when the observed fresh view first became usable.
    */
   return async (reply, paintedAt, controlsReadyAt) => {
     try {

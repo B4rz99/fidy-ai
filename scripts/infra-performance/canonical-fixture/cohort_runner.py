@@ -8,6 +8,7 @@ import subprocess
 import time
 
 from fixture import digest, prepare, uuid, write
+from cohort import identity
 from hosted import HERE, ROOT, RECEIPT_PATH, private_file, verify_native_fixture
 
 
@@ -111,7 +112,7 @@ class BrowserPort:
         self.command("renew")
 
 
-def collect_owned(owner, port):
+def collect_owned(owner, port, *, browser=False):
     coords = owner.coordinates
     session = private_file(port.directory, "native-session.json")
 
@@ -123,7 +124,12 @@ def collect_owned(owner, port):
         return response["data"]
 
     port.guard("foreground")
-    manifest = prepare(call, port.directory, coords["revision"], "performance-1")
+    if browser:
+        owner.save("owned", workload="mounted-transactions-ordinary")
+    manifest = prepare(call, port.directory, coords["revision"], "performance-1", browser_workspace=browser)
+    if browser and (identity(manifest["workspace"]["profile"]["data"]["id"]) != owner.state["user"]
+                    or manifest["workspace"]["review"]["data"]["pendingCount"] != 0):
+        raise ValueError("Native original Session or enrolled workspace differs")
     owner.offer_receipt()
     sealed = call("POST", RECEIPT_PATH, dict(resourcePrefix=coords["prefix"], nativeManifestDigest=digest(manifest)))
     write(port.directory / "native-receipt.json", sealed)

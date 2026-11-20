@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { isDeepStrictEqual } from "node:util";
 import { Schema } from "effect";
 
 export const targetId = "81000000-0000-4000-8000-000000000002";
@@ -34,6 +35,7 @@ const transaction = Schema.StructWithRest(
 const historyPage = Schema.decodeUnknownSync(
   Schema.StructWithRest(Schema.Struct({ data: Schema.Array(transaction) }), [extraFields])
 );
+/** @typedef {Journey & {captured?: ReturnType<typeof historyPage>}} ReadJourney */
 const changedTransaction = Schema.decodeUnknownSync(
   Schema.Struct({
     data: Schema.Struct({ id: Schema.String, revision: Schema.Int }),
@@ -55,9 +57,16 @@ const expectedRows = (calibration) => {
 
 /**
  * @param {ReturnType<typeof historyPage>} initial First verified history response.
- * @param {boolean} calibration Whether this is the eight-original calibration fixture.
+ * @param {ReadJourney} input Fixed reference or independently verified native receipt.
  */
-const verifySeededPage = (initial, calibration) => {
+const verifySeededPage = (initial, { calibration, captured }) => {
+  if (captured) {
+    assert.ok(
+      isDeepStrictEqual(initial, captured),
+      "History differs from the verified native fixture"
+    );
+    return;
+  }
   assert.equal(initial.data.length, calibration ? productionPage : ordinaryPage);
   assert.deepEqual(
     initial.data.map((record) => record.id),
@@ -93,7 +102,7 @@ const bootstrap = Schema.decodeUnknownSync(
   })
 );
 /**
- * @param {Journey} input Browser journey configuration.
+ * @param {ReadJourney} input Browser journey configuration.
  * @param {string} method Expected HTTP method.
  * @param {string} path Exact API pathname.
  */
@@ -104,13 +113,16 @@ const responseFor = ({ page, api }, method, path) =>
   });
 // ResponseEnd is measured from Chromium request start through body completion. It never subtracts RTT.
 /**
- * @param {Journey} input Browser journey configuration.
+ * @param {ReadJourney} input Browser journey configuration.
  * @param {string} label Expected visible counterparty.
  */
-const ready = async ({ page, calibration }, label) => {
-  const expected = expectedRows(calibration).map((row) =>
-    row.id === targetId ? { ...row, label } : row
-  );
+const ready = async ({ page, calibration, captured }, label) => {
+  const expected = captured
+    ? captured.data.map((row) => {
+        assert.ok(row.counterparty);
+        return { id: row.id, label: row.counterparty };
+      })
+    : expectedRows(calibration).map((row) => (row.id === targetId ? { ...row, label } : row));
   await page.waitForFunction((rows) => {
     const controls = document.querySelectorAll(
       'button[data-transaction-slot="transaction-identity-control"]'
@@ -133,10 +145,10 @@ const ready = async ({ page, calibration }, label) => {
   );
 };
 /**
- * @param {Journey} input Browser journey configuration.
+ * @param {ReadJourney} input Browser journey configuration.
  */
 const startApplication = async (input) => {
-  const { page, ledger, api, calibration, observeStartup, offered, completed } = input;
+  const { page, ledger, api, observeStartup, offered, completed } = input;
   process.stderr.write("REFERENCE_STAGE bootstrap\n");
   // The first page may arrive inside the real session bootstrap. An explicit historical
   // month can instead require a canonical read. Inspect only responses the app requested.
@@ -166,7 +178,7 @@ const startApplication = async (input) => {
   assert.ok(reply, "Application startup did not load Transaction history");
   const context = await observeStartup(reply);
   const startup = historyPage(direct ? context : bootstrap(context).initial.transactions.page);
-  verifySeededPage(startup, calibration);
+  verifySeededPage(startup, input);
   completed?.("startup", startupMs);
   return { startup, startupMs };
 };
@@ -207,11 +219,11 @@ const watchRefresh = async (page) => {
   }, timeoutMs);
 };
 /**
- * @param {Journey} input Browser journey configuration.
+ * @param {ReadJourney} input Browser journey configuration.
  * @param {ReturnType<typeof historyPage>} startup History observed during startup.
  */
 const refreshHistory = async (input, startup) => {
-  const { page, calibration, observe, offered, completed } = input;
+  const { page, observe, offered, completed } = input;
   process.stderr.write("REFERENCE_STAGE read\n");
   const refreshCycle = await watchRefresh(page);
   const list = responseFor(input, "GET", "/transactions");
@@ -227,16 +239,17 @@ const refreshHistory = async (input, startup) => {
   const readMs = performance.now() - started;
   await refreshCycle.dispose();
   const initial = historyPage(await observe(initialResponse));
-  assert.deepEqual(initial, startup, "Refresh changed the seeded history");
-  const target = verifySeededPage(initial, calibration);
+  assert.ok(isDeepStrictEqual(initial, startup), "Refresh changed the seeded history");
+  const target = verifySeededPage(initial, input);
   completed?.("refresh", readMs);
   return { initial, target, readMs };
 };
 /**
- * @param {Journey} input Browser journey configuration.
+ * @param {ReadJourney} input Browser journey configuration.
  * @param {Awaited<ReturnType<typeof refreshHistory>>} history Verified pre-Correction history and target.
  */
 const correctHistory = async (input, { initial, target }) => {
+  assert.ok(target);
   const { page, observe, offered, completed } = input;
   process.stderr.write("REFERENCE_STAGE open-correction\n");
   await page.locator('[id="transaction-' + targetId + '"]').click();
@@ -269,6 +282,25 @@ const correctHistory = async (input, { initial, target }) => {
   completed?.("correction", correctionMs);
   return correctionMs;
 };
+/**
+ * Mount the real Transactions page once for alternating read observations. Its caller must
+ * first verify the native receipt and pass that manifest's complete effective history.
+ * @param {Omit<Journey, "calibration">} input Browser and evidence observers.
+ * @param {unknown} expectedHistory Effective page from the independently verified fixture.
+ */
+export const mountCapturedTransactionHistory = async (input, expectedHistory) => {
+  const captured = historyPage(expectedHistory);
+  assert.ok(Array.isArray(captured.next) && captured.next.length === 0);
+  assert.equal(captured.data.length, productionPage);
+  assert.equal(new Set(captured.data.map((record) => record.id)).size, productionPage);
+  const journey = { ...input, captured, calibration: true };
+  const { startup, startupMs } = await startApplication(journey);
+  return {
+    startupMs,
+    refresh: async () => (await refreshHistory(journey, startup)).readMs,
+  };
+};
+
 /**
  * @template Evidence
  * @param {Journey & {beforeRefresh: () => Promise<Evidence>}} input Journey and its pre-refresh accountability observation.

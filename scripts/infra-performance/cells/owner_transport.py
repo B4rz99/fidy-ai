@@ -10,7 +10,7 @@ import urllib.request
 from uuid import UUID
 
 from budget import Refused, counts, today
-from comparison import FIXTURE
+from comparison import FIXTURE, BROWSER_FIXTURE
 from prepare import PIN
 
 HERE = Path(__file__).resolve().parent
@@ -167,6 +167,6 @@ def confirmed(receipt, account, *, exposed):
             or (role == "ingress" and not binding.get("namespace_id") and binding.get("script_name") != tag + "-core")
         ):
             raise Refused("Disposable coordinator identity mismatch")
-    if receipt["fixture"] != FIXTURE or receipt["baseline"] != PIN or receipt["day"] != today():
+    if receipt["fixture"] not in (FIXTURE, BROWSER_FIXTURE) or receipt["baseline"] != PIN or receipt["day"] != today():
         raise Refused("Missing same-day calibrated fixture receipt")
     return "https://" + tag + "-ingress." + subdomain + ".workers.dev"

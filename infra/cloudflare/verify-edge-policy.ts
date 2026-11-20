@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "fb1da73c7e83c0615dc6c98ed7ab654dbfb852a1c1006f29f03d6197b884f39e";
+const expectedEdgePolicyDigest = "08d4d7753334af734b71e2576c0937f0da98534724c7ffc8b7f869253c216f10";
 const securityArtifacts = [
   ...(await Promise.all(
     [
@@ -72,6 +72,13 @@ const securityArtifacts = [
       "../../scripts/infra-performance/cells/owner_transport.py",
       "../../scripts/infra-performance/cells/owner_cloud.py",
       "../../scripts/infra-performance/cells/owner_bundle.py",
+      "../../scripts/infra-performance/cells/browser_window.py",
+      "../../scripts/infra-performance/cells/browser_assets.py",
+      "../../scripts/infra-performance/d1-budget.ts",
+      "../../scripts/infra-performance/hosted-browser/origin.mjs",
+      "../../scripts/infra-performance/hosted-browser/captured-profile.mjs",
+      "../../scripts/infra-performance/hosted-browser/protected-pair.mjs",
+      "../../scripts/infra-performance/hosted-browser/scoped-correction.mjs",
       "../../scripts/infra-performance/deployed-fleet/ten-source.sh",
       "../../scripts/infra-performance/deployed-fleet/ten.py",
       "../../scripts/infra-performance/deployed-fleet/pilot.py",

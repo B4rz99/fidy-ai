@@ -121,7 +121,7 @@ jobs:
         if: ${{ inputs.review_workerd_d1 }}
         run: |
           python3 scripts/infra-performance/reference/run.py --d1 baseline-d1 --do . \
-            --dataset extreme --network "$NETWORK" --review-workerd-d1 --pairs 1 --origin "GitHub-hosted Ubuntu loopback"
+            --dataset extreme --network "$NETWORK" --review-workerd-d1 --pairs 2 --origin "GitHub-hosted Ubuntu loopback"
       - name: Summarize Needs Review phases
         if: ${{ always() && (inputs.review_phases || inputs.review_workerd_d1) }}
         run: |

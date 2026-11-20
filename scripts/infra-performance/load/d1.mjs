@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import { readdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Miniflare } from "miniflare";
+import { withReviewWorkerTiming } from "../../../apps/server/cloudflare/runtime/review-worker-entry.test-fixture";
 import { inOrder, indices } from "./sequence.mjs";
 
 export const baseline = "fb53d9e755c14393048dc945fc0b7f117730d872";
@@ -41,6 +42,13 @@ const worker = async (root, { name, entry, env, browserOrigin, exports = {} }) =
   });
   const entrypoint = build.outputs[0];
   assert.ok(entrypoint && build.success, "Frozen Worker failed to bundle");
+  /** @type {NonNullable<MiniflareWorkerConfig["manifest"]>} */
+  const manifest = {
+    mainModule: "index.mjs",
+    modules: {
+      "index.mjs": { type: "esm", contents: await entrypoint.text() },
+    },
+  };
   return {
     config: {
       type: "worker",
@@ -49,12 +57,10 @@ const worker = async (root, { name, entry, env, browserOrigin, exports = {} }) =
       compatibilityFlags: ["nodejs_compat", "enable_request_signal", "request_signal_passthrough"],
       env: { ...shared, BROWSER_ORIGIN: text(browserOrigin), ...env },
       exports,
-      manifest: {
-        mainModule: "index.mjs",
-        modules: {
-          "index.mjs": { type: "esm", contents: await entrypoint.text() },
-        },
-      },
+      manifest:
+        process.env.FIDY_REFERENCE_D1_WORKERD === "1" && (name === "ingress" || name === "core")
+          ? withReviewWorkerTiming(manifest, name)
+          : manifest,
     },
   };
 };

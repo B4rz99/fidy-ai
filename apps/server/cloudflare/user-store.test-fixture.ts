@@ -1,6 +1,7 @@
 import { Clock, DateTime, Effect, FileSystem, Schema, type Scope } from "effect";
 import { Miniflare, type MiniflareWorkerConfig } from "miniflare";
 import { browserOrigins } from "./runtime/contract";
+import { withReviewWorkerTiming } from "./runtime/review-worker-entry.test-fixture";
 
 export const native = <Value>(run: () => Promise<Value>): Effect.Effect<Value> =>
   Effect.tryPromise(run).pipe(Effect.orDie);
@@ -224,7 +225,7 @@ const ingressWorker = ({
   ingress,
   deployment,
 }: {
-  ingress: Effect.Success<ReturnType<typeof workerManifest>>;
+  ingress: NonNullable<MiniflareWorkerConfig["manifest"]>;
   deployment: Readonly<Record<string, string>>;
 }): Readonly<{ config: MiniflareWorkerConfig }> => ({
   config: {
@@ -244,9 +245,13 @@ const ingressWorker = ({
   },
 });
 const manifests = Effect.fnUntraced(function* (module: string) {
-  return yield* Effect.all([workerManifest("./public-worker.ts"), workerManifest(module)], {
-    concurrency: 2,
-  });
+  const [ingress, core] = yield* Effect.all(
+    [workerManifest("./public-worker.ts"), workerManifest(module)],
+    { concurrency: 2 }
+  );
+  return Bun.env.FIDY_REFERENCE_D1_WORKERD === "1"
+    ? ([withReviewWorkerTiming(ingress, "ingress"), withReviewWorkerTiming(core, "core")] as const)
+    : ([ingress, core] as const);
 });
 
 type NativeFixture =

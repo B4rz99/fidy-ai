@@ -196,28 +196,40 @@ const watchDashboard = (page) =>
   page.evaluateHandle((rows) => {
     let readyAt;
     let frame = 0;
+    const milestones = new Map();
+    const mark = (name) => {
+      if (!milestones.has(name)) milestones.set(name, performance.now());
+    };
     const visible = (element) => Boolean(element?.getClientRects().length);
     const query = (selector) => document.querySelector(selector);
     const ready = () => {
       const chart = '[data-widget-type="spending-chart"]';
-      if (!visible(query(chart + ' [aria-label="Serie COP"]'))) return false;
-      if (!visible(query(chart + ' [aria-label="Serie USD"]'))) return false;
+      const charts = visible(query(chart + ' [aria-label="Serie COP"]')) &&
+        visible(query(chart + ' [aria-label="Serie USD"]'));
+      if (charts) mark("charts-visible");
       const budget = query('[data-widget-type="budget-bar"] .dashboard-budget-values');
       const metric = query('[data-widget-type="custom-metric"]');
+      const transactions = rows.every(({ id, name }) =>
+        [...document.querySelectorAll('a[href*="' + id + '"]')].some(
+          (link) => visible(link) && link.textContent.includes(name)
+        )
+      );
+      if (transactions) mark("transactions-visible");
       return (
+        charts &&
         visible(budget) &&
         /2[.]?000/u.test(budget?.textContent ?? "") &&
         visible(metric) &&
         /4[.]?000/u.test(metric?.textContent ?? "") &&
         /3[.]?000/u.test(metric?.textContent ?? "") &&
-        rows.every(({ id, name }) =>
-          [...document.querySelectorAll('a[href*="' + id + '"]')].some(
-            (link) => visible(link) && link.textContent.includes(name)
-          )
-        )
+        transactions
       );
     };
     const observer = new MutationObserver(() => {
+      for (const pending of document.querySelectorAll('output[aria-label="Cargando tablero"]')) {
+        mark(pending.parentElement?.classList.contains("contents") ? "query-pending" : "route-fallback");
+      }
+      if (query('output[aria-label="Cargando gráfico"]')) mark("chart-fallback");
       if (frame !== 0) return;
       frame = requestAnimationFrame(() => {
         frame = 0;
@@ -232,7 +244,7 @@ const watchDashboard = (page) =>
       stop: () => {
         observer.disconnect();
         if (frame !== 0) cancelAnimationFrame(frame);
-        return readyAt;
+        return { readyAt, milestones: [...milestones] };
       },
     };
   }, expectedRows);
@@ -292,10 +304,17 @@ export const freshDashboard = async (input) => {
   };
   event({ type: "completed", journey, ...result });
   if (recordPhases && dashboardReady) {
-    const readyAt = await dashboardReady.evaluate(({ stop }) => stop());
+    const { readyAt, milestones } = await dashboardReady.evaluate(({ stop }) => stop());
     await dashboardReady.dispose();
     const phases = await recordPhases(reply, paintedAt, readyAt);
-    event({ type: "phases", journey, ...phases });
+    event({
+      type: "phases",
+      journey,
+      ...phases,
+      milestonesBeforePaintMs: Object.fromEntries(
+        milestones.map(([name, time]) => [name, paintedAt - time])
+      ),
+    });
   }
   return result;
 };

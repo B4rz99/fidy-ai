@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { Schema } from "effect";
 import { DashboardDocument } from "../../../apps/server/src/core/dashboard/contract";
 import { DashboardView } from "../../../apps/server/src/shell/dashboard/contract";
+import { trackBrowserClick } from "./browser-phases.mjs";
 import { consumed, painted, responseFor } from "./fresh-workspaces.mjs";
 
 /** @typedef {import("./fresh-workspaces.mjs").Workspace} Workspace */
@@ -200,9 +201,11 @@ export const freshDashboard = async (input) => {
     .waitFor();
   const response = responseFor(input, "/dashboard/view", {});
   const journey = "dashboard.fresh.browser";
+  const control = page.locator('a[href="/app/dashboard"]:visible').first();
+  const recordPhases = input.recordPhases ? await trackBrowserClick(control) : undefined;
   event({ type: "offered", journey });
   const start = performance.now();
-  await page.locator('a[href="/app/dashboard"]:visible').first().click();
+  await control.click();
   const reply = await response;
   await page.waitForFunction(
     (rows) =>
@@ -228,7 +231,7 @@ export const freshDashboard = async (input) => {
       .filter({ hasText: /3[.]?000/u })
       .waitFor(),
   ]);
-  await painted(page);
+  const paintedAt = await painted(page);
   const milliseconds = performance.now() - start;
   const { value, http } = await consumed(reply);
   verifiedWidgets(value);
@@ -241,5 +244,6 @@ export const freshDashboard = async (input) => {
     },
   };
   event({ type: "completed", journey, ...result });
+  if (recordPhases) event({ type: "phases", journey, ...await recordPhases(reply, paintedAt) });
   return result;
 };

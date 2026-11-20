@@ -108,7 +108,7 @@ REASONS = {
     "native worker build failed": "worker-build",
 }
 SOURCE_LOCATION = re.compile(
-    r"/(native-seed\.ts|native\.ts|fresh-transactions\.mjs|fresh-workspaces\.mjs|fresh-dashboard\.mjs|fresh-recurring\.mjs|dev-browser-api\.ts|browser\.mjs|preview\.mjs):(\d{1,6}):(\d{1,6})\b"
+    r"/(native-seed\.ts|native\.ts|fresh-transactions\.mjs|fresh-workspaces\.mjs|fresh-dashboard\.mjs|fresh-recurring\.mjs|dev-browser-api\.ts|browser\.mjs|browser-phases\.mjs|preview\.mjs):(\d{1,6}):(\d{1,6})\b"
 )
 
 
@@ -450,6 +450,8 @@ def main():
         "offeredLoad": "one isolated User, sequential",
         "postSetupIdleMs": args.setup_idle_ms,
         "d1BrowserCost": args.d1_browser_cost,
+        "browserPhases": env.get("FIDY_REFERENCE_PHASES") == "1",
+
         "dataset": args.dataset,
         **workload,
         "stressOnly": args.dataset == "breaking",
@@ -465,7 +467,7 @@ def main():
         "harnessRevision": output(["git", "rev-parse", "HEAD"], ROOT),
         "comparisonSourceSha256": {
             f.name: hashlib.sha256(f.read_bytes()).hexdigest()
-            for f in [Path(__file__), BROWSER, HERE / "fresh-transactions.mjs", HERE / "fresh-workspaces.mjs", HERE / "fresh-dashboard.mjs", HERE / "fresh-recurring.mjs", HERE / "browser-cost.mjs", HERE / "preview.mjs"]
+            for f in [Path(__file__), BROWSER, HERE / "browser-phases.mjs", HERE / "fresh-transactions.mjs", HERE / "fresh-workspaces.mjs", HERE / "fresh-dashboard.mjs", HERE / "fresh-recurring.mjs", HERE / "browser-cost.mjs", HERE / "preview.mjs"]
         },
         "pairs": args.pairs,
         "order": "alternate D1-first and DO-first pairs" if args.candidate else "pinned D1 reference",

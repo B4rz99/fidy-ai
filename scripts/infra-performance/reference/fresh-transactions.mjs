@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { isDeepStrictEqual } from "node:util";
 import { Schema } from "effect";
+import { trackBrowserClick } from "./browser-phases.mjs";
 
 export const targetId = "81000000-0000-4000-8000-000000000002";
 const afterName = "Referencia corregida";
@@ -14,7 +15,7 @@ const productionPage = 7,
 /** @typedef {"startup" | "refresh" | "correction"} Stage */
 /** @typedef {{page: Page, ledger: string, api: string, calibration: boolean,
  * observe: (reply: BrowserResponse) => Promise<unknown>, observeStartup: (reply: BrowserResponse) => Promise<unknown>,
- * checkpoint?: (stage: string) => Promise<void>, offered?: (stage: Stage) => void, completed?: (stage: Stage, milliseconds: number) => void}} Journey */
+ * phases?: (row: Readonly<Record<string, unknown>>) => void, checkpoint?: (stage: string) => Promise<void>, offered?: (stage: Stage) => void, completed?: (stage: Stage, milliseconds: number) => void}} Journey */
 const extraFields = Schema.Record(Schema.String, Schema.Unknown);
 const transaction = Schema.StructWithRest(
   Schema.Struct({
@@ -140,8 +141,8 @@ const ready = async ({ page, calibration, captured }, label) => {
       })
     );
   }, expected);
-  await page.evaluate(
-    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+  return page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(performance.now()))))
   );
 };
 /**
@@ -201,12 +202,12 @@ const watchRefresh = async (page) => {
         if (pending && field?.matches(":enabled")) {
           clearTimeout(timer);
           observer.disconnect();
-          resolve(true);
+          resolve(performance.now());
         }
       });
       const timer = setTimeout(() => {
         observer.disconnect();
-        resolve(false);
+        resolve(null);
       }, timeout);
       observer.observe(document.body, {
         attributes: true,
@@ -223,25 +224,26 @@ const watchRefresh = async (page) => {
  * @param {ReturnType<typeof historyPage>} startup History observed during startup.
  */
 const refreshHistory = async (input, startup) => {
-  const { page, observe, offered, completed } = input;
+  const { page, observe, offered, completed, phases } = input;
   process.stderr.write("REFERENCE_STAGE read\n");
   const refreshCycle = await watchRefresh(page);
   const list = responseFor(input, "GET", "/transactions");
+  const control = page.getByRole("button", { name: "Actualizar transacciones", exact: true });
+  const recordPhases = phases ? await trackBrowserClick(control) : undefined;
   offered?.("refresh");
   const started = performance.now();
-  await page.getByRole("button", { name: "Actualizar transacciones", exact: true }).click();
+  await control.click();
   const initialResponse = await list;
-  assert.ok(
-    await refreshCycle.evaluate((cycle) => cycle.completed),
-    "Refresh did not commit a fresh, editable history"
-  );
-  await ready(input, "Evaluación 2");
+  const controlsReadyAt = await refreshCycle.evaluate((cycle) => cycle.completed);
+  assert.ok(controlsReadyAt !== null, "Refresh did not commit a fresh, editable history");
+  const paintedAt = await ready(input, "Evaluación 2");
   const readMs = performance.now() - started;
   await refreshCycle.dispose();
   const initial = historyPage(await observe(initialResponse));
   assert.ok(isDeepStrictEqual(initial, startup), "Refresh changed the seeded history");
   const target = verifySeededPage(initial, input);
   completed?.("refresh", readMs);
+  if (recordPhases) phases?.(await recordPhases(initialResponse, paintedAt, controlsReadyAt));
   return { initial, target, readMs };
 };
 /**

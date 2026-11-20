@@ -4,7 +4,7 @@ import { Option, Schema } from "effect";
 
 /** @typedef {import("@playwright/test").Page} Page */
 /** @typedef {import("@playwright/test").Response} BrowserResponse */
-/** @typedef {{page: Page, api: string, browser: string, event: (row: Readonly<Record<string, unknown>>) => void}} Workspace */
+/** @typedef {{page: Page, api: string, browser: string, event: (row: Readonly<Record<string, unknown>>) => void, recordPhases?: boolean}} Workspace */
 const categories = 16,
   cap = "100000",
   width = 12,
@@ -71,7 +71,7 @@ export const responseFor = ({ page, api }, path, query) =>
 /** @param {Page} page Mounted browser page. */
 export const painted = (page) =>
   page.evaluate(
-    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(performance.now()))))
   );
 /** @param {number} ordinal Fixture record ordinal. */
 const digits = (ordinal) => String(ordinal).padStart(width, "0");

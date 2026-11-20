@@ -31,6 +31,7 @@ const port = Number(process.env.REFERENCE_WEB_PORT ?? "4183");
 const app = `https://127.0.0.1:${port}`;
 const api = `https://127.0.0.1:${port + 1}`;
 const operator = `http://127.0.0.1:${port + 2}`;
+const recordPhases = process.env.FIDY_REFERENCE_PHASES === "1";
 const readOnly = process.env.FIDY_REFERENCE_READ_ONLY === "1";
 const ledger = app + "/app/transactions?month=2026-11";
 /** @param {Uint8Array} body Exact response bytes used for comparison. */
@@ -185,6 +186,7 @@ try {
         Schema.decodeSync(Schema.fromJsonString(Schema.Unknown))(await reply.text()),
       beforeRefresh: evidence,
       checkpoint,
+      phases: recordPhases ? (row) => event({ type: "phases", journey: journeys.refresh, ...row }) : undefined,
       offered: (stage) => event({ type: "offered", journey: journeys[stage] }),
       completed: (stage, milliseconds) =>
         event({ type: "completed", journey: journeys[stage], milliseconds }),
@@ -209,7 +211,7 @@ try {
     const views = {};
     if (process.env.FIDY_ASSESSMENT === "production" && !readOnly) {
       process.stderr.write("REFERENCE_STAGE budgets-month\n");
-      const input = { page, api, browser: app, event };
+      const input = { page, api, browser: app, event, recordPhases };
       views["budgets.month.browser"] = await freshBudgetMonth(input);
       await checkpoint?.("budgets");
       process.stderr.write("REFERENCE_STAGE review-pending\n");
@@ -225,7 +227,7 @@ try {
     if (process.env.FIDY_ASSESSMENT === "extreme" && !readOnly) {
       const count = 5000,
         nextPage = 50;
-      const input = { page, api, browser: app, event };
+      const input = { page, api, browser: app, event, recordPhases };
       process.stderr.write("REFERENCE_STAGE review-pending\n");
       views["review.pending.browser"] = await freshPendingReview(input, count);
       views["review.next.browser"] = await freshPendingReview(input, count, nextPage);

@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { Effect, Option } from "effect";
+import { Clock, Effect, Option } from "effect";
 import {
   acceptanceRequestAdmitted,
   acceptanceSubject,
@@ -149,5 +149,62 @@ it("binds each closed Core request to the browser and provider callbacks selecte
           yield* acceptanceRequestAdmitted({ request, boundary: "core", environment: core, now })
         ).toBe(false);
       }
+    })
+  ));
+
+it("hands Core a replayable request with the identical authenticated bytes from a streamed POST", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const environment = {
+        SMOKE_PROOF: "a".repeat(48),
+        RELEASE_GIT_SHA: "2".repeat(40),
+        BROWSER_ORIGIN: "https://storage-web-acceptance.fidyapp.com",
+        NATIVE_STORAGE_ADMISSION: "closed",
+        RECOVERY_ISOLATION: "isolated",
+      };
+      const url = "https://core.internal/web/pairings";
+      const bytes = new TextEncoder().encode('{ "memo": "café" }');
+      const headers = new Headers({
+        "content-type": "application/json",
+        origin: environment.BROWSER_ORIGIN,
+      });
+      const deadline = (yield* Clock.currentTimeMillis) + 30_000;
+      headers.set(
+        "x-fidy-acceptance-proof",
+        yield* signAcceptanceRequest({
+          environment,
+          boundary: "core",
+          deadline,
+          request: new Request(url, { method: "POST", headers, body: bytes }),
+        })
+      );
+      const abort = new AbortController();
+      const incoming = new Request(url, {
+        method: "POST",
+        headers,
+        signal: abort.signal,
+        duplex: "half",
+        body: new ReadableStream<Uint8Array>({
+          start(controller): void {
+            controller.enqueue(bytes.subarray(0, 3));
+            controller.enqueue(bytes.subarray(3));
+            controller.close();
+          },
+        }),
+      });
+      const admission = yield* releaseAdmission(incoming, environment, "core");
+      expect(Option.isNone(admission.denial)).toBe(true);
+      expect(incoming.bodyUsed).toBe(true);
+      expect(admission.request.headers.get("x-fidy-acceptance-proof")).toBe(
+        headers.get("x-fidy-acceptance-proof")
+      );
+      expect(admission.request.headers.get("origin")).toBe(environment.BROWSER_ORIGIN);
+      expect(admission.request.url).toBe(url);
+      expect(admission.request.method).toBe("POST");
+      expect(
+        new Uint8Array(yield* Effect.tryPromise(() => admission.request.arrayBuffer()))
+      ).toEqual(bytes);
+      abort.abort();
+      expect(admission.request.signal.aborted).toBe(true);
     })
   ));

@@ -64,14 +64,14 @@ def observed_work(log):
 def work_counts(key, rows):
     offered = completed = unknown = 0
     for row in rows:
-        if key in EVENT_CELLS and row.get("work") is not None:
+        if key in row.get("timings", {}):
+            # The verified result proves one dispatch/completion, including on a paired digest mismatch.
+            offered += 1
+            completed += 1
+        elif key in EVENT_CELLS and row.get("work") is not None:
             counts = row["work"].get(key, {})
             offered += counts.get("offered", 0)
             completed += counts.get("completed", 0)
-        elif key in row.get("timings", {}):
-            # A complete observation proves dispatch and completion even if its paired digest differs.
-            offered += 1
-            completed += 1
         else:
             unknown += 1
     if unknown:

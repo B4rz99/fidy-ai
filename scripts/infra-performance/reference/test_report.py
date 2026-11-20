@@ -144,6 +144,13 @@ class ReferenceReport(unittest.TestCase):
             self.assertEqual((counts["planned"], counts["offered"], counts["completed"],
                               counts["comparable"]), (1, offered, completed, 0))
 
+    def test_verified_timings_prove_completion_when_a_journal_lacks_that_event(self):
+        rows = self.rows(1)
+        for row in rows:
+            row["work"] = {}
+        cell = compare(1, rows, ["d1", "do"])["startup.browser"]
+        self.assertEqual((cell["d1"]["offered"], cell["d1"]["completed"]), (1, 1))
+
     def test_archived_success_leaves_an_unmeasured_cell_missing(self):
         key = "recurring.no-match.browser"
         rows = self.rows(30)

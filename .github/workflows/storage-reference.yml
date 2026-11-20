@@ -35,6 +35,10 @@ on:
         description: Measure only the four compact Recurring interactions and full revision HTTP on extreme
         type: boolean
         default: false
+      review_phases:
+        description: Run 12 diagnostic pairs with Needs Review request and usability phases on extreme
+        type: boolean
+        default: false
       setup_idle_ms:
         description: Idle time between authenticated fixture preparation and the first browser journey
         type: choice
@@ -54,6 +58,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
+      FIDY_REFERENCE_REVIEW_PHASES: ${{ inputs.review_phases && '1' || '0' }}
+      REFERENCE_PAIRS: ${{ inputs.review_phases && 12 || 30 }}
       DATASET: ${{ inputs.dataset || 'production' }}
       NETWORK: ${{ inputs.network || 'normal' }}
       RECURRING_FLAG: ${{ inputs.full_recurring && '--full-recurring' || '' }}
@@ -97,10 +103,16 @@ jobs:
           python3 -m unittest discover -s scripts/infra-performance/reference
           python3 scripts/infra-performance/reference/run.py --d1 baseline-d1 --do . \
             --dataset "$DATASET" --network "$NETWORK" --setup-idle-ms "$SETUP_IDLE_MS" ${READ_ONLY_FLAG:+"$READ_ONLY_FLAG"} ${RECURRING_FLAG:+"$RECURRING_FLAG"} --pairs 1 --origin "GitHub-hosted Ubuntu loopback"
-      - name: Measure 30 alternating pairs
+      - name: Measure alternating pairs
         run: |
           python3 scripts/infra-performance/reference/run.py --d1 baseline-d1 --do . \
-            --dataset "$DATASET" --network "$NETWORK" --setup-idle-ms "$SETUP_IDLE_MS" ${READ_ONLY_FLAG:+"$READ_ONLY_FLAG"} ${RECURRING_FLAG:+"$RECURRING_FLAG"} --pairs 30 --origin "GitHub-hosted Ubuntu loopback"
+            --dataset "$DATASET" --network "$NETWORK" --setup-idle-ms "$SETUP_IDLE_MS" ${READ_ONLY_FLAG:+"$READ_ONLY_FLAG"} ${RECURRING_FLAG:+"$RECURRING_FLAG"} --pairs "$REFERENCE_PAIRS" --origin "GitHub-hosted Ubuntu loopback"
+      - name: Summarize Needs Review phases
+        if: ${{ always() && inputs.review_phases }}
+        run: |
+          for folder in apps/web/test-results/reference/*; do
+            python3 scripts/infra-performance/reference/phase_report.py "$folder" > "$folder/review-phases.json"
+          done
       - name: Preserve reference evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -111,6 +123,7 @@ jobs:
             apps/web/test-results/reference/*/attempts.jsonl
             apps/web/test-results/reference/*/*/workspace-events.jsonl
             apps/web/test-results/reference/*/report.json
+            apps/web/test-results/reference/*/review-phases.json
           if-no-files-found: warn
 
   workerd-load:

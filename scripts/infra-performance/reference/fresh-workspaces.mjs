@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { Option, Schema } from "effect";
+import { trackBrowserClick } from "./browser-phases.mjs";
 
 /** @typedef {import("@playwright/test").Page} Page */
 /** @typedef {import("@playwright/test").Response} BrowserResponse */
@@ -71,7 +72,10 @@ export const responseFor = ({ page, api }, path, query) =>
 /** @param {Page} page Mounted browser page. */
 export const painted = (page) =>
   page.evaluate(
-    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    () =>
+      new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve(performance.now())))
+      )
   );
 /** @param {number} ordinal Fixture record ordinal. */
 const digits = (ordinal) => String(ordinal).padStart(width, "0");
@@ -224,38 +228,35 @@ const verifyPending = (value, context, { count, expected }) => {
   );
   assert.deepEqual(pageContext(context).data.items, expected);
 };
-/** @param {Page} page Mounted browser page. @param {ReturnType<typeof reviewRows>} rows Expected visible entries. */
-const usableReviews = async (page, rows) => {
-  await page.waitForFunction((expected) => {
-    const cards = document.querySelectorAll('[data-review="inbox-row"]');
-    /** @param {Element | null} check Selection control. */
-    const isSelectable = (check) => {
-      if (check instanceof HTMLInputElement) return !check.checked && !check.disabled;
-      return (
-        check?.getAttribute("aria-checked") === "false" &&
-        !check.matches('[aria-disabled="true"],[data-disabled]')
-      );
-    };
-    /** @param {Element | null} control Ready control. @param {string} label Expected accessible label. */
-    const isVisibleControl = (control, label) =>
-      control?.getAttribute("aria-label") === label && control.getClientRects().length > 0;
+/** @param {ReturnType<typeof reviewRows>} expected Ordered entries of the fresh page. */
+const readyReviewControls = (expected) => {
+  const cards = document.querySelectorAll('[data-review="inbox-row"]');
+  /** @param {Element | null} check Selection control. */
+  const isSelectable = (check) => {
+    if (check instanceof HTMLInputElement) return !check.checked && !check.disabled;
     return (
-      cards.length === expected.length &&
-      expected.every(({ reference, excerpt }, index) => {
-        const card = cards[index];
-        const open = card.querySelector('button[data-review="row-content"]:enabled');
-        const check =
-          card.querySelector('[role="checkbox"]') ?? card.querySelector('input[type="checkbox"]');
-        return (
-          isVisibleControl(open, "Abrir Extracto " + reference) &&
-          card.querySelector('[data-review="context-excerpt"]')?.textContent === excerpt &&
-          isSelectable(check) &&
-          isVisibleControl(check, "Seleccionar Extracto " + reference)
-        );
-      })
+      check?.getAttribute("aria-checked") === "false" &&
+      !check.matches('[aria-disabled="true"],[data-disabled]')
     );
-  }, rows);
-  await painted(page);
+  };
+  /** @param {Element | null} control Ready control. @param {string} label Expected accessible label. */
+  const isVisibleControl = (control, label) =>
+    control?.getAttribute("aria-label") === label && control.getClientRects().length > 0;
+  const usable =
+    cards.length === expected.length &&
+    expected.every(({ reference, excerpt }, index) => {
+      const card = cards[index];
+      const open = card.querySelector('button[data-review="row-content"]:enabled');
+      const check =
+        card.querySelector('[role="checkbox"]') ?? card.querySelector('input[type="checkbox"]');
+      return (
+        isVisibleControl(open, "Abrir Extracto " + reference) &&
+        card.querySelector('[data-review="context-excerpt"]')?.textContent === excerpt &&
+        isSelectable(check) &&
+        isVisibleControl(check, "Seleccionar Extracto " + reference)
+      );
+    });
+  return usable ? performance.now() : false;
 };
 const reviewJourney = "review.pending.browser";
 const reviewError = Schema.decodeUnknownOption(
@@ -317,13 +318,30 @@ const measurePendingReview = async (input, count, offset) => {
     ? page.locator('[data-review="pager"]').getByRole("button", { name: "Siguiente", exact: true })
     : page.getByRole("button", { name: /^Pendientes/u });
   const expected = reviewRows(count, offset);
-  event({ type: "offered", journey: offset ? "review.next.browser" : reviewJourney });
+  const journey = offset ? "review.next.browser" : reviewJourney;
+  const recordPhases =
+    process.env.FIDY_REFERENCE_REVIEW_PHASES === "1" ? await trackBrowserClick(control) : undefined;
+  const firstReady = recordPhases ? page.waitForFunction(readyReviewControls, expected) : undefined;
+  // Keep the early read from producing an unhandled timeout if the measured journey fails.
+  firstReady?.catch(() => undefined);
+  event({ type: "offered", journey });
   const start = performance.now();
   const [reply, context] = await Promise.all([workspace, source, control.click()]);
-  await usableReviews(page, expected);
+  await page.waitForFunction(readyReviewControls, expected);
+  const paintedAt = await painted(page);
   const milliseconds = performance.now() - start;
   const [summary, original] = await Promise.all([consumeSuccess(reply), consumeSuccess(context)]);
   verifyPending(summary.value, original.value, { count, expected });
+  if (recordPhases && firstReady) {
+    const ready = await firstReady;
+    const readyAt = await ready.jsonValue();
+    await ready.dispose();
+    event({
+      type: "phases",
+      journey,
+      ...(await recordPhases(reply, paintedAt, readyAt || undefined)),
+    });
+  }
   return { milliseconds, http: summary.http, context: original.http };
 };
 

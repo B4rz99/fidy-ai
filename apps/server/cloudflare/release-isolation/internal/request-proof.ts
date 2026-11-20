@@ -110,30 +110,50 @@ export const signRequest = Effect.fn(function* (ctx: Context & { deadline: numbe
   const mac = yield* Effect.tryPromise(() => crypto.subtle.sign("HMAC", credential, content));
   return [String(ctx.deadline), digest, Hex.encode(new Uint8Array(mac))].join(".");
 });
-/** Authenticate the bounded request metadata before reading or hashing a caller body. */
 const windowValid = (deadline: number, now: number): boolean =>
   deadline > now && deadline <= now + acceptanceLifetimeMs;
-export const verifyRequest = Effect.fn(
-  function* (ctx: Context & { now: number }) {
-    const pieces = proof.exec(proofValue(ctx.request));
-    if (pieces === null || !eligible(ctx)) return false;
-    const [, time, digest, signature] = pieces,
-      deadline = Number(time);
-    if (!windowValid(deadline, ctx.now)) {
-      return false;
-    }
-    const mac = Hex.decode(signature ?? "");
-    if (mac._tag === "Failure") return false;
-    const credential = yield* Effect.tryPromise(() => key(ctx.environment)),
-      content = yield* signedContent(ctx, deadline, digest ?? "");
-    const authenticated = yield* Effect.tryPromise(() =>
-      crypto.subtle.verify("HMAC", credential, Uint8Array.from(mac.success), content)
-    );
-    if (!authenticated) return false;
-    return (yield* bodyDigest(ctx.request)) === digest;
+
+/** Authenticate the claimed digest and request metadata before opening the body stream. */
+const authenticatedDigest = Effect.fn(function* (ctx: Context & { now: number }) {
+  const pieces = proof.exec(proofValue(ctx.request));
+  if (pieces === null || !eligible(ctx)) return Option.none<string>();
+  const [, time, digest = "", signature = ""] = pieces;
+  const deadline = Number(time);
+  if (!windowValid(deadline, ctx.now)) return Option.none<string>();
+  const mac = Hex.decode(signature);
+  if (mac._tag === "Failure") return Option.none<string>();
+  const credential = yield* Effect.tryPromise(() => key(ctx.environment));
+  const content = yield* signedContent(ctx, deadline, digest);
+  const authenticated = yield* Effect.tryPromise(() =>
+    crypto.subtle.verify("HMAC", credential, Uint8Array.from(mac.success), content)
+  );
+  return authenticated ? Option.some(digest) : Option.none<string>();
+});
+const verifiedBody = Effect.fn(
+  function* (ctx: Context & { now: number }, source: () => Request) {
+    const digest = yield* authenticatedDigest(ctx);
+    if (Option.isNone(digest)) return Option.none<Uint8Array<ArrayBuffer>>();
+    const bytes = yield* readBoundedRequestBody(yield* Effect.try(source), policy);
+    return Hex.encode(yield* digestBytes(bytes)) === digest.value
+      ? Option.some(bytes)
+      : Option.none();
   },
-  Effect.orElseSucceed(() => false)
+  Effect.orElseSucceed(() => Option.none<Uint8Array<ArrayBuffer>>())
 );
+export const verifyRequest = (ctx: Context & { now: number }): Effect.Effect<boolean> =>
+  verifiedBody(ctx, () => ctx.request.clone()).pipe(Effect.map(Option.isSome));
+
+/** Forward the very bytes Core authenticated, independently of the inbound network stream. */
+export const verifiedCoreRequest = Effect.fn(function* (ctx: Context & { now: number }) {
+  const body = yield* verifiedBody(ctx, () => ctx.request);
+  return Option.map(body, (bytes) => {
+    if (ctx.request.body === null) return ctx.request;
+    const headers = new Headers(ctx.request.headers);
+    headers.delete("transfer-encoding");
+    headers.delete("content-length");
+    return new Request(ctx.request, { method: ctx.request.method, headers, body: bytes });
+  });
+});
 export const scopedDeadline = (request: Request): Option.Option<number> =>
   Option.fromNullishOr(proof.exec(request.headers.get(acceptanceProofHeader) ?? "")?.[1]).pipe(
     Option.map(Number)

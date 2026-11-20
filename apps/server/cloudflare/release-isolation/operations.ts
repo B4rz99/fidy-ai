@@ -18,7 +18,12 @@ import {
   acceptanceReceiptKind,
   acceptanceWindowQuery,
 } from "./contract";
-import { scopedDeadline, signRequest, verifyRequest } from "./internal/request-proof";
+import {
+  scopedDeadline,
+  signRequest,
+  verifiedCoreRequest,
+  verifyRequest,
+} from "./internal/request-proof";
 import { deploymentPhase } from "./internal/deployment";
 import { smokePath, smokeProofAccepted } from "../runtime/release-smoke/contract";
 
@@ -111,7 +116,7 @@ export const releaseAdmission = Effect.fn(function* (
 ) {
   const phase = deploymentPhase(environment);
   if (phase === "invalid" || (phase === "open" && !liveAddress(request, environment, boundary))) {
-    return { denial: Option.some(isolatedResponse()), deadline: Option.none<number>() };
+    return { request, denial: Option.some(isolatedResponse()), deadline: Option.none<number>() };
   }
   const blocked = recoveryIsolationResponse({
     request,
@@ -120,13 +125,21 @@ export const releaseAdmission = Effect.fn(function* (
       proof: Option.fromUndefinedOr(environment.SMOKE_PROOF),
     },
   });
-  if (Option.isNone(blocked)) return { denial: blocked, deadline: Option.none<number>() };
-  if (
-    yield* verifyRequest({ request, environment, boundary, now: yield* Clock.currentTimeMillis })
-  ) {
-    return { denial: Option.none<Response>(), deadline: scopedDeadline(request) };
+  if (Option.isNone(blocked)) return { request, denial: blocked, deadline: Option.none<number>() };
+  const context = { request, environment, boundary, now: yield* Clock.currentTimeMillis };
+  const admitted = yield* boundary === "core"
+    ? verifiedCoreRequest(context)
+    : verifyRequest(context).pipe(
+        Effect.map((valid) => (valid ? Option.some(request) : Option.none()))
+      );
+  if (Option.isSome(admitted)) {
+    return {
+      request: admitted.value,
+      denial: Option.none<Response>(),
+      deadline: scopedDeadline(request),
+    };
   }
-  return { denial: blocked, deadline: Option.none<number>() };
+  return { request, denial: blocked, deadline: Option.none<number>() };
 });
 
 const cohortLimits: Readonly<Record<string, number>> = {

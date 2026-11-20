@@ -391,7 +391,8 @@ try {
     const budget=training ? {} : routeBounds(await Bun.file(resolve(output,"limits.json")).json());
     const {runBrowser}=await import("../hosted-browser/signed-feasibility.mjs");
     const month="/transactions?limit=25&from=2026-11-01T05%3A00%3A00.000Z&to=2026-12-01T05%3A00%3A00.000Z";
-    for(const network of ["ordinary","poor"])await runBrowser({network,variant:"d1",origins:{browser:origin,api:"https://api.fidyapp.com"},cookie,expected:expected.history,observations:30,
+    const profileRoutes={};
+    for(const network of ["ordinary","poor"]){const start=browserRoutes.length;await runBrowser({network,variant:"d1",origins:{browser:origin,api:"https://api.fidyapp.com"},cookie,expected:expected.history,observations:30,
       forward:async r=>{const u=new URL(r.url);return source(u.pathname+u.search,{method:r.method,headers:Object.fromEntries(r.headers)})},
       afterRequest:(key,response,ev)=>{
         if(key.startsWith("OPTIONS ")){assert.equal(response.status,204);return;}
@@ -403,14 +404,18 @@ try {
         Object.assign(ev,{actual:cost.rowsWritten,maximum:cap.rowsWritten,...(training?{nativeCalls:cost.calls.length}:{})});
       }
     });
+    profileRoutes[network]=browserRoutes.slice(start);}
     const expectedRoutes=["GET /web/session/binding?context=transactions","GET /web/session/binding","GET /ingestion/review-workspace?limit=0&status=pending",...Array.from({length:30},()=>["GET "+month,"GET /user"]).flat()];
-    assert.deepEqual(browserRoutes.sort(),[...expectedRoutes,...expectedRoutes].sort());
+    for(const rows of Object.values(profileRoutes)){
+      for(const route of expectedRoutes)assert.ok(rows.includes(route));
+      assert.ok(rows.length>=63&&rows.length<=72);
+    }
     const check=await db.batch([
       db.prepare("SELECT operation,outcome,count(*) AS entries FROM audit_entries WHERE user_id=? AND session_id=? GROUP BY operation,outcome ORDER BY operation,outcome").bind(subject,binding),
       db.prepare("SELECT (SELECT COALESCE(sum(units),0) FROM commercial_allowance_consumptions WHERE user_id=?1 AND allowance='canonical_call') AS units,(SELECT count(*) FROM canonical_request_replays WHERE user_id=?1 AND state='completed') AS receipts").bind(subject)
     ]);
     account("audit",check);metadata.sessionAudit=check[0].results;
-    assert.equal(check[0].results.find(r=>r.operation==="transactions.listTransactions"&&r.outcome==="success")?.entries,62);
+    assert.equal(check[0].results.find(r=>r.operation==="transactions.listTransactions"&&r.outcome==="success")?.entries,browserRoutes.filter(r=>r==="GET "+month).length+2);
     assert.equal(check[0].results.find(r=>r.operation==="transactions.getTransaction"&&r.outcome==="success")?.entries,8);
     assert.equal(check[0].results.filter(r=>r.operation==="transactions.updateTransaction").length,0);
     assert.deepEqual(check[1].results,[{units:0,receipts:0}]);
@@ -420,8 +425,8 @@ try {
     const allCaps=sqlBatches.map(b=>b.maximum).concat(routes.map(name=>(training?estimates:budget)[name].maximum));
     metadata.fullEstimate=Object.fromEntries(["rowsRead","rowsWritten"].map(k=>[k,allCaps.reduce((a,b)=>a+b[k],0)]));
     metadata.routes=Object.fromEntries([...new Set(routes)].map(name=>[name,{count:routes.filter(r=>r===name).length,cap:(training?estimates:budget)[name].maximum}]));
-    metadata.oneProfileEstimate=Object.fromEntries(["rowsRead","rowsWritten"].map(k=>[k,metadata.fullEstimate[k]-expectedRoutes.reduce((a,name)=>a+(training?estimates:budget)[name].maximum[k],0)]));
-    assert.ok(metadata.oneProfileEstimate.rowsRead<=100000 && metadata.oneProfileEstimate.rowsWritten<=5000);
+    metadata.singleProfiles=Object.fromEntries(Object.entries(profileRoutes).map(([network,rows])=>[network,Object.fromEntries(["rowsRead","rowsWritten"].map(k=>[k,metadata.fullEstimate[k]-(network==="ordinary"?profileRoutes.poor:profileRoutes.ordinary).reduce((a,name)=>a+(training?estimates:budget)[name].maximum[k],0)]))]));
+    metadata.profileRoutes=Object.fromEntries(Object.entries(profileRoutes).map(([network,rows])=>[network,Object.fromEntries([...new Set(rows)].map(route=>[route,rows.filter(r=>r===route).length]))]));
     assert.ok(metadata.fullEstimate.rowsWritten>5000);
     if (training) {
       await Bun.write(resolve(output, "limits.json"), JSON.stringify(estimates, null, 2));

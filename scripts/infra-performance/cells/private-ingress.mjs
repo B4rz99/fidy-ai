@@ -29,7 +29,7 @@ const admitted = async (request, env, paths) => {
     return false;
   }
   const localBrowser = url.hostname === "127.0.0.1" && ["OPTIONS","GET"].includes(request.method) &&
-    ["/web/session/binding?context=transactions","/ingestion/review-workspace?limit=0&status=pending","/user",
+    ["/web/session/binding?context=transactions","/web/consent","/ingestion/review-workspace?limit=0&status=pending","/user",
      "/transactions?limit=25&from=2026-11-01T05%3A00%3A00.000Z&to=2026-12-01T05%3A00%3A00.000Z"].includes(url.pathname + url.search);
   if (!localBrowser && !paths.has(request.method + " " + url.pathname + url.search)) return false;
   return timingSafeEqual(

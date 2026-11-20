@@ -25,7 +25,10 @@ export async function runBrowser({variant, origins, cookie, expected, forward, a
   const api=Bun.serve({hostname:"127.0.0.1",port:0,tls,fetch:async request=>{
     const url=new URL(request.url);
     if(url.origin!==origins.api||request.headers.get("origin")!==origins.browser||!["GET","OPTIONS"].includes(request.method)||
-       !["/web/session/binding","/ingestion/review-workspace","/transactions","/user"].includes(url.pathname))return new Response(null,{status:403});
+       !["/web/session/binding","/web/consent","/ingestion/review-workspace","/transactions","/user"].includes(url.pathname)){
+      events.push({rejected:request.method+" "+url.pathname,keys:[...url.searchParams.keys()]});await report();
+      return new Response(null,{status:403});
+    }
     const key=request.method+" "+url.pathname+url.search;
     const headersOut=new Headers(request.headers);
     for(const name of ["host","connection","content-length","accept-encoding","transfer-encoding"])headersOut.delete(name);
@@ -42,6 +45,7 @@ export async function runBrowser({variant, origins, cookie, expected, forward, a
         capture("initialFields",data.initial);
         assert.deepEqual(data.initial?.transactions?.page,expected);
       }
+      if(url.pathname==="/web/consent")capture("freshConsent",data);
       if(url.pathname==="/user") {capture("profile",data.data);capture("profileEnvelope",data);}
       if(url.pathname==="/transactions") assert.deepEqual(data,expected);
       if(url.pathname==="/ingestion/review-workspace") {capture("review",data); snapshots.reviewCount=data.pendingCount??data.data?.pendingCount;}
@@ -64,6 +68,8 @@ export async function runBrowser({variant, origins, cookie, expected, forward, a
       await cdp.send("Network.enable");
       await cdp.send("Network.emulateNetworkConditions",{offline:false,latency:400,downloadThroughput:125000,uploadThroughput:125000});
     }
+    page.on("requestfailed",r=>events.push({failed:r.method()+" "+new URL(r.url()).pathname,reason:r.failure()?.errorText}));
+    page.on("pageerror",err=>events.push({pageError:err.name}));
     page.setDefaultTimeout(60000);
     const counts=page.waitForResponse(r=>r.request().method()==="GET"&&new URL(r.url()).pathname==="/ingestion/review-workspace");
     const observe=async r=>{assert.equal(r.status(),200);return JSON.parse((await r.body()).toString("utf8"));};

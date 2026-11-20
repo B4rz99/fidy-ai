@@ -12,6 +12,7 @@ QUERY = Path(__file__).with_name("legacy-inventory.sql")
 
 repo = Path(sys.argv[1]) if len(sys.argv) > 1 else Path.cwd()
 db = sqlite3.connect(":memory:")
+db.setlimit(sqlite3.SQLITE_LIMIT_COMPOUND_SELECT, 5)
 archive_bytes = subprocess.check_output(
     ["git", "archive", "--format=tar", BASELINE, MIGRATIONS], cwd=repo, timeout=15
 )

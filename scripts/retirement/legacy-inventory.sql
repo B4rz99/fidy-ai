@@ -1,4 +1,4 @@
-WITH inventory(source, seen, attention) AS (
+WITH material(source, seen, attention) AS (
   SELECT 'structural_samples', count(*), count(*)
   FROM (SELECT 1 FROM anonymized_email_samples LIMIT 1001)
   UNION ALL
@@ -15,7 +15,8 @@ WITH inventory(source, seen, attention) AS (
   SELECT 'admission_events', count(*),
          count(*) FILTER (WHERE policy_key = 'ingestion.upload.outstanding.v1' AND released_at_epoch_ms IS NULL)
   FROM (SELECT policy_key, released_at_epoch_ms FROM resource_admission_events LIMIT 1001)
-  UNION ALL
+),
+billing(source, seen, attention) AS (
   SELECT 'wompi_callback_candidates', count(*),
          count(*) FILTER (WHERE event_received_at_ms IS NOT NULL AND event_resolved_at_ms IS NULL)
   FROM (SELECT event_received_at_ms, event_resolved_at_ms FROM billing_provider_transactions LIMIT 1001)
@@ -29,7 +30,8 @@ WITH inventory(source, seen, attention) AS (
   UNION ALL
   SELECT 'payment_enrollments', count(*), count(*) FILTER (WHERE status IN ('creating', 'verifying'))
   FROM (SELECT status FROM payment_enrollments LIMIT 1001)
-  UNION ALL
+),
+delivery(source, seen, attention) AS (
   SELECT 'whatsapp_deliveries', count(*),
          count(*) FILTER (WHERE state IN ('ready', 'staged', 'sending', 'accepted', 'ambiguous', 'unconfirmed'))
   FROM (SELECT state FROM whatsapp_deliveries LIMIT 1001)
@@ -39,6 +41,11 @@ WITH inventory(source, seen, attention) AS (
   UNION ALL
   SELECT 'provider_authentication_attempts', count(*), count(*) FILTER (WHERE state IN ('pending', 'exchanging', 'verified'))
   FROM (SELECT state FROM provider_authentication_attempts LIMIT 1001)
+),
+inventory AS (
+  SELECT * FROM material
+  UNION ALL SELECT * FROM billing
+  UNION ALL SELECT * FROM delivery
 )
 SELECT source, min(seen, 1000) AS rows_up_to_limit, seen <= 1000 AS complete,
        CASE WHEN seen <= 1000 THEN attention END AS attention_rows

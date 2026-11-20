@@ -8,6 +8,7 @@ import { freshBudgetMonth, freshPendingReview } from "./fresh-workspaces.mjs";
 import { freshDashboard, prepareReferenceDashboard } from "./fresh-dashboard.mjs";
 import { freshRecurring, prepareReferenceRecurring } from "./fresh-recurring.mjs";
 import { freshTransactionHistory, freshTransactions } from "./fresh-transactions.mjs";
+import { observeApiTimeline } from "./browser-phases.mjs";
 import { observeBrowserD1 } from "./browser-cost.mjs";
 
 const { chromium } = await import("@playwright/test");
@@ -80,8 +81,11 @@ try {
     })
   );
   const cdp = await context.newCDPSession(page);
-  if (process.env.FIDY_ASSESSMENT_NETWORK === "poor") {
+  const apiTimeline = recordPhases ? observeApiTimeline(cdp, api) : undefined;
+  if (recordPhases || process.env.FIDY_ASSESSMENT_NETWORK === "poor") {
     await cdp.send("Network.enable");
+  }
+  if (process.env.FIDY_ASSESSMENT_NETWORK === "poor") {
     await cdp.send("Network.emulateNetworkConditions", {
       offline: false,
       latency: 400,
@@ -188,8 +192,14 @@ try {
         Schema.decodeSync(Schema.fromJsonString(Schema.Unknown))(await reply.text()),
       beforeRefresh: evidence,
       checkpoint,
-      phases: recordPhases
-        ? (row) => event({ type: "phases", journey: journeys.refresh, ...row })
+      phases: apiTimeline
+        ? ({ clickEpochMs, ...row }) =>
+            event({
+              type: "phases",
+              journey: journeys.refresh,
+              ...row,
+              apiTimeline: typeof clickEpochMs === "number" ? apiTimeline(clickEpochMs) : [],
+            })
         : undefined,
       offered: (stage) => event({ type: "offered", journey: journeys[stage] }),
       completed: (stage, milliseconds) =>

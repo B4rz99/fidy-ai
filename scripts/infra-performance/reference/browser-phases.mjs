@@ -1,3 +1,77 @@
+const requestRoles = new Map([
+  ["/categories", "categories"],
+  ["/dashboard/catalog", "dashboard-catalog"],
+  ["/ingestion/review-workspace", "review-count"],
+  ["/transactions", "history"],
+  ["/user", "user"],
+  ["/web/session/binding", "binding"],
+]);
+
+/**
+ * Capture Chromium's API lifecycle, including CORS preflights and still-active requests.
+ * @param {import("@playwright/test").CDPSession} cdp Measured page's DevTools session.
+ * @param {string} api API origin.
+ */
+export const observeApiTimeline = (cdp, api) => {
+  const maxRequests = 64;
+  const secondsToMilliseconds = 1000;
+  /** @type {Map<string, {role: string, method: string, started: number, epoch: number,
+   * status?: number, headers?: number, completed?: number, failed?: boolean}>} */
+  const requests = new Map();
+  cdp.on("Network.requestWillBeSent", ({ requestId, request, timestamp, wallTime }) => {
+    const destination = new URL(request.url);
+    if (destination.origin !== api) return;
+    if (requests.size >= maxRequests) {
+      const oldest = requests.keys().next();
+      if (!oldest.done) requests.delete(oldest.value);
+    }
+    requests.set(requestId, {
+      role: requestRoles.get(destination.pathname) ?? "other-api",
+      method: request.method === "OPTIONS" ? "OPTIONS" : request.method === "GET" ? "GET" : "other",
+      started: timestamp,
+      epoch: wallTime * secondsToMilliseconds,
+    });
+  });
+  cdp.on("Network.responseReceived", ({ requestId, response, timestamp }) => {
+    const request = requests.get(requestId);
+    if (request === undefined) return;
+    request.status = response.status;
+    request.headers = timestamp;
+  });
+  cdp.on("Network.loadingFinished", ({ requestId, timestamp }) => {
+    const request = requests.get(requestId);
+    if (request !== undefined) request.completed = timestamp;
+  });
+  cdp.on("Network.loadingFailed", ({ requestId, timestamp }) => {
+    const request = requests.get(requestId);
+    if (request === undefined) return;
+    request.failed = true;
+    request.completed = timestamp;
+  });
+
+  /** @param {number} clickEpochMs Real click time on the browser epoch clock. */
+  return (clickEpochMs) => {
+    const lookbackMs = 1500;
+    return Array.from(requests.values()).flatMap((request) => {
+      const startAfterClickMs = request.epoch - clickEpochMs;
+      const offsetFromClick = (timestamp) =>
+        startAfterClickMs + (timestamp - request.started) * secondsToMilliseconds;
+      const completedAfterClickMs =
+        request.completed === undefined ? undefined : offsetFromClick(request.completed);
+      if (completedAfterClickMs !== undefined && completedAfterClickMs < -lookbackMs) return [];
+      return [{
+        role: request.role,
+        method: request.method,
+        status: request.status,
+        startAfterClickMs,
+        headersAfterClickMs: request.headers === undefined ? undefined : offsetFromClick(request.headers),
+        completedAfterClickMs,
+        failed: request.failed,
+      }];
+    });
+  };
+};
+
 const timingNames = new Set([
   "canonical-total",
   "canonical-admission",
@@ -77,6 +151,7 @@ export const trackBrowserClick = async (control) => {
           ]);
           return {
             status: "observed",
+            clickEpochMs: performance.timeOrigin + clickAt,
             windowMs,
             clickToRequestMs: request.startTime - clickAt,
             requestToResponseMs: request.duration,

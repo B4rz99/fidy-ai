@@ -228,6 +228,17 @@ const verifyPending = (value, context, { count, expected }) => {
 const usableReviews = async (page, rows) => {
   await page.waitForFunction((expected) => {
     const cards = document.querySelectorAll('[data-review="inbox-row"]');
+    /** @param {Element | null} check Selection control. */
+    const isSelectable = (check) => {
+      if (check instanceof HTMLInputElement) return !check.checked && !check.disabled;
+      return (
+        check?.getAttribute("aria-checked") === "false" &&
+        !check.matches('[aria-disabled="true"],[data-disabled]')
+      );
+    };
+    /** @param {Element | null} control Ready control. @param {string} label Expected accessible label. */
+    const isVisibleControl = (control, label) =>
+      control?.getAttribute("aria-label") === label && control.getClientRects().length > 0;
     return (
       cards.length === expected.length &&
       expected.every(({ reference, excerpt }, index) => {
@@ -235,18 +246,11 @@ const usableReviews = async (page, rows) => {
         const open = card.querySelector('button[data-review="row-content"]:enabled');
         const check =
           card.querySelector('[role="checkbox"]') ?? card.querySelector('input[type="checkbox"]');
-        const selectable =
-          check instanceof HTMLInputElement
-            ? !check.checked && !check.disabled
-            : check?.getAttribute("aria-checked") === "false" &&
-              !check.matches('[aria-disabled="true"],[data-disabled]');
         return (
-          open?.getAttribute("aria-label") === "Abrir Extracto " + reference &&
-          open.getClientRects().length > 0 &&
+          isVisibleControl(open, "Abrir Extracto " + reference) &&
           card.querySelector('[data-review="context-excerpt"]')?.textContent === excerpt &&
-          selectable &&
-          check?.getAttribute("aria-label") === "Seleccionar Extracto " + reference &&
-          check.getClientRects().length > 0
+          isSelectable(check) &&
+          isVisibleControl(check, "Seleccionar Extracto " + reference)
         );
       })
     );

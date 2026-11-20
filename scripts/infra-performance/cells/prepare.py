@@ -19,7 +19,10 @@ def main():
     parser.add_argument("--canonical-fixture", type=Path, help="Originals and actual private provenance from the disposable native rehearsal")
     parser.add_argument("--snapshot", action="store_true", help="Reconstruct and check the final empty D1 schema against frozen migration replay")
     parser.add_argument("--materialized", action="store_true", help="Import the complete private pre-Login canonical fixture and verify its full state")
+    parser.add_argument("--bulk-index-restore", action="store_true", help="Build secondary indexes after copying the verified fixture in a fresh unmounted D1")
     args = parser.parse_args()
+    if args.bulk_index_restore and not args.materialized:
+        parser.error("--bulk-index-restore requires --materialized")
     if args.materialized and (not args.canonical_fixture or args.snapshot):
         parser.error("--materialized needs --canonical-fixture and selects its own snapshot mode")
     root, source, out = (p.resolve() for p in (args.d1, args.calibration, args.out))
@@ -83,7 +86,7 @@ def main():
             + 'await Effect.runPromise(applyAlchemyFormat({executor,records,table:ALCHEMY_DEFAULT_TABLE}));\n'
             + 'await import(' + path_literal(HERE / "snapshot.mjs") + ');\n')
         (out / "snapshot-proof.json").write_text(json.dumps({"stage":"replay-frozen-alchemy","baseline":PIN}))
-        subprocess.run(["bun", str(entry), str(out), "materialized" if args.materialized else "empty"], cwd=root, check=True)
+        subprocess.run(["bun", str(entry), str(out), "materialized" if args.materialized else "empty", "bulk-index" if args.bulk_index_restore else "original"], cwd=root, check=True)
 
     artifacts["plan"] = hashlib.sha256((out / "plan.json").read_bytes()).hexdigest()
     (out / "manifest.json").write_text(json.dumps(dict(baseline=PIN, calibration=CALIBRATION, sha256=artifacts), indent=2))

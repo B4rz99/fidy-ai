@@ -10,7 +10,8 @@ import { Schema } from "effect";
 /** @typedef {{batch: Query[], reads:number,writes:number}} Batch */
 /** @typedef {{name:string,type:string,tbl_name:string,sql:string|null}} Definition */
 /** @typedef {{name:string, read:Query, inserts:string[], identities:string[], rowCount:number, dependencies:string[]}} Table */
-const emptyBatchSize = 15;
+const bulkIndexes = process.argv[4] === "bulk-index";
+const emptyBatchSize = bulkIndexes ? 45 : 15;
 const Rows = Schema.Array(Schema.Record(Schema.String, Schema.Json));
 const encodedRows = Schema.decodeUnknownSync(Rows);
 const QueryShape = Schema.Struct({ sql: Schema.String, params: Schema.Array(Schema.Json) });
@@ -341,9 +342,14 @@ try {
     { ...applicationSchema, check: digest(pristine.filter((def) => def.name !== "_cf_METADATA")) },
   ]);
   /** @param {string} kind SQL object type from the frozen schema. */
-  const define = async (kind) => {
+  const define = async (kind, secondary = false) => {
     const group = definitions
-      .filter((def) => def.type === kind)
+      .filter((def) => {
+        if (def.type !== kind) return false;
+        if (kind !== "index" || !bulkIndexes) return true;
+        // Keep every explicit UNIQUE index installed during the copy for foreign-key resolution.
+        return secondary === !/^CREATE\s+UNIQUE\s+INDEX\b/iu.test(String(def.sql));
+      })
       .map((def) => query(String(def.sql)));
     evidence.stage = "define-" + kind;
     // Each kind is a dependency barrier; the source row order retains relative trigger order.
@@ -370,6 +376,7 @@ try {
     // Source rows already include the effects of their original triggers. Installing the exact triggers after
     // copying data avoids replaying those effects a second time on the unexposed destination.
     applied.push(await run(restored, commands));
+    if (bulkIndexes) await define("index", true);
     await define("trigger");
   } else {
     await define("trigger");
@@ -420,6 +427,7 @@ try {
     cost,
   };
   evidence.snapshot = schemaSnapshot;
+  evidence.indexBuild = bulkIndexes ? "secondary indexes after bulk load" : "before fixture";
   evidence.scope = materialized ? "complete pre-Login fixture" : "empty migrated schema";
   evidence.batches = applied.length;
   evidence.restoredPhysical = await physical(restored);

@@ -27,3 +27,12 @@ class OfferedLoadEvidence(unittest.TestCase):
         self.assertEqual(report["do"]["throttled"], 1)
         self.assertEqual(report["dispatchMs"]["status"], "fail")
         self.assertEqual(report["do"]["incomplete"], 1)
+
+    def test_rollback_keeps_financial_equivalence_and_audit_failure_separately_visible(self):
+        rows = [dict(variant=variant, user=0, sample=sample, ok=True, status=200,
+                     dispatchMs=3, scheduledMs=3, bytes=100, digest="refusal-and-fresh-history")
+                for sample in range(30) for variant in ("d1", "do")]
+        report = summarize(rows, 1, 30, audit=False)
+        self.assertEqual(report["pairedPayloadsMatch"], True)
+        self.assertEqual(report["auditMatches"], False)
+        self.assertEqual(report["scheduledMs"]["status"], "fail")

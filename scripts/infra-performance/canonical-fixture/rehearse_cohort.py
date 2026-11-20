@@ -81,7 +81,12 @@ def controller(directory, coords, path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", required=True, type=Path)
-    out = parser.parse_args().out.resolve()
+    parser.add_argument("--d1",type=Path)
+    parser.add_argument("--calibration",type=Path)
+    args = parser.parse_args()
+    if bool(args.d1) != bool(args.calibration):
+        parser.error("The paired browser requires both frozen checkouts")
+    out = args.out.resolve()
     os.umask(0o077)
     out.mkdir(parents=True, exist_ok=False)
     directory = out / "fixture"
@@ -97,7 +102,12 @@ def main():
     with controller(directory, coords, path) as port:
         port.runtime("seed-survivors")
         port.owner.enroll()
-        proof = collect_owned(port.owner, port)
+        proof = collect_owned(port.owner, port, browser=bool(args.d1))
+    if args.d1:
+        import sys
+        sys.path.insert(0,str(ROOT/"scripts/infra-performance/cells"))
+        from rehearse_browser import paired
+        paired(out,proof,json.loads((directory/"native-session.json").read_bytes()),revision,coords["prefix"],args.d1,args.calibration)
     # New controller and new workerd process. The previous committed native databases and R2
     # marker survive the foreground runtime. Only custody and the original bound Session remain.
     with controller(directory, coords, path) as port:

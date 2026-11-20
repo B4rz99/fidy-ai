@@ -40,7 +40,12 @@ def run_window(owner, bundle, context, headers, report, save):
         env = {k:os.environ[k] for k in ("HOME","PATH","BROWSER_TLS_CERT","BROWSER_TLS_KEY","BROWSER_TLS_PIN",
                                           "ASSESSMENT_CHROMIUM","SMOKE_PROOF","RUNNER_TEMP") if k in os.environ}
         env["FIDY_DIAGNOSTIC_DIR"] = str(out.resolve())
-        result = subprocess.run(["bun","scripts/infra-performance/hosted-browser/protected-pair.mjs"],cwd=ROOT,
+        if "workerd" in context:
+            env.update(context["workerd"])
+            entry = "scripts/infra-performance/hosted-browser/pair.test-fixture.mjs"
+        else:
+            entry = "scripts/infra-performance/hosted-browser/protected-pair.mjs"
+        result = subprocess.run(["bun",entry],cwd=ROOT,
                                 env=env,input=json.dumps(config),text=True,timeout=max(1,min(owner.active["deadline"],native_deadline)-time.time()))
         path = out/"comparison.json"
         if path.is_file():

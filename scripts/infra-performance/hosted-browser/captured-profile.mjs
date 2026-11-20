@@ -48,6 +48,7 @@ export async function runBrowser({
     : resolve(process.env[variant === "d1" ? "D1_WEB_ASSETS" : "NATIVE_WEB_ASSETS"]);
   const web = Bun.serve({
     hostname: "127.0.0.1",
+    error: () => new Response(null, { status: 502 }),
     port: 0,
     tls,
     fetch: async (request) => {
@@ -86,6 +87,7 @@ export async function runBrowser({
   });
   const api = Bun.serve({
     hostname: "127.0.0.1",
+    error: () => new Response(null, { status: 502 }),
     port: 0,
     tls,
     fetch: async (request) => {
@@ -132,6 +134,7 @@ export async function runBrowser({
       };
       events.push(ev);
       const bytes = await response.arrayBuffer();
+      ev.bodyBytes = bytes.byteLength;
       if (response.ok && request.method === "GET") {
         const data = JSON.parse(new TextDecoder().decode(bytes));
         const capture = (name, val) => {
@@ -159,7 +162,6 @@ export async function runBrowser({
         }
       }
       await afterRequest?.(key, response, ev);
-      await report();
       const headers = new Headers(response.headers);
       headers.delete("x-fidy-comparison-cost");
       return new Response(bytes.byteLength ? bytes : null, { status: response.status, headers });
@@ -214,7 +216,15 @@ export async function runBrowser({
     );
     const observe = async (r) => {
       assert.equal(r.status(), 200);
-      return JSON.parse((await r.body()).toString("utf8"));
+      const body = await r.body();
+      if (r.request().method() === "GET" && new URL(r.url()).pathname === "/transactions") {
+        events.push({
+          stage: "complete-http",
+          milliseconds: r.request().timing().responseEnd,
+          bodyBytes: body.byteLength,
+        });
+      }
+      return JSON.parse(body.toString("utf8"));
     };
     const [mounted, review] = await Promise.all([
       mountCapturedTransactionHistory(

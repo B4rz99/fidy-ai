@@ -140,6 +140,13 @@ jobs:
           assert read("ordinary-do.json")["snapshots"] == read("ordinary-d1.json")["snapshots"], "Canonical startup, profile or pending Review differs"
           assert read("ordinary-native-mutation.json") == read("bulk/probe.json")["mutation"], "Committed or rolled-back state differs"
           VERIFY
+      - name: Rehearse both protected browser owners and physical disposal
+        run: |
+          source scripts/infra-performance/hosted-browser/tls.sh
+          export ASSESSMENT_CHROMIUM="$(command -v google-chrome)"
+          export NATIVE_WEB_ASSETS="$RUNNER_TEMP/native-web" D1_WEB_ASSETS="$RUNNER_TEMP/d1-web"
+          python3 scripts/infra-performance/canonical-fixture/rehearse_cohort.py --out "$RUNNER_TEMP/full" \
+            --d1 baseline-d1 --calibration baseline-calibration
       - name: Retain the verified workload and D1 cost
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -149,3 +156,6 @@ jobs:
             ${{ runner.temp }}/bulk/snapshot-proof.json
             ${{ runner.temp }}/bulk/probe.json
             ${{ runner.temp }}/ordinary-*.json
+            ${{ runner.temp }}/full/paired.json
+            ${{ runner.temp }}/full/summary.json
+            ${{ runner.temp }}/full/paired/comparison.json

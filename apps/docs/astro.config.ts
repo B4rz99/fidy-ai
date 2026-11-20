@@ -4,6 +4,7 @@ import starlight from "@astrojs/starlight";
 export default defineConfig({
   site: "https://docs.fidyapp.com",
   output: "static",
+  scopedStyleStrategy: "where",
   markdown: { syntaxHighlight: "prism" },
   trailingSlash: "never",
   build: { format: "directory", inlineStylesheets: "never" },

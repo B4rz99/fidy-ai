@@ -50,7 +50,7 @@ const observedManifest = Effect.fnUntraced(function* (module: string, name: stri
         "production.mjs": manifest.modules["index.mjs"],
         "meter.mjs": {
           type: "esm",
-          contents: await Bun.file(new URL("./meter.test-fixture.mjs", import.meta.url)).text(),
+          contents: yield* Effect.promise(()=>Bun.file(new URL("./meter.test-fixture.mjs", import.meta.url)).text()),
         },
       },
     };

@@ -11,7 +11,8 @@ export async function runBrowser({variant, origins, cookie, expected, forward, a
   const tls={ cert:Bun.file(process.env.BROWSER_TLS_CERT),key:Bun.file(process.env.BROWSER_TLS_KEY) };
   const dir=resolve(process.env.FIDY_DIAGNOSTIC_DIR);
   const events=[], snapshots={};
-  const report = () => Bun.write(join(dir,variant+"-"+network+".json"),JSON.stringify({variant,network,events,snapshots},null,2));
+  const assetsDelivered={rawBytes:0,encodedBytes:0,responses:0,gzip:0};
+  const report = () => Bun.write(join(dir,variant+"-"+network+".json"),JSON.stringify({variant,network,events,snapshots,assetsDelivered},null,2));
   const controls = expected.data.map(w=>({id:"transaction-"+w.id,label:w.counterparty}));
   const assets=resolve(process.env[variant==="d1"?"D1_WEB_ASSETS":"NATIVE_WEB_ASSETS"]);
   const web=Bun.serve({hostname:"127.0.0.1",port:0,tls,fetch:async request=>{
@@ -20,7 +21,14 @@ export async function runBrowser({variant, origins, cookie, expected, forward, a
     const path=resolve(assets,"."+u.pathname);
     if(!path.startsWith(assets+sep))return new Response(null,{status:403});
     const file=Bun.file(u.pathname==="/app/transactions"?join(assets,"index.html"):path);
-    return await file.exists()?new Response(file):new Response(null,{status:404});
+    if(!await file.exists())return new Response(null,{status:404});
+    assetsDelivered.responses++;assetsDelivered.rawBytes+=file.size;
+    if(/(?:javascript|css|html)/.test(file.type)&&request.headers.get("accept-encoding")?.includes("gzip")){
+      const bytes=Bun.gzipSync(await file.arrayBuffer());
+      assetsDelivered.encodedBytes+=bytes.byteLength;assetsDelivered.gzip++;
+      return new Response(bytes,{headers:{"content-type":file.type,"content-encoding":"gzip","vary":"accept-encoding"}});
+    }
+    assetsDelivered.encodedBytes+=file.size;return new Response(file);
   }});
   const api=Bun.serve({hostname:"127.0.0.1",port:0,tls,fetch:async request=>{
     const url=new URL(request.url);
@@ -56,13 +64,13 @@ export async function runBrowser({variant, origins, cookie, expected, forward, a
     headers.delete("x-fidy-comparison-cost");
     return new Response(bytes.byteLength?bytes:null,{status:response.status,headers});
   }});
-  let browser;
+  let browser, measuredPage;
   try{
     browser=await chromium.launch({executablePath:process.env.ASSESSMENT_CHROMIUM,env:{HOME:process.env.HOME,PATH:process.env.PATH},args:["--no-proxy-server","--ignore-certificate-errors-spki-list="+process.env.BROWSER_TLS_PIN,
       "--host-resolver-rules=MAP "+new URL(origins.api).hostname+":443 127.0.0.1:"+api.port+", MAP "+new URL(origins.browser).hostname+":443 127.0.0.1:"+web.port+", MAP * ~NOTFOUND, EXCLUDE localhost"]});
     const context=await browser.newContext({timezoneId:"America/Bogota",serviceWorkers:"block"});
     await context.addCookies([{name:"__Host-fidy_session",value:cookie.slice("__Host-fidy_session=".length),url:origins.api,httpOnly:true,secure:true,sameSite:"Lax"}]);
-    const page=await context.newPage();
+    const page=await context.newPage();measuredPage=page;
     if(network==="poor"){
       const cdp=await context.newCDPSession(page);
       await cdp.send("Network.enable");
@@ -81,6 +89,15 @@ export async function runBrowser({variant, origins, cookie, expected, forward, a
       events.push({stage:"refresh",complete:true});
       await Bun.sleep(750);
     }
+  } catch(err) {
+    events.push({stage:"incomplete", error:err.name, message: String(err.message).split("\n")[0].slice(0,100)});
+    if(measuredPage)events.push(await measuredPage.evaluate(()=>({
+      route:location.pathname,title:document.title,
+      text:document.body.innerText.replace(/(?:[a-f0-9-]{20,}|[A-Za-z0-9_+/=-]{32,})/g,"[redacted]").slice(0,380),
+      rowCount:document.querySelectorAll("[data-transaction-slot=transaction-identity-control]").length,
+      resources:performance.getEntriesByType("resource").filter(r=>r.initiatorType==="fetch").map(r=>({path:new URL(r.name).pathname,complete:r.responseEnd>0,status:r.responseStatus})),
+    })));
+    throw err;
   } finally{
     await report();
     await browser?.close();await web.stop(true);await api.stop(true);

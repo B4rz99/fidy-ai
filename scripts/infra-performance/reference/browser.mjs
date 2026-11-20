@@ -170,7 +170,7 @@ try {
   process.stderr.write(JSON.stringify(accountability) + "\n");
   // WebSession requests in the pinned baseline write session Audit and carry no external retry key.
   assert.deepEqual(accountability, {
-    reads: readOnly ? 1 : 2,
+    reads: readOnly ? 30 : 2,
     corrections: readOnly ? 0 : 1,
     units: 0,
     receipts: 0,

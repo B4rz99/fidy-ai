@@ -277,8 +277,16 @@ export const freshTransactionHistory = async (input) => {
   const { startup, startupMs } = await startApplication(input);
   if (input.checkpoint) await input.checkpoint("startup");
   const before = await input.beforeRefresh();
-  const history = await refreshHistory(input, startup);
-  if (input.checkpoint) await input.checkpoint("refresh");
+  assert.ok(input.checkpoint, "This isolated evidence run requires D1 row counters");
+  // One fresh read per second by an already mounted User. Each click waits for verified fresh content.
+  const started = performance.now();
+  let history = await refreshHistory(input, startup);
+  await input.checkpoint("refresh");
+  for (let round = 1; round < 30; round++) {
+    await Bun.sleep(Math.max(0, started + round * 1000 - performance.now()));
+    history = await refreshHistory(input, startup);
+    await input.checkpoint("refresh");
+  }
   return { before, startupMs, readMs: history.readMs, history };
 };
 

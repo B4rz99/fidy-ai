@@ -254,8 +254,9 @@ def observation(path, env, destination, variant="d1"):
             "startup.browser": result["startupMs"],
         }
         if env.get("FIDY_REFERENCE_READ_ONLY") == "1":
-            if len(requests) != 1 or "correctionMs" in result:
-                raise ValueError("Unexpected mutation in read-only journey")
+            if len(requests) != 30 or "correctionMs" in result:
+                raise ValueError("Unexpected mutation or incomplete loaded refresh series")
+            timings = {}  # Cost-only evidence on one installation, with no comparative latency report.
         else:
             timings.update({
                 "correction.backend": requests[1]["backendMs"],
@@ -409,7 +410,7 @@ def main():
         "host": platform.platform(),
         "bun": output(["bun", "--version"], ROOT),
         "network": args.network,
-        "offeredLoad": "one isolated User, sequential",
+        "offeredLoad": "One fixed-ID User on one continuously mounted browser; 30 completed refreshes scheduled at one per second, D1 counters only.",
         "d1BrowserCost": args.d1_browser_cost,
         "dataset": args.dataset,
         **browser_workload(args.dataset, read_only=args.transaction_read_only),

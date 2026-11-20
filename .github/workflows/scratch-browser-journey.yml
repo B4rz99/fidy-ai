@@ -1,0 +1,44 @@
+name: Rehearse retained Web build parity
+on: workflow_dispatch
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RETAINED: aa447b8b781cdda48e021c1332f4377eae00f179
+      REPAIR: 4becc649ec41d8c8215b481d86f3b488762625f9
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/bun-runtime
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.RETAINED }}
+          path: original
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.REPAIR }}
+          path: candidate
+          persist-credentials: false
+      - name: Build clean checkouts and compare full evidence
+        run: |
+          mkdir -p "$RUNNER_TEMP/web-parity"
+          for tree in original candidate; do
+            (cd "$tree" && bash scripts/install-workspace.sh --ignore-scripts)
+            cp scripts/infra-performance/reference/parity-probe.mjs "$tree/infra/cloudflare/parity-probe.mjs"
+            (cd "$tree" && git ls-tree -r HEAD -- apps/web bun.lock > "$RUNNER_TEMP/web-parity/$tree.inputs")
+            (cd "$tree" && bun run --silent --cwd apps/server contracts:digest > "$RUNNER_TEMP/web-parity/$tree.contract")
+            diff "$RUNNER_TEMP/web-parity/original.contract" "$RUNNER_TEMP/web-parity/$tree.contract"
+            (cd "$tree/infra/cloudflare" && bun parity-probe.mjs "$tree" "$(cat "$RUNNER_TEMP/web-parity/$tree.contract")")
+          done
+          python3 scripts/infra-performance/reference/parity-compare.py "$RUNNER_TEMP/web-parity"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: web-build-parity-${{ github.run_id }}
+          path: ${{ runner.temp }}/web-parity
+          if-no-files-found: error

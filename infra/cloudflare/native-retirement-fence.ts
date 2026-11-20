@@ -42,8 +42,8 @@ const fence = Effect.gen(function* () {
   }
   const accountRead = reader({ scope: "accounts/" + account + "/", token, client });
   const zoneRead = reader({ scope: "zones/" + zone + "/", token, client });
-  const evidence = yield* verifyIncumbentFence(accountRead, { partialRetirement: true });
-  yield* verifyIncumbentMail(accountRead, zoneRead, { nativeClosed: false });
+  const evidence = yield* verifyIncumbentFence(accountRead, "retirement");
+  yield* verifyIncumbentMail(accountRead, zoneRead, "retirement");
   return evidence;
 });
 

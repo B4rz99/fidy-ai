@@ -37,15 +37,12 @@ const assertNoWriter = Effect.fn(function* (read: ProviderRead, id: string) {
 
 export const verifyIncumbentFence = Effect.fn(function* (
   read: ProviderRead,
-  options: Readonly<{ partialRetirement?: boolean }> = {}
+  phase: "staging" | "retirement" = "staging"
 ) {
   const scripts = (yield* pages(read, "workers/scripts", worker)).filter((item) =>
     incumbent(item.id)
   );
-  if (
-    options.partialRetirement !== true &&
-    !scripts.some((item) => item.id.startsWith("fidycloudflare-core-"))
-  ) {
+  if (phase === "staging" && !scripts.some((item) => item.id.startsWith("fidycloudflare-core-"))) {
     return yield* Effect.fail(Error("Incumbent Core inventory is missing"));
   }
   yield* Effect.forEach(scripts, (item) => assertNoWriter(read, item.id), {
@@ -54,7 +51,7 @@ export const verifyIncumbentFence = Effect.fn(function* (
   });
   const queues = (yield* pages(read, "queues", queue)).filter((item) => incumbent(item.queue_name));
   if (
-    (options.partialRetirement !== true &&
+    (phase === "staging" &&
       !queues.some((item) => item.queue_name.startsWith("fidycloudflare-asyncdeadletters-"))) ||
     queues.some((item) => item.settings?.delivery_paused !== true)
   ) {
@@ -107,7 +104,7 @@ const deliversToIncumbent = (rule: typeof emailRule.Type, nativeClosed: boolean)
 export const verifyIncumbentMail = Effect.fn(function* (
   account: ProviderRead,
   zone: ProviderRead,
-  options: Readonly<{ nativeClosed?: boolean }> = {}
+  phase: "staging" | "retirement" = "staging"
 ) {
   const path = "email/routing/rules";
   const catchAll = yield* Schema.decodeUnknownEffect(Schema.Struct({ success, result: emailRule }))(
@@ -118,7 +115,7 @@ export const verifyIncumbentMail = Effect.fn(function* (
     ...(yield* pages(zone, path, emailRule)),
     catchAll.result,
   ];
-  if (rules.some((rule) => deliversToIncumbent(rule, options.nativeClosed !== false))) {
+  if (rules.some((rule) => deliversToIncumbent(rule, phase === "staging"))) {
     return yield* Effect.fail(Error("Email delivery to the fenced application is enabled"));
   }
 });

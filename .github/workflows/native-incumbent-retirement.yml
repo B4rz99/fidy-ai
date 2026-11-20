@@ -48,7 +48,7 @@ jobs:
     timeout-minutes: 45
     environment: production
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -74,14 +74,14 @@ jobs:
         run: python3 scripts/retirement/run.py "$RETIREMENT_OPERATION"
       - name: Retain the exact incumbent inventory
         if: success() && inputs.operation == 'inventory'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: incumbent-retirement-inventory-${{ github.run_id }}
           path: ${{ runner.temp }}/incumbent-inventory.json
           if-no-files-found: error
       - name: Retain the disposition and reconciled provider findings
         if: always() && inputs.operation == 'dispose'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: incumbent-retirement-disposition-${{ github.run_id }}
           path: ${{ runner.temp }}/incumbent-disposition.jsonl

@@ -3,6 +3,7 @@ import retainedProvider from "./native-retained-provider.json" with { type: "jso
 import { Config, Data, Effect, Redacted } from "effect";
 
 import { Hex } from "effect/encoding";
+import { fileURLToPath } from "node:url";
 
 export const fixtureBuild = Config.Literals(["ordinary", "fallback"], "NATIVE_FIXTURE_BUILD").pipe(
   Config.withDefault("ordinary")
@@ -16,8 +17,8 @@ const successorOperations: ReadonlySet<string> = new Set([
 export const accountingFixture = {
   revision: "de04a192c3836be0efb488b170a7b93b9f98f28f",
   contractDigest: "7a998d31ff69335d7c90bef16407af1a772cf00aab9e44e23d6c2c357857618f",
-  smokeMain: "../../interrupted/apps/server/cloudflare/release-smoke-worker.ts",
 } as const;
+export const nativeSmokeMain = "../../apps/server/cloudflare/release-smoke-worker.ts";
 const accountingRolloutEnabled = Config.Boolean("FIXTURE_ACCOUNTING_ROLLOUT").pipe(
   Config.withDefault(false)
 );
@@ -33,6 +34,8 @@ export const receiptWorkerMain = ({
   fallback: boolean;
 }): string =>
   "../../apps/server/cloudflare/" + workerFiles[fallback ? "fallback" : "ordinary"][role] + ".ts";
+export const accountingWorkerMain = (role: "Core" | "Ingress"): string =>
+  fileURLToPath(new URL(receiptWorkerMain({ role, fallback: false }), import.meta.url));
 
 export const resourceRevision = ({
   revision,

@@ -1,5 +1,9 @@
 import retainedProvider from "./native-retained-provider.json" with { type: "json" };
-import { fixtureSignerBindings, receiptWorkerMain } from "./native-fixture-signer";
+import {
+  accountingWorkerMain,
+  fixtureSignerBindings,
+  receiptWorkerMain,
+} from "./native-fixture-signer";
 import { marketingSite } from "./marketing-site";
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
@@ -66,6 +70,10 @@ const candidate = (release: NativeRelease): Cloudflare.WorkerProps["version"] =>
         tag: release.release.versionTag,
         message: release.closed ? "isolated" : "release",
       };
+const releaseWorkerMain = (role: "Core" | "Ingress", release: NativeRelease): string =>
+  release.accountingRollout
+    ? accountingWorkerMain(role)
+    : receiptWorkerMain({ role, fallback: release.fallback });
 
 const bindSandboxCertificate = Effect.fn(function* (core: Cloudflare.Worker) {
   const certificate = yield* Config.String("BANCOLOMBIA_SANDBOX_CERTIFICATE_ID").pipe(
@@ -109,7 +117,7 @@ const coreWorker = Effect.fn(function* ({
     ...workerPolicy,
     compatibility: apiCompatibility,
     name: installationNames.Core,
-    main: receiptWorkerMain({ role: "Core", fallback: release.fallback }),
+    main: releaseWorkerMain("Core", release),
     version: candidate(release),
     crons: ["* * * * *"],
     dev: { host: "127.0.0.1", port: productionTopology.core.localPort, strictPort: true },
@@ -188,7 +196,7 @@ export const nativeApplication = Effect.gen(function* () {
     ...workerPolicy,
     compatibility: apiCompatibility,
     name: installationNames.Ingress,
-    main: receiptWorkerMain({ role: "Ingress", fallback: release.fallback }),
+    main: releaseWorkerMain("Ingress", release),
     version: candidate(release),
     dev: { host: "127.0.0.1", port: productionTopology.ingress.localPort, strictPort: true },
     domain: network(release, nativeIngressHost, productionTopology.ingress.hostname),

@@ -6,7 +6,12 @@ import {
   requireRoleBindings,
   requireSuccessorCoreBindings,
 } from "./native-graph";
-import { accountingFixture, receiptWorkerMain } from "./native-fixture-signer";
+import {
+  accountingFixture,
+  accountingWorkerMain,
+  nativeSmokeMain,
+  receiptWorkerMain,
+} from "./native-fixture-signer";
 import { installedOrigins } from "@fidy/server/browser-transport";
 import { type Plan, describeResource } from "alchemy/Plan";
 import * as Cloudflare from "alchemy/Cloudflare";
@@ -141,12 +146,23 @@ const roles = ["Core", "Ingress", "ForwardedEmail", "Web"] as const;
 const requireFixtureMain = (
   role: NativeRole,
   props: unknown,
-  { fingerprint, fallback }: { fingerprint: string; fallback: boolean }
+  {
+    fingerprint,
+    fallback,
+    accounting,
+  }: { fingerprint: string; fallback: boolean; accounting: boolean }
 ): void => {
-  if (fingerprint !== "" && (role === "Core" || role === "Ingress")) {
+  if (accounting && role === "Smoke") {
     Schema.decodeUnknownSync(
-      Schema.Struct({ main: Schema.Literal(receiptWorkerMain({ role, fallback })) })
+      Schema.Struct({
+        main: Schema.Literal(nativeSmokeMain),
+        build: Schema.optional(Schema.Never),
+      })
     )(props);
+  }
+  if (fingerprint !== "" && (role === "Core" || role === "Ingress")) {
+    const main = accounting ? accountingWorkerMain(role) : receiptWorkerMain({ role, fallback });
+    Schema.decodeUnknownSync(Schema.Struct({ main: Schema.Literal(main) }))(props);
   }
 };
 const requireFixtureService = (
@@ -228,7 +244,11 @@ const requirePlannedBindings = ({
     if (node === undefined) throw Error("Missing installed native Worker " + role);
     const props: unknown = node.action === "noop" ? node.state.props : node.props;
     requireInstallationWorker({ logicalId: role, props, revision, hosts });
-    requireFixtureMain(role, props, { fingerprint, fallback });
+    requireFixtureMain(role, props, {
+      fingerprint,
+      fallback,
+      accounting: Option.isSome(accountingRevision),
+    });
     const bindings = node.bindings.flatMap(
       (binding) => Schema.decodeUnknownSync(ProviderBindings)(binding.data).bindings ?? []
     );

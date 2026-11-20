@@ -29,6 +29,7 @@ import { requireNativeResourcePlan } from "./native-graph";
 import { type Plan, describePlan, describeResource } from "alchemy/Plan";
 import { Config, Effect, Option, Schema } from "effect";
 import { HttpClient, HttpClientRequest } from "effect/http";
+import { fileURLToPath } from "node:url";
 import { releaseCommand, releaseEvidence } from "./production-release";
 import { readRecoveryPin } from "./native-recovery-identity";
 import { ReleaseHttpLive } from "./release-http";
@@ -317,24 +318,44 @@ const requireSuccessorSource = Effect.fn(function* (action: SuccessorAction) {
   }
   return { revision, artifacts, fingerprint, directory, source };
 });
-export const readNativeScopedPlan = Effect.fn("readNativeScopedPlan")(function* ({
-  profile,
-  fingerprint,
-  revision,
-  include,
-}: {
+type ScopedPlan = {
   profile: string;
   fingerprint: string;
   revision: string;
   include: readonly string[];
-}) {
+};
+const readScopedPlan = Effect.fn("readNativeScopedPlan")(function* ({
+  profile,
+  fingerprint,
+  revision,
+  include,
+  entrypoint,
+}: ScopedPlan & { entrypoint: string }) {
+  const options = nativePlanOptions({ profile, preview: true, fingerprint });
   return yield* Alchemist.Stack.plan({
-    ...nativePlanOptions({ profile, preview: true, fingerprint }),
+    ...options,
+    target: { ...options.target, entrypoint },
     include,
   }).pipe(
     diagnoseNativePlan(revision),
     Effect.catchCause((cause) => Effect.fail(nativePlanningFailure(cause)))
   );
+});
+export const readNativeScopedPlan = Effect.fn(function* (input: ScopedPlan) {
+  return yield* readScopedPlan({ ...input, entrypoint: "alchemy.storage.ts" });
+});
+
+const successorEntrypoint = Effect.fn(function* (accounting: boolean) {
+  if (!accounting) return "alchemy.storage.ts";
+  const historicalDirectory = fileURLToPath(
+    new URL("../../interrupted/infra/cloudflare", import.meta.url)
+  );
+  if (process.cwd() !== historicalDirectory) {
+    return yield* Effect.fail(
+      Error("Accounting planning requires the historical Smoke build directory")
+    );
+  }
+  return fileURLToPath(new URL("./alchemy.storage.ts", import.meta.url));
 });
 
 const planFixtureSuccessor = Effect.fn(function* (action: SuccessorAction) {
@@ -342,12 +363,12 @@ const planFixtureSuccessor = Effect.fn(function* (action: SuccessorAction) {
     yield* requireSuccessorSource(action);
   const generation = artifacts.resourceRevision;
   const active = action === "rollout";
-  const profile = yield* Config.String("ALCHEMY_PROFILE");
-  const snapshot = yield* readNativeScopedPlan({
-    profile,
+  const snapshot = yield* readScopedPlan({
+    profile: yield* Config.String("ALCHEMY_PROFILE"),
     fingerprint,
     revision,
     include: successorPlanSelection(generation),
+    entrypoint: yield* successorEntrypoint(artifacts.accountingRollout),
   });
   const observed = describePlan(snapshot.native);
   if (snapshot.native.selectedFqns === undefined || observed.actions.length !== 0) {

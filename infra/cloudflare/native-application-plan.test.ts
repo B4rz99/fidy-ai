@@ -9,6 +9,7 @@ import { evalStack } from "alchemy/Stack";
 import { evaluate } from "alchemy/Output";
 import { FetchHttpClient } from "effect/http";
 import { ConfigProvider, Effect, Schema } from "effect";
+import { fileURLToPath } from "node:url";
 import { nativeApplication } from "./native-application";
 import { accountingFixture, fixtureArtifacts } from "./native-fixture-signer";
 import { type NativeBinding, NativeBindings, requireSuccessorCoreBindings } from "./native-graph";
@@ -61,9 +62,9 @@ const accountingConfiguration = {
   CONTRACT_DIGEST: accountingFixture.contractDigest,
 } as const;
 const accountingMain = {
-  Smoke: accountingFixture.smokeMain,
-  Core: "../../apps/server/cloudflare/core-worker.ts",
-  Ingress: "../../apps/server/cloudflare/public-worker.ts",
+  Smoke: "../../apps/server/cloudflare/release-smoke-worker.ts",
+  Core: fileURLToPath(new URL("../../apps/server/cloudflare/core-worker.ts", import.meta.url)),
+  Ingress: fileURLToPath(new URL("../../apps/server/cloudflare/public-worker.ts", import.meta.url)),
 };
 it.effect.each([
   "unsigned",
@@ -183,6 +184,9 @@ it.effect.each([
               (row) => Schema.decodeUnknownSync(bindings)(row.data).bindings ?? []
             );
             assertWorker({ worker, observed, props: resource.Props });
+            if (accounting && worker === "Smoke") {
+              expect(resource.Props).not.toHaveProperty("build");
+            }
           }
         }),
       { stage: "production" }

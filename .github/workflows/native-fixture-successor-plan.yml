@@ -278,7 +278,7 @@ jobs:
           )
           mkdir -p apps/web/dist
           cp -R "$RUNNER_TEMP/retained-web/apps/web/dist/." apps/web/dist
-          if [[ "$FIXTURE_SUCCESSOR_RESUME" == true ]]; then
+          if [[ "$FIXTURE_SUCCESSOR_RESUME" == true || "$FIXTURE_ACCOUNTING_ROLLOUT" == true ]]; then
             mkdir -p interrupted/apps/web/dist
             cp -R "$RUNNER_TEMP/retained-web/apps/web/dist/." interrupted/apps/web/dist
           fi
@@ -289,7 +289,7 @@ jobs:
         run: bun native-storage-release.ts capture-successor-rollout
       - name: Upload the reviewed active successor pair
         if: env.FIXTURE_RELEASE_OPERATION == 'rollout-fixture-successor'
-        working-directory: ${{ inputs.operation == 'rollout-resumed' && 'interrupted/infra/cloudflare' || 'infra/cloudflare' }}
+        working-directory: ${{ (inputs.operation == 'rollout-resumed' || inputs.operation == 'rollout-accounting') && 'interrupted/infra/cloudflare' || 'infra/cloudflare' }}
         env:
           NATIVE_FIXTURE_SIGNING_KEY: ${{ secrets.NATIVE_FIXTURE_SIGNING_KEY }}
         run: bun "$GITHUB_WORKSPACE/infra/cloudflare/native-storage-resources.ts" rollout-fixture-successor

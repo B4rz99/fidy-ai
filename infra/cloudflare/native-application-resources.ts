@@ -2,8 +2,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import { Effect } from "effect";
 import { freeTierWorkerObservability } from "./worker-observability";
 import { type NativeRelease, bindPlannedText } from "./native-application-bindings";
-import { accountingFixture } from "./native-fixture-signer";
-import { fileURLToPath } from "node:url";
+import { accountingFixture, nativeSmokeMain } from "./native-fixture-signer";
 
 export const nativeBuckets = Effect.all({
   STATEMENT_STAGING_BUCKET: Cloudflare.R2.Bucket("StatementStagingBucket", {
@@ -97,22 +96,12 @@ export const nativeSmokeExecutor = Effect.fn(function* (input: {
 }) {
   const revision = input.release.resourceRevision,
     workflowName = "fidy-native-smoke-" + revision;
-  const retained = input.release.accountingRollout ? accountingFixture : undefined;
-  const logicalId = "ReleaseSmoke-" + revision;
-  const historicalBuild = {
-    output: {
-      dir: fileURLToPath(
-        new URL("../../interrupted/infra/cloudflare/.alchemy/bundles/" + logicalId, import.meta.url)
-      ),
-    },
-  };
-  const smoke = yield* Cloudflare.Worker(logicalId, {
+  const smoke = yield* Cloudflare.Worker("ReleaseSmoke-" + revision, {
     name: "fidy-native-smoke-" + revision,
-    main: retained?.smokeMain ?? "../../apps/server/cloudflare/release-smoke-worker.ts",
+    main: nativeSmokeMain,
     compatibility: { date: "2026-09-08" },
     workersDev: false,
     observability: freeTierWorkerObservability,
-    ...(input.release.accountingRollout ? { build: historicalBuild } : {}),
     env: {
       SMOKE_BUCKET: input.buckets.SMOKE_BUCKET,
       NATIVE_STORAGE_ADMISSION: input.release.shared.NATIVE_STORAGE_ADMISSION,

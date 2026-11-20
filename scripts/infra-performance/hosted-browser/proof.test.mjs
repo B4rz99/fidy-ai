@@ -158,6 +158,8 @@ try {
         () => 0
       );
     return await Promise.all([
+      status("/ingestion/review-workspace?limit=0&status=pending"),
+      status("/ingestion/review-workspace?limit=100&status=pending"),
       status("/dashboard/view"),
       status("/recurring-plans?month=2026-11"),
       status(
@@ -167,7 +169,7 @@ try {
       status("/dashboard/initialize", "POST"),
     ]);
   }, origins.api);
-  assert.deepEqual(otherViews, [noContent, noContent, noContent, 0, 0]);
+  assert.deepEqual(otherViews, [noContent, 0, noContent, noContent, noContent, 0, 0]);
 } finally {
   await browser?.close();
   await proxy.stop(true);

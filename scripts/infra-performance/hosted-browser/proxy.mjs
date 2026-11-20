@@ -43,6 +43,7 @@ const workspaceQueries = new Set([
   "/budget-status?month=2026-10&timeZone=America%2FBogota",
   "/budget-status?month=2026-11&timeZone=America%2FBogota",
   "/ingestion/review-workspace?limit=0",
+  "/ingestion/review-workspace?limit=0&status=pending",
   "/ingestion/review-workspace?status=history",
   "/ingestion/review-workspace?status=pending",
   "/ingestion/review-workspace/context?status=pending",

@@ -4,7 +4,8 @@ import { AtomRegistry } from "effect/reactivity";
 import { it } from "@effect/vitest";
 import { afterEach, expect, vi } from "vitest";
 import { makeFidyClient } from "@/transport/client";
-import { type TransactionCaptureTask, makeTransactionCapture } from "./capture-task";
+import { type TransactionCaptureTask, makeCaptureRetention } from "./capture-task";
+import type { CaptureDraft } from "./capture-draft";
 
 const categoryId = "24000000-0000-4000-8000-000000000242";
 const transaction = {
@@ -27,12 +28,13 @@ afterEach(() => {
   vi.useRealTimers();
 });
 type Fixture = Readonly<{
+  attach: (timeZone?: string) => () => void;
   behavior: { delay: number; status: number; body: string };
   dispose: () => void;
   requests: Array<string>;
   view: () => TransactionCaptureTask;
 }>;
-const fixture = (): Fixture => {
+const fixture = (activate = true): Fixture => {
   vi.useFakeTimers();
   const requests: Array<string> = [];
   const behavior = { delay: 0, status: 201, body: JSON.stringify({ data: transaction, next: [] }) };
@@ -56,30 +58,56 @@ const fixture = (): Fixture => {
       })
     ),
   });
-  const resource = makeTransactionCapture({
-    client,
-    timeZone: "America/Bogota",
-    initial: {
-      amount: "64000",
-      currency: "COP",
-      direction: "outflow",
-      counterparty: "Prueba",
-      notes: "",
-      categoryId,
-      occurredOn: "2026-10-23",
-    },
+  const timeZone = "America/Bogota";
+  const initial: CaptureDraft = {
+    amount: "64000",
+    currency: "COP",
+    direction: "outflow",
+    counterparty: "Prueba",
+    notes: "",
+    categoryId,
+    occurredOn: "2026-10-23",
+  };
+  const retention = makeCaptureRetention({
+    input: { client, timeZone, initial },
+    identity: timeZone,
   });
   const registry = AtomRegistry.make();
-  cleanup.push(() => registry.dispose(), registry.mount(resource));
-  const dispose = registry.get(resource).mount();
-  cleanup.push(dispose);
+  cleanup.push(() => registry.dispose(), registry.mount(retention));
+  const attach = (nextTimeZone = timeZone): (() => void) => {
+    const detach = registry
+      .get(retention)
+      .mount({ client, timeZone: nextTimeZone, initial }, nextTimeZone);
+    cleanup.push(detach);
+    return detach;
+  };
   return {
+    attach,
     behavior,
-    dispose,
+    dispose: activate ? attach() : () => {},
     requests,
-    view: (): TransactionCaptureTask => registry.get(resource),
+    view: (): TransactionCaptureTask =>
+      registry.get(Option.getOrThrow(registry.get(retention).resource)),
   };
 };
+
+it.effect("exposes the initial draft without admitting a create before its attachment", () =>
+  Effect.gen(function* () {
+    const harness = fixture(false);
+    const command = { categories: [], invalidate: (): void => {}, onCreated: (): void => {} };
+    expect(harness.view().draft.amount).toBe("64000");
+    harness.view().change({ ...harness.view().draft, amount: "65000" });
+    harness.view().submit(command);
+    yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(0));
+    expect(harness.requests).toEqual([]);
+    expect(harness.view().draft.amount).toBe("64000");
+    harness.attach("America/Lima");
+    expect(harness.view().timeZone).toBe("America/Lima");
+    harness.view().submit(command);
+    yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(0));
+    expect(harness.requests).toEqual(["POST"]);
+  })
+);
 it.effect(
   "keeps the committed Transaction and create lock when its presentation callback throws",
   () =>
@@ -137,11 +165,13 @@ it.effect(
       yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(0));
       expect(harness.requests).toEqual(["POST"]);
       harness.dispose();
-      cleanup.push(harness.view().mount());
+      harness.attach("America/Lima");
       yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(100));
       expect(notified).toBe(0);
       expect(harness.view().uncertain).toBe(true);
       expect(harness.view().saving).toBe(false);
+      expect(harness.view().timeZone).toBe("America/Bogota");
+      expect(Option.getOrThrow(harness.view().attempt).amount).toBe("64000");
       expect(harness.view().draft.amount).toBe("64000");
       harness.view().submit({
         categories: [],

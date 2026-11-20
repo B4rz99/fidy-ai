@@ -222,23 +222,35 @@ export type CaptureRetention = Readonly<{
 type RetainedCapture = Readonly<{
   identity: string;
   resource: Atom.Atom<TransactionCaptureTask>;
-  release: () => void;
 }>;
-export const makeCaptureRetention = (): Atom.Atom<CaptureRetention> =>
+export const makeCaptureRetention = (
+  initial?: Readonly<{ input: Input; identity: string }>
+): Atom.Atom<CaptureRetention> =>
   Atom.make((get) => {
-    let current: Option.Option<RetainedCapture> = Option.none();
-    get.addFinalizer(() => Option.map(current, (retained) => retained.release()));
+    let current: Option.Option<RetainedCapture> = Option.map(
+      Option.fromUndefinedOr(initial),
+      ({ identity, input }) => ({ identity, resource: makeTransactionCapture(input) })
+    );
+    let release: Option.Option<() => void> = Option.none();
+    get.addFinalizer(() => Option.map(release, (unmount) => unmount()));
     const mount = (input: Input, identity: string): (() => void) => {
       if (
         Option.isNone(current) ||
         (!get.once(current.value.resource).locked && current.value.identity !== identity)
       ) {
-        Option.map(current, (retained) => retained.release());
+        Option.map(release, (unmount) => unmount());
         const resource = makeTransactionCapture(input);
-        current = Option.some({ identity, resource, release: get.registry.mount(resource) });
+        current = Option.some({ identity, resource });
+        release = Option.some(get.registry.mount(resource));
         get.setSelf({ resource: Option.some(resource), identity: Option.some(identity), mount });
       }
-      return get.once(Option.getOrThrow(current).resource).mount();
+      const { resource } = Option.getOrThrow(current);
+      if (Option.isNone(release)) release = Option.some(get.registry.mount(resource));
+      return get.once(resource).mount();
     };
-    return { resource: Option.none(), identity: Option.none(), mount };
+    return {
+      resource: Option.map(current, ({ resource }) => resource),
+      identity: Option.map(current, ({ identity }) => identity),
+      mount,
+    };
   });

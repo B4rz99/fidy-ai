@@ -16,24 +16,23 @@ export const ManualCaptureProvider = ({
   timeZone,
   children,
 }: Readonly<{ timeZone: string; children: ReactNode }>): JSX.Element => {
-  const [retentionResource] = useState(() => makeCaptureRetention());
+  const { apiClient } = useRouter().options.context;
+  const [retentionResource] = useState(() =>
+    makeCaptureRetention({
+      input: { client: apiClient, timeZone, initial: emptyCaptureDraft(timeZone) },
+      identity: timeZone,
+    })
+  );
   const retention = useAtomValue(retentionResource);
-  return Option.match(retention.resource, {
-    onNone: () => (
-      <ManualCaptureAttachment retentionResource={retentionResource} timeZone={timeZone}>
-        {null}
-      </ManualCaptureAttachment>
-    ),
-    onSome: (resource) => (
-      <ManualCaptureTask
-        resource={resource}
-        retentionResource={retentionResource}
-        timeZone={timeZone}
-      >
-        {children}
-      </ManualCaptureTask>
-    ),
-  });
+  return (
+    <ManualCaptureTask
+      resource={Option.getOrThrow(retention.resource)}
+      retentionResource={retentionResource}
+      timeZone={timeZone}
+    >
+      {children}
+    </ManualCaptureTask>
+  );
 };
 const ManualCaptureAttachment = ({
   timeZone,

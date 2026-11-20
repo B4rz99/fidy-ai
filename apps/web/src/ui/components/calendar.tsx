@@ -1,4 +1,5 @@
 import * as React from "react";
+import { es } from "react-day-picker/locale";
 import { cn } from "@/ui/class-names";
 import { type DayButton, DayPicker, getDefaultClassNames } from "react-day-picker";
 
@@ -11,7 +12,7 @@ const Calendar = ({
   classNames,
   showOutsideDays = true,
   captionLayout = "label",
-  locale,
+  locale = es,
   formatters,
   components,
   ...props

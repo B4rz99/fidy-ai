@@ -1,14 +1,12 @@
-import { preloadAgentCode } from "./agent-code";
 import { preloadRecurringScreen } from "@/features/recurring/code";
 import { preloadSubscriptionScreen } from "@/features/subscription/code";
-import { preloadTransactionList } from "@/features/transactions/code";
 import { preloadDashboardView } from "@/features/dashboard/code";
 import { preloadBudgetScreen } from "@/features/budgets/code";
 import { preloadReviewWorkspaceCode } from "@/features/needs-review/code";
 
 const entryCode: Readonly<Record<string, () => Promise<unknown>>> = {
   "/login": () => import("./login-page"),
-  "/app/transactions": () => Promise.all([import("./transactions-page"), preloadTransactionList()]),
+  "/app/transactions": () => import("./transactions-page"),
   "/app/dashboard": () => Promise.all([import("./dashboard-page"), preloadDashboardView()]),
   "/app/needs-review": () =>
     Promise.all([import("@/features/needs-review/feature"), preloadReviewWorkspaceCode()]),
@@ -28,8 +26,6 @@ const preloadEntryCode = (pathname: string): Promise<unknown> =>
 
 /** Code loading starts alongside the native binding request; no client or data read starts here. */
 export const preloadWebRouteCode = (pathname: string): Promise<void> =>
-  Promise.allSettled([
-    import("./application-frame"),
-    preloadEntryCode(pathname),
-    preloadAgentCode(pathname),
-  ]).then(() => undefined);
+  Promise.allSettled([import("./application-frame"), preloadEntryCode(pathname)]).then(
+    () => undefined
+  );

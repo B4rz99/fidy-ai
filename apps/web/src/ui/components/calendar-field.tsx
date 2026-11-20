@@ -1,14 +1,19 @@
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { lazyRouteComponent } from "@tanstack/react-router";
+import { PendingRead } from "./pending-read";
 import type { JSX } from "react";
 import { DateTime, Option } from "effect";
-import { es } from "react-day-picker/locale";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Calendar03Icon } from "@hugeicons/core-free-icons";
 import { Button } from "./button";
-import { Calendar } from "./calendar";
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "./popover";
 import { cn } from "@/ui/class-names";
 import { makeCompactDateFormatter } from "@/ui/compact-date";
+
+const Calendar = lazyRouteComponent(() => import("./calendar"), "Calendar");
+const prepareCalendar = (): void => {
+  Calendar.preload?.().catch(() => undefined);
+};
 
 type DateFieldProps = Readonly<{
   id: string;
@@ -71,14 +76,38 @@ const filterMonth = (props: DateFieldProps): Option.Option<Date> =>
     ? Option.flatMap(props.month, (value) => localDate(`${value}-01`, props.timeZone))
     : Option.none();
 
+const DatePicker = ({
+  field: props,
+  close,
+}: Readonly<{ field: DateFieldProps; close: () => void }>): JSX.Element => {
+  const selected = Option.getOrUndefined(localDate(props.value, props.timeZone));
+  return (
+    <Suspense fallback={<PendingRead label="Cargando calendario" />}>
+      <Calendar
+        mode="single"
+        timeZone={props.timeZone}
+        selected={selected}
+        defaultMonth={selected ?? Option.getOrUndefined(filterMonth(props))}
+        onSelect={(date) => {
+          if (date === undefined && props.required) return;
+          props.onChange(selectedDate(Option.fromNullishOr(date), props.timeZone));
+          close();
+        }}
+      />
+    </Suspense>
+  );
+};
+
 export const CalendarField = (props: DateFieldProps): JSX.Element => {
   const [open, setOpen] = useState(false);
   const visibleLabel = calendarLabel(props);
-  const selected = Option.getOrUndefined(localDate(props.value, props.timeZone));
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         id={props.id}
+        onFocus={prepareCalendar}
+        onPointerEnter={prepareCalendar}
+        onPointerDownCapture={prepareCalendar}
         aria-label={calendarAccessibleLabel(props)}
         render={
           <Button
@@ -103,18 +132,7 @@ export const CalendarField = (props: DateFieldProps): JSX.Element => {
         <PopoverTitle className="sr-only">
           {props.appearance === "filter" ? "Filtrar por fecha" : "Seleccionar fecha"}
         </PopoverTitle>
-        <Calendar
-          mode="single"
-          locale={es}
-          timeZone={props.timeZone}
-          selected={selected}
-          defaultMonth={selected ?? Option.getOrUndefined(filterMonth(props))}
-          onSelect={(date) => {
-            if (date === undefined && props.required) return;
-            props.onChange(selectedDate(Option.fromNullishOr(date), props.timeZone));
-            setOpen(false);
-          }}
-        />
+        <DatePicker field={props} close={() => setOpen(false)} />
         {!props.required ? (
           <Button
             type="button"

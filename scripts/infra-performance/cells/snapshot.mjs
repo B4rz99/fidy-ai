@@ -10,8 +10,8 @@ import { Schema } from "effect";
 /** @typedef {{batch: Query[], reads:number,writes:number}} Batch */
 /** @typedef {{name:string,type:string,tbl_name:string,sql:string|null}} Definition */
 /** @typedef {{name:string, read:Query, inserts:string[], identities:string[], rowCount:number, dependencies:string[]}} Table */
-const bulkIndexes = process.argv[4] === "bulk-index";
-const emptyBatchSize = bulkIndexes ? 45 : 15;
+const browserFixture = process.argv[4] === "browser";
+const emptyBatchSize = browserFixture ? 45 : 15;
 const Rows = Schema.Array(Schema.Record(Schema.String, Schema.Json));
 const encodedRows = Schema.decodeUnknownSync(Rows);
 const QueryShape = Schema.Struct({ sql: Schema.String, params: Schema.Array(Schema.Json) });
@@ -342,14 +342,9 @@ try {
     { ...applicationSchema, check: digest(pristine.filter((def) => def.name !== "_cf_METADATA")) },
   ]);
   /** @param {string} kind SQL object type from the frozen schema. */
-  const define = async (kind, secondary = false) => {
+  const define = async (kind) => {
     const group = definitions
-      .filter((def) => {
-        if (def.type !== kind) return false;
-        if (kind !== "index" || !bulkIndexes) return true;
-        // Keep every explicit UNIQUE index installed during the copy for foreign-key resolution.
-        return secondary === !/^CREATE\s+UNIQUE\s+INDEX\b/iu.test(String(def.sql));
-      })
+      .filter((def) => def.type === kind)
       .map((def) => query(String(def.sql)));
     evidence.stage = "define-" + kind;
     // Each kind is a dependency barrier; the source row order retains relative trigger order.
@@ -376,7 +371,6 @@ try {
     // Source rows already include the effects of their original triggers. Installing the exact triggers after
     // copying data avoids replaying those effects a second time on the unexposed destination.
     applied.push(await run(restored, commands));
-    if (bulkIndexes) await define("index", true);
     await define("trigger");
   } else {
     await define("trigger");
@@ -427,7 +421,16 @@ try {
     cost,
   };
   evidence.snapshot = schemaSnapshot;
-  evidence.indexBuild = bulkIndexes ? "secondary indexes after bulk load" : "before fixture";
+  if (browserFixture) {
+    const counts = Object.fromEntries(tables.map((table) => [table.name, table.rowCount]));
+    for (const name of ["budgets", "recurring_plans", "recurring_plan_revisions", "ingestion_review_items"]) {
+      assert.equal(counts[name], 0, "Unexpected unrelated workspace rows in " + name);
+    }
+    assert.equal(counts.transactions, 8);
+    assert.equal(counts.source_attestations, 8);
+    assert.equal(counts.transaction_reconciliation_decisions, 1);
+    evidence.workload = "mounted-transactions-ordinary";
+  }
   evidence.scope = materialized ? "complete pre-Login fixture" : "empty migrated schema";
   evidence.batches = applied.length;
   evidence.restoredPhysical = await physical(restored);

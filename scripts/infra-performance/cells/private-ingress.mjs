@@ -8,6 +8,14 @@ const fixed = [
   "GET /web/session/binding",
   "GET /transactions?limit=25",
 ];
+export const browserReads = [
+  "/web/session/binding?context=transactions",
+  "/web/session/binding",
+  "/web/consent",
+  "/ingestion/review-workspace?limit=0&status=pending",
+  "/transactions?limit=25&from=2026-11-01T05%3A00%3A00.000Z&to=2026-12-01T05%3A00%3A00.000Z",
+  "/user",
+];
 const enc = new TextEncoder();
 /** @param {string} value Experiment proof. */
 const hash = (value) => crypto.subtle.digest("SHA-256", enc.encode(value));
@@ -38,8 +46,12 @@ const admitted = async (request, env, paths) => {
  * @param {PinnedIngress} ingress Frozen application Ingress.
  * @param {ReadonlyArray<string>} inspectionIds Synthetic Transaction IDs verified at bundle time.
  */
-export const privateIngress = (ingress, inspectionIds = []) => {
+export const privateIngress = (ingress, inspectionIds = [], browserWorkspace = false) => {
   const paths = new Set([...fixed, ...inspectionIds.map((id) => "GET /transactions/" + id)]);
+  if (browserWorkspace) for (const path of browserReads) {
+    paths.add("GET " + path);
+    paths.add("OPTIONS " + path);
+  }
   /** @type {string | undefined} */
   let born;
   let requests = 0;

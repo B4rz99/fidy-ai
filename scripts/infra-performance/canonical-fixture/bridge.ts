@@ -131,7 +131,11 @@ const start = Effect.fnUntraced(function* (service: Client) {
 });
 const allowed = (item: Command): boolean =>
   item.method === "GET"
-    ? item.path === "/transactions?limit=25" || /^\/transactions\/[a-f0-9-]{36}$/u.test(item.path)
+    ? [
+        "/user",
+        "/ingestion/review-workspace?limit=0&status=pending",
+        "/transactions?limit=25",
+      ].includes(item.path) || /^\/transactions\/[a-f0-9-]{36}$/u.test(item.path)
     : ["/operations/atomic-batch", "/transactions/link", performanceReceiptPath].includes(
         item.path
       );
@@ -160,6 +164,38 @@ const authority = Effect.gen(function* () {
   }
   return { secret, revision };
 });
+const runMountedWorkspace = (
+  runtime: Miniflare,
+  active: Session
+): Effect.Effect<void, FixtureTransportError> =>
+  io(async () => {
+    const { runBrowser } = await import("../hosted-browser/captured-profile.mjs");
+    const manifest = await Bun.file(
+      process.env.FIDY_DIAGNOSTIC_DIR + "/native/fixture/manifest.json"
+    ).json();
+    await runBrowser({
+      variant: "do",
+      origins: api,
+      cookie: active.cookie,
+      expected: manifest.history,
+      workspace: manifest.workspace,
+      forward: async (request: Request) => {
+        request.headers.set(
+          acceptanceProofHeader,
+          await Effect.runPromise(
+            signAcceptanceRequest({
+              request,
+              boundary: "ingress",
+              environment: environmentOf(await Effect.runPromise(authority)),
+              deadline: Date.now() + acceptanceLifetimeMs,
+            })
+          )
+        );
+        return Effect.runPromise(transport(runtime)(request));
+      },
+    });
+    offer({ status: 200 });
+  });
 export const serveFixture = Effect.fn(function* (runtime: Miniflare) {
   const service = client(yield* authority, transport(runtime));
   const active = yield* start(service);
@@ -168,7 +204,10 @@ export const serveFixture = Effect.fn(function* (runtime: Miniflare) {
   yield* Stream.fromAsyncIterable(lines, () => new FixtureTransportError()).pipe(
     Stream.runForEach((line) =>
       Schema.decodeEffect(Schema.fromJsonString(command))(line).pipe(
-        Effect.flatMap((item) => execute(item, active, service))
+        Effect.flatMap((item) => {
+          if (item.control !== "mounted-workspace") return execute(item, active, service);
+          return runMountedWorkspace(runtime, active);
+        })
       )
     ),
     Effect.ensuring(Effect.sync(() => lines.close()))

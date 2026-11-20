@@ -1041,6 +1041,16 @@ const activeControlEvidence = Effect.fn(function* (
     routing: "pinned",
   });
 });
+const installedSmokeFailure = (
+  failure: Effect.Error<ReturnType<typeof verifyNativeSmoke>>
+): ReleaseFailure =>
+  new ReleaseFailure({
+    message:
+      "Installed release smoke failed: " +
+      (Schema.isSchemaError(failure)
+        ? "Probe request did not match the owned schema"
+        : failure.reason),
+  });
 const verifyFirstInstall = Effect.fn(function* (
   verifier: Config,
   client: HttpClient.HttpClient,
@@ -1071,10 +1081,7 @@ const verifyFirstInstall = Effect.fn(function* (
     core: { ...identity, workerVersionId: installed.coreVersionId },
   }).pipe(
     Effect.provideService(HttpClient.HttpClient, client),
-    Effect.mapError(
-      (failure) =>
-        new ReleaseFailure({ message: "Installed release smoke failed: " + failure.reason })
-    )
+    Effect.mapError(installedSmokeFailure)
   );
   yield* Effect.logInfo("Verified release smoke against the installed Worker versions.");
   const synthetic = yield* Effect.forEach(nativeHostPairs(yield* hostMode), (pair) =>

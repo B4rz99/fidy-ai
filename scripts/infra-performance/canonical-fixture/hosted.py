@@ -163,7 +163,7 @@ def bridge(mode, revision, session):
                 child.kill()
 
 
-def rehearse(revision, prefix, out):
+def rehearse(revision, prefix, out, *, browser_workspace=False):
     mode = "rehearse"
     directory=out/"fixture"
     directory.mkdir(mode=0o700, exist_ok=True)
@@ -189,7 +189,7 @@ def rehearse(revision, prefix, out):
                 if reply["status"]//100 != 2:
                     raise ValueError("Canonical fixture operation returned HTTP "+str(reply["status"]))
                 return reply["data"]
-            report=prepare(canonical,directory,revision,"performance-1")
+            report=prepare(canonical,directory,revision,"performance-1",browser_workspace=browser_workspace)
             request={"resourcePrefix":prefix,"nativeManifestDigest":digest(report)}
             if mode=="rehearse":
                 for failure in ("unsigned","wrong-binding","foreign-session"):
@@ -201,6 +201,8 @@ def rehearse(revision, prefix, out):
             if result["status"]!=200:
                 raise ValueError("Native provenance owner returned HTTP "+str(result["status"]))
             write(directory/"native-receipt.json",result["data"])
+            if browser_workspace and send("GET", "/transactions?limit=25", None, "mounted-workspace")["status"] != 200:
+                raise ValueError("Native mounted workspace did not complete")
             if mode=="rehearse" and send("POST",RECEIPT_PATH,request)["status"]//100==2:
                 raise ValueError("Native owner reissued a single-use receipt")
         bindings=verify_native_fixture(directory,revision=revision,resource_prefix=prefix)
@@ -218,16 +220,16 @@ def main():
     parser.add_argument("--ingress-version")
     parser.add_argument("--release-artifact")
     parser.add_argument("--archive-sha256")
-    parser.add_argument("--browser-workspace", action="store_true", help="Capture the signed workspace for the paired hosted browser profile")
+    parser.add_argument("--browser-workspace", action="store_true", help="Capture the original WebSession's User, TrialPeriod and pending Review count on workerd")
     args=parser.parse_args()
-    if args.browser_workspace and args.mode != "hosted":
-        parser.error("--browser-workspace requires hosted enrollment")
     os.umask(0o077)
     args.out.mkdir(mode=0o700,parents=True,exist_ok=True)
     if args.mode=="rehearse":
         revision=subprocess.check_output(["git","rev-parse","HEAD"],cwd=ROOT,text=True).strip()
         prefix=args.resource_prefix or ("fidy-2259-"+secrets.token_hex(6))
         os.environ["SMOKE_PROOF"]=secrets.token_hex(32)
+        if args.browser_workspace:
+            os.environ["FIDY_BROWSER_METER"] = "true"
         create="const k=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify']);process.stdout.write(JSON.stringify([Buffer.from(await crypto.subtle.exportKey('pkcs8',k.privateKey)).toString('hex'),Buffer.from(await crypto.subtle.exportKey('spki',k.publicKey)).toString('hex')]))"
         pair=json.loads(subprocess.check_output(["bun","-e",create],text=True))
         os.environ["TEST_FIXTURE_PRIVATE_KEY"],os.environ["FIDY_NATIVE_FIXTURE_PUBLIC_KEY"]=pair
@@ -237,7 +239,7 @@ def main():
         return run(args)
     if not re.fullmatch(r"[a-f0-9]{40}",revision) or not re.fullmatch(r"fidy-2259-[a-f0-9]{12}",prefix):
         raise ValueError("Missing exact native revision or allocated comparison prefix")
-    verified=rehearse(revision,prefix,args.out)
+    verified=rehearse(revision,prefix,args.out,browser_workspace=args.browser_workspace)
     if args.mode=="rehearse":
         envelope=private_file(args.out/"fixture","native-receipt.json")
         damaged={**envelope, "signature":("0" if envelope["signature"][0]!="0" else "1")+envelope["signature"][1:]}
@@ -247,7 +249,7 @@ def main():
             pass
         else:
             raise ValueError("Modified owner signature was accepted")
-        if rehearse(revision,prefix,args.out)!=verified:
+        if rehearse(revision,prefix,args.out,browser_workspace=args.browser_workspace)!=verified:
             raise ValueError("Protected resume changed the signed fixture")
     write(args.out/"summary.json",{"scope":args.mode,"nativeRevision":revision,"member":"performance-1",
         "originals":8,"effective":7,"sourceAttestations":8,"linkedPairs":1,"verified":True,

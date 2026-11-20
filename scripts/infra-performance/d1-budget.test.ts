@@ -49,13 +49,28 @@ describe("account-wide Free D1 benchmark headroom", () => {
       })
     ).toEqual({ _tag: "Refused", reason: "wrong_utc_day" });
   });
-  it.each([
-    { rowsRead: 100_001, rowsWritten: 1 },
-    { rowsRead: 1, rowsWritten: 5_001 },
-  ])("refuses an oversized experiment", (estimate) => {
-    expect(assessFreeD1BenchmarkBudget({ ...input, estimate })).toEqual({
+  it.each([{ rowsRead: 100_001, rowsWritten: 1 }])(
+    "refuses an oversized experiment",
+    (estimate) => {
+      expect(assessFreeD1BenchmarkBudget({ ...input, estimate })).toEqual({
+        _tag: "Refused",
+        reason: "experiment_too_large",
+      });
+    }
+  );
+  it("admits writes above the former experiment cap through the available account headroom", () => {
+    expect(
+      assessFreeD1BenchmarkBudget({ ...input, estimate: { rowsRead: 1, rowsWritten: 40_000 } })
+    ).toEqual({
+      _tag: "Allowed",
+      maximumRowsRead: 1,
+      maximumRowsWritten: 40_000,
+    });
+    expect(
+      assessFreeD1BenchmarkBudget({ ...input, estimate: { rowsRead: 1, rowsWritten: 40_001 } })
+    ).toEqual({
       _tag: "Refused",
-      reason: "experiment_too_large",
+      reason: "production_reserve",
     });
   });
   it.each([

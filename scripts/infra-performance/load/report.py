@@ -155,7 +155,7 @@ def two_tab_evidence(report, rows, samples):
                 report[boundary]["status"] = "fail"
 
 
-def two_tab_transport(rows, spans, time_origin):
+def two_tab_transport(rows, spans, time_origin, owner_clock=False):
     day_ms = 86_400_000
     clock_tolerance_ms = 2
     matched = {(row["variant"], row["user"], row["sample"]): row["responses"]
@@ -184,12 +184,17 @@ def two_tab_transport(rows, spans, time_origin):
                 if min(before_ingress, until_headers) < -clock_tolerance_ms:
                     break
                 canonical = span.get("canonicalHistoryMs")
-                phases.append(dict(
+                measured = dict(
                     beforeIngressMs=before_ingress, ingressMs=ingress, coreMs=core,
                     canonicalHistoryMs=(canonical if type(canonical) in (int, float)
                                         and 0 <= canonical <= core else None),
                     ingressToHeadersMs=until_headers, bodyMs=completed - headers,
-                ))
+                )
+                if owner_clock and variant == "do":
+                    directory, owner = span.get("directoryMs"), span.get("userStoreMs")
+                    if all(type(n) in (int, float) and 0 <= n <= core for n in (directory, owner)):
+                        measured.update(directoryMs=directory, userStoreMs=owner)
+                phases.append(measured)
             if len(phases) == 2:
                 samples.append(dict(sample=row["sample"], pairDispatchMs=row["dispatchMs"],
                                     firstComplete=phases[0], lastComplete=phases[1]))
@@ -221,7 +226,9 @@ if __name__ == "__main__":
         if not two_tabs:
             result["history"]["workerSpans"] = history_spans(rows, spans)
         elif "hostTimeOriginMs" in plan:
-            result["history"]["transportClocks"] = two_tab_transport(rows, spans, plan["hostTimeOriginMs"])
+            result["history"]["transportClocks"] = two_tab_transport(
+                rows, spans, plan["hostTimeOriginMs"], owner_clock=plan.get("nativeOwnerClock") is True,
+            )
     (directory / "report.json").write_text(json.dumps(result, indent=2))
     for cell, report in result.items():
         print(cell, report["scheduledMs"], report["dispatchMs"])

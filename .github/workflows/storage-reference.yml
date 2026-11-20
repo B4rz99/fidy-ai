@@ -31,6 +31,10 @@ on:
         description: Attribute two-tab workerd transport intervals with existing ingress clocks
         type: boolean
         default: false
+      two_tab_owner_clock:
+        description: Time real native Directory and UserStore calls in the two-tab Workerd fixture
+        type: boolean
+        default: false
       transaction_read_only:
         description: Measure mounted Transactions startup and fresh history only
         type: boolean
@@ -143,6 +147,7 @@ jobs:
           PROFILE: ${{ inputs.workerd_profile }}
           FIDY_WORKERD_CPU: ${{ inputs.workerd_profile == 'cpu' && '1' || '0' }}
           FIDY_WORKERD_TWO_TAB_CLOCK: ${{ inputs.two_tab_transport_clock && '1' || '0' }}
+          FIDY_WORKERD_OWNER_CLOCK: ${{ inputs.two_tab_owner_clock && '1' || '0' }}
           TZ: UTC
         run: |
           mkdir -p apps/server/test-results/load

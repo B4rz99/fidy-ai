@@ -64,7 +64,8 @@ assert.ok(
   ["original", "native-original", "mixed-review", "single", "two-tabs", "cpu"].includes(profile)
 );
 const twoTabs = profile === "two-tabs";
-const transportClock = process.env.FIDY_WORKERD_TWO_TAB_CLOCK === "1";
+const ownerClock = process.env.FIDY_WORKERD_OWNER_CLOCK === "1";
+const transportClock = process.env.FIDY_WORKERD_TWO_TAB_CLOCK === "1" || ownerClock;
 assert.ok(
   !transportClock || (twoTabs && Intl.DateTimeFormat().resolvedOptions().timeZone === "UTC")
 );
@@ -669,6 +670,24 @@ const measureMutations = async (variants, audits) => {
   });
   await write("audit", audits);
 };
+const ownerWindows = Schema.decodeUnknownSync(
+  Schema.Array(
+    Schema.Tuple([
+      Schema.String,
+      Schema.Struct({
+        directoryMs: Schema.optionalKey(Schema.Union([Schema.Number, Schema.Literal("duplicate")])),
+        userStoreMs: Schema.optionalKey(Schema.Union([Schema.Number, Schema.Literal("duplicate")])),
+      }),
+    ])
+  )
+);
+/** @param {Miniflare} runtime Native workerd runtime. */
+const readOwnerWindows = async (runtime) => {
+  const core = await runtime.getWorker("core");
+  const reply = await core.fetch("https://route-clock.invalid/windows");
+  assert.equal(reply.status, success);
+  return new Map(ownerWindows(await reply.json()));
+};
 /**
  * @param {Miniflare} native Native workerd runtime.
  * @param {D1} [d1] Frozen D1 runtime.
@@ -702,13 +721,19 @@ const measure = async (native, d1) => {
   await write("audit", audits);
   if (!twoTabs) await measureMutations(variants, audits);
   await retainedFixtures(variants);
+  const owners = ownerClock ? await readOwnerWindows(native) : undefined;
   for (const variant of Object.keys(variants)) {
     const logs = spanLogs[variant],
       calls = spanCalls[variant];
     assert.ok(logs && calls);
-    for (const row of correlateWorkerSpans(logs, calls, transportClock)) {
-      record("worker-spans", { variant, ...row });
-    }
+    correlateWorkerSpans(logs, calls, transportClock).forEach((row, index) => {
+      const traces = calls[index]?.traces;
+      const responses = row.responses.map((span, responseIndex) => ({
+        ...span,
+        ...(variant === "do" && owners ? owners.get(traces?.[responseIndex] ?? "") : {}),
+      }));
+      record("worker-spans", { variant, ...row, responses });
+    });
   }
 };
 const plannedOrder = () => {
@@ -737,6 +762,7 @@ await write("plan", {
     "one authenticated full-history warm-up for each User and variant; actual User/shared reconstruction unobserved",
   sameSessionConcurrency: twoTabs ? 2 : 1,
   ...(transportClock ? { hostTimeOriginMs: performance.timeOrigin } : {}),
+  ...(ownerClock ? { nativeOwnerClock: true } : {}),
   order: plannedOrder(),
   boundaries: twoTabs
     ? "host scheduled offer and actual first dispatch through both complete responses; retain per-read dispatch and completion and verify overlap"

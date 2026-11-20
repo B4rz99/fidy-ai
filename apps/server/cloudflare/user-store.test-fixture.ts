@@ -363,7 +363,10 @@ const fixtureWorkers = (
 }> => ({
   withBilling: ["billing", "erasure", "custody"].includes(mode),
   withOidc: ["browser", "login", "custody"].includes(mode),
-  coreModule: fixtureModules[mode] ?? "./core-worker.ts",
+  coreModule:
+    mode === "browser" && Bun.env.FIDY_WORKERD_OWNER_CLOCK === "1"
+      ? "./core-route-clock.test-fixture.ts"
+      : (fixtureModules[mode] ?? "./core-worker.ts"),
   ingressOptions: ["oauth", "connection"].includes(mode)
     ? { upstream: "https://api.fidyapp.com" }
     : inspectionOptions(mode),

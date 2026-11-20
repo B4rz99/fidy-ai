@@ -102,14 +102,15 @@ const storageProbe = Effect.fn(function* (request: Request, environment: CoreHtt
 
 export const makeCoreHttp = ({ telemetry, institutions }: CoreComposition): CoreHttpHandler => {
   const observeRejections = makeCoreRejectionObserver();
-  return (request, installed) => {
+  return (incoming, installed) => {
     const environment = closedHostEnvironment({
-      request,
+      request: incoming,
       environment: installed,
       boundary: "core",
     });
     return Effect.gen(function* () {
-      const admission = yield* releaseAdmission(request, environment, "core");
+      const admission = yield* releaseAdmission(incoming, environment, "core");
+      const request = admission.request;
       if (Option.isSome(admission.denial)) return admission.denial.value;
       if (isAcceptanceReceipt(request)) return yield* fixtureChargeReceipt(request, environment);
       if (isAcceptanceWindow(request)) return yield* renewAcceptanceWindow(request, environment);
@@ -144,13 +145,13 @@ export const makeCoreHttp = ({ telemetry, institutions }: CoreComposition): Core
             operation: "worker.core.fetch",
             parent: Option.getOrUndefined(
               decodeTraceParent({
-                value: Option.fromNullOr(request.headers.get(workerInternalTraceHeader)),
+                value: Option.fromNullOr(incoming.headers.get(workerInternalTraceHeader)),
                 receivedAtUnixMilliseconds,
               })
             ),
           })
         ),
-      (program) => Effect.runPromise(program, { signal: request.signal })
+      (program) => Effect.runPromise(program, { signal: incoming.signal })
     );
   };
 };

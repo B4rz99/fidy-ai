@@ -406,10 +406,23 @@ const admitBrowserErasure = Effect.fn(function* (
   return admitted.reference;
 });
 
-export const fleetBrowser = (input: Inputs): FleetPilotBrowser => {
+const identity = Effect.fn(function* (call: Driver["call"], user: User) {
+  const current = yield* result(
+    yield* call("/user", { headers: user.headers }),
+    Schema.Struct({ data: Schema.Struct({ id: UserId }) })
+  );
+  return current.data.id;
+});
+
+export const fleetBrowser = (
+  input: Inputs
+): FleetPilotBrowser & {
+  refused: (record: ErasureProgress) => Effect.Effect<void, Error>;
+} => {
   const session = Effect.fn(function* (intent: "signup" | "login") {
     const member = yield* boot(input, "fleet-1", intent);
     return {
+      id: yield* identity(runner(input).call, member),
       outcome: member.outcome,
       erase: (): Effect.Effect<string, Error> => admitBrowserErasure(input, member),
       denied: (): Effect.Effect<void, Error> =>
@@ -422,6 +435,7 @@ export const fleetBrowser = (input: Inputs): FleetPilotBrowser => {
     renew: () => renewWork(input),
     register: () => session("signup"),
     login: () => session("login"),
+    refused: (record) => ungrantedPairing(input, "fleet-1", record).pipe(Effect.asVoid),
   };
 };
 const erasureEvidence = Effect.fn(function* (
@@ -430,19 +444,12 @@ const erasureEvidence = Effect.fn(function* (
   observation: ErasureObservation
 ) {
   const { call } = runner(input);
-  const identity = Effect.fn(function* (user: User) {
-    const current = yield* result(
-      yield* call("/user", { headers: user.headers }),
-      Schema.Struct({ data: Schema.Struct({ id: UserId }) })
-    );
-    return current.data.id;
-  });
   return yield* verifyIndependentErasure({
     ...observation,
-    survivors: () => Effect.forEach(pair, identity),
+    survivors: () => Effect.forEach(pair, (user) => identity(call, user)),
     signup: () =>
       boot(input, "erasure-1").pipe(
-        Effect.flatMap((user) => identity(user).pipe(Effect.map((id) => ({ ...user, id }))))
+        Effect.flatMap((user) => identity(call, user).pipe(Effect.map((id) => ({ ...user, id }))))
       ),
     renew: () => renewWork(input),
     admit: (user) => admitBrowserErasure(input, user),
@@ -461,7 +468,11 @@ const completionOutcome = Effect.fn(function* (completion: Response) {
   );
   return outcome;
 });
-const ungrantedPairing = Effect.fn(function* (input: Inputs, record: ErasureProgress) {
+const ungrantedPairing = Effect.fn(function* (
+  input: Inputs,
+  member: "erasure-1" | "fleet-1",
+  record: ErasureProgress
+) {
   const privateLogin = {
     ...input,
     send: Effect.fn(function* (request: Request) {
@@ -474,7 +485,7 @@ const ungrantedPairing = Effect.fn(function* (input: Inputs, record: ErasureProg
       return reply;
     }),
   };
-  const { proof, expiresAt } = yield* verifyProvider(privateLogin, "erasure-1", "login");
+  const { proof, expiresAt } = yield* verifyProvider(privateLogin, member, "login");
   yield* record("erased-provider-verified");
   const { post } = runner(privateLogin);
   const outcome = yield* completionOutcome(yield* post("/web/providers/google/complete", proof));
@@ -520,14 +531,10 @@ export const admittedErasureLogins = (
         ["smoke-1", "smoke-2"] as const,
         Effect.fn(function* (member) {
           const user = yield* boot(transport, member, "login");
-          const current = yield* result(
-            yield* call("/user", { headers: user.headers }),
-            Schema.Struct({ data: Schema.Struct({ id: UserId }) })
-          );
-          return current.data.id;
+          return yield* identity(call, user);
         })
       ),
-    refused: (record) => ungrantedPairing(transport, record),
+    refused: (record) => ungrantedPairing(transport, "erasure-1", record),
   };
 };
 /** Exercise actual auth, private provider exchange and native financial callback through the installed protected release.

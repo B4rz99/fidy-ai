@@ -61,15 +61,15 @@ def check_delta(before, current, now):
     return {"reads": reads, "writes": writes}
 
 
-def remaining_seconds(now):
+def remaining_seconds(now, lifetime=MAX_SECONDS):
     started = int(os.environ["FLEET_PILOT_STARTED_AT"])
     if not 0 < started <= now or started // DAY != now // DAY:
         raise ValueError("Missing same-day protected job start")
-    return min(started + MAX_SECONDS - now, DAY - now % DAY)
+    return min(started + lifetime - now, DAY - now % DAY)
 
 
-def require_room(phase, current, delta, now):
-    seconds = remaining_seconds(now)
+def require_room(phase, current, delta, now, lifetime=MAX_SECONDS):
+    seconds = remaining_seconds(now, lifetime)
     reads = min(PILOT_READS - delta["reads"], DAILY_READS - RESERVE_READS - current.reads)
     writes = min(PILOT_WRITES - delta["writes"], DAILY_WRITES - RESERVE_WRITES - current.writes)
     if phase == "signup":
@@ -80,6 +80,44 @@ def require_room(phase, current, delta, now):
             raise ValueError("Reserve remaining work for cleanup")
     elif reads <= 0 or writes <= 0 or seconds < 7 * 60:
         raise ValueError("No remaining allowance for cleanup lease")
+
+
+def continuation_room(before, last, current, now, phase):
+    delta = check_delta(before, current, now)
+    # Include concurrent account use, outstanding lag and all intervening retries in both caps.
+    cleanup = check_delta(last, current, now)
+    if (current.latest < last.sampled or cleanup["reads"] > CLEANUP_READS
+            or cleanup["writes"] > CLEANUP_WRITES
+            or current.reads + RESERVE_READS > DAILY_READS
+            or current.writes + RESERVE_WRITES > DAILY_WRITES):
+        raise ValueError("Archived cleanup allowance exceeded or unobserved")
+    lifetime = 50 * 60
+    if phase == "resume":
+        require_room("check", current, delta, now, lifetime)
+        if remaining_seconds(now, lifetime) < 40 * 60:
+            raise ValueError("Insufficient time for disposal, refusal and final metering")
+    if phase == "refusal" and remaining_seconds(now, lifetime) < 18 * 60:
+        raise ValueError("Insufficient time for pairing expiry and final metering")
+    if phase != "settle":
+        require_room("cleanup", current, delta, now, lifetime)
+        if cleanup["reads"] >= CLEANUP_READS or cleanup["writes"] >= CLEANUP_WRITES:
+            raise ValueError("Archived cleanup allowance exhausted")
+    return delta
+
+
+def archived_usage(directory, installed, verifier):
+    rows = [json.loads(line) for line in (directory / "fleet-source-meter.jsonl").read_text().splitlines()]
+    if (any(row.get("revision") != installed or row.get("verifierRevision") != verifier for row in rows)
+            or rows[0]["stage"] != "begin" or rows[0]["pilotReads"] != PILOT_READS
+            or rows[0]["pilotWrites"] != PILOT_WRITES):
+        raise ValueError("Foreign archived fleet meter")
+    latest = [row for row in rows if row["stage"] == "finish"][-1]
+    before = Usage(**rows[0]["usage"])
+    final = Usage(latest["sampled"], latest["latest"], latest["reads"], latest["writes"])
+    delta = check_delta(before, final, final.sampled)
+    if rows[-1]["stage"] != "delta" or any(rows[-1].get(key) != value for key, value in delta.items()):
+        raise ValueError("Missing settled source account counters")
+    return before, final
 
 
 def iso(epoch):
@@ -129,12 +167,17 @@ def sample(phase, installed, finished_ms=None):
     revisions = {"revision": installed, "verifierRevision": os.environ["GITHUB_SHA"]}
     directory = Path(os.environ["RUNNER_TEMP"])
     journal = directory / "native-fleet-meter.jsonl"
+    continued = phase in ("resume", "renew-cleanup", "settle", "archived-logs", "refusal")
+    provenance = json.loads((directory / "fleet-provenance.json").read_text()) if continued else {}
+    source = {"sourceRun": provenance["runId"], "sourceVerifierRevision": provenance["sourceRevision"]} if continued else {}
     def record(stage, **values):
         with journal.open("a") as out:
-            print(json.dumps({"stage": stage, **revisions, **values}), file=out)
-    if phase in ("probe-logs", "logs"):
-        evidence = json.loads(Path(os.environ["SMOKE_ATTESTATION_FILE"] + ".fleet").read_text())
-        if any(evidence.get(key) != value for key, value in revisions.items()):
+            print(json.dumps({"stage": stage, **revisions, **source, **values}), file=out)
+    if phase in ("probe-logs", "logs", "archived-logs"):
+        path = directory / "fleet-source.json" if continued else Path(os.environ["SMOKE_ATTESTATION_FILE"] + ".fleet")
+        evidence = json.loads(path.read_text())
+        if evidence["revision"] != installed or evidence["verifierRevision"] != (
+                provenance["sourceRevision"] if continued else revisions["verifierRevision"]):
             raise ValueError("Foreign observation revision")
         if phase == "probe-logs":
             now = int(time.time() * 1000)
@@ -146,7 +189,7 @@ def sample(phase, installed, finished_ms=None):
         if end - start < 600_000:
             raise ValueError("Two elapsed windows required")
         observed = observation(query, os.environ["CLOUDFLARE_ACCOUNT_ID"], evidence["coreVersion"], start, end)
-        record(phase, **observed)
+        record(phase, windowStart=start, windowEnd=end, **observed)
         if not observed["firstWindowWraps"] or not observed["secondWindowWraps"]:
             raise ValueError("Missing completed traversal in one or both windows")
         return
@@ -159,24 +202,32 @@ def sample(phase, installed, finished_ms=None):
         admit(current, now)
         require_room("signup", current, {"reads": 0, "writes": 0}, now)
         return
-    if phase not in ("signup", "check", "cleanup", "finish"):
-        raise ValueError("Invalid metering phase")
-    with journal.open() as source:
-        origin = json.loads(source.readline())
-    if origin["stage"] != "begin" or any(origin.get(key) != value for key, value in revisions.items()):
-        raise ValueError("Missing revision-bound admission")
-    before = Usage(**origin["usage"])
-    current = usage()
-    record(phase, **asdict(current))
-    delta = check_delta(before, current, int(time.time()))
-    if phase != "finish":
-        require_room(phase, current, delta, int(time.time()))
-        return
+    if continued:
+        before, last = archived_usage(directory, installed, provenance["sourceRevision"])
+        current = usage()
+        record(phase, **asdict(current))
+        delta = continuation_room(before, last, current, int(time.time()), phase)
+        if phase != "settle":
+            return
+    else:
+        if phase not in ("signup", "check", "cleanup", "finish"):
+            raise ValueError("Invalid metering phase")
+        with journal.open() as stream:
+            origin = json.loads(stream.readline())
+        if origin["stage"] != "begin" or any(origin.get(key) != value for key, value in revisions.items()):
+            raise ValueError("Missing revision-bound admission")
+        before = Usage(**origin["usage"])
+        current = usage()
+        record(phase, **asdict(current))
+        delta = check_delta(before, current, int(time.time()))
+        if phase != "finish":
+            require_room(phase, current, delta, int(time.time()))
+            return
     finished = int(finished_ms) // 1000
     if not before.sampled <= finished <= current.sampled:
         raise ValueError("Invalid work interval")
     if current.latest >= finished and delta["reads"] > 0 and delta["writes"] > 0:
-        record("delta", **delta)
+        record("cumulative-delta" if continued else "delta", **delta)
         print("observed")
     else:
         print("pending")
@@ -187,7 +238,7 @@ if __name__ == "__main__":
         sample(*sys.argv[1:])
     except Exception as exc:
         phase = sys.argv[1] if len(sys.argv) > 1 else None
-        if "RUNNER_TEMP" in os.environ and phase in ("begin", "signup", "check", "cleanup", "logs", "finish", "probe-logs"):
+        if "RUNNER_TEMP" in os.environ and phase in ("begin", "signup", "check", "cleanup", "logs", "finish", "probe-logs", "resume", "renew-cleanup", "settle", "archived-logs", "refusal"):
             with (Path(os.environ["RUNNER_TEMP"]) / "native-fleet-refusal.jsonl").open("a") as out:
                 print(json.dumps({"phase": phase, "error": type(exc).__name__}), file=out)
         sys.exit("Fleet pilot meter unavailable (" + type(exc).__name__ + ")")

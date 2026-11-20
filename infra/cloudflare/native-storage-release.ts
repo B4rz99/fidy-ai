@@ -13,7 +13,7 @@ import { inspectDeployedEdge } from "./native-deployed-edge";
 import { inspectNativeResources, verifyDeployedVersion } from "./native-deployed-graph";
 import type { NativeRole } from "./native-graph";
 import { continueAdmittedErasure } from "./native-erasure-continuation";
-import { runFleetPilot } from "./native-fleet-pilot";
+import { continueFleetCleanup, runFleetPilot } from "./native-fleet-pilot";
 import { admittedErasureLogins, exerciseClosedUsers, fleetBrowser } from "./native-acceptance";
 import { installedOrigins } from "@fidy/server/browser-transport";
 import { verifyNativeEdge } from "./native-edge";
@@ -1255,7 +1255,19 @@ const prepareDiagnostics = Effect.fn(function* (
 });
 const meter = (
   revision: string,
-  phase: "begin" | "signup" | "check" | "cleanup" | "finish" | "probe-logs" | "logs",
+  phase:
+    | "begin"
+    | "signup"
+    | "check"
+    | "cleanup"
+    | "finish"
+    | "probe-logs"
+    | "logs"
+    | "resume"
+    | "renew-cleanup"
+    | "settle"
+    | "archived-logs"
+    | "refusal",
   ...args: string[]
 ): Effect.Effect<string, ReleaseFailure> =>
   releaseCommand({
@@ -1268,8 +1280,8 @@ const meter = (
     ],
     lifetime: "read-only",
   });
-const settleFleetMeter = Effect.fn(function* (revision: string) {
-  const settled = yield* meter(revision, "finish", String(yield* Clock.currentTimeMillis)).pipe(
+const settleFleetMeter = Effect.fn(function* (revision: string, phase: "finish" | "settle") {
+  const settled = yield* meter(revision, phase, String(yield* Clock.currentTimeMillis)).pipe(
     Effect.map((status) => status.trim()),
     Effect.repeat({
       while: (status) => status === "pending",
@@ -1310,13 +1322,95 @@ const fleetCheckpoints = Effect.fn(function* (
   };
   return record;
 });
+const archivedFleet = Effect.fn(function* (
+  installed: Effect.Success<ReturnType<typeof installedRelease>>
+) {
+  const directory = yield* ReleaseConfig.String("RUNNER_TEMP");
+  const provenance = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({
+      runId: artifactNumber,
+      sourceRevision: Schema.String.check(Schema.isPattern(/^[a-f0-9]{40}$/u)),
+      targetSha256: evidenceDigest,
+      userSha256: evidenceDigest,
+      baselineSha256: evidenceDigest,
+    })
+  )(yield* readFile(directory + "/fleet-provenance.json"));
+  const source = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({
+      revision: Schema.Literal(installed.revision),
+      verifierRevision: Schema.Literal(provenance.sourceRevision),
+      userNamespace: Schema.Literal(installed.userNamespace),
+      coreVersion: Schema.Literal(installed.coreVersionId),
+      publicVersion: Schema.Literal(installed.publicVersionId),
+      requestedPilotUsers: Schema.Literal(1),
+      events: Schema.Array(
+        Schema.Struct({ stage: Schema.String, physicalObject: Schema.optional(evidenceDigest) })
+      ),
+    })
+  )(yield* readFile(directory + "/fleet-source.json"));
+  const stages = [
+    "signup-started",
+    "signup-created",
+    "observation-start",
+    "erasure-submission-started",
+    "erasure-reply-unconfirmed",
+    "erasure-admitted",
+  ];
+  const [, , subject] = yield* Schema.decodeUnknownEffect(
+    Schema.Tuple([
+      Schema.Struct({ stage: Schema.Literal("signup-started") }),
+      Schema.Struct({ stage: Schema.Literal("signup-created") }),
+      Schema.Struct({ stage: Schema.Literal("observation-start"), physicalObject: evidenceDigest }),
+      Schema.Struct({ stage: Schema.Literal("erasure-submission-started") }),
+      Schema.Struct({ stage: Schema.Literals(["erasure-reply-unconfirmed", "erasure-admitted"]) }),
+    ])
+  )(source.events.filter((item) => stages.includes(item.stage)));
+  return { ...provenance, target: subject.physicalObject };
+});
+const resumeFleetCleanup = Effect.fn(function* ({
+  installed,
+  inventory,
+  browser,
+  record,
+}: {
+  installed: Effect.Success<ReturnType<typeof installedRelease>>;
+  inventory: Parameters<typeof continueFleetCleanup>[0]["inventory"];
+  browser: ReturnType<typeof fleetBrowser>;
+  record: Effect.Success<ReturnType<typeof fleetCheckpoints>>;
+}) {
+  const source = yield* archivedFleet(installed);
+  yield* record({
+    stage: "source-bound",
+    sourceRun: source.runId,
+    sourceVerifierRevision: source.sourceRevision,
+  });
+  const budget = (phase: "renew-cleanup" | "refusal"): Effect.Effect<void, Error> =>
+    meter(installed.revision, phase).pipe(Effect.asVoid);
+  // Retain coverage from the source windows even when physical cleanup fails.
+  const coverage = yield* Effect.exit(meter(installed.revision, "archived-logs"));
+  const cleaned = yield* Effect.exit(
+    continueFleetCleanup({
+      ...source,
+      inventory,
+      record,
+      budget,
+      login: browser.login,
+      renewCleanup: () => budget("renew-cleanup").pipe(Effect.andThen(browser.renew)),
+      refused: () => browser.refused((stage) => record({ stage })),
+    })
+  );
+  yield* settleFleetMeter(installed.revision, "settle");
+  if (cleaned._tag === "Failure") return yield* Effect.failCause(cleaned.cause);
+  if (coverage._tag === "Failure") return yield* Effect.failCause(coverage.cause);
+});
 const fleetPilot = Effect.fn(function* (
   verifier: Config,
   client: HttpClient.HttpClient,
-  port: ReleasePort
+  { port, operation }: { port: ReleasePort; operation: "fleet-pilot" | "continue-fleet-cleanup" }
 ) {
   const env = yield* installedConfig(verifier);
-  yield* meter(env.revision, "begin");
+  const continued = operation === "continue-fleet-cleanup";
+  yield* meter(env.revision, continued ? "resume" : "begin");
   const installed = yield* installedRelease(env, client, {
     port,
     staging: false,
@@ -1331,10 +1425,13 @@ const fleetPilot = Effect.fn(function* (
   });
   const record = yield* fleetCheckpoints(env, verifier.revision, installed);
   yield* record({ stage: "verified-release" });
+  const inventory = (): ReturnType<typeof readUserObjects> =>
+    readUserObjects(accountReader(env, client), installed.userNamespace);
+  if (continued) return yield* resumeFleetCleanup({ installed, inventory, browser, record });
   yield* meter(env.revision, "probe-logs");
   const measured = yield* Effect.exit(
     runFleetPilot({
-      inventory: () => readUserObjects(accountReader(env, client), installed.userNamespace),
+      inventory,
       beforeSignup: () => meter(env.revision, "signup").pipe(Effect.asVoid),
       register: browser.register,
       renewCleanup: () =>
@@ -1358,12 +1455,23 @@ const fleetPilot = Effect.fn(function* (
       }),
     })
   );
-  yield* settleFleetMeter(env.revision);
+  yield* settleFleetMeter(env.revision, "finish");
   if (measured._tag === "Failure") return yield* Effect.failCause(measured.cause);
   yield* meter(env.revision, "logs");
 });
+const fleetVerification =
+  (
+    operation: "fleet-pilot" | "continue-fleet-cleanup"
+  ): ((
+    env: Config,
+    client: HttpClient.HttpClient,
+    port: ReleasePort
+  ) => ReturnType<typeof fleetPilot>) =>
+  (env: Config, client: HttpClient.HttpClient, port: ReleasePort) =>
+    fleetPilot(env, client, { port, operation });
 const commands = {
-  "fleet-pilot": fleetPilot,
+  "fleet-pilot": fleetVerification("fleet-pilot"),
+  "continue-fleet-cleanup": fleetVerification("continue-fleet-cleanup"),
   "capture-hosts": captureHostStage,
   "attach-hosts": attachCanonicalHosts,
   "prepare-diagnostics": prepareDiagnostics,
@@ -1382,6 +1490,7 @@ if (import.meta.main) {
     const command = yield* Schema.decodeUnknownEffect(
       Schema.Literals([
         "fleet-pilot",
+        "continue-fleet-cleanup",
         "capture-hosts",
         "attach-hosts",
         "prepare-diagnostics",

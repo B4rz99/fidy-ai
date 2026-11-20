@@ -62,6 +62,20 @@ class Port:
         return self.marker
 
 class CohortTests(unittest.TestCase):
+    def test_cleanup_binds_custody_to_the_application_and_technical_generation(self):
+        port, store = Port(), Store()
+        coordinates = dict(prefix="fidy-2259-0123456789ab", revision="b"*40, resourceRevision="a"*40)
+        Cohort(store, coordinates, port).enroll()
+        for changed in [dict(revision=coordinates["resourceRevision"]),
+                        dict(resourceRevision=coordinates["revision"])]:
+            with self.subTest(changed=changed), self.assertRaisesRegex(ValueError,"Foreign native cohort"):
+                Cohort(store, {**coordinates, **changed}, port).cleanup()
+        self.assertNotIn("erase", port.operations)
+        self.assertTrue(port.objects[port.target])
+        Cohort(store, coordinates, port).cleanup()
+        self.assertEqual(port.operations.count("erase"), 1)
+
+
     def test_a_fresh_process_finishes_owned_erasure_after_the_response_is_lost(self):
         port, store = Port(), Store()
         coordinates = dict(prefix="fidy-2259-0123456789ab", revision="a"*40)

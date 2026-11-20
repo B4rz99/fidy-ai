@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "fb1da73c7e83c0615dc6c98ed7ab654dbfb852a1c1006f29f03d6197b884f39e";
+const expectedEdgePolicyDigest = "2e6513212d85ed844f078492acf498983329a226ffc9d8953117a4b614116f82";
 const securityArtifacts = [
   ...(await Promise.all(
     [
@@ -27,6 +27,7 @@ const securityArtifacts = [
       "../../apps/server/cloudflare/transactions/internal/performance-receipt.ts",
       "./native-fixture-signer.ts",
       "./native-fixture-upload.json",
+      "./native-pairing-upload.json",
       "./native-upload-recovery.ts",
       "./native-retained-provider.json",
       "./native-fallback-probe.ts",

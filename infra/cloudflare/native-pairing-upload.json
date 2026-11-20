@@ -1,0 +1,12 @@
+{
+  "revision": "1072b915a879bc94c20ae400bad72d945ed8a341",
+  "run": "44737727665",
+  "artifact": "14628573756",
+  "sha256": "f0c685b1e0e4e4ef658eeed5aacdc67f2fd99ab8933d0cef5fbd68887ed93543",
+  "publicVersionId": "f459ca84-2367-4f76-9aa2-ad08fd90458f",
+  "coreVersionId": "e04487d2-2f73-4088-bea2-ad2b66b2f51a",
+  "smoke": {
+    "deploymentId": "798c4abe-4b6f-434e-b7c4-83c161f29fbc",
+    "versionId": "a042ae86-642e-4c4e-9e02-275b6f46845f"
+  }
+}

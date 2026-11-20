@@ -1,3 +1,4 @@
+import uploadedPair from "./native-pairing-upload.json" with { type: "json" };
 import { isDeepStrictEqual } from "node:util";
 import { Effect, Schema } from "effect";
 import { gitRevisionPattern } from "../../apps/server/cloudflare/runtime/contract";
@@ -68,15 +69,13 @@ type Role = "core" | "public";
 type Release = FallbackStage["release"];
 type Position = Readonly<{ id: string; serving: boolean }>;
 type Pair = Readonly<Record<Role, Position>>;
+const hasZeroCandidate = (deployment: Deployment, stable: string, candidate: string): boolean =>
+  deployment.versions.length === 2 &&
+  deployment.versions.some((row) => row.id === candidate && row.percentage === 0) &&
+  deployment.versions.some((row) => row.id === stable && row.percentage === 100);
 const matchesStage = (deployment: Deployment, release: Release, role: Role): boolean =>
   deployment.id === release[`${role}DeploymentId`] &&
-  deployment.versions.length === 2 &&
-  deployment.versions.some(
-    (version) => version.id === release[`${role}VersionId`] && version.percentage === 0
-  ) &&
-  deployment.versions.some(
-    (version) => version.id === release.snapshot[role].stableVersionId && version.percentage === 100
-  );
+  hasZeroCandidate(deployment, release.snapshot[role].stableVersionId, release[`${role}VersionId`]);
 
 export const matchesArchivedStage = (value: Release): boolean =>
   value.snapshot.revision === archivedDormant.revision &&
@@ -121,6 +120,89 @@ export const fromArchivedStage = (source: Release["snapshot"]): boolean =>
   source.public.deploymentId === archivedDormant.publicDeploymentId &&
   source.core.stableVersionId === archivedDormant.original.core &&
   source.public.stableVersionId === archivedDormant.original.public;
+
+/** One interrupted upload may advance only the exact new zero-traffic pair over its original history. */
+const uploadedPosition = Effect.fn(function* (
+  port: StageReader,
+  snapshot: Release["snapshot"],
+  role: Role
+) {
+  const captured = snapshot[role];
+  const [active, previous] = yield* port.recentDeployments(captured.name);
+  if (active !== undefined && matchesOriginalStage(active, role)) {
+    return { id: active.id, staged: false };
+  }
+  if (
+    active === undefined ||
+    previous === undefined ||
+    !matchesOriginalStage(previous, role) ||
+    active.id === previous.id ||
+    !hasZeroCandidate(active, captured.stableVersionId, uploadedPair[`${role}VersionId`])
+  ) {
+    return yield* Effect.fail(Error("Interrupted pairing upload has unrelated deployment history"));
+  }
+  return { id: active.id, staged: true };
+});
+const uploadedAssignments = Effect.fn(function* (
+  port: FallbackRepairPort,
+  snapshot: Release["snapshot"]
+) {
+  yield* releaseController.requireTrunk(port, snapshot.revision);
+  const core = yield* uploadedPosition(port, snapshot, "core");
+  const ingress = yield* uploadedPosition(port, snapshot, "public");
+  if (core.staged && !ingress.staged) {
+    return yield* Effect.fail(Error("Unexpected interrupted stage order"));
+  }
+  return { core, public: ingress };
+});
+const confirmUploadedAssignment = (
+  role: Role,
+  observed: Effect.Success<ReturnType<typeof uploadedAssignments>>,
+  expected: { deployment: string; other: string }
+): boolean =>
+  observed[role].staged &&
+  observed[role].id === expected.deployment &&
+  observed[role === "core" ? "public" : "core"].id === expected.other;
+
+export const stageUploadedPair = Effect.fn(function* <E, R>(
+  port: FallbackRepairPort,
+  snapshot: Release["snapshot"],
+  verify: Effect.Effect<void, E, R>
+) {
+  if (snapshot.revision !== uploadedPair.revision || !fromArchivedStage(snapshot)) {
+    return yield* Effect.fail(Error("Unexpected interrupted pairing upload snapshot"));
+  }
+  let positions = yield* uploadedAssignments(port, snapshot);
+  yield* verify;
+  if (!isDeepStrictEqual(positions, yield* uploadedAssignments(port, snapshot))) {
+    return yield* Effect.fail(Error("Pair changed during pre-stage qualification"));
+  }
+  for (const role of ["public", "core"] as const) {
+    if (positions[role].staged) continue;
+    const other = role === "public" ? "core" : "public";
+    const staged = yield* releaseController.deployExact(port, snapshot[role].name, [
+      { id: snapshot[role].stableVersionId, percentage: 100 },
+      { id: uploadedPair[`${role}VersionId`], percentage: 0 },
+    ]);
+    const observed = yield* uploadedAssignments(port, snapshot);
+    if (
+      !confirmUploadedAssignment(role, observed, {
+        deployment: staged.id,
+        other: positions[other].id,
+      })
+    ) {
+      return yield* Effect.fail(Error("Unexpected traffic after staging uploaded Worker"));
+    }
+    positions = observed;
+  }
+  return {
+    snapshot,
+    publicVersionId: uploadedPair.publicVersionId,
+    coreVersionId: uploadedPair.coreVersionId,
+    publicDeploymentId: positions.public.id,
+    coreDeploymentId: positions.core.id,
+  };
+});
 
 export const requirePromotedDormantSource = Effect.fn(function* (
   port: StageReader,

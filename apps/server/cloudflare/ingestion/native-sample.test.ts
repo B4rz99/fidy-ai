@@ -256,7 +256,6 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       Effect.gen(function* () {
         const { runtime, owner, post, id } = yield* scenario();
         const view = yield* previewCandidate(post);
-        // Interrupt between durable writer claim and the R2 acknowledgement. A negative HEAD cannot settle it.
         yield* owner.exec(
           "CREATE TRIGGER stop_sample_reservation BEFORE DELETE ON ingest_sample_reservations BEGIN SELECT RAISE(ABORT,'fixture_lost_reply'); END"
         );

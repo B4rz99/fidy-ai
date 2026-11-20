@@ -42,14 +42,12 @@ export const httpRateLimited = 429;
 const unbiasedBase36Limit = 252;
 const shortAlphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
 
-/** Bounded proof-free projection of an authenticated WebSession. */
 export const SessionRow = Schema.Struct({
   id: Schema.String.check(Schema.isUUID()),
   user_id: Schema.String.check(Schema.isUUID()),
 });
 export type SessionRow = typeof SessionRow.Type;
 
-/** Retained milliseconds must represent an instant the canonical PAT codec can publish. */
 export const retainedPATMillis = Schema.Finite.check(
   Schema.isInt(),
   Schema.makeFilter((milliseconds) =>
@@ -58,7 +56,7 @@ export const retainedPATMillis = Schema.Finite.check(
       : "Expected a canonical PAT timestamp"
   )
 );
-/** One decoded grant row; caller supplies its explicit subject when reading owned data. */
+
 export const PATRow = Schema.Struct({
   id: Schema.String,
   user_id: Schema.String,
@@ -75,12 +73,12 @@ export type PATRow = typeof PATRow.Type;
 
 export const iso = (milliseconds: number): string =>
   DateTime.formatIso(DateTime.makeUnsafe(milliseconds));
-/** Fast SHA-256 is safe here only because inputs are 256-bit randomly generated bearers. */
+
 export const digest = (text: string): Promise<Uint8Array> =>
   crypto.subtle
     .digest("SHA-256", new TextEncoder().encode(text))
     .then((bytes) => new Uint8Array(bytes));
-/** Length-checked constant-work comparison for stored and candidate digests. */
+
 export const equalsDigest = ({
   stored,
   candidate,
@@ -92,10 +90,10 @@ export const equalsDigest = ({
   }
   return difference === 0;
 };
-/** Opaque private proof; no raw value is ever stored. */
+
 export const newProof = (): string =>
   Base64Url.encode(crypto.getRandomValues(new Uint8Array(digestBytes)));
-/** Uniform human-readable safe short id, never authentication material. */
+
 export const newShortId = (): string => {
   let shortId = "";
   while (shortId.length < shortLength) {
@@ -110,7 +108,6 @@ export const newShortId = (): string => {
 export const newBearer = (shortId: string): string => `${patBearerPrefix}${shortId}_${newProof()}`;
 export const validBearer = (value: string): boolean => Schema.is(TokenBearer)(value);
 
-/** Decode JSON bodies before any proof lookup or mutation; malformed bodies are never retained. */
 export const decodeBody = <Decoded, Encoded>({
   request,
   schema,
@@ -137,7 +134,7 @@ export const scopesFrom = (text: string): Option.Option<PATScopes> => {
     return Option.none();
   }
 };
-/** Rebuild decoded persisted fields as a canonical PAT, never spread a D1 row to clients. */
+
 export const patFrom = (row: PATRow): Option.Option<PAT> => {
   const scopes = scopesFrom(row.scopes_json);
   if (Option.isNone(scopes)) return Option.none();
@@ -154,7 +151,7 @@ export const patFrom = (row: PATRow): Option.Option<PAT> => {
     revokedAt: Option.map(Option.fromNullishOr(row.revoked_at_ms), DateTime.makeUnsafe),
   });
 };
-/** Browser freshness is required for authority changes, but not safe listing. */
+
 export const webSession = ({
   request,
   db,
@@ -169,7 +166,7 @@ export const webSession = ({
       browserSession({ request, db, input: { current, fresh } })
     );
   });
-/** Recheck the exact WebSession inside a D1 atomic transition, not only on a prior read. */
+
 export const sessionExists = freshSessionExists;
 export const response = ({ body, status }: Readonly<{ body: unknown; status: number }>): Response =>
   Response.json(body, { status, headers: { "cache-control": "no-store" } });
@@ -222,5 +219,5 @@ export const notFound = (): Response =>
     body: { error: { code: "not_found", message: "PAT not found." }, next: [] },
     status: httpNotFound,
   });
-/** Checks one safe short identifier before it is ever used in a subject-scoped query. */
+
 export const shortIdIsValid = (value: string): boolean => Schema.is(TokenShortId)(value);

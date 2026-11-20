@@ -276,7 +276,6 @@ for (const status of ["APPROVED", "PENDING"] as const) {
       );
       yield* TestClock.adjust("297 seconds");
       expect(requests).toBe(100);
-      // A wall-clock correction makes the last spaced GET reachable before the original deadline.
       yield* TestClock.setTime(294_000);
       penultimate.resolve(tokenResponse("PENDING"));
       yield* TestClock.adjust("3 seconds");

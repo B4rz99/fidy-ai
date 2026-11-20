@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-23
-- **Supersedes:** ADR 0012
+- **Supersedes:** [ADR 0012](0012-canonical-mutations-are-transaction-composable.md)
 
 Canonical mutations normally share one transaction-composable implementation for individual and
 atomic-batch execution. A one-time account-security mutation is **standalone** when challenge issuance,
@@ -18,3 +18,14 @@ alternative was to make every proof-bearing mutation a child of that unit with c
 consumption, and delivery hooks; it increases the lifetime and ownership of security-sensitive material
 without a supported batch use case. Keep the exception narrow and test both the exclusion from the
 batch input and each standalone operation's atomic unit.
+
+A query observes domain state. Required credential-use, allowance and Audit accounting can
+accompany that observation without becoming a domain transition. A mutation requests a domain
+transition, retains durable work or causes an external effect. The atomic-batch schema derives
+eligible child inputs from canonical operation policy and excludes queries and the batch itself.
+
+Individual and batch execution share owner preparation. The UserStore commits admitted child
+writes and their mandatory evidence in one transaction. Owners do not open nested commits.
+Irreversible provider work runs from the committed intent under its matching idempotency and
+reconciliation rules. [Batch accountability](0029-atomic-batch-accountability-boundaries.md)
+describes failure attribution.

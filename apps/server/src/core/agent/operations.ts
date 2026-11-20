@@ -4,7 +4,6 @@ import type { HostedAdmissionDecision, HostedAdmissionRequest } from "./contract
 const millisecondsPerSecond = 1_000;
 const secondsPerMinute = 60;
 const idleMinutes = 15;
-/** The authoritative bounded inactivity interval for a Hosted Agent Session. */
 export const hostedSessionIdleMilliseconds = idleMinutes * secondsPerMinute * millisecondsPerSecond;
 
 const invalidState = ({ userId, nowMs, state }: HostedAdmissionRequest): boolean => {
@@ -21,11 +20,6 @@ const invalidState = ({ userId, nowMs, state }: HostedAdmissionRequest): boolean
   );
 };
 
-/**
- * Decide session admission under a single User's coordination lock. A Pending Turn is never an
- * unlimited session extension: after recovery the next decision uses the latest terminal instant.
- * The caller must durably perform recovery or session creation before retrying admission.
- */
 export const decideHostedAdmission = (request: HostedAdmissionRequest): HostedAdmissionDecision => {
   if (invalidState(request)) return { _tag: "Refused", reason: "InvalidState" };
   if (request.revoked || Option.isNone(request.currentConsent)) {
@@ -49,10 +43,8 @@ export const defaultCompactionTriggerTokens = 100_000;
 
 export const defaultCompactionMaximumTokens = 15_000;
 
-/** Compaction also precedes the exact-entry capacity of a long, low-token Hosted Agent Session. */
 export const compactionEntryTrigger = 80;
 
-/** The last complete terminal Turn in the contiguous retained prefix, never a Pending User entry. */
 export const terminalPrefixCursor = (
   entries: ReadonlyArray<
     Readonly<{ sequence: number; status: "pending" | "completed" | "failed" | "interrupted" }>

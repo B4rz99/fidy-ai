@@ -10,7 +10,7 @@ import {
 const maximumObjects = 4;
 const io = <A>(run: () => Promise<A>): Effect.Effect<A, ErasureUnavailable> =>
   Effect.tryPromise({ try: run, catch: () => new ErasureUnavailable() });
-/** A full-deletion request owns every temporary/original key in its User prefix, even without an inventory row. At most four objects are deleted per continuation. */
+
 const discardUserPrefixPage = (
   input: Readonly<{ configuration: ErasureOriginalConfiguration; scope: ErasureScope }>
 ): Effect.Effect<boolean, ErasureUnavailable> =>

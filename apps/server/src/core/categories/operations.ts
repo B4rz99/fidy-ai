@@ -29,11 +29,9 @@ import {
 export const fallbackCaptureCategory = (direction: "inflow" | "outflow"): CategoryId =>
   chooseFallback(direction);
 
-/** The direct launch taxonomy, in presentation order, without seed or persistence attributes. */
 export const listLaunchCategories = (): ReadonlyArray<Category> =>
   writingTaxonomy(currentCategoryRelease).categories;
 
-/** Explicit choice wins; otherwise the most specific User instruction wins before the direction fallback. */
 export const categorizeCapture = ({
   caller,
   counterparty,
@@ -53,7 +51,6 @@ export const categorizeCapture = ({
     return Option.getOrElse(known, () => fallbackCaptureCategory(direction));
   });
 
-/** The complete requested rule transition, interpreted against one User's already-decoded rules. */
 export type KeywordRuleChange =
   | Readonly<{
       operation: "categories.createKeywordRule" | "categories.updateKeywordRule";
@@ -62,7 +59,6 @@ export type KeywordRuleChange =
     }>
   | Readonly<{ operation: "categories.deleteKeywordRule"; ruleId: KeywordRuleId }>;
 
-/** Reject missing ownership, then normalized duplicates, then capacity without mutating retained rules. */
 export const validateKeywordRuleChange = ({
   rules,
   change,

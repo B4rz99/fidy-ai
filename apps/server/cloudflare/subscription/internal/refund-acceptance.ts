@@ -79,7 +79,7 @@ const lifecycle = (
   if (row.failure === null) return reject("unavailable");
   return Effect.succeed({ status: row.status, failedAt: finalized, failure: row.failure });
 };
-/** Decode a bounded, closed retained view without exposing any Wompi correlation facts. */
+
 export const view = (
   row: typeof RefundRow.Type
 ): Effect.Effect<RefundAttempt, Schema.SchemaError | RefundStartFailure> =>
@@ -260,7 +260,7 @@ const reservationFailure = (
       prepared.requested > prepared.total - amount ? "amount-exceeds-remaining" : "limited"
     );
   });
-/** Atomic acceptance owns the reservation and outbox; no provider calls occur in this transaction. */
+
 export const startRefund = (
   call: RefundStartCall
 ): Effect.Effect<RefundAttempt, RefundStartFailure> =>

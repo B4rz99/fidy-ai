@@ -137,7 +137,6 @@ const materialize = Effect.fn(function* (
       const values = yield* Effect.forEach(parsed.success.rows, (value) =>
         Schema.encodeEffect(rowCodec)(value)
       );
-      // Even a single admitted source row may amplify beyond a SQLite row.
       if (values.some((value) => new TextEncoder().encode(value).byteLength > maximumPartBytes)) {
         return yield* fail(row, current, "resource-limit");
       }

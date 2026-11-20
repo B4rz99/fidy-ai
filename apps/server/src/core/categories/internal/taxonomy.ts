@@ -40,7 +40,6 @@ const understands = (
   );
 };
 
-/** Every old definition survives intact. Any revision the candidate writes must already ship in the serving release. */
 export const canOverlap = ({
   serving,
   candidate,

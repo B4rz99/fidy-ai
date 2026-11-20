@@ -59,7 +59,6 @@ def run_window(owner, bundle, context, headers, report, save):
 
 
 def audit_check(rows, rehearsal):
-    # Frozen Audit may also hold presentation records with null operation and outcome.
     recorded = [r for r in rows[0]["results"] if r["operation"] is not None]
     expected = [r for r in rehearsal["sessionAudit"] if r["operation"] is not None]
     if recorded != expected or rows[1]["results"] != [dict(units=0,receipts=0)]:

@@ -7,7 +7,7 @@ import { expectedGeneration } from "./generation";
 const successStatus = 204;
 const io = <A>(run: () => Promise<A>): Effect.Effect<A, ErasureUnavailable> =>
   Effect.tryPromise({ try: run, catch: () => new ErasureUnavailable() });
-/** First-release operator action only. After any approved case, loss of the checkpoint requires recovery of the independent registry. */
+
 export const initializeRegistry = (
   environment: ErasureOperatorEnvironment
 ): Effect.Effect<Response, ErasureUnavailable> =>

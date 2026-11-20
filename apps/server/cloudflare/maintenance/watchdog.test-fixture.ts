@@ -3,8 +3,7 @@ import { ownerCheckResponse } from "./contract";
 
 type Environment = ConstructorParameters<typeof Maintenance>[1] & Readonly<{ MODE: string }>;
 type Ledger = { names: string[]; active: number; peak: number; aborted: number; cancelled: number };
-// Set the peer's completion clock at request admission. A delayed abort callback
-// must not add a second timer's jitter to the artificial 990ms transport lifetime.
+
 const slowReplyMs = 990;
 const heldBody = (name: string, mode: string): boolean =>
   (name.endsWith("000000000001") && mode === "held-body") ||

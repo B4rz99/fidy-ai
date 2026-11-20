@@ -22,29 +22,24 @@ import type {
   StatementLineSourceAttestation,
 } from "../../src/core/source-attestation/contract";
 
-/** An explicit browser privacy request, independent of processing Consent and commercial access. */
 export type PrivacyTransactionsRead = Readonly<{
   db: D1Database;
   subject: WebSessionSubject;
   request: typeof PrivacyTransactionRequest.Type;
 }>;
 
-/** Unreadable or malformed aggregate facts never become empty history or partial report totals. */
 export class TransactionAggregatesUnavailable extends Data.TaggedError(
   "TransactionAggregatesUnavailable"
 ) {}
 
-/** Unreadable or invalid recurring facts never supply a partial detection selection. */
 export class RecurringFactsUnavailable extends Data.TaggedError("RecurringFactsUnavailable") {}
 
-/** A bounded matching range; its completeness is independent of every other requested range. */
 export type PlanningTransactionRange = Readonly<{ from: string; through: string }>;
 export type PlanningTransactionFacts = Readonly<{
   transactions: ReadonlyArray<Transaction>;
   complete: boolean;
 }>;
 
-/** Caller-owned facts and separately bounded Transaction ranges from one native snapshot. */
 export type PlanningTransactionSnapshot<A> = Readonly<{
   snapshot: A;
   ranges: ReadonlyArray<Option.Option<PlanningTransactionFacts>>;
@@ -55,7 +50,6 @@ export type PlanningTransactionRead<A> = Readonly<{
   userId: string;
   ranges: ReadonlyArray<PlanningTransactionRange>;
   finalization: Option.Option<CanonicalReadFinalization>;
-  /** At most 4096 references, read in independently bounded 128-ID selections. */
   ids: ReadonlyArray<string>;
   snapshot: Readonly<{
     statement: D1PreparedStatement;
@@ -63,13 +57,12 @@ export type PlanningTransactionRead<A> = Readonly<{
   }>;
 }>;
 
-/** One complete revision snapshot of effective financial history; later commits must recheck this revision. */
 export type RecurringFactSnapshot = Readonly<{
   revision: number;
   firstCapturedAt: DateTime.Utc;
   timeZone: IanaTimeZone;
 }>;
-/** Bounded recurring projection with an explicit continuation; changed history never supplies mixed facts. */
+
 export type RecurringFactPage = Readonly<{
   facts: ReadonlyArray<RecurringTransactionFact>;
   cursor: BudgetContributionCursor;
@@ -82,11 +75,9 @@ type CaptureFacts = Readonly<{
   transactionId: string;
   extraction: TransactionExtraction;
   categoryId: CategoryId;
-  /** Static source-owner SQL projecting user_id for eligible work at commit, with values bound in params. */
   sourceGuard: OwnedStatement;
 }>;
 
-/** Canonical capture facts and the historical statement evidence retained by the installed source path. */
 export type StatementCaptureInput = CaptureFacts &
   Readonly<{
     attestation: Pick<
@@ -104,10 +95,8 @@ export type StatementCaptureInput = CaptureFacts &
     >;
   }>;
 
-/** Canonical capture facts and versioned notification evidence, already interpreted by the source owner. */
 export type NotificationEmailCaptureInput = CaptureFacts &
   Readonly<{
-    /** Some projects user_id for the exact unfinished, unexpired native item admitted under active Consent; None requires current Consent. */
     queuedAdmission: Option.Option<OwnedStatement>;
     attestation: Pick<
       typeof NotificationEmailSourceAttestation.Encoded,
@@ -126,41 +115,31 @@ export type NotificationEmailCaptureInput = CaptureFacts &
     interpretation: NotificationInterpretationEvidence;
   }>;
 
-/** A position in ascending effective Transaction order; it never conveys User authority. */
 export type BudgetContributionCursor = Readonly<{
   occurredAt: string;
   transactionId: string;
 }>;
 
-/** A normalized effective Transaction with its public Category metadata. */
 export type DashboardTransactionFact = Readonly<{ transaction: Transaction; category: Category }>;
 
-/** Bounded recent effective Transactions, optionally selected by Category and literal text. */
 export type DashboardTransactionList = Readonly<{
   categories: ReadonlyArray<CategoryId>;
   search: Option.Option<string>;
   limit: number;
 }>;
 
-/**
- * A caller-owned read observed with the Transaction projection. The decoder receives only that
- * read's rows and must fail closed on absent or malformed facts; it cannot confer authority.
- */
 export type DashboardSnapshotRead<A> = Readonly<{
-  /** At most two owner-prepared reads; only the first proof repeats after the first chunk. */
   statements: ReadonlyArray<D1PreparedStatement>;
   accepts: (proof: ReadonlyArray<unknown>) => boolean;
   decode: (results: ReadonlyArray<D1Result>) => Effect.Effect<Option.Option<A>>;
 }>;
 
-/** One complete ready Transaction projection read and its atomically observed caller facts. */
 export type DashboardTransactionSnapshot<A> = Readonly<{
   snapshot: A;
   lists: ReadonlyArray<ReadonlyArray<DashboardTransactionFact>>;
   ranges: ReadonlyArray<ReadonlyArray<EffectiveTransactionAggregate>>;
 }>;
 
-/** Explicit User and bounded list selections, together with public Category metadata. */
 export type DashboardTransactionRead<A> = Readonly<{
   db: D1Database;
   userId: string;
@@ -171,29 +150,20 @@ export type DashboardTransactionRead<A> = Readonly<{
   finalization: Option.Option<CanonicalReadFinalization>;
 }>;
 
-/** How one Transaction mutation presents the records its response reads back. */
 type TransactionReadback =
   | Readonly<{ _tag: "Transaction" }>
   | Readonly<{ _tag: "DeletedTransaction" }>
-  /** The effective Transaction of one linked pair, presented as ordinary history returns it. */
   | Readonly<{ _tag: "EffectiveTransaction"; pair: TransactionPair }>
-  /** The two independent originals one successful unlink restored, in canonical pair order. */
   | Readonly<{ _tag: "RestoredPair"; pair: TransactionPair }>;
 
-/**
- * One Transaction change's committed readback descriptor and the revision its guard observed, if it
- * observed one. It is the Transaction member of the shared outcome union.
- */
 export type TransactionOutcome = Readonly<{
   _tag: "Transaction";
   operation: TransactionMutationOperation;
   transactionId: string;
   readback: TransactionReadback;
-  /** The revision a correction observed and must still find, when it observed one. */
   expectedRevision: Option.Option<number>;
 }>;
 
-/** Explicit User-supplied facts retain a review reference without fabricating extracted evidence. */
 export type ReviewedCaptureInput = CaptureFacts &
   Readonly<{
     attestationId: string;

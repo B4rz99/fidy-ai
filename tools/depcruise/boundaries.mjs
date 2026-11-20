@@ -7,7 +7,6 @@ const testSource = /(?:\.(?:test|spec|fixture)|\.test-fixture)\.[cm]?[jt]sx?$/u;
 
 const compositionRoots = new Set([
   "cloudflare/recovery/support-recovery.test.ts",
-  // Browser and CLI transports compose the published native HTTP response lifetime.
   "../cli/src/direct-client/runtime.ts",
   "../cli/src/direct-client/resources.test.ts",
   "../web/src/transport/browser-http-policy.ts",
@@ -32,7 +31,6 @@ const compositionRoots = new Set([
   "cloudflare/budgets/budgets.test.ts",
   "cloudflare/consent/browser.test.ts",
   "cloudflare/categories/keyword-rules.test.ts",
-  // Native experimental Worker entrypoints must export their bound Durable Object class.
   "cloudflare/memory/memory.test.ts",
   "cloudflare/onboarding/consent-ingress.test.ts",
   "cloudflare/transactions/transactions.test.ts",
@@ -47,8 +45,6 @@ const sharedTestSupport = new Set([
   "../../scripts/dev-browser-api.ts",
   "cloudflare/signed-whatsapp.test-fixture.ts",
   "cloudflare/openai.test-fixture.ts",
-  // Downstream journeys publish real statements through the ingestion owner protocol.
-  // Subscription and Audit proofs seed the same completed Sandbox charge and paid access.
   "src/shell/testing/credential-evidence-harness.ts",
   "src/shell/testing/crypto-harness.ts",
   "src/shell/outbound-http/testing.ts",
@@ -151,7 +147,6 @@ const directionRules = [
   },
 ];
 
-// These separately compiled closed entrypoints reuse exactly the ordinary handler they protect.
 const recoveryWorker = new Map([
   ["cloudflare/fixture-fallback-core.ts", "cloudflare/core-worker.ts"],
   ["cloudflare/fixture-fallback-ingress.ts", "cloudflare/public-worker.ts"],

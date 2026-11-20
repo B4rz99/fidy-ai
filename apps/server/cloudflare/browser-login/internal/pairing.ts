@@ -94,7 +94,6 @@ export const samplePublicCode = (): string => {
   return formatPublicCode(Schema.decodeSync(BrowserLoginPublicCodeSymbols)(symbols));
 };
 
-/** Start an unbound browser challenge. Only the browser receives its private verifier. */
 export const startBrowserPairing = ({
   db,
   retainedPairings: recovery,
@@ -137,7 +136,6 @@ export const startBrowserPairing = ({
     });
   });
 
-/** One signed WhatsApp message may bind one pending challenge to its established User. */
 type ApprovalInput = Readonly<{
   portfolioId: string;
   bsuid: string;
@@ -204,7 +202,6 @@ export const approveBrowserPairing = ({
     return result.meta.changes > 0 ? new Response(null, { status: 200 }) : invalid();
   }).pipe(Effect.orElseSucceed(invalid));
 
-/** Redeem only an approved pairing with the browser's independent verifier. */
 export const redeemBrowserPairing = ({
   request,
   db,

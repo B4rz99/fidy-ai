@@ -187,7 +187,7 @@ const commitExchange = ({
       prepareChangedRowAssertion({ db: input.db, scope: "oauth_atomic" }),
     ]);
   });
-/** Exchanges a bound single-use code; failed atomic issuance leaves the code unconsumed. */
+
 export const exchangeToken = (
   input: ExchangeInput
 ): Effect.Effect<Response, BootstrapInvalid | BootstrapUnavailable | PlatformError.PlatformError> =>

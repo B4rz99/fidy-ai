@@ -41,7 +41,7 @@ import {
   verifiedWhatsAppHostedOnly,
   webSessionOnly,
 } from "~/shell/canonical-policy/contract";
-/** Canonical Transaction facts supplied to resolve one pending statement row. */
+
 export const ResolveNeedsReviewItemInput = Schema.Struct({
   extraction: TransactionExtraction,
 }).annotate({ identifier: "ResolveNeedsReviewItemInput" });
@@ -274,7 +274,6 @@ export const IngestionGroup = HttpApiGroup.make("ingestion")
       .annotateMerge(confirmedWrite)
   );
 
-/** Non-canonical byte staging path; returned references confer no extraction eligibility. */
 export const statementStagingPath = "/ingestion/statements/bytes";
 
 export {
@@ -297,12 +296,10 @@ export {
 } from "~/core/ingestion/contract";
 export { StatementSubmissionId, StatementSourceFormat } from "~/core/ingestion/contract";
 
-/** Safe terminal parser failure that never exposes uploaded statement contents. */
 export class StatementParseFailed extends Data.TaggedError("StatementParseFailed")<{
   readonly safeReason: "unsupported-format" | "resource-limit" | "malformed-file";
 }> {}
 
-/** Bounded rows needed by native finalization; mapping samples remain owner-private. */
 export type ParsedStatement = Readonly<{
   sourceFormat: StatementSourceFormat;
   headers: readonly [string, ...ReadonlyArray<string>];
@@ -313,7 +310,6 @@ const bytesPerKibibyte = 1024;
 const maximumExpandedMebibytes = 12;
 const maximumReferencedTextMebibytes = 8;
 
-/** Document admission ceilings; referenced bytes are a work charge, not an allocation estimate. */
 export const statementParserLimits = {
   maximumDecodedBytes: maximumStatementBytes,
   maximumExpandedBytes: maximumExpandedMebibytes * bytesPerKibibyte * bytesPerKibibyte,
@@ -322,11 +318,9 @@ export const statementParserLimits = {
   maximumReferencedTextBytes: maximumReferencedTextMebibytes * bytesPerKibibyte * bytesPerKibibyte,
 } as const;
 
-/** Closed review outcomes; none contains hostile email or parser text. */
 export const EmailInterpretationReviewReason = NotificationEmailInterpretationReviewReason;
 export type EmailInterpretationReviewReason = NotificationEmailInterpretationReviewReason;
 
-/** Immutable source-specific facts explaining one accepted deterministic interpretation. */
 export const NotificationEmailInterpretationEvidence = Schema.Struct({
   ...NotificationInterpretationEvidence.fields,
   revision: InterpretationRevision,
@@ -334,7 +328,6 @@ export const NotificationEmailInterpretationEvidence = Schema.Struct({
 export type NotificationEmailInterpretationEvidence =
   typeof NotificationEmailInterpretationEvidence.Type;
 
-/** One accepted canonical extraction or a fail-closed review decision. */
 export type NotificationEmailInterpretation =
   | Readonly<{
       _tag: "Interpreted";
@@ -346,7 +339,6 @@ export type NotificationEmailInterpretation =
       reason: EmailInterpretationReviewReason;
     }>;
 
-/** Finalization decision after retained-material validation; raw content never leaves the owner. */
 export type NotificationEmailOutcome =
   | NotificationEmailInterpretation
   | Readonly<{
@@ -354,7 +346,6 @@ export type NotificationEmailOutcome =
       reason: "canonical-validation-failed";
     }>;
 
-/** Closed tooling refusal, independent of private catalog paths and definitions. */
 export class EmailCatalogGenerationFailed extends Data.TaggedError("EmailCatalogGenerationFailed")<{
   readonly reason: "missing-formats" | "missing-fixture" | "stale-catalog";
 }> {}

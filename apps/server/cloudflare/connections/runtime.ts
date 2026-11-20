@@ -243,7 +243,6 @@ const admittedBrowserRequest = (
   }
 };
 
-/** Browser cookie is the only caller authority; neither URL nor bank handoff can establish identity. */
 export const handleConnectionBrowserRequest = (input: BrowserRequest): Effect.Effect<Response> =>
   Effect.gen(function* () {
     if (input.request.headers.get("origin") !== input.browserOrigin) {
@@ -301,11 +300,6 @@ const recoveryPhase = (
     return false;
   });
 
-/**
- * Recover expired Connection authority on its scheduled cadence, independently attempting
- * retention and held-grant cleanup before reporting failure. Interruption stops progression;
- * provider uncertainty retains its durable cleanup evidence and never replays authorization.
- */
 export const recoverConnections = (
   input: Readonly<{
     db: D1Database;

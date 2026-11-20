@@ -3,16 +3,11 @@ from dataclasses import asdict
 from datetime import datetime
 import time
 
-# This path is set by protected_cohort before importing the existing native fleet meter.
 from pilot import (DAY, DAILY_READS, DAILY_WRITES, MAX_AGE, RESERVE_READS,
                    RESERVE_WRITES, CLEANUP_READS, CLEANUP_WRITES, Usage, admit, check_delta, iso, usage)
 
-# The eight-original fixture, 30 history reads and physical erasure measured 173,511
-# cursor reads, 5,919 cursor writes and 31 alarm writes on workerd. Allow 500k/20k
-# for foreground work and account-meter lag, plus the independent recovery reserve.
 COHORT_READS = 500_000 + CLEANUP_READS
 COHORT_WRITES = 20_000 + CLEANUP_WRITES
-# Reserve for both controller lifetimes, census delay, R2 custody, leases, and final settlement.
 R2_OPERATIONS = 4096
 R2_BYTES = 1_048_576
 MAX_R2_OPERATIONS = 1_000_000
@@ -67,7 +62,6 @@ def r2_usage(query, account, now):
     today_requests = aggregate_requests(row.get("today"))
     actions = operations_by_action(row["byAction"])
     grouped_total = sum(actions.values())
-    # Adaptive totals and grouped estimates can diverge. Only GetObject is excluded from Class A.
     class_a = max(filtered, grouped_total - actions.get("GetObject", 0))
     requests = max(total, grouped_total, class_a, today_requests)
     latest, = row["latest"]

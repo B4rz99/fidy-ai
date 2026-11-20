@@ -25,7 +25,6 @@ import {
 } from "~/shell/hosted-inference/internal/conformance";
 import { makeHostedInferenceStubInternal } from "~/shell/hosted-inference/internal/stub";
 
-/** Static build projection; live tool availability and input decoding retain canonical authority. */
 export const makeHostedToolParameters = (): ReadonlyArray<
   Readonly<{ wireName: string; parameters: JsonSchema.JsonSchema }>
 > =>
@@ -34,7 +33,6 @@ export const makeHostedToolParameters = (): ReadonlyArray<
     parameters: openAiProviderSchema(operation.input),
   }));
 
-/** Hosted inference authority supplied by the Cloudflare OpenAI adapter. */
 export class HostedInference extends Context.Service<HostedInference, HostedInferenceService>()(
   "@fidy/server/shell/hosted-inference/operations/HostedInference"
 ) {
@@ -43,12 +41,10 @@ export class HostedInference extends Context.Service<HostedInference, HostedInfe
   ): Layer.Layer<HostedInference, Error, Requirements> => Layer.effect(this, service);
 }
 
-/** Builds deterministic hosted inference without exposing adapters or provider prompts. */
 export const makeHostedInferenceStub = (
   behavior: HostedInferenceStubBehavior
 ): HostedInferenceService => makeHostedInferenceStubInternal(behavior);
 
-/** Evaluate a live model candidate; return no generated content, only closed failure evidence. */
 export const verifyHostedInferenceConformanceChecks = (
   inference: HostedInferenceService
 ): Effect.Effect<void, HostedConformanceFailure> => {

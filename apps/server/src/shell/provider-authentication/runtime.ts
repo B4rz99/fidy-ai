@@ -5,7 +5,6 @@ import type { WhatsAppDelivery, WhatsAppInboundEvent } from "~/shell/channels/wh
 import { makeWhatsAppDelivery } from "~/shell/channels/whatsapp/runtime";
 import { makeKapsoOutboundHttp } from "~/shell/outbound-http/operations";
 
-/** Deliver to the authenticated caller; only the configured sandbox endpoint uses its observed phone. */
 export const makeProviderHandoffSender = (
   input: Readonly<{
     apiKey: Redacted.Redacted<string>;

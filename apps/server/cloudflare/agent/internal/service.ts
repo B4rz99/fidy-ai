@@ -279,7 +279,7 @@ const startWhatsAppTurn = ({
 };
 
 const hostedResponseDeadlineMs = 25_000;
-/** A soft response deadline; admission/preflight is interrupted, committed work is not. */
+
 const hostedDeadline = (
   signal: AbortSignal
 ): Readonly<{
@@ -328,11 +328,6 @@ const hostedDeadline = (
   };
 };
 
-/** Recover a stalled owner before freeing the per-User queue. A later canonical commit must pass
- * the pending-Turn fence inside the same D1 batch, so it cannot commit after recovery. Recovery
- * defects leave settlement with the original owner; only unavailable recovery is retried. The
- * supplied settlement Promise must resolve for both success and failure of the original work.
- */
 const boundedHostedOwner = ({
   ownerSettled,
   recover,
@@ -785,7 +780,6 @@ const acceptHostedRequest = (
   });
 };
 
-/** Construct only the existing hosted workflow; the caller retains its shared User queue. */
 export const makeHostedService = (owner: AgentServiceInput): AgentService => ({
   recover: () => Effect.runPromise(recoverAbandonedWork(owner)),
   accept: (input) => acceptHostedRequest(owner, input),

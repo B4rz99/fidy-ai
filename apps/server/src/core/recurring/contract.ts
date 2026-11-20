@@ -7,7 +7,6 @@ import {
   TransactionId,
 } from "~/core/transactions/contract";
 
-/** Assigned once; confirmation replay and later observations retain this identity. */
 export const RecurringSeriesId = Schema.String.check(Schema.isUUID()).pipe(
   Schema.brand("RecurringSeriesId")
 );
@@ -16,9 +15,7 @@ export const RecurringConfirmationId = Schema.String.check(Schema.isUUID()).pipe
   Schema.brand("RecurringConfirmationId")
 );
 export type RecurringConfirmationId = typeof RecurringConfirmationId.Type;
-/** Monthly means consecutive calendar months in the captured evaluation zone, not thirty days. */
 export const Cadence = Schema.Struct({ kind: Schema.Literal("monthly") });
-/** Eligibility fixed at first confirmation; suppression never expires into a delayed announcement. */
 export const Announcement = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("eligible") }),
   Schema.Struct({
@@ -32,7 +29,6 @@ const positiveMoney = Money.check(
     (money: ReadonlyMoney) => BigDecimal.Order(money.amount, BigDecimal.make(0n, 0)) > 0
   )
 );
-/** A detected historical pattern, not proof that a charge is still active or will happen again. */
 export const RecurringSeries = Schema.Struct({
   id: RecurringSeriesId,
   counterparty: Counterparty,
@@ -44,7 +40,6 @@ export const RecurringSeries = Schema.Struct({
   announcement: Announcement,
 }).annotate({ identifier: "RecurringSeries" });
 export type RecurringSeries = typeof RecurringSeries.Type;
-/** Immutable confirmation snapshot; no algorithm scores or private clustering evidence escape. */
 export const RecurringSeriesConfirmed = Schema.Struct({
   id: RecurringConfirmationId,
   seriesId: RecurringSeriesId,
@@ -55,9 +50,7 @@ export const RecurringSeriesConfirmed = Schema.Struct({
   announcement: Announcement,
 }).annotate({ identifier: "RecurringSeriesConfirmed" });
 export type RecurringSeriesConfirmed = typeof RecurringSeriesConfirmed.Type;
-/** Minimal facts are declared once by Transactions; capture classification is never guessed by the detector. */
 export type RecurringFact = RecurringTransactionFact;
-/** A pure proposal with unique support; the native owner assigns identity and eligibility. */
 export const RecurringProposal = Schema.Struct({
   counterparty: Counterparty,
   money: positiveMoney,
@@ -70,17 +63,14 @@ export const RecurringProposal = Schema.Struct({
   latestTransactionId: TransactionId,
   backfill: Schema.Boolean,
 });
-/** Immutable decision view derived from the canonical proposal; BigDecimal caches are not caller authority. */
 export type RecurringProposal = Omit<typeof RecurringProposal.Type, "money" | "referenceMoney"> &
   Readonly<{ money: ReadonlyMoney; referenceMoney: ReadonlyMoney }>;
-/** Whether the latest complete evaluation still describes the current financial facts. */
 export const EvaluationStatus = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("not-evaluated") }),
   Schema.Struct({ kind: Schema.Literal("updating") }),
   Schema.Struct({ kind: Schema.Literal("current"), asOf: UtcTimestamp }),
 ]);
 const maximumCursorLength = 1024;
-/** A bounded page of historical patterns; an updating result must not be called complete. */
 export const RecurringSeriesPage = Schema.Struct({
   series: Schema.Array(RecurringSeries),
   evaluation: EvaluationStatus,

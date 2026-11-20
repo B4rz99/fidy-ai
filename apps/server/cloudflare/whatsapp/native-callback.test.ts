@@ -137,7 +137,6 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           ]);
           expect((yield* privateCall(claimDeliveryUrl, claim)).status).toBe(409);
         }
-        // Provider evidence follows the actual claim even when a busy Worker spends a second admitting it.
         const deliveredAt = yield* Clock.currentTimeMillis;
         const key = yield* native(() =>
           crypto.subtle.importKey(

@@ -1,7 +1,5 @@
 #!/usr/bin/env bun
 
-// A file-scoped lint directive can silence a linter rule that checks for it; scan independently.
-
 type Suppression = {
   readonly file: string;
   readonly line: number;
@@ -44,19 +42,15 @@ const checkedFiles = (): readonly string[] => {
     throw new Error(`git ls-files failed: ${decode(listed.stderr).trim()}`);
   }
 
-  return (
-    decode(listed.stdout)
-      .split("\0")
-      .filter(
-        (path) =>
-          LINTED_EXTENSIONS.some((extension) => path.endsWith(extension)) ||
-          /(?:^|\/)tsconfig[^/]*\.json$/.test(path)
-      )
-      .filter((path) => !NOT_FIRST_PARTY.some((directory) => path.startsWith(directory)))
-      // `git ls-files --cached` retains a deleted path until the deletion is staged;
-      // do not try to read that stale index entry.
-      .filter((path) => Bun.file(`${repoRoot}${path}`).size > 0)
-  );
+  return decode(listed.stdout)
+    .split("\0")
+    .filter(
+      (path) =>
+        LINTED_EXTENSIONS.some((extension) => path.endsWith(extension)) ||
+        /(?:^|\/)tsconfig[^/]*\.json$/.test(path)
+    )
+    .filter((path) => !NOT_FIRST_PARTY.some((directory) => path.startsWith(directory)))
+    .filter((path) => Bun.file(`${repoRoot}${path}`).size > 0);
 };
 
 export const suppressionsIn = ({

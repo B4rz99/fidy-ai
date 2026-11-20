@@ -1,8 +1,6 @@
 import { createRequire } from "node:module";
 import { AstroCheck } from "@astrojs/language-server";
 
-// Astro's checker needs the JavaScript compiler API, which TypeScript 7 does not expose.
-// Resolve the tool's TypeScript 6 locally instead of the workspace's hoisted compiler.
 const require = createRequire(import.meta.url);
 const target = process.argv[2] ?? "../../apps/site";
 const root = Bun.fileURLToPath(new URL(target, import.meta.url));

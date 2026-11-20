@@ -86,11 +86,6 @@ import {
 } from "../../memory/operations";
 import { committedJsonResponse } from "./mutation-unit";
 
-/**
- * One owner's canonical mutation adapter: it decides a child without committing, presents a
- * committed child's canonical individual response, and answers for a child whose callId or
- * canonical input failed its published schema.
- */
 export type CanonicalMutationAdapter = Readonly<{
   prepare: (
     work: CanonicalPreparationWork
@@ -260,11 +255,6 @@ const transactionInvalidRefusal =
       current: work.current,
     });
 
-/**
- * The correction owner answers an unstable retained id as absent rather than as malformed input,
- * exactly as its own prepare seam does. A caller-supplied input that carries no textual id at all
- * stays the ordinary validation refusal.
- */
 const correctionInvalidRefusal = (work: CanonicalPreparationWork): CanonicalMutationRefusal => {
   const unstable = Option.flatMap(
     Schema.decodeUnknownOption(Schema.Struct({ params: Schema.Struct({ id: Schema.String }) }))(
@@ -286,7 +276,6 @@ const correctionInvalidRefusal = (work: CanonicalPreparationWork): CanonicalMuta
     : transactionInvalidRefusal("transactions.updateTransaction")(work);
 };
 
-/** The keyword-rule owner records no refusal Audit and renders the declared validation failure. */
 const keywordRuleInvalidRefusal = (_work: CanonicalPreparationWork): CanonicalMutationRefusal => ({
   code: "validation_failed",
   message: invalidChildMessage,
@@ -770,7 +759,6 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
   ],
 ]);
 
-/** The owner adapter for one canonical mutation, or None when no owner composes it yet. */
 export const canonicalMutationAdapter = (
   operation: CanonicalOperationId
 ): Option.Option<CanonicalMutationAdapter> => Option.fromUndefinedOr(adapters.get(operation));

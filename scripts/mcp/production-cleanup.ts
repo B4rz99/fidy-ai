@@ -18,7 +18,7 @@ const CleanupBudgets = Schema.Array(
     cap: Schema.Literal("1000"),
   })
 ).check(Schema.isMaxLength(1));
-/** A zero-Budget fixture baseline makes the host's fixed Category an unambiguous recovery boundary. Never retry creation after lost delivery. */
+
 export const disposeBudget = Effect.fn(function* (
   context: Readonly<{ scope: ApprovedScope; root: string }>,
   host: NativeHost

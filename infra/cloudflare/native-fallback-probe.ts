@@ -35,7 +35,7 @@ export const fallbackHeaders = (pair: Coordinates): Readonly<Record<string, stri
 
 const ok = 200,
   clientError = 400;
-/** Both independently compiled entrypoints must answer through the exact pinned candidate pair. */
+
 export const observeDormantPair = Effect.fn(function* (
   client: HttpClient.HttpClient,
   pair: Coordinates,
@@ -133,7 +133,7 @@ const matchesCanonicalUnavailable = Effect.fn(function* (response: Response) {
   );
   return Option.isSome(read) && offset === canonicalUnavailable.length;
 });
-/** Observe the ordinary pairing start or a bodyless probe without retaining the one-time response. */
+
 export const observePairingStart = Effect.fn(function* (
   pair: Coordinates,
   body: "json" | "empty",
@@ -180,7 +180,6 @@ const isIsolationResponse = (request: Request, response: Response): boolean =>
   request.url === installedOrigins.acceptance.api + "/transactions" &&
   !request.headers.has(acceptanceProofHeader);
 const controlResponse = Effect.fn(function* (request: Request, response: Response) {
-  // The login control owns the exact 503 assertion on its unsigned read.
   if (response.status < clientError || isIsolationResponse(request, response)) return response;
   const operation = controlRequests.get(new URL(request.url).pathname) ?? "control identity";
   const error =
@@ -224,7 +223,6 @@ export const controlsDigest = Effect.fn(function* (
   return new Bun.CryptoHasher("sha256").update(encoded).digest("hex");
 });
 
-/** Source artifact 14571027939 identifies the exact proven installation before its one-way repair. */
 export const requireOriginalFallbackSource = (source: ReleaseSnapshot): void => {
   if (
     source.stableRevision !== "8dd3b0d47d655868c1ab4f16b6145a06d99bd721" ||

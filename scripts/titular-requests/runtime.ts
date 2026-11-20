@@ -225,7 +225,6 @@ const report = (value: TitularCase): CaseReceipt => {
   };
 };
 
-/** Private, bounded local operator ledger. Atomic replay preserves the original receipt and never executes product effects. */
 export const runCaseRegister = Effect.fn(function* (
   input: Readonly<{ directory: string; request: unknown }>
 ) {

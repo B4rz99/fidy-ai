@@ -35,7 +35,6 @@ import * as patEvidence from "~/shell/audit/internal/pat-evidence";
 
 export { utcDayMilliseconds } from "./contract";
 
-/** A bounded connection page and its latest outcomes share the caller's native snapshot. */
 export const prepareOAuthActivityPage = (
   input: Readonly<{ connections: OwnedStatement; guard: OwnedStatement }>
 ): Readonly<{
@@ -91,7 +90,7 @@ export const prepareOAuthActivityPage = (
       return new Map(entries);
     }).pipe(Effect.catchCause(() => Effect.fail(new AuditUnavailable()))),
 });
-/** Append canonical metadata under the exact OAuth-owned live authority in the same protected query unit. */
+
 export const recordOAuthCall = (
   input: Readonly<{
     id: string;
@@ -113,27 +112,12 @@ export const recordOAuthCall = (
     ...input.authority.bindings,
   ],
 });
-/**
- * Records approved call metadata only while the supplied User-owned credential is live.
- * Commit the returned statement in the canonical unit, after the owner write when
- * `afterOwnerWrite` is true. A skipped guard changes no row and must refuse the unit;
- * never report success without checking the owning unit's completion assertion.
- * Audit chooses the storage projection and enforces its append-only policy.
- */
+
 export const recordAuthorizedCall = (input: AuthorizedAuditCall): OwnedStatement =>
   authorizedCallStatement(input);
 
-/**
- * Appends fixed metadata only after a subject-scoped owner proof. Commit it with that owner's
- * write and completion assertion; a failed proof must never produce success evidence. The proof
- * supplies no Audit columns or bodies. This does not independently authorize a canonical call.
- */
 export const recordOwnerCall = (input: OwnerAuditCall): OwnedStatement => ownerCallStatement(input);
 
-/**
- * Record the found/absent outcome of a canonical query under its live authority in the same
- * snapshot. `missingWhen` is a subject-scoped owner SELECT; no queried content enters evidence.
- */
 export const prepareAuditQueryCall = ({
   db,
   missingWhen,
@@ -143,7 +127,6 @@ export const prepareAuditQueryCall = ({
   return db.prepare(statement.sql).bind(...statement.params);
 };
 
-/** Bind an attributable call to D1 without committing it outside its canonical unit. */
 export const prepareAuthorizedAuditCall = ({
   db,
   ...input
@@ -152,7 +135,6 @@ export const prepareAuthorizedAuditCall = ({
   return db.prepare(statement.sql).bind(...statement.params);
 };
 
-/** Record an authenticated admission refusal without retaining input, key, or error detail. */
 export const prepareCanonicalAdmissionRefusal = ({
   db,
   ...input
@@ -161,7 +143,6 @@ export const prepareCanonicalAdmissionRefusal = ({
   return db.prepare(statement.sql).bind(...statement.params);
 };
 
-/** Bind current-PAT disclosure evidence and the exact retained response proof in one read/accountability unit. */
 export const prepareCanonicalReplayAccess = ({
   db,
   ...input
@@ -170,7 +151,6 @@ export const prepareCanonicalReplayAccess = ({
   return db.prepare(statement.sql).bind(...statement.params);
 };
 
-/** Bind approved credential-replacement evidence to its owner's atomic D1 transition. */
 export const prepareEmailReplacementEvidence = ({
   db,
   ...input
@@ -179,40 +159,30 @@ export const prepareEmailReplacementEvidence = ({
   return db.prepare(statement.sql).bind(...statement.params);
 };
 
-/**
- * Proof for a PAT-owner activity transition correlated to its subject row. The exact successful
- * call must exist under that PAT and User; compose this SELECT with the credential owner's guard.
- */
 export const recordedPATCallProof: typeof patEvidence.recordedPATCallProof = (input) =>
   patEvidence.recordedPATCallProof(input);
 
-/** Exact current-PAT proof for a successfully disclosed retained canonical envelope. */
 export const recordedPATReplayCallProof: typeof patEvidence.recordedPATReplayCallProof = (input) =>
   patEvidence.recordedPATReplayCallProof(input);
 
-/** Attribute a successful PAT issuance/approval only after the credential owner's preceding write. */
 export const recordSessionPATTransition: typeof patEvidence.recordSessionPATTransition = (input) =>
   patEvidence.recordSessionPATTransition(input);
-/** Attribute a pairing claim only after the consumed proof and minted PAT commit in the same unit. */
+
 export const recordClaimedPAT: typeof patEvidence.recordClaimedPAT = (input) =>
   patEvidence.recordClaimedPAT(input);
-/** Account for PAT-list access under the exact live User-owned session. */
+
 export const recordPATList: typeof patEvidence.recordPATList = (input) =>
   patEvidence.recordPATList(input);
-/** Append revocation evidence naming the exact User-owned PAT just revoked. */
 export const recordOnePATRevocation: typeof patEvidence.recordOnePATRevocation = (input) =>
   patEvidence.recordOnePATRevocation(input);
-/** Append revoke-all evidence under the same fresh User decision as its credential transition. */
+
 export const recordAllPATRevocations: typeof patEvidence.recordAllPATRevocations = (input) =>
   patEvidence.recordAllPATRevocations(input);
-/** Append canonical-call evidence under the exact live authority supplied by the PAT owner. */
 export const recordCanonicalPATWork: typeof patEvidence.recordCanonicalPATWork = (input) =>
   patEvidence.recordCanonicalPATWork(input);
-/** Append a refused canonical call under the live authority that attempted it. */
 export const recordRejectedPATWork: typeof patEvidence.recordRejectedPATWork = (input) =>
   patEvidence.recordRejectedPATWork(input);
 
-/** Bind fixed metadata and a subject-scoped owner proof to the same atomic D1 unit. */
 export const prepareOwnerAuditCall = ({
   db,
   ...input
@@ -227,7 +197,6 @@ const ActivityRow = Schema.Struct({
   occurredAt: Schema.DateTimeUtcFromMillis,
 });
 
-/** Read bounded retained evidence using Tokens' same-User grant selection and the exact live caller proof. Commit the read and its Audit together before disclosure. */
 export const preparePATActivity = (
   input: Readonly<{
     userId: string;
@@ -265,7 +234,6 @@ export const preparePATActivity = (
   };
 };
 
-/** Account for a PAT activity answer or indistinguishable missing/foreign grant without retaining the requested identifier. */
 export const recordPATActivityQuery = (
   input: Readonly<{
     id: string;

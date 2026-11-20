@@ -11,7 +11,6 @@ import { calculateBudgetStatus } from "../../../src/core/budgets/operations";
 import type { EffectiveTransactionAggregate } from "../../../src/core/transactions/contract";
 import { monthlySpending } from "./monthly-cash-flow";
 
-/** Index one request's exact outflows once; no result or working index survives the request. */
 export const assembleBudgetReport = ({
   budgets,
   aggregates,

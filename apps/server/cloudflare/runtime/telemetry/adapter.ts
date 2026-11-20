@@ -279,7 +279,6 @@ const spanUpdates = (
   };
 };
 
-/** Creates bounded synchronous native telemetry; accepted events need no later flush or persistence. */
 export const makeWorkerTelemetryAdapter = (
   sink: Readonly<{ exportWork: (record: TelemetryWorkRecord) => void; exportEvent: EventSink }>
 ): TelemetryAdapter => {

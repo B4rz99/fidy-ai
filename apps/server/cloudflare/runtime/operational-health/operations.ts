@@ -23,7 +23,6 @@ const validateCanary = (payload: unknown, now: number): Effect.Effect<CanaryPayl
       : Effect.die(new Error("Invalid operational canary"));
   });
 
-/** An actual Queue consumer, not queue.send(), proves Queue execution. */
 export const receiveCanary = (
   input: Readonly<{
     workflow: Readonly<{
@@ -59,14 +58,12 @@ export const receiveCanary = (
     })
   );
 
-/** Native WORKFLOW_SUCCESS, not instance creation, proves completion of this validated step. */
 export const completeCanary = ({
   payload,
   now,
 }: Readonly<{ payload: unknown; now: number }>): Promise<void> =>
   Effect.runPromise(Effect.asVoid(validateCanary(payload, now)));
 
-/** Sending is not success; missing Workflows and Queue delivery remain visible until a real completion. */
 export const sendCanary = ({
   queue,
   now,
@@ -77,11 +74,9 @@ export const sendCanary = ({
   signal: AbortSignal;
 }>): Promise<void> => {
   const sentAtMs = Math.floor(now / periodMs) * periodMs;
-  // Core ticks every minute; publish only in the first minute of each canary period.
   if (now - sentAtMs >= minuteMs) return Promise.resolve();
   return Effect.runPromise(
     Effect.tryPromise(() => queue.send({ version: 1, sentAtMs } satisfies CanaryPayload)).pipe(
-      // Queue.send has no cancellation API. Stop waiting without retrying an ambiguous offer.
       Effect.timeout("2 seconds"),
       Effect.asVoid
     ),
@@ -89,11 +84,6 @@ export const sendCanary = ({
   );
 };
 
-/**
- * Inspect a bounded oldest-work sample per owner and the dead-letter backlog. An unavailable
- * monitor reports its own closed signal without masking the other owners or changing domain work.
- * Workflow error messages and outputs are never retained. Counts are samples, not global totals.
- */
 const minuteMs = 60_000;
 
 const warningAgeMs = 120_000;
@@ -149,7 +139,6 @@ const retentionSeverity = (age: number): OperationalSeverity => {
   return age >= retentionWarningAgeMs ? "warning" : "none";
 };
 
-/** Unavailable measurements and failed work never become healthy zeroes. */
 export const operationalSeverity = (signal: AlertSignal): OperationalSeverity => {
   if (signal.state === "unavailable") return "warning";
   if (signal.component === "capability") return "none";
@@ -179,7 +168,7 @@ const logRequiredBindings = Effect.fnUntraced(function* (healthy: boolean) {
   }
   yield* Effect.logInfo({ message });
 });
-/** Queue depth is a platform measurement. Domain health and eligible recovery come from native owner inspection. */
+
 export const inspectNativeQueues = Effect.fn(function* (
   environment: Partial<
     Readonly<{
@@ -227,7 +216,7 @@ export const inspectNativeQueues = Effect.fn(function* (
 });
 
 const pendingStaleMs = 120000;
-/** Only the sampled User's stale Workflow identities are inspected; logs contain aggregate values. */
+
 export const observeNativePending = Effect.fn(function* (
   rows: ProactivityWorkObservations,
   workflow: Parameters<typeof inspectWorkflow>[0],

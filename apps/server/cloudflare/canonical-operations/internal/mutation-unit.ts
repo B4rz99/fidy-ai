@@ -39,11 +39,9 @@ const isHostedUnitCaller = (
   subject: TransactionCaller | HostedCanonicalCaller
 ): subject is HostedCanonicalCaller => "_tag" in subject;
 
-/** What one caller-owned D1 unit did with its ordered canonical mutations. */
 export type CanonicalMutationUnitExecution =
   | Readonly<{
       _tag: "Committed";
-      /** One canonical success value per prepared mutation, in the order the unit prepared them. */
       values: ReadonlyArray<CommittedMutationValue>;
     }>
   | Readonly<{
@@ -72,13 +70,10 @@ const childCompletion = (db: D1Database, index: number): D1PreparedStatement =>
     ON CONFLICT(child_index) DO UPDATE SET accepted = excluded.accepted`)
     .bind(index);
 
-/** Decode only a known CHECK failure; a trigger with similar prose is not proof of a child. */
 const childGuardMarker = (
   cause: unknown
 ): Option.Option<Readonly<{ index: number; kind: "completion" | "capacity" }>> => {
   const detail = String(cause);
-  // SQLite appends the actual extended code after trigger-supplied prose. A forged CHECK phrase
-  // inside a RAISE(ABORT) message still ends with SQLITE_CONSTRAINT_TRIGGER and is not trusted.
   if (detail.includes("extended: SQLITE_CONSTRAINT_TRIGGER")) return Option.none();
   const match =
     /D1_ERROR: CHECK constraint failed: canonical_child_(guard|capacity)_(0|[1-9]|10|11): SQLITE_CONSTRAINT \(extended: SQLITE_CONSTRAINT_CHECK\)/u.exec(
@@ -91,7 +86,6 @@ const childGuardMarker = (
   return Option.some({ index, kind: "completion" as const });
 };
 
-/** Record the already-decided child refusal and return the disposition its caller must report. */
 const rejectRecorded = ({
   callIndex,
   refusal,
@@ -107,7 +101,6 @@ const rejectRecorded = ({
     })
   );
 
-/** Attribute an owner's indexed completion or capacity assertion only to the child it names. */
 const refuseChildGuard = ({
   db,
   subject,
@@ -143,7 +136,6 @@ const refuseChildGuard = ({
     return yield* rejectRecorded({ callIndex: index, refusal });
   });
 
-/** Classify a child-specific CHECK, refusing unknown lookalikes without guessing a child. */
 const markedAbort = ({
   db,
   subject,
@@ -176,11 +168,6 @@ const markedAbort = ({
     : Option.none();
 };
 
-/**
- * Attribute an aborted unit only when its indexed CHECK proves the child, then
- * record that child's refusal after rollback. A forged marker or unowned trigger is Unavailable;
- * an unmarked abort stays Aborted so a same-material statement can retry without a false Audit.
- */
 const classifyAbortedUnit = ({
   db,
   subject,
@@ -204,7 +191,6 @@ const classifyAbortedUnit = ({
     return { _tag: "Aborted" } as const;
   });
 
-/** Hosted aborts cannot be classified through a borrowed browser credential. */
 const classifyUnitCallerAbort = (
   input: Omit<Parameters<typeof classifyAbortedUnit>[0], "subject"> &
     Readonly<{ subject: TransactionCaller | HostedCanonicalCaller }>
@@ -213,7 +199,6 @@ const classifyUnitCallerAbort = (
     ? Effect.succeed({ _tag: "Unavailable" })
     : classifyAbortedUnit({ ...input, subject: input.subject });
 
-/** Read one committed child's canonical success value, or None when the readback is incomplete. */
 const findCommittedValue = ({
   db,
   userId,
@@ -243,7 +228,6 @@ const findCommittedValue = ({
   }
 };
 
-/** OAuth rechecks execution-time grant authority without changing the hosted Turn's owner guards. */
 const oauthChildStatements = ({
   db,
   subject,
@@ -340,14 +324,6 @@ const hostedFenceStatements = (
 const validUnitSize = (mutations: ReadonlyArray<PreparedCanonicalMutation>): boolean =>
   mutations.length > 0 && mutations.length <= maximumAtomicBatchCalls;
 
-/**
- * Commit one ordered set of owner-prepared canonical mutations in a single D1 atomic unit and read
- * each committed value back. Each child has its own indexed Audit assertion and a completion assertion;
- * a guard that silently changes no row aborts the whole unit instead of being noticed after a
- * successful commit. The unit never opens a nested D1 unit and never performs provider work; an
- * aborted unit is classified against the same live credential, budgets, and domain premises the
- * individual operations check.
- */
 export const executeCanonicalMutationUnit = ({
   db,
   subject,
@@ -541,9 +517,6 @@ type MutationAttempt =
       respond: (execution: CanonicalMutationUnitExecution) => Effect.Effect<Response>;
     }>;
 
-/** Reprepare the entire attempt once only after a proven same-material publication race.
- * Each attempt retains its own response projection; preparation remains interruptible.
- */
 export const executeMutationProgression = <R>(
   work: MutationWork & Readonly<{ prepare: Effect.Effect<MutationAttempt, never, R> }>
 ): Effect.Effect<Response, never, R> =>
@@ -577,7 +550,6 @@ type SingleWork<R> = MutationWork &
     present: (value: CommittedMutationValue) => Effect.Effect<Response>;
   }>;
 
-/** Execute an owner-prepared mutation in its caller-owned unit, retaining individual validation, live authority, refusal Audit and commit classification. */
 export const executeSingleCanonicalMutation = <R>(
   work: SingleWork<R>
 ): Effect.Effect<Response, never, R> =>

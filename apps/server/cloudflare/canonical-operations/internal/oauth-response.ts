@@ -13,7 +13,6 @@ import {
 } from "../../../src/shell/canonical-operations/operations";
 import { NextOperations } from "../../../src/shell/public-http/contract";
 
-/** Record metadata-only refusal evidence under the exact admitted OAuth child or envelope authority. */
 export const recordOAuthRefusal = (
   input: Readonly<{
     db: D1Database;
@@ -43,7 +42,7 @@ export const recordOAuthRefusal = (
 
 const Success = Schema.Struct({ data: Schema.Json, next: NextOperations });
 const Failure = Schema.Struct({ error: Schema.Json, next: NextOperations });
-/** Retain the canonical envelope while checkpointing continuations against current OAuth capability and tier facts. */
+
 export const checkpointOAuthResponse = (
   input: Readonly<{ response: Response; caller: SuggestedOperationCaller }>
 ): Effect.Effect<Response> =>

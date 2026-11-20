@@ -20,8 +20,6 @@ const rowSchema = Schema.Struct({
   digest: Schema.String,
 });
 
-/** The marker is private operational evidence, independent of every originating User and receipt.
- * Mark first. Payloads only replace an exact random placeholder ETag and must read the marker after reservation. */
 export const withdrawArtifact = Effect.fn(function* (
   id: string,
   buckets: Buckets,
@@ -60,7 +58,6 @@ const createReservation = Effect.fn(function* (id: string, buckets: Buckets) {
       customMetadata: { purpose: placeholder, nonce },
     })
   );
-  // Only a returned R2 decision (including a conditional miss) proves this invocation has stopped.
   yield* settleReservation(id, nonce);
   return object;
 });
@@ -79,8 +76,6 @@ const drainRemoved = Effect.fn(function* (id: string, buckets: Buckets) {
   const sql = yield* SqliteClient;
   const observed = yield* Effect.tryPromise(() => buckets.SAMPLE_BUCKET.head(sampleKey(id)));
   yield* settleObservedReservation(id, Option.fromNullOr(observed));
-  // A positive nonce settles a lost reserve reply. Absence leaves every unknown reservation pending.
-  // No payload is permitted once the private fence commits.
   yield* Effect.tryPromise(() =>
     buckets.EMAIL_BUCKET.put(fenceKey(id), '{"erased":true}', { onlyIf: { etagDoesNotMatch: "*" } })
   );
@@ -116,7 +111,6 @@ const finish = Effect.fn(function* (id: string, user: string, buckets: Buckets) 
   const settled = yield* withStoreCapacity("required")(
     Effect.gen(function* () {
       if (!(yield* approved(id, user))) return false;
-      // Even a content-free create-if-absent call must settle before the User can release its writer records.
       return (
         (yield* sql`UPDATE ingest_sample_decisions SET phase='published',artifact=NULL,due_ms=NULL WHERE sample_id=${id} AND phase='approved' AND NOT EXISTS(SELECT 1 FROM ingest_sample_reservations WHERE sample_id=${id}) RETURNING sample_id`)
           .length === 1
@@ -147,7 +141,6 @@ const completePayload = Effect.fn(function* (
   if (current.customMetadata?.purpose !== placeholder || !(yield* approved(id, row.user_id))) {
     return false;
   }
-  // Retries consume the original immutable approval snapshot, validating its grammar and digest again.
   yield* Schema.decodeEffect(Schema.fromJsonString(SampleArtifact), { onExcessProperty: "error" })(
     row.artifact
   );
@@ -199,8 +192,6 @@ const safePublication = Effect.fn(function* (id: string, digest: string, buckets
   return Option.isSome(sample) && (yield* Schema.encodeEffect(codec)(sample.value)) === text;
 });
 
-/** Release only the exact canonical structural bytes admitted by human review.
- * A malformed artifact follows the same independent withdrawal fence as an unfinished publication. */
 export const inspectPublishedSamples = Effect.fn(function* (
   user: string,
   buckets: Buckets,

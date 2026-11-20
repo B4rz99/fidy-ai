@@ -68,7 +68,6 @@ const encodeInitial = Schema.encodeEffect(
 );
 const encodeOtp = Schema.encodeEffect(jsonStringSchema(Schema.Struct({ code: OtpCode })));
 
-/** Only CC is supported by the documented recurring-authorization example. */
 export type DaviplataFields = Readonly<{
   documentNumber: Redacted.Redacted<string>;
   productNumber: Redacted.Redacted<string>;
@@ -79,7 +78,6 @@ export type DaviplataProviderOutcome =
   | Readonly<{ status: "approved"; token: Redacted.Redacted<string> }>
   | Readonly<{ status: "refused" }>
   | Readonly<{ status: "uncertain" }>;
-/** Provider authority stays enclosed; only the enrollment gateway may consume an approved token. */
 export type DaviplataProviderChallenge = Readonly<{
   signal: AbortSignal;
   resend: () => Effect.Effect<DaviplataProviderOutcome>;
@@ -90,7 +88,6 @@ export type DaviplataProviderChallenge = Readonly<{
 
 const sandboxOtpEndpoint =
   "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox";
-/** Build from reviewed configuration and bound identity; never send a provider-supplied URL. */
 const otpEndpoint = (endpoint: string, id: string, step: "send" | "confirm"): string =>
   endpoint === sandboxOtpEndpoint
     ? `${endpoint}?token=${id}&operation=${step === "send" ? "RESEND_OTP" : "VALIDATE_OTP_API"}`
@@ -141,7 +138,6 @@ type OtpRequest<Decoder extends Schema.ConstraintDecoder<unknown>> = Readonly<{
   signal: AbortSignal;
 }>;
 
-/** Consumes one bearer/payload. Exact destination, bounded bytes/time, cancellation; no retries or telemetry. */
 const postDaviplataOtp = <Decoder extends Schema.ConstraintDecoder<unknown>>(
   input: OtpRequest<Decoder>
 ): Effect.Effect<Decoder["Type"], DaviplataAuthorizationFailed, Decoder["DecodingServices"]> => {
@@ -486,11 +482,6 @@ const initialize = (
     const first = yield* perform(authority, { type: "send" });
     yield* checkInitialSend(authority, first);
   });
-/**
- * Tokenizes CC/product fields directly and sends the first OTP. Actions consume rotating bearers
- * within an absolute five-minute/enrollment deadline. Disposal/cancellation revoke the closure.
- * Ambiguous mutations stop authorization permanently; OTPs are never retried automatically.
- */
 export const startDaviplataWithWompi = (
   input: AuthorizationInput
 ): Effect.Effect<DaviplataProviderChallenge, DaviplataAuthorizationFailed> =>

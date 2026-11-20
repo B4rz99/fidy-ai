@@ -19,7 +19,6 @@ export const defaultBudgetGroup = (label: string): string => {
 export const budgetRemaining = (status: BudgetStatus): BigDecimal.BigDecimal =>
   BigDecimal.subtract(status.budget.cap.amount, status.spent.amount);
 
-/** The display ratio is approximate; all monetary totals retain exact decimals. */
 export const budgetPercentage = ({
   cap,
   spent,
@@ -83,7 +82,6 @@ export type SummaryFigure = Readonly<{
   percentage: number;
 }>;
 
-/** Monthly cash flow includes uncapped categories and never mixes currencies. */
 export const summaryFigures = ({
   report,
   locale,

@@ -5,13 +5,11 @@ import { Hex } from "effect/encoding";
 import type { TokenBearer } from "~/core/tokens/contract";
 import { configuredSecret } from "~/shell/secret-material/internal/configured-secret";
 
-/** A lowercase SHA-256 digest used only for PAT persistence and lookup. */
 export const PATBearerDigest = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)).pipe(
   Schema.brand("PATBearerDigest")
 );
 export type PATBearerDigest = typeof PATBearerDigest.Type;
 
-/** Public prefixes used to reject Wompi credentials issued for the wrong environment. */
 export type WompiCredentialPrefixes = Readonly<{
   readonly publicKey: string;
   readonly privateKey: string;
@@ -71,7 +69,6 @@ export const loadWompiIntegritySecret = (
     requirement: `must be a ${environment} Wompi integrity secret`,
   });
 
-/** Derives the one-way SHA-256 digest persisted and compared when authenticating a PAT bearer. */
 export const derivePATBearerDigest = (
   bearer: TokenBearer
 ): Effect.Effect<PATBearerDigest, never, Digest.Digest> =>
@@ -82,14 +79,12 @@ export const derivePATBearerDigest = (
     Effect.orDie
   );
 
-/** Resolves Google's application credential without exposing malformed values in diagnostics. */
 export const loadGoogleClientSecret = configuredSecret({
   name: "GOOGLE_CLIENT_SECRET",
   schema: Schema.String.check(Schema.isNonEmpty()),
   requirement: "must be a nonempty Google application secret",
 });
 
-/** Resolves Microsoft's application secret through redacted configuration diagnostics. */
 export const loadMicrosoftClientSecret = configuredSecret({
   name: "MICROSOFT_CLIENT_SECRET",
   schema: Schema.String.check(Schema.isNonEmpty()),

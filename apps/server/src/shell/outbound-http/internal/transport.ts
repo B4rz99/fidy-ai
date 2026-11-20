@@ -24,7 +24,6 @@ import {
 import { collectBoundedBytes } from "./bounded-bytes";
 import { OutboundHttpFailure, type OutboundHttpResponse } from "~/shell/outbound-http/contract";
 
-/** External provider selected by one closed transport policy. */
 type OutboundHttpProvider = Exclude<TelemetryCode<"provider">, "cloudflare-workers">;
 
 type OutboundHttpPolicy = Readonly<{

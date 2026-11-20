@@ -15,7 +15,6 @@ const millisecondsPerSecond = 1000;
 const maximumSubjectLength = 256;
 const Claims = Schema.Struct({
   type: Schema.Literal("app"),
-  // Signature verification checks audience membership. A human operator token must name exactly one application.
   aud: Schema.Union([
     Schema.String,
     Schema.NonEmptyArray(Schema.String).check(Schema.isMaxLength(1)),

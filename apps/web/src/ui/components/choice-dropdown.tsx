@@ -100,7 +100,6 @@ const ChoiceMenuOptions = ({ value, getOptions, onChange }: ChoiceMenuProps): JS
   </DropdownMenuRadioGroup>
 );
 
-/** Selection effects belong to the caller. */
 export const InlineChoiceDropdown = ({
   label,
   disabled,

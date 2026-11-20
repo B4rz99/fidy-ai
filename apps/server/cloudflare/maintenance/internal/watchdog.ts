@@ -46,7 +46,6 @@ const sampleFrom = (response: Response): Option.Option<typeof Sample.Type> => {
 };
 
 const inspect = (response: Response): Promise<Outcome> => {
-  // The protocol is bodyless. Cancel even an error body and keep its promise inside the budget.
   if (response.body !== null) {
     return response.body
       .cancel()
@@ -60,7 +59,6 @@ const inspect = (response: Response): Promise<Outcome> => {
   return Promise.resolve(repair === "1" ? "repaired" : "observed");
 };
 
-/** The abort and body cancellation share the original deadline. Only settled cleanup frees the slot. */
 const probe = Effect.fnUntraced(function* (target: Target, pending: Set<Promise<unknown>>) {
   if (target.binding === undefined) {
     return {
@@ -219,8 +217,6 @@ const inspectBatch = Effect.fnUntraced(function* (
   pending: Set<Promise<unknown>>
 ) {
   const sql = yield* SqliteClient;
-  // Checkpoint the admitted range before remote I/O. A crash leaves its outcome unobserved.
-  // Only probes which return to this executor are counted as attempted.
   const containsShared = batch.some((target) => target.family !== "user");
   yield* sql`UPDATE watchdog_progress SET cursor=coalesce(${Option.getOrNull(cursor)},cursor),defer_fixed=coalesce(${containsShared ? 1 : null},defer_fixed),admitted=admitted+${batch.length},unknown=unknown+${batch.length} WHERE singleton=1`;
   const selected = batch.find((target) => target.sampleWork === true);
@@ -233,8 +229,6 @@ const inspectBatch = Effect.fnUntraced(function* (
   const failed = replies.filter(({ outcome }) => outcome === "failed").length;
   const unsupported = replies.filter(({ outcome }) => outcome === "unsupported").length;
   const unsettled = replies.some((reply) => reply.unsettled);
-  // A fixed owner which exhausted cleanup goes after the Users next minute. A stalled
-  // User batch restores fixed-owner priority. Neither can monopolize the first batch.
   const sharedStalled = replies.some(
     (reply, index) => reply.unsettled && batch[index]?.family !== "user"
   );
@@ -325,7 +319,6 @@ const scanUsers = Effect.fnUntraced(function* ({
   return "capacity" as const;
 });
 
-/** Freeze this tick's upper key. New tail registrations enter the next page, and inserts behind the cursor enter after wrap. */
 export const runWatchdog = Effect.fn(function* (
   bindings: SharedBindings,
   scheduled: number,

@@ -29,7 +29,6 @@ import {
 
 const maximumBudgetsPerUser = 128;
 
-/** Owner checks run under the same D1 lock as the child write and its Audit. */
 export const budgetCommitGuards = ({
   db,
   userId,
@@ -215,7 +214,6 @@ export const updateBudgetStatement = ({
   });
 };
 
-/** Freeze all inherited caps before changing one month; these statements share the canonical write unit. */
 export const prepareMonthlyPlan = ({
   db,
   subject,
@@ -245,7 +243,6 @@ export const prepareMonthlyPlan = ({
   ];
 };
 
-/** Rename the explicitly selected, caller-owned category collection in the same canonical unit. */
 export const prepareBudgetGroup = ({
   db,
   subject,
@@ -390,7 +387,6 @@ export const reviewBudget = (
     );
   });
 
-/** Freeze inherited plans, revise the selected cap, and rename only the explicitly owned collection. */
 export const prepareBudgetMonthUpdate = (
   input: Readonly<{
     db: D1Database;

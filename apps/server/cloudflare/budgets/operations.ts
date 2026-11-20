@@ -94,7 +94,6 @@ import {
 import { readCrossings } from "./internal/budget-crossings";
 import { readConsentStatus } from "../consent/operations";
 
-/** Compose the browser Budget workspace in admission's single protected native snapshot. */
 export const prepareBoundBudgetWorkspace: typeof prepareBrowserWorkspace = (request) =>
   prepareBrowserWorkspace(request);
 
@@ -104,7 +103,6 @@ const HTTP_BAD_REQUEST = 400;
 
 type BudgetMutationOperation = BudgetOutcome["operation"];
 
-/** Record and present an owner-decided refusal under the same caller's live authority. */
 export const budgetRefusal = ({
   db,
   subject,
@@ -132,7 +130,6 @@ export const budgetRefusal = ({
     ),
 });
 
-/** Explain a proved Budget completion using retained earlier children and the post-rollback owner row. */
 const budgetGuardRefusal =
   (outcome: BudgetOutcome) =>
   ({
@@ -289,10 +286,6 @@ const refuseInvalidBudget = (
   }>
 ): CanonicalMutationPreparation => refuseBudget({ ...input, code: "validation_failed" });
 
-/**
- * Prepare one positive cap for a known Category under live caller authority. The canonical User
- * unit commits these guarded writes with its accountability evidence or commits none of them.
- */
 export const prepareCreateBudget = ({
   db,
   subject,
@@ -377,10 +370,6 @@ const acceptsBudgetUpdate = ({
     );
   }).pipe(Effect.orElseSucceed(() => false));
 
-/**
- * Prepare a caller-owned Category/cap revision. Group currency is versioned explicitly; commit-time
- * guards recheck Category existence, uniqueness, and authority without reopening monthly marks.
- */
 export const prepareUpdateBudget = ({
   db,
   subject,
@@ -441,7 +430,6 @@ export const prepareUpdateBudget = ({
     });
   }).pipe(Effect.orElseSucceed(failedPreparation));
 
-/** Prepare removal of one caller-owned Budget and its operational marks in the canonical unit. */
 export const prepareDeleteBudget = ({
   db,
   subject,
@@ -501,11 +489,6 @@ export const prepareDeleteBudget = ({
 
 const monthLabelLength = 7;
 
-/**
- * Prepare the complete peer cap projection for one explicitly planned local month. Calendar inputs
- * grant no authority: the caller retains the same User's coordination, current context proof,
- * live authorization and Audit. Commit this read in that caller's existing native snapshot.
- */
 export const prepareBudgetCaps = (
   input: Readonly<{
     db: D1Database;
@@ -537,11 +520,6 @@ const invalid = (): Response =>
 const missing = (): Response =>
   transactionFailure({ code: "not_found", status: 404, message: "Budget unavailable." });
 
-/**
- * Read one User's complete, ordered public cap projection for authorized peer work. The caller
- * establishes authority and serializes that User's work; an id alone is not authority. An invalid
- * or oversized retained set is unavailable, never a partial answer.
- */
 export const readBudgetCaps = ({
   db,
   userId,
@@ -562,11 +540,6 @@ export const readBudgetCaps = ({
     return yield* readPlannedCaps({ db, userId, month, includeInactive: true });
   }).pipe(Effect.orElseSucceed(() => Option.none()));
 
-/**
- * Read spending and cash flow from one complete Transaction-owned aggregate snapshot.
- * The caller supplies one authorized, coordinated User and an explicit IANA zone;
- * unavailable projections never supply partial totals.
- */
 export const readBudgetSpending = ({
   db,
   userId,
@@ -651,7 +624,6 @@ const readAuthorizedBudget = ({
       : transactionUnavailable();
   }).pipe(Effect.orElseSucceed(transactionUnavailable));
 
-/** Observe Budget facts with live authority and accountability, without advancing pending alerts. */
 export const browseBudgets = ({
   db,
   subject,
@@ -682,7 +654,6 @@ export const browseBudgets = ({
     return yield* readAuthorizedBudget({ db, subject, operation, now, ...parsed.value });
   }).pipe(Effect.orElseSucceed(transactionUnavailable));
 
-/** Return the private commit fence only after one bounded pre-opt-in pass proves drained accounting. */
 export const prepareBudgetThresholdOptIn = (
   input: Readonly<{ db: D1Database; userId: UserId }>
 ): Effect.Effect<Option.Option<D1PreparedStatement>> =>
@@ -692,23 +663,17 @@ export const prepareBudgetThresholdOptIn = (
     )
   );
 
-/** Bounded pending same-User delivery groups retain the grant captured at detection, including explicit ineligibility. */
 export const readBudgetCrossingGroups: typeof readGroups = (input) => readGroups(input);
 
-/** Acknowledge frozen publication only in the peer's atomic occurrence unit, under its same-User occurrence proof. */
 export const prepareBudgetCrossingPublication: typeof preparePublication = (input) =>
   preparePublication(input);
 
-/** Bounded identity-only pending publication hints; no financial facts or execution authority. */
 export const discoverBudgetCrossingUsers: typeof discoverUsers = (input) => discoverUsers(input);
 
-/** Rotate identity-only pending publication hints after an attempted coordinated evaluation. */
 export const noteBudgetCrossingEvaluation: typeof noteEvaluation = (input) => noteEvaluation(input);
 
-/** Observe the original first-Budget milestone once, without reading financial content. */
 export const findFirstBudgetOffer: typeof findFirstCreation = (input) => findFirstCreation(input);
 
-/** Acknowledge the first-Budget milestone in the atomic contextual request unit under the peer's same-User request proof. */
 export const prepareFirstBudgetOffer: typeof prepareFirstOffer = (input) =>
   prepareFirstOffer(input);
 
@@ -721,7 +686,6 @@ const matchesCrossingMonth = (
   crossing.period.from.epochMilliseconds === input.period.from.epochMilliseconds &&
   crossing.period.to.epochMilliseconds === input.period.to.epochMilliseconds;
 
-/** Read complete immutable threshold facts for one explicit User/month under live processing Consent and caller-owned coordination. Legacy rows without captured facts are unavailable, never rebuilt from current state. */
 export const readBudgetCrossings = (
   input: BudgetCrossingRead
 ): Effect.Effect<ReadonlyArray<BudgetCrossing>, BudgetCrossingUnavailable> =>
@@ -808,13 +772,6 @@ const pendingPeriod = Effect.fn(function* ({
   return yield* Schema.decodeUnknownEffect(Schema.Array(PendingWork))(rows.results);
 });
 
-/**
- * Coalesce a bounded snapshot of timestamps in one applied month before reconciling its alerts. Work for a backdated
- * correction uses its own zoned month, not the request's current month. The versioned removal
- * leaves a concurrent writer's work pending even if it arrives during an earlier drain.
- * Unavailable can follow a committed crossing batch or unconfirmed acknowledgement; it never
- * establishes rollback of a financial mutation. Callers must retain same-User coordination.
- */
 export const reconcileBudgetThresholds = ({
   db,
   userId,

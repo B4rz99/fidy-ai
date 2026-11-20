@@ -41,7 +41,6 @@ const numberFormatter = ({
   return formatter;
 };
 
-/** Applies Locale and explicit Currency without routing exact decimal magnitude through Number. */
 const currencyAmount = ({
   amount,
   currency,
@@ -78,7 +77,6 @@ const currencyAmount = ({
           minimumDigits: digits,
           maximumDigits: digits,
         }).format(remainder < 0n ? -remainder : remainder);
-  // Preserve negative zero's Locale sign placement when rounding a negative amount to zero.
   const parts = formatter.formatToParts(
     whole === 0n && BigDecimal.isNegative(decimal) ? -0 : whole
   );
@@ -109,7 +107,6 @@ export const formatCurrencyAmount = (
     compact: false,
   });
 
-/** Formats exact canonical Money without allowing Locale to supply Currency meaning. */
 export const formatMoney = ({ locale, money }: MoneyOptions): string =>
   currencyAmount({
     amount: money.amount,
@@ -119,7 +116,6 @@ export const formatMoney = ({ locale, money }: MoneyOptions): string =>
     compact: false,
   });
 
-/** Currency code followed by the signed value, without an ambiguous currency symbol. */
 export const formatMoneyWithCode = ({ locale, money }: MoneyOptions): string =>
   currencyAmount({
     amount: money.amount,
@@ -129,7 +125,6 @@ export const formatMoneyWithCode = ({ locale, money }: MoneyOptions): string =>
     compact: false,
   });
 
-/** Explicit currency after the symbol; exact integral amounts need no empty fractional part. */
 export const formatMoneyWithCompactCode = ({ locale, money }: MoneyOptions): string =>
   `${currencyAmount({
     amount: money.amount,

@@ -31,20 +31,34 @@ The effective Transaction relation reads each linked pair as one effective Trans
 visible member's id, selecting each fact group from the member the Transaction-owned policy selects:
 Money, direction, and occurrence from the latest corrected member, else the latest statement-sourced
 member, else the visible member; Category, Counterparty, and notes from the latest member that
-explicitly decided them, else the visible member. The relation is one shared SQL fragment, so
-history, search, and a future Dashboard derive the same row. That fragment is the only
-implementation of the selection: the link decision validates eligibility and picks the visible
-member, and no caller-side copy of the fact-authority policy is kept.
+explicitly decided them, else the visible member. The Transaction owner applies this selection to history, search and the leaves used by
+[Dashboard projections](0060-dashboard-initialization-and-exact-projections.md). The link
+decision validates eligibility and picks the visible member.
 
 `revision` is the visible member's on every effective row, because the visible member is the identity
 history and search return. A single-record read by a suppressed member's id reports that member's
 revision instead, so the value a caller reads for an id is exactly the value its correction
 compare-and-swaps.
 
-The statement-sourced rank is retained but dormant in this revision: `source_attestations.kind`
-still admits only `manual`, so until the statement-ingestion slice widens it, only a corrected member
-or the visible member can rank.
+Native storage accepts `statement-line` SourceAttestations, and their precedence participates in
+effective-fact selection.
 
 The decision stores only the pair and its visible member, never the current fact authorities.
 Authorities move when a member is corrected, and a stored copy would need a refresh hook on every
 fact-changing write path — the exact drift this relation exists to prevent.
+
+An explicit authorized link still requires equal exact Money, Currency and direction. The User's
+decision resolves timing ambiguity. A field decision includes intentionally clearing Counterparty
+or notes, so automatic fact selection cannot replace that absence with an older value. The
+inspection surface reads the effective Transaction and its retained originals in one snapshot.
+
+Filter, order and page the effective relation. During projection repair, retained source
+history can supply the effective view only when readiness and facts are read together.
+Reuse the same User proof on every path. Expose compound ordering keys to SQLite while
+dropping them from canonical row decoding. Browser literal search folds the supported
+Spanish capitals explicitly because SQLite's ordinary lowercase function handles ASCII.
+
+Group correction fences the complete selected revision and fails atomically on a missing
+or stale member. Accepted deletion removes visibility while preserving retained provenance
+and updating derived projections. Treat an indexed intra-unit revision repeat as attributable.
+An arbitrary premise changed only inside a rolled-back unit can remain unobservable.

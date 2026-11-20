@@ -12,14 +12,12 @@ export type CaptureSources = CanonicalSuccess<"transactions.getTransaction">["da
 export type OriginalTransactions = Pick<LinkedPair, "firstTransaction" | "secondTransaction">;
 export type Transaction = CanonicalSuccess<"transactions.listTransactions">["data"][number];
 
-/** Half-open UTC bounds for one calendar month in the exact applied IANA time zone. */
 export type CurrentMonthPeriod = Readonly<{
   from: DateTime.Utc;
   to: DateTime.Utc;
   timeZone: string;
 }>;
 
-/** Derives the User's local calendar month without allowing Locale to affect query instants. */
 export const deriveCurrentMonthPeriod = ({
   now,
   timeZone,
@@ -94,7 +92,6 @@ export type TransactionPresentationRecord = Readonly<{
   occurredAt: Transaction["occurredAt"];
 }>;
 
-/** Joins canonical records while preserving the canonical newest-first Transaction order. */
 export const presentTransactionRows = ({
   categories,
   counterpartyFallback,
@@ -143,7 +140,6 @@ export const presentTransactionRows = ({
   }));
 };
 
-/** Retains the exact IANA zone used for the month’s query bounds. */
 export const presentPeriod = ({
   locale,
   period: { from, timeZone },

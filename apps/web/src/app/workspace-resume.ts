@@ -6,7 +6,6 @@ import { type RefCallback, useCallback, useRef, useState } from "react";
 
 const recentResumeMilliseconds = 5000;
 
-/** Revalidate retained display data on return without repeating a recent refresh. */
 export const useWorkspaceResume = ({
   active,
   key,

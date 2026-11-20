@@ -121,7 +121,7 @@ const validClaims = ({
   claims.nonce === input.attempt.nonce &&
   claims.iat * millisecondsPerSecond <= current &&
   claims.aud === clientId;
-/** Common authorizes both personal and organizational identities. Every key's issuer scope must match the exact token tenant. */
+
 export const validateMicrosoftToken = (
   input: Validation
 ): Effect.Effect<VerifiedProviderIdentity, ValidationFailure, HttpClient.HttpClient> =>

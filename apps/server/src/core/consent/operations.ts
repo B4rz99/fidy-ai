@@ -42,10 +42,6 @@ const patRevocationDisclosures = {
   },
 } as const satisfies Record<PATRevocationOrigin, PATRevocationDisclosure>;
 
-/**
- * Classifies one decoded reply using a closed explicit grammar. A bare “sí” is
- * deliberately ambiguous and never authorizes personal-data processing.
- */
 export const decideConsentReply = (
   content: ConsentInboundContent
 ): Effect.Effect<ConsentReplyDecision> => {
@@ -61,7 +57,6 @@ export const decideConsentReply = (
   return Effect.succeed({ _tag: "Clarify" });
 };
 
-/** Starts one caller-independent pending draft with the fixed 24-hour legal lifetime. */
 export const makePendingConsentDraft = (
   input: PendingConsentInput
 ): Effect.Effect<PendingConsentDraft> =>
@@ -76,7 +71,6 @@ export const makePendingConsentDraft = (
     expiresAt: DateTime.add(input.createdAt, { hours: 24 }),
   });
 
-/** Treats the exact 24-hour boundary as expired, never as one final valid instant. */
 export const hasPendingConsentExpired = (
   input: Readonly<{
     readonly pending: Readonly<{ readonly expiresAt: DateTime.Utc }>;
@@ -85,7 +79,6 @@ export const hasPendingConsentExpired = (
 ): Effect.Effect<boolean> =>
   Effect.succeed(DateTime.isGreaterThanOrEqualTo(input.now, input.pending.expiresAt));
 
-/** Only a later message following proven delivery can become a decision. */
 export const canRecordConsentIngressDecision = ({
   exchange,
   message,
@@ -96,7 +89,6 @@ export const canRecordConsentIngressDecision = ({
   exchange.businessPhoneNumberId === message.businessPhoneNumberId &&
   exchange.initiatingMessageId !== message.providerMessageId;
 
-/** An expired message predating the former exchange cannot initiate a new one. */
 export const classifyConsentIngressReplay = ({
   exchange,
   message,
@@ -117,7 +109,6 @@ export const classifyConsentIngressReplay = ({
     : "conflict";
 };
 
-/** A delivered or settled exchange must not initiate another disclosure. */
 export const isConsentIngressDecisionPhase = (exchange: ConsentIngressExchange): boolean =>
   exchange.phase._tag !== "BeforeDelivery";
 

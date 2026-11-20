@@ -153,7 +153,7 @@ const holdWindows = Effect.fn(function* (
     yield* Effect.sleep("25 seconds");
   }
 });
-// Directory admits 30 exchanges per source per minute. Each browser flow charges four.
+
 const pacedBrowser = (): (<A>(flow: Effect.Effect<A, Error>) => Effect.Effect<A, Error>) => {
   let nextStart = 0;
   const cooldownMs = 12_000;
@@ -196,7 +196,6 @@ export const executeTen = Effect.fn(function* (release: Release, continued: bool
   const source = yield* tenSource(continued, release);
   const state = yield* restore(release, source);
   if (continued && state.members.length === 0) {
-    // The separately archived pre-enrollment checkpoint survives loss of a runner mid-signup.
     for (const ordinal of fleetOrdinals) state.members.push({ ordinal, user: "", physical: "" });
   }
   const fs = yield* FileSystem.FileSystem;

@@ -51,7 +51,6 @@ const fetchTargets = (port: number): Effect.Effect<unknown, InspectorIoError> =>
     )
   );
 
-/** Discovers the first workerd DevTools target or fails when no inspectable isolate exists. */
 export const inspectorTarget = ({
   port,
   signal,
@@ -124,8 +123,6 @@ const inspectSocket = <A>(
     const cleanup = (failed: boolean): void => {
       signal?.removeEventListener("abort", abort);
       interrupted.removeEventListener("abort", abort);
-      // The successful caller still owns the returned HTTP response body. Abort only when
-      // profiling failed or was interrupted; aborting on success can cut off later body reads.
       if (failed) controller.abort();
       if (Option.isSome(socket)) socket.value.close();
     };
@@ -229,7 +226,6 @@ const handleProfileMessage = (
   }
 };
 
-/** Profiles one supplied HTTP request and returns its response plus sampled non-idle V8 time. */
 export const profileWorkerRequest = ({
   debuggerUrl,
   sendRequest,
@@ -264,7 +260,6 @@ export const profileWorkerRequest = ({
   );
 };
 
-/** Reads current retained V8 heap bytes from a workerd DevTools target. */
 export const heapUsage = ({
   debuggerUrl,
   signal,

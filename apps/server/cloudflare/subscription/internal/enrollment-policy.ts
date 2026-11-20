@@ -77,7 +77,6 @@ export const enrollmentDigest = (text: string): Promise<Uint8Array> =>
     .digest("SHA-256", new TextEncoder().encode(text))
     .then((bytes) => new Uint8Array(bytes));
 
-/** Derive one BillingAttempt ID from the authenticated User and the validated, retry-stable PaymentRequestId for a single payment action. Never use a new PaymentRequestId to retry the same action. */
 export const billingAttemptIdFor = (
   input: Readonly<{ userId: UserId; requestId: PaymentRequestId }>
 ): Promise<BillingAttemptId> =>

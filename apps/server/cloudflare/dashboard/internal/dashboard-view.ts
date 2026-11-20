@@ -155,7 +155,6 @@ const restoreGroups = (
   return Option.some(groups);
 };
 
-/** Read all bounded financial facts at one revision, with one captured calendar interpretation. */
 export const loadDashboardFacts = ({
   db,
   userId,
@@ -220,7 +219,6 @@ const assembleDashboardFacts = ({
   });
 };
 
-/** All widget periods, list pages, planned caps and accountability share the caller's SQLite transaction. */
 export const localDashboardFacts = Effect.fn(function* (
   user: UserId,
   document: DashboardDocument,

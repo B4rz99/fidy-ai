@@ -14,10 +14,6 @@ type BoundBrowserRequest = Readonly<{
   current: number;
 }>;
 
-/** Only for read work wholly inside this same atomic batch, with no provider work afterward.
- * D1 serializes the transaction: count existing live leases plus this read against the same cap.
- * A transient lease inserted/deleted in this batch would never be visible to another transaction.
- */
 export const prepareBoundBrowserSnapshot = ({
   db,
   lookup,
@@ -90,7 +86,6 @@ export const prepareBoundBrowserRequest = ({
   ];
 };
 
-/** Resolve cookie binding and Consent with pressure acquisition in the same native snapshot. */
 export const acquireBoundBrowserRequest = ({
   db,
   lookup,
@@ -123,11 +118,9 @@ export const acquireBoundBrowserRequest = ({
           : ("unavailable" as const)
       )
     ),
-    // A lost response can hide a committed lease; reconcile only this server-owned id.
     Effect.tap((result) => (result === "unavailable" ? releaseRequest({ db, id }) : Effect.void))
   );
 
-/** Fixed per-User request protection, not a commercial allowance. Refusals never spend quota. */
 export const acquireRequest = ({
   db,
   userId,
@@ -169,11 +162,9 @@ export const acquireRequest = ({
           : ("unavailable" as const)
       )
     ),
-    // A lost response can hide a committed lease; reconcile only this server-owned id.
     Effect.tap((result) => (result === "unavailable" ? releaseRequest({ db, id }) : Effect.void))
   );
 
-/** Release the request slot even for a failed or interrupted implementation. */
 export const releaseRequest = ({
   db,
   id,
@@ -183,7 +174,6 @@ export const releaseRequest = ({
     catch: () => undefined,
   }).pipe(Effect.ignore);
 
-/** Invalid credentials share a keyed trusted-source envelope, with no raw address or credential persisted. */
 export const admitUnresolvedSource = ({
   db,
   source,

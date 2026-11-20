@@ -20,11 +20,6 @@ import type { EmailDeliveryEnvironment } from "../contract";
 
 export type ProviderCertainty = "accepted" | "rejected" | "ambiguous";
 
-/**
- * Send one claimed mailbox proof using its retained idempotency identity. The caller must keep
- * mailbox and proof out of Workflow history and settle the returned certainty into owner state;
- * an ambiguous outcome never authorizes another send with a fresh proof.
- */
 export const sendClaimedProof = (
   input: WorkerTraceContinuation &
     Readonly<{

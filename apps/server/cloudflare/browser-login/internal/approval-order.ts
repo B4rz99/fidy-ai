@@ -1,6 +1,5 @@
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 
-/** Same-User ready work may only be replaced by a strictly later owner-assigned row order. */
 export const noLaterReadyPairing = ({
   userId,
   candidate,

@@ -60,7 +60,6 @@ const callerOf = (row: typeof Row.Type): AuditCaller => {
   throw new Error("Audit evidence has no caller");
 };
 
-/** Reads attributable calls only; supporting publication evidence is not a second canonical call. */
 export const queryEvidence = ({
   database,
   input,
@@ -95,7 +94,7 @@ const PublicationRow = Schema.Struct({
   ...AuditPublicationEvidence.fields,
   occurredAt: Schema.DateTimeUtcFromMillis,
 });
-/** Observes supporting publication/review metadata without inventing a credential absent from retained evidence. */
+
 export const queryPublications = ({
   database,
   input,

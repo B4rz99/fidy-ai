@@ -45,7 +45,6 @@ import {
 
 const HTTP_UNAVAILABLE = 503;
 
-/** Caller facts for suggestion policy. Every recovery target is a Free read, so tier never filters. */
 const suggestionCaller = (subject: TransactionCaller): SuggestedOperationCaller =>
   isPATCaller(subject)
     ? {
@@ -74,10 +73,6 @@ export const keywordRuleUnavailable = (): Response =>
     status: HTTP_UNAVAILABLE,
   });
 
-/**
- * One refused keyword-rule change: it records no refusal AuditLogEntry (the owner's rule writes
- * audit only accepted work) and renders the declared Category failure with its recovery hints.
- */
 export const keywordRuleRefusal = ({
   failure,
   subject,
@@ -94,7 +89,6 @@ export const keywordRuleRefusal = ({
   };
 };
 
-/** Persist the exact guarded child's refusal after its atomic unit has rolled back. */
 const recordKeywordRuleGuard = ({
   db,
   subject,
@@ -151,7 +145,6 @@ const recordKeywordRuleGuard = ({
   );
 };
 
-/** Construct a proved keyword-rule guard refusal; its Audit is deferred to `record`. */
 export const keywordRuleGuardRefusal = ({
   db,
   subject,
@@ -198,7 +191,6 @@ export const keywordRuleGuardRefusal = ({
   };
 };
 
-/** One owned rule by stable id; a foreign or absent id returns no row. */
 const findOwnedRule = ({
   db,
   userId,
@@ -214,7 +206,6 @@ const findOwnedRule = ({
     .then(keywordRuleFromRows);
 };
 
-/** The failure for a Category the rolled-back state no longer contains, or None. */
 const missingCategoryFailure = ({
   db,
   outcome,
@@ -230,7 +221,6 @@ const missingCategoryFailure = ({
       : Option.some(new CategoryNotFound({ categoryId }));
   });
 
-/** Replay earlier rule children and construct a refusal whose Audit runs only on `record`. */
 export const keywordRuleGuardFor =
   (outcome: KeywordRuleOutcome) =>
   ({
@@ -284,7 +274,6 @@ export const keywordRuleGuardFor =
           )
         );
 
-/** Explain a guarded rule child from earlier writes and retained state, or return None. */
 export const keywordRuleGuardFailure = ({
   db,
   userId,
@@ -314,10 +303,6 @@ export const keywordRuleGuardFailure = ({
     return yield* keywordRuleAbortFailure({ db, userId, outcome, earlier });
   });
 
-/**
- * Find a missing Category, vanished rule, duplicate keyword, or exhausted rule set in retained
- * state after rollback. Return None when the retained state cannot prove any of those conflicts.
- */
 export const keywordRuleAbortFailure = ({
   db,
   userId,
@@ -353,10 +338,6 @@ export const keywordRuleAbortFailure = ({
     return yield* validateKeywordRuleChange({ rules: projected, change: outcome });
   });
 
-/**
- * Read one committed keyword-rule child's canonical value: the stored rule for a create or update,
- * and the removed id for a delete whose row the unit already proved gone.
- */
 export const findKeywordRuleValue = ({
   db,
   userId,

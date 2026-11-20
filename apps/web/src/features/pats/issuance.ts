@@ -383,10 +383,6 @@ const mountIssuance =
       if (current.value._tag === "Issued") clear();
     };
   };
-/** One mounted manual PAT lifecycle. Canonical work uses the authentication registry;
- * command results are void so a bearer cannot enter an Atom cache. Late completions cannot
- * disclose after disposal. Restoration only creates a fresh review, never an issuance.
- */
 export const usePATIssuance = ({
   apiClient,
   clipboard,

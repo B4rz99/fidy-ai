@@ -14,7 +14,7 @@ const oidcDestinations = {
     token: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
   },
 } as const;
-/** Only the selected provider’s reviewed endpoints are reachable; protocol credentials remain in POST bodies. */
+
 export const oidcHttp = (
   input: Readonly<{
     provider: "google" | "microsoft";

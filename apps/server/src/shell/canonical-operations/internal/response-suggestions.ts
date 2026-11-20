@@ -55,6 +55,5 @@ const project = (value: Schema.Json, scope: Scope): Option.Option<Schema.Json> =
   );
 };
 
-/** Checkpoint canonical suggestions and their hinted targets at every encoded response depth; unrelated data, including exact decimal strings, is retained. */
 export const responseSuggestions = ({ value, ...scope }: ResponseSuggestionsInput): Schema.Json =>
   Option.getOrElse(project(value, scope), () => null);

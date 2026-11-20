@@ -86,7 +86,7 @@ const prepareSensitiveUnit = (
       commit: prepared.commit,
     };
   });
-/** Both sensitive and ordinary children bind the complete original invocation and ordered scopes. */
+
 export const prepareOAuthUnitConfirmation = (work: Work): Effect.Effect<UnitReview> => {
   const index = work.mutations.findIndex(sensitive);
   if (index < 0) {

@@ -53,7 +53,7 @@ const insertJob = Effect.fn(function* (
     VALUES(${id},${account.id},${account.grant_attempt_id},${account.cursor},${now},${deadline},${now},'pending')`;
   yield* preserveStoreAlarm(storage, now);
 });
-/** Called in the Account-discovery commit. A queue message alone never admits work. */
+
 export const admitSynchronization = Effect.fn(function* (
   grant: string,
   now: number,
@@ -244,7 +244,6 @@ export const offerSynchronizations = Effect.fn(function* ({
           yield* insertJob(account, now, storage);
         }
       }
-      // A recurring schedule is only a prompt to recheck authority.
       yield* sql`UPDATE connection_refresh SET next_refresh_ms=NULL WHERE next_refresh_ms<=${now} AND account_id IN (SELECT account_id FROM connection_synchronizations WHERE state IN ('pending','running'))`;
       yield* sql`UPDATE connection_refresh SET next_refresh_ms=${now + offerRetryMs} WHERE next_refresh_ms<=${now}`;
       const rows = yield* Schema.decodeUnknownEffect(Schema.Array(SynchronizationWork))(

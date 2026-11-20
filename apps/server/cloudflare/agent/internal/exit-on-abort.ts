@@ -9,9 +9,6 @@ const interruptOnAbort = (signal: AbortSignal): Effect.Effect<never> =>
     return Effect.sync(() => signal.removeEventListener("abort", interrupt));
   });
 
-/** Observe work in the current runtime while an external deadline may interrupt it. The caller
- * receives its complete Exit so durable Turn settlement can run after deadline cancellation.
- */
 export const exitOnAbort: {
   (
     signal: AbortSignal

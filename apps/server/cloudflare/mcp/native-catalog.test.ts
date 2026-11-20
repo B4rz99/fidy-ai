@@ -2,7 +2,6 @@ import { expect, it } from "vitest";
 import { nativeMcpCatalog } from "./operations";
 import { decideOperationAccess } from "../../src/shell/canonical-policy/operations";
 
-// The public MCP catalog before retirement of shared storage. Each name has an addressed native handler.
 const published = [
   "budgets.createBudget",
   "budgets.deleteBudget",

@@ -62,7 +62,6 @@ export const prepareReferenceDashboard = async (request, { api, headers }) => {
     },
     { op: "remove-widget", widgetId: previous.id },
   ]);
-  // Each insertion and subsequent removal transform the previously committed layout.
   await edits.reduce(async (applied, data) => {
     await applied;
     const reply = await request.post(api + "/dashboard/edits", { headers, data });

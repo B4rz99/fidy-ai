@@ -21,7 +21,6 @@ export const editBodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
 
 class DashboardQueryLimited extends Data.TaggedError("DashboardQueryLimited") {}
 
-/** Query accounting rechecks authority; its only writes are credential and Audit metadata. */
 export const accountQuery = ({
   db,
   subject,
@@ -38,7 +37,6 @@ export const accountQuery = ({
     catch: () => new DashboardUnavailable(),
   }).pipe(Effect.asVoid);
 
-/** Owner accounting prepared for composition with its final financial snapshot. */
 export const prepareQueryAccounting = ({
   db,
   subject,
@@ -82,7 +80,6 @@ export const prepareQueryAccounting = ({
         )
       : []),
     audit,
-    // Abort the batch on a missing Audit without writing a persistent assertion slot.
     db.prepare("SELECT json(CASE WHEN changes() = 1 THEN 'true' ELSE '' END) AS accepted"),
   ];
 };

@@ -128,8 +128,6 @@ const mountPairing =
       lifetime.active = false;
     };
   };
-/** A mounted review binds approval to its retained grant. Cancellation abandons only this view;
- * a dispatched approval may still commit, and its response cannot settle a replacement review. */
 export const usePATPairing = ({
   apiClient,
   initialReview,

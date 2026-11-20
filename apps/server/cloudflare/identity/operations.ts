@@ -24,7 +24,6 @@ import type {
 } from "./contract";
 import { associationProjection, associationQuery, resolveCaller } from "./internal/association";
 
-/** Load only display preferences for an authenticated privacy read; the caller must recheck its exact credential before releasing these values. */
 export const readPrivacyPreferences = ({
   db,
   userId,
@@ -43,25 +42,13 @@ export const readPrivacyPreferences = ({
     return yield* Schema.decodeUnknownEffect(UserPreferences)(value);
   }).pipe(Effect.mapError(() => new IdentityUnavailable()));
 
-/**
- * Resolve only a persisted Business Portfolio and BSUID association. Contact values and provider
- * ids never substitute for that pair. This pre-coordination lookup is not authorization: every
- * protected action must recheck the exact User association in its own authoritative D1 unit.
- */
 export const findWhatsAppUser = (
   input: WhatsAppCallerLookup
 ): Effect.Effect<Option.Option<UserId>, IdentityUnavailable> => resolveCaller(input);
 
-/** Query the exact stable User/caller association at the protected action's decision instant. */
 export const whatsAppIdentityQuery = (input: WhatsAppAssociationSubject): IdentityStatement =>
   associationQuery(input);
 
-/**
- * Compose one User's current WhatsApp associations with a caller-owned D1 action. The published
- * identity_associations relation contains only userId, businessPortfolioId and businessScopedUserId.
- * Keep the caller's exact pair restriction in its action; the projection is re-evaluated in that
- * same statement, including after a prepared action waits. No contacts or provider evidence escape.
- */
 export const prepareWhatsAppIdentity = (
   input: Readonly<{ db: D1Database; userId: UserId; statement: IdentityStatement }>
 ): D1PreparedStatement => {
@@ -69,30 +56,13 @@ export const prepareWhatsAppIdentity = (
   return input.db.prepare(query.sql).bind(...query.params);
 };
 
-/**
- * Prepare one new Colombian User and its original 168-hour TrialPeriod without channel evidence.
- * Commit these actions in the same onboarding D1 batch as Consent, recovery credential and the
- * originating proof owner's final current-proof assertion. No stable identity may commit
- * before that assertion. Preparation neither consumes a proof nor establishes reusable authority.
- */
 export const prepareUserCreation = (input: UserCreationInput): UserCreationStatements =>
   userCreationStatements(input);
 
-/**
- * Establish the initial association of a new or provider-authenticated User only with the exact accepted Consent exchange's originating WhatsApp
- * caller. Commit with the originating proof consumption and any new User, Consent and Recovery records; the final
- * proof guard must refuse stale, foreign or missing exchange evidence in that same atomic unit.
- * Preparation neither verifies a proof nor authorizes reassociation of an established User.
- */
 export const prepareOnboardingWhatsAppAssociation = (
   input: OnboardingWhatsAppAssociation
 ): D1PreparedStatement => onboardingWhatsAppStatement(input);
 
-/**
- * Load one authenticated User's full canonical projection with their current Consent grant.
- * This read grants no authority: the caller must recheck its exact live credential before release.
- * Missing, invalid or inaccessible state fails closed without exposing persistence details.
- */
 export const readCurrentUser = ({
   db,
   userId,
@@ -113,7 +83,6 @@ export const readCurrentUser = ({
     return yield* read.decode(result.results);
   }).pipe(Effect.mapError(() => new IdentityUnavailable()));
 
-/** Establish only an empty initial channel association inside the exact verified provider and originating-chat approval unit. The caller must consume its same-caller invitation and current private proof atomically; these values alone grant no authority. */
 export const prepareProviderWhatsAppAssociation = (
   input: Readonly<{
     db: D1Database;
@@ -139,7 +108,7 @@ export const readLocalProfile = Effect.fn(function* (user: UserId) {
     body: { data: yield* Schema.encodeEffect(User)(result.data), next: [] },
   };
 });
-/** Compose a preference change and its complete User projection in the caller's native transaction. */
+
 export const prepareLocalPreferences = ({
   user,
   preferences,

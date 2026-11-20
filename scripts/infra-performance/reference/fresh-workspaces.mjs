@@ -82,7 +82,6 @@ const verifyBudgets = (value) => {
   assert.equal(Date.parse(period.to), Date.parse("2026-12-01T05:00:00Z"));
   assert.equal(period.timeZone, "America/Bogota");
   assert.equal(statuses.length, currencies.length * categories);
-  // Seven effective outflows after one Reconciliation. Category 1 has two COP outflows and one USD outflow.
   /** @type {Record<string, string>[]} */
   const outflows = [
     { 1: "2000", 4: "1000", 6: "1000" },

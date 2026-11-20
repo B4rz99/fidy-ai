@@ -2,7 +2,7 @@ import type { PendingConsentExchangeId } from "../../src/shell/consent/contract"
 import { Data } from "effect";
 import type { UserId } from "../../src/core/identity/contract";
 import type { DisclosureSnapshot } from "../../src/core/consent/contract";
-/** Operator-owned provider application configuration; absent configuration disables authentication. */
+
 export type ProviderConfiguration = Readonly<{ BROWSER_ORIGIN: string }> &
   Partial<
     Readonly<{
@@ -17,7 +17,6 @@ export type ProviderConfiguration = Readonly<{ BROWSER_ORIGIN: string }> &
 
 export type ProviderEnvironment = ProviderConfiguration & Readonly<{ DB: D1Database }>;
 
-/** One-use verified web origin. Compose owner records only inside this request and commit them together. */
 export type ProvenProviderSignup = Readonly<{
   origin:
     | Readonly<{ _tag: "Web" }>
@@ -36,7 +35,6 @@ export type ProviderCompletionRequest = Readonly<{
   complete: (proof: ProvenProviderSignup) => Promise<Response>;
 }>;
 
-/** Closed Maintenance failure; no protocol state or provider cause is exported. */
 export class ProviderAuthenticationRetentionUnavailable extends Data.TaggedError(
   "ProviderAuthenticationRetentionUnavailable"
 ) {}

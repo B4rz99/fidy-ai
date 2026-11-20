@@ -32,7 +32,6 @@ export const projections: ReadonlyArray<ErasureProjection> = [
   },
 ];
 
-/** Retired pairings remain attributable for deletion only, never authentication. */
 export const erasurePairingsQuery = (userId: string): OwnedStatement => ({
   sql: "SELECT id AS pairingId FROM browser_login_pairings WHERE erasure_user_id=? OR user_id=? OR approval_user_id=?",
   params: [userId, userId, userId],

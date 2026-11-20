@@ -53,7 +53,6 @@ export {
 
 export { BrowserPairingEmailAuthenticationWebAuthGroup } from "~/shell/email-authentication/contract";
 
-/** Direct browser authentication API. Secret-bearing responses never enter the canonical API. */
 export class WebAuthApi extends HttpApi.make("webAuth")
   .add(BrowserLoginWebAuthGroup)
   .add(BrowserSessionGroup)
@@ -65,11 +64,9 @@ export class WebAuthApi extends HttpApi.make("webAuth")
   .add(BrowserPairingEmailAuthenticationWebAuthGroup)
   .annotate(OpenApi.Title, "fidy-ai WebAuth API") {}
 
-/** Group shape exported for deriving the dedicated credential-bearing browser client. */
 export type WebAuthApiGroups =
   typeof WebAuthApi extends HttpApi.HttpApi<infer _Identifier, infer Groups> ? Groups : never;
 
-/** Owner-declared browser protocol paths; this projection grants no proof or session authority. */
 export const webAuthenticationEndpoints = {
   startPairing: BrowserLoginWebAuthGroup.endpoints.startPairing,
   redeemPairing: BrowserLoginWebAuthGroup.endpoints.redeemPairing,

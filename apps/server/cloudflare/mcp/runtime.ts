@@ -389,7 +389,7 @@ const requestLifetime = (body: Uint8Array): number => {
     ? transportLifetimeMilliseconds
     : admissionLifetimeMilliseconds;
 };
-/** Authenticates and transfers bounded MCP work to the User execution boundary, where both protocol runtimes own cleanup. */
+
 export const handleMcpRequest = (
   input: Readonly<{ request: Request; db: D1Database; coordinator: Coordinator }>
 ): Effect.Effect<Response> =>
@@ -475,7 +475,7 @@ const leaseOwner = (owner: ResidentOwner): (() => void) => {
     if (owner.leases === 0) owner.drained.resolve();
   };
 };
-/** Concurrent caller/disposer cancellation joins the same locked SDK reader settlement. */
+
 const leaseResponseReader = (
   owner: ResidentOwner,
   ticket: ResidentTicket,
@@ -495,7 +495,7 @@ const leaseResponseReader = (
   owner.bodies.add(cancel);
   return { finish, cancel, isReleased: () => released };
 };
-/** A Response lease lasts through native streaming, not merely response-header completion. */
+
 const leasedResponse = (
   owner: ResidentOwner,
   response: Response,
@@ -548,7 +548,7 @@ export type McpResidency = Readonly<{
   erasureSettled: () => Effect.Effect<boolean>;
   retireConnections: (connectionId: Option.Option<string>) => Effect.Effect<void>;
 }>;
-/** One volatile residency owner per existing User coordinator, never a global caller-tool cache. */
+
 type CallerStorage =
   | { db: D1Database }
   | {
@@ -590,7 +590,7 @@ type ResidentTicket = {
   settleTransfer: () => void;
   cancelBody: Option.Option<() => Promise<void>>;
 };
-/** Readiness is resolve-only: a pinned ticket either registers its body or terminates. */
+
 const pinResidentTicket = (
   registry: ResidentRegistry,
   input: Readonly<{ owner: ResidentOwner; ticket: ResidentTicket }>
@@ -627,7 +627,7 @@ type ResidentTool = Readonly<{
 type OwnerDisposalSettlement =
   | Readonly<{ _tag: "Success" }>
   | Readonly<{ _tag: "Failure"; error: unknown }>;
-/** Observe SDK rejection immediately; the original error is rethrown after owned cleanup. */
+
 const settledDisposal = (promise: Promise<unknown>): Promise<OwnerDisposalSettlement> =>
   promise.then(
     () => ({ _tag: "Success" }),
@@ -744,8 +744,6 @@ const residentLifetime = (
         Effect.provideService(Clock.Clock, clock),
         Effect.andThen(
           Effect.sync(() => {
-            // Start native disposal after this callback returns; joining its own Scope here
-            // would deadlock the lifetime fiber against handler disposal.
             disposeOwner(registry, resident).catch(() => undefined);
           })
         )
@@ -949,7 +947,7 @@ const transferResidentResponse = (
     ticket.settleTransfer();
     return leased;
   });
-/** Only ingress acquisition/handoff is masked; SDK RPC/financial fibers retain their own cancellation. */
+
 const ownResidentReply = (
   registry: ResidentRegistry,
   input: Readonly<{
@@ -1026,7 +1024,6 @@ const retireConnections = (
         disposeOwner(registry, owner).catch(() => undefined);
       }
     }
-    // Do not await native shutdown while holding a financial ticket: callbacks use that chain.
   });
 const disposeRegistry = (registry: ResidentRegistry): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
@@ -1050,7 +1047,6 @@ export const makeMcpResidency = (config: ResidencyConfig): McpResidency => {
   };
 };
 
-/** Construct native SDK admission from the bounded original protocol bytes. The User rechecks the connection for every protocol request and tool. */
 export const localProtocolAdmission = Effect.fn(function* (request: Request, subject: OAuthCaller) {
   const body = yield* readBoundedRequestBody(request, bodyPolicy);
   return yield* prepareMcp({ request, lifetimeMilliseconds: requestLifetime(body) }, subject, body);

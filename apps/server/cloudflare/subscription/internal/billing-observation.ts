@@ -75,7 +75,7 @@ const terminalStatuses: ReadonlySet<InstanceStatus["status"]> = new Set([
   "terminated",
   "complete",
 ]);
-/** Reserve only new or terminal execution handoffs; an active execution keeps its existing budget. */
+
 const offerBillingWorkflow = (
   input: Readonly<{
     workflow: BillingObservationWorkflow;
@@ -136,7 +136,6 @@ const callCancellationOwner = (
     return yield* failure();
   });
 
-/** Queue redelivery follows the same native instance, consulting the live User owner before restart. */
 export const receiveLocalSourceCancellation = (
   input: Readonly<{
     environment: BillingWorkRouting;
@@ -155,7 +154,6 @@ export const receiveLocalSourceCancellation = (
     if (!offered) return yield* failure();
   });
 
-/** Offer retained cancellation work; inactive or exhausted intent needs no handoff. Failures leave receipt retryable. */
 export const receiveSourceCancellation = (
   input: Readonly<{
     db: D1Database;
@@ -191,7 +189,7 @@ type BillingObservationExecution = Readonly<{
   sleep: (name: string, duration: number) => Promise<void>;
   wompiHttp: WompiTransportFactory;
 }>;
-/** Execute retained observation work; identities never replace live eligibility or provider evidence. */
+
 export const runBillingObservation = (input: BillingObservationExecution): Promise<void> => {
   const local = Schema.decodeUnknownOption(LocalSourceCancellationWork)(input.payload);
   if (Option.isSome(local)) return runLocalCancellationLoop({ ...input, work: local.value });
@@ -439,7 +437,6 @@ const offerBillingLookup = (
     });
   });
 
-/** Recheck known candidates by starting a bounded, named Workflow Activity. Failed handoffs retain D1 intent. */
 export const reconcileBillingCandidates = (
   environment: Readonly<{ DB: D1Database; BILLING_COLLECTION_WORKFLOW: BillingObservationWorkflow }>
 ): Effect.Effect<void, BillingCollectionFailure> =>

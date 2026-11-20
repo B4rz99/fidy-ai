@@ -20,8 +20,7 @@ const choiceDecision = (text: string): Option.Option<"accept" | "decline" | "rev
   if (["no", "no, gracias", "no gracias"].includes(value)) return Option.some("decline");
   return value === "desactivar" ? Option.some("revoke") : Option.none();
 };
-/** Resolve literal replies against this caller's delivered message. The decision owner still checks
- * the exact disclosure, current grant, expiry and one-use evidence before any state changes. */
+
 export const readProactivityReplyChoice = ({
   db,
   proof,

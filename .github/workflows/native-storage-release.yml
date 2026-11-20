@@ -127,7 +127,7 @@ jobs:
               [[ "$RELEASE_OPERATION" == verify || "$RELEASE_OPERATION" == verify-erasure || "$RELEASE_OPERATION" == continue-erasure || "$RELEASE_OPERATION" == fleet-pilot || "$RELEASE_OPERATION" == continue-fleet-cleanup || "$RELEASE_OPERATION" == ten-hosted || "$RELEASE_OPERATION" == continue-ten-cleanup ]]
             fi
           fi
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -463,7 +463,7 @@ jobs:
       RELEASE_GIT_SHA: ${{ github.sha }}
       SITE_PUBLICATION: marketing-only
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
       - uses: ./.github/actions/bun-runtime

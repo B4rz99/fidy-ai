@@ -9,7 +9,6 @@ import {
 } from "./contract";
 import { checkLocalPath } from "./internal/local-path";
 
-/** Exact runtime whose experimental Secrets API supports local-only Windows persistence. */
 export const supportedBunRevision = "38afee6c84fcf48c0edb2466aa4b27d287a59c30";
 const nativeService = "com.fidy.cli.api.fidyapp.com";
 const savedName = "login";
@@ -30,7 +29,6 @@ const guardRuntime = <A>(work: Effect.Effect<A, CliFailure>): Effect.Effect<A, C
       : Effect.fail(new CliFailure({ reason: "UnsupportedRuntime" }))
   );
 
-/** Bun's only plaintext boundary. Windows entries are explicitly local, never roaming. */
 export const bunSecrets: NativeSecrets = {
   get: (name) =>
     guardRuntime(
@@ -144,7 +142,6 @@ const writeGrant = Effect.fn(function* (
   yield* write.pipe(Effect.scoped, Effect.mapError(storageUnavailable));
 });
 
-/** Returns a locked store whose bounded metadata contains no bearer. */
 export const makeCredentialStore = Effect.fn(function* (
   directory: string,
   secrets: NativeSecrets = bunSecrets

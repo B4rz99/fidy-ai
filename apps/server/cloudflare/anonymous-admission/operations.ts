@@ -5,12 +5,6 @@ import type { AnonymousAdmissionRequest } from "./contract";
 
 const minimumAdmissionKeyLength = 32;
 
-/**
- * Derive a keyed, content-free source identity for anonymous abuse accounting. The public Worker
- * must supply Cloudflare's trusted request and its own configuration, never caller-selected
- * admission policy. Only the configured local topology may substitute a fixed local source.
- * Missing authoritative source or unusable key fails closed before any pairing is forwarded.
- */
 export const deriveAnonymousSource = ({
   request,
   browserOrigin,

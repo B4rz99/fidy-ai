@@ -80,7 +80,7 @@ const liveMaterialCaller = ({
     Effect.mapError(() => new ReviewUnavailable())
   );
 };
-/** WebSession-only policy prevents personal originals entering agent outputs or retained transcripts. */
+
 export const browseReviewMaterial = ({
   db,
   subject,

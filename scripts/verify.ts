@@ -86,12 +86,11 @@ const checks: Array<Check> = [
     env: Bun.env,
   },
   rootCheck("static", "Lint rule regressions", ["bun", "run", "lint:rules"]),
+  rootCheck("static", "Code comments", ["bun", "run", "lint:comments"]),
   rootCheck("static", "Lint suppressions", ["bun", "run", "lint:suppressions"]),
   rootCheck("static", "oxlint type-aware", ["bun", "run", "lint:type-aware"]),
   rootCheck("static", "Format", ["bun", "run", "format:check"]),
   rootCheck("static", "Project-reference build", ["bun", "run", "typecheck"]),
-  // The JS plugin is checked with the classic compiler in the isolated tool install;
-  // the patched root compiler applies Effect diagnostics to these foreign AST callbacks.
   rootCheck("static", "Oxlint plugin JS types", ["bun", "run", "typecheck:oxlint"]),
   rootCheck("static", "Dependency cruiser JS types", ["bun", "run", "typecheck:depcruise"]),
   rootCheck("static", "Module graph", ["bun", "run", "lint:deps"]),

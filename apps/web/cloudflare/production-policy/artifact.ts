@@ -82,7 +82,6 @@ const validateContents = (directory: string, path: string): Promise<void> =>
       }
     });
 
-/** Rejects non-static, unhashed, secret-bearing or incomplete uploads and invalid release identities. */
 export const validateProductionArtifact = (request: ProductionArtifactRequest): Promise<void> =>
   artifactPaths(request.directory).then((paths) => {
     const pathSet = new Set(paths);

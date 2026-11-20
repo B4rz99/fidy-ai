@@ -34,7 +34,6 @@ def bind_workspace_user(plan, workspace):
 def scoped_transaction_plan(plan, workspace):
     if workspace["review"]["data"]["pendingCount"] != 0:
         raise ValueError("Scoped Transactions browser requires an empty unrelated Review workspace")
-    # Only remove the explicitly named fixtures belonging to other financial views.
     omitted = {"budgets", "user_documents", "recurring_plans", "recurring_plan_revisions",
                "statement_staging_objects", "statement_submissions", "ingestion_review_items"}
     seen = set()
@@ -100,7 +99,6 @@ def materialize(plan_file, directory):
     pair["batch"][0] = dict(sql=LINK, params=[SUBJECT,link["first"],link["second"],link["visible"],link["decidedAtMs"]])
     plan["canonicalTransactionFixture"] = {"previousPlanDigest":original_plan, "observedOriginals":8,
                                             "nativeManifestDigest":digest(report), "nativeProvenanceDigest":digest(private), **coordinates}
-    # Rehearsal recalculates actual native costs and per-batch ceilings for this exact plan.
     for modified in [capture, pair]:
         modified.pop("reads", None)
         modified.pop("writes", None)

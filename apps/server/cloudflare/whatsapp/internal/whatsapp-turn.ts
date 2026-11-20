@@ -27,7 +27,6 @@ import {
   whatsAppServiceWindowMilliseconds,
 } from "../contract";
 
-/** Well inside the 30-day Turn evidence retention, even after delayed delivery. */
 export const hostedInboundReplayWindowMs = 604_800_000;
 export const withinHostedInboundWindow = ({
   occurredAtMs,
@@ -36,7 +35,7 @@ export const withinHostedInboundWindow = ({
   occurredAtMs >= receivedAtMs - hostedInboundReplayWindowMs;
 
 const UserRow = Schema.Struct({ user_id: UserId });
-/** Correlation is a lookup hint only; the User coordinator rechecks the exact persisted attempt. */
+
 export const findWhatsAppDeliveryUser = ({
   db,
   correlationToken,
@@ -58,7 +57,7 @@ export const findWhatsAppDeliveryUser = ({
     const decoded = yield* Schema.decodeUnknownEffect(UserRow)(row);
     return Option.some(decoded.user_id);
   });
-/** Window evidence never authorizes the User or the Turn; it only refuses late free-form sends. */
+
 export const isWhatsAppWindowOpen = ({
   db,
   userId,
@@ -89,7 +88,6 @@ export const isWhatsAppWindowOpen = ({
     return row !== null;
   });
 
-/** Bounded scheduled cleanup; no inbound webhook is needed to expire old windows. */
 export const sweepExpiredWhatsAppWindows = ({
   db,
   now,
@@ -109,7 +107,6 @@ const ReplayRow = Schema.Struct({
   text: Schema.NullOr(TranscriptText),
 });
 
-/** After Compaction removes exact text, the same identity/provider id still cannot start new work. */
 export const findWhatsAppReplay = ({
   db,
   userId,
@@ -171,7 +168,7 @@ const PendingWork = Schema.Struct({
   sandbox_phone: Schema.OptionFromNullOr(E164PhoneNumber),
   text: TranscriptText,
 });
-/** A continuation reads only its own pending Turn and exact User Transcript, never Queue text. */
+
 export const readWhatsAppPendingWork = ({
   db,
   userId,

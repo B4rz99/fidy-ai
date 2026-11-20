@@ -151,7 +151,7 @@ const enrollmentProvider = Effect.fn(function* (request: Request, path: string, 
   }
   return new Response(null, { status: 404 });
 });
-/** Local outbound Worker only. Accept a void and lose its response, then expose the independent provider state. */
+
 const refundFixture = Effect.fnUntraced(function* (request: Request, db: SqlStorage) {
   const material = yield* Schema.decodeUnknownEffect(
     Schema.Struct({

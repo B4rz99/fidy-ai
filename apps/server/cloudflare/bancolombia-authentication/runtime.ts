@@ -65,7 +65,6 @@ const withSandboxClient = <A, E>(
     }).pipe(Effect.provideService(FetchHttpClient.Fetch, fetch));
   }).pipe(Effect.scoped);
 
-/** Use only the private Core certificate binding and registered signing key; missing bindings refuse. */
 export const verifyBancolombiaSandboxAuthentication = (
   environment: BancolombiaSandboxEnvironment
 ): Effect.Effect<void, BancolombiaAuthenticationFailed> =>
@@ -121,7 +120,6 @@ const prepareProfile = (
     ).pipe(Effect.mapError(() => new ConnectionAuthorizationUnavailable()));
   });
 
-/** Missing or foreign test profiles cannot install bank execution; registration remains a separate gate. */
 export const makeBancolombiaSandboxPreparation = (
   input: Readonly<{ environment: BancolombiaSandboxEnvironment; userId: string }>
 ): Option.Option<ConnectionBankPreparation> =>
@@ -178,7 +176,6 @@ export const makeBancolombiaSandboxActivation = (
     }))
   );
 
-/** Cleanup remains available after the sandbox admission window closes; it cannot create customer authority. */
 export const makeBancolombiaSandboxCleanup = (
   environment: BancolombiaSandboxEnvironment
 ): Option.Option<ConnectionBankCleanup> => {

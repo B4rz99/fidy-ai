@@ -4,7 +4,6 @@ import { deliverySender } from "~/shell/email-authentication/internal/delivery";
 
 export type { EmailDeliveryPortService, EmailSendFailed } from "./contract";
 
-/** Construct bounded proof delivery using the caller's policy-bearing Outbound HTTP authority. */
 export const makeEmailDelivery = (
   input: Readonly<{ outboundHttp: OutboundHttpService }>
 ): EmailDeliveryPortService =>

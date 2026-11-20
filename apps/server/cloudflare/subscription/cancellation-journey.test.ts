@@ -231,7 +231,6 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const runtime = yield* start();
         const paid = yield* paidUser(runtime);
         const { exec, check, provider, now } = paid;
-        // Interrupted after commit, with all native alarm retries exhausted.
         yield* exec(
           "INSERT INTO subscription_cancellations(paid_attempt_id,subscription_id,payment_source_id,cancelled_at_ms,paid_through_ms,source_cancellation_state,next_offer_at_ms) VALUES (?,?,?,?,?,'void-pending',?)",
           attempt,

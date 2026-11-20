@@ -9,7 +9,6 @@ import type { ErasureStore } from "../../erasure-store/contract";
 const io = <A>(run: () => Promise<A>): Effect.Effect<A, ErasureUnavailable> =>
   Effect.tryPromise({ try: run, catch: () => new ErasureUnavailable() });
 
-/** Recorded confirms the current projection; Conflict may retain a rejected event. */
 export const submitCustodyEvidence = (
   input: Readonly<{
     db: D1Database;

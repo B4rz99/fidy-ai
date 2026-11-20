@@ -28,13 +28,11 @@ const sha256 = (value: string): string =>
   new Bun.CryptoHasher("sha256").update(value).digest("hex");
 const canonical = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 
-/** Fingerprint the very statements and release seeds used by openSqliteStore. */
 const migrationHistory = (history: StoreHistory): ReadonlyArray<string> =>
   history.steps.map((step) =>
     sha256(canonical([history.owner, step.version, step.id, step.statements]))
   );
 
-/** A changed private wire contract needs a reader-first release before the next writer is enabled. */
 export const buildStorageRelease = Effect.fn(function* () {
   const contracts = [
     "directory",
@@ -82,7 +80,6 @@ export const storageOverlap = ({
     storageOwners.every((owner) =>
       stable.histories[owner].every((step, index) => candidate.histories[owner][index] === step)
     );
-  // Current object code refuses a store newer than its last known migration.
   return {
     forward,
     rollback:

@@ -8,7 +8,6 @@ export const MemoryId = Schema.String.check(Schema.isUUID())
   .annotate({ identifier: "MemoryId" });
 export type MemoryId = typeof MemoryId.Type;
 
-/** Formatting-normalized arbitrary prose retained for durable economic context. */
 export const MemoryText = Schema.String.check(
   Schema.isMinLength(1),
   Schema.isMaxLength(maximumMemoryTextLength),
@@ -21,7 +20,6 @@ export type MemoryText = typeof MemoryText.Type;
 const normalizeMemoryFormatting = (text: string): string =>
   text.replaceAll("\r\n", "\n").replaceAll("\r", "\n").trim();
 
-/** Public codec that canonicalizes line endings and outer whitespace without inspecting meaning. */
 export const MemoryTextInput = Schema.String.pipe(
   Schema.decodeTo(
     MemoryText,
@@ -49,22 +47,18 @@ export type RememberInput = typeof RememberInput.Type;
 export const ReviseInput = MemoryTextPayload.annotate({ identifier: "ReviseInput" });
 export type ReviseInput = typeof ReviseInput.Type;
 
-/** Every current Memory in stable ascending creation and identity order. */
 export const RecallOutput = Schema.Array(Memory).annotate({ identifier: "RecallOutput" });
 
-/** Fixed content-free policy failure; Memory prose and identity never enter the error. */
 export class MemoryCapacityExceeded extends Data.TaggedError("MemoryCapacityExceeded")<{}> {
   override get message(): string {
     return "The User's current Memories have reached their aggregate token capacity";
   }
 }
 
-/** Content-free absence shared by missing and foreign Memory identifiers. */
 export class MemoryNotFound extends Data.TaggedError("MemoryNotFound")<{}> {
   override get message(): string {
     return "No current Memory belongs to the User";
   }
 }
 
-/** Inclusive token capacity for the complete recall-ordered Memory aggregate. */
 export const maximumAggregateMemoryTokens = 15_000;

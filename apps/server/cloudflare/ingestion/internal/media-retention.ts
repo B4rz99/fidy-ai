@@ -3,7 +3,7 @@ import { Data, Effect } from "effect";
 class MediaRetentionUnavailable extends Data.TaggedError("MediaRetentionUnavailable")<{}> {}
 const retentionBatchSize = 512;
 const accountabilityLifetimeMs = 31536000000;
-/** Clear expired locators/captions and pending identities after 30 days; retain metadata-only review and accountability for one year. Each scheduled action is bounded. */
+
 export const sweepMedia = ({
   db,
   now,

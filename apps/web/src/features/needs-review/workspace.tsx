@@ -28,7 +28,6 @@ import { type Workspace, sources } from "./model";
 import { type Filter, ReviewNavigation } from "./view-navigation";
 import { reviewWorkspaceQueries } from "./query";
 
-/** The active route owns pagination repair; application composition retains the workspace. */
 export const NeedsReviewRoute = (): JSX.Element => {
   const search = useSearch({ from: "/authenticated/app/needs-review" });
   const filter = search.status ?? "pending";
@@ -40,7 +39,6 @@ export const NeedsReviewRoute = (): JSX.Element => {
     </>
   );
 };
-/** Pagination repair belongs to the active route, outside the retained presentation owner. */
 const ReviewPageRepair = ({
   filter,
   page,

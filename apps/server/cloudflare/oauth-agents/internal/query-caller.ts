@@ -10,7 +10,7 @@ const Snapshot = Schema.Struct({
   scopes: Schema.fromJsonString(PATScopes),
   pro: Schema.Literals([0, 1]),
 });
-/** Current OAuth-owned capability and derived-tier facts, never a reusable authorization grant. */
+
 export const queryCallerSnapshot = (
   input: Readonly<{ db: D1Database; subject: OAuthCaller; current: number }>
 ): Effect.Effect<Option.Option<SuggestedOperationCaller>, OAuthQueryCallerUnavailable> =>

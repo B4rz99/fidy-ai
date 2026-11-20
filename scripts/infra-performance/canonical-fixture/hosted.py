@@ -167,7 +167,6 @@ def rehearse(revision, prefix, out, *, browser_workspace=False):
     mode = "rehearse"
     directory=out/"fixture"
     directory.mkdir(mode=0o700, exist_ok=True)
-    # Serialize Session creation and receipt issuance separately from the canonical mutation journal.
     with serialized(out/"owner"):
         marker=out/"owner"/"attempt.json"
         state=json.loads(marker.read_text()) if marker.is_file() else {"revision":revision,"resourcePrefix":prefix,"member":"performance-1"}

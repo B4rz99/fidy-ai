@@ -8,7 +8,6 @@ const pageSize = 32,
 const settledPairings = `SELECT p.ordinal,p.expires_at_ms FROM browser_pairings p WHERE p.user_id IS NULL OR p.email_handoff IS NOT NULL OR EXISTS(SELECT 1 FROM provider_attempts a WHERE a.pairing_id=p.id AND (a.acknowledged=1 OR a.state='cancelled')) OR EXISTS(SELECT 1 FROM channel_approvals c WHERE c.pairing_id=p.id) OR EXISTS(SELECT 1 FROM support_handoffs s WHERE s.pairing_id=p.id)`;
 const settledInvitations = `SELECT i.id,i.expires_at_ms FROM whatsapp_invitations i WHERE NOT EXISTS(SELECT 1 FROM provider_attempts a WHERE a.invitation=i.id AND a.state='bound' AND a.acknowledged=0)`;
 
-/** Release expired comparison material while leaving every uncertain reservation fenced. */
 export const drainBootstrapExpiry = Effect.fn(function* (now: number) {
   const sql = yield* SqliteClient;
   for (const table of ["email_capacity_slots", "media_capacity_slots"]) {
@@ -35,7 +34,6 @@ export const drainBootstrapExpiry = Effect.fn(function* (now: number) {
   yield* sql`DELETE FROM bootstrap_admissions WHERE id IN(SELECT id FROM bootstrap_admissions WHERE expires_at_ms<=${now} ORDER BY expires_at_ms LIMIT ${pageSize})`;
 });
 
-/** A pending owner check can schedule cleanup after the last browser or provider disconnects. */
 export const directoryDeadline = Effect.gen(function* () {
   const sql = yield* SqliteClient;
   const [row] = yield* sql.unsafe(

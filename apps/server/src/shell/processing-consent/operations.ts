@@ -15,7 +15,6 @@ const receiptRead = (condition: OwnedStatement): OwnedStatement => ({
   params: condition.params,
 });
 
-/** Exact live credential proof remains part of the receipt observation; no Consent is demanded. */
 export const prepareProcessingConsentStatusRead = ({
   subject,
   current,
@@ -27,7 +26,6 @@ export const prepareProcessingConsentStatusRead = ({
   });
 };
 
-/** First-document observation resolves both identity and receipt from the one exact live credential. */
 export const prepareInitialProcessingConsentRead = ({
   digest,
   current,
@@ -42,7 +40,7 @@ const ReceiptRow = Schema.Struct({
   reference: Schema.NullOr(Schema.String),
   occurredAtMs: Schema.NullOr(Schema.Int),
 });
-/** Decode only the owned receipt query. Absence means its credential is no longer live. */
+
 export const decodeProcessingConsentStatusRead = (
   rows: ReadonlyArray<unknown>
 ): Effect.Effect<Option.Option<ProcessingConsentStatus>, Schema.SchemaError> =>
@@ -59,6 +57,5 @@ export const decodeProcessingConsentStatusRead = (
     return Option.some(result);
   });
 
-/** Observe the legal receipt for an exact live browser credential selected in this transaction. */
 export const prepareSelectedProcessingConsentRead = (users: OwnedStatement): OwnedStatement =>
   receiptRead({ sql: `w.id IN (SELECT id FROM (${users.sql}))`, params: users.params });

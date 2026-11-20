@@ -106,7 +106,6 @@ export const localPlanningReferences = Effect.fn(function* (
   return transactions;
 });
 
-/** Bounded same-User effective facts; the canonical coordinator owns live authority. */
 export const readPlanningTransactions = ({
   db,
   userId,
@@ -131,7 +130,6 @@ export const readPlanningTransactions = ({
     return decodeFacts(rows.results);
   }).pipe(Effect.orElseSucceed(() => Option.none()));
 
-/** Independently capped ranges, references and the caller's read share one database snapshot. */
 export const readPlanningTransactionSnapshot = <A>({
   db,
   userId,
@@ -214,10 +212,6 @@ const orderedReferences = (
   return Option.some(groups.flat());
 };
 
-/** Prepare independently capped matching windows and all bounded linked facts in one snapshot.
- * Range-only eligibility stays separate from the linked facts' live User proof.
- * Decoding restores the existing 128-reference group order without repeating selection per group.
- */
 export const prepareBoundPlanningTransactions = ({
   db,
   rangeUsers,

@@ -8,8 +8,7 @@ import { releaseDueMedia } from "./local-media";
 import { updateSharedCapacity } from "./email-capacity";
 
 const pageSize = 8;
-/** Releasing an offered slot also fences its late claim. Keep the slot and generation until
- * Directory confirms that exact Release, even if the first reply was lost. */
+
 export const drainIngestion = Effect.fn(function* (user: UserId, env: LocalIngestionEnvironment) {
   const sql = yield* SqliteClient;
   yield* reconcileOriginals(user, env);

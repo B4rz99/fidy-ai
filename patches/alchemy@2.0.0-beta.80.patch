@@ -663,17 +663,6 @@ diff --git a/lib/Cloudflare/StateStore/State.d.ts b/lib/Cloudflare/StateStore/St
 diff --git a/lib/Cloudflare/Workers/WorkerProvider.js b/lib/Cloudflare/Workers/WorkerProvider.js
 --- a/lib/Cloudflare/Workers/WorkerProvider.js
 +++ b/lib/Cloudflare/Workers/WorkerProvider.js
-@@ -3042,8 +3042,8 @@
-         // possible when the script already has a live deployment to split
-         // traffic against (otherwise the first deploy takes 100%), and only
-         // for changes a version can carry — code, bindings, compatibility
--        // settings, cache. Script-level settings in the upload metadata
--        // (tags, observability, limits, placement, logpush) keep their live
-+        // settings, cache, and placement. Script-level settings in the upload metadata
-+        // (tags, observability, limits, logpush) keep their live
-         // values until the next full deploy, matching
-         // `wrangler versions upload` semantics.
-         if (rolloutTraffic !== undefined &&
 @@ -3075,6 +3075,7 @@
                      compatibilityDate: metadata.compatibilityDate,
                      compatibilityFlags: metadata.compatibilityFlags,
@@ -682,11 +671,10 @@ diff --git a/lib/Cloudflare/Workers/WorkerProvider.js b/lib/Cloudflare/Workers/W
                      annotations: news.version?.alias !== undefined ||
                          news.version?.message !== undefined ||
                          news.version?.tag !== undefined
-@@ -4133,6 +4134,12 @@
+@@ -4133,6 +4134,11 @@
              // with this Worker — see readWorkerRoutes. Empty-array props
              // (`domain: []`, `routes: []`, `crons: []`) still observe so we
              // can detect drift and converge deletions.
-+            // versionId is an immutable upload receipt, not current traffic.
 +            const uploadedVersionId = output?.versionId
 +                ? yield* workers.getScriptVersion({ accountId, scriptName: workerName, versionId: output.versionId }).pipe(
 +                    Effect.map(() => output.versionId),
@@ -695,7 +683,7 @@ diff --git a/lib/Cloudflare/Workers/WorkerProvider.js b/lib/Cloudflare/Workers/W
              const observeDomains = shouldObserveWorkerDomains(olds, output);
              const observeRoutes = shouldObserveWorkerRoutes(olds, output);
              const observeCrons = shouldObserveWorkerCrons(olds, output);
-@@ -4234,6 +4241,7 @@
+@@ -4234,6 +4240,7 @@
                  // (a getPhas call per known zone on every read); carry the
                  // cleanup list forward like any other stable cache.
                  affinityZoneIds: output?.affinityZoneIds,
@@ -823,11 +811,10 @@ diff --git a/lib/Util/PlatformServices.js b/lib/Util/PlatformServices.js
 diff --git a/src/Apply.ts b/src/Apply.ts
 --- a/src/Apply.ts
 +++ b/src/Apply.ts
-@@ -84,10 +84,16 @@
+@@ -84,10 +84,15 @@
  };
  
  export interface ApplyOptions {
-+  /** Keep tracked resources until release verification, or run only their cleanup. */
 +  deletions?: "defer" | "only";
    planDisplay?: PlanDisplayOptions;
    /** Structured event sink for non-CLI callers. */
@@ -840,7 +827,7 @@ diff --git a/src/Apply.ts b/src/Apply.ts
  
  interface ResourceTracker {
    output: any;
-@@ -156,10 +162,33 @@
+@@ -156,10 +161,33 @@
    | AuthError
    | NeedsReauth
    | PlatformError
@@ -875,7 +862,7 @@ diff --git a/src/Apply.ts b/src/Apply.ts
      // Credential-free dev: a dev-mode plan that needs the real cloud
      // (`Alchemy.remote()` rows, remote-proxied bindings, deletions of rows
      // stamped `providerMode: "live"`) demands cloud credentials exactly
-@@ -193,6 +222,10 @@
+@@ -193,6 +221,10 @@
      // wrapping this body in Effect.scoped would kill them when apply
      // returns.
      return yield* Effect.gen(function* () {
@@ -886,7 +873,7 @@ diff --git a/src/Apply.ts b/src/Apply.ts
        const state = yield* yield* State;
        const stack = yield* Stack;
        const stage = yield* Stage;
-@@ -276,7 +309,7 @@
+@@ -276,7 +308,7 @@
        // -> RISK: some UPDATEs may not be reversible (i.e. trigger replacements)
        // TODO(sam): should pivot be done separately? E.g shift traffic?
  
@@ -985,15 +972,13 @@ diff --git a/src/Cloudflare/D1/ApplyMigrations.ts b/src/Cloudflare/D1/ApplyMigra
        Effect.map(
          (result) =>
            (result.result[0]?.results ?? []) as Array<Record<string, unknown>>,
-@@ -65,8 +65,11 @@
+@@ -65,8 +65,9 @@
          .map((statement) =>
            statement.endsWith(";") ? statement : `${statement};`,
          )
 -        .join("\n"),
 +        ,
      ).pipe(
-+      // A failed response does not establish whether the SQL committed.
-+      // Metadata calls outside this executor keep their configured retries.
 +      CloudflareRetry.none,
        Effect.asVoid,
        Effect.mapError(
@@ -1031,17 +1016,6 @@ diff --git a/src/Cloudflare/D1/index.ts b/src/Cloudflare/D1/index.ts
 diff --git a/src/Cloudflare/Workers/WorkerProvider.ts b/src/Cloudflare/Workers/WorkerProvider.ts
 --- a/src/Cloudflare/Workers/WorkerProvider.ts
 +++ b/src/Cloudflare/Workers/WorkerProvider.ts
-@@ -4221,8 +4221,8 @@
-         // possible when the script already has a live deployment to split
-         // traffic against (otherwise the first deploy takes 100%), and only
-         // for changes a version can carry — code, bindings, compatibility
--        // settings, cache. Script-level settings in the upload metadata
--        // (tags, observability, limits, placement, logpush) keep their live
-+        // settings, cache, and placement. Script-level settings in the upload metadata
-+        // (tags, observability, limits, logpush) keep their live
-         // values until the next full deploy, matching
-         // `wrangler versions upload` semantics.
-         if (
 @@ -4261,6 +4261,7 @@
                  compatibilityDate: metadata.compatibilityDate,
                  compatibilityFlags: metadata.compatibilityFlags,
@@ -1050,13 +1024,10 @@ diff --git a/src/Cloudflare/Workers/WorkerProvider.ts b/src/Cloudflare/Workers/W
                  annotations:
                    news.version?.alias !== undefined ||
                    news.version?.message !== undefined ||
-@@ -5587,6 +5588,19 @@
+@@ -5587,6 +5588,16 @@
              // with this Worker — see readWorkerRoutes. Empty-array props
              // (`domain: []`, `routes: []`, `crons: []`) still observe so we
              // can detect drift and converge deletions.
-+            // versionId is the last upload receipt, not the current traffic
-+            // deployment. Retain it only while the immutable version exists;
-+            // omitting it on every read creates false gradual-rollout drift.
 +            const uploadedVersionId = output?.versionId
 +              ? yield* workers.getScriptVersion({
 +                  accountId,
@@ -1070,7 +1041,7 @@ diff --git a/src/Cloudflare/Workers/WorkerProvider.ts b/src/Cloudflare/Workers/W
              const observeDomains = shouldObserveWorkerDomains(olds, output);
              const observeRoutes = shouldObserveWorkerRoutes(olds, output);
              const observeCrons = shouldObserveWorkerCrons(olds, output);
-@@ -5704,6 +5718,7 @@
+@@ -5704,6 +5715,7 @@
                // (a getPhas call per known zone on every read); carry the
                // cleanup list forward like any other stable cache.
                affinityZoneIds: output?.affinityZoneIds,

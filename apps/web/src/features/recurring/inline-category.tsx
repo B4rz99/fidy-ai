@@ -3,7 +3,6 @@ import { InlineChoiceDropdown } from "@/ui/components/choice-dropdown";
 import { CategoryVisual } from "@/ui/components/category-visual";
 import type { Category, Occurrence, Save } from "./model";
 
-/** Occurrence edits leave other dates and historical fulfillments intact. */
 export const InlineRecurringCategory = ({
   item,
   categories,

@@ -64,7 +64,7 @@ const requireStageNode = (node: Plan["resources"][string]): void => {
     after: node.action === "noop" ? node.state.props : node.props,
   });
 };
-/** Staging changes only destinations of existing Access applications. Worker versions and all store resources are outside this plan. */
+
 export const requireHostPlan = (plan: Plan): void => {
   const rows = describePlan(plan),
     expected = new Set([...Object.keys(existingDependencies), ...stagedAccessApplications]);

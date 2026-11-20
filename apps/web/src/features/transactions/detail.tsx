@@ -288,8 +288,6 @@ const DeletionPanel = ({
     </DetailFrame>
   );
 };
-// Admission uses the inspected revision; the mounted Correction then owns its draft and
-// canonical history recovery, including revisions newer than that inspection snapshot.
 const useEditingAdmission = (input: InspectedProps): boolean => {
   const [admitted, setAdmitted] = useState(false);
   const editing = input.mode._tag === "Editing";

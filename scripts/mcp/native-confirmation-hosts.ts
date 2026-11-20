@@ -80,7 +80,7 @@ const requireCheck = (
   message: string
 ): Effect.Effect<void, never, never> | Effect.Effect<never, LocalProofFailure, never> =>
   passed ? Effect.void : Effect.fail(new LocalProofFailure({ message }));
-/** Reads one local confirmation fixture response within its byte and complete-request deadlines. */
+
 export const requestLocalConfirmationBridge = <A>({
   path,
   codec,

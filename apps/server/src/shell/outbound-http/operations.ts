@@ -30,18 +30,12 @@ const WompiPublicKey = Schema.String.check(
   Schema.isPattern(/^pub_(?:test|prod)_[A-Za-z0-9_-]{8,}$/u)
 );
 
-/**
- * Executes a request through its closed provider destination policy. Callers provide no URL,
- * provider credential, headers, redirect choice, tracing choice, or byte limit and receive only
- * bounded response bytes, explicitly retained headers, or a coordinate-free failure.
- */
 export type OutboundHttpService = Readonly<{
   readonly execute: (
     request: OutboundHttpRequest
   ) => Effect.Effect<OutboundHttpResponse, OutboundHttpFailure>;
 }>;
 
-/** Configuration-scoped, bounded Access signing-key lookup; requests cannot select a destination. */
 export const makeAccessSigningKeysOutboundHttp = (
   input: Readonly<{
     issuer: string;
@@ -49,7 +43,6 @@ export const makeAccessSigningKeysOutboundHttp = (
   }>
 ): OutboundHttpService => makeCloudflareAccessSigningKeysHttp(input);
 
-/** A Kapso-only Outbound HTTP authority; every other provider request fails closed. */
 export const makeKapsoOutboundHttp = (
   input: Readonly<{
     readonly apiKey: Redacted.Redacted<string>;
@@ -64,7 +57,6 @@ export const makeKapsoOutboundHttp = (
     digest: Option.none(),
   });
 
-/** Execute only Resend requests using the supplied credential and client; other providers fail closed. */
 export const makeResendOutboundHttp = (
   input: Readonly<{
     apiKey: Redacted.Redacted<string>;
@@ -79,9 +71,6 @@ export const makeResendOutboundHttp = (
     digest: Option.none(),
   });
 
-/** Restricts Worker-owned Wompi credentials to bounded provider transport. The optional reviewed
- * OTP policy authorizes only synthetic Sandbox proof requests; Production always refuses them.
- */
 export const makeWompiOutboundHttp = (
   input: Readonly<{
     environment: WompiEnvironment;
@@ -104,7 +93,6 @@ export const makeWompiOutboundHttp = (
     digest: Option.some(input.digest),
   });
 
-/** Authority to reach an external provider through the published Outbound HTTP policy. */
 export class OutboundHttp extends Context.Service<OutboundHttp, OutboundHttpService>()(
   "@fidy/server/shell/outbound-http/operations/OutboundHttp"
 ) {
@@ -140,7 +128,6 @@ export class OutboundHttp extends Context.Service<OutboundHttp, OutboundHttpServ
   );
 }
 
-/** Construct the fixed, bounded, no-redirect Google transport under shared provider telemetry policy. */
 export const makeGoogleOutboundHttp = (
   input: Readonly<{
     clientId: string;
@@ -150,7 +137,6 @@ export const makeGoogleOutboundHttp = (
   }>
 ): ProviderOidcHttpService => oidcHttp({ ...input, provider: "google" });
 
-/** Construct the fixed Microsoft common-authority transport with bounded, secret-free telemetry. */
 export const makeMicrosoftOutboundHttp = (
   input: Readonly<{
     clientId: string;
@@ -160,17 +146,14 @@ export const makeMicrosoftOutboundHttp = (
   }>
 ): ProviderOidcHttpService => oidcHttp({ ...input, provider: "microsoft" });
 
-/** Fixed, anonymous GitHub release transport under shared response and telemetry policy. */
 export const makeCliReleaseOutboundHttp = (
   httpClient: HttpClient.HttpClient
 ): CliReleaseHttpService => cliReleaseHttp(httpClient);
 
-/** Construct the fixed sandbox transport; the native composition supplies its certificate-bound client. */
 export const makeBancolombiaSandboxOutboundHttp = (
   client: HttpClient.HttpClient
 ): BancolombiaSandboxHttpService => bancolombiaSandboxHttp(client);
 
-/** Fixed OpenAI transport with bounded responses, no redirects, and secret-free telemetry. */
 export const makeOpenAiOutboundHttp = (
   input: Readonly<{
     apiKey: Redacted.Redacted<string>;

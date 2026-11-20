@@ -43,7 +43,6 @@ const checkpointStatements = (
     .bind(checkpoint.generation),
 ];
 
-/** An uncertain initial publication keeps ordinary data access and restore release fenced. Commit the returned checkpoint with the exact request transition. */
 export const publishDeletionMarker = (
   input: Readonly<{
     configuration: ErasureRecoveryConfiguration;
@@ -105,7 +104,6 @@ const installCase = (
     return previous;
   }).pipe(Effect.mapError(() => new ErasureUnavailable()));
 
-/** Commit the returned assertions and generation update with the caller's exact disposition change. A failed native commit leaves ordinary data units fenced. */
 export const prepareCheckpoint = (
   configuration: ErasureRecoveryConfiguration
 ): Effect.Effect<ReadonlyArray<D1PreparedStatement>, ErasureUnavailable> =>

@@ -23,14 +23,12 @@ const toBudget = (row: typeof Row.Type): Budget => ({
 });
 const decodeBudget = Schema.decodeUnknownEffect(Schema.toType(Budget));
 
-/** Decode a present retained Budget; corrupt storage is not row absence. */
 export const budgetFromRow = (raw: unknown): Effect.Effect<Budget, Schema.SchemaError> =>
   Effect.gen(function* () {
     const row = yield* decodeRow(raw);
     return yield* decodeBudget(toBudget(row));
   });
 
-/** Decode the retained cap columns together before validating complete Budget values. */
 export const budgetsFromRows = (
   raw: ReadonlyArray<unknown>
 ): Effect.Effect<ReadonlyArray<Budget>, Schema.SchemaError> =>

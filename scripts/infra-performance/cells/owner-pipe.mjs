@@ -1,4 +1,3 @@
-// Private runner pipe for the native D1 control-plane rehearsal. Only the bounded Ingress has a socket.
 import { createWriteStream } from "node:fs";
 import { createInterface } from "node:readline";
 import { Schema } from "effect";

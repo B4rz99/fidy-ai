@@ -67,7 +67,6 @@ def work_counts(key, rows):
     offered = completed = unknown = 0
     for row in rows:
         if key in row.get("timings", {}):
-            # The verified result proves one dispatch/completion, including on a paired digest mismatch.
             offered += 1
             completed += 1
         elif key in EVENT_CELLS and row.get("work") is not None:
@@ -82,7 +81,6 @@ def work_counts(key, rows):
     return dict(offered=offered, completed=completed, incomplete=offered-completed)
 
 
-# Export only controlled stage names, error classes and harness source coordinates.
 STAGES = {
     "runtime", "user", "transactions", "planning", "reviews", "counts", "launch",
     "pairing", "approval", "redeem", "bootstrap", "accountability-before", "read",
@@ -212,7 +210,6 @@ def prepare(api, front, port):
 
 def observation(path, env, destination, variant="d1"):
     with ExitStack() as stack:
-        # The preview process is terminated after each observation. Own its native D1 images here.
         scratch = stack.enter_context(tempfile.TemporaryDirectory(prefix="fidy-reference-"))
         api = stack.enter_context(
             serve(

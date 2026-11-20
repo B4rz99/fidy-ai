@@ -16,17 +16,11 @@ import { operationPolicy, userOwnedAgentScoped } from "~/shell/canonical-policy/
 const InsightParams = Schema.Struct({ id: InsightEventId });
 const InsightOperationFailures = [NotFound, ValidationFailed] as const;
 
-/** Canonical result pairing one delivered InsightEvent with its immutable provider evidence. */
 export const DeliveredInsight = Schema.Struct({
   insight: InsightEvent,
   deliveryAttempt: InsightDeliveryAttempt,
 });
 
-/**
- * Canonical contract for one caller's shared InsightEvent stream. Reads require
- * `read`; lifecycle movement requires `write`; ownership comes only from the
- * authenticated caller, never from request payloads or opaque event ids.
- */
 export const InsightsGroup = HttpApiGroup.make("insights")
   .add(
     HttpApiEndpoint.get("getRecurringDigestReport", "/insights/recurring/:id", {
@@ -169,5 +163,4 @@ export const InsightsGroup = HttpApiGroup.make("insights")
       )
   );
 
-/** Public failures for an absent owned occurrence or an invalid lifecycle movement. */
 export type InsightApiFailure = NotFound | ValidationFailed;

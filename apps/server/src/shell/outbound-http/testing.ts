@@ -7,19 +7,16 @@ import {
   HttpClientResponse,
 } from "effect/http";
 
-/** Raw request visible only to Outbound HTTP transport tests and compatibility adapter fixtures. */
 export type TestOutboundTransportRequest = HttpClientRequest.HttpClientRequest;
 
 export type TestOutboundTransport = HttpClient.HttpClient;
 export type TestOutboundTransportError = HttpClientError.HttpClientError;
 
-/** Test transport callback kept behind the Outbound HTTP owner instead of provider test modules. */
 export type TestOutboundTransportHandler = (
   request: TestOutboundTransportRequest,
   signal: AbortSignal
 ) => Effect.Effect<Response, HttpClientError.HttpClientError>;
 
-/** Builds the raw transport layer used only underneath a published Outbound HTTP layer in tests. */
 export const testOutboundTransportLayer = (
   handler: TestOutboundTransportHandler
 ): Layer.Layer<HttpClient.HttpClient> =>

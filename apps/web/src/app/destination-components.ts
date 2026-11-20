@@ -13,7 +13,6 @@ export const RecurringRoute = lazyRouteComponent(
   () => import("@/features/recurring/feature"),
   "RecurringRoute"
 );
-/** Code only; the browser adapter yields between destinations and can retire the queue. */
 export const destinationCodePreloads = [
   { path: "/app/needs-review", load: (): Promise<unknown> => ReviewWorkspace.preload() },
   {

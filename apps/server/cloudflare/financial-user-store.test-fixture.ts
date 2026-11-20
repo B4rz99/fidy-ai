@@ -26,7 +26,7 @@ export const transaction = "10000000-0000-4000-8000-000000000088";
 export const second = "10000000-0000-4000-8000-000000000089";
 export const instant = 1_700_000_000_000;
 type ServiceResponse = ReturnType<Awaited<ReturnType<Miniflare["getWorker"]>>["fetch"]>;
-/** The local client sends the original credentials and browser Origin to this instance’s Ingress binding. */
+
 export const nativeIngress =
   (runtime: Miniflare) =>
   (url: string, init: RequestInit): ServiceResponse => {
@@ -160,7 +160,6 @@ const sendNativeRequest = (runtime: Miniflare, request: Request): Promise<Respon
     );
 };
 
-/** Production ingress and two isolated User stores; only fixture setup and invariant probes see SQL. */
 export const makeNativeTransactionJourney = Effect.fn(function* (
   ceiling?: string,
   platform: typeof nativeUserPlatform = nativeUserPlatform

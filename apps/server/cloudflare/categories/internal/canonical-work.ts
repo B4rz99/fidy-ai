@@ -4,7 +4,6 @@ import { liveWebSessionAuthority } from "../../../src/shell/identity/operations"
 
 type BrowserCategorySubject = Readonly<{ id: string; userId: string; digest: Uint8Array }>;
 
-/** Count browser Category work only for its live User-owned WebSession. */
 export const recordBrowserCategoryWork = ({
   subject,
   id,

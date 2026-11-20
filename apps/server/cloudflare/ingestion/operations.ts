@@ -108,23 +108,14 @@ import {
 } from "./internal/statement-mutation";
 import { forwardingAddressMutationAdapter } from "./internal/forwarding-address-mutation";
 
-/** Atomically publish an authenticated image for review with its media unit, attribution and
- * capacity reservation. A 202 acknowledges admission, never extraction or Transaction capture.
- * Exact-event replay preserves the identity and original evidence expiry without restoring material
- * or consuming another unit. Resolution and metadata retention are independent of evidence expiry.
- * A 503 can follow publication; retry the exact event to reconcile its outcome.
- */
 export const acceptWhatsAppMedia = (input: MediaAdmissionInput): Effect.Effect<Response> =>
   admitMedia(input);
 
-/** Share installed queries with the verified upload conversation without borrowing credentials. */
 export const readHeldStatementQuery: typeof heldQuery = (input) => heldQuery(input);
 
-/** Compose clarification deadlines and permanent session boundaries in Agent's lifecycle unit. */
 export const prepareStatementSessionActivity: typeof sessionActivity = (input) =>
   sessionActivity(input);
 
-/** Admit direct attachment evidence in Agent's guarded Turn transaction. */
 export const prepareStatementDocumentAdmission: typeof documentAdmission = (input) =>
   documentAdmission(input);
 type HeldStatementDocumentWork = Readonly<{
@@ -136,9 +127,6 @@ type HeldStatementDocumentWork = Readonly<{
   current: number;
 }>;
 
-/** Recover retained bytes without a download or new charge; otherwise admit, retrieve and stage
- * the live Turn's document, releasing its upload lease. The reference grants no publication authority.
- */
 export const recoverHeldStatementDocument = (
   work: HeldStatementDocumentWork
 ): Effect.Effect<StagedStatementBytes, StatementDocumentUnavailable> =>
@@ -180,78 +168,70 @@ export const recoverHeldStatementDocument = (
     );
   });
 
-/** Read only the admitted upload's media identity under live held authority. */
 export const readHeldStatementDocument: typeof readDocument = (input) => readDocument(input);
 export const readHeldStatementDocumentSubmission: typeof readDocumentSubmission = (input) =>
   readDocumentSubmission(input);
 
-/** Share canonical row settlement with Agent's held, verified origin-session authority. */
 export const prepareHeldStatementReviewDecision: typeof heldReview = (input) => heldReview(input);
-/** Share canonical cancellation with Agent's held, verified origin-session authority. */
+
 export const prepareHeldStatementAbandonment: typeof heldAbandon = (input) => heldAbandon(input);
 
-/** Prepare a canonical row decision with capture, erasure, entitlement and Audit in one unit. */
 export const prepareStatementReviewDecision: typeof prepareReview = (input) => prepareReview(input);
-/** Prepare permanent explicit abandonment under live caller authority. */
+
 export const prepareStatementAbandonment: typeof prepareAbandon = (work) => prepareAbandon(work);
-/** Attribute a stale or foreign clarification without exposing source evidence. */
+
 export const statementClarificationRefusal: typeof legacyReviewRefusal = (input) =>
   legacyReviewRefusal(input);
 
-/** Publish staged bytes and verified origin through the shared hosted canonical unit. */
 export const prepareHeldStatementSubmission: typeof heldSubmission = (work) => heldSubmission(work);
 
-/** Stage bounded bytes under a live User session; the result grants no extraction authority. */
 export const uploadStagedStatement: typeof uploadStatement = (input) => uploadStatement(input);
-/** Read only the current caller's public submission lifecycle, with live authority and Audit. */
+
 export const readStatementSubmission: typeof readSubmission = (input) => readSubmission(input);
-/** Decode the bounded submission handle without accepting bytes or untrusted storage locators. */
+
 export const submitForExtractionInput: typeof decodeSubmission = (input) => decodeSubmission(input);
-/** Return the same closed unavailable answer without parser or storage details. */
+
 export const unavailableStatement = (): Response => unavailable();
-/** Read the owned forwarding address and monthly allowance under the caller's current authority. */
+
 export const forwardingAddressResponse: typeof addressResponse = (...input) =>
   addressResponse(...input);
-/** Read one User's decoded forwarding address after the caller's guarded unit commits. */
+
 export const readForwardingAddress: typeof readAddress = (...input) => readAddress(...input);
-/** Read the caller's bounded visible review lifecycle, retaining no other User's evidence. */
+
 export const listNeedsReviewItems: typeof listReview = (input) => listReview(input);
-/** Finalize one bounded statement chunk under the existing explicit User coordinator. */
+
 export const processStatementSubmission: typeof processSubmission = (input) =>
   processSubmission(input);
-/** Retain a visible closed failure and conserved completed-row accounting for interrupted extraction. */
+
 export const failStatementSubmission: typeof failSubmission = (input) => failSubmission(input);
-/** Recheck User, Consent, bytes and source eligibility before atomic Transaction-or-review finalization. */
+
 export const processForwardedEmail: typeof processEmail = (input) => processEmail(input);
-/** Prepare admission and outbox publication for the caller's D1 unit; no nested commit is made. */
+
 export const prepareStatementSubmission: typeof statementMutationAdapter.prepare = (work) =>
   statementMutationAdapter.prepare(work);
-/** Present only committed canonical submission state. */
+
 export const presentStatementSubmission: typeof statementMutationAdapter.present = (value) =>
   statementMutationAdapter.present(value);
-/** Attribute invalid submission input with the owner's metadata-only refusal contract. */
+
 export const invalidStatementSubmission: typeof statementMutationAdapter.invalidRefusal = (work) =>
   statementMutationAdapter.invalidRefusal(work);
 
-/** Prepare idempotent forwarding-address access and its Audit for the caller's D1 unit. */
 export const prepareForwardingAddress: typeof forwardingAddressMutationAdapter.prepare = (work) =>
   forwardingAddressMutationAdapter.prepare(work);
-/** Present only the owned committed forwarding address. */
+
 export const presentForwardingAddress: typeof forwardingAddressMutationAdapter.present = (value) =>
   forwardingAddressMutationAdapter.present(value);
-/** Keep malformed forwarding-address calls on the closed canonical refusal path. */
+
 export const invalidForwardingAddress: typeof forwardingAddressMutationAdapter.invalidRefusal = (
   work
 ) => forwardingAddressMutationAdapter.invalidRefusal(work);
 
-/** Observe at most eight pending identities for private operational health; this is not execution authority. */
 export const prepareIngestionPendingWorkObservation: typeof pendingIngestionWork = (input) =>
   pendingIngestionWork(input);
-/** Observe bounded due retention timestamps without exposing retained personal evidence. */
+
 export const prepareIngestionRetentionObservation: typeof overdueIngestionRetention = (input) =>
   overdueIngestionRetention(input);
 
-/** Reject malformed statement input without echoing hostile bytes or diagnostics. */
 export const validationFailed: typeof validation = (message) => validation(message);
 
 export const browseReviewWorkspace = (input: ReviewQueryWork): Effect.Effect<Response> =>
@@ -268,23 +248,15 @@ export const prepareReviewEdit = (
 export const reviewRefusal = (input: ReviewAuditWork): CanonicalMutationRefusal =>
   refuseReview(input);
 
-/** Prepare the existing inbox observation in the browser admission snapshot. */
 export const prepareBoundReviewWorkspace: typeof prepareInbox = (request) => prepareInbox(request);
 
-/** Prepare browser-only source excerpts in the existing native observation. */
 export const prepareBoundReviewPageContext: typeof prepareContext = (request) =>
   prepareContext(request);
 
-/** Original selection composes with admission; bytes remain outside the native transaction. */
 export const prepareBoundReviewMaterial: typeof prepareMaterial = (input) => prepareMaterial(input);
 
-/** Compose the existing detail observation with native browser admission. */
 export const prepareBoundReviewItem: typeof prepareItem = (request) => prepareItem(request);
 
-/** Advance only the coordinator User's retained extraction identity. Settled means activity
- * termination, including failed, absent or foreign submissions; it never proves extraction success.
- * The first activity may materialize the complete bounded source; 32 bounds committed outcomes.
- */
 export const advanceStatementExtraction = (
   input: Readonly<{
     DB: D1Database;

@@ -228,7 +228,6 @@ const preparedGroup = (
   };
 };
 
-/** Correct the exact selection in one guarded commit; absent or stale members change no records. */
 export const prepareGroupCorrection = (work: Work): Effect.Effect<CanonicalMutationPreparation> =>
   Effect.gen(function* (): Effect.fn.Return<
     CanonicalMutationPreparation,

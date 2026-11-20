@@ -271,7 +271,6 @@ export const canonicalQueryOwner = (id: string): Option.Option<QueryOwner> =>
     )
   );
 
-/** The same installed statement queries also accept Agent's held conversation authority. */
 type HostedQueryOwner = (
   work: StatementDecisionWork & { caller: HostedCanonicalCaller; request: Request }
 ) => Effect.Effect<Response>;

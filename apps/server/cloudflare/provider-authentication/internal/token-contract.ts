@@ -2,7 +2,6 @@ import { Data, type Option } from "effect";
 import type { AuthenticationProvider } from "../../../src/shell/provider-authentication/contract";
 import type { ProviderConfiguration } from "../contract";
 
-/** Private, finite rejection evidence; never retains a provider cause or protocol value. */
 export class ProviderVerificationFailure extends Data.TaggedError("ProviderVerificationFailure")<{
   readonly reason:
     | "configuration_invalid"

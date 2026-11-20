@@ -188,11 +188,6 @@ const rateLimitRules: ReadonlyArray<Cloudflare.Ruleset.Rule> = [
   },
 ];
 
-/**
- * Production edge manifest consumed by Alchemy and release verification. It derives owned
- * hostnames from the topology authority and records the proof/replay owner for each reserved
- * machine ingress. Every enforcement action is non-interactive; no challenge rule exists.
- */
 export const edgeSecurityPolicy = {
   browserOrigin: browserOrigins.production,
   hsts: {

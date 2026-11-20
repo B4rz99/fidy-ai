@@ -9,14 +9,8 @@ import {
   SchemaAST,
 } from "effect";
 
-/** Values whose internal object representation is not part of a partial operation input. */
 type AtomicInput = DateTime.Utc | BigDecimal.BigDecimal | Option.Option<unknown>;
 
-/**
- * The values a handler may already know for a target operation input. Object
- * properties become optional recursively, arrays retain their cardinality
- * semantics, and atomic declarations remain indivisible.
- */
 export type PartialInput<Value> = Value extends AtomicInput
   ? Value
   : Value extends ReadonlyArray<unknown>
@@ -286,10 +280,5 @@ const partialInputAst = (ast: SchemaAST.AST): SchemaAST.AST => {
   return partial;
 };
 
-/**
- * Derives the runtime schema matching `PartialInput`: supplied values retain
- * their canonical codecs and checks, while object checks wait only for omitted
- * required input.
- */
 export const makePartialInputSchema = (schema: Schema.Top): PartialInputSchema =>
   Schema.make<PartialInputSchema>(partialInputAst(schema.ast));

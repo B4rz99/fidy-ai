@@ -9,7 +9,6 @@ type AmountInputProps = Omit<
 > &
   Readonly<{ value: string; width: "full" | "content" }>;
 
-/** Decimal drafts with end-caret editing. onValueChange retains localized separators; callers own exact Money validation. */
 export const AmountInput = ({
   value,
   width,

@@ -113,8 +113,6 @@ const compactHomogeneousArray = (schema: Record<string, unknown>): Record<string
     schema.items !== undefined &&
     JSON.stringify(schema.prefixItems[0]) === JSON.stringify(schema.items)
   ) {
-    // A homogeneous head/rest pair has the same validation as items alone.
-    // Keep minItems/maxItems; annotation and literal values are never traversed.
     const { prefixItems: _prefixItems, ...homogeneous } = schema;
     return homogeneous;
   }

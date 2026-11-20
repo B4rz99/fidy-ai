@@ -122,7 +122,6 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         yield* native(() => refused.arrayBuffer());
         const first = leases[0];
         if (first === undefined) return yield* Effect.die("Missing first resident");
-        // A later extension of the authoritative credential cannot extend previously acquired SDK scopes.
         yield* owner.exec(
           "UPDATE oauth_credentials SET expires_at_ms=? WHERE kind='access'",
           current + 60000

@@ -254,7 +254,7 @@ const supportApplication = Effect.fn(function* (
     policies: [{ name, decision: "allow", precedence: 1, sessionDuration: "15m", include }],
   });
 });
-/** Keep the reviewed name and wire type inspectable while Alchemy resolves the upstream value at apply. */
+
 export const bindPlannedText = Effect.fn(function* (
   worker: Cloudflare.Worker,
   values: Readonly<Record<string, string | Output<string>>>

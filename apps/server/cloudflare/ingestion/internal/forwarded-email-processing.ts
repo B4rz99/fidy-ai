@@ -70,8 +70,6 @@ const activeSource = `SELECT r.user_id FROM forwarded_email_receipts r
   AND r.outcome IS NULL`;
 const active = `EXISTS (${activeSource})`;
 
-// Only these fixed HTML tags may leave the personal-evidence boundary; never store tag names
-// supplied by the email, attributes, text, URLs, dimensions, or content-dependent lengths.
 const structuralTags = ["table", "tr", "td", "p", "span", "div"] as const;
 export const anonymizeStructure = (html: string): string => {
   const counts: Record<(typeof structuralTags)[number], number> = {
@@ -312,8 +310,6 @@ const settle = (
       material.interpretation._tag === "Interpreted"
         ? [...(yield* acceptedStatements(settlement))]
         : [reviewStatement(settlement)];
-    // The deterministic, versioned, allowlisted structural transform is the approval policy.
-    // Do not retain uncertain/unrecognized email structure indefinitely.
     if (Option.isSome(material.html) && material.interpretation._tag === "Interpreted") {
       const sampleId = yield* emailSecureRandom.uuidV4();
       statements.push(sampleStatement(settlement, sampleId, material.html.value));
@@ -340,9 +336,6 @@ const settle = (
     yield* attempt(() => input.DB.batch(statements));
   });
 
-/** Finalize one owned delivery under the User coordinator. R2/D1 failure rejects for redelivery;
- * uncertain email becomes visible review. Result, attestation, and outcome commit atomically.
- */
 export const processForwardedEmail = (input: Input): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {

@@ -195,13 +195,6 @@ const threeFractionCurrencies = new Set<(typeof currencyCodes)[number]>([
   "TND",
 ]);
 
-/**
- * A recognized monetary ISO 4217 denomination. This is the retained
- * snapshot of active currencies with defined fractional precision: ISO fund,
- * metal, accounting, testing, and no-currency codes are deliberately absent.
- * Currency is independent of ServiceMarket; accepting USD does not enable a
- * United States market or promise conversion to or from COP.
- */
 export const Currency = Schema.Literals(currencyCodes).annotate({
   identifier: "Currency",
   description:
@@ -211,7 +204,6 @@ export type Currency = typeof Currency.Type;
 
 export type CurrencyMetadata = {
   readonly alphabeticCode: Currency;
-  /** Maximum decimal places ISO 4217 assigns to ordinary values in this Currency. */
   readonly fractionalDigits: 0 | 2 | 3 | 4;
 };
 
@@ -225,11 +217,6 @@ const fractionalDigits = (currency: Currency): CurrencyMetadata["fractionalDigit
   return currency === "UYW" ? 4 : 2;
 };
 
-/**
- * Reads the retained ISO metadata for an accepted Currency. Every member of
- * `Currency` has an answer from the static snapshot above; changing an ISO list
- * later must not erase metadata needed by existing Money.
- */
 export const currencyMetadata = (alphabeticCode: Currency): CurrencyMetadata => ({
   alphabeticCode,
   fractionalDigits: fractionalDigits(alphabeticCode),
@@ -240,11 +227,6 @@ const zero = BigDecimal.make(0n, 0);
 
 type ReadonlyBigDecimal = Readonly<BigDecimal.BigDecimal>;
 
-/**
- * Immutable view for decisions over an already-validated Money value. Callers guarantee a
- * non-negative exact amount within the Currency's fractional precision; zero remains valid
- * until an owning operation rejects it, and arithmetic requires equal Currency values.
- */
 export type ReadonlyMoney = {
   readonly amount: ReadonlyBigDecimal;
   readonly currency: Currency;
@@ -265,7 +247,6 @@ const formatPlainDecimal = (amount: ReadonlyBigDecimal): string => {
   return `${digits.slice(0, decimalAt)}.${digits.slice(decimalAt)}`;
 };
 
-/** Encodes an accepted decimal amount as normalized, non-exponent plain text. */
 export const encodeMoneyAmount = formatPlainDecimal;
 
 const MoneyAmount = Schema.String.check(
@@ -275,8 +256,6 @@ const MoneyAmount = Schema.String.check(
 ).pipe(
   Schema.decodeTo(
     Schema.BigDecimal.check(Schema.isGreaterThanOrEqualToBigDecimal(zero)),
-    // Decoding reports unparsable text as an issue instead of throwing; encoding
-    // keeps the normalized plain-decimal spelling `BigDecimal.format` does not give.
     new SchemaTransformation.Transformation(
       SchemaTransformation.bigDecimalFromString.decode,
       SchemaGetter.transform(formatPlainDecimal)
@@ -297,13 +276,6 @@ const MoneyShape = Schema.Struct({
     "A non-negative exact decimal amount together with its ISO 4217 Currency. Currency precision is enforced and no conversion is implied.",
 });
 
-/**
- * Non-negative exact decimal value in one Currency. Decimal text preserves the
- * value across JSON, Currency controls the allowed fractional precision, and
- * encoding is normalized plain notation. Zero is valid until an owning
- * operation requires movement; arithmetic and comparison require equal
- * Currency and never perform FX conversion.
- */
 export const Money = MoneyShape.check(
   Schema.makeFilter<ReadonlyMoney>((money) => {
     const usedDigits = Math.max(0, BigDecimal.normalize(money.amount).scale);
@@ -318,7 +290,6 @@ export const Money = MoneyShape.check(
 ).annotate({ identifier: "Money" });
 export type Money = typeof Money.Type;
 
-/** Equal-Currency arithmetic was requested with two different denominations. */
 export class CurrencyMismatch extends Data.TaggedError("CurrencyMismatch")<{
   readonly left: Currency;
   readonly right: Currency;
@@ -332,7 +303,6 @@ const requireSameCurrency = (
     ? Effect.void
     : Effect.fail(new CurrencyMismatch({ left: left.currency, right: right.currency }));
 
-/** Adds two Money values exactly, failing instead of mixing denominations. */
 export const addMoney = (operands: {
   readonly left: ReadonlyMoney;
   readonly right: ReadonlyMoney;
@@ -346,7 +316,6 @@ export const addMoney = (operands: {
     )
   );
 
-/** Compares two Money values in the same Currency, failing when they differ. */
 export const compareMoney = (operands: {
   readonly left: ReadonlyMoney;
   readonly right: ReadonlyMoney;
@@ -369,7 +338,6 @@ const groupCurrenciesMatch = Schema.makeFilter<
     : undefined;
 });
 
-/** Separate exact inflow and outflow sums for one Currency. */
 export const MoneyGroup = Schema.Struct({
   currency: Currency,
   inflow: Money,
@@ -379,7 +347,6 @@ export const MoneyGroup = Schema.Struct({
   .annotate({ identifier: "MoneyGroup" });
 export type MoneyGroup = typeof MoneyGroup.Type;
 
-/** Immutable view for decisions over an already-validated MoneyGroup. */
 export type ReadonlyMoneyGroup = {
   readonly currency: Currency;
   readonly inflow: ReadonlyMoney;
@@ -401,17 +368,11 @@ const deterministicCurrencyOrder = Schema.makeFilter<
   return undefined;
 });
 
-/** Currency groups in unique alphabetic order; empty means no Money was retained. */
 export const MoneyGroups = Schema.Array(MoneyGroup)
   .check(deterministicCurrencyOrder)
   .annotate({ identifier: "MoneyGroups" });
 export type MoneyGroups = typeof MoneyGroups.Type;
 
-/**
- * Groups Money by Currency in alphabetic order, keeping direction-separated
- * sums and omitting a Currency when both sums are zero. No net or converted
- * total is manufactured.
- */
 export const groupMoney = (movements: {
   readonly inflows: ReadonlyArray<ReadonlyMoney>;
   readonly outflows: ReadonlyArray<ReadonlyMoney>;

@@ -92,8 +92,6 @@ def credentials(binary, root):
             'Credential verification requires an isolated GitHub-hosted runner')
     native('empty')
     print('Native empty-slot preflight passed.', flush=True)
-    # macOS Keychain resolution depends on HOME. Keep the disposable runner's
-    # initialized home; a made-up home does not have an initialized native store.
     home = Path(os.environ['HOME']) if platform.system() == 'Darwin' else root / 'home'
     directory = home / '.fidy' / 'cli'
     require(not directory.exists() and not directory.is_symlink(),
@@ -102,8 +100,6 @@ def credentials(binary, root):
     metadata = directory / 'grant.json'
     bearer = 'fin_relcheck_' + secrets.token_urlsafe(32)
     if platform.system() == 'Darwin':
-        # security reads the synthetic password from stdin, never process arguments.
-        # Trust these exact executables on this disposable CI-only credential.
         command = shlex.join(['add-generic-password', '-a', 'login',
                               '-s', 'com.fidy.cli.api.fidyapp.com', '-T', str(binary),
                               '-T', shutil.which('bun'), '-w', bearer])

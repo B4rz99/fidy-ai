@@ -5,11 +5,10 @@
 - **Amended:** 2026-10-08
 - **Related:** [ADR 0020 Provider authentication and recovery](./0020-mandatory-verified-email-authentication-and-recovery.md)
 
-The accepted [storage and routing migration](0041-per-user-durable-object-storage-direction.md#one-shared-lookup-object)
-places unbound attempts in one shared lookup object, then permanently hands completion to the
-destination User. Browser Login remains the sole session issuer; exact proof consumption and
-same-User ready-pairing supersession remain atomic inside that User. The current database
-mechanics below apply until migration implementation.
+[ADR 0041](0041-per-user-durable-object-storage-direction.md#one-shared-lookup-object)
+places unbound attempts in Directory and permanently hands completion to the destination User.
+Browser Login remains the sole session issuer. Exact proof consumption and same-User ready-pairing
+supersession remain atomic inside that User.
 
 ## Context
 
@@ -23,7 +22,7 @@ transport the browser's complete proof.
 
 ## Decision
 
-Web login is browser-initiated pairing at the stable web entry `https://fidyapp.com/auth/pair`, not a
+Web login is browser-initiated pairing at the stable web entry `https://app.fidyapp.com/auth/pair`, not a
 provider-delivered magic link. This supersedes only ADR 0002's former `/auth/magic` entry. The browser
 obtains and retains a high-entropy private verifier and displays a short-lived public user code. A
 User may approve the pairing through their verified WhatsApp association, prove their
@@ -70,3 +69,19 @@ surviving a total Kapso, Meta, or Resend compromise remains out of scope.
   the existing User.
 - **Mandatory passkey:** deferred because it adds another enrollment and recovery lifecycle beyond
   the MVP threat model.
+
+The public pairing and redemption endpoints normalize malformed, foreign, and terminal inputs to
+the same closed refusal. Polling cadence is surfaced through Retry-After. A valid proof before
+approval returns a pending response. Successful redemption discloses the bearer through the
+host-only WebSession cookie and carries no bearer or User payload.
+
+Session-only checks can establish current credential state for privacy and legal receipt reads
+after Processing Consent withdrawal. They do not establish current Consent. First-document
+receipt lookup resolves the same live credential and observed state in one snapshot. Historical
+ownership remains available for accountability. Pairing pruning keeps references from retained
+sessions even after expiry or revocation.
+
+Browser proof consumption is single-use and atomic with the exact session issuance. Native
+registration precedes the local commit. A lost acknowledgment can follow a successful commit
+and cannot establish that another issuance is safe. Approval ordering uses the owner's strict
+row order. Retired pairing references remain available for erasure alone.

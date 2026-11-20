@@ -103,7 +103,7 @@ const commitApproval = (
       prepareChangedRowAssertion({ db: input.db, scope: "oauth_atomic" }),
     ]);
   });
-/** Publishes the exact reviewed grant, Consent and callback code as one indivisible unit. */
+
 export const approveRequest = (
   input: ApprovalInput
 ): Effect.Effect<

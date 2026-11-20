@@ -304,7 +304,6 @@ const verifyRecurringReadAnswer = (answer: unknown): Effect.Effect<void, HostedI
     }
   });
 
-/** A maintained plan is distinct from both historical detection and a past occurrence's state. */
 export const verifyRecurringPlanRead = (
   inference: HostedInferenceService
 ): Effect.Effect<void, HostedInferenceError> =>

@@ -6,7 +6,6 @@ import { Option } from "effect";
 import { useSession } from "@/session/session-context";
 import { type JSX, Suspense, useState } from "react";
 
-/** Keep the visited inbox in its authentication lifetime, including its evidence expiry timers. */
 export const RetainedReviewWorkspace = (): JSX.Element => {
   const { authentication } = useSession();
   const privacy = useRouterState({

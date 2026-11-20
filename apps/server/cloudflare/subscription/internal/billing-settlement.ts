@@ -132,7 +132,6 @@ const standingAndIntent = <Statement>(
   ];
 };
 
-/** Persist verified evidence and all resulting Subscription state as one guarded D1 atomic unit. */
 export const recordVerifiedBillingEvidence = (
   input: Settlement & { db: D1Database }
 ): Promise<void> =>

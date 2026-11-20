@@ -44,7 +44,6 @@ def main():
                         entry, "--outfile", str(destination)], cwd=root, check=True)
         artifacts[name] = hashlib.sha256(destination.read_bytes()).hexdigest()
 
-    # Restore only test instrumentation. Every application module and SQL migration comes from PIN.
     originals = {}
     try:
         for name in ("apps/server/cloudflare/browser-assessment.test-fixture.ts", "apps/server/cloudflare/d1-test-fixture.ts",
@@ -75,8 +74,6 @@ def main():
             mutation_target, = [r["id"] for r in observed["history"]["data"] if r["counterparty"] == "Evaluación 2"]
         (out / "expected.json").write_text(json.dumps({"history": observed["history"], "inspections": observed["inspections"], **({"workspace": observed["workspace"]} if args.browser_workspace else {})}, ensure_ascii=False))
     if args.snapshot or args.materialized:
-        # Use the same package and migration registry as the frozen Alchemy D1 provider.
-        # Only the executor is directed to the private local workerd binding.
         migration_module = root / "node_modules/alchemy/src/SQL/Migrations"
         path_literal = lambda path: json.dumps(str(path))
         entry = out / "derive-snapshot.mjs"

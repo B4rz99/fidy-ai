@@ -4,18 +4,14 @@ import type { PATSubject as AuthorizedPAT, PATAuthority } from "../../src/shell/
 import type { WebSessionAuthority } from "../../src/shell/web-session/contract";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 
-/** A recorded refusal stands, whether or not its owner retains Audit; other dispositions identify why durable recording failed. */
 export type CanonicalRefusalDisposition = "recorded" | "credential_refused" | "unavailable";
 
-/** A Transaction adapter dependency failure whose kind is classified and never exposed. */
 export class TransactionBoundaryFailure extends Data.TaggedError("TransactionBoundaryFailure")<{
   readonly cause: unknown;
 }> {}
 
-/** Shared, request-scoped identity and safe response vocabulary for the D1 Transaction adapters. */
 export type TransactionSubject = Readonly<{ id: string; userId: string; digest: Uint8Array }>;
 
-/** A private, admitted hosted Turn's live guard, minted by Agent rather than a transport caller. */
 export type HostedCanonicalCaller = Readonly<{
   _tag: "HostedCanonical";
   userId: string;
@@ -31,7 +27,6 @@ export type HostedCanonicalCaller = Readonly<{
   }>;
 }>;
 
-/** Live canonical callers retain their distinct browser, PAT, or OAuth authority. */
 export type TransactionCaller =
   | TransactionSubject
   | AuthorizedPAT
@@ -42,7 +37,6 @@ export type QueryCaller = TransactionCaller;
 
 export const transactionNoStore = { "cache-control": "no-store" };
 
-/** One canonical Transaction input is bounded by this many bytes, for every adapter that reads one. */
 export const maximumTransactionInputBytes = 4096;
 export const maximumTransactionGroupInputBytes = 524288;
 
@@ -66,17 +60,11 @@ export type TransactionMutationOperation =
   | "transactions.linkTransactions"
   | "transactions.unlinkTransactions";
 
-/**
- * Why one canonical Transaction mutation was refused without changing domain state. The outcome is
- * the metadata-only rejection Audit either an individual call or a batch child reports; `message`
- * is addressed to the calling agent and never carries input bodies or database detail.
- */
 export type TransactionRefusal = Readonly<{
   outcome: "not_found" | "validation_failed" | "resource_limit";
   message: string;
 }>;
 
-/** One live-authority gate over a credential table: its table, predicate, and bindings. */
 export type TransactionAuthority =
   | PATAuthority
   | WebSessionAuthority

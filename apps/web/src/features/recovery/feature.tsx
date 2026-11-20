@@ -126,7 +126,6 @@ const mountRecoveryTask =
     };
   };
 
-/** Mounted disclosure view; replacing its React identity irreversibly drops the code state. */
 const MountedRecoveryTask = ({ apiClient, clipboard }: RotationViewProps): JSX.Element => {
   const registry = useContext(RegistryContext);
   const [state, setState] = useState<DisclosureState>(() =>

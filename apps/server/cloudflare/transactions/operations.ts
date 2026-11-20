@@ -109,7 +109,6 @@ import {
 
 export * from "./contract";
 
-/** Read two complete exact selections at one financial revision; None is unavailable authority/readiness, never empty history. */
 export const readCompletePeriodAggregates = (
   input: Readonly<{
     db: D1Database;
@@ -119,20 +118,18 @@ export const readCompletePeriodAggregates = (
 ): Effect.Effect<Option.Option<CompletePeriodAggregates>, TransactionAggregatesUnavailable> =>
   readPeriodAggregates(input);
 
-/** Recheck processing Consent, complete readiness and the observed revision in the caller's atomic publication batch. */
 export const preparePeriodAggregateGuard = (
   input: Readonly<{ db: D1Database; userId: UserId; revision: number }>
 ): D1PreparedStatement => periodAggregateGuard(input);
-/** Read one owned capture after a peer's atomic source decision commits. The caller owns authority. */
+
 export const findCapturedTransaction: typeof ownerFindCapturedTransaction = (input) =>
   ownerFindCapturedTransaction(input);
 
-/** Read one User's effective-fact revision under current processing Consent; absence is no authorized history. */
 export const findRecurringSnapshot = (
   input: Readonly<{ db: D1Database; userId: UserId }>
 ): Effect.Effect<Option.Option<RecurringFactSnapshot>, RecurringFactsUnavailable> =>
   findSnapshot(input);
-/** Read at most 128 decoded effective outflows; None means the expected revision or authority changed. */
+
 export const readRecurringFacts = (
   input: Readonly<{
     db: D1Database;
@@ -141,145 +138,95 @@ export const readRecurringFacts = (
     cursor: BudgetContributionCursor;
   }>
 ): Effect.Effect<Option.Option<RecurringFactPage>, RecurringFactsUnavailable> => readFacts(input);
-/** Assert current processing Consent and the evaluated revision in the caller's atomic commit; refusal rolls it back. */
+
 export const prepareRecurringFactGuard = (
   input: Readonly<{ db: D1Database; userId: UserId; revision: number }>
 ): D1PreparedStatement => revisionGuard(input);
-/** Compose minimal fact-revision identities with a peer-owned bounded discovery; identities grant no access. */
+
 export const prepareFactRevisionProjection = (
   input: Readonly<{ db: D1Database; statement: OwnedStatement }>
 ): D1PreparedStatement => revisionProjection(input);
 
-/** Browse the same bounded canonical Transaction projection under live WebSession or PAT authority. */
 export const browseTransactions: typeof ownerBrowseTransactions = (...args) =>
   ownerBrowseTransactions(...args);
 
-/** Run the browser History query with live authority and accountability in the destination User's transaction. */
-/** Read one explicit Transactions privacy page with its fresh browser proof and local Audit. */
 export const readScopedPrivacyPage: typeof readPrivacyPage = (...args) => readPrivacyPage(...args);
 export const readUserHistory: typeof readLocalHistory = (...args) => readLocalHistory(...args);
 
-/** Return bounded same-User financial history for an explicit Titular access request; every page requires fresh browser proof and atomic Audit, never renewed processing Consent. */
 export const readPrivacyTransactions = (input: PrivacyTransactionsRead): Effect.Effect<Response> =>
   ownerReadPrivacyTransactions(input);
 
-/** Decode a bounded correction without treating omitted facts as explicit decisions. */
 export const correctionInput: typeof ownerCorrectionInput = (...args) =>
   ownerCorrectionInput(...args);
 
-/** Decode one bounded canonical pair without treating either id as authority. */
 export const transactionPairInput: typeof ownerTransactionPairInput = (...args) =>
   ownerTransactionPairInput(...args);
 
-/** Decode bounded canonical input before dispatching a mutation to the User coordinator. */
 export const transactionInput: typeof ownerTransactionInput = (...args) =>
   ownerTransactionInput(...args);
 
-/** Resolve a live WebSession on every canonical call; neither an object id nor a User id is authority. */
 export const transactionSession: typeof ownerTransactionSession = (...args) =>
   ownerTransactionSession(...args);
 
-/** Repair one User's projection in bounded pages; views stay unavailable until guarded cutover. */
 export const repairDashboardProjection: typeof ownerRepairDashboardProjection = (...args) =>
   ownerRepairDashboardProjection(...args);
 
-/** Record a metadata-only Transaction refusal under its child authority and render its own response. */
 export const transactionRefusal: typeof ownerTransactionRefusal = (...args) =>
   ownerTransactionRefusal(...args);
 
-/**
- * Decide one canonical Transaction capture against live caller authority, User context, and the
- * Category taxonomy. The returned statements are guard-chained writes; the caller's D1 unit
- * commits them or none of them.
- */
 export const prepareCapture: typeof ownerPrepareCapture = (...args) => ownerPrepareCapture(...args);
 
-/**
- * Decide one canonical Transaction correction against live caller authority and the revision the
- * caller observed. The returned statements are guard-chained writes; the caller's D1 unit commits
- * them or none of them.
- */
 export const prepareCorrection: typeof ownerPrepareCorrection = (...args) =>
   ownerPrepareCorrection(...args);
 
-/** Decide one canonical link against live authority and both retained candidates. */
 export const prepareLink: typeof ownerPrepareLink = (...args) => ownerPrepareLink(...args);
 
-/** Decide one canonical unlink against live authority and the pair's current decision state. */
 export const prepareUnlink: typeof ownerPrepareUnlink = (...args) => ownerPrepareUnlink(...args);
 
-/**
- * Read the records one committed Transaction child presents, or None when the unit read back an
- * incomplete set. The individual response and the atomic-batch child output encode the same value.
- */
 export const findTransactionValue: typeof ownerFindTransactionValue = (...args) =>
   ownerFindTransactionValue(...args);
 
-/** Decide a proved Transaction trigger refusal under the prepared child's exact caller authority. */
-
-/**
- * Prepare one statement Transaction and historical SourceAttestation for the caller's existing
- * User-coordinated outcome batch. The source query projects user_id for eligible work at commit;
- * a foreign source cannot authorize this User. Commit both writes with the unique source outcome
- * and its assertion. Category assignment and admission Consent remain with the caller.
- */
 export const prepareStatementCapture: typeof ownerPrepareStatementCapture = (input) =>
   ownerPrepareStatementCapture(input);
 
-/**
- * Prepare one notification-email Transaction and its captured evidence for the caller's existing
- * User-coordinated outcome batch. Both writes recheck a live same-User source query. Without
- * queuedAdmission they require current Consent. For bounded continuation after withdrawal, the
- * caller must supply the exact same-User unfinished, unexpired native admission originally queued
- * under active Consent. Malformed evidence fails before writes; commit both with the unique source
- * outcome and its assertion. Category assignment remains with the caller.
- */
 export const prepareNotificationEmailCapture: typeof ownerPrepareNotificationEmailCapture = (
   input
 ) => ownerPrepareNotificationEmailCapture(input);
 
-/** Read ready, decoded effective Transaction lists atomically with a caller-owned context snapshot. */
 export const readDashboardTransactions: typeof ownerReadDashboardTransactions = (input) =>
   ownerReadDashboardTransactions(input);
 
-/** Compose one exact interval with peer reads while retaining Transaction-owned SQL and decoding. */
 export const prepareTransactionAggregate: typeof ownerPrepareTransactionAggregate = (input) =>
   ownerPrepareTransactionAggregate(input);
 
-/** Compose exact aggregates under an admission-owned live same-User selection. */
 export const prepareBoundTransactionAggregate: typeof ownerPrepareBoundTransactionAggregate = (
   input
 ) => ownerPrepareBoundTransactionAggregate(input);
 
-/** Read exact Currency-preserving contributions over a bounded half-open UTC interval. */
 export const findDashboardAggregate: typeof ownerFindDashboardAggregate = (input) =>
   ownerFindDashboardAggregate(input);
 
-/** Read bounded ordered intervals through current Consent and consistent projection revisions. */
 export const findDashboardAggregateRanges: typeof ownerFindDashboardAggregateRanges = (input) =>
   ownerFindDashboardAggregateRanges(input);
 
-/** Prepare irreversible history removal under live authority and the observed revision. */
 export const prepareDeletion: typeof ownerPrepareDeletion = (input) => ownerPrepareDeletion(input);
 
 const PlanningMonthRow = Schema.Struct({
   month: Schema.String.check(Schema.isPattern(/^20[0-9]{2}-(?:0[1-9]|1[0-2])$/u)),
 });
 const maximumMonths = 1200;
-/** Read bounded same-User matching facts through their native owner. */
+
 export const readPlanningTransactions: typeof ownerReadPlanningTransactions = (input) =>
   ownerReadPlanningTransactions(input);
-/** Compose caller-owned context and independently complete matching ranges. */
+
 export const readPlanningTransactionSnapshot: typeof ownerReadPlanningTransactionSnapshot = (
   input
 ) => ownerReadPlanningTransactionSnapshot(input);
 
-/** Prepare effective matching facts and owner-selected references without an independent submission. */
 export const prepareBoundPlanningTransactions: typeof ownerPrepareBoundPlanningTransactions = (
   input
 ) => ownerPrepareBoundPlanningTransactions(input);
 
-/** Complete bounded month identities, without transferring financial facts to a peer. */
 export const readPlanningTransactionMonths = ({
   db,
   userId,
@@ -306,24 +253,19 @@ export const readPlanningTransactionMonths = ({
 export const prepareReviewedCapture: typeof ownerPrepareReviewedCapture = (input) =>
   ownerPrepareReviewedCapture(input);
 
-/** Return the canonical browser page before HTTP encoding; the owner retains authority and Audit. */
 export const readBrowserTransactionPage = (
   input: Parameters<typeof ownerReadBrowserTransactionPage>[0]
 ): ReturnType<typeof ownerReadBrowserTransactionPage> => ownerReadBrowserTransactionPage(input);
 
-/** Compose the existing initial history page and Audit in bootstrap's final snapshot. */
 export const prepareBrowserTransactionPage: typeof prepareInitialPage = (input) =>
   prepareInitialPage(input);
 
-/** Prepare an explicit revision-checked selection for one all-or-nothing correction. */
 export const prepareGroupCorrection: typeof ownerPrepareGroupCorrection = (input) =>
   ownerPrepareGroupCorrection(input);
 
-/** Native single or composed capture. Admission and completion belong to the enclosing User transaction. */
 export const captureLocalTransaction: typeof captureNative = (input, userId, current) =>
   captureNative(input, userId, current);
 
-/** Canonical operations whose financial authority lives in the destination UserStore. */
 export const isLocalTransactionOperation = (id: string): boolean =>
   [
     "transactions.createTransaction",
@@ -443,7 +385,7 @@ export const dispatchLocalTransaction = Effect.fn(
 
 export const readLocalTransactionAggregate: typeof localAggregate = (user, from, toExclusive) =>
   localAggregate(user, from, toExclusive);
-/** Supply complete effective list selections and exact financial ranges in the caller's local unit. */
+
 export const readLocalDashboardTransactions = Effect.fn(function* (
   user: UserId,
   input: Pick<DashboardTransactionRead<never>, "lists" | "ranges" | "categories">
@@ -467,7 +409,6 @@ export const readLocalDashboardTransactions = Effect.fn(function* (
   return { lists, ranges };
 });
 
-/** Read Effective Transactions in the calling UserStore transaction. */
 export const readLocalPlanningRange: typeof planningFacts.localPlanningRange = (user, range) =>
   planningFacts.localPlanningRange(user, range);
 export const readLocalPlanningReferences: typeof planningFacts.localPlanningReferences = (

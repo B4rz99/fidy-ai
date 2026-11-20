@@ -2,7 +2,6 @@ import type { UserId } from "../../../src/core/identity/contract";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { prepareConsentAction } from "../../consent/operations";
 
-/** Agent supplies its retained transcript proof; Insights owns the same-User event association. */
 export const prepareTranscriptAssociations = (
   input: Readonly<{
     db: D1Database;
@@ -24,7 +23,6 @@ export const prepareTranscriptAssociations = (
     },
   });
 
-/** This projection conveys association only; Agent still verifies the retained transcript and expiry. */
 export const transcriptAssociationQuery = (
   input: Readonly<{
     userId: UserId;

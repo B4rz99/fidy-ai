@@ -37,7 +37,6 @@ export const DashboardPeriod = Schema.Literals([
 ]);
 export type DashboardPeriod = typeof DashboardPeriod.Type;
 
-/** Dimension used to bucket one spending chart without changing monetary grouping. */
 export const SpendingGroupBy = Schema.Literals(["category", "day", "month"]);
 export type SpendingGroupBy = typeof SpendingGroupBy.Type;
 
@@ -50,11 +49,9 @@ const MetricLabel = Schema.NonEmptyString.check(Schema.isTrimmed()).check(
   Schema.isMaxLength(maximumDashboardLabelLength)
 );
 
-/** Currency-preserving monetary calculation supported by a custom metric. */
 export const MoneyAggregation = Schema.Literals(["sum", "average", "maximum"]);
 export type MoneyAggregation = typeof MoneyAggregation.Type;
 
-/** Presentation and jurisdiction applied when ephemeral widget data was calculated. */
 export const DashboardQueryContext = UserContext.annotate({ identifier: "DashboardQueryContext" });
 export type DashboardQueryContext = typeof DashboardQueryContext.Type;
 
@@ -71,7 +68,6 @@ const validAppliedPeriod = Schema.makeFilter<typeof AppliedDashboardPeriodShape.
     : { path: ["toExclusive"], issue: "Expected an instant after from" }
 );
 
-/** Half-open UTC interval resolved from a relative period in the applied time zone. */
 export const AppliedDashboardPeriod = AppliedDashboardPeriodShape.check(
   validAppliedPeriod
 ).annotate({ identifier: "AppliedDashboardPeriod" });
@@ -81,7 +77,6 @@ const TransactionSearch = Schema.NonEmptyString.check(Schema.isTrimmed()).check(
   Schema.isMaxLength(100)
 );
 
-/** Maximum number of recent Transactions requested by one list widget. */
 export const TransactionListLimit = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 50 }))
   .pipe(Schema.brand("TransactionListLimit"))
   .annotate({ identifier: "TransactionListLimit" });
@@ -92,7 +87,6 @@ const WidgetBase = {
   title: Schema.optionalKey(WidgetTitle),
 } as const;
 
-/** A time-bounded chart whose eventual Money output remains grouped by Currency. */
 export const SpendingChartWidget = Schema.Struct({
   ...WidgetBase,
   type: Schema.tag("spending-chart"),
@@ -102,7 +96,6 @@ export const SpendingChartWidget = Schema.Struct({
 }).annotate({ identifier: "SpendingChartWidget" });
 export type SpendingChartWidget = typeof SpendingChartWidget.Type;
 
-/** A current monthly Budget selected by its Category and explicit Currency. */
 export const BudgetBarWidget = Schema.Struct({
   ...WidgetBase,
   type: Schema.tag("budget-bar"),
@@ -111,7 +104,6 @@ export const BudgetBarWidget = Schema.Struct({
 }).annotate({ identifier: "BudgetBarWidget" });
 export type BudgetBarWidget = typeof BudgetBarWidget.Type;
 
-/** Raw recent Transactions; nested Money preserves each Transaction's Currency. */
 export const TransactionListWidget = Schema.Struct({
   ...WidgetBase,
   type: Schema.tag("transaction-list"),
@@ -121,7 +113,6 @@ export const TransactionListWidget = Schema.Struct({
 }).annotate({ identifier: "TransactionListWidget" });
 export type TransactionListWidget = typeof TransactionListWidget.Type;
 
-/** A monetary aggregation whose eventual result is grouped by Currency. */
 export const CustomMetricWidget = Schema.Struct({
   ...WidgetBase,
   type: Schema.tag("custom-metric"),
@@ -142,7 +133,6 @@ export const Widget = Schema.Union([
   .pipe(Schema.toTaggedUnion("type"));
 export type Widget = typeof Widget.Type;
 
-// `mapFields` keeps no struct-level annotation, so each template renames itself.
 const SpendingChartTemplate = SpendingChartWidget.mapFields(Struct.omit(["id"])).annotate({
   identifier: "SpendingChartTemplate",
 });
@@ -156,7 +146,6 @@ const CustomMetricTemplate = CustomMetricWidget.mapFields(Struct.omit(["id"])).a
   identifier: "CustomMetricTemplate",
 });
 
-/** Catalog-ready Widget config that receives identity only when it is added. */
 export const WidgetTemplate = Schema.Union([
   SpendingChartTemplate,
   BudgetBarTemplate,
@@ -167,16 +156,12 @@ export const WidgetTemplate = Schema.Union([
   .pipe(Schema.toTaggedUnion("type"));
 export type WidgetTemplate = typeof WidgetTemplate.Type;
 
-/** Orientation of a split: row is side-by-side and column is stacked. */
 export const Axis = Schema.Literals(["row", "column"]);
 export type Axis = typeof Axis.Type;
 
-/** Lowest persisted relative share for one Dashboard region. */
 export const minimumSplitWeight = 0.001;
-/** Highest persisted relative share for one Dashboard region. */
 export const maximumSplitWeight = 1000;
 
-/** Positive bounded finite number interpreted only relative to sibling weights. */
 export const SplitWeight = Schema.Finite.check(
   Schema.isBetween({ minimum: minimumSplitWeight, maximum: maximumSplitWeight })
 )
@@ -189,13 +174,11 @@ export type LayoutLeaf<Leaf> = Readonly<{
   readonly widget: Leaf;
 }>;
 
-/** One weighted child region whose share is relative only to its siblings. */
 export type WeightedLayoutChild<Leaf, Weight = SplitWeight> = Readonly<{
   readonly weight: Weight;
   readonly node: LayoutNodeFor<Leaf, Weight>;
 }>;
 
-/** Canonical row or column of at least two weighted child regions. */
 export type LayoutSplit<Leaf, Weight = SplitWeight> = Readonly<{
   readonly kind: "split";
   readonly axis: Axis;
@@ -247,7 +230,6 @@ export const makeLayoutNodeSchema = <Leaf extends Schema.Top>(
 };
 
 export const LayoutNode = makeLayoutNodeSchema({ leaf: () => Widget, identifier: "LayoutNode" });
-/** Recursive Dashboard layout whose in-order leaves define mobile order. */
 export type LayoutNode = typeof LayoutNode.Type;
 export type LeafNode = Extract<LayoutNode, { readonly kind: "leaf" }>;
 export type SplitNode = Extract<LayoutNode, { readonly kind: "split" }>;
@@ -269,7 +251,6 @@ type VisitContext = Readonly<{
   readonly path: ReadonlyArray<string | number>;
 }>;
 
-/** Finds the first structural invariant violation with its document-relative path. */
 export const findDashboardStructureIssue = (
   document: Readonly<DashboardDocumentShape>
 ): Option.Option<DashboardStructureIssue> => {
@@ -331,10 +312,6 @@ const validDocumentStructure = Schema.makeFilter<DashboardDocumentShape>((docume
   Option.toArray(findDashboardStructureIssue(document))
 );
 
-/**
- * The one persistent dashboard configuration for a User. Identity and ownership
- * come from authenticated operation context, not fields in this document.
- */
 export const DashboardDocument = DashboardDocumentShape.check(validDocumentStructure).annotate({
   identifier: "DashboardDocument",
 });
@@ -360,7 +337,6 @@ export const DashboardCatalogEntry = Schema.Struct({
 }).annotate({ identifier: "DashboardCatalogEntry" });
 export type DashboardCatalogEntry = typeof DashboardCatalogEntry.Type;
 
-/** Exact ordered collection of the four built-in direct-launch Widget presets. */
 export const DashboardCatalog = Schema.Tuple([
   DashboardCatalogEntry,
   DashboardCatalogEntry,
@@ -384,11 +360,9 @@ export type BesidePlacement = typeof BesidePlacement.Type;
 
 export const isBesidePlacement = Schema.is(BesidePlacement);
 
-/** Root or sibling-relative destination accepted by add and move edits. */
 export const Placement = Schema.Union([Schema.Literals(["top", "bottom"]), BesidePlacement]);
 export type Placement = typeof Placement.Type;
 
-/** Edit adding a fresh complete Widget at a structural destination. */
 export const AddWidget = Schema.Struct({
   op: Schema.tag("add-widget"),
   widget: Widget,
@@ -396,14 +370,12 @@ export const AddWidget = Schema.Struct({
 }).annotate({ identifier: "AddWidget" });
 export type AddWidget = typeof AddWidget.Type;
 
-/** Edit removing one Widget while retaining a non-empty canonical layout. */
 export const RemoveWidget = Schema.Struct({
   op: Schema.tag("remove-widget"),
   widgetId: WidgetId,
 }).annotate({ identifier: "RemoveWidget" });
 export type RemoveWidget = typeof RemoveWidget.Type;
 
-/** Edit moving an existing Widget without changing its identity or configuration. */
 export const MoveWidget = Schema.Struct({
   op: Schema.tag("move-widget"),
   widgetId: WidgetId,
@@ -418,7 +390,6 @@ export const SwapWidgets = Schema.Struct({
 }).annotate({ identifier: "SwapWidgets" });
 export type SwapWidgets = typeof SwapWidgets.Type;
 
-/** Exact in-order Widget identities naming one current leaf or compound layout region. */
 export const LayoutRegionSelector = Schema.TupleWithRest(Schema.Tuple([WidgetId]), [WidgetId])
   .check(Schema.isMaxLength(maximumWidgetsPerDashboard), Schema.isUnique())
   .annotate({ identifier: "LayoutRegionSelector" });
@@ -438,7 +409,6 @@ const RegionResizeSize = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("ratio"), ratio: LayoutRegionRatio }),
 ]);
 
-/** Edit changing the share of one exact non-root layout region. */
 export const ResizeRegion = Schema.Struct({
   op: Schema.tag("resize-region"),
   widgetIds: LayoutRegionSelector,
@@ -446,7 +416,6 @@ export const ResizeRegion = Schema.Struct({
 }).annotate({ identifier: "ResizeRegion" });
 export type ResizeRegion = typeof ResizeRegion.Type;
 
-/** Edit replacing a Widget's complete configuration at its existing region. */
 export const UpdateWidget = Schema.Struct({
   op: Schema.tag("update-widget"),
   widget: Widget,
@@ -466,7 +435,6 @@ export const DashboardEdit = Schema.Union([
   .pipe(Schema.toTaggedUnion("op"));
 export type DashboardEdit = typeof DashboardEdit.Type;
 
-/** One Category reference and its field relative to the Widget that carries it. */
 export type DashboardCategoryReference = Readonly<{
   readonly categoryId: CategoryId;
   readonly widgetId: WidgetId;
@@ -474,7 +442,6 @@ export type DashboardCategoryReference = Readonly<{
 }>;
 
 export type DashboardIssue = Readonly<{
-  /** `None` when the violation is about the document as a whole. */
   readonly path: Option.Option<string>;
   readonly message: string;
 }>;
@@ -488,12 +455,10 @@ export class WidgetNotFound extends Data.TaggedError("WidgetNotFound")<{
   readonly role: "edit-target" | "placement-target";
 }> {}
 
-/** The root layout has no sibling-relative region whose weight can change. */
 export class RootRegionResize extends Data.TaggedError("RootRegionResize")<{
   readonly widgetIds: LayoutRegionSelector;
 }> {}
 
-/** No current leaf or compound layout region has exactly the supplied Widget contents. */
 export class RegionNotFound extends Data.TaggedError("RegionNotFound")<{
   readonly widgetIds: LayoutRegionSelector;
 }> {}
@@ -502,7 +467,6 @@ export class SelfPlacement extends Data.TaggedError("SelfPlacement")<{
   readonly widgetId: WidgetId;
 }> {}
 
-/** Removing the only remaining Widget would make the dashboard empty. */
 export class LastWidgetRemoval extends Data.TaggedError("LastWidgetRemoval")<{
   readonly widgetId: WidgetId;
 }> {}
@@ -538,7 +502,6 @@ export type DashboardMetricFact =
       count: bigint;
     }>;
 
-/** One UTC range whose aggregated facts form one local Dashboard chart bucket. */
 export type DashboardProjectionRange = Readonly<{
   key: string;
   from: number;
@@ -557,7 +520,6 @@ export const DashboardBucket = Schema.Union([
 
 export type DashboardBucket = typeof DashboardBucket.Type;
 
-/** A validated spending bucket containing exact Currency-separated directional Money. */
 export const DashboardChartBucket = Schema.Struct({
   key: DashboardBucket,
   moneyGroups: MoneyGroups,

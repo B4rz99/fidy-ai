@@ -6,7 +6,6 @@ import { Option } from "effect";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { Badge } from "@/ui/components/badge";
 
-/** Mounted Review uses its own fresh count; other routes make the count-only observation. */
 export const ReviewPendingCount = (): JSX.Element => {
   const client = useRouter().options.context.apiClient;
   const match = useMatch({ from: "/authenticated/app/needs-review", shouldThrow: false });

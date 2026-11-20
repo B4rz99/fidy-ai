@@ -22,7 +22,6 @@ const nonceBytes = 32;
 const commandPrefix = "CONFIRMAR ";
 const modelCommand = new RegExp(`\\b${commandPrefix}[a-f0-9]{${nonceBytes * 2}}\\b`, "iu");
 
-/** Executable confirmation commands are host presentation, never model-generated prose. */
 export const guardModelConfirmationReply = (text: TranscriptText): TranscriptText =>
   modelCommand.test(text)
     ? TranscriptText.make(
@@ -30,7 +29,6 @@ export const guardModelConfirmationReply = (text: TranscriptText): TranscriptTex
       )
     : text;
 
-/** Identify only exact confirmation attempts, so malformed commands cannot become model prompts. */
 export const isHostedConfirmationAttempt = (text: TranscriptText): boolean =>
   text.startsWith(commandPrefix);
 const ConfirmationRow = Schema.Struct({
@@ -41,13 +39,11 @@ const ConfirmationRow = Schema.Struct({
 });
 type ConfirmationRow = typeof ConfirmationRow.Type;
 
-/** A User-visible host challenge, bound to precisely the model's validated canonical input. */
 export type PendingHostedConfirmation = Readonly<{ text: TranscriptText; command: string }>;
 type ConfirmationPreparation =
   | Readonly<PendingHostedConfirmation & { _tag: "Challenge" }>
   | Readonly<{ _tag: "Notice"; text: TranscriptText }>;
 
-/** Store a short-lived, single-use challenge before offering it through visible delivery. */
 type IssueConfirmationInput = Readonly<{
   db: D1Database;
   userId: UserId;
@@ -145,7 +141,6 @@ export const readWhatsAppConfirmation = ({
     );
   });
 
-/** Read only the most recent challenge for this stable User after its visible Turn completed. */
 const findHostedConfirmation = ({
   db,
   userId,
@@ -220,9 +215,6 @@ const confirmationTurnGuard = ({
   };
 };
 
-/** Consume once, or recover consumption by this exact live Pending Turn in the same channel.
- * Recovery rechecks authority without rewriting or lending another Turn's consumed challenge.
- */
 const consumeHostedConfirmation = ({
   db,
   subject,
@@ -275,7 +267,6 @@ const consumeHostedConfirmation = ({
       : Option.none();
   });
 
-/** One local attempt; reconstructed tasks retain the durable exact-Turn recovery protocol. */
 export type HostedConfirmationTask<A, E> = Readonly<{
   execute: () => Effect.Effect<Option.Option<A>, E>;
 }>;
@@ -326,9 +317,6 @@ const confirmationTask = <A, E>({
   };
 };
 
-/** Lookup and standalone reservation stay private to this hosted protocol. The original callback
- * owns execution lifetime and failure containment; reservation alone never proves mutation commit.
- */
 export const prepareHostedConfirmation = <A, E>({
   turnId,
   subject,

@@ -87,7 +87,6 @@ const decodeEvent = (raw: unknown): Option.Option<InsightEvent> =>
     });
   });
 
-/** Read the authoritative occurrence for one User; an opaque id alone grants no access. */
 export const findInsight = ({
   db,
   userId,
@@ -112,7 +111,6 @@ export const findInsight = ({
     Effect.mapError(() => new InsightUnavailable())
   );
 
-/** Insert one immutable scheduled occurrence; replay returns the original, never rewrites context. */
 export const generateInsight = ({
   db,
   userId,
@@ -164,7 +162,6 @@ export const generateInsight = ({
     return yield* findInsight({ db, userId, id: identity.value.id });
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
 
-/** Global due lookup reveals only bounded identities; the User coordinator must re-read the event. */
 export const discoverDueInsights = ({
   db,
   now,
@@ -197,7 +194,6 @@ type InsightCall = Readonly<{
   current: number;
 }>;
 
-/** Compose required accountability with the caller-owned read or mutation. */
 const insightAuditStatement = ({
   db,
   subject,
@@ -226,7 +222,6 @@ const insightAuditStatement = ({
   });
 };
 
-/** Account for the live caller inside the same unit as the query or refusal it attests. */
 const insightCallStatements = (input: InsightCall): ReadonlyArray<D1PreparedStatement> => {
   const { db, subject, current } = input;
   const authority = callerAuthority({ subject, current });
@@ -244,7 +239,6 @@ const insightCallStatements = (input: InsightCall): ReadonlyArray<D1PreparedStat
   ];
 };
 
-/** Record a refusal only under the live caller; failed authority leaves no partial accountability. */
 const recordInsightCall = (input: InsightCall): Effect.Effect<"recorded" | "unavailable"> =>
   Effect.tryPromise(() => input.db.batch([...insightCallStatements(input)])).pipe(
     Effect.map(() => "recorded" as const),
@@ -331,7 +325,6 @@ const pendingPageResponse = (
     );
   });
 
-/** One bounded canonical query over the same authoritative events delivery reads. */
 export const listPendingInsights = ({
   db,
   subject,
@@ -732,7 +725,6 @@ const observeOAuthInsight = (
     };
   });
 
-/** Prepare a guarded transition, its immutable send evidence, and its success Audit as one unit. */
 export const prepareInsightTransition = (
   input: TransitionInput
 ): Effect.Effect<CanonicalMutationPreparation> =>
@@ -760,7 +752,6 @@ export const prepareInsightTransition = (
     return transitionStatements(input, observed.review);
   }).pipe(Effect.orElseSucceed(failedPreparation));
 
-/** Read send evidence by User and event identity; never infer it from provider identity. */
 export const findInsightAttempt = ({
   db,
   userId,

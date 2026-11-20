@@ -26,9 +26,6 @@ const graphSources = (packageRoot, roots) => {
   ) {
     return roots;
   }
-  // Git includes every application and repository source file, including root configurations and
-  // untracked probes. The checked-in upstream reference checkouts are not product source; ignored
-  // generated output and installed dependencies also never become independent graph roots.
   const repositorySources = execFileSync(
     "git",
     [
@@ -96,7 +93,6 @@ export const loadGraph = async (directory, roots, validate = true) => {
     throw new Error("dependency-cruiser requires a TypeScript config and forbidden rules");
   }
   const tsConfig = extractTSConfig(resolve(packageRoot, fileName));
-  // Reported paths and rule patterns are application-relative.
   const previousDirectory = process.cwd();
   process.chdir(packageRoot);
   try {

@@ -15,7 +15,6 @@ export const earlierOriginalDeadline = ({
 }>): Item["expiresAt"] =>
   DateTime.toEpochMillis(first) <= DateTime.toEpochMillis(second) ? first : second;
 
-/** Retain only the earliest observed timestamp until this authentication registry is disposed. */
 export const observeOriginalDeadline = ({
   registry,
   item,

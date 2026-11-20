@@ -21,7 +21,6 @@ import {
 } from "~/shell/public-http/contract";
 import type { CanonicalAuthorityRoot } from "~/shell/canonical-policy/contract";
 
-/** Host-only cookie name published as part of the declaration-only browser authorization scheme. */
 export const webSessionCookieName = "__Host-fidy_session";
 
 type HostedAuditCaller = Extract<AuditCaller, { readonly _tag: "HostedAgentSession" }>;
@@ -37,7 +36,6 @@ type CanonicalAuthority =
   | Readonly<{
       auditCaller: WebSessionAuditCaller;
       authorityRoot: "no-verified-whatsapp-authority";
-      /** Freshness at this canonical operation's authorization checkpoint. */
       fresh: boolean;
     }>;
 
@@ -47,7 +45,6 @@ export type CanonicalCaller = Readonly<{
 }> &
   CanonicalAuthority;
 
-/** Request- or Turn-scoped canonical caller; repositories still receive explicit UserId. */
 export class ResolvedCaller extends Context.Service<ResolvedCaller, CanonicalCaller>()(
   "@fidy/server/shell/authorization/contract/ResolvedCaller"
 ) {}
@@ -58,11 +55,6 @@ type ChildAuditEvidence = Readonly<{
   occurredAt: DateTime.Utc;
 }>;
 
-/**
- * Records metadata-only child outcomes for the current canonical operation. Callers provide the
- * operation, outcome, and occurrence time; recording preserves the evidence for the enclosing
- * request's audit result and does not add a failure to the caller's effect.
- */
 export type ChildOperationAuditService = Readonly<{
   record: (evidence: ChildAuditEvidence) => Effect.Effect<void>;
 }>;
@@ -72,13 +64,11 @@ export class ChildOperationAudit extends Context.Service<
   ChildOperationAuditService
 >()("@fidy/server/shell/authorization/contract/ChildOperationAudit") {}
 
-/** Extracts the host-only WebSession cookie for canonical first-party authorization. */
 export const webSessionSecurity = HttpApiSecurity.apiKey({
   in: "cookie",
   key: webSessionCookieName,
 });
 
-/** Extracts PAT bearer credentials for canonical API authorization. */
 export const agentBearerSecurity = HttpApiSecurity.bearer.pipe(
   HttpApiSecurity.annotate(OpenApi.Format, TokenBearerFormat)
 );

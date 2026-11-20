@@ -18,7 +18,6 @@ const policy = Schema.decodeSync(RequestBodyPolicy)({
 const validRequest = (request: Request): boolean =>
   request.method === "POST" && !request.headers.has("origin") && new URL(request.url).search === "";
 
-/** Origin verification precedes every publication, including recovery of a previously committed result. */
 export const publishPrice = (
   input: Readonly<{ request: Request; environment: PricingEnvironment; http: OutboundHttpService }>
 ): Effect.Effect<Response> =>

@@ -177,7 +177,7 @@ const requestRevocation = (
       catch: () => new BootstrapUnavailable(),
     });
   });
-/** Browser management never accepts agent authority, even for an otherwise valid OAuth bearer. */
+
 export const manageConnections = (
   input: ManagementInput
 ): Effect.Effect<Response, BootstrapUnavailable | AuditUnavailable | Schema.SchemaError> =>

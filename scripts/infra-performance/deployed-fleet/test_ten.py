@@ -68,7 +68,6 @@ class TenMeter(unittest.TestCase):
     def test_outstanding_work_is_reserved_even_with_a_current_account_sample(self):
         now = 12 * 3600
         current = Usage(now,now-120,100_000,1_000)
-        # Nine existing signups have consumed budget, but their unconfirmed work still needs a hold.
         enrolled = list(ORDINALS[:-1])
         with patch.dict(os.environ, {"FLEET_PILOT_STARTED_AT":str(now)}):
             delta = {"reads":600_000,"writes":20_000}

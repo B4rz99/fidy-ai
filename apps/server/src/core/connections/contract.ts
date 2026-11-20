@@ -1,7 +1,6 @@
 import { Schema, Struct } from "effect";
 import { UtcTimestamp } from "~/core/_shared/time";
 
-/** Stable Fidy identity of a financial institution, independent of its technical integration. */
 export const InstitutionId = Schema.NonEmptyString.check(
   Schema.isPattern(/^[a-z][a-z0-9-]{0,63}$/u)
 )
@@ -9,13 +8,11 @@ export const InstitutionId = Schema.NonEmptyString.check(
   .annotate({ identifier: "InstitutionId" });
 export type InstitutionId = typeof InstitutionId.Type;
 
-/** Stable identity retained across reauthorization of one User's institution association. */
 export const ConnectionId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("ConnectionId"))
   .annotate({ identifier: "ConnectionId" });
 export type ConnectionId = typeof ConnectionId.Type;
 
-/** Product lifecycle; initiating an attempt never grants institution authority. */
 export const ConnectionState = Schema.Literals([
   "Connecting",
   "Active",
@@ -24,7 +21,6 @@ export const ConnectionState = Schema.Literals([
 ]).annotate({ identifier: "ConnectionState" });
 export type ConnectionState = typeof ConnectionState.Type;
 
-/** Safe caller-owned Connection projection without credentials, attempts, or provider identifiers. */
 export const Connection = Schema.Struct({
   id: ConnectionId,
   institutionId: InstitutionId,
@@ -42,7 +38,6 @@ export const Account = Schema.Struct({ id: AccountId, connectionId: ConnectionId
 });
 export type Account = typeof Account.Type;
 
-/** Discovery includes unavailable institutions and only the caller's current association. */
 export const InstitutionSummary = Schema.Struct({
   id: InstitutionId,
   displayName: Schema.NonEmptyString,
@@ -56,7 +51,6 @@ export const ConnectInstitutionInput = Schema.Struct({ institutionId: Institutio
 });
 export type ConnectInstitutionInput = typeof ConnectInstitutionInput.Type;
 
-/** Public browser locator; the same User's browser authentication is still required. */
 export const BrowserContinuation = Schema.Struct({
   url: Schema.String.check(
     Schema.isPattern(/^https:\/\/app\.fidyapp\.com\/connections\/continue\?attempt=[0-9a-f-]{36}$/u)
@@ -64,7 +58,6 @@ export const BrowserContinuation = Schema.Struct({
   expiresAt: UtcTimestamp,
 }).annotate({ identifier: "BrowserContinuation" });
 
-/** A browser handoff or an already authorized association; no bank authority is returned. */
 export const ConnectInstitutionResult = Schema.Union([
   Schema.Struct({
     type: Schema.Literal("continue_in_browser"),

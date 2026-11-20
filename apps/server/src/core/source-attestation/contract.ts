@@ -68,7 +68,6 @@ export const NotificationEmailSourceAttestation = Schema.Struct({
 });
 export type NotificationEmailSourceAttestation = typeof NotificationEmailSourceAttestation.Type;
 
-/** Immutable evidence of the context and mechanism that interpreted one Transaction. */
 const ConnectionMovementSource = Schema.Struct({
   ...SourceAttestationCommon.fields,
   kind: Schema.Literal("connection-movement"),

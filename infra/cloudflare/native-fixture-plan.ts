@@ -71,7 +71,6 @@ export const requireFixtureLifecycle = ({
   }
 };
 
-/** A same-stack Worker.ref reads the retained Alchemy generation. Only a deferred delete may hold it. */
 export const verifyFixturePlan = ({ plan, fallback }: { plan: Plan; fallback: boolean }): void => {
   requireFixtureLifecycle({ rows: describePlan(plan).resources, fallback });
   const originalId = "ReleaseSmoke-" + retainedProvider.revision;

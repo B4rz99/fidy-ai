@@ -4,7 +4,7 @@ import {
   protectConsentAuthority,
   protectOAuthGrantConsentAuthority,
 } from "~/shell/consent/operations";
-/** Require the admitted User, client, resource, credential, exact scope and immutable grant at the action instant. */
+
 export const liveOAuthAuthority = (
   input: Readonly<{ subject: OAuthCaller; current: number }>
 ): OAuthAuthority => {
@@ -48,7 +48,6 @@ export const liveOAuthAuthority = (
 const databaseCurrentMillis = `CAST(strftime('%s', 'now') AS INTEGER) * 1000
   + CAST(substr(strftime('%f', 'now'), 4, 3) AS INTEGER)`;
 
-/** Require queued protected work to retain unexpired authority when it actually executes, not merely when prepared. */
 export const liveOAuthCommitAuthority = (
   input: Readonly<{ subject: OAuthCaller; current: number }>
 ): OAuthAuthority => {

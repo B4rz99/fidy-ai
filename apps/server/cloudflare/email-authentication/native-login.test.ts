@@ -169,7 +169,6 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(yield* deliver(identity)).toBe(204);
         expect(yield* inbox()).toEqual([]);
         if (change === "expiry" || change === "work deadline") {
-          // The User alarm can remove the expired proof before delivery observes it.
           expect(
             yield* owner.exec(
               "SELECT count(*) AS usable FROM login_email_proofs WHERE state <> 'rejected' OR selector IS NOT NULL OR digest IS NOT NULL"

@@ -2,7 +2,7 @@ import { Option } from "effect";
 import { ProcessingConsentGroup } from "./contract";
 
 const consentTransports = Object.values(ProcessingConsentGroup.endpoints);
-/** Recognize only declared cookie-only privacy transports; adapters still verify origin and live proof. */
+
 export const processingConsentTransport = (
   path: string
 ): Option.Option<{

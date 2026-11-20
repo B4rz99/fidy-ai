@@ -34,7 +34,6 @@ const failedWhatsApp = (db: D1Database, current: number): D1PreparedStatement =>
           ) ORDER BY created LIMIT ?`)
     .bind(current - rejectedWindowMilliseconds, current - rejectedWindowMilliseconds, sampleLimit);
 
-/** Each condition has its own bounded sample; old pending work cannot mask failed delivery. */
 export const inspectWhatsApp = ({
   db,
   current,

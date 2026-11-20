@@ -39,7 +39,6 @@ const deleteControls = (
     );
   });
 
-/** Remove only externally completed deletion metadata beyond the supported backup horizon. A restored or unpublished database never purges its independent markers. */
 export const purgeCompletedCases = (
   input: ErasureRecoveryConfiguration
 ): Effect.Effect<void, ErasureUnavailable> =>

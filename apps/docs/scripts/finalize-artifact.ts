@@ -11,8 +11,6 @@ for (const entry of readdirSync(distribution, { recursive: true, withFileTypes: 
     html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gu),
     (match) => `'sha256-${createHash("sha256").update(match[1]).digest("base64")}'`
   );
-  // Starlight's is:inline scripts retain whitespace that Astro's CSP collector hashes differently.
-  // Authorize their exact emitted bytes; browser acceptance checks keep script execution restricted.
   const finalized = html.replace(
     /<meta http-equiv="content-security-policy" content="([^"]+)"/u,
     (meta, policy: string): string =>

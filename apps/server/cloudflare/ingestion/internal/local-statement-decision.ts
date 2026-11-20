@@ -151,7 +151,6 @@ export const prepareLocalDecision = Effect.fn(function* (
   });
 });
 
-/** Re-open a clarification only for its exact verified channel, issuing Turn and admitted Session. */
 export const resolveOrigin = Effect.fn(function* (active: string, target: string, user: UserId) {
   const sql = yield* SqliteClient;
   const scope = yield* hostedStatements(active, user, yield* Clock.currentTimeMillis);

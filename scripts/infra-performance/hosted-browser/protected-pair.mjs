@@ -1,4 +1,3 @@
-// The parent holds both durable account claims and passes the original Sessions on stdin.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
@@ -435,7 +434,6 @@ export const comparePair = async (config, http, environment) => {
     });
   } catch (error) {
     evidence.failure = error instanceof Error ? error.name : "Unknown";
-    // Preserve the failing source location without serializing an assertion's actual or expected values.
     evidence.failureLocation =
       /(?:protected-pair|fresh-transactions|captured-profile|scoped-correction)\.mjs:\d+:\d+/u.exec(
         error instanceof Error ? (error.stack ?? "") : ""

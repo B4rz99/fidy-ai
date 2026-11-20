@@ -54,7 +54,6 @@ const ConsentResult = ({
   return <ConsentRequired revoked={status.value.status === "Revoked"} />;
 };
 
-/** Check cookie-only Consent before mounting ordinary Subscription queries or payment controls. */
 export const SubscriptionConsentBoundary = ({
   children,
 }: Readonly<{ children: ReactNode }>): JSX.Element => {

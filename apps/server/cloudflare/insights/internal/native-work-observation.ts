@@ -12,7 +12,7 @@ const job = Schema.Struct({
   created: Schema.Int,
   deadline: Schema.Int,
 });
-/** Only bounded locators and timestamps leave the SQL snapshot. Financial content and delivery authorization stay local. */
+
 export const nativePendingWork = Effect.fn(function* (flags: {
   weekly: boolean;
   category: boolean;

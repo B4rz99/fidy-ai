@@ -42,7 +42,7 @@ const sourceBinding = Schema.is(
     }),
   ])
 );
-/** The interrupted Ingress is evidence for an upload only. It was never eligible to receive traffic. */
+
 export const requireInterruptedUpload = (versions: { core: unknown; ingress: unknown }): void => {
   for (const role of ["core", "ingress"] as const) {
     const { result } = Schema.decodeUnknownSync(version)(versions[role]);

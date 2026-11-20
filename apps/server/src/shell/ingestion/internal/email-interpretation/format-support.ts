@@ -32,7 +32,6 @@ export type FormatCurrencyDefault = Readonly<{
 const currencyFieldLabels = ["currency", "currency:", "moneda", "moneda:"];
 const minimumCompleteFinancialDigits = 10;
 
-/** Resolves explicit amount/Currency-row evidence or an explicitly format-owned default rule. */
 export const resolveCurrency = (input: {
   document: EmailDocument;
   amountText: string;
@@ -67,7 +66,6 @@ export const resolveCurrency = (input: {
   });
 };
 
-/** Detects complete financial-number material before any field can be trusted or projected. */
 export const containsCompleteFinancialNumber = (text: string): boolean => {
   for (const match of text.matchAll(/[0-9][0-9 .-]*[0-9]/gu)) {
     const candidate = match[0].trim();
@@ -81,7 +79,6 @@ export const containsCompleteFinancialNumber = (text: string): boolean => {
 
 export type AmountStyle = "comma-grouped" | "comma-grouped-decimal" | "dot-grouped";
 
-/** Parses only the exact numeric convention evidenced by one format revision. */
 export const parseAmount: {
   (style: AmountStyle): (value: string) => Option.Option<string>;
   (value: string, style: AmountStyle): Option.Option<string>;
@@ -106,7 +103,6 @@ type OccurredAtInput = Readonly<{
   context: CapturedInterpretationContext;
 }>;
 
-/** Interprets an evidenced local civil date/time using the captured historical IANA zone. */
 const parseOccurredAt = (input: OccurredAtInput): Option.Option<DateTime.Utc> => {
   const datePattern =
     input.dateStyle === "slash" ? /^(\d{4})\/(\d{2})\/(\d{2})$/u : /^(\d{4})-(\d{2})-(\d{2})$/u;
@@ -145,12 +141,10 @@ const parseOccurredAt = (input: OccurredAtInput): Option.Option<DateTime.Utc> =>
   });
 };
 
-/** Constructs decoded safe hints; invalid source projections become format rejection. */
 export const decodeAccountHints = (
   input: typeof AccountHints.Encoded
 ): Option.Option<AccountHints> => Schema.decodeOption(AccountHints)(input);
 
-/** Combines the required common fields without turning malformed evidence into partial facts. */
 export const makeInterpretation = (input: {
   document: EmailDocument;
   amountText: string;

@@ -7,7 +7,6 @@ import {
   type HttpClientResponse,
 } from "effect/http";
 
-/** Immutable expected session for one mounted application; the cookie remains sole authority. */
 export type BrowserSessionLifetime = Readonly<{
   binding: string;
   signal: AbortSignal;
@@ -24,7 +23,6 @@ const permitsFor = (signal: AbortSignal): Semaphore.Semaphore => {
   return permits;
 };
 
-/** Coordinates this page's clients within their shared session; admission remains server-owned. */
 export const coordinateBrowserRequests = ({
   transport,
   signal,
@@ -80,7 +78,6 @@ const acceptResponse =
     return Effect.succeed(response);
   };
 
-/** Bind every client to one immutable lifetime; retirement cancels I/O and suppresses late replies. */
 export const bindBrowserSession = ({
   transport,
   lifetime,

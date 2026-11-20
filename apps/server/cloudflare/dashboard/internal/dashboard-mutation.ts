@@ -100,7 +100,6 @@ type StoredDashboard = Readonly<{
   encoded: string;
 }>;
 
-/** Fetch a decoded owned document; an invalid retained row fails closed rather than resetting it. */
 export const findDashboardDocument = ({
   db,
   userId,
@@ -167,7 +166,6 @@ const decodeViewSource = (
     };
   });
 
-/** Select view sources under admission's exact credential and Consent in that same native unit. */
 export const prepareDashboardViewSource = (
   input: Parameters<CanonicalBrowserRead>[0]
 ): Readonly<{
@@ -208,7 +206,6 @@ export const prepareDashboardViewSource = (
   };
 };
 
-/** Observe live authority and its gated view sources in one read-only native snapshot. */
 const readViewSource = ({
   db,
   subject,
@@ -342,7 +339,6 @@ export const dashboardOutcome = (operation: DashboardMutationOperation): OwnerOu
   read: (db, userId) => findDashboardValue({ db, userId, operation }),
 });
 
-/** Read the committed document from the same User after the mutation unit commits. */
 export const findDashboardValue = ({
   db,
   userId,
@@ -365,7 +361,6 @@ export const findDashboardValue = ({
     });
   }).pipe(Effect.orElseSucceed(() => Option.none()));
 
-/** Project a document already established in this canonical read, without retaining it afterward. */
 export const projectDashboardValue = ({
   db,
   userId,

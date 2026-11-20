@@ -40,7 +40,7 @@ const claim = Effect.fn(function* (work: Inbound, current: number, storage: Dura
   yield* preserveStoreAlarm(storage, current + retentionMs);
   return claimed;
 });
-/** A claimed refusal is never re-sent after an ambiguous provider result. */
+
 export const refuseVoice = Effect.fn(function* ({
   request,
   environment,

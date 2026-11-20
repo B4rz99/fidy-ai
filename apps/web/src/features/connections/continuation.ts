@@ -94,7 +94,6 @@ type Continuation = Readonly<{
   canFollow: (review: Review) => boolean;
 }>;
 
-/** Owns one mounted locator/session; a dispatched Begin remains spent even after an old Ready read. */
 export const useContinuation = (attempt: Attempt): Continuation => {
   const { webAuthClient: client, registry } = useRouter().options.context;
   const [lifetime] = useState(makeLifetime);

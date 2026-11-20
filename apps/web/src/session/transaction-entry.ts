@@ -14,7 +14,6 @@ export const initialConsentObservation: (
   ).pipe(Atom.setIdleTTL("400 millis"))
 );
 
-/** A fresh bootstrap observation can bridge the first entry; every later entry refreshes HTTP. */
 export const transactionEntryConsent = Atom.family((client: WebAuthClient) => {
   const remote = client.query("processingConsent", "status", { timeToLive: "400 millis" });
   return Atom.readable(
@@ -29,7 +28,6 @@ export const transactionEntryConsent = Atom.family((client: WebAuthClient) => {
   );
 });
 
-/** Consumed once for the actual initial entry, and only within the loader-to-commit interval. */
 export const initialTransactionConsent = Atom.make<Option.Option<number>>(Option.none()).pipe(
   Atom.setIdleTTL("400 millis")
 );

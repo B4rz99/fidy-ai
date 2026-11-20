@@ -116,7 +116,6 @@ class AccountExperiment:
         return self.state["active"]
 
     def save(self):
-        # Vary each representation even if a later transition restores an earlier logical state.
         self.state["transition"] = secrets.token_hex(16)
         self.version = self.store.replace(self.version, self.state)
 

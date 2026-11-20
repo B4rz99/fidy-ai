@@ -131,9 +131,6 @@ export const RawKapsoEnvelope = Schema.Union([
   }),
 ]);
 
-// Kapso retains raw Meta status history, including BSUID and international phone digits:
-// https://kapso.com/guides/business-scoped-user-ids/introduction/reading-the-new-payload
-// https://github.com/gokapso/agent-skills/blob/master/skills/integrate-whatsapp/references/webhooks-event-types.md
 const RawDisclosureStatus = Schema.Struct({
   recipient_user_id: Schema.optionalKey(WhatsAppBusinessScopedUserId),
   recipient_id: Schema.optionalKey(Schema.String.check(Schema.isPattern(/^[1-9][0-9]{7,14}$/u))),
@@ -179,7 +176,6 @@ const RawStoredMessage = Schema.Struct({
   }),
 });
 
-// Kapso publishes the sent message before Meta receipt history is available.
 const RawPendingSentMessage = Schema.Struct({
   ...RawStoredMessage.fields,
   kapso: Schema.Struct({
@@ -221,10 +217,6 @@ const RawIdentityChangeMessage = Schema.Struct({
   }),
 });
 
-/**
- * Strictly decodes the hexadecimal claim to the one digest length the contract promises, then
- * compares it to the expected digest with the platform constant-time equality primitive.
- */
 const authenticatesDigest = (signature: string, expected: Uint8Array): boolean => {
   const decoded = Hex.decode(signature);
   if (Result.isFailure(decoded)) return false;
@@ -391,7 +383,6 @@ const lifecycleFailure = (
   return { reason: disposition.safeReason, automaticRetry: disposition.automaticRetry };
 };
 
-/** Projects one provider-held raw status into the same metadata-only evidence used by webhooks. */
 const projectDecodedDisclosureLifecycleStatus = Effect.fn(function* (input: {
   readonly status: typeof RawDisclosureStatus.Type;
   readonly receivedAt: DateTime.Utc;
@@ -620,7 +611,6 @@ const projectReceiptEvent = Effect.fn(function* (
       DateTime.Order(time, times[index] ?? time) > 0 ? candidate : index,
     0
   );
-  // Provider timestamps have second precision; tied receipts have no array-order authority.
   if (
     !raw.message.kapso.statuses.some(
       (status, index) =>
@@ -633,7 +623,6 @@ const projectReceiptEvent = Effect.fn(function* (
   return Option.some({ ...latest.value, businessPhoneNumberId: raw.phone_number_id });
 });
 
-/** One authenticated event and its latest chronological status, shared across delivery purposes. */
 export const decodeLifecycleStatus = Effect.fn(function* (
   input: WhatsAppLifecycleAuthentication,
   lookup: Option.Option<OutboundHttpService> = Option.none(),

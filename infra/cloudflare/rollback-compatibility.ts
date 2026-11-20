@@ -57,7 +57,6 @@ const versionBindings = (
   ) {
     throw new Error("Durable Object namespace identity unavailable");
   }
-  // Each side has proved its exact source revision. Preserve all other binding properties for comparison.
   return Object.fromEntries(
     bindings.map((binding) => [
       binding.name,
@@ -66,7 +65,6 @@ const versionBindings = (
   );
 };
 
-/** Read the immutable version response without exposing configuration values on failure. */
 export const verifiedVersionResources = ({
   raw,
   versionId,
@@ -92,7 +90,6 @@ export const verifiedVersionResources = ({
   };
 };
 
-/** Conservative eligibility: only code changed, with unchanged versioned binding and DO configuration. */
 export const rollbackCompatible = (
   input: Readonly<{
     stable: WorkerResources;

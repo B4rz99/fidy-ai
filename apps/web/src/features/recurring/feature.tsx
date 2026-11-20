@@ -297,10 +297,8 @@ const SaveNotice = ({
     ) : null}
   </>
 );
-/** Application composition owns the retained workspace. This route retains code preloading. */
 export const RecurringRoute = (): JSX.Element => <></>;
 const preparedClients = Atom.family((_client: FidyClient) => Atom.make(false).pipe(Atom.keepAlive));
-/** First-entry preparation uses the same compact query as the retained planning owner. */
 const monthLabelLength = 7;
 RecurringRoute.preloadData = ({
   apiClient,

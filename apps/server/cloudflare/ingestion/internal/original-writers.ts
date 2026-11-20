@@ -11,8 +11,6 @@ const Bucket = Schema.Literals(["email", "statement"]);
 const Writer = Schema.Struct({ nonce: Schema.String, bucket: Bucket, object_key: Schema.String });
 const pageSize = 8;
 
-/** Each individual R2 call has its own nonce. A conditional miss is a returned decision;
- * a rejected promise or an interrupted acknowledgement retains the exact writer. */
 export const trackOriginalPut = Effect.fn(function* (
   scope: { bucket: R2Bucket; kind: typeof Bucket.Type; user: string },
   { key, bytes, options }: { key: string; bytes: Uint8Array; options: R2PutOptions }
@@ -34,8 +32,6 @@ export const trackOriginalPut = Effect.fn(function* (
   return output;
 });
 
-/** An observed placeholder may be replaced on the next retry. Settle its exact writer while
- * that positive evidence is still available, including when only its final SQL reply was lost. */
 export const settleObservedOriginal = Effect.fn(function* (
   bucket: typeof Bucket.Type,
   key: string,
@@ -69,7 +65,6 @@ export const settleBeforeDisposal = Effect.fn(function* (
   yield* settleObservedOriginal(kind, row.object_key, Option.fromNullOr(head));
 });
 
-/** Absence cannot settle a previously issued create. Only this writer's own committed nonce can. */
 export const reconcileOriginals = Effect.fn(function* (
   user: UserId,
   env: LocalIngestionEnvironment

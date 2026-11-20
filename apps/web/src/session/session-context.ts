@@ -1,7 +1,6 @@
 import { Option } from "effect";
 import { createContext, useContext } from "react";
 
-/** Browser-visible authentication state; it contains no credential or server-owned User data. */
 export type BrowserAuthentication = "signed-out" | "signed-in" | "expired";
 
 export type SessionContextValue = Readonly<{

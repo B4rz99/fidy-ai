@@ -426,12 +426,10 @@ const useInitialViewportRows = (
         return height > 0 ? [height] : [];
       });
       if (heights.length === 0) return;
-      // A commit ref fills any estimate shortfall before paint; no viewport information is skipped.
       setCount(Math.min(sortedRows.length, count + Math.ceil(shortfall / Math.min(...heights))));
     },
     [preparing, count, sortedRows.length]
   );
-  // Only initial offscreen work yields. Filters and authoritative revisions always render now.
   return { visible: preparing ? sortedRows.slice(0, count) : sortedRows, measure };
 };
 const LedgerBody = ({
@@ -579,7 +577,6 @@ const LedgerContents = ({
     </>
   );
 };
-/** A date-grouped ledger; sorting preserves dates as the primary grouping key. */
 export const TransactionLedger = ({ rows, ...props }: LedgerProps): JSX.Element => {
   const [visibility, setVisibility] = useState({});
   const [sorting, onSortingChange] = useState<SortingState>([]);

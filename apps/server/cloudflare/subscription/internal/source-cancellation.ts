@@ -155,7 +155,6 @@ export const cancelSource = (
     );
   });
 
-/** Only independently verified provider state for this exact source settles an accepted void. */
 export const verifyVoidedSource = Effect.fnUntraced(function* (
   http: Effect.Success<ReturnType<WompiTransportFactory>>,
   sourceId: WompiSourceId

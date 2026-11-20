@@ -25,7 +25,6 @@ export type RecurringAuditWork = Readonly<{
   current: number;
 }>;
 
-/** A bounded calculation selection and the separate complete compact editing projection. */
 export type RecurringReadProjection = Readonly<{
   months: ReadonlyArray<string>;
   schedule: RecurringSchedule;

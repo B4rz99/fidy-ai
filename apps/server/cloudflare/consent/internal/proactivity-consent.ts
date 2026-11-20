@@ -101,7 +101,6 @@ const OfferRow = Schema.Struct({
 const liveGrant = `SELECT g.id FROM (SELECT * FROM consent_history WHERE record_type='proactivity_grant') AS g WHERE g.user_id=? AND g.kind=? AND g.grant_id IS NULL
  AND NOT EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='proactivity_grant') AS r WHERE r.user_id=g.user_id AND r.kind=g.kind AND r.grant_id=g.id)`;
 
-/** Atomic historical eligibility capture; the caller receives only the current grant identity. */
 export const currentGrantQuery = (
   input: Readonly<{ userId: UserId; kind: ProactivityOptInKind }>
 ): OwnedStatement =>
@@ -123,7 +122,6 @@ export const guardedAction = (input: ProactivityConsentAction): D1PreparedStatem
   return input.db.prepare(guarded.sql).bind(...guarded.params);
 };
 
-/** Category revocation still wins over historical processing Consent. */
 export const queuedAction = (
   input: ProactivityConsentAction & Readonly<{ queued: QueuedConsentAction["queued"] }>
 ): D1PreparedStatement => {
@@ -232,7 +230,6 @@ export const createOffer = (
     });
   }).pipe(Effect.mapError(() => new ConsentUnavailable()));
 
-/** Reuse an unexpired exact category offer after a lost materialization acknowledgement. */
 export const findCurrentOffer = (
   input: ProactivityConsentContext
 ): Effect.Effect<Option.Option<ProactivityConsentOffer>, ConsentUnavailable> =>

@@ -47,7 +47,6 @@ export type TranscriptWindowEntry = WindowTextEntry | WindowCallEntry | WindowRe
 type LifecycleWindowEntry =
   | Pick<typeof FailedTurnTranscriptEntry.Encoded, "_tag" | "turnId">
   | Pick<typeof InterruptedTurnTranscriptEntry.Encoded, "_tag" | "turnId">;
-/** Any persisted entry accepted for model selection; lifecycle-only markers are removed. */
 export type TranscriptSelectionEntry = TranscriptWindowEntry | LifecycleWindowEntry;
 
 export const isTranscriptWindowEntry = (
@@ -55,7 +54,6 @@ export const isTranscriptWindowEntry = (
 ): entry is TranscriptWindowEntry =>
   entry._tag !== "FailedTurnTranscriptEntry" && entry._tag !== "InterruptedTurnTranscriptEntry";
 
-/** Positive whole-turn bound for model-context selection. */
 export const TranscriptWindowTurnLimit = Schema.Int.check(
   Schema.isBetween({ minimum: 1, maximum: 100 })
 )
@@ -63,7 +61,6 @@ export const TranscriptWindowTurnLimit = Schema.Int.check(
   .annotate({ identifier: "TranscriptWindowTurnLimit" });
 export type TranscriptWindowTurnLimit = typeof TranscriptWindowTurnLimit.Type;
 
-/** Positive character bound for model-context selection. */
 export const TranscriptWindowCharacterLimit = Schema.Int.check(
   Schema.isBetween({ minimum: 1, maximum: 200_000 })
 )
@@ -257,14 +254,6 @@ const newestTurnsWithin = (
     maxCharacters
   );
 
-/**
- * Selects the newest contiguous Transcript turns that satisfy both bounds.
- * Entries must be chronological, with entries from each turn contiguous; the
- * caller decides which turns are complete or may include an in-progress turn.
- * Complete turns remain atomic. If the active newest turn exceeds the aggregate
- * bound, its User request and newest complete call/result suffix are retained.
- * No entry is truncated and persisted history is never mutated.
- */
 export const selectTranscriptWindow = Effect.fn("selectTranscriptWindow")(
   (
     entries: ReadonlyArray<TranscriptSelectionEntry>,

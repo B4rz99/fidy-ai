@@ -54,12 +54,10 @@ export type BudgetEditing = Readonly<{
   rowKey: (status: BudgetStatus) => string;
 }>;
 const monthLabelLength = 7;
-/** Local calendar label; financial values remain canonical report facts. */
 export const currentBudgetMonth = (user: CurrentUser): string =>
   DateTime.formatIsoDate(
     DateTime.setZone(DateTime.nowUnsafe(), DateTime.zoneMakeNamedUnsafe(user.timeZone))
   ).slice(0, monthLabelLength);
-/** Moves calendar months without using the host time zone. */
 export const monthShift = ({
   month,
   offset,
@@ -79,14 +77,12 @@ export const categoryFor = ({
   id,
 }: Readonly<{ categories: ReadonlyArray<Category>; id: string }>): Category =>
   Option.getOrThrow(Option.fromUndefinedOr(categories.find((category) => category.id === id)));
-/** A persisted group takes precedence over the view's default category grouping. */
 export const groupFor = ({
   status,
   categories,
 }: Readonly<{ status: BudgetStatus; categories: ReadonlyArray<Category> }>): string =>
   status.budget.groupName ??
   defaultBudgetGroup(categoryFor({ categories, id: status.budget.categoryId }).label);
-/** A row edit keeps category identity and currency stable. */
 export const rowDraft = ({
   status,
   categories,

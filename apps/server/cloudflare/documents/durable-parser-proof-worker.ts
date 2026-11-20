@@ -5,7 +5,6 @@ type ProofEnvironment = Readonly<{
   XLSX_PROOF_KEY: string;
 }>;
 
-/** Isolated synthetic compute only; no production storage or outbound provider binding. */
 export class XlsxParserProof {
   fetch(request: Request): Promise<Response> {
     return documentParsingWorker.fetch(request);

@@ -203,7 +203,6 @@ const makeCommands = (apiClient: FidyClient): Commands => {
     ),
     refresh: apiClient.runtime.fn<Query>()((query, get) =>
       Effect.gen(function* () {
-        // Reactive display atoms may retain success until the source refresh notification arrives.
         const workspace = queries.workspace(query).source;
         const categories = queries.categories.source;
         get.mount(workspace);
@@ -313,7 +312,6 @@ const makeInteraction = (): Interaction => {
     },
   };
 };
-/** Retains write uncertainty across month and filter changes until an explicit reread succeeds. */
 export const useRecurringPlanning = (options: PlanningOptions): PlanningState => {
   const { apiClient, query, profileStale, profileWaiting, refreshProfile } = options;
   const [commands] = useState(() => makeCommands(apiClient));

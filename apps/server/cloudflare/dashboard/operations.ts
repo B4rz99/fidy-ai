@@ -72,7 +72,6 @@ import { accountQuery, editBodyPolicy, prepareQueryAccounting } from "./internal
 
 type MutationContext = Readonly<{ db: D1Database; subject: TransactionCaller; current: number }>;
 
-/** Record and present a closed owner refusal under the same live caller's authority. */
 export const dashboardRefusal = ({
   work,
   operation,
@@ -196,13 +195,6 @@ const dashboardAccess = ({
     })
   );
 
-/**
- * Prepare explicit initialization or one validated edit for the shared one-User atomic
- * unit. Initialization returns an existing document without changing its content or revision.
- * The caller owns the commit boundary; live credential, revision and accountability guards are
- * rechecked there. An invalid initial edit leaves no document; batch collision and failure
- * attribution stay intact.
- */
 export const prepareDashboard = ({
   work,
   operation,
@@ -253,16 +245,6 @@ export const presentDashboard = (
     Effect.orElseSucceed(transactionUnavailable)
   );
 
-/**
- * Execute the caller's canonical Dashboard operation under live credential and User authority.
- * Only explicit initialization and edits use the canonical mutation unit; queries never create or
- * repair domain state and return DashboardUninitialized for genuine absence. Views expose complete,
- * validated projections from the Categories, Transactions and Budgets published operations.
- * The caller applies canonical scope policy. Mutations retain the same User's coordinator;
- * views assert their exact document, calendar interpretation and financial revision in native
- * snapshots. Concurrent changes withhold the whole view without replaying its work.
- * A subject identity is never a reusable authorization grant.
- */
 export const browseDashboard = (input: DashboardRequest): Effect.Effect<Response> =>
   Effect.gen(function* () {
     const { db, subject, request, operation } = input;
@@ -360,7 +342,6 @@ const readDashboardCatalog = (
 ): Effect.Effect<Response, Effect.Error<ReturnType<typeof accountQuery>> | Schema.SchemaError> =>
   accountQuery(input).pipe(Effect.andThen(presentDashboardCatalog()));
 
-/** The static catalog needs only one complete browser authority, pressure and accounting unit. */
 export const prepareBoundDashboardCatalog: CanonicalBrowserRead = ({
   db,
   authority,
@@ -382,7 +363,6 @@ export const prepareBoundDashboardCatalog: CanonicalBrowserRead = ({
   present: () => presentDashboardCatalog().pipe(Effect.orElseSucceed(transactionUnavailable)),
 });
 
-/** The dependent financial projection keeps its own fresh revision, calendar and disclosure fence. */
 export const prepareBoundDashboardView: CanonicalBrowserSourceRead = (input) => {
   const source = prepareDashboardViewSource(input);
   return {
@@ -463,7 +443,6 @@ const queryDashboard = (
     Effect.orElseSucceed(transactionUnavailable)
   );
 
-/** The UserStore owns these Dashboard documents and their complete financial views. */
 export const isLocalDashboardOperation: typeof localDashboard.isLocalDashboardOperation = (id) =>
   localDashboard.isLocalDashboardOperation(id);
 export const dispatchLocalDashboard: typeof localDashboard.dispatchLocalDashboard = (unit) =>

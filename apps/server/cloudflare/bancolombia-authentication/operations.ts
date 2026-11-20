@@ -111,10 +111,6 @@ const prepareAssertion = Effect.fn(function* (input: SandboxAuthenticationInput)
   return Redacted.make(jwt);
 });
 
-/**
- * Verifies the configured key against registration before HTTP, then requests only an accounts
- * application token for the private consent request. No retry, User consent or account read occurs.
- */
 const applicationToken = (
   input: SandboxAuthenticationInput,
   schema: typeof Discovery | typeof AuthorizationDiscovery | typeof TokenLifecycleDiscovery
@@ -175,7 +171,6 @@ const PushedAuthorization = Schema.Struct({
   ),
 });
 
-/** Push one already-created consent under the support-provided sandbox PAR contract; never create consent or retry uncertainty. */
 export const pushBancolombiaSandboxAuthorization = (
   input: SandboxAuthenticationInput & BancolombiaAuthorizationInput
 ): Effect.Effect<
@@ -305,7 +300,6 @@ const createConsent = (
     };
   }).pipe(Effect.mapError(() => new BancolombiaAuthorizationFailed()));
 
-/** Create the support-collection consent once, record its identifier, then push the exact PAR. */
 export const authorizeBancolombiaSandbox = (
   input: ConsentCreationInput
 ): Effect.Effect<
@@ -344,7 +338,6 @@ export const activateBancolombiaSandbox = (
     consentBearer: applicationToken(input, Discovery).pipe(Effect.map((grant) => grant.bearer)),
   });
 
-/** Verifies active-to-inactive application-token behavior; grants no customer authority or consent cleanup guarantee. */
 export const verifyBancolombiaSandboxTokenLifecycle = (
   input: SandboxAuthenticationInput
 ): Effect.Effect<void, BancolombiaAuthenticationFailed> =>
@@ -360,7 +353,6 @@ export const verifyBancolombiaSandboxTokenLifecycle = (
     Effect.mapError(() => failure("bancolombia_token_lifecycle"))
   );
 
-/** Revoke only the supplied held grant and verify both token kinds inactive; does not cancel bank consent. */
 export const revokeBancolombiaSandboxGrant = (
   input: SandboxAuthenticationInput &
     Readonly<{ grant: BancolombiaBankGrant; proof: Option.Option<BancolombiaCleanupProof> }>

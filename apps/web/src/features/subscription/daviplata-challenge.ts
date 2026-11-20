@@ -11,11 +11,6 @@ export type DaviplataConfirmation =
   | Readonly<{ status: "submitted"; submission: PaymentSubmissionType }>
   | Readonly<{ status: "refused" }>
   | Readonly<{ status: "uncertain"; retrySubmission: boolean }>;
-/**
- * Mounted authorization capability. OTPs are consumed; provider authority never leaves this closure.
- * Uncertain authorization cannot resume. An uncertain Fidy submission may be explicitly retried
- * within the original authorization lifetime, with the same PaymentRequestId and no new OTP call.
- */
 export type DaviplataChallenge = Readonly<{
   retirement: AbortSignal;
   resend: () => Promise<DaviplataConfirmation>;
@@ -145,7 +140,6 @@ const makeLifetime = (
   forwardRetirement(input.provider.signal, controller);
   return { controller, signal, pendingOtp };
 };
-/** Encloses provider approval and projects only safe submission outcomes for the mounted form. */
 export const makeDaviplataChallenge = (input: ChallengeInput): DaviplataChallenge => {
   const { controller, signal, pendingOtp } = makeLifetime(input);
   let disposed = false;

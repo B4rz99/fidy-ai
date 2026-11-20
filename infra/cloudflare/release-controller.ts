@@ -36,7 +36,6 @@ export const releaseSchemas = {
   staged: StagedReleaseSchema,
 };
 
-/** Cloudflare routing is the only replaceable adapter; no product Worker or Alchemy resource is constructed here. */
 export type ReleasePort = Readonly<{
   trunk(): Effect.Effect<string, Error>;
   current(name: string): Effect.Effect<Deployment, Error>;
@@ -139,7 +138,6 @@ const deployExact = Effect.fn(function* (
         )
     )
   );
-  // Wrangler's write adapter reads traffic after its command; that read can still be the old ID.
   const result =
     reported.id === previous.id
       ? yield* observeCommitted(port, name, { versions, previousId: previous.id })
@@ -313,7 +311,6 @@ const promoteRelease = Effect.fn(function* (
   return { publicDeploymentId: publicPromoted.id, coreDeploymentId: corePromoted.id };
 });
 
-/** Requires the inspected serving pair. A failed transition may leave traffic changed; inspect it before recovery. */
 const isolateRelease = Effect.fn(function* (
   port: ReleasePort,
   snapshot: ReleaseSnapshot,

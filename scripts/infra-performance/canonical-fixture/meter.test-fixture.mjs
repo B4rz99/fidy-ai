@@ -1,4 +1,3 @@
-// Loaded only by the disposable credential-free workerd. The serving bundle has no observer.
 /** @typedef {{rowsRead:number,rowsWritten:number}} NativeCursor */
 /** @typedef {(...args:unknown[])=>unknown} NativeMethod */
 /** @typedef {Record<string,unknown> & {sql:{exec:(query:string,...bindings:unknown[])=>NativeCursor}}} NativeStorage */
@@ -34,7 +33,6 @@ const observedCursor = (cursor, counts) => {
     reads = cursor.rowsRead;
     writes = cursor.rowsWritten;
   };
-  // Native counters grow as the application consumes each result, including native raw iterators.
   observe();
   /** @param {object} source Native cursor or its iterator. @returns {object} */
   const wrap = (source) => {

@@ -623,8 +623,6 @@ const coreRequest = (
       );
     }
     if (oauthPath(path)) {
-      // Transfer this body directly: cloning an unfinished stream would leave an unread tee branch
-      // and prevent Core's bounded-body cancellation from closing the ingress source.
       return new Request(`https://core.internal${path}${new URL(request.url).search}`, {
         redirect: "manual",
         method: request.method,
@@ -634,8 +632,6 @@ const coreRequest = (
         duplex: "half",
       });
     }
-    // Clone the streamed request before replacing its URL and admitted headers.
-    // Rebuilding a Request from the raw body requires runtime-specific duplex options.
     return new Request(
       new Request(
         `https://core.internal${path}${preservesCoreQuery(path) ? new URL(request.url).search : ""}`,
@@ -712,7 +708,7 @@ const mixedConsentCredentials = (request: Request, path: string): boolean =>
   Option.isSome(processingConsentTransport(path)) &&
   request.headers.has("authorization") &&
   request.headers.has("cookie");
-/** MCP serves native clients only; validate public coordinates before private forwarding erases them. */
+
 const rejectsMcpIngress = (request: Request, browserOrigin: string): boolean => {
   const url = new URL(request.url);
   if (url.pathname !== oauthPaths.mcp) return false;
@@ -1102,11 +1098,4 @@ export const makePublicWorker = (telemetry: TelemetryService): PublicWorker => (
     ),
 });
 
-/**
- * Internet-facing ingress for published API routes. Originless machine callers remain eligible;
- * browser requests and Categories preflight must use `BROWSER_ORIGIN`. Every response is no-store,
- * receives the API security projection, and is observed once. Unknown routes, methods, origins,
- * credentials, and Core failures produce bounded responses. Sandbox registration metadata and
- * its unavailable callback are served locally; accepted stateful requests are delegated once.
- */
 export default makePublicWorker(cloudflareWorkerTelemetry);

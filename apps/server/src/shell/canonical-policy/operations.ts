@@ -61,7 +61,6 @@ const decideFreshWebOrVerifiedWhatsApp = (caller: OperationAccessCaller): Operat
     ? decideFreshWebSession(caller)
     : decideVerifiedWhatsAppHosted(caller);
 
-/** Decides execution from the same closed requirement used by every derived surface. */
 export const decideOperationAccess: {
   (caller: OperationAccessCaller): (self: OperationAccess) => OperationAccessDecision;
   (self: OperationAccess, caller: OperationAccessCaller): OperationAccessDecision;
@@ -82,7 +81,6 @@ export const decideOperationAccess: {
   }
 });
 
-/** Whether a hosted caller with the given authority may discover this operation as a tool. */
 export const isHostedVisible: {
   (authorityRoot: CanonicalAuthorityRoot): (self: OperationAccess) => boolean;
   (self: OperationAccess, authorityRoot: CanonicalAuthorityRoot): boolean;
@@ -92,7 +90,6 @@ export const isHostedVisible: {
     decideOperationAccess(access, { _tag: "HostedAgentSession", authorityRoot })._tag === "Allowed"
 );
 
-/** Whether a successful hosted tool call completes the Turn without another model round. */
 export const completesHostedTurn = (policy: OperationPolicyValue): boolean => {
   if (policy.kind !== "mutation") return false;
   if (policy.access._tag === "UserOwnedAgentScoped") {

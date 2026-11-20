@@ -42,7 +42,7 @@ import {
   isPATCaller,
   refusedTransactionWork,
 } from "../../canonical-work/operations";
-/** One audit batch that could not settle; its cause's stable marker classifies the refusal. */
+
 class IngestionAuditFailed extends Data.TaggedError("IngestionAuditFailed")<{
   readonly cause: unknown;
 }> {}
@@ -83,7 +83,6 @@ export const unavailableStatement = (): Response =>
     HTTP_UNAVAILABLE
   );
 
-/** One bounded validation refusal whose issue list is always empty and carries no input detail. */
 export const validationFailed = (message: string): Response =>
   json({ error: { code: "validation_failed", fields: [], message }, next: [] }, HTTP_BAD_REQUEST);
 
@@ -105,7 +104,6 @@ const rateLimited = (): Response =>
     HTTP_TOO_MANY_REQUESTS
   );
 
-/** The one message every absent or foreign submission shares; an id never proves ownership. */
 const submissionNotFound = (): Response =>
   json(
     { error: { code: "not_found", message: "Statement submission unavailable." }, next: [] },
@@ -120,10 +118,6 @@ const refusalStatus = (code: StatementPublicationRefusal["code"]): number => {
   return HTTP_BAD_REQUEST;
 };
 
-/**
- * The one bounded HTTP answer for a closed canonical publication refusal. The refusal's own code,
- * message, and status are what every individual caller receives; a refusal never echoes bytes.
- */
 export const statementRefusalResponse = (refusal: StatementPublicationRefusal): Response =>
   json(
     {
@@ -149,7 +143,6 @@ const stagingService = (
     })
   );
 
-/** Encodes one stored submission into the canonical response body, or `None` for a broken row. */
 export const submissionResponse: {
   (status: number): (stored: StoredStatementSubmission) => Effect.Effect<Option.Option<Response>>;
   (stored: StoredStatementSubmission, status: number): Effect.Effect<Option.Option<Response>>;
@@ -164,7 +157,6 @@ export const submissionResponse: {
   })
 );
 
-/** Every closed staging transport refusal, as its one bounded response. None echoes bytes. */
 const stagingFailureResponses: Record<StatementStagingFailureReason, () => Response> = {
   cancelled: () =>
     validationFailed("The statement upload did not complete; upload the file again."),
@@ -178,11 +170,6 @@ const stagingFailureResponses: Record<StatementStagingFailureReason, () => Respo
     validationFailed("The uploaded bytes are not a CSV or XLSX statement."),
 };
 
-/**
- * Stages one User's bounded statement bytes in private R2 after admission. Raw bytes and the
- * claimed content type never influence what may become durable staging state; the response is the
- * non-authoritative reference a canonical submission cites, never a readable statement.
- */
 export const uploadStagedStatement = ({
   request,
   environment,
@@ -230,7 +217,6 @@ export const uploadStagedStatement = ({
     return encoded === undefined ? unavailable() : json({ data: encoded, next: [] }, HTTP_CREATED);
   });
 
-/** Sweep only expired upload admission grants, not proof/outbox grants belonging to other owners. */
 export const sweepExpiredUploadAdmission = ({
   db,
   now,
@@ -268,7 +254,6 @@ export const sweepExpiredUploadAdmission = ({
     catch: (cause) => new IngestionAuditFailed({ cause }),
   }).pipe(Effect.asVoid);
 
-/** Classify live-credential refusal; unreadable authority returns the Ingestion unavailable contract. */
 const refusedCredential = ({
   db,
   subject,
@@ -278,18 +263,11 @@ const refusedCredential = ({
     catch: () => undefined,
   }).pipe(Effect.orElseSucceed(unavailable));
 
-/** Decodes one bounded canonical submission input before it reaches the User coordination turn. */
 export const submitForExtractionInput = (
   request: Request
 ): Effect.Effect<Option.Option<SubmitForExtractionInput>> =>
   boundedJsonBody({ request, policy: submissionInputPolicy, schema: SubmitForExtractionInput });
 
-/**
- * One canonical read's attribution: a session caller commits one metadata-only read audit row, and
- * a PAT caller advances its activity and commits one accepted `pat_audit` row (never both, so a
- * read appends one required AuditLogEntry). A malformed id binds no value, so it is still
- * audited as absent.
- */
 const oauthReadAudit = (
   input: Readonly<{
     database: D1Database;
@@ -359,8 +337,6 @@ const readStatements = (
   ].map(({ sql, params }) => database.prepare(sql).bind(...params));
 };
 
-/** Commits one read's attribution unit: `None` when it stands, or the refusal a dead authority
- * proves. A dead credential writes nothing, so a refused read leaves no audit row. */
 type StatementAuditRead = Readonly<{
   submissionId: string;
   operation: "ingestion.getStatementSubmission" | "ingestion.listNeedsReviewItems";
@@ -402,7 +378,6 @@ export const commitReadAudit = ({
     return Option.some(yield* refusedCredential({ db: environment.DB, subject }));
   });
 
-/** One canonical submission query, with prepared transport authority and optional conversation scope. */
 export const readCanonicalSubmission = ({
   config,
   userId,
@@ -432,11 +407,6 @@ export const readCanonicalSubmission = ({
     return Option.getOrElse(response, submissionNotFound);
   }).pipe(Effect.catchCause(() => Effect.succeed(unavailable())));
 
-/**
- * Reads one owned statement submission only after its canonical call committed a metadata-only
- * audit row under the caller's live authority; a dead credential writes nothing and is refused, and
- * every absent or foreign id shares the one bounded not-found answer.
- */
 export const readStatementSubmission = ({
   request,
   environment,

@@ -77,7 +77,6 @@ export const prepareMemory = Effect.fn(function* (edit: Edit, user: UserId, curr
           yield* sql`DELETE FROM memories WHERE user_id=${user} AND id=${id} RETURNING id`;
         return removed.length === 1 ? success(id) : absent;
       }
-      // Count the final aggregate inside the unit, including writes by earlier batch children.
       const [size] =
         yield* sql`SELECT COALESCE(SUM(length(CAST(json_object('id',id,'text',text) AS BLOB)) + 1),0)
         + length(CAST(json_object('id',${id},'text',${edit.text}) AS BLOB)) AS bytes

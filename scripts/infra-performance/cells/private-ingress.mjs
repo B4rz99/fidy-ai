@@ -1,4 +1,3 @@
-// The pinned Ingress remains private. Only the experiment controller knows this expiring key.
 import { timingSafeEqual } from "node:crypto";
 
 /** @import {IngressEnvironment, PinnedIngress} from "./contracts.d.mts" */

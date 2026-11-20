@@ -32,7 +32,6 @@ export const registerBrowserSession = Effect.fn(function* (request: Request) {
   }).pipe(withStoreCapacity("growth"));
 });
 
-/** Discard only the provisional route belonging to this failed UserStore session write. */
 export const releaseBrowserSession = Effect.fn(function* (request: Request) {
   const input = yield* Schema.decodeUnknownEffect(SessionRegistration)(
     yield* Effect.tryPromise(() => request.json())

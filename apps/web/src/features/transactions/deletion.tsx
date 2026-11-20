@@ -32,7 +32,6 @@ const deletionStatus = (
   if (status === "recovering" || status === "refreshing") return "saving";
   return status === "recovered" ? "idle" : status;
 };
-/** Confirms permanent visibility removal; uncertain outcomes require a fresh history read. */
 export const TransactionDeletion = (
   props: Readonly<{
     transaction: Transaction;

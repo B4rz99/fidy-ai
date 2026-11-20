@@ -1,6 +1,5 @@
 import { DateTime } from "effect";
 
-/** Compact calendar-day labels retain localized components and never reinterpret the input day. */
 export const makeCompactDateFormatter = (locale: string): ((localDate: string) => string) => {
   const formatter = new Intl.DateTimeFormat(locale, {
     day: "numeric",

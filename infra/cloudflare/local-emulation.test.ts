@@ -54,7 +54,6 @@ layer(LocalEmulationServices, {
           cwd: infrastructureRoot,
           env: {
             ...Bun.env,
-            // A clean-install check must not reuse the developer's persisted schema.
             ALCHEMY_STAGE: `test-${stageId}`,
             CLOUDFLARE_ACCOUNT_ID: "00000000000000000000000000000000",
             CLOUDFLARE_API_TOKEN: "local-development-placeholder",

@@ -4,7 +4,6 @@ export const smokePath = "/internal/release-smoke";
 
 export const localCanonicalReadBearer = "fin_localdev_local-emulation-category-read-token";
 
-/** Stable production network surface consumed by the Alchemy stack and topology tests. */
 export const productionTopology = {
   docs: { hostname: "docs.fidyapp.com" },
   core: {
@@ -26,7 +25,6 @@ export const productionTopology = {
   },
 } as const;
 
-/** Closed browser origins accepted by the public Worker in each complete topology mode. */
 export const browserOrigins = {
   local: `http://127.0.0.1:${productionTopology.web.localPort}`,
   acceptance: "https://127.0.0.1:4173",
@@ -34,6 +32,5 @@ export const browserOrigins = {
   nativeAcceptance: installedOrigins.acceptance.browser,
 } as const;
 
-/** Canonical lowercase release-identity formats shared by deployment and Worker boundaries. */
 export const gitRevisionPattern = /^[0-9a-f]{40}$/u;
 export const contractDigestPattern = /^[0-9a-f]{64}$/u;

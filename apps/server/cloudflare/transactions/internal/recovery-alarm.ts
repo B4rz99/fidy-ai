@@ -10,9 +10,6 @@ class RecoveryAlarmUnavailable extends Data.TaggedError("RecoveryAlarmUnavailabl
 const nativeAlarm = <A>(run: () => Promise<A>): Effect.Effect<A, RecoveryAlarmUnavailable> =>
   Effect.tryPromise({ try: run, catch: () => new RecoveryAlarmUnavailable() });
 
-/** One resident coordinator serializes alarm updates; durable intent remains in D1. Retiring the
- * owner fences late callbacks before joining pending native writes and clearing the alarm.
- */
 export const makeUserRecoveryAlarm = (
   storage: Storage
 ): Readonly<{

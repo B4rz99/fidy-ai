@@ -24,7 +24,6 @@ const observeBindingReply = (
     receivedAt,
   }));
 
-/** The initial context is an owned, live observation; ordinary resume requests only public binding. */
 type BootstrapClient = HttpApiClient.Client<typeof BrowserBootstrapApi.groups.browserSession>;
 export type BrowserSessionEntryFailure = Effect.Error<
   ReturnType<BootstrapClient["browserSession"]["binding"]>
@@ -57,7 +56,6 @@ export const loadBrowserSessionEntry = ({
     });
     const entry = yield* observeBindingReply(result);
     if (!includeContext || Option.isNone(entry.initial)) return entry;
-    // Every private entry needs current-cookie proof, including an unprepared fallback.
     const latest = yield* client.browserSession.binding({ query: {} });
     return (latest.binding ?? "none") === entry.binding
       ? entry
@@ -73,7 +71,6 @@ export const loadBrowserSessionEntry = ({
     Effect.scoped
   );
 
-/** Read public session identity without loading User data or renewing/replacing a cookie. */
 export const loadBrowserSessionBinding = ({
   apiOrigin,
 }: Readonly<{ apiOrigin: string }>): Effect.Effect<string, BrowserSessionEntryFailure> =>

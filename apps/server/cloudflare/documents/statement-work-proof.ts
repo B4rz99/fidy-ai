@@ -10,7 +10,6 @@ const evidenceCodec = Schema.fromJsonString(StatementRowEvidence);
 const extractionDecoder = Schema.decodeUnknownEffect(Schema.toCodecJson(TransactionExtraction));
 const byteSize = (value: string): number => encoder.encode(value).length;
 
-/** Nonproduction characterization only: execute the native interpreter seam in its 32-row chunks. */
 export const measureStatementWork = Effect.fn(function* (parsed: ParsedStatement) {
   let logicalTextBytes = 0;
   let serializedEvidenceBytes = 0;

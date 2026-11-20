@@ -7,13 +7,11 @@ import {
   RequestBodyUnreadable,
 } from "./contract";
 
-/** Fails when the request aborts and removes its listener when the waiting fiber is interrupted. */
 export const awaitRequestAbort = (
   request: Pick<Request, "signal">
 ): Effect.Effect<never, BoundedBodyReadFailed> =>
   Effect.callback((resume, fiberSignal) => {
     const onAbort = (): void => {
-      // A synchronous resume bypasses callback's returned finalizer in installed Effect 4.
       cleanup();
       resume(Effect.fail(new BoundedBodyReadFailed({ reason: "cancelled" })));
     };
@@ -24,10 +22,6 @@ export const awaitRequestAbort = (
     return Effect.sync(cleanup);
   });
 
-/**
- * Collects a request stream up to `maximumBytes`; aborts collection at the first excess chunk and
- * fails for cancellation, malformed streams, or resource exhaustion without returning partial data.
- */
 export const collectBoundedRequestBody = Effect.fn(function* (
   request: Request,
   maximumBytes: number
@@ -70,9 +64,7 @@ const releaseReader = (reader: ReadableStreamDefaultReader<unknown>): Effect.Eff
   Effect.sync(() => {
     try {
       reader.cancel().catch(() => undefined);
-    } catch {
-      // A synchronous cancellation failure must not prevent the lock-release finalizer.
-    }
+    } catch {}
   }).pipe(Effect.ensuring(releaseLock(reader)));
 
 const readNextChunk = (
@@ -112,12 +104,6 @@ const collectBody = Effect.fn(function* (
   return body;
 });
 
-/**
- * Reads one public Worker request body under a route-owned byte budget and deadline. The caller must
- * provide policy values decoded through `RequestBodyPolicy` and may begin business effects only
- * after this succeeds. Failure or interruption initiates cancellation and releases the reader lock without
- * waiting on an untrusted cancellation promise; failures retain no body detail.
- */
 export const readBoundedRequestBody = Effect.fn(function* (
   request: Pick<Request, "signal" | "body">,
   policy: RequestBodyPolicy
@@ -150,12 +136,6 @@ export const readBoundedRequestBody = Effect.fn(function* (
   );
 });
 
-/**
- * Decode one bounded JSON request body against a route schema. A non-JSON content type and any
- * unreadable, oversized, late, malformed, or schema-invalid body are all refused as `Option.none`
- * without retaining any body detail. Request cancellation and caller interruption remain interruption,
- * never malformed-input absence.
- */
 export const boundedJsonBodyWithSize = <A extends Schema.ConstraintDecoder<unknown>>({
   request,
   policy,
@@ -198,10 +178,6 @@ export const boundedJsonBody = <A extends Schema.ConstraintDecoder<unknown>>({
     Effect.map(Option.map(({ value }) => value))
   );
 
-/**
- * The stable id the final segment of this request's path addresses, decoded by that id's own
- * schema, or None when the segment is absent or is not a stable identity.
- */
 export const pathId = <A extends Schema.ConstraintDecoder<unknown>>({
   schema,
   request,
@@ -213,12 +189,5 @@ export const pathId = <A extends Schema.ConstraintDecoder<unknown>>({
     Schema.decodeOption(schema)(raw)
   );
 
-/**
- * The final path segment exactly as it arrived, undecoded, for a route that must forward an
- * unstable id instead of answering for it. The empty string stands for a path that carries no
- * segment at all; both spellings reach the owner, which is the only place that decides whether
- * the id is a retained one. Prefer `pathId` when the route itself answers 404 for an id that is
- * not a stable identity.
- */
 export const rawPathId = ({ request }: Readonly<{ request: Request }>): string =>
   new URL(request.url).pathname.split("/").at(-1) ?? "";

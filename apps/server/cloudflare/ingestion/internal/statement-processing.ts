@@ -119,12 +119,6 @@ const markFailed = ({
     ).pipe(Effect.asVoid, Effect.uninterruptible);
   });
 
-/**
- * Settles exhausted statement work under the User coordinator, atomically releasing a pending
- * Free entitlement and acknowledging its extraction identity. Repeated or late failure cannot
- * regress a completed submission. Only a closed public reason is stored; the Workflow's raw
- * exception must never be passed here.
- */
 export const failStatementSubmission = ({
   DB,
   userId,
@@ -432,7 +426,6 @@ const finalizeChunk = ({
           })
       )
     );
-    // D1 batches must settle sequentially; a parallel batch could reorder this durable cursor.
     for (const [index, row] of chunk.entries()) {
       const categoryId = yield* Effect.fromOption(
         Option.fromUndefinedOr(categories[index]),
@@ -548,15 +541,7 @@ const sourceInput = (
   locale: context.locale,
   timeZone: context.time_zone,
 });
-/**
- * Finalizes an owned submission under its stable User's Durable Object turn. The caller MUST
- * serialize all processing and retention work for this User; an opaque submission id is never
- * authority. D1 atomically commits each row with its evidence, so retry resumes from the unique
- * (submission, record) outcome. Each call commits at most 32 rows, returning `continue` for
- * another named Workflow activity or `completed` for terminal state. Complete derived material
- * is published once and reused within its original retention purpose. Infrastructure
- * failures reject for durable redelivery; unsafe material becomes terminal or visible review.
- */
+
 export const processStatementSubmission = (
   input: ProcessInput
 ): Effect.Effect<"continue" | "completed", StatementProcessingUnavailable> =>

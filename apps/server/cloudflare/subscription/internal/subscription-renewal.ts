@@ -154,7 +154,6 @@ export const claimSubscriptionRenewal = (
     );
   });
 
-/** Discover only bounded identities; each admission rechecks same-User authority inside its coordinator. */
 export const dispatchSubscriptionRenewals = (
   input: SubscriptionRenewalDispatchInput
 ): Effect.Effect<void, BillingCollectionFailure> =>

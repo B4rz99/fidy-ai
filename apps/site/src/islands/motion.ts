@@ -91,7 +91,6 @@ const revealSection = (target: Element): ReadonlyArray<Animation> => {
   ];
 };
 
-/** Disposing is terminal and cancels only animations created by this mount. */
 export const mountMotion = (root: HTMLDivElement): (() => void) => {
   const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
   let stopped = false;

@@ -27,7 +27,7 @@ import { validateGoogleToken as nativeValidateGoogleToken } from "./internal/goo
 import { validateMicrosoftToken as nativeValidateMicrosoftToken } from "./internal/microsoft-token";
 
 const invalidStatus = 400;
-/** Recognize the fixed first-party provider protocol surface; matching grants no authority. */
+
 export const ownsProviderAuthenticationPath = (path: string): boolean =>
   [...Object.values(providerPaths), ...Object.values(microsoftProviderPaths)].some(
     (owned) => owned === path
@@ -54,7 +54,7 @@ const providerGet = ({
     ? providerCallback({ request, environment, provider: "google" })
     : Effect.succeed(providerJson({ body: { status: "invalid" }, status: invalidStatus }));
 };
-/** Execute the owner-validated browser-bound provider flow; this owner never issues a WebSession. */
+
 const dispatchProviderAuthentication = ({
   request,
   environment,
@@ -83,12 +83,10 @@ const dispatchProviderAuthentication = ({
   return Effect.succeed(providerJson({ body: { status: "invalid" }, status: invalidStatus }));
 };
 
-/** Verify the initiating browser and exact validated provider attempt before atomic signup or returning-User pairing approval. No session or reusable provider authority is returned. */
 export const completeProviderAuthentication = (
   input: ProviderCompletionRequest
 ): Promise<Response> => completeProvider(input);
 
-/** Apply durable anonymous admission before proof reads, provider calls or mutations. */
 export const handleProviderAuthentication = (
   input: Readonly<{ request: Request; environment: ProviderEnvironment }>
 ): Effect.Effect<Response, never, HttpClient.HttpClient> =>

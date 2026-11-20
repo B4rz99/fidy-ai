@@ -49,7 +49,7 @@ const scopeDecision = (
   if (access._tag === "Allowed") return "accepted";
   return access.reason === "user_owned_agent_scope_missing" ? "scope_missing" : "unauthenticated";
 };
-/** Resolve a live credential without granting an operation. Admission rechecks every declared capability before charging, and owners recheck requiredScope at publication. */
+
 export const resolveCanonicalPATCredential = ({
   request,
   db,
@@ -74,7 +74,6 @@ export const resolveCanonicalPATCredential = ({
     };
   });
 
-/** Every declared operation uses the same bearer, subject, expiry and policy decision. */
 export const authorizeCanonicalPAT = ({
   request,
   db,

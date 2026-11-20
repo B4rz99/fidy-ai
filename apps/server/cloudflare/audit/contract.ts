@@ -3,7 +3,7 @@ import { auditRetentionDays, utcDayMilliseconds } from "../../src/shell/audit/co
 const admissionDays = 93;
 export const ordinaryAuditKinds = "'session_call','credential_call','insight_call','publication'";
 export const retainedAuditKinds = ordinaryAuditKinds + ",'request_admission'";
-/** Equality survives ordinary retention; the independent admission limit is inclusive. */
+
 export const auditDeadlineExpression = (prefix: "" | "OLD."): string =>
   `${prefix}occurred_at_ms+CASE ${prefix}record_type WHEN 'request_admission' THEN ${admissionDays * utcDayMilliseconds} ELSE ${auditRetentionDays * utcDayMilliseconds + 1} END`;
 export const auditRetentionSchema = [

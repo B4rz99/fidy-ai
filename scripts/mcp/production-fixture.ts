@@ -95,7 +95,6 @@ export const privateDirectory = Effect.gen(function* () {
     ),
     (root) => fs.remove(root, { recursive: true, force: true }).pipe(Effect.orDie)
   );
-  // Native clients derive profile identity from the canonical working directory.
   return yield* fs
     .realPath(root)
     .pipe(

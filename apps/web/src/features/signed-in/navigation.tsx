@@ -32,7 +32,6 @@ const navigationLinks = [
   { to: "/app/recurring", label: "Recurrentes", icon: Calendar03Icon },
 ] as const;
 
-/** Share the Transactions page's fresh Consent query before mounting ordinary navigation reads. */
 const ConsentedReviewCount = ({ children }: Readonly<{ children: ReactNode }>): JSX.Element => {
   const client = useRouter().options.context.webAuthClient;
   const [query] = useState(() => transactionEntryConsent(client));

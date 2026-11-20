@@ -48,7 +48,6 @@ type CategoryFailureInput<Failure extends CategoryFailure> = Readonly<{
   caller: SuggestedOperationCaller;
 }>;
 
-/** Maps actionable Category failures to the complete canonical API failure vocabulary. */
 export function toApiFailure(
   input: CategoryFailureInput<CategoryNotFound | KeywordRuleNotFound>
 ): NotFound;
@@ -106,7 +105,6 @@ export function toApiFailure({
   }
 }
 
-/** Safe public failure when Category authority is unavailable. */
 export const categoryUnavailable = (): Unavailable =>
   Unavailable.make({
     error: {
@@ -116,21 +114,14 @@ export const categoryUnavailable = (): Unavailable =>
     next: [],
   });
 
-/** The release owns the validated, bounded display taxonomy. Callers own authority and Audit. */
 export const listCategoriesResponse: Effect.Effect<typeof ListCategoriesResponse.Type> =
   Effect.sync(() => ({ data: listLaunchCategories(), next: [] }));
 
-/**
- * Prepare the canonical bounded, ordered Category projection in a caller-owned native unit.
- * Only the prepared action escapes; the owner retains SQL and row policy. Canonical callers compose
- * their live-authority audit in the same unit before decoding or releasing the result.
- */
 export const prepareCategoryRead = ({ db, authority }: CategoryReadInput): D1PreparedStatement => {
   const query = categoryRowsQuery(Option.getOrUndefined(authority));
   return db.prepare(query.sql).bind(...query.params);
 };
 
-/** Decode a completed Category read; malformed or oversized projections are never partially returned. */
 export const decodeCategoryRead = (
   result: unknown
 ): Option.Option<typeof ListCategoriesResponse.Type> => categoryResponseFromRows(result);

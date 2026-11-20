@@ -3,7 +3,6 @@ import { type Effect, type Option, Schema, type Scope } from "effect";
 import type { CliFailure, Credential, CredentialStore } from "../credential/contract";
 import type { HttpClient } from "effect/http";
 
-/** Transport metadata contains no raw request or response values. */
 export type OperationResult = Readonly<{
   envelope: Schema.Json;
   failed: boolean;
@@ -12,7 +11,6 @@ export type OperationResult = Readonly<{
   traceId: Option.Option<typeof TelemetryTraceId.Type>;
 }>;
 
-/** Decoded request fields; endpoint encoders validate them before transport. */
 export const CanonicalRequest = Schema.Struct({
   params: Schema.optionalKey(Schema.Unknown),
   query: Schema.optionalKey(Schema.Unknown),
@@ -20,7 +18,6 @@ export const CanonicalRequest = Schema.Struct({
   headers: Schema.optionalKey(Schema.Unknown),
 });
 
-/** Endpoint encoders validate decoded request fields before execution. */
 export type CanonicalClient = Readonly<
   Record<
     string,
@@ -42,7 +39,6 @@ export type CanonicalClientFactory = (
   }>
 ) => Effect.Effect<CanonicalClient, never, Scope.Scope>;
 
-/** Process adapters; result and guidance are separate channels even in machine mode. */
 export type CanonicalDependencies = Readonly<{
   store: CredentialStore;
   httpClient: HttpClient.HttpClient;

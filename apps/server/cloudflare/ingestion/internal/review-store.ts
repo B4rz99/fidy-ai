@@ -49,7 +49,6 @@ export const readReviewDetail = ({
     return Option.some(yield* projectReviewDetail({ db, userId, row, current }));
   }).pipe(Effect.mapError(() => new ReviewUnavailable()));
 
-/** Project the same revision and expiry policy for an inbox row and an individual read. */
 export const projectReviewDetail = (
   input: Readonly<{
     db: D1Database;
@@ -136,7 +135,6 @@ export const projectReviewSummary = ({
     });
   }).pipe(Effect.mapError(() => new ReviewUnavailable()));
 
-/** Resolve current Category instructions without altering retained extraction facts or User drafts. */
 const suggestReviewCategory = <E, R = never>({
   categorize,
   draft,

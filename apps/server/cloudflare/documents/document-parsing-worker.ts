@@ -73,13 +73,6 @@ const fetch = (
   );
 };
 
-/**
- * Accepts `POST /statement` with at most the parser's compressed-input ceiling. It returns only
- * source format, row count, elapsed handler time, and a closed rejection reason. `/statement-work`
- * additionally measures serialized evidence and the real interpreter, returning only counts. Body-stream
- * cancellation interrupts collection; parsing is bounded synchronous work. No binding or outbound
- * capability is available to the entrypoint.
- */
 export const documentParsingWorker = { fetch };
 
 export default documentParsingWorker;

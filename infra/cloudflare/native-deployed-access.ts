@@ -182,7 +182,7 @@ const relevantApplications = Effect.fn(function* (input: Input) {
   }
   return active;
 });
-/** The independent account and zone app inventories must describe only the four authorized protected paths. */
+
 export const inspectNativeAccess = Effect.fn(function* (input: Input) {
   const { read, account, installed } = input;
   const active = yield* relevantApplications(input);

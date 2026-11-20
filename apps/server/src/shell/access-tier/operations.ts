@@ -5,14 +5,6 @@ import { Option, Schema } from "effect";
 import { activePaidSubscriptionForUserSelection } from "~/shell/subscription/operations";
 import { activeTrialPeriodForUserSelection } from "~/shell/identity/operations";
 
-/**
- * Decide Pro standing inside the caller's User transaction from the original TrialPeriod or a settled
- * paid period or ManualProGrant at the same instant as its protected action. The explicit stable User is not
- * authorization: callers must compose their live credential/Consent guard in that same unit.
- * Invalid identities and missing or inactive periods are false; storage failure remains the
- * caller's closed unavailable outcome. Manual grants never establish credential or Consent authority.
- * The trusted decision instant must be finite; invalid time throws before SQL composition.
- */
 export const activeProUserCondition = (
   input: Readonly<{ userId: string; nowEpochMs: number }>
 ): OwnedStatement => {
@@ -25,10 +17,6 @@ export const activeProUserCondition = (
   });
 };
 
-/**
- * Observe Pro standing only when the bounded single-column selection resolves one distinct User.
- * Empty or ambiguous selections are false; the trusted decision instant must be finite.
- */
 export const activeProForUserSelection = (
   input: Readonly<{ users: OwnedStatement; nowEpochMs: number }>
 ): OwnedStatement => {

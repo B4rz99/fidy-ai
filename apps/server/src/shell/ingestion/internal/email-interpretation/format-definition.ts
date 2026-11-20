@@ -11,7 +11,6 @@ import type {
 } from "~/core/transactions/contract";
 import type { EmailDocument } from "./document";
 
-/** Financial facts a format must establish before the shared canonical decoder may trust them. */
 export type FormatInterpretation = Readonly<{
   amount: string;
   currency: Currency;
@@ -20,10 +19,6 @@ export type FormatInterpretation = Readonly<{
   accountHints: AccountHints;
 }>;
 
-/**
- * Private format-author interface. Recognition only nominates a candidate; `interpret` must verify
- * the complete evidenced structure and returns absence for malformed, conflicting, or unsafe data.
- */
 export type NotificationEmailFormat = Readonly<{
   id: NotificationFormatId;
   revision: InterpretationRevision;

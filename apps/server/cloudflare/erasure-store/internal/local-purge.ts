@@ -79,7 +79,7 @@ const receiveDrain = Effect.fn(function* (record: Scope, drained: Response) {
   if (drained.status !== success) return;
   yield* sealDrain(record, drained);
 });
-/** Each acknowledged boundary can lose its reply. The next case alarm repeats only that phase. */
+
 export const advanceLocalPurge = Effect.fn(function* (
   record: Scope & { state: string },
   env: Readonly<Record<"USER_STORE" | "DIRECTORY" | "PRICING", Target>>

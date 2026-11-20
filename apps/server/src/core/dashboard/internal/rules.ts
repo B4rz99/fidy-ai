@@ -46,8 +46,6 @@ const toInvalidDashboardResult = (error: Schema.SchemaError): InvalidDashboardRe
   return new InvalidDashboardResult({ issues: [issue, ...rest] });
 };
 
-// Revalidate Type-side invariants; collect every field issue for the caller.
-/** Re-prove all decoded document invariants and return field issues for the complete invalid result. */
 export const revalidateDocument = (
   candidate: Readonly<DashboardDocument>
 ): Effect.Effect<DashboardDocument, InvalidDashboardResult> =>
@@ -88,7 +86,6 @@ type ChildScale = Readonly<{ keep: bigint; flatten: bigint }>;
 
 const splitWeightPrecision = 1000;
 
-/** Converts a bounded three-decimal weight into an integer for exact normalization arithmetic. */
 const splitWeightInteger = (weight: SplitChild["weight"]): bigint =>
   BigInt(Math.round(weight * splitWeightPrecision));
 
@@ -308,7 +305,6 @@ const removeSplitWidget = (
   return Option.none();
 };
 
-/** Remove one existing Widget and collapse its empty region; reject removing the final Widget. */
 export const applyRemove = (
   input: Readonly<{
     readonly document: DashboardDocument;
@@ -330,7 +326,6 @@ type DuplicatePolicy = "reject" | "allow";
 
 const duplicatePolicies = new Set<DuplicatePolicy>(Array.of("reject"));
 
-/** Add a validated Widget at the decoded placement; reject duplicate identity unless moving the same Widget. */
 export const applyAdd = ({
   document,
   edit,
@@ -389,7 +384,6 @@ const replaceWidget = (
   return Option.none();
 };
 
-/** Replace one existing Widget while preserving its position; reject absence or an invalid complete document. */
 export const applyUpdate = ({
   document,
   widget,
@@ -495,7 +489,6 @@ const resizeResult = (
     onSome: (layout) => revalidateDocument({ ...document, layout }),
   });
 
-/** Resize an exact child region with validated weights; reject the root or an absent selector. */
 export const applyResize = ({
   document,
   edit,
@@ -512,7 +505,6 @@ const besideWidgetId = (at: Readonly<Placement>): Option.Option<WidgetId> =>
     Option.map((beside: Readonly<BesidePlacement>) => beside.besideWidget)
   );
 
-/** Move one existing Widget without changing its identity; reject self placement and invalid complete layouts. */
 export const applyMove = ({
   document,
   edit,
@@ -564,7 +556,6 @@ const replaceSwappedWidgets = (
   };
 };
 
-/** Exchange two distinct existing Widgets in place; reject absent targets or an invalid complete document. */
 export const applySwap = ({
   document,
   edit,

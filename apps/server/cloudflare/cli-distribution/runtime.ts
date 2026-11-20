@@ -34,7 +34,6 @@ const latestVersion = Effect.gen(function* () {
   )
 );
 
-/** Serves the published release pointer without credentials or Core authority; upstream failures never become versions. */
 export const cliDistributionResponse = (
   request: Request
 ): Effect.Effect<Option.Option<Response>> => {

@@ -90,7 +90,7 @@ export const present = (candidate: unknown): Effect.Effect<Response, Schema.Sche
   });
 const guardedQuery = (authority: TransactionAuthority, registered: string): string =>
   `${query(registered)} AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`;
-/** Review and its metadata-only Audit use the same authoritative snapshot. */
+
 export const reviewContinuation = (
   input: Readonly<{
     db: D1Database;
@@ -201,7 +201,6 @@ const claimStatements = ({
     .bind(admission.attempt, admission.userId, current, admission.sessionId, ...authority.bindings),
 ];
 
-/** Claim once under fresh same-User authority before any external preparation. */
 export const beginContinuation = (
   input: Readonly<{ db: D1Database; admission: ConnectionBrowserAdmission; signal: AbortSignal }>
 ): Effect.Effect<Response> =>

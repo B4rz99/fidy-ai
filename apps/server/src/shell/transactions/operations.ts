@@ -7,7 +7,6 @@ import {
   suggestOperation,
 } from "~/shell/canonical-operations/operations";
 
-/** A bounded Transaction history continuation that preserves valid URL filters and rejects undeclared inputs. */
 export const nextTransactionPage = ({
   cursor,
   filters,

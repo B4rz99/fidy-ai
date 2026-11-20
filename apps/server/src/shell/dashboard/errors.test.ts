@@ -15,7 +15,6 @@ import {
 
 import { DashboardCategoryNotFound } from "./contract";
 import { toApiFailure } from "./operations";
-// Failure suggestions validate targets against the assembled canonical declarations.
 import "~/shell/api";
 
 const widgetId = Schema.decodeSync(WidgetId)("f1d1a000-0000-4000-8000-000000000991");

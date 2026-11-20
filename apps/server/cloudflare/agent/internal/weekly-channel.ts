@@ -120,7 +120,6 @@ const prepareCategorySettlement = (
   ];
 };
 
-/** Signed status is rechecked against same-User claims; actual Channel proof composes settlement atomically. */
 export const reconcileWeeklyChannel = (input: Status): Effect.Effect<boolean, AgentUnavailable> =>
   Effect.gen(function* () {
     const { environment, userId, status } = input;
@@ -155,7 +154,6 @@ export const reconcileWeeklyChannel = (input: Status): Effect.Effect<boolean, Ag
     return proactive._tag === "Recorded";
   }).pipe(Effect.mapError(() => new AgentUnavailable()));
 
-/** Authenticated replies reset attention even when inference or Hosted Turn admission is unavailable. */
 export const recordWeeklyReply = (
   input: Readonly<{ db: D1Database; proof: WhatsAppTurnAdmission }>
 ): Effect.Effect<void, AgentUnavailable> =>
@@ -255,7 +253,6 @@ const handleCategoryCommand = (
     return Option.some(new Response(null, { status: accepted }));
   }).pipe(Effect.mapError(() => new AgentUnavailable()));
 
-/** Explicit commands and exact disclosure-qualified choices never become inferred Consent or invented Turns. */
 export const handleWeeklyChoice = (
   input: Readonly<{ environment: AgentEnvironment; proof: WhatsAppTurnAdmission; now: number }>
 ): Effect.Effect<Option.Option<Response>, AgentUnavailable> =>

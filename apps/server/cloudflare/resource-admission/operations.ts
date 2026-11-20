@@ -190,8 +190,6 @@ const executeBatch = (
   ReadonlyArray<D1Result<unknown>>,
   ResourceAdmissionRefused | ResourceAdmissionUnavailable
 > =>
-  // D1 batch has no cancellation API. Shield it through settlement so interruption cannot detach a
-  // still-running authority transaction from its caller and leave the durable outcome ambiguous.
   Effect.uninterruptible(
     Effect.tryPromise({
       try: () => database.batch([...statements]),
@@ -199,7 +197,6 @@ const executeBatch = (
     })
   );
 
-/** D1 exposes trigger provenance through this canonical SQLite extended-code error shape. */
 export const classifyResourceAdmissionFailure = (
   cause: unknown
 ): ResourceAdmissionRefused | ResourceAdmissionUnavailable =>
@@ -207,9 +204,6 @@ export const classifyResourceAdmissionFailure = (
     ? new ResourceAdmissionRefused({ reason: "resource_limit" })
     : new ResourceAdmissionUnavailable({ reason: "authority_unavailable" });
 
-/** Prepare complete admission for an owner-controlled atomic D1 commit; performs no I/O.
- * Unknown policies and unsafe timestamps are defects before any statements execute.
- */
 export const prepareResourceAdmission = dual<
   (
     request: ResourceAdmissionTransition
@@ -243,7 +237,6 @@ export const prepareResourceAdmission = dual<
   };
 });
 
-/** Commit admission and caller statements together, waiting for D1 settlement on interruption. */
 export const admitResource = dual<
   (
     request: ResourceAdmissionRequest
@@ -272,7 +265,6 @@ export const admitResource = dual<
   })
 );
 
-/** Prepare completion inside an owner's final native unit; no capacity is released before commit. */
 export const prepareOutstandingResourceRelease = dual<
   (
     request: ReleaseOutstandingWorkRequest
@@ -295,7 +287,6 @@ export const prepareOutstandingResourceRelease = dual<
   ];
 });
 
-/** Release outstanding occupancy with the caller's completion statements in the same D1 batch. */
 export const releaseOutstandingResource = dual<
   (
     request: ReleaseOutstandingWorkRequest
@@ -315,7 +306,6 @@ export const releaseOutstandingResource = dual<
   )
 );
 
-/** Charge bounded attempt pressure even when the subsequent atomic work admission is refused. */
 export const admitResourceWithAttemptPressure = dual<
   (
     request: ResourceAdmissionAttempt
@@ -349,7 +339,6 @@ const anchoredCounters = {
   { key: string; duration: number }
 >;
 
-/** Observe a closed counter inside an owner's query; absence means no accepted window yet. */
 export const resourceCounterQuery = (input: ResourceCounterQuery): OwnedStatement => ({
   sql: `SELECT used,window_start_ms,window_ends_ms,last_work_id FROM resource_admission_counters
     WHERE policy_key=? AND window_kind='anchored' AND scope_key=${
@@ -363,9 +352,6 @@ export const resourceCounterQuery = (input: ResourceCounterQuery): OwnedStatemen
   ],
 });
 
-/** Advance a closed counter with its owner proof. Calendar compaction retains every UTC day;
- * anchored policies keep their original reset and refusal rules. Zero changes spend no capacity.
- */
 export const prepareResourceCounter = (input: ResourceCounterRequest): D1PreparedStatement => {
   if (input.kind === "hosted_compaction") {
     const day = Math.floor(input.current / calendarDayMs) * calendarDayMs;
@@ -408,9 +394,6 @@ export const prepareResourceCounter = (input: ResourceCounterRequest): D1Prepare
     );
 };
 
-/** Charge a PAT public-code review before decoding its body, under exact live-session ownership.
- * A full rolling window spends nothing. Keep event and one-claim grant together in one batch.
- */
 export const preparePATReviewAdmission = (
   input: Readonly<{
     db: D1Database;
@@ -449,7 +432,6 @@ export const preparePATReviewAdmission = (
     .bind(input.id, input.current),
 ];
 
-/** Original bounded retention for anonymous anchored sources, with no fabricated User owner. */
 export const sweepPATSourceCounters = (
   input: Readonly<{ current: number; limit: number }>
 ): OwnedStatement => ({
@@ -460,7 +442,6 @@ export const sweepPATSourceCounters = (
   params: [input.current - patRetentionMs, input.limit],
 });
 
-/** Remove a bounded expired review batch; orphan grant cleanup is atomic with each event deletion. */
 export const sweepPATReviewEvents = (
   input: Readonly<{ current: number; limit: number }>
 ): OwnedStatement => ({
@@ -471,7 +452,6 @@ export const sweepPATReviewEvents = (
   params: [input.current - patRetentionMs, input.limit],
 });
 
-/** Bounded compaction retention discovery, ordered by each original UTC accounting day. */
 export const expiredCompactionCounterUsers = (
   input: Readonly<{ cutoff: number; limit: number }>
 ): OwnedStatement => ({
@@ -481,7 +461,6 @@ export const expiredCompactionCounterUsers = (
   params: [input.cutoff, input.limit],
 });
 
-/** Retention is owned by Hosted execution, not by the calendar window's admission expiry. */
 export const sweepCompactionCounters = (
   input: Readonly<{ userId: string; cutoff: number; limit: number }>
 ): OwnedStatement => ({
@@ -492,7 +471,6 @@ export const sweepCompactionCounters = (
   params: [input.userId, input.cutoff, input.limit],
 });
 
-/** Earliest retained day keeps hosted retention discoverable after Turns have been removed. */
 export const compactionCounterDeadline = (
   input: Readonly<{ userId: string; retentionMs: number }>
 ): OwnedStatement => ({

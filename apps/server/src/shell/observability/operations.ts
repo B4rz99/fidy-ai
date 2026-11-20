@@ -81,7 +81,6 @@ const projectReasonStack = (reason: Cause.Reason<unknown>): ReadonlyArray<Projec
   return [];
 };
 
-/** Extracts only scrubbed application coordinates from stack-bearing data. */
 export const projectStack = (cause: unknown): ReadonlyArray<ProjectedStackFrame> => {
   if (Cause.isCause(cause)) {
     const direct = cause.reasons.flatMap(projectReasonStack);
@@ -106,7 +105,6 @@ export const projectHttpStatusClass = (status: TelemetryHttpStatus): TelemetryHt
   return "5xx";
 };
 
-/** Projects a provider request into its closed method and provider coordinates. */
 export const projectExternalHttpRequest: {
   (
     provider: TelemetryCode<"provider">
@@ -120,7 +118,6 @@ export const projectExternalHttpRequest: {
   "http.request.method": method,
 }));
 
-/** Projects a response status into its low-cardinality status class. */
 export const projectExternalHttpResponse = (status: number): ExternalHttpResponseAttributes =>
   Option.match(Schema.decodeOption(TelemetryHttpStatus, TelemetryStrictDecoding)(status), {
     onNone: () => ({}),
@@ -131,7 +128,6 @@ export const projectExternalHttpOutcome = (
   outcome: TelemetryTransportOutcome
 ): ExternalHttpOutcomeAttributes => ({ "fidy.transport_outcome": outcome });
 
-/** No-op adapter resource for tests and disabled runtime configuration. */
 export const DisabledTelemetryResource: TelemetryResource = {
   adapter: {
     startSpan: () => Effect.succeedNone,
@@ -146,11 +142,9 @@ export const DisabledTelemetryResource: TelemetryResource = {
   close: Effect.void,
 };
 
-/** The shell-owned metadata-only observability seam. */
 export class Telemetry extends Context.Service<Telemetry, TelemetryService>()(
   "@fidy/server/shell/observability/operations/Telemetry"
 ) {
-  /** Builds the service from a scoped adapter resource and drains it when the layer shuts down. */
   static readonly layer = <E, R>(
     resource: Effect.Effect<TelemetryResource, E, R>
   ): Layer.Layer<Telemetry, E, R> =>
@@ -290,10 +284,6 @@ const decodeFreshContext = (
     () => Effect.succeedNone
   );
 
-/**
- * The child-parent coordinates of an active span. `capturedAtUnixMilliseconds` is zero because a
- * same-fiber child never crosses a durable boundary and so is never age-checked.
- */
 const inProcessParent = (active: TelemetrySpan): DurableTraceContext =>
   DurableTraceContext.make({
     version: 1,
@@ -303,11 +293,9 @@ const inProcessParent = (active: TelemetrySpan): DurableTraceContext =>
     capturedAtUnixMilliseconds: 0,
   });
 
-/** Encodes approved durable coordinates as one W3C trace parent for loopback propagation. */
 export const encodeTraceParent = (context: DurableTraceContext): string =>
   `00-${context.traceId}-${context.parentSpanId}-${context.sampled ? "01" : "00"}`;
 
-/** Decodes only the strict W3C trace parent shape emitted by this service. */
 export const decodeTraceParent = ({
   value,
   receivedAtUnixMilliseconds,
@@ -359,7 +347,6 @@ const withActiveSpan = (
     })
   );
 
-/** Constructs the public service around an adapter while containing every adapter defect. */
 export const makeTelemetryService = (adapter: TelemetryAdapter): TelemetryService => {
   const activeSpans = new Map<string, SpanDescriptor["operation"]>();
   return Telemetry.of({
@@ -420,7 +407,6 @@ export const makeTelemetryService = (adapter: TelemetryAdapter): TelemetryServic
   });
 };
 
-/** Makes every telemetry operation a side-effect-free no-op while preserving wrapped Work. */
 export const TelemetryDisabled: Layer.Layer<Telemetry> = Telemetry.layer(
   Effect.succeed(DisabledTelemetryResource)
 );

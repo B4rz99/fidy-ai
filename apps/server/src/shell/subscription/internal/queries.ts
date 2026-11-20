@@ -72,7 +72,6 @@ const unavailable = (): Unavailable =>
     next: [],
   });
 
-/** Validate published Price rows as one ordered, immutable offer set. */
 export const projectSubscriptionOffers = (rows: ReadonlyArray<unknown>): SubscriptionOffers =>
   decode(
     Schema.toCodecJson(SubscriptionOffers),
@@ -91,7 +90,6 @@ export const projectSubscriptionOffers = (rows: ReadonlyArray<unknown>): Subscri
     })
   );
 
-/** Load only published immutable Prices, validating the complete ordered offer set. */
 export const listSubscriptionOffersResponse = Effect.flatMap(SqlClient.SqlClient, (sql) => {
   const query = subscriptionOffersQuery();
   return sql.unsafe(query.sql, query.params);
@@ -101,7 +99,6 @@ export const listSubscriptionOffersResponse = Effect.flatMap(SqlClient.SqlClient
   Effect.catchDefect(() => Effect.fail(unavailable()))
 );
 
-/** Read one User's trial, paid period, and bounded attempts at the same decision instant. */
 export const readSubscriptionStatus = (
   userId: UserId
 ): Effect.Effect<
@@ -170,7 +167,6 @@ const hasPeriodAccess = (row: typeof StandingRow.Type, now: number): boolean =>
     row.access_ends_at_ms !== null &&
     row.access_ends_at_ms > now);
 
-/** Build a closed User-specific standing projection from decoded authoritative rows. */
 export const projectSubscriptionStatus = ({
   standingRow,
   attemptRows,

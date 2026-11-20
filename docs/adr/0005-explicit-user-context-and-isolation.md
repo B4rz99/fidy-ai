@@ -20,7 +20,7 @@ service. Ordinary aggregates do not carry a `userId` field because the User is t
 `ConsentRecord` and `AuditLogEntry` carry an explicit subject because their purpose is to attest who
 acted.
 
-The Cloudflare application uses a private data boundary. The public Worker cannot access private D1;
+The Cloudflare application uses a private data boundary. Public Ingress cannot access private User storage;
 operation-derived isolation evidence enumerates the assembled API, seeds two subjects, and verifies
 that one subject's operations cannot see or mutate the other's data. Queue, Workflow, and Email Worker
 paths also carry the subject explicitly. Durable Object keys coordinate work but never authorize it.
@@ -58,5 +58,4 @@ supplying the User.
 
 ### Use a process-local or public data store
 
-Rejected because it cannot prove isolation across Worker requests or replicas. Private D1 and explicit
-subject propagation are the authority.
+Rejected because it cannot prove isolation across Worker requests or replicas. The named UserStore and explicit subject propagation define the private boundary.

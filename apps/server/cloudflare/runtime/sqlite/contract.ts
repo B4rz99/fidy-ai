@@ -1,6 +1,5 @@
 import { Context, Data, type Effect } from "effect";
 
-/** Only owner-defined, versioned SQL can enter a store migration. */
 export type MigrationStatement =
   | string
   | Readonly<{ sql: string; bindings: ReadonlyArray<string | number> }>;
@@ -32,9 +31,7 @@ export class StoreCapacity extends Context.Service<
   }
 >()("@fidy/server/cloudflare/runtime/sqlite/contract/StoreCapacity") {}
 
-/** Only the Core holder of a shared namespace can ask its singleton for retained migration markers. */
 export const storeReadinessUrl = "https://store.invalid/release-readiness";
 
-/** Cannot equal a canonical UUID UserId. This named schema probe holds no User authority. */
 export const storeTransactionUrl = "https://store.invalid/release-transaction";
 export const releaseProbeName = "release-schema-probe-v1";

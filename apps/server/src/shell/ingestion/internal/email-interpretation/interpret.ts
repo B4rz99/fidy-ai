@@ -155,12 +155,6 @@ const interpret = (input: InterpretationInput): NotificationEmailInterpretation 
     : finalizeInterpretation(candidate, document.value, input.context);
 };
 
-/**
- * Deterministically interprets bounded provider-decoded email content. The caller supplies captured
- * historical context and may rely on this function never invoking a model, fetching embedded
- * content, logging input, or returning unvalidated facts. Every non-unique or unsafe result is a
- * closed NeedsReview decision.
- */
 export const interpretNotificationEmail = Effect.fn("interpretNotificationEmail")(function (
   input: InterpretationInput
 ): Effect.Effect<NotificationEmailInterpretation> {

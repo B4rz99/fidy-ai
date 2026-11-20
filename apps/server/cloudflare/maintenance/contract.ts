@@ -37,19 +37,15 @@ export type ScheduledOperation =
   | "forwarded-email.sweep"
   | "forwarded-email.dispatch";
 
-/** Already-bound owner work; the schedule supplies neither authorization nor retention policy. */
 export type ScheduledActivity<E = void> = Readonly<{
   operation: ScheduledOperation;
   work: Effect.Effect<unknown, E>;
 }>;
 
-/** At least one independent activity failed; owner failures and payloads remain private. */
 export class ScheduledWorkFailed extends Data.TaggedError("ScheduledWorkFailed") {}
 
-/** A failed Email Worker tick retains its existing closed native failure classification. */
 export class EmailScheduleUnavailable extends Data.TaggedError("EmailScheduleUnavailable") {}
 
-/** Private singleton for lifetime discovery. One UserId always names one User store. */
 export const maintenanceName = "core-maintenance-v1";
 export const registrationAcceptedStatus = 204;
 export const registerLifetimeUrl = "https://maintenance.invalid/lifetime/register";

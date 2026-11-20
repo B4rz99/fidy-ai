@@ -23,12 +23,10 @@ export type OwnerOutcome = Readonly<{
   _tag: "Owner";
   operation: string;
   collisionKey: Option.Option<string>;
-  /** Owner-specific facts retained for earlier-child guard replay inside one batch. */
   guardFacts: Option.Option<BudgetOutcome | KeywordRuleOutcome>;
   read: (db: D1Database, userId: string) => Effect.Effect<Option.Option<CommittedMutationValue>>;
 }>;
 
-/** The committed value an owner must read back and how it presents to the caller. */
 export type CanonicalMutationOutcome =
   | OwnerOutcome
   | TransactionOutcome
@@ -43,30 +41,20 @@ export type CanonicalMutationOutcome =
       publication: StatementPublicationOutcome;
     }>;
 
-/** Facts an owner needs to classify its own indexed guard refusal after rollback. */
 export type GuardRefusalWork = Readonly<{
   db: D1Database;
   subject: TransactionCaller;
   current: number;
   earlier: ReadonlyArray<CanonicalMutationOutcome>;
-  /** The indexed CHECK that proved this child, not an error string guessed after rollback. */
   kind: "completion" | "capacity";
 }>;
 
-/**
- * One owner-prepared canonical mutation ready for a caller-owned D1 unit. `statements` end with
- * the success AuditLogEntry; the unit appends an indexed rollback assertion after them.
- * `outcome` drives committed readback, and `guardRefusal` decides a proved completion failure.
- */
 export type PreparedCanonicalMutation = Readonly<{
-  /** Absent until an owner supplies exact sensitive effect/revision guards. */
   oauthReview: Option.Option<OAuthMutationReview>;
 
-  /** Exact PAT or OAuth capability used to prepare and audit this child. None carries no child-specific capability. */
   requiredScope: Option.Option<CanonicalCapability>;
   statements: ReadonlyArray<D1PreparedStatement>;
   outcome: CanonicalMutationOutcome;
-  /** Owner-defined checks run after the shared Audit check but before this child's writes. */
   commitGuards: Option.Option<
     (
       work: Readonly<{
@@ -77,9 +65,7 @@ export type PreparedCanonicalMutation = Readonly<{
       }>
     ) => ReadonlyArray<D1PreparedStatement>
   >;
-  /** Browser Budget Audits use their own cap rather than the shared PAT/Category cap. */
 
-  /** Construct the owner's refusal; its metadata-only Audit is recorded only when `record` runs. */
   guardRefusal: (work: GuardRefusalWork) => Effect.Effect<CanonicalMutationRefusal>;
 }>;
 
@@ -95,11 +81,6 @@ export type CommittedMutationValue =
   | Readonly<{ _tag: "StatementSubmission"; submission: StatementSubmission }>
   | Readonly<{ _tag: "ForwardingAddress"; address: EmailForwardingAddress }>;
 
-/**
- * One canonical refusal an owner decided. `code` and `message` are what a batch child reports;
- * `record` commits the owner's refusal AuditLogEntry under the exact child authority, and
- * `respond` renders the owner's own canonical individual response for that disposition.
- */
 export type CanonicalMutationRefusal = Readonly<{
   code: ErrorCode;
   message: string;
@@ -107,12 +88,6 @@ export type CanonicalMutationRefusal = Readonly<{
   respond: (disposition: CanonicalRefusalDisposition) => Effect.Effect<Response>;
 }>;
 
-/**
- * One owner's answer for a canonical mutation before its caller-owned unit may commit. The three
- * payload-free arms differ by who answers: `CredentialRefused` and `Unavailable` are decided, so
- * the executor renders them directly, while `Failed` is a dependency defect the executor
- * re-classifies against the live credential before answering.
- */
 export type CanonicalMutationPreparation =
   | Readonly<{ _tag: "Prepared"; mutation: PreparedCanonicalMutation }>
   | Readonly<{ _tag: "Refused"; refusal: CanonicalMutationRefusal }>
@@ -120,24 +95,17 @@ export type CanonicalMutationPreparation =
   | Readonly<{ _tag: "Unavailable" }>
   | Readonly<{ _tag: "Failed" }>;
 
-/** Raw children are decoded against the catalog; malformed named children remain attributable for refusal Audit. */
 export const BatchCalls = Schema.NonEmptyArray(Schema.Unknown).check(
   Schema.isMaxLength(maximumAtomicBatchCalls)
 );
 export type BatchCalls = typeof BatchCalls.Type;
 const Batch = { calls: BatchCalls } as const;
-/** Catalog operation identity selects the adapter; its raw input is decoded by that owner. */
+
 const Call = {
   operation: CanonicalOperationId,
   input: Schema.Unknown,
 } as const;
 
-/**
- * Canonical work one User coordinator executes. A Call carries catalog-owned canonical input;
- * a Query carries only an admitted HTTP path/query target, never headers or credential plaintext;
- * a Batch carries the bounded raw child list. Query owners retain input classification and live
- * accounting; mutation owners retain their shared atomic commit.
- */
 export const CanonicalWork = Schema.Union([
   Schema.TaggedStruct("Call", Call),
   Schema.TaggedStruct("Query", {
@@ -151,7 +119,6 @@ export type CanonicalWork = typeof CanonicalWork.Type;
 export const BatchInput = Schema.Struct(Batch);
 export type BatchInput = typeof BatchInput.Type;
 
-/** One owner preparation receives decoded catalog input and the caller's exact live authority. */
 export type CanonicalPreparationWork = Readonly<{
   db: D1Database;
   subject: TransactionCaller;
@@ -170,7 +137,7 @@ const PAT = {
   patId: Schema.String.check(Schema.isUUID()),
   requiredScope: Schema.NullOr(CanonicalCapability),
 } as const;
-/** Live caller authority paired with the exact work admitted; this envelope is not a canonical mutation. */
+
 export const CanonicalWorkAdmission = Schema.Union([
   Schema.TaggedStruct("WebSessionQueryWork", {
     ...WebSession,
@@ -190,19 +157,10 @@ export const CanonicalWorkAdmission = Schema.Union([
 ]);
 export type CanonicalWorkAdmission = typeof CanonicalWorkAdmission.Type;
 
-/**
- * The live WebSession facts an admission carries for one piece of work: the session id, its
- * User, and the proof digest the coordinator re-verifies against live authority before any D1 unit
- * commits. The work itself is excluded — it is what the authority admits, not part of it.
- */
 type WebSessionAuthority = Omit<
   Extract<CanonicalWorkAdmission, { _tag: "WebSessionWork" }>,
   "_tag" | "work"
 >;
-/**
- * The live PAT facts an admission carries for one piece of work: the PAT id, its User, the
- * proof digest, and the required capability the coordinator re-verifies against live authority
- * before any D1 unit commits. The work itself is excluded — it is what the authority admits.
- */
+
 type PATAuthority = Omit<Extract<CanonicalWorkAdmission, { _tag: "PATWork" }>, "_tag" | "work">;
 export type { PATAuthority, WebSessionAuthority };

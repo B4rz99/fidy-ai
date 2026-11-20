@@ -25,7 +25,7 @@ const messageContext = {
   expiresAt: UtcTimestamp,
   timeZone: IanaTimeZone,
 };
-/** Frozen category content distinguishes existing delivery permission from a pending legal decision. */
+
 export const ProactivityReport = Schema.Union([
   Schema.TaggedStruct("GrantMessage", {
     ...messageContext,
@@ -45,7 +45,6 @@ export const ProactivityReport = Schema.Union([
 ]);
 export type ProactivityReport = typeof ProactivityReport.Type;
 
-/** A caller-owned live authority held inside User coordination. The User is re-correlated at each read/write; neither this snapshot nor a schedule identity authorizes a later effect. */
 export type ReminderCanonicalWork = Readonly<{
   db: D1Database;
   userId: string;
@@ -55,7 +54,7 @@ export type ReminderCanonicalWork = Readonly<{
 }>;
 
 const unansweredDeliveries = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 200 }));
-/** Governor standing is separate from legal permission. Paused execution has no pending question. */
+
 export const WeeklyGovernor = Schema.Union([
   Schema.TaggedStruct("Attentive", { unanswered: unansweredDeliveries }),
   Schema.TaggedStruct("QuestionPending", { unanswered: unansweredDeliveries }),
@@ -67,7 +66,6 @@ export const WeeklyGovernor = Schema.Union([
 ]);
 export type WeeklyGovernor = typeof WeeklyGovernor.Type;
 
-/** Historical instruction plus the explicit owner and particular delivery grant; never reusable authority. */
 export const WeeklyScheduleSnapshot = Schema.Struct({
   ...WeeklySchedule.fields,
   userId: UserId,
@@ -75,7 +73,6 @@ export const WeeklyScheduleSnapshot = Schema.Struct({
 });
 export type WeeklyScheduleSnapshot = typeof WeeklyScheduleSnapshot.Type;
 
-/** Captured reminder instruction and exact legal grant, not reusable execution authority. */
 export const ReminderScheduleSnapshot = Schema.Struct({
   ...ReminderSchedule.fields,
   userId: UserId,
@@ -83,16 +80,13 @@ export const ReminderScheduleSnapshot = Schema.Struct({
 });
 export type ReminderScheduleSnapshot = typeof ReminderScheduleSnapshot.Type;
 
-/** Reminder generation distinguishes no due work from expired unstarted delivery. */
 export type ReminderMaterialization =
   | Readonly<{ _tag: "NoWork" | "Expired" }>
   | Readonly<{ _tag: "Created"; id: InsightEventId }>;
 
-/** A bounded due identity is a coordination hint, not content or authority. */
 export const DueWeeklySchedule = Schema.Struct({ userId: UserId, id: ScheduleId });
 export type DueWeeklySchedule = typeof DueWeeklySchedule.Type;
 
-/** Immutable complete report and presentation for one explicit occurrence; attention state remains Insights-owned. */
 export const WeeklySummaryReport = Schema.Struct({
   insightEventId: InsightEventId,
   payload: WeeklySummaryPayload,
@@ -102,12 +96,10 @@ export const WeeklySummaryReport = Schema.Struct({
 }).annotate({ identifier: "WeeklySummaryReport" });
 export type WeeklySummaryReport = typeof WeeklySummaryReport.Type;
 
-/** Closed materialization outcomes distinguish empty activity from unavailable projections and stale delivery work. */
 export type WeeklyMaterialization =
   | Readonly<{ _tag: "NoWork" | "NoActivity" | "Expired" }>
   | Readonly<{ _tag: "Created"; id: InsightEventId }>;
 
-/** Only identities cross Queue and Workflow history; neither financial facts nor authorization does. */
 export const WeeklySummaryWork = Schema.Struct({
   traceContext: Schema.optionalKey(Schema.Unknown),
   kind: Schema.Literal("weekly-summary"),
@@ -117,7 +109,6 @@ export const WeeklySummaryWork = Schema.Struct({
 });
 export type WeeklySummaryWork = typeof WeeklySummaryWork.Type;
 
-/** Separate question identity; a question is not a financial InsightEvent or a counted delivery. */
 export const WeeklyQuestionWork = Schema.Struct({
   traceContext: Schema.optionalKey(Schema.Unknown),
   kind: Schema.Literal("weekly-question"),
@@ -126,7 +117,7 @@ export const WeeklyQuestionWork = Schema.Struct({
   id: Schema.String.check(Schema.isUUID()),
 });
 export type WeeklyQuestionWork = typeof WeeklyQuestionWork.Type;
-/** Content-free continuation for one frozen category message; the report owns its role and live grant. */
+
 export const CategoryDeliveryWork = Schema.Struct({
   owner: Schema.optionalKey(Schema.Literal("user")),
   traceContext: Schema.optionalKey(Schema.Unknown),
@@ -136,7 +127,7 @@ export const CategoryDeliveryWork = Schema.Struct({
   id: Schema.String.check(Schema.isUUID()),
 });
 export type CategoryDeliveryWork = typeof CategoryDeliveryWork.Type;
-/** Shared content-free delivery protocol for weekly summaries/questions and category messages. */
+
 export const ProactivityDeliveryWork = Schema.Union([
   WeeklySummaryWork,
   WeeklyQuestionWork,
@@ -144,7 +135,6 @@ export const ProactivityDeliveryWork = Schema.Union([
 ]);
 export type ProactivityDeliveryWork = typeof ProactivityDeliveryWork.Type;
 
-/** Deterministic status hints, never authority. Category IDs omit the long kind to fit Cloudflare's 100-character limit; weekly identities remain stable. */
 export const ProactivityWorkflowId = Schema.Union([
   Schema.TemplateLiteral([
     "weekly-",
@@ -156,23 +146,13 @@ export const ProactivityWorkflowId = Schema.Union([
   ]),
   Schema.TemplateLiteral(["proactivity-", UserId, "-", CategoryDeliveryWork.fields.id]),
 ]);
-/** The private operational projection exposes only a validated locator and bounded timing metadata. */
+
 export const ProactivityWorkObservation = Schema.Struct({
   id: ProactivityWorkflowId,
-  /**
-   * UTC epoch milliseconds when summary/category delivery work was materialized, or a weekly
-   * question was requested or triggered by summary delivery; not Queue offer or Workflow start time.
-   */
   created: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-  /**
-   * UTC epoch milliseconds when the delivery window expires: the frozen report's expiry for
-   * summary/category work, or 24 hours after created for weekly questions. None means expiry is
-   * unknown to this observation, never unlimited delivery eligibility; current delivery kinds
-   * supply a deadline.
-   */
   deadline: Schema.OptionFromNullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
 });
-/** Maximum oldest pending locators exposed by one operational observation. */
+
 export const proactivityObservationLimit = 8;
 export const ProactivityWorkObservations = Schema.Array(ProactivityWorkObservation).check(
   Schema.isMaxLength(proactivityObservationLimit)
@@ -200,14 +180,14 @@ export const ProactivityActivity = Schema.Union([
   }),
 ]);
 export type ProactivityActivity = typeof ProactivityActivity.Type;
-/** Workflow history retains only the next permissible instant, never provider/report/recipient text. */
+
 export const ProactivityActivityResult = Schema.Union([
   Schema.TaggedStruct("Done", {}),
   Schema.TaggedStruct("RecoveryAdmitted", {}),
   Schema.TaggedStruct("Deferred", { nextEligibleAtMs: Schema.Int }),
 ]);
 export type ProactivityActivityResult = typeof ProactivityActivityResult.Type;
-/** Both approved templates and an explicit enablement gate are required before native execution. */
+
 export type ProactivityEnvironment = Partial<UserStoreBindings> &
   Readonly<{ DB: D1Database }> &
   Partial<
@@ -224,14 +204,11 @@ export type ProactivityEnvironment = Partial<UserStoreBindings> &
   >;
 export const WeeklyThresholdConfiguration = Schema.toCodecStringTree(ProactivityThresholds);
 
-/** A coordination hint only; processing must re-read the event inside this User's boundary. */
 export const DueInsight = Schema.Struct({ userId: UserId, id: InsightEventId });
 export type DueInsight = typeof DueInsight.Type;
 
-/** Another instruction edit has already replaced the revision this caller read. */
 export class ReminderRevisionConflict extends Data.TaggedError("ReminderRevisionConflict") {}
 
-/** Insight state could not be read or retained completely; it is not an absent occurrence. */
 export class InsightUnavailable extends Data.TaggedError("InsightUnavailable") {}
 
 export type RecurringDigestAdvanceResult =

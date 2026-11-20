@@ -652,9 +652,6 @@ const budgetEditing = (data: MonthData, writes: BudgetWrites): BudgetEditing => 
     `${status.budget.id}:${BigDecimal.format(status.budget.cap.amount)}:${writes.refreshVersion}`,
 });
 
-/** Owns one User's monthly reads, write admission and explicit reread recovery.
- * Query atoms retain canonical facts; local state retains only edit interaction and feedback.
- */
 export const useMonthlyBudgets = (input: MonthInput): BudgetMonth => {
   const reads = useMonthQueries(input);
   const writes = useBudgetWrites({

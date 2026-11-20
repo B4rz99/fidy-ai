@@ -14,7 +14,6 @@ import { withStoreCapacity } from "../../runtime/sqlite/operations";
 const pageSize = 8;
 const retryMs = 60_000;
 
-/** Reconcile the old destination's durable outcome. A timeout retains the exact reservation and identity hold. */
 export const reconcileErasedHandoffs = Effect.fn(function* (
   users: Pick<DurableObjectNamespace, "getByName">
 ) {
@@ -59,7 +58,7 @@ const releaseIdentityHolds = Effect.fn(function* (user: string) {
   }
   return true;
 });
-/** In a single guarded transaction each selected row keeps its original binding through deletion. */
+
 export const cleanDirectoryCase = Effect.fn(function* (
   scope: typeof CleanupCommand.Type,
   permission: typeof CleanupPermission.Type
@@ -73,7 +72,6 @@ export const cleanDirectoryCase = Effect.fn(function* (
   ) {
     return false;
   }
-  // Source/global budgets remain shared. These two scopes bear the exact subject or pairing verifier digest.
   const admissions =
     yield* sql`DELETE FROM bootstrap_admissions WHERE id IN(SELECT id FROM bootstrap_admissions WHERE scope IN(
     SELECT 'wa:'||length(portfolio)||':'||portfolio||bsuid FROM whatsapp_routes WHERE user_id=${user} UNION ALL
@@ -82,7 +80,6 @@ export const cleanDirectoryCase = Effect.fn(function* (
   const invitations =
     yield* sql`DELETE FROM whatsapp_invitations WHERE id IN(SELECT i.id FROM browser_pairings p JOIN whatsapp_invitations i ON i.pairing_id=p.id WHERE p.user_id=${user} UNION ALL SELECT i.id FROM whatsapp_routes w JOIN whatsapp_invitations i ON i.portfolio=w.portfolio AND i.bsuid=w.bsuid WHERE w.user_id=${user} LIMIT 32) RETURNING id`;
   if (invitations.length === deletionPage) return false;
-  // Delete children referring to exact existing reservations, then the frozen pairings and their remaining proof data.
   for (const table of [
     "session_routes",
     "pat_routes",
@@ -107,7 +104,6 @@ export const cleanDirectoryCase = Effect.fn(function* (
   );
 });
 
-/** Reveal only the original callback coordinates of this pending, operator-authorized obligation. */
 export const inspectDirectoryScope = Effect.fn(function* (
   request: Request,
   registry: ErasureRegistryNamespace

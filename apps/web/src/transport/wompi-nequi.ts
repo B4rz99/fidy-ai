@@ -146,12 +146,6 @@ const waitForApproval = (
     return token;
   });
 
-/**
- * Borrows one approved authorization into the consumer, then wipes the token on every exit.
- * Phone drafts are cleared even on preflight failure; progress callbacks cannot reject work.
- * Only authorization has the original five-minute deadline. Consumer failures and interruption
- * retain their own meaning and approval does not establish collection settlement.
- */
 export const withApprovedNequiWithWompi: {
   <A, E, R>(
     consume: (token: Redacted.Redacted<string>) => Effect.Effect<A, E, R>

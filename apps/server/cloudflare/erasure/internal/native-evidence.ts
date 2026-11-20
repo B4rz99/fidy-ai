@@ -13,7 +13,6 @@ const reply = (accepted: boolean): Response =>
     headers: { "cache-control": "no-store" },
   });
 
-/** The operator supplies a bounded reference to a reviewed outcome. Local absence never chooses a disposition. */
 export const recordNativeEvidence = Effect.fn(function* (
   request: Request,
   storage: DurableObjectStorage

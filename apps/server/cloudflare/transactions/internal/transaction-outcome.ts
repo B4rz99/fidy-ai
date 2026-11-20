@@ -34,7 +34,7 @@ import {
   findTransactionPair,
   findTransactionPresentation,
 } from "./transaction-history";
-/** The one message both the individual caller and a batch child report for an observed revision. */
+
 export const staleCorrectionMessage =
   "The Transaction changed since it was read. Re-read it and retry the correction.";
 
@@ -43,7 +43,6 @@ const staleCorrectionRefusal: TransactionRefusal = {
   message: staleCorrectionMessage,
 };
 
-/** Classify an indexed Transaction guard abort using the owner's retained premises and earlier children. */
 export const transactionGuardRefusal =
   (outcome: TransactionOutcome) =>
   ({
@@ -83,7 +82,6 @@ export const transactionGuardRefusal =
     );
   };
 
-/** Record a metadata-only Transaction refusal under its child authority and render its own response. */
 export const transactionRefusal = ({
   db,
   subject,
@@ -122,10 +120,6 @@ export const transactionRefusal = ({
   },
 });
 
-/**
- * One decided Transaction refusal as the preparation every owner executor maps to its canonical
- * response. Each owner names only its operation and refusal; the evidence recording stays here.
- */
 export const refusedTransactionMutation = ({
   db,
   subject,
@@ -140,8 +134,6 @@ export const refusedTransactionMutation = ({
   current: number;
 }>): CanonicalMutationPreparation =>
   refusedPreparation(transactionRefusal({ db, subject, operation, refusal, current }));
-
-/** The refusal a Transaction child reports for a trigger that belongs to its own owner. */
 
 const findDeletedTransactionValue = ({
   db,
@@ -169,10 +161,6 @@ const findDeletedTransactionValue = ({
     );
   });
 
-/**
- * Read the records one committed Transaction child presents, or None when the unit read back an
- * incomplete set. The individual response and the atomic-batch child output encode the same value.
- */
 export const findTransactionValue = ({
   db,
   userId,
@@ -222,7 +210,6 @@ const PairPremiseRow = Schema.Struct({
   eligible: Schema.Int,
 });
 
-/** The refusal one link premise reports, or none while the pair can still link. */
 const linkPremiseRefusalFor = (
   premise: typeof PairPremiseRow.Type
 ): Option.Option<TransactionRefusal> => {
@@ -237,7 +224,6 @@ const linkPremiseRefusalFor = (
     : Option.none();
 };
 
-/** The refusal one link whose pair premise moved before commit reports, or none when it still holds. */
 const linkPremiseRefusal = ({
   db,
   userId,
@@ -282,7 +268,6 @@ const linkPremiseRefusal = ({
     Effect.orElseSucceed(() => Option.none())
   );
 
-/** The refusal one unlink whose decision stopped being linked before commit reports, or none. */
 const unlinkPremiseRefusal = ({
   db,
   userId,
@@ -322,7 +307,6 @@ const unlinkPremiseRefusal = ({
 
 const RevisionRow = Schema.Struct({ revision: Schema.Int });
 
-/** None means the observed correction revision still holds. repeated means an earlier child used the same Transaction revision, so this child owns the aborted guard. */
 const observedRevisionRefusal = ({
   db,
   userId,
@@ -350,13 +334,6 @@ const observedRevisionRefusal = ({
       : Option.none();
   });
 
-/**
- * The refusal one Transaction child explains for an aborted unit, or None when it cannot. A
- * correction whose stored revision no longer matches (or that repeats an earlier child's observed
- * revision) comes first, then a link or unlink whose pair premise moved outside the unit. A premise
- * or revision that only the unit itself changed is invisible here because the unit rolled back, so
- * an intra-batch conflict stays unattributable.
- */
 export const transactionAbortRefusal = ({
   db,
   userId,
@@ -387,7 +364,6 @@ export const transactionAbortRefusal = ({
 
 const TotalRow = Schema.Struct({ total: Schema.Int });
 
-/** Decode the count from one D1 aggregate; a missing or malformed row is unavailable. */
 export const countRows = (statement: D1PreparedStatement): Promise<number> =>
   statement
     .first()

@@ -36,8 +36,6 @@ it("keeps mailbox-proof replacement out of atomic batches", () => {
 });
 
 it("keeps held-only statement publication out of the public atomic-batch child union", () => {
-  // Statement publication remains an atomic owner mutation, but public HTTP batches cannot
-  // supply its verified WhatsApp attachment and live original-Turn authority.
   const ingestion = operationCatalog.byId.get("ingestion.submitForExtraction");
   expect(ingestion?.atomicBatchEligible).toBe(true);
   expect(ingestion?.policy.kind).toBe("mutation");

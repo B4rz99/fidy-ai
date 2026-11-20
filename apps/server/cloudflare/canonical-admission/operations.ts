@@ -116,7 +116,6 @@ type RequestCall<E, R> = Readonly<{
     | Readonly<{
         canonicalInput: Schema.Json;
         retryKey: Option.Option<unknown>;
-        /** Server-bound continuation; the confirmation owner retains single-use authority. */
         confirmationReference: Option.Option<string>;
       }>
   );
@@ -131,7 +130,7 @@ type MeteredCall<E, R> = Call<E, R> &
 export const canonicalAdmissionUnavailable = (): Response => unavailable();
 export const noAuthority = (): Response => unauthorized();
 export const rateLimited = (): Response => limited();
-/** Bound shared User request pressure without consuming a commercial allowance or adding canonical accounting. */
+
 export const protectCanonicalPressure = <A, E, R>(
   input: Readonly<{
     db: D1Database;
@@ -267,7 +266,7 @@ const checkScopes = <E, R>(
   });
 const attachStanding = (response: Response, status: QuotaStatus, current: number): Response =>
   standingResponse({ response, status, current });
-/** Disclose current allowance only after the caller's atomic read and accountability succeed. */
+
 export const attachCanonicalStanding = ({
   response,
   status,
@@ -283,7 +282,7 @@ const replayResponse = (replay: Replay): Response => {
   return new Response(replay.body.value, { status: replay.status.value, headers });
 };
 const forbiddenHttpStatus = 403;
-/** A withdrawn-Consent refusal is public recovery guidance, never the original financial body. Rebuild the closed refusal instead of turning it into an invalid-credential response. */
+
 const deniedDisclosure = (response: Response): Effect.Effect<Response> => {
   if (response.status !== forbiddenHttpStatus) return Effect.succeed(noAuthority());
   return Effect.tryPromise({ try: () => response.clone().json(), catch: () => undefined }).pipe(
@@ -660,7 +659,6 @@ const prepareRetainedCall = <E, R>(
     };
   });
 
-/** Own one exact invocation through acceptance, retention and current-authority disclosure. A pending outcome never authorizes another execution. */
 const runRetainedCall = <E, R>(
   input: RequestCall<E, R>,
   identity: string
@@ -688,7 +686,6 @@ const runRetainedCall = <E, R>(
     return yield* disclose(call, response);
   });
 
-/** Trusted public ingress supplies a keyed source; no caller-selected policy or plaintext source is accepted. */
 export const protectCanonicalSource = ({
   db,
   request,
@@ -706,7 +703,6 @@ export const protectCanonicalSource = ({
       : Option.some(result === "rate_limited" ? rateLimited() : unavailable());
   });
 
-/** One external envelope is charged before work; exact replay never starts new work. Browser calls are commercially free. */
 const executeProtectedRequest = <E, R>(
   input: RequestCall<E, R>
 ): Effect.Effect<Response, never, R> =>
@@ -796,7 +792,6 @@ const executeAcquiredRequest = <E, R>({
     Effect.map((result) => result.response)
   );
 
-/** Header disclosure proves only the live User-owned credential and Consent, not business capability. Missing scope or invalid input can still report that User's allowance; failed proof discloses nothing. */
 const finalizeAllowance = ({
   db,
   caller,
@@ -840,7 +835,6 @@ const finalizeAllowance = ({
     )
   );
 
-/** Prove the live credential and Consent again before disclosing standing. */
 export const discloseCanonicalAllowance = (
   input: Readonly<{ db: D1Database; caller: AuthorizedCanonicalCaller; response: Response }>
 ): Effect.Effect<Response> =>
@@ -848,7 +842,6 @@ export const discloseCanonicalAllowance = (
     Effect.map((result) => result.response)
   );
 
-/** Decorate all authenticated outcomes, including validation, protection and dependency refusals, without spending a commercial unit or relaxing owner disclosure authority. */
 export const protectCanonicalRequest = <E, R>(
   input: RequestCall<E, R>
 ): Effect.Effect<Response, never, R> => executeProtectedRequest(input);
@@ -864,7 +857,6 @@ type BrowserRequest<E, R> = Readonly<{
   ) => Effect.Effect<Response, E, R>;
 }>;
 
-/** Resolve mounted browser proof with native pressure admission; owner work and disclosure still recheck live authority. */
 const executeBrowserRequest = <E, R>(
   input: BrowserRequest<E, R>,
   timings: Option.Option<CanonicalRequestTimings>
@@ -943,7 +935,6 @@ const refuseBrowserSnapshot = ({
   unavailableResponse: () => Response;
 }>): Effect.Effect<Response, CanonicalAdmissionUnavailable> =>
   Effect.gen(function* () {
-    // A response can be lost after commit. Never replay owner work.
     const row = yield* Effect.tryPromise({
       try: () =>
         db
@@ -995,7 +986,6 @@ const presentBrowserSnapshot = ({
     return attachStanding(response, status.value, current);
   });
 
-/** Recheck this exact credential in the caller's same native snapshot. */
 const snapshotUserSelection = (lookup: BoundWebSessionLookup): OwnedStatement => ({
   sql: `SELECT userId FROM (${lookup.statement.sql})`,
   params: lookup.statement.params,
@@ -1037,7 +1027,6 @@ const prepareSnapshotRead = (
   };
 };
 
-/** Commit an approved unmetered browser read, pressure, Audit and standing under one fresh native fence. */
 export const protectCanonicalBrowserSnapshot = (
   input: BrowserSnapshotRequest
 ): Effect.Effect<Response> =>
@@ -1091,7 +1080,6 @@ export const protectCanonicalBrowserSnapshot = (
     );
   });
 
-/** Meter canonical work inside an already pressure-protected MCP invocation under the User coordinator. */
 export const admitCanonicalOperation = <E, R>(
   input: RequestCall<E, R>
 ): Effect.Effect<Response, never, R> =>
@@ -1102,7 +1090,6 @@ export const admitCanonicalOperation = <E, R>(
     )
   );
 
-/** Startup/Consent observations share the same native pressure policy as canonical reads. */
 export const prepareBrowserObservationProtection = (
   input: Readonly<{
     db: D1Database;
@@ -1116,12 +1103,10 @@ export const prepareBrowserObservationProtection = (
     onSome: (id) => prepareBoundBrowserRequest({ ...input, id }),
   });
 
-/** Cleanup only the server-owned startup lease after a failed or interrupted phased read. */
 export const releaseBrowserObservation = (
   input: Readonly<{ db: D1Database; id: string }>
 ): Effect.Effect<void> => releaseRequest(input);
 
-/** Final standing and exact lease release join the owner's final Audit transaction. */
 export const prepareCanonicalReadCompletion = ({
   db,
   subject,
@@ -1164,7 +1149,6 @@ export const prepareCanonicalReadCompletion = ({
   };
 };
 
-/** One request-local finalizer for a phased browser query. Owner Audit and admission settle once. */
 export const prepareCanonicalBrowserQueryFinalization = (
   input: Readonly<{
     db: D1Database;
@@ -1202,7 +1186,6 @@ export const prepareCanonicalBrowserQueryFinalization = (
   };
 };
 
-/** Admission and owner source selection share the first phase; dependent work retains a lease. */
 type BrowserSourceRequest = Readonly<{
   db: D1Database;
   request: Request;
@@ -1269,7 +1252,6 @@ const executeBrowserSource = (
     })
   ).pipe(Effect.orElseSucceed(unavailable));
 
-/** Retain complete-request timing across source admission and freshly fenced dependent work. */
 export const protectCanonicalBrowserSource = (
   input: BrowserSourceRequest
 ): Effect.Effect<Response> =>
@@ -1281,12 +1263,10 @@ export const protectCanonicalBrowserSource = (
     );
   });
 
-/** The User transaction owns live authority, admission, owner work, Audit and exact receipt. */
 export const runLocalMutation: typeof mutateLocal = (input, invalidTarget) =>
   mutateLocal(input, invalidTarget);
 export const admitLocalRequest: typeof admitLocal = (input) => admitLocal(input);
 
-/** Visit expired ordinary receipts, independently of new captures, within a bounded User maintenance page. */
 export const sweepLocalReceipts: typeof sweepReceipts = (current) => sweepReceipts(current);
 
 export const recoverLocalReceipts: typeof recoverReceipts = (current, storage) =>

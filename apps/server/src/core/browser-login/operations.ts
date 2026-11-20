@@ -15,7 +15,6 @@ const unbiasedBase20ByteLimit = 240;
 const millisecondsPerSecond = 1_000;
 const pollingSlowdownIncrementSeconds = 5;
 
-/** Selects at most `maximum` uniform code symbols, rejecting biased random-byte values. */
 export const selectPublicCodeSymbols = (
   input: Readonly<{ readonly bytes: ReadonlyArray<number>; readonly maximum: number }>
 ): string => {
@@ -28,11 +27,9 @@ export const selectPublicCodeSymbols = (
   return accepted;
 };
 
-/** Formats eight validated base-20 symbols into the only canonical public spelling. */
 export const formatPublicCode = (symbols: BrowserLoginPublicCodeSymbols): BrowserLoginPublicCode =>
   BrowserLoginPublicCode.make(`${symbols.slice(0, 4)}-${symbols.slice(4)}`);
 
-/** Decides whether a pending challenge may replace the User's current Ready challenge. */
 export const decideApprovalTransition = (input: {
   readonly candidateOrdinal: bigint;
   readonly readyOrdinal: Option.Option<bigint>;
@@ -42,7 +39,6 @@ export const decideApprovalTransition = (input: {
     onSome: (readyOrdinal) => (readyOrdinal < input.candidateOrdinal ? "bind" : "reject"),
   });
 
-/** Expiry is fixed by the challenge creation instant, not caller input. */
 export const browserLoginPairingExpiry = (createdAt: DateTime.Utc): DateTime.Utc =>
   DateTime.addDuration(createdAt, browserLoginPairingLifetime);
 
@@ -87,10 +83,6 @@ const determineLifecycleAfterWrongVerifier = (
 ): "pending_approval" | "ready" | "invalidated" =>
   wrongVerifierAttempts === maximumWrongVerifierAttempts ? "invalidated" : activeLifecycle;
 
-/**
- * Decides one proof-bearing poll against a locked candidate. Unknown candidates take the generic
- * shell path after a dummy digest comparison; this rule handles only a real persisted pairing.
- */
 export const decideBrowserLoginRedemption = (
   input: RedemptionInput
 ): BrowserLoginRedemptionDecision => {

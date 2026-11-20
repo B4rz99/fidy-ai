@@ -176,7 +176,6 @@ const nativeSmokeJourney = Effect.fnUntraced(function* () {
     )
   ).toBe(environment.CONTRACT_DIGEST);
   const now = yield* Clock.currentTimeMillis;
-  // Native Queue transport invokes the dedicated executor, not candidate Core by hand.
   yield* Effect.tryPromise(() => bindings.SMOKE_QUEUE.send(offered));
   yield* Effect.tryPromise(() => bindings.SMOKE_QUEUE.send(offered));
   yield* awaitSmokeCompletion(() => poll());
@@ -214,7 +213,6 @@ const nativeSmokeJourney = Effect.fnUntraced(function* () {
     expect(stale.status).toBe(503);
     expect(stale.headers.get("x-fidy-smoke-failure")).toBe("probe_state");
   }
-  // A subsequent release does not move or overwrite the preceding native execution path.
   const prior = yield* Effect.tryPromise(() =>
     mf.getBindings<{ SMOKE_WORKFLOW: Workflow; SMOKE_QUEUE: Queue }>(priorRevision)
   );

@@ -7,7 +7,6 @@ const maximumPlans = 100;
 const maximumRevisions = 100;
 const maximumRecords = 4096;
 const maximumDay = 31;
-/** Local calendar identity, independent of browser timezone or daylight-saving transitions. */
 export const RecurringDate = Schema.String.check(
   Schema.isPattern(/^20\d{2}-\d{2}-\d{2}$/u),
   Schema.makeFilter(
@@ -118,7 +117,6 @@ const SuggestionDecision = Schema.Struct({
   disposition: Schema.Literals(["dismissed", "linked"]),
   planId: Schema.optionalKey(RecurringPlanId),
 });
-/** A bounded planning ledger. Historical detection and FinancialRecord remain separate owners. */
 export const RecurringDocument = Schema.Struct({
   revision: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   plans: Schema.Array(RecurringPlan).check(Schema.isMaxLength(maximumPlans)),
@@ -141,9 +139,6 @@ export type RecurringDocument = Omit<
         Partial<Readonly<{ replacement: RecurringPlanInput }>>
     >;
   }>;
-/** Calculation facts covering the requested months and retained occurrence dates.
- * This selection is not a complete editing ledger; publication retains its own document.
- */
 export type RecurringSchedule = Pick<
   RecurringDocument,
   "plans" | "exceptions" | "fulfillments" | "excludedTransactionIds"

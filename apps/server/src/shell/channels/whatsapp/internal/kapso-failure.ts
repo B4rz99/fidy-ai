@@ -56,7 +56,6 @@ const unavailableCodes = new Set([
   metaServerTemporarilyUnavailableCode,
 ]);
 
-/** Decides safe retry semantics for one documented Meta failure code; unknown codes are terminal. */
 export const classifyKapsoMetaFailureCode = (code: number): KapsoMetaFailureDisposition => {
   if (invalidRecipientCodes.has(code)) {
     return { safeReason: "invalid_recipient", automaticRetry: false };

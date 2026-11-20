@@ -2,7 +2,6 @@ const minimumRegionPixels = 32;
 const maximumMinimumShare = 0.49;
 const resizeWeightPrecision = 1000;
 
-/** Pointer geometry affects the preview only; the canonical edit still validates the weight. */
 export const dashboardResizePreview = ({
   coordinate,
   start,

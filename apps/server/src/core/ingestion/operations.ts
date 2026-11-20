@@ -117,12 +117,6 @@ const interpretSingleCapture = (
   };
 };
 
-/**
- * Interprets decoded image/text facts, applying COP and the frozen submission instant only when
- * absent. Missing required financial facts and non-completed/multiple movements enter review.
- * The caller supplies captured context and the finalization instant; processing time never replaces
- * the submission date. This pure decision neither accepts work nor grants authority to persist it.
- */
 export const interpretCapture = (input: CaptureInterpretationInput): CaptureInterpretation => {
   switch (input.proposal._tag) {
     case "Unparseable":
@@ -141,17 +135,10 @@ const bogotaAllowancePeriod = (
   return { from: period.startsAt, toExclusive: period.resetsAt };
 };
 
-/** Half-open Colombia calendar month used by every forwarded-email allowance decision. */
 export const emailAllowancePeriod = (
   now: DateTime.Utc
 ): Readonly<{ from: DateTime.Utc; toExclusive: DateTime.Utc }> => bogotaAllowancePeriod(now);
 
-/**
- * Decides eligibility from one User's current-month, non-negative media consumption snapshot after
- * replay handling. Admit describes publication of one new submission, not webhook acknowledgment.
- * Recheck this decision inside the acceptance commit; this pure snapshot grants no authority and
- * reserves no unit. Pro access bypasses only the product cap, never resource admission.
- */
 export const decideMediaAdmission = (
   input: Readonly<{
     access: AccessTier;
@@ -196,7 +183,6 @@ type DecideDeferredForwardedEmailActivation = (input: {
   | Readonly<{ _tag: "Activate"; consumesFreeAllowance: boolean }>
   | Readonly<{ _tag: "RemainDeferred"; resumeAt: DateTime.Utc }>;
 
-/** Decides one locked deferred-receipt transition without owning its atomic persistence. */
 export const decideDeferredForwardedEmailActivation: DecideDeferredForwardedEmailActivation = (
   input
 ) => {
@@ -228,7 +214,6 @@ type DecideForwardedEmailAdmission = (input: {
   remaining: Option.Option<number>;
 }>;
 
-/** Decides whether one already-deduplicated provider email runs now or at the next reset. */
 export const decideForwardedEmailAdmission: DecideForwardedEmailAdmission = (input) => {
   if (input.outstanding >= forwardedEmailOutstandingCap) {
     return {
@@ -254,7 +239,6 @@ const redactionMoney = "\uE001";
 const redactionDigits = "\uE002";
 const redactionText = "\uE003";
 
-/** Produces value-free structural evidence for explicit operator review. */
 export const redactEmailCandidate = (content: string): string =>
   content
     .replace(/[\uE000-\uE003]/gu, "")
@@ -270,8 +254,6 @@ export const redactEmailCandidate = (content: string): string =>
     .replaceAll(redactionDigits, "[DIGITS]")
     .replaceAll(redactionText, "[TEXT]");
 
-// Only this exact structural declaration is sufficient for mechanical capture. A regional
-// default never supplies a Currency or an uncertain column mapping.
 const mechanicallyMappedHeaders = ["fecha", "valor", "moneda", "contraparte"];
 const mechanicalStatementMapping = Schema.decodeSync(StatementColumnMapping)({
   dateColumn: 0,
@@ -285,7 +267,6 @@ const mechanicalStatementMapping = Schema.decodeSync(StatementColumnMapping)({
   decimalSeparator: ".",
 });
 
-/** The sole format that can be captured without inferring facts from an unknown bank layout. */
 export const mechanicalMappingFor = (
   headers: ReadonlyArray<string>
 ): Option.Option<StatementColumnMapping> =>
@@ -296,7 +277,6 @@ export const mechanicalMappingFor = (
     ? Option.some(mechanicalStatementMapping)
     : Option.none();
 
-/** Retain the original row for review rather than fabricating its mapping or Currency. */
 export const unmappedStatementRow = (row: ParsedStatementRow): NeedsReviewStatementRow => ({
   outcome: "needs-review",
   recordNumber: row.recordNumber,
@@ -657,10 +637,6 @@ const interpretRow: InterpretRow = (row, mapping, context) =>
         };
   });
 
-/**
- * Mechanically interprets every parser row and proves the conservation equation. The caller owns
- * the canonical decoder for the entity it will persist; a decoding failure becomes review.
- */
 export const interpretStatementRows = Effect.fn(function* <Extraction>(
   input: Readonly<{
     rows: ReadonlyArray<ParsedStatementRow>;

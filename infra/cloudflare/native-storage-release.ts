@@ -608,7 +608,6 @@ const erasureObservation = ({
   userNamespace: string;
   fs: FileSystem.FileSystem;
 }): ErasureObservation => {
-  // The final report retains each phase even when the last census fails or is interrupted.
   const checkpoints: Array<Parameters<ErasureObservation["record"]>[0]> = [];
   const path = env.smokeAttestationFile + ".erasure";
   return {
@@ -634,7 +633,6 @@ const sendClosedRequest = (
   body: "bytes" | "stream"
 ): Parameters<typeof admittedErasureLogins>[0]["send"] =>
   Effect.fn(function* (request: Request) {
-    // FromWeb drops Content-Type on an empty body. The Ingress proof binds the explicit headers.
     const outbound = HttpClientRequest.setHeaders(
       HttpClientRequest.fromWeb(request),
       request.headers
@@ -1211,7 +1209,6 @@ const attachCanonicalHosts = Effect.fn(function* (
   client: HttpClient.HttpClient,
   port: ReleasePort
 ) {
-  // The application and Access plans are separate. A domain attachment must never upload a new Worker version.
   for (const host of [
     new URL(installedOrigins.production.api).hostname,
     new URL(installedOrigins.production.browser).hostname,
@@ -1992,7 +1989,6 @@ const stageNative = Effect.fn(function* (
   );
 });
 
-/** Promotion is limited to the isolated network surface. Product opening has its own acceptance gates. */
 const promoteClosed = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
@@ -2367,7 +2363,6 @@ const resumeFleetCleanup = Effect.fn(function* ({
   });
   const budget = (phase: "renew-cleanup" | "refusal"): Effect.Effect<void, Error> =>
     meter(installed.revision, phase).pipe(Effect.asVoid);
-  // Retain coverage from the source windows even when physical cleanup fails.
   const coverage = yield* Effect.exit(meter(installed.revision, "archived-logs"));
   const cleaned = yield* Effect.exit(
     continueFleetCleanup({

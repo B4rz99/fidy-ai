@@ -10,7 +10,6 @@ import {
 import { expect, it } from "@effect/vitest";
 import { browserHttpClientLayer } from "./browser-http-policy";
 
-// Keep this test isolated from the assembled API: ordinary channel clients must not need it.
 it.effect("paces a declared unadmitted mutation without loading the bootstrap API", () =>
   Effect.gen(function* () {
     const started = Deferred.makeUnsafe<void>();

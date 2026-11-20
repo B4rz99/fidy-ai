@@ -26,7 +26,6 @@ const preloadEntryCode = (pathname: string): Promise<unknown> =>
     ? import("@/features/oauth-connections/feature")
     : Promise.resolve(entryCode[pathname]?.());
 
-/** Code loading starts alongside the native binding request; no client or data read starts here. */
 export const preloadWebRouteCode = (pathname: string): Promise<void> =>
   Promise.allSettled([
     import("./application-frame"),

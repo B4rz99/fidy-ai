@@ -1,4 +1,3 @@
-// Each invocation owns an isolated browser context and one newly seeded local installation.
 import assert from "node:assert/strict";
 import { appendFileSync } from "node:fs";
 import { createHash } from "node:crypto";
@@ -144,7 +143,6 @@ try {
   assert.ok(idleMs === 0 || idleMs === settledSetupMs);
   if (idleMs > 0) {
     const started = performance.now();
-    // Allow one timer tick for rounding; verify the actual interval before navigation.
     await sleep(idleMs + 1);
     const elapsedMs = performance.now() - started;
     assert.ok(elapsedMs >= idleMs);
@@ -180,7 +178,6 @@ try {
     receipts: after.receipts - before.receipts,
   };
   process.stderr.write(JSON.stringify(accountability) + "\n");
-  // WebSession requests in the pinned baseline write session Audit and carry no external retry key.
   assert.deepEqual(accountability, {
     reads: readOnly ? 1 : 2,
     corrections: readOnly ? 0 : 1,

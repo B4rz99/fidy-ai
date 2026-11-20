@@ -43,7 +43,6 @@ export const budgetParameters = ({
   }));
 };
 
-/** Apply an explicit planning month or the caller's current local calendar month. */
 export const budgetPeriod = ({
   now,
   query,

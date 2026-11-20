@@ -1,7 +1,5 @@
 import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
-/** Commit a PAT transition only when its final guarded evidence/audit write succeeded.
- * The last statement is a constraint, not a post-commit check: a zero-row guard rolls back
- * the complete D1 batch. The caller keeps all provider effects outside this atomic unit. */
+
 export const commitPATUnit = ({
   db,
   statements,

@@ -1770,7 +1770,6 @@ for (const cleanup of ["throw", "reject", "pending"] as const) {
             };
             reader.cancel = (): Promise<void> => {
               cancellations++;
-              // Reentrant abort cannot restart cleanup.
               abort.abort();
               if (cleanup === "throw") throw new Error("private cancel failure");
               return cleanup === "reject"

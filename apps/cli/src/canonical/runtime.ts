@@ -5,7 +5,6 @@ import { makeProtectedClient } from "../direct-client/runtime";
 import { CliFailure, apiOrigin } from "../credential/contract";
 import type { CanonicalClient, CanonicalClientFactory } from "./contract";
 
-// HttpApiClient validates these erased request fields through the original endpoint codecs.
 type CanonicalEndpoint = HttpApiEndpoint.ConstraintRequest & {
   readonly "~Params": Schema.ConstraintCodec<unknown, unknown>;
   readonly "~Query": Schema.ConstraintCodec<unknown, unknown>;
@@ -20,7 +19,6 @@ type CanonicalGroup = HttpApiGroup.Constraint & {
   readonly endpoints: Readonly<Record<string, CanonicalEndpoint>>;
 };
 
-/** Per-invocation derived client: bearer authority never enters an ambient shared transport. */
 export const makeCanonicalClient: CanonicalClientFactory = Effect.fn(function* (options) {
   const authorization = yield* Layer.build(
     makeTokenAuthorizationClientLive(Redacted.value(options.credential.bearer))
@@ -57,14 +55,12 @@ const releaseInputReader = (
 ): Effect.Effect<void> =>
   Effect.sync(() => {
     try {
-      // Input cancellation may never settle; local ownership must still end.
       reader.cancel().catch(() => undefined);
     } finally {
       reader.releaseLock();
     }
   });
 
-/** Owns input acquisition, byte/deadline budgets and reader cleanup over an OS input adapter. */
 export const makeInputReader = (
   open: (path: string) => ReadableStream<unknown>
 ): ((path: string) => Effect.Effect<string, CliFailure>) =>
@@ -115,7 +111,6 @@ export const makeInputReader = (
     });
   });
 
-/** Production has no implicit stdin: only an explicit '-' selects the process input stream. */
 export const readOperationInput = makeInputReader((path) =>
   path === "-" ? Bun.stdin.stream() : Bun.file(path).stream()
 );

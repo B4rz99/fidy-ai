@@ -36,7 +36,6 @@ const continuation = (page: Page): Option.Option<string> => {
   );
 };
 
-/** Opening a spending amount mounts a bounded, read-only canonical history query. */
 export const BudgetSpending = (props: Props): JSX.Element => {
   const [open, setOpen] = useState(false);
   const amount = formatMoneyWithCode({ locale: props.user.locale, money: props.spent });

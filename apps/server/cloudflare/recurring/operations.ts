@@ -40,7 +40,6 @@ import { prepareSourceGuard, readSource } from "./internal/digest-source";
 
 type Work = Readonly<{ db: D1Database; userId: UserId }>;
 
-/** Traverse one complete revision-bounded confirmation cutoff. Invalidations and legacy exclusions remain explicit; a changed cutoff fails closed and requires restarting traversal. */
 export const readRecurringDigestSource = (
   input: Work & Readonly<{ cursor: Option.Option<string> }>
 ): Effect.Effect<RecurringDigestSourcePage, RecurringUnavailable> =>
@@ -61,7 +60,6 @@ export const readRecurringDigestSource = (
     return page;
   });
 
-/** Compose the exact cutoff's live processing, fact-revision and complete-evaluation guards with the consumer's own atomic commit. This does not inspect or authorize consumer state. */
 export const prepareRecurringDigestSourceGuard = (
   input: Work & Readonly<{ checkpoint: string }>
 ): Effect.Effect<ReadonlyArray<D1PreparedStatement>, RecurringUnavailable> =>
@@ -72,7 +70,6 @@ export const prepareRecurringDigestSourceGuard = (
     return yield* prepareSourceGuard(input);
   });
 
-/** Advance one bounded evaluation step under this User's existing coordinator and live processing Consent. */
 export const evaluateRecurringSeries = (work: Work): Effect.Effect<void, RecurringUnavailable> =>
   Effect.gen(function* () {
     const snapshot = yield* findRecurringSnapshot(work);
@@ -114,7 +111,6 @@ const discoveryCheckpoint = ({
 }>): ReadonlyArray<D1PreparedStatement> => {
   const last = users.at(-1);
   if (discover) {
-    // A full batch may leave a backlog. Keep discovering until a shorter batch drains it.
     return [
       db
         .prepare(`INSERT INTO recurring_dispatch(id,last_user,next_discovery_at_ms)
@@ -133,7 +129,6 @@ const discoveryCheckpoint = ({
     : [db.prepare("UPDATE recurring_dispatch SET last_user=? WHERE id=1").bind(last)];
 };
 
-/** Discover changed Users at most weekly, with hourly idle discovery. Resume unfinished work and drain a full batch promptly; recheck processing authority inside each coordinator. */
 export const discoverRecurringWork = (
   db: D1Database
 ): Effect.Effect<ReadonlyArray<UserId>, RecurringUnavailable> =>
@@ -170,7 +165,6 @@ const confirmationPosition = (
     onSome: (value) => [1, value.confirmedAt.epochMilliseconds, value.id],
   });
 
-/** Read immutable confirmation snapshots under current Consent inside this User's coordinator; invalid patterns are excluded. */
 export const readRecurringConfirmations = ({
   db,
   userId,
@@ -229,7 +223,6 @@ export const readRecurringConfirmations = ({
     return { confirmations, cursor: nextCursor };
   }).pipe(Effect.mapError(() => new RecurringUnavailable()));
 
-/** Execute the Free read-scoped query with atomic live credential, Consent, Audit and decoded page status. */
 export const listRecurringSeries = ({
   db,
   subject,
@@ -253,7 +246,6 @@ export const listRecurringSeries = ({
     return yield* Option.isNone(cursor) ? invalidCursor(call) : readPage({ call, cursor });
   });
 
-/** First retained discovery, including suppressed or legacy evidence, supplies only an opt-in opportunity identity. It never grants delivery or substitutes financial snapshots. */
 export const findRecurringDiscovery = (
   input: Work
 ): Effect.Effect<Option.Option<RecurringConfirmationId>, RecurringUnavailable> =>
@@ -279,13 +271,11 @@ export const findRecurringDiscovery = (
     return Option.some(row.id);
   }).pipe(Effect.mapError(() => new RecurringUnavailable()));
 
-/** Metadata-only complete evaluation identities for fair digest discovery; no financial content or execution authority is projected. */
 export const recurringDigestSourceIdentities = (): OwnedStatement => ({
   sql: "SELECT p.user_id,p.evaluated_revision||':'||strftime('%Y-%m-%dT%H:%M:%fZ',p.evaluated_at_ms/1000.0,'unixepoch')||':'||(SELECT coalesce(max(confirmation_sequence),0) FROM recurring_series WHERE user_id=p.user_id AND confirmation_sequence IS NOT NULL)||':'||(SELECT count(*) FROM recurring_series WHERE user_id=p.user_id AND confirmation_sequence IS NOT NULL) AS source_identity FROM (SELECT rowid,user_id,revision,phase,cursor_at_ms,cursor_id,group_key,evaluated_at_ms,evaluated_revision,first_captured_at_ms,time_zone FROM recurring_evaluation_records WHERE kind='progress') AS p WHERE p.phase='complete'",
   params: [],
 });
 
-/** A planning decision may reference only this User's retained detector series. */
 export const ownsRecurringSeries = ({
   db,
   userId,

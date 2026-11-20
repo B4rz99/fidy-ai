@@ -76,7 +76,6 @@ const decodeSource = Schema.decodeUnknownResult(SourceResponse);
 const decodeSourceLookup = Schema.decodeUnknownResult(SourceLookupResponse);
 const decodeJson = Schema.decodeUnknownResult(UnknownJsonString);
 
-/** Fresh provider acceptances paired with the exact safe links and text displayed by Fidy. */
 export type WompiContracts = Readonly<{
   publicKey: string;
   evidence: WompiContractEvidenceSet;
@@ -396,7 +395,6 @@ const makeCreatePaymentSource =
         Effect.withSpan("Wompi.createPaymentSource", { attributes: { provider: "wompi" } })
       );
 
-/** Worker-owned enrollment client: acceptance and source creation use the closed outbound policy. */
 export const makeWompiEnrollmentClient = (
   input: Readonly<{
     outboundHttp: OutboundHttpService;

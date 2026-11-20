@@ -12,7 +12,6 @@ import { type InsightLifecycleState, InvalidInsightTransition } from "./contract
 
 const elapsedDayMs = 86_400_000;
 
-/** Capture a confirmation's calendar identity in its historical zone, including DST day length. */
 export const captureConfirmationDay = (
   input: Readonly<{
     confirmedAt: DateTime.Utc;
@@ -31,7 +30,6 @@ export const captureConfirmationDay = (
   };
 };
 
-/** Next local morning and an elapsed-day deadline are distinct from the confirmation window. */
 export const recurringDigestTiming = (
   day: ConfirmationDay
 ): Readonly<{
@@ -91,7 +89,6 @@ const selectReminderDate = (
   throw new Error("Reminder calendar could not locate an anchored occurrence");
 };
 
-/** Find the next preset occurrence strictly after an instant; three-day cadence keeps its local-date anchor across months and DST. */
 export const nextReminderOccurrence = (
   input: ReminderInstructions & Readonly<{ after: DateTime.Utc }>
 ): DateTime.Utc => {
@@ -101,7 +98,6 @@ export const nextReminderOccurrence = (
   return selectReminderDate(input, advance(input.after), advance);
 };
 
-/** Select only the latest due preset occurrence, including its exact cutoff, without reconstructing a missed backlog. */
 export const latestReminderOccurrence = (
   input: ReminderInstructions & Readonly<{ atOrBefore: DateTime.Utc }>
 ): DateTime.Utc => {
@@ -118,7 +114,6 @@ export const latestReminderOccurrence = (
 const deliveryOpeningHour = 9;
 const deliveryClosingHour = 19;
 
-/** Calculate report bounds from captured schedule context, never the actual delivery time. */
 export const weeklyPeriods = (
   input: Readonly<{
     scheduledAt: DateTime.Utc;
@@ -136,7 +131,6 @@ export const weeklyPeriods = (
   };
 };
 
-/** Find the next wall-clock occurrence strictly after an instant using validated weekly timing. */
 export const nextWeeklyOccurrence = (
   input: Readonly<{
     after: DateTime.Utc;
@@ -154,7 +148,6 @@ export const nextWeeklyOccurrence = (
     )
   );
 
-/** Select the latest cutoff at or before now; callers still enforce schedule activation and freshness. */
 export const latestWeeklyOccurrence = (
   input: Readonly<{
     atOrBefore: DateTime.Utc;
@@ -170,7 +163,6 @@ export const latestWeeklyOccurrence = (
   return Cron.match(cron, minute) ? minute : DateTime.makeUnsafe(Cron.prev(cron, input.atOrBefore));
 };
 
-/** Snapshot the last admissible send instant; a delivery started earlier must still reconcile. */
 export const insightDeliveryDeadline = (
   input: Readonly<{
     scheduledAt: DateTime.Utc;
@@ -184,7 +176,6 @@ export const insightDeliveryDeadline = (
     )
   );
 
-/** Expire an unstarted Budget send after 24 elapsed hours or at its captured month-end, including already-ended backdated periods. */
 export const budgetAlertDeadline = (
   input: Readonly<{ detectedAt: DateTime.Utc; monthEnd: DateTime.Utc }>
 ): DateTime.Utc =>
@@ -192,7 +183,6 @@ export const budgetAlertDeadline = (
     Math.min(input.detectedAt.epochMilliseconds + elapsedDayMs, input.monthEnd.epochMilliseconds)
   );
 
-/** Decide freshness and the captured-zone [09:00,19:00) window without authorizing a send. */
 export const decideInsightDelivery = (
   input: Readonly<{
     scheduledAt: DateTime.Utc;
@@ -242,7 +232,6 @@ export const allowedInsightTransitions = (
   current: InsightLifecycleState
 ): ReadonlyArray<InsightLifecycleState> => allowedTargets[current];
 
-/** Validates one monotonic lifecycle movement, including direct forward skips. */
 export const transitionInsight = (
   input: Readonly<{
     current: InsightLifecycleState;

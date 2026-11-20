@@ -31,12 +31,6 @@ const sourceRows = (
     : Option.some({ proof, documents });
 };
 
-/**
- * Observe exact live authority, its gated document and bounded owner-prepared peer reads (two Dashboard, four Recurring ledger selections).
- * Peers must gate private rows with the same authority. This batch performs no writes and grants
- * no reusable authority. A failed observation is unavailable; it is never retried or classified
- * from an earlier proof. The enclosing operation retains its fresh Audit and disclosure checks.
- */
 export const readAuthorizedUserDocumentSnapshot = (
   input: Readonly<{
     db: D1Database;
@@ -86,7 +80,6 @@ export const readAuthorizedUserDocumentSnapshot = (
     return { live: true, document, related: results.slice(2) };
   });
 
-/** Read a document and its owner-prepared related reads in one native snapshot. */
 export const readUserDocumentSnapshot = (
   input: Readonly<{
     db: D1Database;
@@ -117,7 +110,6 @@ export const readUserDocumentSnapshot = (
     return { document, related: results.slice(1) };
   });
 
-/** Prepare one document from an at-most-one-User credential selection without submitting a read. */
 export const prepareSelectedUserDocument = ({
   db,
   users,
@@ -152,7 +144,6 @@ export const findUserDocument = (
     Effect.map((snapshot) => snapshot.document)
   );
 
-/** Assert the exact document observation inside a later native unit; disagreement aborts that unit. */
 export const unchangedUserDocument = ({
   userId,
   kind,

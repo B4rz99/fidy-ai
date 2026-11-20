@@ -11,7 +11,6 @@ const premiseCodec = Schema.fromJsonString(
 );
 const maximumOutputBytes = 4096;
 
-/** Synthetic terminal/Access input stays on stdin, never argv, environment or a retained file. */
 export const invokeRecoveryOperator = Effect.fn(
   function* (premise: typeof premiseCodec.Type) {
     const input = yield* Schema.encodeEffect(premiseCodec)(premise);

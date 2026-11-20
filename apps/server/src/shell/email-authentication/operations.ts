@@ -75,7 +75,6 @@ export const emailReplacementImplementations = {
   complete: completeEmailReplacement,
 } as const;
 
-/** The browser WebSession is the sole authority for the canonical replacement invocation. */
 export const browserReplacementCaller = (session: {
   readonly user_id: string;
   readonly id: string;
@@ -93,7 +92,6 @@ export const browserReplacementCaller = (session: {
 
 type ReplacementOperation = keyof typeof emailReplacementOperations;
 
-/** Fail closed if the declaration's browser access policy diverges from Worker authorization. */
 export const permitsFreshBrowserReplacement = (operation: ReplacementOperation): boolean => {
   const { access } = getOperationPolicy(emailReplacementOperations[operation]);
   return (
@@ -102,10 +100,5 @@ export const permitsFreshBrowserReplacement = (operation: ReplacementOperation):
   );
 };
 
-/**
- * Retain only pairingId/userId subjects compatible with existing mailbox approval at commit.
- * The caller supplies trusted static SQL projecting pairingId and userId with parameterized values,
- * then composes the returned query into its own guarded statement. No proof evidence is released.
- */
 export const emailPairingAllowsUser = (input: EmailPairingSubject): OwnedStatement =>
   compatibleSubject(input);

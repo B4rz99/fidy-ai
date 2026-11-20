@@ -213,7 +213,6 @@ export const makeWhatsAppDelivery = ({
 }: Readonly<{
   deliveryMode: KapsoDeliveryMode;
   outboundHttp: OutboundHttpService;
-  /** Only this operator-selected business endpoint may use provider-observed phone delivery. */
   sandboxPhoneNumberId: Option.Option<string>;
 }>): WhatsAppDelivery => {
   const sendText = Effect.fn("Kapso.sendText")(function* (input: KapsoSendInput) {
@@ -245,7 +244,6 @@ export const makeWhatsAppDelivery = ({
   return KapsoClient.of({ sendText });
 };
 
-/** Execute exactly one bounded provider mutation; no transport failure permits blind retry. */
 export const sendKapsoMessage = ({
   outboundHttp,
   businessPhoneNumberId,
@@ -263,7 +261,6 @@ export const sendKapsoMessage = ({
     const responseText = new TextDecoder().decode(response.body);
     if (Option.isNone(decodedStatus)) return yield* rejected("invalid_response");
     const responseStatus = decodedStatus.value;
-    // Kapso returns its sandbox recipient refusal as HTTP403; preserve that safe diagnosis.
     if (responseStatus === forbiddenStatus) {
       const body = Schema.decodeOption(UnknownJsonString)(responseText);
       if (Option.isSome(body)) {
@@ -291,14 +288,9 @@ export const sendKapsoMessage = ({
     })
   );
 
-/** True-external seam for authorized WhatsApp text delivery. */
 export class KapsoClient extends Context.Service<KapsoClient, WhatsAppDelivery>()(
   "@fidy/server/shell/channels/whatsapp/internal/kapso-client/KapsoClient"
 ) {
-  /**
-   * WHATSAPP_DELIVERY_MODE defaults to BSUID delivery and permits explicit sandbox phone routing.
-   * Calls fail within 15 seconds, reject invalid provider responses, and never persist channel state.
-   */
   static readonly layer = Layer.effect(
     this,
     Effect.gen(function* () {

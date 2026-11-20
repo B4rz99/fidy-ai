@@ -204,10 +204,6 @@ type HistoryRow = Readonly<{
   authority: AuthorityCondition;
 }>;
 
-/**
- * One bounded effective-history page for the caller. Filters and the keyset cursor apply to the
- * effective Transaction, so a linked pair is filtered and paged as the one record it represents.
- */
 const listFilters = ({
   userId,
   query,
@@ -277,7 +273,6 @@ const listStatement = ({ db, userId, query, authority }: HistoryRow): D1Prepared
   return db.prepare(page.sql).bind(...page.bindings);
 };
 
-/** Prepare the same bounded page from a live, owner-prepared User selection in this snapshot. */
 export const selectedHistoryPage = ({
   userSelection,
   query,
@@ -291,7 +286,6 @@ export const selectedHistoryPage = ({
     ...listFilters({ userId: Option.none(), query, authority: Option.some(authority) }),
   });
 
-/** The enclosing User transaction already resolved the live caller; keep every row bound to this User. */
 export const localHistoryPage = ({
   user,
   query,
@@ -337,12 +331,6 @@ const originalProjection = (member: "first" | "second"): string => `(SELECT json
     AND original.id = requested.reconciliation_${member}_id
     AND original.deleted_at_ms IS NULL) AS ${member}_original`;
 
-/**
- * One effective presentation by either original id, optionally gated on a live caller authority.
- * A linked member resolves to the effective Transaction and records which original id was requested.
- * `revision` is the requested member's, so the value a caller reads for an id is exactly the value
- * its correction compare-and-swaps.
- */
 export const presentationQuery = ({
   userId,
   id,
@@ -423,7 +411,6 @@ const storedFields = (row: typeof Row.Type): typeof Transaction.Encoded => ({
   revision: row.revision,
 });
 
-/** Decode untrusted D1 projection into the canonical Transaction shape before it may be returned. */
 export const decodeTransactionRow = (
   raw: unknown
 ): Option.Option<typeof TransactionOutput.Type> => {
@@ -447,7 +434,6 @@ const presentationMetadata = (row: typeof PresentationRow.Type): PresentationMet
   return { kind: "suppressed-member", requestedId: row.requested_id };
 };
 
-/** Decode one effective projection and explain how the requested id maps to its visible identity. */
 const decodePresentationRow = (raw: unknown): Option.Option<TransactionPresentation> => {
   const row = Schema.decodeUnknownOption(PresentationRow)(raw);
   if (Option.isNone(row)) return Option.none();
@@ -457,10 +443,8 @@ const decodePresentationRow = (raw: unknown): Option.Option<TransactionPresentat
   });
 };
 
-/** A stored Transaction decoded into the canonical JSON projection every response carries. */
 export type StoredTransaction = typeof TransactionOutput.Type;
 
-/** Read one owned Transaction projection by id; absence is an answer rather than a defect. */
 export const findTransaction = ({
   db,
   userId,
@@ -502,7 +486,6 @@ export const findTransactionPair = ({
       });
     });
 
-/** Read one effective presentation by either original id, as an immediate canonical read would. */
 export const findTransactionPresentation = ({
   db,
   userId,
@@ -678,7 +661,6 @@ const historyStatement = (
     : listStatement({ db, userId, query, authority });
 };
 
-/** Assemble a WebSession's protected read and its Transaction-owner audit. */
 const browserHistoryStatements = (
   db: D1Database,
   input: Readonly<{ selection: BrowserSelection; query: typeof Query.Type; current: number }>
@@ -750,7 +732,6 @@ export const presentPrivacyPage = ({
     return Response.json(page, { headers: noStore });
   }).pipe(Effect.orElseSucceed(unavailable));
 
-/** Deliver one explicit privacy-purpose page; native credential, freshness and Audit share its snapshot. */
 export const readPrivacyTransactions = ({
   db,
   subject,
@@ -926,7 +907,6 @@ const readAuthorizedHistory = (
     });
 };
 
-/** Browse the same bounded canonical Transaction projection under live WebSession or PAT authority. */
 const readHostedHistory = ({
   db,
   selection,
@@ -988,7 +968,6 @@ export const browseTransactions = ({
     return yield* Effect.tryPromise(() => readAuthorizedHistory(db, { selection, query, current }));
   }).pipe(Effect.orElseSucceed(() => failedAudit()));
 
-/** Prepare the initial page and its authority-bound Audit for bootstrap's final native unit. */
 export const prepareBrowserTransactionPage = (
   input: Readonly<{
     db: D1Database;
@@ -1022,7 +1001,6 @@ export const prepareBrowserTransactionPage = (
   }));
 };
 
-/** The same browser query and atomic Audit, before HTTP encoding. */
 export const readBrowserTransactionPage = (
   input: Readonly<{
     db: D1Database;

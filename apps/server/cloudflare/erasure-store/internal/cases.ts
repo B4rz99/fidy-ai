@@ -131,7 +131,6 @@ export const advanceErasureCases = Effect.fn(function* (
   });
 });
 
-/** Maintenance retains discovery until this exact independent case has completed. */
 export const confirmLifetimeCase = Effect.fn(function* (request: Request) {
   const scope = yield* Schema.decodeUnknownEffect(
     Schema.Struct({

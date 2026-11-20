@@ -16,7 +16,6 @@ const forbiddenNodeModules = /(^|\/)node_modules\/effect\/dist\/sql(?:\/|$)/u;
 const forbiddenNodeBuiltin =
   /^(?:node:|bun:)[^/]+(?:\/|$)|^(?:assert|child_process|cluster|crypto|dgram|dns|fs|http|https|module|net|os|path|perf_hooks|process|stream|timers|tls|tty|util|v8|vm|worker_threads)(?:\/|$)/u;
 
-/** Configures the web source root used by the browser bundle gate, primarily for isolated tests. */
 export type BrowserBundleCheckOptions = Readonly<{
   readonly entrypoint: string;
   readonly outdir: string;
@@ -288,15 +287,12 @@ const assertSourceBoundary = (
   const { webRoot, workspaceRoot } = roots;
   const imports = sourceImports(sources);
   const forbiddenServerImport = findForbiddenServerImport(imports, webRoot, workspaceRoot);
-  // Node assertions may live in unbundled tests; a test imported by production has no exemption.
   const forbiddenSourceImport = imports.find(
     ({ importPath, sourceFile }) =>
       forbiddenNodeBuiltin.test(importPath) &&
       (!sourceFile.endsWith(".test.ts") ||
         bundledSources.has(Bun.fileURLToPath(new URL(sourceFile, `file://${webRoot}/`))))
   );
-  // The dependency-free document-entry adapter prepares one response for the bounded SDK decoder.
-  // Every other module must use the normal Effect transport seam.
   const directFetch = sources.find(
     ({ source, sourceFile }) =>
       sourceFile !== "src/transport/initial-request.ts" && /\bfetch\s*\(/u.test(source)

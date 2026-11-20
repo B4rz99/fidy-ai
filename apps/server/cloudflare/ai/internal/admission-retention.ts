@@ -2,7 +2,6 @@ import { Effect } from "effect";
 import { OpenAiAdmissionUnavailable } from "../contract";
 import { openAiAdmissionWindowMs } from "./admission-policy";
 
-/** Remove bounded expired AI admission evidence; never refund unexpired spend or retry grants. */
 export const sweepExpiredOpenAiAdmission = ({
   db,
   now,

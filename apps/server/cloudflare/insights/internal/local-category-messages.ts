@@ -22,7 +22,7 @@ const rows = Schema.Array(
     endpoint: Schema.String,
   })
 );
-/** Freeze an approved template against the immutable crossing; its Queue contains only owner and message identity. */
+
 export const publishCategoryMessages = Effect.fn(function* (
   now: number,
   sender: ProactivityTemplateSender

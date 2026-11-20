@@ -24,7 +24,7 @@ export const QueueKind = Schema.Literals([
   "proactivityQueue",
 ]);
 export type QueueKind = typeof QueueKind.Type;
-/** Closed operational evidence. No identity, provider detail, proof, or financial value is exported. */
+
 export type PendingSignal = Readonly<{
   component: "async-health";
   operation: WorkKind;
@@ -39,7 +39,6 @@ export type PendingSignal = Readonly<{
   unavailableWorkflows: number;
 }>;
 
-/** Unavailable measurements carry no invented zeroes; Queue totals are distinct from D1 samples. */
 export type OperationalSignal =
   | PendingSignal
   | Readonly<{
@@ -83,6 +82,5 @@ export type CapabilityProbe = Readonly<{
   state: "healthy" | "unavailable";
 }>;
 
-/** Selected by the owning adapter, never accepted from request headers or tool arguments. */
 export const CoreRejectionBoundary = Schema.Literals(["http", "providerCallback", "mcp"]);
 export type CoreRejectionBoundary = typeof CoreRejectionBoundary.Type;

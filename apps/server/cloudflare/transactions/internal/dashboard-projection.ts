@@ -43,7 +43,6 @@ type GroupKey = Readonly<{
 }>;
 const groupKey = (row: GroupKey): string => `${row.currency}:${row.direction}:${row.category_id}`;
 
-/** Only a complete, current User projection can supply Dashboard Money. */
 export const projectionReady = (raw: unknown): boolean =>
   Option.isSome(Schema.decodeUnknownOption(StateRow)(raw));
 
@@ -163,7 +162,6 @@ export const projectionQueries = (
   );
 };
 
-/** Count retained rows before aggregation so Dashboard can bound simultaneous raw results. */
 export const projectionSizeQuery = ({
   db,
   userId,
@@ -245,12 +243,11 @@ const decodeGroups = (
 };
 
 type AggregateRange = Readonly<{ from: number; toExclusive: number }>;
-// At most 32 native batches, leaving room for the caller within the Free invocation query budget.
+
 export const maximumAggregateRanges = 128;
-// Bound transient raw results without starting additional concurrent provider work.
+
 export const aggregateRangesPerBatch = 4;
 
-/** Read one exact interval through the bounded projection snapshot reader. */
 export const findDashboardAggregate = (
   input: Readonly<{ db: D1Database; userId: string }> & AggregateRange
 ): Effect.Effect<Option.Option<ReadonlyArray<EffectiveTransactionAggregate>>> =>
@@ -294,7 +291,6 @@ export const decodeAggregateSnapshot = ({
   return Option.some({ revision: revision.value.revision, values });
 };
 
-/** Prepare one complete same-User interval for composition in the caller's native snapshot. */
 export const prepareTransactionAggregate = (
   input: Readonly<{ db: D1Database; userId: string }> & AggregateRange
 ): Option.Option<
@@ -321,7 +317,6 @@ export const prepareTransactionAggregate = (
       ),
   }));
 
-/** Resolve the exact mounted caller inside the same native transaction as its aggregate facts. */
 export const prepareBoundTransactionAggregate = (
   input: Readonly<{ db: D1Database; userSelection: OwnedStatement }> & AggregateRange
 ): ReturnType<typeof prepareTransactionAggregate> =>
@@ -340,7 +335,6 @@ export const prepareBoundTransactionAggregate = (
       ),
   }));
 
-/** Read ordered exact intervals in small native snapshots; a changed revision refuses the whole read. */
 export const findDashboardAggregateRanges = ({
   db,
   userId,
@@ -427,7 +421,6 @@ const decodeAggregateBatch = (
   });
 };
 
-/** Both intervals and readiness are read in one D1 snapshot under current processing Consent. */
 export const readPeriodAggregates = (
   input: Readonly<{
     db: D1Database;
@@ -462,7 +455,6 @@ export const readPeriodAggregates = (
     return yield* decodeAggregateBatch(result, input.periods);
   });
 
-/** A failed readiness, authority or revision assertion aborts all caller-owned publication writes. */
 export const periodAggregateGuard = (
   input: Readonly<{ db: D1Database; userId: UserId; revision: number }>
 ): D1PreparedStatement => {
@@ -482,7 +474,6 @@ export const periodAggregateGuard = (
     .bind(...protectedSelection.params);
 };
 
-/** Read one maintained, exact interval under the encompassing User transaction. */
 export const localProjectionRange = Effect.fn(function* (
   userId: UserId,
   from: number,
@@ -506,7 +497,6 @@ export const localProjectionRange = Effect.fn(function* (
   );
 });
 
-/** Bound retained reference validation by the known taxonomy, independent of the User's history length. */
 export const localProjectionReady = Effect.fn(function* (user: UserId) {
   const sql = yield* SqliteClient;
   const [state] =

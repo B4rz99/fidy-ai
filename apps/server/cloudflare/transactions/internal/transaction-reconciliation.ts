@@ -62,7 +62,6 @@ const MemberRow = Schema.Struct({
 type MemberRow = typeof MemberRow.Type;
 type Pair = typeof Input.Type;
 
-/** One retained candidate as the pure link policy reads it, plus the persistence-only pair state. */
 type Candidate = Readonly<{ member: ReconciliationMember; alreadyLinked: boolean }>;
 
 type PairWork = Readonly<{
@@ -72,7 +71,6 @@ type PairWork = Readonly<{
   current: number;
 }>;
 
-/** Decode one bounded canonical pair without treating either id as authority. */
 export const transactionPairInput = (
   request: Request
 ): Effect.Effect<Option.Option<typeof Input.Type>> =>
@@ -164,10 +162,6 @@ const pairSnapshot = (work: PairWork): Effect.Effect<PairSnapshot, TransactionBo
     };
   });
 
-/**
- * One successful link or unlink AuditLogEntry under the caller's own credential, guarded by the
- * decision state the write just committed. It is always the last statement of the unit.
- */
 const successStatements = ({
   db,
   subject,
@@ -227,12 +221,6 @@ const detachMember = (work: PairWork & Readonly<{ transactionId: string }>): D1P
       work.pair.secondTransactionId
     );
 
-/**
- * The guarded writes of one link: the decision re-asserts both retained rows still exist and still
- * hold equal Currency, exact amount, and direction at commit time, then both member updates and the
- * success Audit are chained on `changes()` so a premise that moved after the candidate read aborts
- * the whole unit.
- */
 const linkStatements = (
   work: PairWork & Readonly<{ visibleTransactionId: string; authority: TransactionAuthority }>
 ): ReadonlyArray<D1PreparedStatement> => {
@@ -303,7 +291,6 @@ const unlinkStatements = (
   ];
 };
 
-/** Decide one canonical link against live authority and both retained candidates. */
 export const prepareLink = (work: PairWork): Effect.Effect<CanonicalMutationPreparation> =>
   Effect.gen(function* () {
     const refuse = (refusal: TransactionRefusal): CanonicalMutationPreparation =>
@@ -399,7 +386,6 @@ const reviewUnlink = (
     );
   });
 
-/** Decide one canonical unlink against live authority and the pair's current decision state. */
 export const prepareUnlink = (work: PairWork): Effect.Effect<CanonicalMutationPreparation> =>
   Effect.gen(function* () {
     const refuse = (refusal: TransactionRefusal): CanonicalMutationPreparation =>

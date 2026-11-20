@@ -26,7 +26,6 @@ export class CandidateRoutingPending extends Data.TaggedError("CandidateRoutingP
   readonly reason: string;
 }> {}
 
-/** Proof authority is identical for normal traffic and exact-version calls; only pinned calls carry overrides. */
 export const smokeHeaders = ({
   config,
   publicVersion,
@@ -57,9 +56,6 @@ type SmokeExchange = Readonly<{
   result: Option.Option<typeof SmokeResult.Type>;
 }>;
 
-/** A single bounded proof exchange. No raw body or foreign failure escapes; interruption cancels the reader.
- * Malformed JSON is an absent identity, while overflow/transport failure fails the exchange. No retries occur here.
- */
 export const exchangeSmoke = Effect.fn(
   function* (
     input: Readonly<{
@@ -173,7 +169,6 @@ const shouldReplay = (
   expected: Readonly<{ public: SmokeIdentity; replayIdentity: boolean }>
 ): boolean => expected.replayIdentity && isIdentityRefusal(response, expected.public);
 
-/** Classifies only pre-admission routing evidence as replayable. The runner decides whether and how to retry. */
 export const checkSmokeExchange = Effect.fn(function* (
   response: SmokeExchange,
   expected: Readonly<{
@@ -222,7 +217,7 @@ const rejectedCore = (response: SmokeExchange, stableCore: string): CoreObservat
   }
   return { version: Option.none(), source: "unavailable" };
 };
-/** Diagnosis may name only validated protocol identities; equality fallback names the supplied stable Core, never a guess. */
+
 export const observeSmokeCore = ({
   response,
   method,

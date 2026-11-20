@@ -676,7 +676,6 @@ const CurrentUserQuery = ({
       );
   }
 };
-/** Optional composition mounts only once the displayed Transaction information is current. */
 export const TransactionListFeature = ({
   children,
 }: Readonly<{
@@ -689,7 +688,6 @@ type TransactionPreparation = Readonly<{
   signal: AbortSignal;
   search: TransactionSearch;
 }>;
-/** Prepare the same first-page resource after entry authority, before the ordinary tree mounts. */
 TransactionListFeature.preloadData = ({
   apiClient,
   destinationMode,
@@ -736,6 +734,5 @@ TransactionListFeature.preloadData = ({
       );
     })
   );
-/** Entry code can overlap live access checks without loading this workspace on other routes. */
 TransactionListFeature.preload = (): Promise<void> =>
   TransactionWorkspace.preload?.() ?? Promise.resolve();

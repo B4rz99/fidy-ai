@@ -17,7 +17,6 @@ const noContentStatus = 204;
 const missingRouteStatus = 404;
 const conflictStatus = 409;
 
-/** An exact, permanent reservation survives a lost reply. Only the owner can authorize its event. */
 export const externalEventRequest = Effect.fn(function* (request: Request) {
   if (request.url === statusLookupAdmissionUrl) return yield* admitKapsoLookup(request);
   const sql = yield* SqliteClient;

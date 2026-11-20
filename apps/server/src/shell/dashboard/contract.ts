@@ -94,7 +94,6 @@ const CustomMetricResult = Schema.Struct({
   moneyGroups: MoneyGroups,
 }).annotate({ identifier: "CustomMetricResult" });
 
-/** One closed Widget variant paired with its only legal ephemeral result. */
 export const DashboardWidgetView = Schema.Union([
   Schema.Struct({ widget: SpendingChartWidget, result: SpendingChartResult }),
   Schema.Struct({ widget: BudgetBarWidget, result: BudgetBarResult }),
@@ -113,7 +112,6 @@ const DashboardViewContext = Schema.Struct({
   calculatedAt: UtcTimestamp,
 }).annotate({ identifier: "DashboardViewContext" });
 
-/** One complete ephemeral Dashboard projection with a result colocated at every recursive leaf. */
 export const DashboardView = Schema.Struct({
   title: DashboardTitle,
   context: DashboardViewContext,
@@ -125,7 +123,6 @@ const DashboardEditFailures = [NotFound, ValidationFailed] as const;
 
 export const InitializeDashboardCanonicalInput = Schema.Struct({});
 
-/** A missing document is an observed state, never permission to create or repair it. */
 export class DashboardUninitialized extends Schema.Error<
   DashboardUninitialized,
   Brand.Brand<"DashboardUninitialized">
@@ -143,7 +140,7 @@ export class DashboardUninitialized extends Schema.Error<
 
 export const GetDashboardCanonicalInput = Schema.Struct({});
 export const GetDashboardViewCanonicalInput = Schema.Struct({});
-/** Canonical call shape for a Dashboard edit, shared by individual and batch execution. */
+
 export const ApplyDashboardEditCanonicalInput = Schema.Struct({ payload: DashboardEdit });
 
 export const DashboardGroup = HttpApiGroup.make("dashboard")
@@ -243,10 +240,8 @@ export const DashboardGroup = HttpApiGroup.make("dashboard")
       )
   );
 
-/** A complete validated Dashboard projection cannot be produced from the supplied facts. */
 export class DashboardUnavailable extends Data.TaggedError("DashboardUnavailable") {}
 
-/** Decoded User-owned facts supplied by the storage adapter for one Dashboard projection. */
 export type DashboardFacts = Readonly<{
   groups: ReadonlyMap<string, ReadonlyArray<ProjectedRange>>;
   lists: ReadonlyMap<
@@ -258,7 +253,6 @@ export type DashboardFacts = Readonly<{
   context: UserContext;
 }>;
 
-/** A candidate dashboard references a Category unavailable to the authenticated User. */
 export class DashboardCategoryNotFound extends Data.TaggedError("DashboardCategoryNotFound")<{
   readonly categoryId: CategoryId;
   readonly path: string;

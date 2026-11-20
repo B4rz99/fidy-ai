@@ -61,7 +61,7 @@ jobs:
       PAIRS: ${{ inputs.pairs }}
       WORKLOAD: ${{ inputs.action }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -74,20 +74,20 @@ jobs:
           install -d -m 700 "$RUNNER_TEMP/native-comparison"
           echo "OUT=$RUNNER_TEMP/native-comparison" >> "$GITHUB_ENV"
           bun infra/cloudflare/verify-edge-policy.ts
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         if: inputs.action == 'compare' || inputs.action == 'browser'
         with:
           ref: fb53d9e755c14393048dc945fc0b7f117730d872
           path: baseline-d1
           persist-credentials: false
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         if: inputs.action == 'compare' || inputs.action == 'browser'
         with:
           ref: 972ecaa22bb58ab472de2e9458c76290c72aa09d
           path: baseline-fixtures
           persist-credentials: false
           sparse-checkout: apps/server/cloudflare
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         if: inputs.action == 'compare' || inputs.action == 'browser'
         with:
           ref: 15cfe773cd263b6a3d4e1b6e1b958f233cdde84f
@@ -186,7 +186,7 @@ jobs:
             --prefix "$RESOURCE_PREFIX" --out "$OUT/comparison"
       - name: Retain only aggregate observations
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: closed-native-comparison-${{ github.run_id }}-${{ github.run_attempt }}
           path: |

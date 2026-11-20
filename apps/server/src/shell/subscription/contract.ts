@@ -96,7 +96,6 @@ const cancelSubscription = HttpApiEndpoint.post(
     })
   );
 
-/** Canonical Free operation group for discovering and presenting Subscription standing and offers. */
 export const SubscriptionGroup = HttpApiGroup.make("subscription")
   .add(getUpgradeUrl)
   .add(listSubscriptionOffers)
@@ -122,37 +121,31 @@ const InvalidFields = {
   }),
 };
 
-/** Generic direct-browser refusal that never reflects a transient token or provider response. */
 export class PaymentEnrollmentInvalidApi extends Schema.Error<
   PaymentEnrollmentInvalidApi,
   Brand.Brand<"PaymentEnrollmentInvalidApi">
 >("PaymentEnrollmentInvalidApi")(InvalidFields, { httpApiStatus: 400 }) {}
 
-/** Missing or expired WebSession authority at the dedicated enrollment boundary. */
 export class PaymentEnrollmentUnauthenticatedApi extends Schema.Error<
   PaymentEnrollmentUnauthenticatedApi,
   Brand.Brand<"PaymentEnrollmentUnauthenticatedApi">
 >("PaymentEnrollmentUnauthenticatedApi")(InvalidFields, { httpApiStatus: 401 }) {}
 
-/** Cross-origin enrollment attempt rejected before any provider or persistence effect. */
 export class PaymentEnrollmentOriginRejectedApi extends Schema.Error<
   PaymentEnrollmentOriginRejectedApi,
   Brand.Brand<"PaymentEnrollmentOriginRejectedApi">
 >("PaymentEnrollmentOriginRejectedApi")(InvalidFields, { httpApiStatus: 403 }) {}
 
-/** Bounded-body rejection that does not parse or report the rejected secret-bearing body. */
 export class PaymentEnrollmentPayloadTooLargeApi extends Schema.Error<
   PaymentEnrollmentPayloadTooLargeApi,
   Brand.Brand<"PaymentEnrollmentPayloadTooLargeApi">
 >("PaymentEnrollmentPayloadTooLargeApi")(InvalidFields, { httpApiStatus: 413 }) {}
 
-/** Non-JSON secret-bearing submission rejected without provider work. */
 export class PaymentEnrollmentUnsupportedMediaTypeApi extends Schema.Error<
   PaymentEnrollmentUnsupportedMediaTypeApi,
   Brand.Brand<"PaymentEnrollmentUnsupportedMediaTypeApi">
 >("PaymentEnrollmentUnsupportedMediaTypeApi")(InvalidFields, { httpApiStatus: 415 }) {}
 
-/** Bounded preparation-attempt pressure refuses before provider work, not as an outage. */
 export class PaymentEnrollmentRateLimitedApi extends Schema.Error<
   PaymentEnrollmentRateLimitedApi,
   Brand.Brand<"PaymentEnrollmentRateLimitedApi">
@@ -166,7 +159,6 @@ export class PaymentEnrollmentRateLimitedApi extends Schema.Error<
   { httpApiStatus: 429 }
 ) {}
 
-/** Bounded provider/configuration outage response carrying no provider details. */
 export class PaymentEnrollmentUnavailableApi extends Schema.Error<
   PaymentEnrollmentUnavailableApi,
   Brand.Brand<"PaymentEnrollmentUnavailableApi">
@@ -180,7 +172,6 @@ export class PaymentEnrollmentUnavailableApi extends Schema.Error<
   { httpApiStatus: 503 }
 ) {}
 
-/** Explicit replacement of a cleared failed card by an enabled method; paid Subscriptions and unresolved charges remain blocked. */
 export const PreparePaymentEnrollmentPayload = Schema.Struct({
   priceId: PriceId,
   method: EnrollmentMethod,
@@ -198,7 +189,6 @@ const SubmitBase = {
   decisions: EnrollmentDecisions,
 };
 
-/** Secret-bearing submission shape; reauthorization omits card material and reuses the source. */
 export const SubmitPaymentEnrollmentPayload = Schema.Union([
   Schema.Struct({
     method: Schema.Literal("card"),
@@ -236,7 +226,6 @@ const directErrors = [
   PaymentEnrollmentRateLimitedApi,
 ] as const;
 
-/** Dedicated first-party browser operations; none join canonical agent or PAT surfaces. */
 export const SubscriptionEnrollmentGroup = HttpApiGroup.make("subscriptionEnrollment")
   .add(
     HttpApiEndpoint.get("availability", "/web/subscription/payment-enrollments/availability", {
@@ -273,35 +262,27 @@ export const SubscriptionEnrollmentGroup = HttpApiGroup.make("subscriptionEnroll
     })
   );
 
-/** Direct no-store payment-source enrollment API excluded from FidyApi, OpenAPI, agents, and PATs. */
 export class SubscriptionEnrollmentApi extends HttpApi.make("subscriptionEnrollmentApi")
   .add(SubscriptionEnrollmentGroup)
   .annotate(OpenApi.Title, "fidy-ai Subscription enrollment API") {}
 
-/** Group shape exported solely for deriving the first-party browser client. */
 export type SubscriptionEnrollmentApiGroups =
   typeof SubscriptionEnrollmentApi extends HttpApi.HttpApi<infer _Identifier, infer Groups>
     ? Groups
     : never;
 
-/** Shared bounded generic invalid response for raw direct-browser handlers. */
 export const paymentEnrollmentInvalidBody = { error: invalidError } as const;
-/** Shared bounded provider/configuration outage response. */
+
 export const paymentEnrollmentUnavailableBody = { error: unavailableError } as const;
-/** Shared bounded preparation-attempt refusal, distinct from provider/configuration outage. */
+
 export const paymentEnrollmentRateLimitedBody = { error: rateLimitedError } as const;
 
-/** Live credential predicate composed into a Subscription read within the caller's atomic unit. */
 export type SubscriptionReadAuthority = Readonly<{
   table: "pats" | "web_sessions" | "oauth_credentials" | "hosted_turns";
   predicate: string;
   bindings: ReadonlyArray<string | number | Uint8Array>;
 }>;
 
-/**
- * A bounded read to commit with the caller's authority and required Audit evidence. Decode only
- * its ordered results after that same commit succeeds; no persistence shape leaves this owner.
- */
 export type PreparedSubscriptionRead = Readonly<{
   statements: ReadonlyArray<OwnedStatement>;
   decode: (rows: ReadonlyArray<ReadonlyArray<unknown>>) => Schema.Json;

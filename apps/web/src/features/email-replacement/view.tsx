@@ -243,7 +243,6 @@ const replacementOutcome = (
   );
 };
 
-/** Mailbox proofs stay in transient form state and request bodies. */
 export const EmailReplacementView = ({
   lifecycleRef,
   ...props

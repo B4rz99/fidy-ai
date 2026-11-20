@@ -28,7 +28,6 @@ export const io = <A>(tryWork: () => Promise<A>): Effect.Effect<A, EmailUnavaila
         : authorityUnavailable(),
   });
 
-/** Worker-native entropy and digest, supplied at the Email Worker boundary. */
 export const emailSecureRandom = SecureRandom.make((size) =>
   crypto.getRandomValues(new Uint8Array(size))
 );

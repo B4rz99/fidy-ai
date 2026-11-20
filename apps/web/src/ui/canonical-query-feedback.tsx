@@ -2,7 +2,6 @@ import type { ComponentProps, JSX } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Button } from "@/ui/components/button";
 
-/** Retry belongs to the owning atom; Cause details never enter presentation. */
 export const CanonicalQueryRetry = ({
   description,
   onRetry,

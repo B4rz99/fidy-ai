@@ -7,14 +7,12 @@ const monthsPerYear = 12;
 const maximumDayDrift = 3;
 const percentScale = BigDecimal.make(100n, 0);
 const tolerancePercent = BigDecimal.make(5n, 0);
-/** Formatting equivalence only; it never guesses a person or organization. */
 export const normalizeCounterparty = (text: string): string =>
   text
     .normalize("NFKC")
     .replaceAll(/\p{White_Space}+/gu, " ")
     .trim()
     .toLowerCase();
-/** The reference never moves: small increases cannot compound the five-percent same-Currency band. */
 export const comparableMoney = ({
   candidate,
   reference,
@@ -210,11 +208,6 @@ const extendProposal = ({
     latestTransactionId: last.fact.id,
   };
 };
-/**
- * Confirm unambiguous consecutive-month triples in a complete bounded fact selection. Each fact
- * supports at most one proposal. The initial calendar day is clamped at month end with three days
- * of drift; the initial exact Money anchors every comparison. Gaps never expire historical patterns.
- */
 export const detectMonthlySeries = ({
   facts,
   timeZone,
@@ -251,7 +244,6 @@ export const detectMonthlySeries = ({
 
 const coldStartDays = 30;
 const millisecondsPerDay = 86_400_000;
-/** Suppression is decided once at confirmation; the thirty-day clock starts at first financial capture. */
 export const decideAnnouncement = ({
   backfill,
   firstCapturedAt,

@@ -154,7 +154,7 @@ const reserveClaim = (db: D1Database, claim: Claim): Effect.Effect<boolean, Caus
     );
     return results.every((item) => item.meta.changes === 1);
   });
-/** Atomically consume a reviewed private proof and mint one unrecoverable bearer. */
+
 const mint = (
   db: D1Database,
   pairing: PairingRow,
@@ -210,7 +210,7 @@ const mint = (
         : unavailable();
     }).pipe(Effect.orElseSucceed(() => invalid()));
   });
-/** Only the original private-code holder may poll or claim; all terminal states refuse replay. */
+
 export const claimPATPairing = ({
   request,
   db,

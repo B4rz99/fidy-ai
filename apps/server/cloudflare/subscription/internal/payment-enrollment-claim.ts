@@ -16,14 +16,6 @@ const Claim = Schema.Struct({
   authorizationDigest: Schema.optionalKey(Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u))),
 });
 
-/**
- * Atomically claims one User-owned prepared PaymentEnrollment for one browser payment action.
- * The caller must already have verified exact Origin, a fresh WebSession, current Consent,
- * the submitted decisions, and a bounded decoded request. Only a successful claim may
- * start provider source creation. Failure is deliberately indistinguishable from replay,
- * expiry, an unrelated User, or another concurrent claimant; none authorizes a retry of
- * an ambiguous provider request.
- */
 export const claimPreparedPaymentEnrollment = ({
   db,
   input,
@@ -32,9 +24,7 @@ export const claimPreparedPaymentEnrollment = ({
 }: Readonly<{
   db: D1Database;
   input: typeof Claim.Type;
-  /** Unix milliseconds used for both acceptance and expiry at this claim. */
   claimedAtMs: number;
-  /** Requires the exact live, fresh WebSession and active Consent when the claim commits. */
   authorityGuard: OwnedStatement;
 }>): Promise<boolean> => {
   const claim = Schema.decodeSync(Claim)(input);

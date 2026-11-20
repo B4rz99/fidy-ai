@@ -33,3 +33,27 @@ Build generation and freshness/collision checks replace manual registration. Fin
 remains ordinary reviewed TypeScript, not a speculative template language. New formats still require
 evidence, adversarial fixtures, review, and deployment. Shared interpretation changes require a new
 revision; generated discovery removes central editing, not the cost of maintaining formats.
+
+Capture freezes ServiceMarket, locale and time zone when admitting the evidence. Card suffix and
+account suffix occupy separate namespaces even when the digits match. Account-like hints and
+explicit product labels may be retained as partial evidence. They establish neither account
+identity nor a Transaction match. Capture establishes that a label came from an admissible bounded
+field before applying the formatting codec.
+
+Recognition nominates a candidate and never authorizes incomplete or conflicting evidence.
+Parse bounded inert HTML with no execution or fetching. Overflow or potentially hidden content
+makes recognition unavailable. Truncation could falsely yield a unique match. Numeric and date
+parsing use the evidenced format revision and captured historical zone. Match normalization
+does not rewrite retained financial fields.
+
+The email catalog is produced by `apps/server/tools/email-formats/generate-runtime.ts` and
+checked for freshness by the Workspace Gate. Its checked-in private catalog excludes fixtures.
+Synthetic fixtures represent the structure under test and use fictional transaction or personal
+values. They do not serve as byte-for-byte records of received mail.
+
+Only a deterministic allowlisted versioned structural transform can produce long-lived
+retained evidence. It includes no original text, variable HTML names or attributes, URLs,
+dimensions or content-dependent lengths. Human-reviewed publication reserves the exact
+placeholder and checks its independent marker after reservation. Withdrawal fences any
+late write before the owner can release its writer. Retry revalidates the original grammar
+and digest. Malformed publication follows the same withdrawal boundary.

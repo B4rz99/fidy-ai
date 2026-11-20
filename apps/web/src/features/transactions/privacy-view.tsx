@@ -28,7 +28,6 @@ const ReadOnlyNotice = (): JSX.Element => (
   />
 );
 
-/** Read-only Transaction access grants neither mutation nor hosted-agent authority. */
 export const PrivacyTransactions = (): JSX.Element => {
   const [date, setDate] = useState("");
   const router = useRouter();

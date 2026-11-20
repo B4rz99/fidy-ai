@@ -1,5 +1,4 @@
 import { SecureRandom } from "effect/crypto";
-// Native CLI managed-path ownership uses the host operating system path format.
 import { join, resolve, sep } from "node:path";
 import { userInfo } from "node:os";
 import {
@@ -555,7 +554,7 @@ const runLogin = (input: NativeInput, signal: AbortSignal): LoginEffect =>
       );
     })
   );
-/** Starts isolated native OAuth. The caller approves its authorization URL; a manually returned callback is optional when the native listener completes login. */
+
 export const nativeLogin = ({
   host,
   binary,
@@ -1719,7 +1718,7 @@ const runTools = (input: ToolInput, signal: AbortSignal): ToolsEffect =>
       );
     })
   );
-/** Drives canned model decisions through real native clients. Mutation delivery is never retried; caller reconciles private outputs with canonical state and Audit. */
+
 export const nativeTools = (
   input: Readonly<{
     host: NativeHost;
@@ -1838,7 +1837,7 @@ const selectCredential = (host: NativeHost, raw: Schema.Json): NativeCredential 
   if (matches.length !== 1 || matches[0] === undefined) throw new Error("credential ownership");
   return normalizeCredential(matches[0]);
 };
-/** Reads only this isolated native client's OAuth credential. Secrets remain redacted in memory; never serialize this result. */
+
 export const nativeCredential = ({
   host,
   binary,

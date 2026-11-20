@@ -27,7 +27,6 @@ const json = (body: object, status = 200, headers?: HeadersInit): Response => {
   return Response.json(body, { status, headers: responseHeaders });
 };
 
-/** Require a still-fresh browser session before rotating its User's emergency proof. */
 export const rotateBackupRecoveryCode = ({
   request,
   db,

@@ -5,7 +5,6 @@ import { runOperationCommand } from "../src/canonical/operations";
 import { makeCanonicalClient, readOperationInput } from "../src/canonical/runtime";
 import { SavedGrant, apiOrigin } from "../src/credential/contract";
 
-/** Real server responses cross the production client and output channels. */
 const ServerResponse = Schema.Struct({
   body: Schema.String,
   status: Schema.Int,

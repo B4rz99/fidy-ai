@@ -116,7 +116,6 @@ const RenewalChoice = ({
   );
 };
 
-/** Explicit fresh-browser acceptance of the exact saved disclosure and current withdrawal. */
 export const ConsentRenewal = ({
   client,
   withdrawalReference,

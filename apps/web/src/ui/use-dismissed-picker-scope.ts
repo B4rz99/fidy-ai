@@ -1,6 +1,5 @@
 import { type RefCallback, useCallback, useState } from "react";
 
-/** Dismiss open Base UI portals on departure while preserving closed retained controls. */
 export const useDismissedPickerScope = (
   active: boolean
 ): Readonly<{ generation: number; scope: RefCallback<HTMLDivElement> }> => {

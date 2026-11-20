@@ -12,7 +12,6 @@ export type AcceptanceProviderEnvironment = Readonly<{
     }>
   >;
 
-/** The closed payment fixture binds each instrument to the ordinal of its predeclared synthetic subject. */
 export const acceptancePaymentToken = ({
   kind,
   subject,

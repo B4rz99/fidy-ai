@@ -4,7 +4,7 @@ const voiceRefusalSweepLimit = 128;
 const voiceRefusalRetentionMs = 604_800_000;
 const attempt = <A>(run: () => Promise<A>): Effect.Effect<A, void> =>
   Effect.tryPromise({ try: run, catch: () => undefined });
-/** Expire only the bounded, metadata-only voice-refusal replay purpose. */
+
 export const expireVoiceRefusals = ({
   db,
   now,

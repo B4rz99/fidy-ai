@@ -32,7 +32,6 @@ const queryUnavailable = (): Unavailable =>
     next: [],
   });
 
-/** One bounded PAT metadata query, optionally rechecking its web caller at protected D1 work. */
 export const patMetadataQuery = (
   input: Readonly<{ current: number; session: Option.Option<FreshSessionSubject> }> &
     (Readonly<{ userId: string }> | Readonly<{ users: OwnedStatement }>)
@@ -78,7 +77,6 @@ const decodeMetadata = (
     });
   });
 
-/** Decode the same bounded metadata projection for both hosted and public Worker callers. */
 export const patMetadataResponseFromRows = (
   raw: unknown
 ): Effect.Effect<
@@ -95,7 +93,6 @@ export const patMetadataResponseFromRows = (
     return { data: { pats }, next: [] as const };
   }).pipe(Effect.mapError(queryUnavailable));
 
-/** Load only active, User-owned PAT metadata; malformed or excessive stored rows fail closed. */
 export const listPATsResponse = (
   userId: UserId
 ): Effect.Effect<

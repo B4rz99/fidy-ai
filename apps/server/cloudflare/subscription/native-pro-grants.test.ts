@@ -108,7 +108,6 @@ const nativeStanding = Effect.gen(function* () {
     }))
   );
   expect((yield* admitPurge(owner.runtime)).status).toBe(202);
-  // A read or mutation at the old address cannot add an event after the User erasure fence.
   expect(yield* exec("SELECT id FROM users")).toEqual([{ id: alice.user }]);
   expect(yield* record("grant")).toEqual([]);
   expect(yield* record("revoke")).toEqual([]);

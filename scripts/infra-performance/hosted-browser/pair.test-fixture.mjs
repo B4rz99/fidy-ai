@@ -1,4 +1,3 @@
-// Reopen the actual enrolled User. Only the D1 socket resolves to a network transport.
 import assert from "node:assert/strict";
 import { join, resolve, sep } from "node:path";
 import { Effect } from "effect";

@@ -50,7 +50,6 @@ const presentRetainedHistory = (input: Parameters<typeof presentHistory>[0]): Re
 
 class HistoryUnavailable extends Data.TaggedError("HistoryUnavailable") {}
 
-/** A bound browser read is unmetered. Materialize its complete response, standing and Audit together. */
 export const readUserHistory = Effect.fn(function* (
   request: Request,
   owns: (userId: string) => boolean
@@ -58,7 +57,6 @@ export const readUserHistory = Effect.fn(function* (
   const sql = yield* SqliteClient;
   const prepared = yield* Effect.tryPromise(() => readBoundWebSessionProof(request));
   if (Option.isNone(prepared)) return noAuthority();
-  // Hashing the cookie can yield. Build the final expiry predicates at the transaction's decision instant.
   const search = new URL(request.url).pathname === "/transactions/search";
   const operation = search ? "transactions.searchTransactions" : "transactions.listTransactions";
   const selection = { request, search, id: Option.none<string>() } as const;

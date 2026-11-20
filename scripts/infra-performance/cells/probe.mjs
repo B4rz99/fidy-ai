@@ -1,4 +1,3 @@
-// Exercise the frozen deployment's actual Ingress -> named erasure registry -> D1 route.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";

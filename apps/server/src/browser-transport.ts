@@ -1,4 +1,3 @@
-/** Dependency-free browser request declarations; response codecs live in browser-bootstrap. */
 export {
   browserSessionBindingPath,
   browserSessionBindingHeader,

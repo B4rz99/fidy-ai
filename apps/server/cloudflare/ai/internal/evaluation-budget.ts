@@ -62,7 +62,7 @@ const dryResponse = (): Response =>
     ],
     usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
   });
-/** One process lifetime; reserves worst-case output before egress and never refunds failed calls. */
+
 export const makeEvaluationBudget = ({
   environment,
   execute,

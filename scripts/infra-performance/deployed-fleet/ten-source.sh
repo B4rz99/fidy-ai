@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Recover the original protected trial only. The admission artifact was sealed before first signup.
 set -euo pipefail
 umask 077
 [[ "$FLEET_SOURCE_RUN" =~ ^[1-9][0-9]{0,19}$ ]]

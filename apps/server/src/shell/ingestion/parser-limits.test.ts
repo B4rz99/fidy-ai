@@ -70,7 +70,6 @@ it.effect("preserves quoted delimiters, escaped quotes, raw records and physical
         recordNumber: 1,
         startLine: newline === "\r\n" ? 3 : 2,
         endLine: newline === "\r\n" ? 4 : 3,
-        // Csv-parse retains only the first character of a CRLF record terminator.
         rawRecord: newline === "\r\n" ? rawRecord.slice(0, -1) : rawRecord,
         fields: ["00123", `a,b;\t"quoted"${newline}next`, ""],
       });
@@ -112,7 +111,6 @@ it.effect("bounds decoding work for long leading fields followed by many empty c
     const leadingField = "x".repeat(250_000);
     const rawRecord = `${leadingField}${fullRow}\n`;
     const bytes = encode(`${fullRow}\n${rawRecord.repeat(20)}`);
-    // Workers' ambient Buffer declaration is untyped; validate only the observed callable seam.
     const constructor: unknown = Buffer;
     if (!Predicate.isFunction(constructor)) return yield* Effect.die("Missing Buffer constructor");
     const prototype: unknown = Reflect.get(constructor, "prototype");
@@ -140,7 +138,6 @@ it.effect("bounds decoding work for long leading fields followed by many empty c
       startLine: 2,
       endLine: 2,
     });
-    // Raw-context decoding per field would exceed 1 GB for this approximately 5 MB input.
     expect(decodedCharacters).toBeLessThan(bytes.length * 6);
   })
 );

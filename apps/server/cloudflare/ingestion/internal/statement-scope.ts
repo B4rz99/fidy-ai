@@ -2,9 +2,6 @@ import { Option } from "effect";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import type { StatementDecisionWork } from "../contract";
 
-/** Credentials cannot resume a hosted clarification. Its live original conversation must match.
- * The column reference is a fixed owner SQL expression, never decoded from transport input.
- */
 export const statementOriginGuard = ({
   work,
   submission,

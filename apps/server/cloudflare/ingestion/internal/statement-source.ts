@@ -25,7 +25,7 @@ const fragmentCharacters = fragmentKibicharacters * bytesPerKibibyte;
 const maximumParts = 1024;
 const maximumHeaderBytes = maximumMaterializedHeaderBytes;
 const writeBatchSize = 8;
-// A reusable generation must have passed the current XLSX work admission policy.
+
 const representationRevision = "statement-material-v2";
 const highSurrogateStart = 0xd800;
 const highSurrogateEnd = 0xdbff;
@@ -330,7 +330,6 @@ const readRows = (
     return rows.slice(offset % statementChunkSize);
   });
 
-/** Loads at most one owned chunk at the durable cursor. Refuses substituted data and recovers interrupted publication within the durable source-parse budget. */
 const findMaterializedChunk = (
   input: MaterializationIdentity & Readonly<{ offset: number }>
 ): Effect.Effect<Option.Option<MaterializedChunk>, Failure> =>
@@ -468,7 +467,7 @@ const writeParts = (
       );
     }
   });
-/** Reserve before expensive source reads. Ambiguous acknowledgements consume a slot, while idempotent cache cleanup remains independently retryable. */
+
 const reserveStatementSourceParse = (
   input: MaterializationIdentity
 ): Effect.Effect<void, Failure> =>
@@ -497,7 +496,6 @@ const reserveStatementSourceParse = (
     }
   });
 
-/** Retains at most 16 MiB of derived rows for the original source purpose/deadline. Only complete publication may drive captures. Requires the User coordinator. */
 const materializeStatement = (
   input: MaterializationIdentity & Readonly<{ parsed: ParsedStatement }>
 ): Effect.Effect<void, Failure> =>
@@ -565,13 +563,6 @@ const readSource = (input: SourceInput): Effect.Effect<ParsedStatement, Failure>
     return parsed;
   });
 
-/**
- * Acquires verified rows at the durable processing offset for an owned, active submission.
- * The caller holds the User coordinator and supplies the submission's captured source identity
- * and retention deadline. Reuses or recovers complete derived material before spending a bounded
- * source parse. Rejection carries only a terminal reason; unavailability permits durable retry.
- * Neither failure settles the submission or changes its captured Transactions.
- */
 export const acquireStatementChunk = (
   input: SourceInput
 ): Effect.Effect<MaterializedChunk, Failure> =>
@@ -581,7 +572,6 @@ export const acquireStatementChunk = (
     yield* reserveStatementSourceParse(input);
     const parsed = yield* readSource(input);
     yield* materializeStatement({ ...input, parsed });
-    // Successful publication must be readable before any row may be captured.
     return yield* findMaterializedChunk(input).pipe(
       Effect.flatMap((published) =>
         Effect.fromOption(published, () => new StatementSourceUnavailable())

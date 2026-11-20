@@ -101,8 +101,6 @@ def prepare(call, directory, revision, member, *, browser_workspace=False):
             write(path, journal)
 
         page = call("GET", HISTORY, None)
-        # The browser authority carries no canonical retry receipt. Journal before either mutation
-        # and read its all-or-nothing outcome after interruption instead of submitting it twice.
         if "capture" not in journal:
             if page["data"]:
                 raise ValueError("Synthetic performance User already has unrelated history")

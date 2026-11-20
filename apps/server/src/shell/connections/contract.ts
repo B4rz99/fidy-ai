@@ -84,7 +84,6 @@ export const ConnectionsGroup = HttpApiGroup.make("connections")
       .annotateMerge(read)
   );
 
-/** Public locator only; possession never establishes User or institution authority. */
 export const ConnectionAttemptReference = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("ConnectionAttemptReference"))
   .annotate({ identifier: "ConnectionAttemptReference" });
@@ -114,7 +113,6 @@ export const ConnectionAuthorizationHandoff = Schema.Struct({
   expiresAt: UtcTimestamp,
 });
 
-/** Safe same-User continuation facts, with the original absolute deadline. */
 const continuationFields = {
   connection: Connection,
   institutionName: Schema.Literal("Bancolombia"),
@@ -141,7 +139,6 @@ export const ConnectionContinuationReview = Schema.Union([
 
 export { connectionBrowserPaths };
 
-/** Bounded failure envelope: no locator, credential, or provider detail is reflected. */
 export const ConnectionContinuationFailure = Schema.Struct({
   error: Schema.Struct({ code: Schema.Literal("continuation_unavailable") }),
 });
@@ -157,7 +154,6 @@ const browserFailures = Object.values(browserFailureStatuses).map((status) =>
   ConnectionContinuationFailure.pipe(HttpApiSchema.status(status))
 );
 
-/** Browser-only continuation; excluded from canonical tools and atomic batches. */
 export const ConnectionBrowserApi = HttpApi.make("ConnectionBrowserApi").add(
   HttpApiGroup.make("connectionBrowser")
     .add(
@@ -176,10 +172,8 @@ export const ConnectionBrowserApi = HttpApi.make("ConnectionBrowserApi").add(
     )
 );
 
-/** Only implementations satisfying SupportedInstitution may be registered. None currently qualify. */
 export const registeredConnectionInstitutionIds: ReadonlyArray<InstitutionId> = [];
 
-/** Code-composed supported integration registration; transport data cannot supply this service. */
 export const ConnectionInstitutions = Context.Reference<ReadonlyArray<InstitutionId>>(
   "@fidy/server/connections/Institutions",
   { defaultValue: () => registeredConnectionInstitutionIds }

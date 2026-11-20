@@ -9,7 +9,6 @@ import { prepareCount } from "./weekly-governor";
 import { insightVerifiedDeliveryQuery } from "../../whatsapp/operations";
 import { newId } from "../../secret-material/operations";
 
-/** Compose verified actual channel metadata with attention and execution; delivered never replaces read or dismissed. Execute this ordered group contiguously in the caller's native batch with Transcript effects: changes() couples the count marker to its governor update. */
 export const prepareWeeklyDeliverySettlement = (
   input: Readonly<{
     db: D1Database;

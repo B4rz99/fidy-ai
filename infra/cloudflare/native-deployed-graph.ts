@@ -86,7 +86,7 @@ const requireQueueName = (
     );
   }
 };
-/** Assert actual provider metadata for each consuming Worker, including its independently deployed private service targets. */
+
 export const requireDeployedRole = (input: {
   role: Exclude<NativeRole, "Web">;
   revision: string;
@@ -135,7 +135,7 @@ const staticSiteVersion = Schema.Struct({
     }),
   }),
 });
-/** StaticSite gets revision and contract evidence from the independently rebuilt and served assets. */
+
 export const verifyDeployedVersion = (input: {
   role: NativeRole;
   raw: unknown;
@@ -151,7 +151,6 @@ export const verifyDeployedVersion = (input: {
   }
   const bindings = { ...verifiedVersionResources(input).bindings };
   const { role, revision } = input;
-  // WorkerProvider adds these coordinates when uploading executable scripts, after the plan binding check.
   const runtime = {
     ALCHEMY_PHASE: "runtime",
     ALCHEMY_WORKER_NAME:
@@ -258,7 +257,7 @@ const inspectConsumers = Effect.fn(function* (
   );
   return [row.consumer_id];
 });
-/** Read all candidate-owned data resources before the first mutation and verify their exact consumer ownership after installation. */
+
 export const inspectNativeResources = Effect.fn(function* (
   read: Read,
   revision: string,

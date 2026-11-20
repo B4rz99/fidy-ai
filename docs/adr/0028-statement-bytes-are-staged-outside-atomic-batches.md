@@ -91,3 +91,82 @@ all; ownership of authority stays with `ingestion.submitForExtraction`.
   expires.
 - **Publishing first and verifying later, or assuming R2 and D1 commit together.** Either can leave
   an authoritative submission pointing at missing or mismatched material.
+
+## Ownership of retained material and row outcomes
+
+The staging handle names an unpredictable server-created object and the exact staged-byte digest.
+A receipt alone grants no authority. Publication verifies the supplied handle against the retained
+owner record, including the byte count and content digest. The caller's submission key identifies
+one logical publication. Unpublished bytes have a hard staging expiry. Published material has a
+separate extraction deadline and cannot be revived when that deadline passes.
+
+A failed run with partial progress counts only finalized input rows. Preserve original row
+evidence while a review can still act on it, without evaluating spreadsheet formulas. A safe
+review summary can remain available independently of its raw evidence. Mechanical capture uses
+only the exact structurally evidenced format and explicitly sourced Currency. Uncertain field
+mapping or Currency requires review instead of applying a regional default to the statement.
+Use zero-based column indexes, one Currency source, and a closed refusal projection that leaves
+the original bytes and parser internals private.
+
+Before requesting field evidence, admit CSV dimensions with the same grammar and no raw field
+context. This prevents repeated copies of a long raw prefix. Keep raw evidence and the per-row
+retention charge at the review boundary, so already accepted captures do not count as pending
+review material. Tests cover CRLF evidence and bounded decoding work.
+
+Inspect and canonicalize expanded ZIP members before handing them to SheetJS. Admit one
+unambiguous representation without encryption, ZIP64 or binary financial parts. Scan XML
+parts independently of standard names. Reconcile raw XML attributes, entity and Office escapes,
+text fragments and format ids using conservative bounds aligned with SheetJS decoding. Charge
+shared text, future metadata and custom format work before workbook construction. Exclude shared
+formula translation and comment insertion. Accept inert ordinary formula evidence without
+executing it. The content-type part is mandatory because SheetJS otherwise has fallback
+container behavior outside this scan.
+
+The statement parser and staging gate select by content signatures before interpreting claimed
+types. Treat the OLE signature as an unsupported protected Office container. Keep parser engines
+out of ordinary API initialization. Media retrieval accepts only a validated token at the fixed
+Kapso download operation, without project credentials or provider-supplied transport coordinates.
+
+Keep raw originals behind the live browser review boundary. Materialize the bounded page
+before fetching excerpts, and bound raw row fragments inside the query. Recheck locator,
+eligibility, caller authority and accounting after an external read. Preserve the original
+deadline for reversible workspace decisions. Conversation settlement can discard resolved
+material. Canonical metadata, Queue and Workflow history never carry originals or passwords.
+
+Queue publication is an offer of the exact versioned identity. Lost acknowledgments can
+repeat that identity but cannot create new authority. Workflow existence does not prove
+completion. An ambiguous create must resolve the same instance before Queue acknowledgment.
+The owner alarm and scheduled reconciliation recover admitted work when a wake is lost.
+
+The verified conversation binds document admission and publication to the same Turn, Hosted
+Agent Session and message. An exact retry cannot extend a deadline or restore expired media.
+One native unit composes publication, capacity, accountability and visible review. Original
+media and unpublished work expire after thirty days; metadata-only accountability may be
+retained for one year.
+
+### Publication, derived material and durable accounting
+
+Recheck actual object size and checksum before buffering or publishing. A published reference
+may be readable after the staging expiry, subject to the submission's own deadline. Failed
+upload cleanup persists its deleting row before touching R2 and removes the row only after
+the object is gone. Keep the outcome of an interrupted D1 write attached to its durable
+settlement.
+
+Canonical publication creates the submission, promotes its stage, reserves any Free backfill,
+records the exact credential's accountability and publishes the extraction identity atomically.
+Recheck all mutable premises in the insert. The same material and request identity recover a
+stored result with live replay accountability. Different material conflicts. Post-rollback
+classification must use proven retained state and cannot depend on reading R2. A missing or
+foreign staging reference has the same validation failure.
+
+Reserve source work before expensive reads. Ambiguous reservation acknowledgment consumes a
+slot. Reuse only complete derived material admitted under current parser policy and its
+original source deadline. Advance the durable row cursor through sequential bounded commits.
+Each row's result and evidence commit together. Terminal failure keeps prior row accounting,
+releases its pending entitlement and cannot regress a completed submission.
+
+Size review material before serialization against the complete D1/SQLite record overhead,
+including headers, repeated references and escaped text. Request-local byte counts can be
+reused while each occurrence is charged. Metadata reads never load the raw row, and filtering
+precedes pagination. A verified origin session is required to continue the hosted clarification.
+The inbox can retain its independently expiring review material after that session closes.

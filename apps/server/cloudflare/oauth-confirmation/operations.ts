@@ -20,9 +20,6 @@ import {
 } from "./contract";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 
-/** Compose an owner's exact observed revision predicate into the protected unit. The owner must
- * provide the same facts in its effect/revision disclosure; values remain bound SQL parameters.
- */
 export const oauthMutationReview = (
   input: Readonly<{
     db: D1Database;
@@ -174,11 +171,6 @@ const issueIntent = (
       : ({ _tag: "Refused" } as const);
   });
 
-/** Review the original invocation or prepare one attempt of its complete protected native unit.
- * Supply every owner revision guard, write and required Audit statement before continuing.
- * The returned commit consumes confirmation with those captured statements or rolls them all back;
- * it permits one attempt and never attests human presence or confirms delivery of its result.
- */
 export const prepareOAuthConfirmation = (
   input: ConfirmationInput
 ): Effect.Effect<ConfirmationPreparation> =>
@@ -202,7 +194,6 @@ export const prepareOAuthConfirmation = (
       : issueIntent(intent);
   }).pipe(Effect.catchCause(() => Effect.succeed({ _tag: "Refused" } as const)));
 
-/** Private protocol handoff, never a canonical success or a model-callable approval tool. */
 export const oauthReviewResponse: typeof reviewResponse = (review) => reviewResponse(review);
 
 export const confirmLocalOAuth: typeof localConfirmation = (...args) => localConfirmation(...args);

@@ -9,7 +9,6 @@ import type { CanonicalSuccess, FidyClient } from "@/transport/client";
 import type { ReviewWorkspaceQuery } from "./decisions";
 import type { Filter } from "./view-navigation";
 
-// Bridge React's render-to-subscription gap without retaining abandoned reads indefinitely.
 const renderCommitRetention = "400 millis";
 class WorkspaceKey extends Data.Class<
   Readonly<{
@@ -28,12 +27,10 @@ const sources = Atom.family(({ client, filter, page }: WorkspaceKey) =>
     timeToLive: renderCommitRetention,
   })
 );
-// Cache the owned atoms themselves: a weakly held wrapper can disappear while its atoms remain mounted.
 const activeQueries = Atom.family((key: WorkspaceKey) => {
   const source = sources(key);
   return observeReviewQuery(source);
 });
-/** Each inbox filter and page shares one refresh owner in the authentication registry. */
 export const reviewWorkspaceQueries = (
   input: Readonly<{
     client: FidyClient;
@@ -47,7 +44,6 @@ export const reviewWorkspaceQueries = (
   const key = new WorkspaceKey(input);
   return { source: sources(key), active: activeQueries(key) };
 };
-/** Read the inbox's selected revision directly; other selections retain their own canonical read. */
 export const reviewItemQuery = ({
   client,
   workspace,
@@ -82,7 +78,6 @@ const invalidateItemReads = Atom.family((client: FidyClient) =>
   client.runtime.fn<ReadonlyArray<string>>()((keys) => Reactivity.invalidate(keys))
 );
 const visited = Atom.family((_client: FidyClient) => Atom.make(false).pipe(Atom.keepAlive));
-/** Return reads complete before reveal; preloading code does not consume another data generation. */
 const recentSnapshotMilliseconds = 5000;
 type ReviewPreparation = Readonly<{
   apiClient: FidyClient;
@@ -189,7 +184,6 @@ export const prepareReviewWorkspace = (input: ReviewPreparation): Promise<void> 
       }
     })
   );
-/** Only explicit first-entry intent warms immutable material; returns reuse the retained selection. */
 export const preloadReviewMaterial = ({
   client,
   registry,

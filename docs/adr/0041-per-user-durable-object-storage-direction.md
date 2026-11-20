@@ -1,15 +1,13 @@
 # Per-User Durable Objects own application storage and atomic execution
 
-- **Status:** Accepted implementation-ready migration design, including User storage/execution,
-  routing, shared facts, background discovery, account erasure, operations and acceptance/cutover.
-  Implementation and measured acceptance remain subsequent work. Backup restoration and a new
-  complete User-data export are outside this migration.
+- **Status:** Accepted. The repository implements the per-User SQLite Durable Object topology.
+  Measured acceptance and opening intended admission remain separate release gates.
+  Backup restoration and a new complete User-data export are outside this decision.
 - **Supersedes:** The D1 storage destination and coordination-only Durable Object role in
   [ADR 0026](0026-cloudflare-native-production-replatform.md), and the initial-platform restriction
   in [ADR 0039](0039-fresh-read-performance-contract.md).
 
-Fidy will replace D1 with SQLite Durable Objects, with one object per stable User owning that
-User's application state and atomic execution. Co-locating execution and storage removes the
+One SQLite Durable Object per stable User owns that User's application state and atomic execution. Co-locating execution and storage removes the
 remote database boundary inside the User's unit of work. This trades the simplicity of a shared
 database for explicit global routing, work discovery and recovery protocols. A permanent D1/DO
 hybrid is not the destination.
@@ -476,8 +474,71 @@ operational procedures and required evidence. The
 records source-backed findings and outstanding evidence. Dated research and decision-ticket detail
 remain on the tracker.
 
-This ADR records the chosen boundaries and the explicit disposable-data cutover scope; it does not
-establish that migration code exists, measurements pass or deployment has occurred. Fidy is
-unreleased and needs no unnecessary backward compatibility. Architecture documents and runtime
-runbooks continue to describe the current implementation until it changes; the implementation
-effort must publish executable procedures beside the actual commands.
+This ADR records the storage boundaries and disposable-data cutover scope. Release evidence
+records measured acceptance and deployment. When coupled records move between owners, move
+their production callers with them and preserve exact authority, evidence and historical meaning.
+External deletion is irreversible. Account erasure discards content under independent minimal
+markers and restore enforcement while ordinary feature retention remains separate.
+
+Retained canonical receipts use a positive allowlist so new one-time disclosures cannot become
+replayable by default. Chunk large ordinary or correlated receipts before writing SQLite text,
+without splitting Unicode scalars. Finishing does not extend the original retry window. If an
+acknowledgment is lost, reconcile only the exact server-owned receipt or lease and never replay
+owner work on that evidence.
+
+Browser admission uses the same User pressure envelope across credentials and AccessTier.
+Unmetered browser work may share one committed authorized snapshot, or acquire a lease for a
+phased read with dependent work. In the phased case the final snapshot rechecks live authority,
+commits the owner's Audit and releases the exact lease. Request timing exposes bounded elapsed
+phases and no User or queried facts. Failed phases do not become zero-valued successful samples.
+
+Only Memory capacity work requires the explicitly constructed counting service. Missing inference
+cannot deny other local canonical commands. Categories persists stable taxonomy keys for references
+and reads labels and order from the release. Owner writes recheck a referenced Category and their
+live User predicate together. Keyword instructions affect future captures without rewriting
+retained Transactions. Capture interprets them in the same protected snapshot as retention.
+
+Directory lookup and reservations route to the named User. Neither a PAT route nor a bank
+callback establishes local authority. Recheck the credential, mounted binding when present,
+and any required original browser session there. Generation-scoped reservations are fenced
+until their exact terminal result is known. Retire descendants of the original binding only.
+Callback cleanup and expiry cannot unbind a different generation or the shared source budgets.
+
+### Erasure recovery and external writers
+
+The independent Erasure registry records the case identity, original admission and phase
+acknowledgments. A participant checks the exact case and phase before serializing a local
+purge. Local row absence proves disposal only after the independent case records the required
+prior acknowledgments. An acknowledgment lost in transit retries just that phase. Directory
+and Pricing retain their attributed registrations until their own cleanup acknowledgment.
+A missing registry after any accepted case requires recovery and cannot be initialized
+through ordinary data access. Native units assert the external generation in the same
+transaction using a read-only rollback assertion. Independent control-marker retention stays
+outside a restored D1 and extends past supported backup restore.
+
+Retain each R2 writer's specific nonce until a returned decision or matching positive evidence
+proves settlement. Absence cannot settle an ambiguous issued create. Erasure sweeps the whole
+canonical User prefix in bounded continuations even when inventory rows are missing. An
+independent sealed marker proves the original drain across restore and keeps old attempts from
+becoming new external instructions. Native registry publication uses [the Durable Object storage synchronization boundary](https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/#sync).
+
+### Maintenance and uncertain transport
+
+Advance the bounded watchdog range before remote I/O so restart neither repeats undiscovered
+work from the same claim nor reports it as returned. Freeze this tick's upper key and rotate
+fixed-owner and User priority when cleanup stalls. Deadline and body cancellation share one
+budget and a slot stays owned until cleanup settles. Flush progress before forcing a reset
+of an incarnation that cannot release its transport. Retire an erasure fence only after all
+original registration windows elapsed and retirement was acknowledged.
+
+Private object mutation is correlated by User namespace, exact owner reservation and
+placeholder ETag. Check live reservation after the placeholder settles. Deleting its
+placeholder fences a late payload. A control sweep preserves a replacement that won before
+the fence and cannot proceed after an ambiguous fence acknowledgment. It cannot settle an
+unknown owner writer.
+
+Register the User lifetime outside its transaction before activation. A cold physically empty
+UserStore could reflect interrupted purge. Resolve its independent erasure case before
+allocating the schema again. Preserve versioned schema prefixes and retained original retry
+deadlines through migrations. Observe unresolved claims separately from scheduled work.
+An original writer's last check does not establish when its claim began.

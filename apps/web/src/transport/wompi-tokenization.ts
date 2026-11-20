@@ -1,7 +1,6 @@
 import { UnknownJsonString, jsonStringSchema } from "@/schema-compatibility";
 import { Data, Effect, Function, Result, Schema } from "effect";
 
-/** Card fields stay in this browser-owned value only until Wompi answers. */
 export type CardFields = Readonly<{
   number: string;
   cvc: string;
@@ -43,7 +42,6 @@ const decodeChunks = (chunks: ReadonlyArray<Uint8Array>, byteLength: number): st
   return new TextDecoder().decode(bytes);
 };
 
-/** Bounds provider bytes before JSON decoding and cancels the owned reader on interruption. */
 export const readBoundedWompiResponse = (
   response: Response
 ): Effect.Effect<string, CardTokenizationFailed> =>
@@ -101,7 +99,6 @@ export const readBoundedWompiResponse = (
     });
   });
 
-/** Selects only the fixed tokenization origin corresponding to the merchant public key. */
 export const wompiTokenizationOrigin = (
   publicKey: string
 ): Effect.Effect<string, CardTokenizationFailed> => {
@@ -114,7 +111,6 @@ export const wompiTokenizationOrigin = (
 
 export type WompiFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
-/** Sends card fields directly to Wompi and returns only its short-lived opaque token. */
 export const tokenizeCardWithWompi: {
   (
     card: CardFields,

@@ -24,8 +24,6 @@ const executeBatch =
       : Effect.runPromise(expectedGeneration(input.configuration))
     )
       .then((expected) => {
-        // Preserve native D1 refusals for the operation owner; the generation assertion remains
-        // first in the same atomic unit, including when that unit is refused by an Audit trigger.
         const run = (): Promise<D1Result<Row>[]> =>
           input.source.batch<Row>([
             generationAssertion({ db: input.source, generation: expected.generation }),
@@ -99,7 +97,6 @@ const guardQueries = <Source extends Queries>(
   });
 };
 
-/** Every supported unit rechecks the external recovery generation in its native transaction. exec, dump and raw tuple access are unavailable; native row queries and Sessions remain guarded. */
 export const guardedDatabase = (
   configuration: ErasureRecoveryConfiguration &
     Readonly<{ measurement: Option.Option<RecoveryMeasurement> }>

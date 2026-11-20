@@ -8,7 +8,7 @@ const credentialAuditTable = `CREATE TABLE audit_entries(id TEXT PRIMARY KEY,use
    (operation IS NOT NULL AND ((record_type='session_call' AND session_id IS NOT NULL AND pat_id IS NULL AND outcome IN ('success','validation_failed','not_found')) OR
    (record_type='credential_call' AND (pat_id IS NOT NULL OR session_id IS NOT NULL OR (oauth_connection_id IS NOT NULL AND oauth_credential_id IS NOT NULL)) AND outcome IN ('accepted','rejected')) OR
    (record_type='request_admission' AND pat_id IS NOT NULL AND session_id IS NULL AND outcome IS NULL))))) STRICT`;
-/** User-bound device proof and immutable grant evidence commit beside the bearer digest. */
+
 export const userPATSchema = (): ReadonlyArray<string> =>
   [
     `CREATE TABLE pat_pairings(id TEXT PRIMARY KEY,public_code TEXT NOT NULL,proof_digest BLOB NOT NULL CHECK(length(proof_digest)=32),
@@ -88,7 +88,7 @@ const connectionAuditTable = credentialAuditTable.replace(
   "CHECK((record_type='session_call'",
   "CHECK((record_type='connection_synchronization' AND operation='connections.synchronize' AND outcome='success' AND session_id IS NULL AND pat_id IS NULL AND oauth_connection_id IS NULL) OR (record_type='session_call'"
 );
-/** Retain credential history while allowing a completed exact Synchronization to record system accountability. */
+
 export const connectionAuditSchema = (): ReadonlyArray<string> => [
   "CREATE TABLE saved_connection_audit AS SELECT * FROM audit_entries",
   "DROP TABLE audit_entries",
@@ -117,7 +117,7 @@ const hostedAuditGuards = [
       SELECT 1 FROM hosted_turns t WHERE t.id=NEW.hosted_turn_id AND t.user_id=NEW.user_id AND t.state='running' AND t.deadline_ms>NEW.occurred_at_ms
     ) BEGIN SELECT RAISE(ABORT,'hosted_authority_unavailable'); END`,
 ];
-/** Keep credential accountability after the originating Turn expires without retaining its transcript. */
+
 export const hostedMetadataAuditSchema = (): ReadonlyArray<string> => [
   "CREATE TABLE saved_hosted_audit AS SELECT * FROM audit_entries",
   "DROP TABLE audit_entries",
@@ -127,7 +127,6 @@ export const hostedMetadataAuditSchema = (): ReadonlyArray<string> => [
   ...hostedAuditGuards,
 ];
 
-/** Signed inbound media uses its own immutable accountability record. */
 export const mediaAuditSchema = (): ReadonlyArray<string> => [
   "CREATE TABLE saved_media_audit AS SELECT * FROM audit_entries",
   "DROP TABLE audit_entries",

@@ -1,7 +1,5 @@
 import { DateTime, Schema, SchemaTransformation } from "effect";
 
-// Require complete offset-bearing RFC 3339 input. OpenAI structured-output
-// validators require this JSON Schema pattern to avoid lookaround.
 const rfc3339 =
   /^(?:[0-9]{3}[1-9]|[0-9]{2}[1-9][0-9]|[0-9][1-9][0-9]{2}|[1-9][0-9]{3})-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\.[0-9]+)?(?:Z|[+-](?:0[0-9]|1[0-5]):[0-5][0-9])$/u;
 
@@ -49,11 +47,6 @@ const canonicalUtcDateTime = Schema.DateTimeUtc.check(
   })
 );
 
-/**
- * RFC 3339 instant with a four-digit year from 0001 through 9999 and `Z` or an
- * offset from -15:59 through +15:59. Decoding resolves the UTC instant; encoding
- * always uses UTC.
- */
 export const UtcTimestamp = Schema.String.annotate({ format: "date-time" })
   .check(Schema.isPattern(rfc3339), existingCalendarDate)
   .annotate({ identifier: "UtcTimestamp" })

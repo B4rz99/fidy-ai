@@ -18,7 +18,6 @@ sys.path.insert(0, str(HERE.parent / "cells"))
 from owner_cloud import Cloud
 from owner_state import CustodyObject
 from owner_transport import NATIVE_API, cloudflare, fetch
-# Select the existing native fleet meter ahead of the unrelated D1 pilot.
 fleet_path = HERE.parent / "deployed-fleet"
 sys.path.insert(0, str(fleet_path))
 from native_budget import CLEANUP_READS, CLEANUP_WRITES, DAY, check, observe, recovery_reservation
@@ -142,7 +141,6 @@ class HostedPort(BrowserPort):
         if "recoveryUsageBefore" in state and (delta["reads"] > CLEANUP_READS or delta["writes"] > CLEANUP_WRITES):
             raise ValueError("Reserved recovery rows exhausted")
         if phase == "finish":
-            # Work accepted by Cloudflare can be absent from the newest analytics group.
             finished = state.get("lastDispatch", now)
             for attempt in range(20):
                 if min(current["sqlite"]["latest"], current["r2"]["latest"]) >= finished and all(current["sqlite"][k] > initial["sqlite"][k]
@@ -242,7 +240,6 @@ def run(args):
         return actual
 
     if args.mode != "cleanup" and args.browser_workspace:
-        # The protected workflow writes this from real Chromium before touching cohort custody.
         checked_browser_origin(args.out/"origin-before-enrollment.json",time.time())
     candidate = verify()
     os.environ["FIDY_NATIVE_FIXTURE_PROVIDER_REVISION"] = installed["retainedProvider"]["revision"]
@@ -309,8 +306,6 @@ def comparable_native_reads(account, candidate, proof, pairs, *, browser=False):
         reserved += 1
         state.update(comparisonOffered=reserved, lastDispatch=now, lastUsage=current)
         if browser:
-            # This one durable claim fences the entire finite window, including unresolved mutations.
-            # The runner rejects excess route counts and cannot resume an interrupted window.
             state["browserReservation"] = dict(refreshes=30, correction=1, staleBatch=1,
                 authenticatedRequests=67, maximumPreflights=67, admission="one-use")
         version = store.replace(version,state)

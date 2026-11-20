@@ -97,7 +97,6 @@ const prepareContext = ({
   };
 };
 
-/** Browser-only excerpts commit with the exact caller, pressure, Audit and standing. */
 export const prepareBoundReviewPageContext =
   (request: Request): CanonicalBrowserRead =>
   ({ db, authority, reservation, current }) => {
@@ -120,7 +119,6 @@ export const prepareBoundReviewPageContext =
     };
   };
 
-/** Browser-only source context shares the inbox's page order; originals never enter agent metadata. */
 export const browseReviewPageContext = ({
   db,
   subject,
@@ -152,8 +150,6 @@ export const browseReviewPageContext = ({
     Effect.orElseSucceed(transactionUnavailable)
   );
 
-// Materialize the bounded page before inspecting any original, and clip inside D1 so raw
-// statement rows (up to 2 MB each) never cross the database response boundary.
 export const contextSql = (filter: string): string => `WITH page AS MATERIALIZED (
         SELECT id,user_id,expires_at_ms FROM (
           ${reviewRelation}

@@ -5,7 +5,6 @@ import { OAuthNativeReview } from "../oauth-confirmation/contract";
 import { readBoundedRequestBody } from "../http/operations";
 import type { RequestBodyPolicy } from "../http/contract";
 
-/** Protocol-native continuation only: canonical arguments cannot carry a confirmation decision. */
 export const readNativeConfirmation = (
   input: Readonly<{
     context: McpSchema.McpRequestContext["Service"];
@@ -43,7 +42,6 @@ type NativeConfirmationFailure =
   | Effect.Error<ReturnType<McpSchema.McpReverseClient["elicit"]>>
   | Cause.TimeoutError;
 
-/** Modern keyed continuation or legacy server request. Neither creates additional caller authority. */
 export const requestNativeConfirmation = (
   input: Readonly<{
     response: Response;

@@ -76,7 +76,7 @@ export const directoryEvidence = Effect.fn(function* <A, Encoded>(
     yield* Schema.decodeUnknownEffect(schema)(yield* Effect.tryPromise(() => response.json()))
   );
 });
-/** The originating object has verified the caller. A reservation binds the operation and comparison material, and never activates a PAT. */
+
 export const directoryPATCommand = Effect.fn(function* (request: Request) {
   const input = yield* Schema.decodeUnknownEffect(Schema.Union([Lookup, Bind, Reserve]))(
     yield* Effect.tryPromise(() => request.json())

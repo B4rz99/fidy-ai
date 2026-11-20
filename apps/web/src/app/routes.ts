@@ -167,7 +167,6 @@ const needsReviewRoute = createRoute({
                 signal: abortController.signal,
               }).catch(() => undefined);
           yield* Effect.tryPromise(() => ReviewWorkspace.preload());
-          // The registry owns query state; unresolved data must not block the workspace shell.
           return { preparation };
         })
       ),
@@ -250,9 +249,7 @@ const transactionsRoute = createRoute({
     date: search.date,
     transaction: search.transaction,
   }),
-  // Authorization entry checks must run even when the browser clock moves backwards.
   shouldReload: true,
-  // A speculative loader must never donate a code-only result to an actual Consent entry.
   preload: false,
   preloadStaleTime: 0,
   loader: {

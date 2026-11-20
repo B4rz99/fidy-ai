@@ -1,8 +1,6 @@
 import { defineConfig } from "vitest/config";
 import { BaseSequencer, type TestSpecification } from "vitest/node";
 
-// Start the native runtime and bounded subprocess suites before the small policy tests.
-// Estimates are from successful fixed-runner CI 39163060495; ties keep Vitest's order.
 const nativeFileMilliseconds: Readonly<Record<string, number>> = {
   "local-emulation.test.ts": 15_300,
   "openai-conformance-script.test.ts": 14_800,

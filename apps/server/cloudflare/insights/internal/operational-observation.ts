@@ -19,7 +19,6 @@ export const PendingDeliveryObservations = Schema.Array(
   ])
 ).check(Schema.isMaxLength(proactivityObservationLimit));
 
-/** Select bounded owner-private Work hints; locator construction stays outside SQL. */
 export const prepareProactivityWorkObservation = (
   input: Readonly<{ db: D1Database; weeklyEnabled: boolean; proactivityEnabled: boolean }>
 ): D1PreparedStatement => {

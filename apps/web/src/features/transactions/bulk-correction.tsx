@@ -206,7 +206,6 @@ const BulkHeading = ({ count }: Readonly<{ count: number }>): JSX.Element => (
     <p data-transaction-slot="transaction-panel-note">{count} transacciones seleccionadas</p>
   </header>
 );
-/** Sends one revision-checked atomic correction and never replays an uncertain save. */
 export const BulkTransactionCorrection = (input: BulkProps): JSX.Element => {
   const [transactions] = useState(() => input.transactions);
   const props = { ...input, transactions };

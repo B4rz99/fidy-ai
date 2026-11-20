@@ -120,7 +120,6 @@ const CurrencySummary = ({
     </div>
   );
 };
-/** Summarizes only the displayed FinancialRecord coverage; Money is aggregated within each Currency. */
 export const TransactionSummary = (props: SummaryProps): JSX.Element => {
   const currencies = Array.from(new Set(props.transactions.map((record) => record.money.currency)));
   const range = dateRange(props);

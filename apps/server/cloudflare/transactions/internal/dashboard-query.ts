@@ -44,7 +44,6 @@ const decodeTransactionFact = (
     )
   );
 
-/** Decode a returned page without treating malformed retained Transactions as empty results. */
 export const decodeDashboardTransactions = ({
   rows,
   categories,
@@ -59,7 +58,6 @@ const selectedFrom = `FROM transaction_projection_leaf effective`;
 const recentOrder = `effective.occurred_at_ms DESC, effective.created_at_ms DESC, effective.id DESC`;
 const categoryWindowOrder = `occurred_at_ms DESC, created_at_ms DESC, id DESC`;
 
-// SQLite's lower() is ASCII-only; fold Spanish capital accents explicitly for es-CO search.
 const listSearchText = [
   ["Á", "á"],
   ["É", "é"],
@@ -127,7 +125,6 @@ export const dashboardListStatement = ({
   };
 };
 
-/** Publish indexed, User-scoped effective list pages; caller owns the encompassing D1 batch. */
 export const dashboardTransactionQueries = ({
   db,
   userId,

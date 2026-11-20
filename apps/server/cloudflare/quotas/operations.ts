@@ -31,7 +31,6 @@ const CountRow = Schema.Struct({
   canonical_call: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 });
 
-/** Guards the subject and inserts at most one unit with the owner transition. D1 enforces capacity under races. */
 const consumptionStatements = (
   input: ConsumptionInput,
   mode: "required" | "if-available"
@@ -76,11 +75,9 @@ const consumptionStatements = (
   ];
 };
 
-/** Required publication fails atomically if this Free unit cannot be admitted. */
 export const prepareConsumption = (input: ConsumptionInput): ReadonlyArray<D1PreparedStatement> =>
   consumptionStatements(input, "required");
 
-/** Attach a server-created continuation to its already admitted unit without changing the amount or period. */
 export const bindConsumptionRetry = (
   input: ConsumptionInput & Readonly<{ retryIdentity: string }>
 ): D1PreparedStatement =>
@@ -97,12 +94,10 @@ export const bindConsumptionRetry = (
       input.userId
     );
 
-/** Email may branch to bounded deferral in the same D1 batch if no processing unit is available. */
 export const prepareAvailableConsumption = (
   input: ConsumptionInput
 ): ReadonlyArray<D1PreparedStatement> => consumptionStatements(input, "if-available");
 
-/** Owner-scoped commit proof for peers joining their transition to this allowance admission. */
 export const allowanceConsumptionProof = ({
   userId,
   allowance,
@@ -112,7 +107,6 @@ export const allowanceConsumptionProof = ({
   params: [userId, allowance, identity],
 });
 
-/** Explicit-User current-period count for an owner-held read projection, never inferred from Audit or receipts. */
 export const allowanceConsumptionCount = ({
   userId,
   allowance,
@@ -126,7 +120,6 @@ export const allowanceConsumptionCount = ({
   ],
 });
 
-/** Classifies only closed D1 constraint provenance; all other failures are unavailable. */
 export const quotaFailure = (failure: unknown): "exhausted" | "authority" | "unavailable" => {
   const text = String(failure);
   if (/commercial_quota_exhausted: SQLITE_CONSTRAINT/u.test(text)) return "exhausted";
@@ -134,7 +127,6 @@ export const quotaFailure = (failure: unknown): "exhausted" | "authority" | "una
   return "unavailable";
 };
 
-/** Observes a bounded consumption projection. Caller must guard and audit disclosure before releasing it. */
 export const quotaStatusStatement = (
   input: Readonly<{ db: D1Database; userId: string; current: number }>
 ): D1PreparedStatement =>
@@ -143,7 +135,6 @@ export const quotaStatusStatement = (
     users: { sql: "SELECT ?", params: [input.userId] },
   });
 
-/** Prepare standing for one credential-owned User selection in the same native snapshot. */
 export const quotaStatusForUserSelection = (
   input: Readonly<{ db: D1Database; users: OwnedStatement; current: number }>
 ): D1PreparedStatement => {
@@ -156,7 +147,6 @@ export const quotaStatusSelection = (
 ): OwnedStatement => {
   const pro = activeProForUserSelection({ users: input.users, nowEpochMs: input.current });
   const period = allowancePeriod(DateTime.makeUnsafe(input.current));
-  // SQLite needs a contiguous index prefix: allowance precedes period_start_ms.
   return {
     sql: `SELECT ${pro.sql} AS pro,
     coalesce(sum(CASE WHEN allowance = 'forwarded_email' THEN units ELSE 0 END),0) AS forwarded_email,
@@ -170,7 +160,6 @@ export const quotaStatusSelection = (
   };
 };
 
-/** Snapshot standing only while the exact supplied User-scoped authority is live in this same D1 batch. */
 export const prepareAuthorizedQuotaRead = ({
   db,
   userId,
@@ -193,7 +182,6 @@ export const prepareAuthorizedQuotaRead = ({
   quotaStatusStatement({ db, userId, current }),
 ];
 
-/** Decodes the owner projection; a malformed meter is unavailable, never zero consumption. */
 export const decodeQuotaStatus = (
   input: Readonly<{ row: unknown; current: number }>
 ): Option.Option<QuotaStatus> =>
@@ -205,7 +193,6 @@ export const decodeQuotaStatus = (
     })
   );
 
-/** Reads only one explicit User for guarded peer composition; storage/decode failure remains absent authority. */
 export const readQuotaStatus = (
   input: Readonly<{ db: D1Database; userId: string; current: number }>
 ): Effect.Effect<Option.Option<QuotaStatus>> =>
@@ -223,7 +210,6 @@ const unavailable = (): Response =>
     { status: 503 }
   );
 
-/** The same guarded, attributable independent-meter query for every canonical caller. */
 export const executeProtectedQuotaQuery = ({
   db,
   subject,

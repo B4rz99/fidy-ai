@@ -70,8 +70,6 @@ const documentJourney = Effect.fn(function* (mediaId: string = "media_statement_
       })
     );
   const holdUnboundStage = Effect.fnUntraced(function* () {
-    // A canonical submission has no Hosted Turn. Exercise its decisions with an independent
-    // durable pre-publication stage, then let the actual extractor build its Review rows.
     const id = "22460000-0000-4000-8000-000000000017",
       at = Math.floor(owner.now / 1000) * 1000;
     yield* owner.exec(

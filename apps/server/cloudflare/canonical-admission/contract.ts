@@ -6,12 +6,8 @@ import type { OAuthCaller } from "../../src/shell/oauth-agents/contract";
 import type { AuthorizedPAT } from "../tokens/contract";
 import type { AuthenticatedWebSession } from "../web-session/contract";
 
-/** An owner-prepared unmetered browser read; presentation follows the complete protected batch.
- * Closed to existing observations with unmetered browser policies.
- */
 export type PreparedCanonicalBrowserRead = Readonly<{
   statements: ReadonlyArray<D1PreparedStatement>;
-  /** Bounded decoding, pure calculation and encoding; no storage or provider work after the atomic snapshot. */
   present: (results: ReadonlyArray<D1Result>) => Effect.Effect<Response>;
 }>;
 
@@ -19,25 +15,21 @@ export type CanonicalBrowserRead = (
   input: Readonly<{
     db: D1Database;
     authority: WebSessionAuthority;
-    /** Admission-owned live credential selection, valid only in this native snapshot. */
     reservation: OwnedStatement;
     current: number;
   }>
 ) => PreparedCanonicalBrowserRead;
 
-/** Authorization is supplied by the credential owner, never inferred from an allowance or a retry key. */
 export type AuthorizedCanonicalCaller = Readonly<
   | { _tag: "PAT"; value: AuthorizedPAT }
   | { _tag: "WebSession"; value: AuthenticatedWebSession }
   | { _tag: "OAuth"; value: OAuthCaller }
 >;
 
-/** Private dependency failure without SQL or credential disclosure. */
 export class CanonicalAdmissionUnavailable extends Data.TaggedError(
   "CanonicalAdmissionUnavailable"
 )<{ readonly cause: unknown }> {}
 
-/** One stable User shares the initial API protection envelope, irrespective of credentials or AccessTier. */
 export const canonicalRequestProtection = {
   intervalMs: 100,
   burst: 10,
@@ -46,10 +38,8 @@ export const canonicalRequestProtection = {
   retryAfterSeconds: 1,
 } as const;
 
-/** Server-owned continuation for a phased browser query; it grants no credential authority. */
 export type CanonicalReadCompletion = Readonly<{ leaseId: string }>;
 
-/** Final accounting is prepared at the last snapshot, never reused across native transactions. */
 export type CanonicalReadFinalization = () => Effect.Effect<
   Readonly<{
     statements: ReadonlyArray<D1PreparedStatement>;
@@ -59,10 +49,8 @@ export type CanonicalReadFinalization = () => Effect.Effect<
 
 export const canonicalReadCompletionHeader = "fidy-internal-read-completion";
 
-/** Source selection shares admission; dependent work must freshly fence final disclosure and settle its lease. */
 export type CanonicalBrowserSourceRead = (input: Parameters<CanonicalBrowserRead>[0]) => Readonly<{
   statements: ReadonlyArray<D1PreparedStatement>;
-  /** Preserve an owner's existing storage-failure response; authority and pressure refusals stay shared. */
   unavailable: Option.Option<() => Response>;
   present: (
     rows: ReadonlyArray<D1Result>,
@@ -92,23 +80,19 @@ export type CanonicalBrowserSnapshotOperation =
   | "ingestion.getReviewPageContext"
   | "ingestion.getReviewItem";
 
-/** A finite canonical outcome produced by an owner within the same User transaction. */
 export type LocalMutationResult = Readonly<{
   status: number;
   outcome: "success" | "validation_failed" | "not_found" | "resource_limit";
   body: Schema.Json;
 }>;
 
-/** Prepare against the original User snapshot. Only the guarded commit may alter domain state. */
 export type LocalReviewFacts = { effect: string; revision: string };
 export type LocalMutationPlan = Readonly<{
   review: Option.Option<
     Effect.Effect<LocalReviewFacts, CanonicalAdmissionUnavailable, SqliteClient>
   >;
-  /** Multiple children may rely on a premise unless another child changes it. */
   premises: ReadonlyArray<string>;
   targets: ReadonlyArray<string>;
-  /** A later child addressing a removed record observes its absence. */
   removedTarget: Option.Option<string>;
   commit: Effect.Effect<LocalMutationResult, CanonicalAdmissionUnavailable, SqliteClient>;
 }>;

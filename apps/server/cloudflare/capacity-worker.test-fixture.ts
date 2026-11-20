@@ -3,7 +3,6 @@ import { UserStore as NativeUserStore } from "./core-worker";
 export { default } from "./core-worker";
 export * from "./core-worker";
 
-/** Only the host fixture calls this private namespace to observe the real SQLite allocation. */
 export class UserStore extends NativeUserStore {
   override fetch(request: Request): Promise<Response> {
     if (request.url === "https://fixture.invalid/database-size") {

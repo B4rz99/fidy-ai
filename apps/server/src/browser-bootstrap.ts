@@ -1,4 +1,3 @@
-/** Narrow browser bootstrap surface, derived from the same published endpoint declaration. */
 import { HttpApi } from "effect/http-api";
 import { BrowserSessionGroup } from "~/shell/web-session/contract";
 

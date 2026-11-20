@@ -39,7 +39,6 @@ import {
 
 const StatementInput = Schema.toType(getCanonicalOperationInput("ingestion.submitForExtraction"));
 
-/** Preserve the statement owner's metadata-only refusal audit and individual response. */
 export const canonicalStatementRefusal = ({
   config,
   subject,
@@ -101,7 +100,6 @@ const wakePublishedSubmission = (
     yield* wake;
   });
 
-/** Read only public lifecycle after the unit commits; transient adapter failures get bounded retries. */
 const committedSubmission =
   (config: StatementStagingConfig, publication: PreparedStatementPublication) =>
   (userId: string): Effect.Effect<Option.Option<StatementSubmission>> =>
@@ -187,7 +185,6 @@ const heldPublicationConfig = ({
   nowEpochMs: () => work.current,
 });
 
-/** Publish using the same staging/entitlement unit and atomically bind verified upload provenance. */
 export const prepareHeldStatementSubmission = (
   work: StatementDecisionWork
 ): Effect.Effect<CanonicalMutationPreparation> =>
@@ -249,7 +246,6 @@ export const prepareHeldStatementSubmission = (
     } satisfies CanonicalMutationPreparation;
   }).pipe(Effect.orElseSucceed(unavailablePreparation));
 
-/** One staged reference prepared for the shared canonical mutation unit, never a nested commit. */
 export const statementMutationAdapter = {
   prepare: (work: CanonicalPreparationWork): Effect.Effect<CanonicalMutationPreparation> =>
     Effect.gen(function* () {

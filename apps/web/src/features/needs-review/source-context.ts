@@ -66,7 +66,6 @@ const evidenceProjection = Atom.family((query: ContextQuery) =>
   })
 );
 
-/** Page-local source evidence stays in the authentication registry and expires independently of drafts. */
 export const useReviewPageContext = ({
   filter,
   page,

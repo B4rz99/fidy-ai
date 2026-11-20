@@ -25,7 +25,7 @@ const upstream = Schema.Struct({
   headers: Schema.Array(Schema.Tuple([Schema.String, Schema.String])),
   body: Schema.String,
 });
-// The parent checks account custody and release admission before it sends each request.
+
 const relay = (read: Read): Transport =>
   Effect.fnUntraced(function* (request: Request) {
     output({

@@ -13,9 +13,7 @@ const HEADER_SHAPE_ERROR = "Commit header must follow format: type(scope): #123 
 const NAME_COLUMN = 14;
 
 type ScopeSection = {
-  /** The HTML comment in the convention document the table follows. */
   readonly marker: string;
-  /** Printed above the group in the failure message. */
   readonly lead: string;
 };
 
@@ -34,11 +32,6 @@ type Allowlist = {
   readonly scopeGroups: readonly ScopeGroup[];
 };
 
-/**
- * The published convention, ready to judge a header or a whole message. Every
- * failure it reports is followed by the current list, so a rejected message can
- * be fixed from the terminal.
- */
 export type CommitConvention = {
   readonly validateHeader: (header: string) => readonly string[];
   readonly validateMessage: (message: string) => readonly string[];
@@ -201,11 +194,6 @@ const messageErrors = (message: string, allowlist: Allowlist): readonly string[]
   return [];
 };
 
-/**
- * Parses the convention out of any `markdown` carrying the documented markers.
- * Throws when a marker is missing, or when the
- * list or table under it holds no entries.
- */
 export const parseCommitConvention = (markdown: string): CommitConvention => {
   const allowlist = parseAllowlist(markdown);
 
@@ -216,10 +204,6 @@ export const parseCommitConvention = (markdown: string): CommitConvention => {
   };
 };
 
-/**
- * The convention as CODING_STANDARDS.md publishes it, re-read on every call. Rejects when
- * the file cannot be read or does not parse.
- */
 export const loadCommitConvention = (): Promise<CommitConvention> =>
   Bun.file(CONVENTION_SOURCE).text().then(parseCommitConvention);
 

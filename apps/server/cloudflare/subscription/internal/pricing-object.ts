@@ -196,7 +196,6 @@ const firstRegistrationCheck = Effect.gen(function* () {
 const nextRegistrationCheck = Effect.gen(function* () {
   const first = yield* firstRegistrationCheck;
   if (first !== null) return Option.fromUndefinedOr(first);
-  // Pricing v1 retained the exact deadline in the registration before v2 added its wake column.
   const sql = yield* SqlClient.SqlClient;
   const restored =
     yield* sql`UPDATE price_registrations SET next_check_ms=json_extract(request,'$.deadlineMs')
@@ -292,7 +291,7 @@ export const outstandingPricingRegistrations = (userId: string): OwnedStatement 
 });
 
 const erasurePage = 32;
-/** Shared Price publication remains available while the exact User's already-settled records drain. */
+
 export const cleanPricingCase = Effect.fn(function* (scope: typeof CleanupCommand.Type) {
   const sql = yield* SqlClient.SqlClient;
   if (

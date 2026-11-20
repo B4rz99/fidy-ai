@@ -1,4 +1,3 @@
-// Complete passing Linux native adapter run 44432264215, revision 3d21108.
 const estimatedSeconds: Readonly<Record<string, number>> = {
   "transactions/transactions.test.ts": 185.03,
   "dashboard/user-store.test.ts": 74.94,
@@ -145,7 +144,6 @@ const estimatedSeconds: Readonly<Record<string, number>> = {
   "whatsapp/webhook-body.test.ts": 0.01,
 };
 
-/** Assigns every discovered file once, longest estimated work first, to the lightest shard. */
 export const cloudflareTestShards = ({
   files,
   cloudflareRoot,

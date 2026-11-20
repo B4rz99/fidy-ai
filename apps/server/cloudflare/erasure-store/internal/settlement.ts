@@ -22,7 +22,6 @@ type Participants = Readonly<
 >;
 type Scope = typeof ErasureHandoff.Type;
 
-/** No independent participant erases a hold or forgets its fence on an unauthenticated instruction. */
 export const confirmCleanup = Effect.fn(function* (request: Request) {
   const scope = yield* Schema.decodeUnknownEffect(CleanupCommand, { onExcessProperty: "error" })(
     yield* Effect.tryPromise(() => request.json())

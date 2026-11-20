@@ -4,7 +4,6 @@ import { QueueDeliveryUnavailable, dispatchCoreQueue } from "./internal/dispatch
 import { observeWorkerExecution } from "../runtime/telemetry/operations";
 import { Effect } from "effect";
 
-/** Construct the identity-only Queue handoff boundary with its existing closed Work observation. */
 export const makeCoreQueue =
   (telemetry: TelemetryService): CoreQueueHandler =>
   (batch, environment) =>

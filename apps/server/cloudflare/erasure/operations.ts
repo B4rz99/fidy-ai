@@ -33,9 +33,6 @@ import {
   ErasureReceipt,
 } from "../../src/core/erasure/contract";
 
-/** Composition inside the serialized User coordinator. Binding supplies no authority:
- * each call decodes its own admission and retains the original credentials and deadline.
- * No receipt, credential or lifecycle observation is retained across invocations. */
 export const makeErasureOwner = (
   configuration: ErasureExecution & Readonly<{ userId: string }>
 ): ErasureOwner => ({
@@ -52,7 +49,7 @@ export const makeErasureOwner = (
 const conflictStatus = 409;
 const acceptedStatus = 202;
 const unavailableStatus = 503;
-/** Accepts only private Core admissions, rechecked under the named User's existing coordinator. */
+
 const executeErasureAdmission = (
   input: Readonly<{
     db: D1Database;
@@ -90,7 +87,6 @@ const executeErasureAdmission = (
       : new Response(null, { status: conflictStatus });
   }).pipe(Effect.orElseSucceed(() => new Response(null, { status: unavailableStatus })));
 
-/** A continuation is bound to the reviewed User and inventory; unresolved independent stores refuse progression. */
 const executeErasureContinuation = (
   input: Readonly<{
     db: D1Database;
@@ -292,14 +288,11 @@ export const sweepErasureControlObjects = (
   input: Parameters<typeof sweepControlObjects>[0]
 ): ReturnType<typeof sweepControlObjects> => sweepControlObjects(input);
 
-/** Only local deployment startup may use this preparation. Ordinary data access never initializes a missing registry; existing checkpoints are preserved. */
 export const prepareLocalErasureRegistry = <Requirements>(
   input: ErasureRegistryInitialization<Requirements>
 ): Effect.Effect<void, ErasureUnavailable, Requirements> =>
   initializeRegistryStorage({ ...input, mode: "LocalStartup" });
 
-// Directory and Pricing retain User-attributed identity, credential, and registration records
-// until their separate cleanup acknowledgements. Report only classes settled by User purge.
 const localClasses = [
   "transactions",
   "memory",
@@ -385,7 +378,6 @@ const caseReceipt = Effect.fn(function* (
   return Response.json(receipt, { headers: { "cache-control": "no-store" } });
 });
 
-/** The named Erasure object receives an Access-authenticated, short-lived continuation from ingress. */
 export const caseOperatorRequest = Effect.fn(function* (
   request: Request,
   storage: DurableObjectStorage,

@@ -40,7 +40,6 @@ const allowedRedirect = (url: URL): boolean => {
   );
 };
 
-/** A fixed anonymous GET and at most two reviewed HTTPS redirects; all response bytes cross shared policy. */
 export const cliReleaseHttp = (client: HttpClient.HttpClient): CliReleaseHttpService => {
   const http = makeProviderTransport("github")(client);
   return {

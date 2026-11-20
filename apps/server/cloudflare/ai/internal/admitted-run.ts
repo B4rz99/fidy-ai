@@ -19,11 +19,6 @@ const inferenceAdmissionFailure = (failure: unknown): HostedInferenceError =>
     retryAfter: Option.none(),
   });
 
-/**
- * Recheck the User's Consent purpose immediately before every provider call and reserve the maximum
- * token proxy even on failure. Only an exact, still-Pending admitted Turn can retain its accepted
- * Consent basis after revocation; preflight and standalone work require current standing.
- */
 export const makeAdmittedOpenAiRun =
   ({
     db,

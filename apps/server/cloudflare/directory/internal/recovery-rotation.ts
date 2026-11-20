@@ -49,7 +49,7 @@ const canReserve = (value: typeof RecoveryRouteDecision.Type, now: number): bool
   value.expires_at_ms > now &&
   value.decision === "reserve" &&
   value.prior_digest !== value.next_digest;
-/** A replay can only settle this exact reservation and its archived predecessor. */
+
 export const recoveryRouteDecision = Effect.fn(function* (request: Request) {
   const value = yield* Schema.decodeUnknownEffect(RecoveryRouteDecision)(
     yield* Effect.tryPromise(() => request.json())
@@ -61,7 +61,6 @@ export const recoveryRouteDecision = Effect.fn(function* (request: Request) {
     const [row] = yield* sql`SELECT * FROM recovery_rotations WHERE id=${value.id}`;
     if (row !== undefined) return yield* settle({ row, value, prior, next });
     const now = yield* Clock.currentTimeMillis;
-    // A terminal receipt can be collected only after retirement. The User needs only its lost acknowledgement.
     if (value.decision !== "reserve" && value.expires_at_ms <= now) return acknowledged();
     if (value.decision === "cancelled") {
       yield* sql`INSERT INTO recovery_rotations VALUES(${value.id},${value.user_id},${value.prior_digest},${value.next_digest},NULL,${value.revision},${value.expires_at_ms},'cancelled') RETURNING 1`.pipe(

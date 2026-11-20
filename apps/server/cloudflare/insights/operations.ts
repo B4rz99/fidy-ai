@@ -114,66 +114,58 @@ import {
   transcriptAssociationQuery,
 } from "./internal/transcript-associations";
 
-/** Apply only an authenticated exact current-question continue/stop choice; operational state never grants or revokes legal Consent. */
 export const controlManualReminders: typeof controlReminderOwned = (input) =>
   controlReminderOwned(input);
 
-/** Observe independent reminder-only attention under current processing Consent. */
 export const findReminderGovernor: typeof findReminderGovernorOwned = (input) =>
   findReminderGovernorOwned(input);
-/** Compose one-shot verified reminder/question evidence with Transcript settlement. Execute the ordered group contiguously in one native batch; changes() couples its count marker and governor update. */
+
 export const prepareReminderDelivery: typeof prepareReminderDeliveryOwned = (input) =>
   prepareReminderDeliveryOwned(input);
-/** Reset only from same-User channel-qualified reminder/question reply evidence. */
+
 export const prepareReminderReply: typeof prepareReminderReplyOwned = (input) =>
   prepareReminderReplyOwned(input);
-/** Bind an operational pause mention to an admitted User request, never a scheduler Turn. */
+
 export const prepareReminderPauseNotice: typeof prepareReminderNoticeOwned = (input) =>
   prepareReminderNoticeOwned(input);
-/** Observe only the notice bound to this admitted same-User Turn. */
+
 export const readReminderPauseNotice: typeof readReminderNoticeOwned = (input) =>
   readReminderNoticeOwned(input);
-/** Mark the mention complete only from verified exact visible assistant evidence. */
+
 export const prepareReminderPauseNoticeCompletion: typeof prepareReminderNoticeCompletionOwned = (
   input
 ) => prepareReminderNoticeCompletionOwned(input);
 
-/** Record an authenticated exact category request for durable contextual disclosure, never a legal grant. */
 export const requestProactivityConsent: typeof requestOffer = (input) => requestOffer(input);
 
-/** Observe one same-User frozen category payload under current processing Consent; this snapshot grants no send authority. */
 export const findProactivityReport: typeof findProactivityReportOwned = (input) =>
   findProactivityReportOwned(input);
 
-/** Settle linked occurrences and outbox from authenticated channel evidence in the caller's atomic Transcript unit. */
 export const prepareProactivityDeliverySettlement: typeof prepareSettlement = (input) =>
   prepareSettlement(input);
-/** Supply the primary retained occurrence and exact channel text without exposing Insights persistence. */
+
 export const proactivityTranscriptOccurrenceQuery: typeof transcriptOccurrenceQuery = (input) =>
   transcriptOccurrenceQuery(input);
 
-/** All same-User occurrence links for one verified message, for atomic Agent-owned Transcript linking. */
 export const proactivityTranscriptLinksQuery: typeof transcriptLinksQuery = (input) =>
   transcriptLinksQuery(input);
 
-/** Read instructions under the canonical caller's live authority and required Audit. */
 export const readCanonicalReminderSchedule: typeof readCanonicalReminderScheduleOwned = (input) =>
   readCanonicalReminderScheduleOwned(input);
-/** Compose instruction revisions, current credential/Consent, optimistic version and required Audit in canonical execution. Never grants opt-in. */
+
 export const prepareCanonicalReminderRevision: typeof prepareCanonicalReminderRevisionOwned = (
   input
 ) => prepareCanonicalReminderRevisionOwned(input);
-/** The same read under Agent's published current Turn authority. */
+
 export const readHeldReminderSchedule: typeof readHeldReminderScheduleOwned = (input) =>
   readHeldReminderScheduleOwned(input);
-/** The same revision under Agent's current Turn authority and confirmation fence. */
+
 export const prepareHeldReminderRevision: typeof prepareHeldReminderRevisionOwned = (input) =>
   prepareHeldReminderRevisionOwned(input);
-/** A malformed canonical instruction edit is an accountable owner refusal. */
+
 export const reminderRevisionRefusal: typeof reminderRevisionRefusalOwned = (input) =>
   reminderRevisionRefusalOwned(input);
 
-/** Observe one User's reminder instructions under current processing Consent; grant and storage details stay private. */
 export const findReminderSchedule = (
   input: Readonly<{ db: D1Database; userId: UserId }>
 ): Effect.Effect<Option.Option<ReminderSchedule>, InsightUnavailable> =>
@@ -215,7 +207,7 @@ const prepareCategoryStanding = (
     }
     return statements;
   });
-/** Commit an exact authenticated category choice with reminder activation/disablement in one User-coordinated D1 unit. Legal standing is never inferred from a canonical/model call. */
+
 export const recordProactivityDecision = (
   input: ProactivityConsentContext & Readonly<{ choice: string; decisionMessageId: string }>
 ): Effect.Effect<boolean, InsightUnavailable> =>
@@ -234,25 +226,21 @@ export const recordProactivityDecision = (
     return true;
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
 
-/** Explicit native WhatsApp choice atomically changes exact recurring Consent and standing; other categories are refused. */
 export const recordRecurringDigestDecision = (
   input: ProactivityConsentContext & Readonly<{ choice: string; decisionMessageId: string }>
 ): Effect.Effect<boolean, InsightUnavailable> =>
   input.kind === "new-recurring-series" ? recordProactivityDecision(input) : Effect.succeed(false);
 
-/** Advance bounded confirmation consumption and freeze one complete closed captured day under the existing User coordinator. */
 export const advanceRecurringDigest = (
   input: Readonly<{ db: D1Database; userId: UserId; now: DateTime.Utc }>
 ): Effect.Effect<RecurringDigestAdvanceResult, InsightUnavailable> =>
   recurringGeneration.advance(input);
 
-/** Read the complete immutable report for this explicit User; expiry of its send never removes historical facts. */
 export const findRecurringDigestReport = (
   input: Readonly<{ db: D1Database; userId: UserId; id: InsightEventId }>
 ): Effect.Effect<Option.Option<RecurringDigestReport>, InsightUnavailable> =>
   recurringGeneration.findReport(input);
 
-/** Prepare a complete reminder instruction edit under the caller's User coordination. Compose these revision/grant/Consent guards with canonical credential authority and Audit in the caller's atomic unit; this operation never grants opt-in. */
 export const prepareReminderRevision = (
   input: Readonly<{
     db: D1Database;
@@ -265,52 +253,44 @@ export const prepareReminderRevision = (
   InsightUnavailable | ReminderRevisionConflict
 > => reminder.prepareRevision(input);
 
-/** Under existing User coordination, read the current reminder and admit at most one latest due occurrence. Event, original deadline, outbox, history and advancement commit together under the exact enabled revision and live grant; Created means admitted intent, not delivered. */
 export const materializeReminder = (
   input: Readonly<{ db: D1Database; userId: UserId; now: DateTime.Utc }>
 ): Effect.Effect<ReminderMaterialization, InsightUnavailable> => reminder.advanceReminderDue(input);
 
-/** Reject invalid governor knobs before production execution or delivery settlement. */
 export const readWeeklyThresholds: typeof weeklyThresholds = (input) => weeklyThresholds(input);
 
-/** Authenticated explicit command creates a bounded, replay-safe request; no Consent is inferred. */
 export const requestWeeklySummaryConsent: typeof requestQuestion = (input) =>
   requestQuestion(input);
 
-/** Observe same-User governor standing under current processing Consent. */
 export const findWeeklyGovernor: typeof findGovernor = (input) => findGovernor(input);
-/** Compose an authenticated category-correlated reply with its admitted User request. */
+
 export const prepareWeeklyGovernorReply: typeof prepareReply = (input) => prepareReply(input);
-/** Question delivery never increments scheduled-message counters. */
+
 export const prepareWeeklyQuestionDelivery: typeof prepareQuestionDelivered = (input) =>
   prepareQuestionDelivered(input);
-/** Reserve the pause mention for an admitted User-initiated session only. */
+
 export const prepareWeeklyPauseNotice: typeof prepareNotice = (input) => prepareNotice(input);
-/** Fixed copy, not model inference, accompanies this exact admitted Turn's answer. */
+
 export const readWeeklyPauseNotice: typeof readNotice = (input) => readNotice(input);
-/** Consume the mention only with authoritative visible delivery of its exact prefix. */
+
 export const prepareWeeklyPauseNoticeCompletion: typeof prepareNoticeCompletion = (input) =>
   prepareNoticeCompletion(input);
 
-/** Compose actual verified channel evidence, forward-only attention and outbox settlement with the Agent's exact Transcript copy in one caller-coordinated D1 batch. */
 export const prepareWeeklyDeliverySettlement: typeof prepareWeeklyDeliverySettlementOwned = (
   input
 ) => prepareWeeklyDeliverySettlementOwned(input);
 
-/** Admit bounded weekly generation under the existing User coordinator; current processing and exact category Consent are required before financial evaluation. Complete revision guards commit financial facts, occurrence, report, outbox and schedule advance atomically; unavailable facts never become no activity. */
 export const runWeeklyGeneration = (
   input: Readonly<{ db: D1Database; userId: UserId; id: ScheduleId; now: DateTime.Utc }>
 ): Effect.Effect<WeeklyMaterialization, InsightUnavailable> => runGeneration(input);
-/** Recheck the enabled schedule and captured grant in the channel owner's irreversible claim action. */
+
 export const weeklyReportDeliveryQuery: typeof weeklyReportDeliveryQueryOwned = (input) =>
   weeklyReportDeliveryQueryOwned(input);
 
-/** Read the complete immutable same-User report under current processing Consent; this read cannot authorize provider egress. */
 export const findWeeklySummaryReport = (
   input: Readonly<{ db: D1Database; userId: UserId; id: InsightEventId }>
 ): Effect.Effect<Option.Option<WeeklySummaryReport>, InsightUnavailable> => findReport(input);
 
-/** Apply an authenticated exchange-qualified WhatsApp decision and schedule activation/revocation in one atomic User-coordinated unit. This is not a canonical or model-callable Consent operation. */
 export const recordWeeklySummaryDecision = (
   input: WeeklyConsentContext & Readonly<{ choice: string; decisionMessageId: string }>
 ): Effect.Effect<boolean, InsightUnavailable> =>
@@ -336,79 +316,48 @@ export const recordWeeklySummaryDecision = (
     return true;
   });
 
-/** Current same-User instruction for authorized processing under existing User coordination; absence grants no authority. */
 export const findWeeklySchedule = (
   input: Readonly<{ db: D1Database; userId: UserId }>
 ): Effect.Effect<Option.Option<WeeklyScheduleSnapshot>, InsightUnavailable> => findSchedule(input);
-/** Bounded identities only. Re-read under User coordination; discovery grants no access or send permission. */
+
 export const discoverDueWeeklySchedules = (
   input: Readonly<{ db: D1Database; now: DateTime.Utc }>
 ): Effect.Effect<ReadonlyArray<DueWeeklySchedule>, InsightUnavailable> => discoverSchedules(input);
-/** Rotate recovery discovery fairly even when a due User has withdrawn processing authority; this updates operational metadata only. */
+
 export const noteWeeklyScheduleEvaluation = (
   input: Readonly<{ db: D1Database; userId: UserId; id: ScheduleId; now: DateTime.Utc }>
 ): Effect.Effect<void, InsightUnavailable> => noteScheduleEvaluation(input);
-/**
- * Read one User's authoritative occurrence inside that User's coordination boundary. The caller
- * establishes the purpose and live authority; an occurrence identity grants no access by itself.
- * Retained schedule context and exact Currency-separated Money never follow later preferences.
- */
+
 export const findInsight = (
   input: Omit<Parameters<typeof find>[0], "userId"> & Readonly<{ userId: UserId }>
 ): ReturnType<typeof find> => find(input);
 
-/**
- * Retain one scheduled occurrence for an explicit User under the existing User coordinator.
- * Supply validated historical schedule context and Money groups from published owner projections,
- * never another owner's rows. Replay returns the original occurrence without rewriting its facts
- * or lifecycle. The caller establishes current processing authority before generation.
- */
 export const generateInsight = (
   input: Omit<Parameters<typeof generate>[0], "userId"> & Readonly<{ userId: UserId }>
 ): ReturnType<typeof generate> => generate(input);
 
-/**
- * Discover at most 64 pending due identities, oldest scheduled instant then identity first.
- * These are coordination hints only: enter each User's existing coordinator, recheck current
- * authority and read its authoritative occurrence before processing or delivery.
- */
 export const discoverDueInsights: typeof discover = (input) => discover(input);
 
-/**
- * Read one bounded canonical pending page under the caller's live credential and explicit User.
- * Cursor ordering and canonical delivery share the same authoritative occurrence records.
- */
 export const listPendingInsights: typeof list = (input) => list(input);
 
-/**
- * Prepare one forward-only lifecycle movement, actual send evidence and metadata-only Audit for
- * the shared one-User canonical commit. The caller owns the atomic unit and coordination; live
- * credential, Consent and current lifecycle are rechecked at commit, so stale work cannot regress.
- * Preparing or recording delivery does not send anything to an external provider.
- */
 export const prepareInsightTransition: typeof prepare = (input) => prepare(input);
 
-/** Present and record a closed lifecycle refusal under the same live caller's authority. */
 export const insightRefusal: typeof refuse = (input) => refuse(input);
 
-/** Read the same User's immutable send evidence without treating provider identity as authority. */
 export const findInsightAttempt = (
   input: Omit<Parameters<typeof findAttempt>[0], "userId"> & Readonly<{ userId: UserId }>
 ): ReturnType<typeof findAttempt> => findAttempt(input);
 
-/** Canonical complete report read rechecks the caller's live read authority and records accountability in the same commit. */
 export const readCanonicalRecurringDigestReport: typeof readCanonicalDigestOwned = (input) =>
   readCanonicalDigestOwned(input);
-/** Held hosted report access retains the same User and original admitted Turn authority. */
+
 export const readHeldRecurringDigestReport: typeof readHeldDigestOwned = (input) =>
   readHeldDigestOwned(input);
 
-/** Offer the first retained discovery in an authenticated foreground WhatsApp interaction, including permanently suppressed discoveries. */
 export const requestRecurringDigestOffer = (
   input: ProactivityConsentContext & Readonly<{ messageId: string }>
 ): Effect.Effect<void, InsightUnavailable> => requestDiscoveryOffer(input);
 
-/** Observe at most eight oldest enabled delivery identities. Decode owner storage and construct the same Workflow locators as delivery; report, recipient, financial content, and delivery authority never cross this boundary. */
 export const observeProactivityWork = (
   input: Readonly<{ db: D1Database; weeklyEnabled: boolean; proactivityEnabled: boolean }>
 ): Effect.Effect<ProactivityWorkObservations, InsightUnavailable> =>
@@ -423,11 +372,9 @@ export const observeProactivityWork = (
     return yield* Schema.decodeEffect(Schema.toType(ProactivityWorkObservations))(observations);
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
 
-/** Compose same-User transcript evidence without granting Agent access to private event writes. */
 export const prepareInsightTranscriptAssociations: typeof prepareTranscriptAssociations = (input) =>
   prepareTranscriptAssociations(input);
 
-/** Compose the Insights-owned event association with Agent-owned retained Transcript and current Consent. */
 export const readProactiveTranscript = (
   input: Readonly<{ db: D1Database; userId: UserId; insightEventId: InsightEventId; now: number }>
 ): ReturnType<typeof readAssociatedProactiveTranscript> =>

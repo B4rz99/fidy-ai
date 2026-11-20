@@ -10,7 +10,7 @@ import {
   createdStatus,
 } from "~/shell/public-http/contract";
 import { operationPolicy, userOwnedAgentScoped } from "~/shell/canonical-policy/contract";
-/** Declared content-free failure when a Memory write would exceed aggregate capacity. */
+
 export class MemoryCapacityExceededApi extends Schema.Error<
   MemoryCapacityExceededApi,
   Brand.Brand<"MemoryCapacityExceededApi">
@@ -49,11 +49,6 @@ const recallPolicy = operationPolicy({
   kind: "query",
 });
 
-/**
- * The retained Memory path parameter, rebuilt at each declaration. The published document
- * componentizes one schema instance reached from several declarations, so sharing the instance
- * would renumber the OpenAPI components; sharing the shape is what keeps them in step.
- */
 const retainedMemoryParams = (): Schema.Struct<{ readonly id: typeof MemoryId }> =>
   Schema.Struct({ id: MemoryId });
 
@@ -107,10 +102,8 @@ export const MemoryGroup = HttpApiGroup.make("memory")
       .annotateMerge(recallPolicy)
   );
 
-/** Every canonical Memory operation id, derived from the endpoints this group declares. */
 export type MemoryOperationId = `memory.${keyof typeof MemoryGroup.endpoints}`;
 
-/** Adapter dispatch list; an alignment test proves it covers exactly the declared group. */
 export const memoryOperationIds = [
   "memory.remember",
   "memory.revise",
@@ -118,14 +111,9 @@ export const memoryOperationIds = [
   "memory.recall",
 ] as const satisfies ReadonlyArray<MemoryOperationId>;
 
-/** Explicit browser credential proof for one User-owned Memory call. */
 export type BrowserMemorySubject = Readonly<{ id: string; userId: string; digest: Uint8Array }>;
 export type MemoryAuditOperation = MemoryOperationId;
-/** Closed outcome vocabulary for one audited Memory call. */
+
 export type MemoryAuditOutcome = "success" | "not_found" | "validation_failed" | "resource_limit";
 
-/**
- * The Memory audit outcomes one refusal can report: the owner's individual entry point and its
- * canonical refusal descriptor share this vocabulary.
- */
 export type MemoryRefusalOutcome = Exclude<MemoryAuditOutcome, "success">;

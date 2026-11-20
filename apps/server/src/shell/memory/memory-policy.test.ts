@@ -33,7 +33,6 @@ it.effect("admits the complete ASCII aggregate at 15,000 bytes and rejects one e
   Effect.gen(function* () {
     const inference = yield* localInference;
     const current = Array.from({ length: 7 }, (_, index) => memory(index, "a".repeat(2_000)));
-    // Eight 55-byte JSON envelopes, seven LF separators, and 14,553 ASCII bytes total 15,000.
     const candidate = memory(7, "a".repeat(553));
     expect(
       yield* countAndAdmitMemory(current, candidate).pipe(
@@ -54,8 +53,6 @@ it.effect("counts UTF-8 bytes in the replaced aggregate and refuses a revision a
   Effect.gen(function* () {
     const inference = yield* localInference;
     const current = Array.from({ length: 4 }, (_, index) => memory(index, "é".repeat(2_000)));
-    // Four 55-byte envelopes and three LF separators leave 14,777 text bytes;
-    // three unchanged 4,000-byte texts plus 1,388 two-byte accents and one ASCII byte fill it.
     const replacement = memory(0, "é".repeat(1_388) + "a");
     expect(
       yield* countAndAdmitMemoryRevision(current, replacement).pipe(

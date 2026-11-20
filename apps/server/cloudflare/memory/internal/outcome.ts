@@ -43,7 +43,7 @@ const memoryNotFoundMessage = "No current Memory with that identifier belongs to
 
 const jsonResponse = (body: unknown, status: number): Response =>
   Response.json(body, { status, headers: transactionNoStore });
-/** The declared content-free failure when authoritative Memory storage cannot answer. */
+
 export const memoryUnavailable = (): Response => {
   const failure = Unavailable.make({
     error: { code: "unavailable", message: memoryUnavailableMessage },
@@ -54,7 +54,7 @@ export const memoryUnavailable = (): Response => {
     HTTP_UNAVAILABLE
   );
 };
-/** The declared quota failure, encoded from its own canonical declaration and never from prose. */
+
 const memoryCapacityExceeded = (): Response => {
   const failure = mapMemoryFailure(new MemoryCapacityExceeded());
   return jsonResponse(
@@ -62,14 +62,14 @@ const memoryCapacityExceeded = (): Response => {
     HTTP_CONFLICT
   );
 };
-/** The declared validation failure for one Memory input that failed its published schema. */
+
 const memoryInvalid = (): Response =>
   transactionFailure({
     code: "validation_failed",
     status: HTTP_INVALID,
     message: memoryInvalidMessage,
   });
-/** The declared absent-or-foreign failure for one addressed Memory identity. */
+
 const memoryNotFound = (): Response =>
   transactionFailure({
     code: "not_found",
@@ -128,7 +128,6 @@ const rejectionStatement = ({
   return db.prepare(auditStatement.sql).bind(...auditStatement.params);
 };
 
-/** The caller-facing message one decided Memory refusal outcome reports. */
 const memoryRefusalMessage = (outcome: MemoryRefusalOutcome): string => {
   if (outcome === "resource_limit") {
     return mapMemoryFailure(new MemoryCapacityExceeded()).error.message;
@@ -137,7 +136,6 @@ const memoryRefusalMessage = (outcome: MemoryRefusalOutcome): string => {
   return memoryInvalidMessage;
 };
 
-/** Classify an indexed Memory guard abort; its returned refusal records evidence when invoked. */
 export const memoryGuardRefusal =
   (outcome: MemoryOutcome) =>
   ({ db, subject, current, kind }: GuardRefusalWork): Effect.Effect<CanonicalMutationRefusal> => {
@@ -182,7 +180,6 @@ export const memoryGuardRefusal =
     );
   };
 
-/** Record one metadata-only Memory refusal under its child authority and render its response. */
 export const memoryRefusal = ({
   db,
   subject,
@@ -220,11 +217,6 @@ export const memoryRefusal = ({
   },
 });
 
-/**
- * True while the caller owns the named Memory row, or None when the read cannot decide — the same
- * "cannot decide" answer `findExistingCategory` gives, never a guessed `false` that would blame
- * the child with `not_found`.
- */
 export const findOwnedMemory = ({
   db,
   userId,
@@ -239,7 +231,6 @@ export const findOwnedMemory = ({
     Effect.orElseSucceed(() => Option.none())
   );
 
-/** Read the committed Memory for remember/revise or the proved removed id for forget. The caller must have committed the guarded write and its completion assertion first. */
 export const findMemoryValue = ({
   db,
   userId,
@@ -275,13 +266,11 @@ export const findMemoryValue = ({
         Effect.orElseSucceed(() => Option.none<CommittedMutationValue>())
       );
 
-/** Private retained identity; write prose stays inside its owner preparation closure. */
 export type MemoryOutcome = Readonly<{
   operation: "memory.remember" | "memory.revise" | "memory.forget";
   memoryId: MemoryId;
 }>;
 
-/** Only collision, refusal and committed readback behavior cross the shared mutation boundary. */
 export const memoryOutcome = (outcome: MemoryOutcome): OwnerOutcome => ({
   _tag: "Owner",
   operation: outcome.operation,

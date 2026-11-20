@@ -11,9 +11,6 @@ type EmailWorker = Readonly<{
   email: (message: ForwardedEmailMessage, environment: unknown) => Promise<void>;
 }>;
 
-/** Refuse native delivery until institution verification and Connection admission exist;
- * the addressed User recovers previously admitted work from its own alarm.
- */
 export const makeEmailWorker = (telemetry: TelemetryService): EmailWorker => ({
   email: (message, environment) =>
     Effect.sync(() => message.setReject("Mailbox unavailable")).pipe(

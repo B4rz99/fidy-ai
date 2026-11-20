@@ -16,9 +16,7 @@ type CategoriesQuery = Atom.Atom<
 type CatalogQuery = Atom.Atom<
   AsyncResult.AsyncResult<CanonicalSuccess<"dashboard.listDashboardCatalog">, CatalogError>
 >;
-/** Retain display data only within the current authentication registry. */
 export const workspaceQueryRetention = { timeToLive: "5 minutes" } as const;
-/** Reuse a recent display snapshot; expired results reread before editing resumes. */
 export const revalidateWorkspaceQuery = <A, E>(
   query: Atom.Atom<AsyncResult.AsyncResult<A, E>>
 ): Atom.Atom<AsyncResult.AsyncResult<A, E>> =>
@@ -57,7 +55,6 @@ const workspaceMetadataQuery = Atom.family((client: FidyClient) => {
   const source = Atom.readable(
     (get) => {
       const current = Option.getOrElse(get(initialMetadata(client)), () => get(remote));
-      // The first remote read has no prior value of its own; retain the owned entry display.
       return AsyncResult.isInitial(current)
         ? AsyncResult.waitingFrom(
             get.self<
@@ -80,7 +77,6 @@ const workspaceMetadataQuery = Atom.family((client: FidyClient) => {
     before: (registry) => registry.set(initialMetadata(client), Option.none()),
   });
 });
-/** The initial observation belongs to the canonical metadata owner; refresh retires it. */
 export const workspaceMetadataInitialValue = ({
   client,
   value,
@@ -93,7 +89,6 @@ export const workspaceMetadataInitialValue = ({
   ReturnType<typeof initialMetadata>,
   Option.Option<AsyncResult.AsyncResult<CanonicalSuccess<"identity.getCurrentUser">, ProfileError>>,
 ] => [initialMetadata(client), Option.some(AsyncResult.success(value, { timestamp }))] as const;
-/** Retain supplied display metadata in its canonical owner without starting another HTTP read. */
 export const retainPreparedWorkspaceMetadata = ({
   client,
   registry,
@@ -102,7 +97,6 @@ export const retainPreparedWorkspaceMetadata = ({
     registry.get(workspaceMetadataQuery(client));
   }
 };
-/** All workspaces observe one profile and its optional inline display taxonomy. */
 export const workspaceProfileQuery: (client: FidyClient) => ProfileQuery = Atom.family(
   (client: FidyClient) =>
     forwardFreshQuery({
@@ -110,7 +104,6 @@ export const workspaceProfileQuery: (client: FidyClient) => ProfileQuery = Atom.
       sources: [workspaceMetadataQuery(client)],
     })
 );
-/** The browser's metadata projection supplies taxonomy; other transports can read it separately. */
 const workspaceCategoriesSource: (client: FidyClient) => CategoriesQuery = Atom.family(
   (client: FidyClient) => {
     const individual = makeFreshQuery({

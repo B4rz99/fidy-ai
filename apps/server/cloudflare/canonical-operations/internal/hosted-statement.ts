@@ -141,9 +141,6 @@ const missingInference = (
   );
 };
 
-/** Agent's admitted statement call uses the installed catalogue, owner adapter and canonical unit.
- * This private entry accepts no browser credential, PAT, raw bytes, storage coordinate or new tools.
- */
 export const executeHostedStatementCall = ({
   db,
   bucket,
@@ -201,7 +198,6 @@ export const executeHostedStatementCall = ({
     });
   });
 
-/** Hosted reads use the existing canonical query owner and its shared metadata-only Audit. */
 export const executeHostedStatementQuery = ({
   db,
   bucket,

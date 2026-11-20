@@ -269,7 +269,6 @@ const mount =
     };
   };
 
-/** One mounted review owns single/all admission; metadata recovery cannot reconstruct a lost receipt. */
 export const usePATManagement = (
   apiClient: FidyClient
 ): Readonly<{

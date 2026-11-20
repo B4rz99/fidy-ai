@@ -13,7 +13,6 @@ const closeProviderReturn = (): void => {
   window.close();
 };
 
-/** The return document carries no completion state; the opener owns authenticated polling. */
 export const tryMountProviderReturn = (): boolean => {
   if (!providerReturnPaths.has(window.location.pathname)) return false;
   if (document.readyState === "loading") {

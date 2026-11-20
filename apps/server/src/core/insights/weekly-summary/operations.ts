@@ -78,7 +78,6 @@ const leaders = (
       outflow: { amount: entry[1], currency },
     }));
 };
-/** Consume complete Transaction-owned facts from one revision; callers guard that revision when freezing the report. */
 export const summarizeWeek = (
   input: Readonly<{
     periods: WeeklyPeriods;
@@ -140,7 +139,6 @@ const changeText: Readonly<Record<WeeklyComparison["change"], string>> = {
 const comparisonText = (comparison: ComparisonPresentation): string =>
   `${encodeMoneyAmount(comparison.current.amount).replace(".", ",")} (${changeText[comparison.change]}: ${encodeMoneyAmount(comparison.absoluteDelta.amount).replace(".", ",")})`;
 
-/** Present validated frozen report facts deterministically in Spanish. Missing Category metadata refuses the whole presentation; no Currency or leader is silently omitted. */
 export const presentWeeklySummary = (
   input: Readonly<{
     payload: Readonly<{ periods: WeeklyPeriods; groups: ReadonlyArray<GroupPresentation> }>;
@@ -175,7 +173,6 @@ export const presentWeeklySummary = (
 const samePeriod = (left: TransactionPeriod, right: TransactionPeriod): boolean =>
   left.from.epochMilliseconds === right.from.epochMilliseconds &&
   left.toExclusive.epochMilliseconds === right.toExclusive.epochMilliseconds;
-/** Build from a complete Transaction snapshot, first current then previous. Mismatched bounds are a caller invariant defect, never no activity. */
 export const buildWeeklySummary = (
   input: Readonly<{
     periods: WeeklyPeriods;

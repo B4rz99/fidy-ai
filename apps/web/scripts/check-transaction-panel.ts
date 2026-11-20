@@ -1,4 +1,3 @@
-// A tall Correction must remain reachable alongside a longer desktop Transaction history.
 import assert from "node:assert/strict";
 import { Config, Effect, Option } from "effect";
 

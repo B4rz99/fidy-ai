@@ -159,7 +159,6 @@ const readSnapshot = ({
     };
   });
 
-/** Read a bounded pair and every retained premise used to select its effective facts. */
 export const observeOAuthTransactions = (
   input: Readonly<{
     db: D1Database;
@@ -186,7 +185,7 @@ export const observeOAuthTransactions = (
 const encodeSelection = Schema.encodeSync(
   Schema.fromJsonString(UpdateTransactionsInput.fields.transactions)
 );
-/** Observe a decoded group selection, linked originals and every effective-fact premise. */
+
 export const observeOAuthGroup = (
   input: Readonly<{
     db: D1Database;
@@ -206,13 +205,11 @@ export const observeOAuthGroup = (
     ],
   });
 
-/** Exact Spanish financial disclosure, using the same canonical Money encoding as native reads. */
 export const discloseTransactions = (
   transactions: ReadonlyArray<typeof TransactionOutput.Type>
 ): string =>
   Schema.encodeSync(Schema.fromJsonString(Schema.Array(TransactionOutput)))(transactions);
 
-/** Compare both the retained and effective reconciliation facts again when native review resumes. */
 export const localCorrectionReview = Effect.fn(function* (
   user: string,
   id: string,

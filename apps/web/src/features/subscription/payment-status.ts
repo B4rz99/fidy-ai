@@ -10,7 +10,6 @@ export const paymentStatusRefreshDelay = (
   return refreshCount < frequentPaymentStatusRefreshes ? "5 seconds" : "10 seconds";
 };
 
-/** True permits forgetting the retained browser payment request. */
 export const paymentSubmissionIsTerminal = (submission: PaymentSubmission): boolean =>
   submission.status === "refused" ||
   (submission.status === "payment-pending" && submission.billingAttempt.status !== "pending");

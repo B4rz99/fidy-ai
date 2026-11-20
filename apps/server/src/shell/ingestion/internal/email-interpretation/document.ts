@@ -37,13 +37,11 @@ const hasUnsafeVisibility = (element: Element): boolean => {
   );
 };
 
-/** One bounded, inert HTML projection shared by every notification format. */
 export type EmailDocument = Readonly<{
   text: string;
   rows: ReadonlyArray<ReadonlyArray<string>>;
 }>;
 
-/** Canonicalizes decoded HTML text for structural matching, never for retained financial facts. */
 export const normalizeDocumentText = (text: string): string =>
   text
     .normalize("NFKC")
@@ -123,10 +121,6 @@ const directCells = (
     : [];
 };
 
-/**
- * Parses bounded HTML without executing or fetching embedded content. Overflow and potentially
- * hidden content are absence, not truncation, because either could manufacture unique recognition.
- */
 export const parseEmailDocument = (html: string): Option.Option<EmailDocument> => {
   const root = parse(html);
   const traversal: TraversalState = {

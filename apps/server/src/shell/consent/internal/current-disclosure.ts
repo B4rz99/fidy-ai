@@ -10,7 +10,6 @@ Si activas el reenvío de correos financieros, Fidy procesa su texto, HTML e im�
 
 Para crear tu cuenta, responde exactamente “Acepto” o usa la opción Aceptar. Si no quieres crearla, responde “No acepto”. Después de aceptar, abre el enlace de Fidy para autenticarte con Google o Microsoft. Vuelve a este chat y escribe “Estado” para revisar y confirmar la asociación de tu cuenta con este chat. No compartas credenciales ni códigos de recuperación por WhatsApp.`;
 
-/** Source-controlled disclosure facts; revisions and digests pin these exact legal bytes. */
 export const currentDisclosureFacts: typeof DisclosureSnapshot.Encoded = {
   serviceMarket: "CO",
   locale: "es-CO",

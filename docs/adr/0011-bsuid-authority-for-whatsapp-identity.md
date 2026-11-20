@@ -73,3 +73,8 @@ automatic fallback and does not weaken BSUID authorization.
 
 Rejected because generated values are not provider-authenticated identities and the product has no
 released compatibility obligation.
+
+The ingress owner takes the Business Portfolio from trusted deployment configuration. Parent
+BSUID, phone number, username, contact id and message id are evidence. They do not participate in
+User resolution. A later observation can update mutable evidence without changing the original
+verified association or stable User id.

@@ -1,7 +1,6 @@
 import { Clock, Effect } from "effect";
 import { localCanonicalReadBearer } from "./contract";
 
-/** Server-observed time for native operations; never a caller-supplied deadline. */
 export const currentMillis = (): number => Effect.runSync(Clock.currentTimeMillis);
 
 export const resolveLocalCanonicalReadBearer = (development: boolean): string =>

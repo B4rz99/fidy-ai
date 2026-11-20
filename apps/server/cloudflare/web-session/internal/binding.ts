@@ -41,7 +41,6 @@ const boundCurrentUserRead = (request: Request, path: string): boolean =>
 const ownerChecksBinding = (request: Request, path: string): boolean =>
   independentProofPaths.has(path) || boundCurrentUserRead(request, path);
 
-/** Protect cookie-bearing ingress before any owner work; bootstrap discloses only public identity. */
 export const bindingResponse = ({
   request,
   db,

@@ -86,7 +86,6 @@ const finishMaterial = ({
       ],
     });
     const finishing = yield* final.finalization();
-    // Recheck eligibility and locator after external bytes, atomically with fresh access and accounting.
     const rows = yield* Effect.tryPromise(() =>
       db.batch([...work.statements, ...finishing.statements])
     ).pipe(Effect.uninterruptible);
@@ -118,7 +117,6 @@ const presentMaterial = (
     return yield* finishMaterial({ work, found, original, text });
   }).pipe(Effect.orElseSucceed(transactionUnavailable));
 
-/** Original eligibility and locator join admission; unused draft interpretation starts no read. */
 export const prepareBoundReviewMaterial =
   ({
     request,

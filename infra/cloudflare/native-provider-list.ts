@@ -15,7 +15,7 @@ const pageUrl = (path: string, page: number): string =>
   new URLSearchParams({ page: String(page), per_page: String(limit) });
 const consistent = (expected: number, actual?: number): boolean =>
   actual === undefined || actual === expected;
-/** A bounded metadata scan cannot prove absence when the provider skips records or pages. */
+
 export const readProviderList = Effect.fn(function* <Value>(
   read: ProviderRead,
   path: string,

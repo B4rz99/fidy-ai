@@ -9,7 +9,6 @@ import { type JSX, Suspense, useState } from "react";
 import { useSession } from "@/session/session-context";
 import { useWorkspaceResume } from "./workspace-resume";
 
-/** Preserve the visited planning display only inside its current authentication lifetime. */
 export const RetainedRecurringWorkspace = (): JSX.Element => {
   const { authentication } = useSession();
   const privacy = useRouterState({

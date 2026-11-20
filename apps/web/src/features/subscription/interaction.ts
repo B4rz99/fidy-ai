@@ -565,9 +565,6 @@ const present = (owner: Owner): EnrollmentInteraction => {
   };
 };
 
-/** Each mounted owner admits actions synchronously and fences every completion after disposal.
- * Transient payment fields are consumed once; uncertain submissions require an explicit reread.
- */
 export const makeEnrollmentInteraction = (
   input: Readonly<{
     gateway: Option.Option<EnrollmentGateway>;

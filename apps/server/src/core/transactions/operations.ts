@@ -9,7 +9,7 @@ import {
   type TransactionPairInput,
 } from "./contract";
 import { DateTime, Effect, Equal, Option } from "effect";
-/** Accepts occurredAt up to and including the caller-supplied decision instant. */
+
 export const checkAlreadyOccurred = (
   occurrence: Readonly<{
     readonly occurredAt: DateTime.Utc;
@@ -37,7 +37,6 @@ const checkPeriodWidth = (
     ? Effect.void
     : Effect.fail(new InvalidTransactionPeriod(bounds));
 
-/** A two-ended period must have positive width; either end may be omitted. */
 export const checkTransactionPeriod = (
   period: TransactionPeriod
 ): Effect.Effect<void> | Effect.Effect<never, InvalidTransactionPeriod> =>
@@ -74,10 +73,6 @@ const selectVisibleMember = (
     first
   );
 
-/**
- * Validates one explicit pair and selects its visible member. Exact Money, Currency, and direction
- * are hard gates; timing ambiguity is deliberately bypassed because the authorized User decided.
- */
 export const decideTransactionLink = Effect.fn(function* (
   first: ReconciliationMember,
   second: ReconciliationMember

@@ -23,7 +23,6 @@ type OriginalWrite = Readonly<{
   objectKey: string;
 }>;
 
-/** Commit with the owner's original reservation in one native batch. A refused writer aborts that complete reservation. */
 export const prepareOriginalWrite = (
   input: OriginalWrite & Readonly<{ current: number }>
 ): ReadonlyArray<D1PreparedStatement> => [
@@ -41,7 +40,6 @@ export const prepareOriginalWrite = (
   prepareChangedRowAssertion({ db: input.db, scope: "erasure_writer" }),
 ];
 
-/** Enclose the entire original-byte write and its publication/cleanup. Only successful publication releases its writer; failure or cancellation leaves the object locator unresolved for reviewed reconciliation. */
 export const trackOriginalWrite = <A, E, R>(
   input: OriginalWrite &
     Readonly<{
@@ -80,7 +78,6 @@ export const originalWriteActive = (
     })
   ).pipe(Effect.map((active) => active === 1));
 
-/** Reserve this owner's lifetime identity before its first domain schema. */
 export const erasureStoreHistory: StoreHistory = {
   owner: "erasure",
   steps: [
@@ -150,7 +147,7 @@ export const erasureBarrierSchema =
 
 const acknowledged = 204;
 const conflictStatus = 409;
-/** Refuse a confused first handoff. Once recorded, the exact fence survives User-local purge. */
+
 export const fenceErasureParticipant = Effect.fn(function* (
   request: Request,
   users: Pick<DurableObjectNamespace, "getByName">,
@@ -186,7 +183,6 @@ export const cleanupBarrierColumns = [
   "CREATE INDEX erasure_active_cleanup ON erasure_barriers(user_id) WHERE cleaned=0",
 ];
 
-/** Observe actual erasures, including ordinary expiry that overlaps the fence. All arguments are schema-owned SQL. */
 export const deletionWitness = ({
   table,
   deadline,
@@ -202,13 +198,12 @@ const refused = (): Response => new Response(null, { status: 409 });
 
 const expireBarrier = Effect.fn(function* (scope: typeof CleanupCommand.Type) {
   const sql = yield* SqliteClient;
-  // A missing row confirms disposal only after the independent case has retained both prior acknowledgements.
   yield* sql`DELETE FROM erasure_barriers WHERE user_id=${scope.userId} AND reference=${scope.reference} AND requested_at_ms=${scope.requestedAtMs} AND cleaned=1`;
   const conflict =
     yield* sql`SELECT 1 FROM erasure_barriers WHERE user_id=${scope.userId} OR reference=${scope.reference}`;
   return new Response(null, { status: conflict.length === 0 ? acknowledged : conflictStatus });
 });
-/** The participant independently confirms the exact case phase, then serializes deletion with its local barrier. */
+
 export const handleSharedCleanup = Effect.fn(function* <R, E>(
   request: Request,
   registry: ErasureRegistryNamespace,

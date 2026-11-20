@@ -134,7 +134,6 @@ const lostAcknowledgement = Effect.gen(function* () {
   expect(yield* native(() => db.exec("SELECT state FROM recovery_rotations"))).toEqual([
     { state: "committed" },
   ]);
-  // Restore the exact post-expiry state after directory collection and before the User receives its acknowledgement.
   yield* native(() => db.directory.exec("DELETE FROM recovery_rotations WHERE state='committed'"));
   yield* native(() => db.exec("UPDATE recovery_rotations SET expires_at_ms=0"));
   yield* native(() => db.exec("DROP TRIGGER hold_ack"));

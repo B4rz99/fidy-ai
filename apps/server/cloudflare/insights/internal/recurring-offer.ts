@@ -9,7 +9,6 @@ import { findProactivityConsentGrant } from "../../consent/operations";
 import { offerWindowOpen, requestOffer } from "./proactivity-offers";
 import { InsightUnavailable } from "../contract";
 
-/** A fresh authenticated foreground interaction may disclose once; only definitive rejection or expiry before starting permits replacement. */
 export const requestDiscoveryOffer = (
   input: ProactivityConsentContext & Readonly<{ messageId: string }>
 ): Effect.Effect<void, InsightUnavailable> =>

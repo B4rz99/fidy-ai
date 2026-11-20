@@ -12,7 +12,6 @@ export type BudgetId = typeof BudgetId.Type;
 const maximumBudgetGroupNameLength = 64;
 const maximumBudgetGroupCategories = 128;
 
-/** Local calendar month label, independent of the zone used to measure spending. */
 export const BudgetMonth = Schema.String.check(Schema.isPattern(/^[2-9]\d{3}-(0[1-9]|1[0-2])$/));
 export const BudgetGroupName = Schema.String.check(
   Schema.isMinLength(1),
@@ -44,7 +43,6 @@ export const Budget = Schema.Struct({
   .annotate({ identifier: "Budget" });
 export type Budget = typeof Budget.Type;
 
-/** Caller-owned facts for creating a Budget; identity and ownership come from the shell. */
 export const CreateBudgetInput = Schema.Struct({
   ...Budget.mapFields(Struct.pick(["categoryId", "cap", "groupName"])).fields,
   month: Schema.optionalKey(BudgetMonth),
@@ -53,7 +51,6 @@ export const CreateBudgetInput = Schema.Struct({
   .annotate({ identifier: "CreateBudgetInput" });
 export type CreateBudgetInput = typeof CreateBudgetInput.Type;
 
-/** Category caps inherit group Currency; explicit group settings version it from the selected month. */
 const UpdateBudgetFields = Schema.Struct({
   ...Budget.mapFields(Struct.pick(["categoryId", "cap", "groupName"])).fields,
   month: Schema.optionalKey(BudgetMonth),
@@ -71,7 +68,6 @@ type GroupSettings = {
   ]: Key extends "groupCategoryIds" ? ReadonlyArray<string> : string;
 };
 
-/** Validates a monthly cap and, when supplied, the complete collection affected by group settings. */
 export const UpdateBudgetInput = UpdateBudgetFields.check(
   positiveBudgetCap,
   Schema.makeFilter<GroupSettings>((input) =>
@@ -109,7 +105,6 @@ const calendarMonth = Schema.makeFilter<{
       };
 });
 
-/** Exact half-open UTC bounds of one calendar month in an explicitly applied zone. */
 export const AppliedBudgetMonth = Schema.Struct({
   from: UtcTimestamp,
   to: UtcTimestamp,
@@ -121,7 +116,6 @@ export type AppliedBudgetMonth = typeof AppliedBudgetMonth.Type;
 
 const budgetThreshold80 = 80;
 
-/** Historical same-Currency financial facts captured when a monthly threshold first latches, never recomputed from later Budget or Transaction edits. */
 export const BudgetCrossing = Schema.Struct({
   budgetId: BudgetId,
   categoryId: CategoryId,
@@ -251,7 +245,6 @@ const hasExactBudgetProgress = ({ cap, spent, status }: BudgetProgressFact): boo
   return hasExactBudgetStatus(cap, spent, status);
 };
 
-/** Exact progress over decoded Money, shared by monthly status and Dashboard projections. */
 export const BudgetProgress = Schema.Struct({
   cap: Money,
   spent: Money,
@@ -301,24 +294,20 @@ const exactStatusAmounts = Schema.makeFilter<StatusCurrencyView>((status) =>
       }
 );
 
-/** Exact current-month state of one Budget; decoding rejects mixed-Currency values. */
 export const BudgetStatus = Schema.Union([UnderBudget, ReachedBudget, OverBudget])
   .check(sameStatusCurrency, exactStatusAmounts)
   .annotate({ identifier: "BudgetStatus" });
 export type BudgetStatus = typeof BudgetStatus.Type;
 
-/** Applied calendar period plus deterministic per-Budget statuses, including when none match. */
 export const BudgetStatusReport = Schema.Struct({
   period: AppliedBudgetMonth,
   statuses: Schema.Array(BudgetStatus),
-  /** Outflows without a cap in the same Category and Currency, from the same monthly snapshot. */
   unbudgetedExpenses: Schema.Array(Schema.Struct({ categoryId: CategoryId, spent: Money })),
   cashFlow: Schema.Struct({ income: Schema.Array(Money), expenses: Schema.Array(Money) }),
   initialized: Schema.optionalKey(Schema.Boolean),
 }).annotate({ identifier: "BudgetStatusReport" });
 export type BudgetStatusReport = typeof BudgetStatusReport.Type;
 
-/** Status and complete editing metadata for the selected month in one authorized workspace read. */
 export const BudgetWorkspace = Schema.Struct({
   ...BudgetStatusReport.fields,
   budgets: Schema.Array(Budget),
@@ -330,7 +319,6 @@ export const BudgetStatusQueryValues = Schema.Struct({
   timeZone: IanaTimeZone,
 });
 
-/** Canonical URL filters; Category and Currency are optional and the IANA zone is explicit. */
 export const BudgetStatusQueryParameters = Schema.Struct({
   categoryId: Schema.optionalKey(BudgetStatusQueryValues.fields.categoryId),
   currency: Schema.optionalKey(BudgetStatusQueryValues.fields.currency),
@@ -345,7 +333,6 @@ export const BudgetStatusQuery = Schema.Struct({
 }).annotate({ identifier: "BudgetStatusQuery" });
 export type BudgetStatusQuery = typeof BudgetStatusQuery.Type;
 
-/** Highest threshold retained for one applied month; lower spending cannot reopen it. */
 export const BudgetMonthLatch = Schema.Struct({
   budgetId: BudgetId,
   period: AppliedBudgetMonth,
@@ -353,18 +340,15 @@ export const BudgetMonthLatch = Schema.Struct({
 }).annotate({ identifier: "BudgetMonthLatch" });
 export type BudgetMonthLatch = typeof BudgetMonthLatch.Type;
 
-/** The requested Budget is absent or does not belong to the current User. */
 export class BudgetNotFound extends Data.TaggedError("BudgetNotFound")<{
   readonly budgetId: BudgetId;
 }> {}
 
-/** Another Budget already owns this User/Category/Currency scope. */
 export class BudgetAlreadyExists extends Data.TaggedError("BudgetAlreadyExists")<{
   readonly categoryId: CategoryId;
   readonly currency: Currency;
 }> {}
 
-/** A Budget's denomination cannot be changed in place. */
 export class BudgetCurrencyImmutable extends Data.TaggedError("BudgetCurrencyImmutable")<{
   readonly expected: Currency;
   readonly received: Currency;

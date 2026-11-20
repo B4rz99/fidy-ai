@@ -10,9 +10,6 @@ import { type AutomaticProjection, automaticProjection } from "./query";
 
 const monthWidth = 7;
 
-/** Materialize existing effective completions only inside an explicit coordinated mutation.
- * Otherwise a new competing plan or a backdated schedule edit could rewrite completed history.
- */
 export const snapshotCompletions = ({
   work,
   document,
@@ -77,7 +74,6 @@ export const retainCompletions = <E, R>({
     let retained = document;
     for (const month of candidates) {
       const projection = yield* project(retained, month, now);
-      // Incomplete reads cannot establish a safe allocation boundary for an edit.
       if (!projection.complete) return yield* new RecurringPlanningUnavailable();
       const extra = projection.document.fulfillments.filter(
         (mark) =>

@@ -49,13 +49,13 @@ export const isPATCaller = (subject: CanonicalCaller): subject is AuthorizedPAT 
   "patId" in subject;
 export const isHostedCaller = (subject: CanonicalCaller): subject is HostedCanonicalCaller =>
   "_tag" in subject;
-/** Distinguish OAuth authority without granting browser or PAT lifecycle privileges. */
+
 export const isOAuthCaller = (subject: CanonicalCaller): subject is OAuthCaller =>
   "oauthConnectionId" in subject;
-/** The exact User-owned agent capability; a WebSession carries none. */
+
 export const callerScope = (subject: CanonicalCaller): Option.Option<CanonicalCapability> =>
   isPATCaller(subject) || isOAuthCaller(subject) ? subject.requiredScope : Option.none();
-/** Execute and audit one child under its exact PAT or OAuth capability; preserve browser authority unchanged. */
+
 export const childCaller = <Caller extends QueryCaller>({
   subject,
   requiredScope,
@@ -66,7 +66,6 @@ export const childCaller = <Caller extends QueryCaller>({
 export const transactionNow = (): number => Effect.runSync(Clock.currentTimeMillis);
 export const transactionId = (): string => newId();
 
-/** Chain the accepted PAT Audit immediately after its owner write and PAT use immediately after that Audit. Both share one audit identity. */
 export const acceptedPATAccountability = ({
   afterOwnerWrite,
   authority,
@@ -95,7 +94,6 @@ export const acceptedPATAccountability = ({
   ].map(({ sql, params }) => database.prepare(sql).bind(...params));
 };
 
-/** The same accepted pair for a caller admitted as a subject rather than as a held authority. */
 export const acceptedPATStatements = ({
   db,
   subject,
@@ -115,7 +113,6 @@ export const acceptedPATStatements = ({
     operation,
   });
 
-/** Append OAuth mutation evidence after a completed owner write in the same protected unit. */
 export const acceptedOAuthStatement = (
   input: Readonly<{
     db: D1Database;
@@ -228,11 +225,6 @@ const sessionRefusalStatement = ({
   });
 };
 
-/**
- * Record one refused Transaction mutation's metadata-only AuditLogEntry. A refusal whose audit
- * cannot commit for a dead credential or a database defect is
- * reported as that cause instead: the caller never reports a refusal the durable record denies.
- */
 export const recordTransactionRefusal = ({
   db,
   subject,
@@ -307,7 +299,6 @@ export const refusedTransactionResponse = (refusal: TransactionRefusal): Respons
 export const refusalFailureCode = (outcome: TransactionRefusal["outcome"]): ErrorCode =>
   refusalOutcomes[outcome].code;
 
-/** Refuse one authenticated canonical Transaction mutation after its refusal Audit committed. */
 export const rejectTransactionMutation = ({
   db,
   subject,
@@ -338,7 +329,6 @@ export const rejectTransactionMutation = ({
     }
   });
 
-/** Refuse one authenticated canonical Transaction call whose input failed validation. */
 export const rejectInvalidTransactionInput = ({
   db,
   subject,
@@ -358,10 +348,6 @@ export const rejectInvalidTransactionInput = ({
     refusal: { outcome: "validation_failed", message: invalidTransactionMessage },
   });
 
-/**
- * Return the batch's declared ValidationGate failure without a child index. The caller decides
- * whether this refusal owes envelope Audit evidence before returning this response.
- */
 export const rejectInvalidBatchInput = (): Response =>
   transactionFailure({
     code: "validation_failed",
@@ -369,11 +355,6 @@ export const rejectInvalidBatchInput = (): Response =>
     message: "Invalid atomic batch input.",
   });
 
-/**
- * Record one authenticated, pre-admission batch refusal without child attribution. This row is
- * metadata-only; request admission already bounds the invocation.
- * A PAT needs a live credential and Consent, but no child scope: no child was admitted.
- */
 const batchEnvelopeStatement = ({
   db,
   subject,
@@ -417,11 +398,6 @@ const batchEnvelopeStatement = ({
   });
 };
 
-/**
- * Record one metadata-only envelope refusal for a live credential. Return the declared validation
- * failure only after the row commits; otherwise answer credential refusal or unavailable
- * without claiming evidence was recorded.
- */
 export const rejectBatchEnvelope = (
   input: Readonly<{
     db: D1Database;
@@ -461,7 +437,6 @@ const refusedBearerWork = Effect.fn(function* ({
   );
 });
 
-/** Native Promise admission adapter; Effect owners compose refusedCredentialResponse instead. */
 export const refusedPATWork = (
   input: Readonly<{ db: D1Database; userId: string }>
 ): Promise<Response> => Effect.runPromise(refusedBearerWork(input));
@@ -473,7 +448,6 @@ export const unauthenticatedTransaction = (): Response =>
     message: "Present a valid credential and retry.",
   });
 
-/** Classify a Transaction credential refusal against the live PAT and Consent decisions. */
 export const refusedTransactionWork = ({
   db,
   subject,
@@ -482,7 +456,6 @@ export const refusedTransactionWork = ({
     ? refusedPATWork({ db, userId: subject.userId })
     : Promise.resolve(unauthenticatedTransaction());
 
-/** Classify a credential refusal, closing over any dependency defect as canonical unavailable. */
 export const refusedCredentialResponse = ({
   db,
   subject,
@@ -494,7 +467,7 @@ export const refusedCredentialResponse = ({
 
 export const isPATAuthority = (authority: TransactionAuthority): authority is PATAuthority =>
   authority.table === "pats";
-/** Recheck bearer, lifetime, scope, and Consent for either Transaction caller inside a D1 unit. */
+
 export function callerAuthority(
   input: Readonly<{ subject: OAuthCaller; current: number }>
 ): OAuthAuthority;
@@ -531,7 +504,6 @@ const authorityExists = (db: D1Database, authority: QueryAuthority): Promise<boo
     .first()
     .then((row) => row !== null);
 
-/** True while the caller's credential exists, regardless of scope; classification only. */
 export const liveTransactionCredential = ({
   db,
   subject,
@@ -547,7 +519,6 @@ export const liveTransactionCredential = ({
         })
   );
 
-/** True while the caller's authority for the exact scope it presented is still live. */
 export const liveTransactionAuthority = ({
   db,
   subject,

@@ -159,7 +159,6 @@ const exactEffect = (input: Omit<ReviewInput, "db">, snapshot: typeof Snapshot.T
   );
 };
 
-/** Observe the exact aggregate that settlement may erase or complete, without minting new identities. */
 export const clarificationOAuthReview = (
   input: ReviewInput
 ): Effect.Effect<
@@ -202,7 +201,6 @@ const categoryFor = Effect.fn(function* (
   return category.categoryId;
 });
 
-/** The OAuth form binds the selected rows, original deadline, sibling decisions and current Category. */
 export const localClarificationReview = Effect.fn(function* (
   input: Omit<ReviewInput, "db" | "userId"> & { userId: UserId }
 ) {

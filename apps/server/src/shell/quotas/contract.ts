@@ -4,7 +4,6 @@ import { QuotaStatus } from "~/core/quotas/contract";
 import { operationPolicy, userOwnedAgentScoped } from "~/shell/canonical-policy/contract";
 import { OperationResponse, Unavailable } from "~/shell/public-http/contract";
 
-/** Canonical response protocol names; never interpret security-rate headers as a commercial meter. */
 export const canonicalAllowanceHeaders = {
   allowance: "fidy-canonical-allowance",
   limit: "fidy-canonical-limit",
@@ -21,9 +20,7 @@ const headerCount = Schema.String.check(Schema.isPattern(/^(0|[1-9][0-9]*)$/u)).
     )
   )
 );
-/** Allowlisted wire projection. Reset is an absolute UTC instant, never a Retry-After delay.
- * Uncapped means no visible commercial meter, not exemption from request/security protection.
- */
+
 export const CanonicalAllowance = Schema.Union([
   Schema.Struct({
     allowance: Schema.Literal("canonical_call"),
@@ -40,7 +37,6 @@ export const CanonicalAllowance = Schema.Union([
 ]);
 export type CanonicalAllowance = typeof CanonicalAllowance.Type;
 
-/** Observe independent Free meters; inspection remains callable when the canonical-call meter is exhausted. */
 export const QuotasGroup = HttpApiGroup.make("quota").add(
   HttpApiEndpoint.get("getQuota", "/quota", {
     success: OperationResponse(QuotaStatus),

@@ -17,7 +17,6 @@ const browserSubjectQuery = (
   params: authority.bindings,
 });
 
-/** Recheck an established channel credential, including after Consent revocation for refusal classification. */
 export const hostedIdentity = ({
   subject,
   current,
@@ -26,7 +25,6 @@ export const hostedIdentity = ({
     ? whatsAppIdentityQuery(subject)
     : browserSubjectQuery(webSessionCredentialAuthority({ subject, current }));
 
-/** Project only the same live User at execution; provider identifiers alone never authorize work. */
 export const hostedAuthority = ({
   subject,
   current,

@@ -42,7 +42,6 @@ const AddressRow = Schema.Struct({
 const domain = "fidyapp.com";
 const HTTP_OK = 200;
 
-/** One authorized canonical forwarding operation; both operations disclose only the User's own address. */
 export type ForwardingAddressOperation =
   | "ingestion.enableEmailForwarding"
   | "ingestion.getEmailForwarding";
@@ -117,7 +116,6 @@ export const forwardingAddressAudit = ({
   ];
 };
 
-/** One metadata-only refusal for a guarded forwarding-address mutation after its D1 unit rolls back. */
 export const forwardingAddressGuardAudit = ({
   db,
   subject,
@@ -176,7 +174,6 @@ const projectAddress = (row: typeof AddressRow.Type): EmailForwardingAddress => 
   createdAt: row.created_at_ms,
 });
 
-/** Committed readback for the composable enable mutation, never a caller-supplied address. */
 export const readForwardingAddress = Effect.fn(
   (
     db: D1Database,
@@ -216,11 +213,6 @@ const responseFor = Effect.fn(function* (row: typeof AddressRow.Type, current: n
     : transactionUnavailable();
 });
 
-/**
- * Read the address issued with verified onboarding under the canonical caller's live authority.
- * The same atomic D1 batch commits a metadata-only Audit (and PAT use where applicable) before
- * this read discloses the address. POST composes its Audit in the shared mutation unit.
- */
 export const forwardingAddressResponse = Effect.fn(function* (
   input: Readonly<{
     db: D1Database;

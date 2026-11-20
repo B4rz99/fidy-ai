@@ -42,8 +42,6 @@ const scan = (xml: string, configure: (parser: SaxesParser) => void): void => {
 };
 
 const assertNumericText = (text: string): void => {
-  // SheetJS decodes Office escapes after XML entities. Count conservatively even when
-  // rich-text/phonetic markup would remove nonnumeric characters from the eventual value.
   const decoded = text.replace(/_x([\da-f]{4})_/giu, (_match, hex: string) =>
     String.fromCharCode(Number.parseInt(hex, 16))
   );
@@ -66,10 +64,7 @@ const assertAttributes = (tag: SaxesTagPlain): void => {
   ];
   for (const name of Object.keys(tag.attributes)) {
     if (name.startsWith("xmlns:")) continue;
-    // Core-property date typing is metadata, not a SheetJS relationship Type alias.
     if (name === "xsi:type" && ["dcterms:created", "dcterms:modified"].includes(tag.name)) continue;
-    // SheetJS lowercases attribute aliases and strips underscore suffixes. Refuse
-    // spellings that would make its cost-bearing attributes differ from this scan.
     const alias = localName(name).split("_")[0]?.toLowerCase();
     const expected = canonical.find((attribute) => attribute.toLowerCase() === alias);
     if (expected !== undefined && name !== expected) malformed();
@@ -112,13 +107,10 @@ const assertRelationship = (tag: SaxesTagPlain): void => {
 };
 const assertXmlRepresentation = (tag: SaxesTagPlain, root: string): void => {
   const name = localName(tag.name);
-  // Comments are outside Statement evidence; foreign per-cell insertion is quadratic.
   if (["comments", "comment", "ThreadedComments", "threadedComment"].includes(name)) limit();
   if (["externalLink", "externalBook"].includes(name)) limit();
   const requiredRoot = requiredXmlRoots[name];
   if (requiredRoot !== undefined && root !== requiredRoot) malformed();
-  // SheetJS selects binary parsers by content type and by a part's .bin suffix.
-  // Inert VBA attachments remain allowed, but no binary financial part is admitted.
   if (name === "Override") assertContentType(tag);
   if (name === "Relationship") assertRelationship(tag);
 };
@@ -139,7 +131,6 @@ const xmlMembers = (entries: Map<string, Uint8Array>): ReadonlyArray<XmlMember> 
     ) {
       limit();
     }
-    // OOXML parts can have nonstandard names. Inspect all XML-looking members too.
     if (
       !name.endsWith(".xml") &&
       !/^\s*</u.test(new TextDecoder().decode(bytes.subarray(0, xmlChunkCharacters)))
@@ -155,7 +146,6 @@ const xmlMembers = (entries: Map<string, Uint8Array>): ReadonlyArray<XmlMember> 
       parser.on("comment", malformed);
       parser.on("processinginstruction", malformed);
       parser.on("opentag", (tag) => {
-        // SheetJS retains raw inner XML in text leaves; SAX text alone would undercharge it.
         if (textLeaf) malformed();
         const name = localName(tag.name);
         assertStringChild(name, ancestors.at(-1) ?? "");
@@ -227,7 +217,6 @@ const retainFormat = (tag: SaxesTagPlain, formats: Map<number, number>): void =>
   const bytes = size(tag.attributes.formatCode ?? "");
   if (bytes > maximumFormatBytes) limit();
   const id = indexFor(tag.attributes.numFmtId ?? "");
-  // SheetJS remaps higher IDs into this range before formatting cells.
   if (id > maximumFormatId) limit();
   if (formats.has(id)) malformed();
   formats.set(id, bytes);
@@ -235,7 +224,6 @@ const retainFormat = (tag: SaxesTagPlain, formats: Map<number, number>): void =>
 const assertFormula = (tag: SaxesTagPlain): void => {
   if (localName(tag.name) !== "f") return;
   if (["shared", "array"].includes(tag.attributes.t ?? "")) limit();
-  // SheetJS searches the whole raw opening tag, including unrelated attribute values.
   if (Object.values(tag.attributes).some((value) => /t="(?:shared|array)"/u.test(value))) {
     limit();
   }
@@ -356,8 +344,6 @@ const admitWorksheet = ({ xml, strings, formats, charge }: WorksheetInput): void
       });
     }
     if (Option.isSome(cell) && name === "v") cell.value.inValue = true;
-    // Shared formulas can amplify before the cell callback. Their translation is excluded
-    // from this admitted envelope; ordinary inert formula evidence remains supported.
     assertFormula(tag);
   };
   scan(xml, (parser) => {
@@ -377,8 +363,6 @@ const admitWorksheet = ({ xml, strings, formats, charge }: WorksheetInput): void
       const referenced = cell.value.shared ? strings[indexFor(cell.value.value)] : 0;
       if (referenced === undefined) return malformed();
       const valueBytes = cell.value.textBytes + referenced;
-      // Custom formats can repeat a value for each format token, or emit long literals.
-      // Charge an upper bound before the foreign formatter sees any cell.
       charge(valueBytes + (valueBytes + numericFormattingAllowance) * cell.value.formatBytes);
       assertNumericText(cell.value.text);
       cell = Option.none();
@@ -487,18 +471,15 @@ const admitSheetMetadata = (members: ReadonlyArray<XmlMember>): void => {
       });
       parser.on("text", (text) => charge(size(text)));
     });
-    // SheetJS compares every future-metadata name against every metadata type.
     for (const futureBytes of future) {
       for (const typeBytes of types) charge(futureBytes + typeBytes);
     }
   }
 };
 
-/** Admit repeated text and formatting work before workbook construction; never truncates evidence. */
 export const admitXlsxArchive = (bytes: Uint8Array): Uint8Array => {
   const entries = decodeXlsxArchive(bytes);
   const members = xmlMembers(entries);
-  // Without the OOXML content-type part SheetJS can recursively read an uninspected Index.zip.
   if (
     !members.some(
       (member) => member.name.toLowerCase() === "[content_types].xml" && member.root === "Types"

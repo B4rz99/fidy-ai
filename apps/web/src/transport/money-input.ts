@@ -7,7 +7,6 @@ const LocalizedAmount = Schema.String.check(
 const decodeAmount = Schema.decodeUnknownOption(LocalizedAmount);
 const decodeMoney = Schema.decodeUnknownOption(Transaction.fields.money);
 
-/** Parses positive Money using es-CO separators; a period always denotes thousands grouping. */
 export const parseMoneyInput = ({
   text,
   currency,
@@ -25,7 +24,6 @@ export const parseMoneyInput = ({
     Option.filter((money) => BigDecimal.isPositive(money.amount))
   );
 
-/** Keeps an existing Money value editable without exponent notation or a decimal period. */
 export const formatMoneyInput = (money: Transaction["money"]): string =>
   Schema.encodeSync(Transaction.fields.money)(money).amount.replace(".", ",");
 

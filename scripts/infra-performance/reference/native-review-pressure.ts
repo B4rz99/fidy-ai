@@ -7,7 +7,6 @@ const snapshot = Schema.decodeUnknownOption(
 );
 const refused = 429;
 
-/** Sample the disposable owner's predicates after its refusal. Overlap or elapsed time can change either. */
 export const withReviewPressureSnapshot = Effect.fn(function* ({
   owner,
   user,

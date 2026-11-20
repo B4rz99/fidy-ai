@@ -1,4 +1,3 @@
-// Restore the frozen schema and selected synthetic facts into a fresh, unmounted workerd D1.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -180,7 +179,6 @@ const captureTable = async (db, def) => {
     "SELECT " + projected.join(",") + " FROM " + name + " ORDER BY " + keys.join(",")
   );
   const rows = readValues(await select(db, read));
-  // Verification includes generated columns that SQLite omits from the writable projection.
   const insertable = fields.filter(
     (field) => field === "_rowid_" || columns.some((col) => col.name === field)
   );
@@ -229,8 +227,6 @@ const materializedRows = (tables) => {
   const maximumStatementBytes = 98_304;
   const encoder = new TextEncoder();
   for (const table of tables) {
-    // SQLite itself recreates sequence rows when copied autoincrement rows are inserted.
-    // The final table digest includes its high-water marks and rowids.
     if (table.name === "sqlite_sequence" || !table.inserts.length) continue;
     let packed = "";
     for (const sql of table.inserts) {
@@ -290,7 +286,6 @@ try {
       "A populated import requires the actual native originals"
     );
     evidence.stage = "populate-oracle";
-    // Build the reference with its original triggers, constraints, and calibrated fixture operations.
     await serial(plan.batches.slice(start), async ({ batch }) => {
       const replies = await oracle.batch(
         batch.map(({ sql, params }) => oracle.prepare(sql).bind(...params))
@@ -301,8 +296,6 @@ try {
   }
   evidence.stage = "extract";
   evidence.oraclePhysical = await physical(oracle);
-  // D1 creates this opaque service-owned table on the first write to its database.
-  // Its definition participates in the full schema check after the restoration writes.
   const platform = new Set([...pristine.map((def) => def.name), "_cf_METADATA"]);
   const definitions = originalOrder.filter(
     (def) => !platform.has(def.name) && !def.name.startsWith("sqlite_") && def.sql !== null
@@ -337,7 +330,6 @@ try {
       applied.push(await run(restored, Array.from(group)));
     });
   evidence.stage = "verify-pristine";
-  // A D1 batch may itself initialize platform metadata, even when it only runs SELECT.
   const applicationSchema = query(
     "SELECT type,name,tbl_name,sql FROM sqlite_schema WHERE name <> '_cf_METADATA' ORDER BY type,name,tbl_name"
   );
@@ -350,7 +342,6 @@ try {
       .filter((def) => def.type === kind)
       .map((def) => query(String(def.sql)));
     evidence.stage = "define-" + kind;
-    // Each kind is a dependency barrier; the source row order retains relative trigger order.
     await append(group);
   };
   await serial(["table", "index", "view"], define);
@@ -370,9 +361,6 @@ try {
     }
     const commands = materializedRows(tables);
     evidence.importStatements = commands.length;
-    // D1 checks the genuine cyclic Transaction/Reconciliation foreign keys when this batch commits.
-    // Source rows already include the effects of their original triggers. Installing the exact triggers after
-    // copying data avoids replaying those effects a second time on the unexposed destination.
     applied.push(await run(restored, commands));
     await define("trigger");
   } else {
@@ -381,8 +369,6 @@ try {
       evidence.stage = "seed-" + table.name;
       const existing = readValues(await select(restored, table.read));
       if (digest(existing) === table.read.check) return;
-      // Install the original constraints and triggers before the first seed row. Refuse side effects
-      // that differ from the final snapshot and never overwrite, disable or drop a guard.
       const remaining = new Map(table.identities.map((key, index) => [key, table.inserts[index]]));
       assert.equal(remaining.size, table.rowCount, "Seed row identity collision");
       for (const row of existing) {

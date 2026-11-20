@@ -67,11 +67,6 @@ const conversationOwner = (clearAcceptedDraft: () => void): ConversationOwner =>
   };
 };
 
-/**
- * Retains one mounted conversation and its private delivery material until disposal.
- * Call reply-bound visibility only after its exact text commits in an active, visible document.
- * Unresolved work blocks submissions; accepted proposals clear the caller's disabled draft.
- */
 export const useHostedConversation = ({
   client,
   clearAcceptedDraft,

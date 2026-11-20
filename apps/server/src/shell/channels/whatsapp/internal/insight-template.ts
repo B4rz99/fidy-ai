@@ -33,7 +33,6 @@ export const buildInsightTemplateSender = (
         ...decoded.sections.map((section) => `${section.currency}: ${section.text}`),
       ].join(" · ");
       const text = configuration.value.body.replace("{{1}}", parameter);
-      // Conservative UTF-16 and actual UTF-8 bounds; never clip or omit a section.
       if (
         text.length > maximumTemplateLength ||
         new TextEncoder().encode(text).byteLength > maximumTemplateBytes

@@ -9,9 +9,6 @@ type SubscriptionEnrollmentLifetimeProps = Readonly<{
   readonly makeClient: () => SubscriptionEnrollmentClient;
 }>;
 
-/** Ends enrollment authority immediately on lifetime replacement or unmount.
- * React Strict Mode replay acquires a fresh client after cleanup.
- */
 export const SubscriptionEnrollmentLifetime = ({
   children,
   makeClient,

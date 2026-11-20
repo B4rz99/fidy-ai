@@ -111,7 +111,6 @@ const responseFor = ({ page, api }, method, path) =>
     const url = new URL(reply.url());
     return reply.request().method() === method && url.origin === api && url.pathname === path;
   });
-// ResponseEnd is measured from Chromium request start through body completion. It never subtracts RTT.
 /**
  * @param {ReadJourney} input Browser journey configuration.
  * @param {string} label Expected visible counterparty.
@@ -150,8 +149,6 @@ const ready = async ({ page, calibration, captured }, label) => {
 const startApplication = async (input) => {
   const { page, ledger, api, observeStartup, offered, completed } = input;
   process.stderr.write("REFERENCE_STAGE bootstrap\n");
-  // The first page may arrive inside the real session bootstrap. An explicit historical
-  // month can instead require a canonical read. Inspect only responses the app requested.
   /** @type {{ history?: BrowserResponse, bootstrap?: BrowserResponse }} */
   const responses = {};
   /** @param {BrowserResponse} reply Observed startup response. */
@@ -187,8 +184,6 @@ const startApplication = async (input) => {
  * @param {Page} page Mounted Chromium page.
  */
 const watchRefresh = async (page) => {
-  // Both builds disable search while history or Categories are stale, and keep it disabled on failure.
-  // Arm the observer before the click so even a fast refresh must commit both DOM states.
   const search = page.getByRole("searchbox", { name: "Buscar transacciones", exact: true });
   assert.ok(await search.isEnabled());
   return await page.evaluateHandle((timeout) => {

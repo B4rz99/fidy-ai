@@ -248,7 +248,6 @@ const Continuation = ({ attempt }: Readonly<{ attempt: AttemptReference }>): JSX
   );
 };
 
-/** Navigation accepts only a public locator; the server verifies same-User authority. */
 export const ConnectionContinuationFeature = (): JSX.Element => {
   const { sessionBinding } = useRouter().options.context;
   const { authentication } = useSession();

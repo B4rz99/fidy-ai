@@ -106,14 +106,12 @@ import {
 } from "../canonical-work/operations";
 import { transactionNoStore } from "../canonical-work/contract";
 
-/** Read only installed statement queries under Agent's current upload conversation authority. */
 export const executeHostedStatementQuery: typeof heldStatementQuery = (input) => {
   const operation = operationCatalog.byId.get(input.operation);
   const work = heldStatementQuery(input);
   return operation === undefined ? work : observeCanonicalResponse(work, operation.id);
 };
 
-/** Execute only installed statement work under Agent's verified live Turn and origin Session. */
 export const executeHostedStatementCall: typeof heldStatementCall = (input) => {
   const operation = operationCatalog.byId.get(input.operation);
   const work = heldStatementCall(input);
@@ -222,7 +220,6 @@ type OAuthCanonicalWork = Readonly<{
   retryKey: Option.Option<Schema.Json>;
 }>;
 
-/** Execute an installed canonical operation under live OAuth authority and the bounded User coordination turn. */
 export const executeOAuthCanonicalWork = (input: OAuthCanonicalWork): Effect.Effect<Response> =>
   withCanonicalLifetime({ ...input, execute: (db) => executeOAuthWork({ ...input, db }) });
 
@@ -423,7 +420,6 @@ const executeCall = (
   }).pipe((effect) => observeCanonicalResponse(effect, work.operation));
 };
 
-/** Dispatch a bounded batch or an individual catalog call within one User coordination turn. */
 const affectsBudget = (operation: CanonicalOperationId): boolean =>
   operationCatalog.byId.get(operation)?.policy.kind === "mutation" &&
   (operation.startsWith("budgets.") || operation.startsWith("transactions."));
@@ -515,11 +511,6 @@ const executeWork = (
     return result;
   });
 
-/**
- * True when the work can reach the Memory capacity policy, the only consumer of hosted
- * inference. Every other owner decides without it, so a missing AI binding must not deny
- * their work.
- */
 export const canonicalWorkRequiresInference = (work: CanonicalWork): boolean => {
   if (work._tag === "Query") return false;
   if (work._tag === "Batch") {
@@ -560,12 +551,6 @@ const oauthWorkRefusal = (input: WorkInput): Option.Option<Effect.Effect<Respons
   return Option.some(refusal.record().pipe(Effect.flatMap(refusal.respond)));
 };
 
-/**
- * Execute one named call or ordered batch inside the caller's existing User coordination turn.
- * Owner preparation, live authority, refusal Audit, atomic commit and canonical presentation stay
- * together. Memory work requires its explicitly constructed counting service; a missing binding
- * refuses only that work. No provider or storage authority is acquired here.
- */
 export const executeCanonicalWork = (
   input: WorkInput & Readonly<{ inference: Option.Option<HostedInferenceService> }>
 ): Effect.Effect<Response> => {
@@ -588,7 +573,6 @@ export const executeCanonicalWork = (
   );
 };
 
-/** The verified statement channel discovers only adapters installed for its native authority. */
 export const installedHostedStatementOperations = (): ReadonlyArray<CatalogOperation> =>
   operationCatalog.operations.filter(
     ({ id, policy }) =>
@@ -608,7 +592,6 @@ export const installedCanonicalOperations = (): ReadonlyArray<CatalogOperation> 
       : id === atomicBatchOperation || Option.isSome(canonicalMutationAdapter(id))
   );
 
-/** Only a declared query may reach dispatch; its owner classifies malformed route/query input. */
 const queryDeclaration = (operation: CanonicalOperationId): Option.Option<CatalogOperation> =>
   Option.fromUndefinedOr(operationCatalog.byId.get(operation)).pipe(
     Option.filter((declared) => declared.policy.kind === "query")
@@ -616,7 +599,6 @@ const queryDeclaration = (operation: CanonicalOperationId): Option.Option<Catalo
 
 const queryOrigin = "https://canonical.internal";
 
-/** Reconstruct only the named query's route, without forwarding transport credential material. */
 const requestFromTarget = (operation: CatalogOperation, target: string): Option.Option<Request> =>
   Option.liftThrowable(() => new URL(target, queryOrigin))().pipe(
     Option.filter(
@@ -668,12 +650,6 @@ const invokeQueryOwner = ({
     return Exit.isSuccess(result) ? Option.some(result.value) : Option.none();
   });
 
-/**
- * Execute an admitted HTTP query through the installed owner dispatch. Document/view assembly
- * and accounting use the owner's native consistency guards. The HTTP adapter retains transport
- * admission; owners retain validation, live authority and Audit. Recurring's phased non-browser
- * reader still requires the same User's coordinator.
- */
 export const executeCanonicalHttpQuery = ({
   operation: operationId,
   coordinate,
@@ -726,11 +702,6 @@ export const executeCanonicalHttpQuery = ({
     );
   }).pipe(Effect.orElseSucceed(transactionUnavailable), Effect.withSpan(operationId));
 
-/** Call a query owner inside an already held User coordination turn. Canonical arguments build
- * only the catalog-owned route; owners classify malformed identities and filters exactly as for
- * HTTP. None means an uninstalled owner, unrepresentable arguments or an owner defect; canonical
- * refusals remain Some(response). Interruption reaches the caller unchanged.
- */
 export const executeCanonicalQuery = ({
   db,
   subject,
@@ -760,7 +731,6 @@ export const executeCanonicalQuery = ({
     });
   });
 
-/** Native batch dispatch and the individual keyword and group-correction entry points. */
 const successfulMutationStatus = 200;
 export const isLocalBatchRoute = (id: string): boolean =>
   isNativeAccountQuery(id) ||
@@ -937,7 +907,6 @@ export const dispatchLocalBatchRoute = Effect.fn(
 export const localOAuthReviewBinding: typeof localReviewBinding = (...args) =>
   localReviewBinding(...args);
 
-/** The hosted channel may only project operations its independent canonical caller policy permits. */
 const defaultReviewPageSize = 50;
 const parameterizedReads = [
   "categories.listCategories",
@@ -953,7 +922,7 @@ const parameterizedReads = [
   "ingestion.getStatementSubmission",
   "ingestion.listNeedsReviewItems",
 ];
-/** Installed public operations use the same User-owned handlers that execute each catalog call. */
+
 export const nativeCanonicalOperations = (): ReadonlyArray<CatalogOperation> =>
   operationCatalog.operations.filter(
     (operation) =>

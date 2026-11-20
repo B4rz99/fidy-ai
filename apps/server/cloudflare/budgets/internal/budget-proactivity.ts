@@ -147,7 +147,6 @@ ORDER BY s.last_evaluated_at_ms,p.pending_at,s.user_id LIMIT ?`
     )(result.results)).map((row) => row.user_id);
   }).pipe(Effect.mapError(() => new BudgetCrossingUnavailable()));
 
-/** Only pending same-User frozen facts are observed; a later grant is never consulted. */
 export const readGroups = (
   input: Readonly<{ db: D1Database; userId: UserId }>
 ): Effect.Effect<ReadonlyArray<BudgetCrossingGroup>, BudgetCrossingUnavailable> =>

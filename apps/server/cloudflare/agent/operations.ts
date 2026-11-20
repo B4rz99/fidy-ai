@@ -23,53 +23,42 @@ import {
   prepareChannelTurn,
 } from "./internal/channel-evidence";
 
-/** Copy only the channel's exact protected verified text into the User Transcript, without inventing a Turn or session. Commit alongside Insight settlement. */
 export const prepareProactiveTranscript: typeof prepareProactiveTranscriptOwned = (input) =>
   prepareProactiveTranscriptOwned(input);
-/** Read one same-User, unexpired proactive Transcript entry under current processing Consent for an ordinary correlated reply. */
+
 export const readAssociatedProactiveTranscript = (
   input: Parameters<typeof readProactiveTranscriptOwned>[0]
 ): Effect.Effect<
   Effect.Success<ReturnType<typeof readProactiveTranscriptOwned>>,
   AgentUnavailable
 > => readProactiveTranscriptOwned(input).pipe(Effect.mapError(() => new AgentUnavailable()));
-/** Build same-User unexpired proactive reply context only from authenticated channel reference evidence. */
+
 export const readContextualProactiveReply: typeof readContextualProactiveReplyOwned = (input) =>
   readContextualProactiveReplyOwned(input);
-/** Observe one same-User verified control/disclosure message under current processing purpose, without invented InsightEvent or Turn linkage. */
+
 export const readProactiveMessageTranscript: typeof findMessageTranscript = (input) =>
   findMessageTranscript(input);
-/** Execute the fixed proactive Transcript retention policy independently of later User messages. */
+
 export const expireProactiveTranscript = (
   input: Parameters<typeof expireProactiveTranscriptOwned>[0]
 ): Effect.Effect<void, AgentUnavailable> =>
   expireProactiveTranscriptOwned(input).pipe(Effect.mapError(() => new AgentUnavailable()));
-/** Mint only live same-User, same-channel Pending statement authority for the canonical adapter. */
+
 export const mintHostedStatementCaller: typeof statementCaller = (input) => statementCaller(input);
 
-/** Same-User Turn lifecycle metadata, with id, user_id, hosted_session_id, status, started_at_ms, terminal_at_ms and failure_reason; no Transcript content or credential. */
 export const hostedChannelTurnQuery = (userId: UserId): OwnedStatement => channelTurnQuery(userId);
-/** Same-User lifecycle and exact retained User entry for channel continuation; absence after compaction cannot create new work. */
+
 export const hostedChannelContinuationQuery = (userId: UserId): OwnedStatement =>
   channelContinuationQuery(userId);
-/** Exact User entries only for this User's retained Turns; use solely for authenticated same-message replay comparison. */
+
 export const hostedChannelUserEntryQuery = (userId: UserId): OwnedStatement =>
   channelUserEntryQuery(userId);
-/** Secret-free Turn lifecycle relation for bounded private operational sampling or identity-only dispatch; never includes Transcript content. */
+
 export const hostedChannelTurnObservation = (): string => channelTurnObservation();
-/** Compose this User's lifecycle as channel_turns inside the caller's existing atomic statement; preparation grants no Turn authority. */
+
 export const prepareHostedChannelTurn: typeof prepareChannelTurn = (input) =>
   prepareChannelTurn(input);
 
-/**
- * Prepare channel cleanup with channel_retention_turns(id, user_id): at most 100 due Turn
- * identities for the supplied User, including evidence retained after Transcript compaction.
- * now is the cleanup decision instant in UTC epoch milliseconds. statement.sql must be one
- * cleanup statement without its own WITH clause, consuming this relation and correlating channel
- * evidence by both id and user_id;
- * statement.params supplies only that statement's placeholders, in order. The caller executes the
- * prepared statement in its cleanup batch. Preparation grants no send authority.
- */
 export const prepareHostedChannelRetention = ({
   db,
   userId,
@@ -88,12 +77,6 @@ export const prepareHostedChannelRetention = ({
   ) ${statement.sql}`)
     .bind(userId, now - hostedTranscriptRetentionMs, ...statement.params);
 
-/**
- * Bind one canonical mutation commit to the exact pending Turn and tool call of its stable User.
- * The caller must include these statements and every mutation in the same uninterruptible D1 batch.
- * Recovery winning first, a foreign Turn, or a repeated call aborts that entire batch; a successful
- * commit leaves the owner's durable evidence used to recover a reply lost after mutation.
- */
 export const prepareHostedMutationCommit = ({
   db,
   userId,
@@ -103,9 +86,7 @@ export const prepareHostedMutationCommit = ({
 }: HostedCommitFence &
   Readonly<{
     db: D1Database;
-    /** The established stable User carried by the caller's resolved authority. */
     userId: string;
-    /** One Worker-owned decision instant, in UTC epoch milliseconds. */
     current: number;
   }>): ReadonlyArray<D1PreparedStatement> => [
   preparePredicateAssertion({
@@ -122,12 +103,6 @@ export const prepareHostedMutationCommit = ({
     .bind(turnId, toolCallId, userId, current),
 ];
 
-/**
- * Read the captured Consent basis only for the exact explicit User and still-Pending Turn within
- * the original active Hosted Agent Session lifetime. Observation never extends that lifetime.
- * Absence is None; malformed or unavailable persistence fails closed. This grants no egress or
- * lifecycle authority: Consent retains its current-standing comparison immediately before egress.
- */
 export const readAdmittedHostedConsent = (
   input: Readonly<{ db: D1Database; userId: UserId; turnId: TranscriptTurnId }>
 ): Effect.Effect<Option.Option<OnboardingConsentBasis>, AgentUnavailable> =>

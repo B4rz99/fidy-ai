@@ -56,7 +56,6 @@ const useMaterialQuery = (
   );
   return query;
 };
-/** Load original bytes alongside the selected detail, within the same expiry fence. */
 export const ReviewMaterialPreload = ({
   item,
   expiresAt,

@@ -14,7 +14,6 @@ type IndicatorTone =
   | "expense";
 const iconSizes = { plain: 20, category: 20, "category-large": 30, direction: 18 } as const;
 
-/** Decorative pastel indicator; callers supply an adjacent accessible label and retain category identity. */
 export const IconIndicator = ({
   icon,
   tone,

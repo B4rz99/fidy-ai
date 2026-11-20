@@ -54,7 +54,6 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       const directory = yield* native(() =>
         runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
       );
-      // Isolate the owner protocol after provider signature and nonce validation.
       yield* native(() =>
         directory.exec(
           "UPDATE provider_attempts SET state='verified',issuer=?,subject=? WHERE pairing_id=?",

@@ -30,7 +30,7 @@ const isVerificationFile = (path: string): boolean =>
   verifierFiles.has(path) || /^infra\/cloudflare\/[^/]+\.test\.ts$/u.test(path);
 
 const typeManifests = ["apps/server/package.json", "bun.lock", "infra/cloudflare/package.json"];
-// Exact before/after Git blobs for the dev-only @cloudflare/workers-types 5.20261112.1 → 5.20261113.1 refresh.
+
 const reviewedTypesDigest = "cecb1320af85336bd11b1c8cd052a65a0425d49d60919cfdc9e7d81b1d0310d2";
 
 type GitRead = (args: ReadonlyArray<string>) => Effect.Effect<string, Error>;
@@ -57,7 +57,7 @@ const reviewedTypeRefresh = Effect.fn(function* (
   ]);
   return new Bun.CryptoHasher("sha256").update(raw.trimEnd()).digest("hex") === reviewedTypesDigest;
 });
-/** Keep the checked-out verifier on protected trunk and prove all other files match the installed source. */
+
 export const verificationRevision = Effect.fn(function* (
   trunk: string,
   requested: string,

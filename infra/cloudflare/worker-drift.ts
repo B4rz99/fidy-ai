@@ -37,7 +37,6 @@ const fields = [
 ] as const;
 const knownFields = new Set<string>(fields);
 
-/** Projects attribute differences to closed names only; neither values nor unknown keys escape. */
 export const workerDriftFields = ({
   expected,
   actual,
@@ -60,7 +59,6 @@ export const workerDriftFields = ({
   return changed;
 };
 
-/** Projects an untrusted dry-run plan without treating diagnostics as permission to repair it. */
 export const workerDriftReport = (plan: unknown): ReadonlyArray<string> => {
   const decoded = Schema.decodeUnknownOption(driftPlan)(plan);
   if (Option.isNone(decoded)) {

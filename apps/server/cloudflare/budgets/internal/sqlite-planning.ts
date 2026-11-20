@@ -59,7 +59,6 @@ export const currentUserMonth = Effect.fn(function* (user: UserId, current: numb
   return localMonth({ now: DateTime.makeUnsafe(current), zone: time_zone });
 });
 
-/** Resolve the active group denomination and inherited cap under the same User transaction. */
 export const plannedBudgets = Effect.fn(function* (
   user: UserId,
   planned: Option.Option<string>,
@@ -121,7 +120,6 @@ const groupPrecision = Effect.fn(function* (
   if (duplicate !== undefined) return false;
   const fits = Schema.decodeUnknownOption(Schema.toCodecJson(Money));
   if (Option.isNone(fits({ amount, currency }))) return false;
-  // A future month can hold a different cap. Validate every distinct nominal amount in bounded pages.
   const caps = sql`WITH selected AS (SELECT id,cap FROM budgets WHERE ${members}), caps AS (
     SELECT cap FROM selected UNION SELECT COALESCE((SELECT p.cap FROM budget_month_plan_records p
       WHERE p.kind='cap' AND p.user_id=${user} AND p.budget_id=s.id AND p.month<=${month} ORDER BY p.month DESC LIMIT 1),s.cap) FROM selected s
@@ -260,7 +258,6 @@ const writeBudget = Effect.fn(function* (
 });
 class BudgetWriteConflict extends Data.TaggedError("BudgetWriteConflict") {}
 
-/** Only a Budget start or a group Currency change can introduce a monthly Category/Currency collision. */
 const checkMonthlyDenominations = Effect.fn(function* (user: UserId) {
   const sql = yield* SqliteClient;
   const conflicts = yield* sql`WITH repeated_categories AS (

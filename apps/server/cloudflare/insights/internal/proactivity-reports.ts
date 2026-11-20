@@ -88,7 +88,6 @@ export const deliveryQuery = (input: Readonly<{ userId: UserId; id: string }>): 
   params: [input.userId, input.id],
 });
 
-/** Only actual channel proof can settle all same-User links; provider acceptance never calls this unit. */
 export const prepareSettlement = (
   input: Readonly<{ db: D1Database; userId: UserId; id: string; proof: OwnedStatement }>
 ): ReadonlyArray<D1PreparedStatement> => [
@@ -130,7 +129,7 @@ export const transcriptLinksQuery = (
   sql: `SELECT l.user_id,l.id AS insight_event_id FROM insight_events AS l JOIN (${input.proof.sql}) AS v ON v.user_id=l.user_id AND v.delivery_id=l.message_id WHERE l.message_kind='proactivity-delivery' AND l.user_id=? AND l.message_id=?`,
   params: [...input.proof.params, input.userId, input.id],
 });
-/** Channel exact text plus the Insights-owned primary occurrence; Agent alone persists its Transcript. */
+
 export const transcriptOccurrenceQuery = (
   input: Readonly<{ userId: UserId; id: string; proof: OwnedStatement }>
 ): OwnedStatement => ({

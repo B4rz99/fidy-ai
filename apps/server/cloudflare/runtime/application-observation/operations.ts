@@ -116,7 +116,6 @@ const finishApplication = (
   );
 };
 
-/** Observe closed application work in the caller's trace without requiring telemetry in fixtures. */
 const observeApplicationOperationWork = <A, E, R>(
   work: Effect.Effect<A, E, R>,
   descriptor: ApplicationSpan,
@@ -144,7 +143,6 @@ const responseOutcome = (response: Response): DeclaredOutcome => {
   return { outcome: "succeeded", error: Option.none(), retryable: false };
 };
 
-/** HTTP status is sufficient to classify canonical refusals; response bodies stay private. */
 const observeApplicationResponseWork = <E, R>(
   work: Effect.Effect<Response, E, R>,
   descriptor: ApplicationSpan,

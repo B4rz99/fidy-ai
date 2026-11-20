@@ -12,8 +12,6 @@ class NativeBudgetTests(unittest.TestCase):
         def sample(reads, writes):
             return {"sqlite": asdict(Usage(now, now, reads, writes)), "r2": {
                 "requests": 10, "todayRequests": 10, "upperBoundBytes": 100}}
-        # 5M daily minus 2.5M reserved for other work and 750k for this fixture.
-        # 100k daily minus 10k for other work and 30k for this fixture.
         base = sample(1_750_000, 60_000)
         check(base, base, "begin", now)
         for over in (sample(1_750_001, 60_000), sample(1_750_000, 60_001)):

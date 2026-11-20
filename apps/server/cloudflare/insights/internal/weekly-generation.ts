@@ -252,7 +252,6 @@ const materialize = (
     return { _tag: "Created", id: candidate.id } as const;
   });
 
-/** Current security/resource admission precedes evaluation; caller serializes this User. */
 export const runGeneration = (
   input: Readonly<{ db: D1Database; userId: UserId; id: ScheduleId; now: DateTime.Utc }>
 ): Effect.Effect<WeeklyMaterialization, InsightUnavailable> =>
@@ -261,7 +260,6 @@ export const runGeneration = (
     return yield* materialize(input);
   });
 
-/** Current enabled schedule and the same captured grant; timing revisions affect future reports only. */
 export const weeklyReportDeliveryQuery = (
   input: Readonly<{ userId: UserId; insightEventId: InsightEventId }>
 ): OwnedStatement => ({

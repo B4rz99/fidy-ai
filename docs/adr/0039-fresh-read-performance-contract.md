@@ -7,8 +7,8 @@
 
 The web application takes seconds to reveal information. Backend redesign will focus on actual
 access patterns, bounded set-based work, compact projections and reducing data movement and
-sequential round trips. Cloudflare Workers, D1 and per-User Durable Objects remain the initial
-platform; replacing them requires evidence of a limiting constraint. Web request composition and
+sequential round trips. The [per-User storage decision](0041-per-user-durable-object-storage-direction.md) owns
+placement and topology. Web request composition and
 canonical query contracts may change. Live authorization, exact Money and consistent financial
 reads remain requirements.
 
@@ -60,7 +60,8 @@ retained product response. Retained-result navigation has a separate measurement
 satisfy the fresh-read gate. Browser result retention will be evaluated separately after fresh
 reads meet their target; it is not being removed by this decision. Exact write-maintained
 aggregates, request-local computation reuse and in-flight request deduplication remain available.
-The atomic financial projection in ADR 0030 is not a stale response cache.
+The [write-maintained financial projection](0060-dashboard-initialization-and-exact-projections.md)
+is part of the fresh-read design.
 
 ## Trade-off
 
@@ -95,3 +96,28 @@ ordinary live navigation is not proof of the full load envelope.
 Precise timing and cold-start definitions, full application startup and exceptional-operation
 budgets remain to be settled. The interview authorized batching existing reads first, followed by
 repeat measurements. Data-selection and placement experiments remain separate implementation work.
+
+## Protected comparisons
+
+Measure browser ResponseEnd from the start of the Chromium request through body completion,
+including round-trip latency. Observe only requests made by the mounted application. The
+initial page can come from the session bootstrap or a separate history read for a selected
+month. Arm the refresh observer before the interaction and capture the disabled and settled
+states. Finish in-flight requests before sampling native storage counters.
+
+Use the frozen application, provider schema and migration registry for the D1 reference.
+Keep the instrumentation in the disposable comparator. When restoring captured rows, preserve
+their original constraints, generated columns, rowids and sequence high-water marks. Install
+the original triggers after copying rows that already include their effects. A fresh seed
+instead runs under those triggers from the first insert. Stop the workerd writer before
+physical census and give the verifier its own SQLite WAL index.
+
+The protected cohort journals each mutation before dispatch because browser authority has
+no canonical mutation retry receipt. A lost acknowledgment requires readback of the original
+all-or-nothing outcome. The initial bounded window does not resume after interruption.
+Keep durable custody and the original session for the separate recovery path. Measure
+account-wide resource use, including concurrent work and analytics lag. Keep the reserve
+until a later metrics bucket covers completion. The preflight cannot reserve provider capacity.
+
+For R2 headroom, reconcile adaptive totals with grouped estimates conservatively. Only
+`GetObject` is excluded from the Class A estimate.

@@ -57,7 +57,6 @@ export const completePairing = ({
     });
   });
 
-/** Revoke the exact cookie's session without disclosing whether it existed. */
 export const logout = ({
   request,
   db,
@@ -70,7 +69,6 @@ export const logout = ({
     if (Option.isSome(token)) {
       const current = yield* Clock.currentTimeMillis;
       const tokenDigest = yield* attempt(() => sessionDigest(token.value));
-      // D1 does not abort a submitted revocation; retain ownership of its callback only.
       yield* attempt(() =>
         db
           .prepare(

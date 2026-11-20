@@ -14,7 +14,6 @@ const Replay = Schema.Struct({
 });
 export type Replay = typeof Replay.Type;
 
-/** Read only live exact-User retained outcomes; the coordinator rechecks authority before disclosure. */
 export const retainedReplay = ({
   db,
   userId,
@@ -39,7 +38,6 @@ export const retainedReplay = ({
     )
   );
 
-/** Claim participates in the same D1 acceptance batch as canonical allowance consumption. */
 export const claimReplay = ({
   db,
   userId,
@@ -69,7 +67,6 @@ export const claimReplay = ({
     .bind(userId, retryKey, operation, inputHash, identity, current),
 ];
 
-/** Finishing never extends the original 24-hour window. Pending claims cannot execute fresh work. */
 export const completeReplay = ({
   db,
   userId,

@@ -50,7 +50,6 @@ export type QuestionStart = Readonly<{
   id: string;
   now: DateTime.Utc;
   guard: OwnedStatement;
-  /** Some projects user_id for the exact same-User unfinished, unexpired native item originally admitted under active Consent; None requires current Consent. */
   queuedAdmission: Option.Option<OwnedStatement>;
 }>;
 const questionAction = (
@@ -331,7 +330,6 @@ export const reconcileWeeklyQuestion = (
         });
   }).pipe(Effect.mapError(() => new WhatsAppUnavailable()));
 
-/** Accept requires a current offer; an authenticated no may revoke the category even after that disclosure expires or was accepted. */
 export const readWeeklyReplyChoice = (
   input: Readonly<{ db: D1Database; proof: WhatsAppTurnAdmission; now: number }>
 ): Effect.Effect<Option.Option<string>, WhatsAppUnavailable> =>
@@ -368,7 +366,6 @@ export const readWeeklyReplyChoice = (
     return Option.some(`weekly:${row.offer_id}:${decision}`);
   }).pipe(Effect.mapError(() => new WhatsAppUnavailable()));
 
-/** Only verified question sends, with identity and send instant for the Insights-owned counter policy. */
 export const weeklyQuestionDeliveryQuery = (
   input: Readonly<{ userId: UserId; id: string }>
 ): OwnedStatement => ({

@@ -2,7 +2,6 @@ import { Data, Schema, Struct } from "effect";
 import { NormalizedSearchText } from "~/core/search/contract";
 import { UtcTimestamp } from "~/core/_shared/time";
 
-/** Stable Category identity, independent of label, display order, and taxonomy version. */
 export const CategoryId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("CategoryId"))
   .annotate({ identifier: "CategoryId" });
@@ -11,20 +10,17 @@ export type CategoryId = typeof CategoryId.Type;
 const maximumCategoryTextLength = 80;
 const normalizeCategoryKeyword = Schema.decodeSync(NormalizedSearchText);
 
-/** Stable identity of one user keyword rule; tie-breaking may rely on its lexical UUID order. */
 export const KeywordRuleId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("KeywordRuleId"))
   .annotate({ identifier: "KeywordRuleId" });
 export type KeywordRuleId = typeof KeywordRuleId.Type;
 
-/** Spanish label shown for a Category; changing it never changes Category identity. */
 export const CategoryLabel = Schema.NonEmptyString.check(Schema.isTrimmed())
   .check(Schema.isMaxLength(maximumCategoryTextLength))
   .pipe(Schema.brand("CategoryLabel"))
   .annotate({ identifier: "CategoryLabel" });
 export type CategoryLabel = typeof CategoryLabel.Type;
 
-/** Counterparty fragment; accepted writes retain its canonical case/accent-normalized spelling. */
 export const CategoryKeyword = Schema.NonEmptyString.check(Schema.isTrimmed())
   .check(Schema.isMaxLength(maximumCategoryTextLength))
   .check(
@@ -41,14 +37,12 @@ export const CategoryKeyword = Schema.NonEmptyString.check(Schema.isTrimmed())
   .annotate({ identifier: "CategoryKeyword" });
 export type CategoryKeyword = typeof CategoryKeyword.Type;
 
-/** Public Category metadata; identity remains stable when its Spanish label changes. */
 export const Category = Schema.Struct({
   id: CategoryId,
   label: CategoryLabel,
 }).annotate({ identifier: "Category" });
 export type Category = typeof Category.Type;
 
-/** One User-owned instruction assigning matching future captures to a Category. */
 export const KeywordRule = Schema.Struct({
   id: KeywordRuleId,
   keyword: CategoryKeyword,
@@ -58,29 +52,24 @@ export const KeywordRule = Schema.Struct({
 }).annotate({ identifier: "KeywordRule" });
 export type KeywordRule = typeof KeywordRule.Type;
 
-/** Facts a caller supplies for a new rule; identity and timestamps are assigned at persistence. */
 export const CreateKeywordRuleInput = KeywordRule.mapFields(
   Struct.omit(["id", "createdAt", "updatedAt"])
 ).annotate({ identifier: "CreateKeywordRuleInput" });
 export type CreateKeywordRuleInput = typeof CreateKeywordRuleInput.Type;
 
-/** Complete replacement of a rule's editable keyword and target Category. */
 export const UpdateKeywordRuleInput = CreateKeywordRuleInput.annotate({
   identifier: "UpdateKeywordRuleInput",
 });
 export type UpdateKeywordRuleInput = typeof UpdateKeywordRuleInput.Type;
 
-/** The requested stable Category identity is not present in the configured taxonomy. */
 export class CategoryNotFound extends Data.TaggedError("CategoryNotFound")<{
   readonly categoryId: CategoryId;
 }> {}
 
-/** The User already has a rule with the same normalized keyword. */
 export class KeywordRuleAlreadyExists extends Data.TaggedError("KeywordRuleAlreadyExists")<{
   readonly keyword: CategoryKeyword;
 }> {}
 
-/** The requested rule does not belong to the current User or no longer exists. */
 export class KeywordRuleNotFound extends Data.TaggedError("KeywordRuleNotFound")<{
   readonly keywordRuleId: KeywordRuleId;
 }> {}
@@ -114,7 +103,6 @@ export const categoryIds = {
   otros: CategoryId.make("10000000-0000-4000-8000-000000000016"),
 } as const;
 
-/** Bounds one User's retained capture-time keyword instructions. */
 export const maximumKeywordRulesPerUser = 100;
 
 const maximumCategoriesPerRevision = 100;
@@ -138,7 +126,6 @@ export const CategoryTaxonomyRevision = Schema.Struct({
 );
 export type CategoryTaxonomyRevision = typeof CategoryTaxonomyRevision.Type;
 
-/** Release-owned reader definitions and the one complete revision writers may select. */
 export const CategoryTaxonomyRelease = Schema.Struct({
   write: CategoryTaxonomyRevisionId,
   revisions: Schema.Array(CategoryTaxonomyRevision).check(Schema.isMinLength(1)),

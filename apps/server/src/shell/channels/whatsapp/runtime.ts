@@ -31,12 +31,6 @@ import {
   type WhatsAppStatusUnavailable,
 } from "./contract";
 
-/** Authenticate lifecycle proof before exposing metadata. Signed v2 hints without history require
- * one fixed-origin, 64 KiB provider read within eight seconds; read/sent never prove delivery.
- * Invalid signature, malformed history or mismatching provider coordinates fail before state changes.
- * None acknowledges a valid uncorrelated receipt or pending sent hint without delivery authority
- * or domain effects.
- */
 export const makeLifecycleVerifier = (
   input: Readonly<{
     apiKey: Redacted.Redacted<string>;
@@ -61,10 +55,6 @@ export const makeLifecycleVerifier = (
   });
 };
 
-/** Read one stored attempt's provider history within eight seconds and 64 KiB. Only a matching
- * delivered receipt is returned; no receipt returns None. The caller must authorize and bound reads
- * before calling. Invalid coordinates/proof or unavailable transport cannot authorize delivery.
- */
 export const makeDeliveryVerifier = (
   input: Readonly<{ apiKey: Redacted.Redacted<string>; httpClient: HttpClient.HttpClient }>
 ): ((
@@ -87,7 +77,6 @@ export const makeDeliveryVerifier = (
   });
 };
 
-/** Construct with operator-owned approved configuration, never a request's template selection. Missing or invalid configuration disables all delivery. */
 export const makeInsightTemplateSender = (
   input: Readonly<{
     configuration: unknown;
@@ -95,7 +84,6 @@ export const makeInsightTemplateSender = (
   }>
 ): InsightTemplateSender => buildInsightTemplateSender(input);
 
-/** Freeze and send complete approved category content; stored template identity is checked again before provider egress. */
 export const makeProactivityTemplateSender = (
   input: Readonly<{ configuration: unknown; outboundHttp: OutboundHttpService }>
 ): ProactivityTemplateSender => buildProactivityTemplateSender(input);
@@ -104,8 +92,6 @@ export const makeWeeklyQuestionSender = (
   input: Readonly<{ configuration: unknown; outboundHttp: OutboundHttpService }>
 ): WeeklyQuestionSender => buildWeeklyQuestionSender(input);
 
-/** One bounded provider attempt. Only an operator-configured matching sandbox endpoint may use
- * authenticated caller phone evidence; ordinary endpoints use BSUID. Acceptance is not delivery. */
 export const makeHostedSender = ({
   apiKey,
   httpClient,
@@ -144,12 +130,10 @@ export const makeHostedSender = ({
     });
 };
 
-/** Build a bounded channel sender at the published Outbound HTTP seam. Production uses BSUID; sandbox routing requires an explicit mode. */
 export const makeWhatsAppDelivery: (
   input: Parameters<typeof buildDelivery>[0]
 ) => WhatsAppDelivery = (input) => buildDelivery(input);
 
-/** Send one fixed, non-secret voice failure reply without using transcript content. */
 export const makeVoiceUnavailableSender = (
   input: Readonly<{
     apiKey: Redacted.Redacted<string>;

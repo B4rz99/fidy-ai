@@ -15,11 +15,9 @@ export const BatchEnvelope = Schema.Struct({
 
 const batchCallIdDigits = 12;
 
-/** The callId one batch child carries; every child in a request needs its own. */
 export const batchCallId = (suffix: number): string =>
   `20000000-0000-4000-8000-${String(suffix).padStart(batchCallIdDigits, "0")}`;
 
-/** One canonical correction child addressing a Transaction at the revision the caller observed. */
 export const correctionCall: {
   (id: string, payload: object): (suffix: number) => object;
   (suffix: number, id: string, payload: object): object;
@@ -51,10 +49,6 @@ export const seedTransaction = ({
     .bind(id, userId, categoryId, occurredAt, occurredAt)
     .run();
 
-/**
- * Advances one seeded Transaction to revision 1 through the same evidence a real correction keeps,
- * so a child's observed revision is provably stale by the time its own unit runs.
- */
 export const concurrentCorrection = ({
   correctedAt,
   db,
@@ -85,11 +79,6 @@ export const concurrentCorrection = ({
         .run()
     );
 
-/**
- * A D1 binding that runs one competing write immediately before the first unit batch, so a premise
- * the caller observed can move after preparation and only the unit's own guard or the post-rollback
- * re-check can see it. Later batches pass through untouched.
- */
 export const competingWriteDb: {
   (before: () => Promise<unknown>): (db: D1Database) => D1Database;
   (db: D1Database, before: () => Promise<unknown>): D1Database;
@@ -107,7 +96,6 @@ export const competingWriteDb: {
   });
 });
 
-/** A D1 binding whose unit batch always fails, so a defect can never leave partial state. */
 export const defectiveBatchDb = (db: D1Database): D1Database =>
   new Proxy(db, {
     get: (target, property): unknown =>

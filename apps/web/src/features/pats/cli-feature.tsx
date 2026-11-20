@@ -70,7 +70,6 @@ const PreselectedApproval = ({
     />
   );
 };
-/** Public links select a request; only an explicit approval click grants access. */
 export const CLIConnectionFeature = (): JSX.Element => {
   const search = useSearch({ strict: false });
   const { sessionBinding } = useRouter().options.context;

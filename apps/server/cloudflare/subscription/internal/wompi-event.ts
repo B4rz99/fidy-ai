@@ -124,7 +124,6 @@ const readEvent = (
       : Option.none();
   });
 
-/** Verify Wompi's ordered event properties with the separate events secret before using the id as a lookup hint. */
 export const verifiedWompiEventHint = (
   input: Readonly<{ request: Request; secret: string; environment: WompiEnvironment }>
 ): Effect.Effect<

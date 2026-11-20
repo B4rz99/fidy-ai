@@ -234,7 +234,6 @@ for (const mode of ["inherited", "undefined", "null", "replacement"] as const) {
       if (mode === "null") init = { signal: null };
       if (mode === "replacement") init = { signal: replacement.signal };
       if (mode === "undefined") init = { signal: undefined };
-      // Native Request construction is the independent reference for Fetch signal precedence.
       const reference = new Request(request, init);
       const response = yield* Effect.tryPromise({
         try: () => ownNativeFetch(native)(request, init),

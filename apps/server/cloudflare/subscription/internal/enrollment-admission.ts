@@ -35,7 +35,6 @@ const cardPreparationPolicies = ResourceAdmissionPolicies.make([
   },
 ]);
 
-/** Count authenticated preparation attempts before the existing provider-work reservation. */
 export const admitEnrollmentAttempt = ({
   db,
   userId,
@@ -65,7 +64,6 @@ export const admitEnrollmentAttempt = ({
     }
   );
 
-/** Sweep only expired, standalone attempt grants; work evidence belongs to PaymentEnrollment D1. */
 export const sweepExpiredEnrollmentAdmission = ({
   db,
   now,

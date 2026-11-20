@@ -20,7 +20,6 @@ export const Disclosure = ({ title, children }: Props): JSX.Element => (
   </details>
 );
 
-/** Mount requested content on first expansion; closing retains its fields and query owner. */
 export const DeferredDisclosure = ({ title, children }: Props): JSX.Element => {
   const [visited, setVisited] = useState(false);
   return (

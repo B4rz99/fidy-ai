@@ -113,7 +113,6 @@ export const signRequest = Effect.fn(function* (ctx: Context & { deadline: numbe
 const windowValid = (deadline: number, now: number): boolean =>
   deadline > now && deadline <= now + acceptanceLifetimeMs;
 
-/** Authenticate the claimed digest and request metadata before opening the body stream. */
 const authenticatedDigest = Effect.fn(function* (ctx: Context & { now: number }) {
   const pieces = proof.exec(proofValue(ctx.request));
   if (pieces === null || !eligible(ctx)) return Option.none<string>();
@@ -143,7 +142,6 @@ const verifiedBody = Effect.fn(
 export const verifyRequest = (ctx: Context & { now: number }): Effect.Effect<boolean> =>
   verifiedBody(ctx, () => ctx.request.clone()).pipe(Effect.map(Option.isSome));
 
-/** Forward the very bytes Core authenticated, independently of the inbound network stream. */
 export const verifiedCoreRequest = Effect.fn(function* (ctx: Context & { now: number }) {
   const body = yield* verifiedBody(ctx, () => ctx.request);
   return Option.map(body, (bytes) => {

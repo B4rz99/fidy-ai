@@ -1,18 +1,15 @@
 import { DateTime } from "effect";
 import type { WebSessionDeadlines } from "./contract";
 
-/** Fixed lifetimes established when a browser pairing becomes one WebSession. */
 export const calculateWebSessionDeadlines = (pairedAt: DateTime.Utc): WebSessionDeadlines => ({
   freshUntil: DateTime.addDuration(pairedAt, "10 minutes"),
   idleExpiresAt: DateTime.addDuration(pairedAt, "30 days"),
   hardExpiresAt: DateTime.addDuration(pairedAt, "90 days"),
 });
 
-/** Derives the requested idle deadline for one accepted use before persistence invariants apply. */
 export const webSessionIdleRenewalCandidate = (usedAt: DateTime.Utc): DateTime.Utc =>
   DateTime.addDuration(usedAt, "30 days");
 
-/** Renews idle use monotonically for thirty days, capped by immutable hard expiry. */
 export const renewWebSessionIdleDeadline = ({
   currentIdleExpiresAt,
   hardExpiresAt,

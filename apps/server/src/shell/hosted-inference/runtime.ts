@@ -7,10 +7,6 @@ import {
 } from "./contract";
 import { makeOpenAiInferenceServiceInternal } from "~/shell/hosted-inference/internal/openai";
 
-/**
- * Builds direct OpenAI hosted inference. Configuration is decoded before authority exists;
- * unsupported models and absent transports fail closed without invoking a provider.
- */
 export const makeOpenAiHostedInference = (
   configuration: OpenAiConfiguration
 ): Effect.Effect<HostedInferenceService, HostedInferenceError> =>

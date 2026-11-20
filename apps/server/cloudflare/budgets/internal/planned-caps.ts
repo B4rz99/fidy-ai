@@ -16,7 +16,6 @@ export const preparePlannedCaps = (
   const { db, month, includeInactive } = input;
   const selection =
     "userId" in input ? { sql: "SELECT ? AS userId", params: [input.userId] } : input.userSelection;
-  // The mounted credential selects at most one User; scalar equality retains the ordered cap index.
   const predicate =
     "userId" in input ? "b.user_id=?" : `b.user_id = (SELECT userId FROM (${selection.sql}))`;
   return db

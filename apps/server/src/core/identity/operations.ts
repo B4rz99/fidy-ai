@@ -2,7 +2,6 @@ import { DateTime, Effect } from "effect";
 import { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
 import { type TrialPeriod, User, type UserId } from "./contract";
 
-/** Whether the caller-supplied instant falls inside the immutable half-open TrialPeriod. */
 export const isTrialPeriodActive = Effect.fn("isTrialPeriodActive")(function* (
   trialPeriod: TrialPeriod,
   now: DateTime.Utc
@@ -12,7 +11,6 @@ export const isTrialPeriodActive = Effect.fn("isTrialPeriodActive")(function* (
   );
 });
 
-/** Creates a Colombian User and its one immutable 168-hour TrialPeriod at createdAt. */
 export const makeColombianUser = ({
   userId,
   createdAt,

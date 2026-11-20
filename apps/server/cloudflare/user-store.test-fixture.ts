@@ -482,7 +482,7 @@ const captureLogs = (
     logs.push(log.message);
   },
 });
-/** Production ingress and Core in separate workerd isolates. SQL inspection belongs to the host fixture only. */
+
 const privateEmailWorker = Effect.fnUntraced(function* (withBilling: boolean) {
   const emailFixture = withBilling
     ? [
@@ -604,7 +604,6 @@ export const nativeClockPlatform = createUserPlatform("clock");
 export const nativeUserPlatform = createUserPlatform("user");
 export const nativeBillingPlatform = createUserPlatform("billing");
 
-/** Preserve the public hostname across Miniflare's loopback HTTP bridge for MCP Host validation. */
 export const nativeOAuthPlatform = createUserPlatform("oauth");
 
 export const nativeFleetPlatform = createUserPlatform("fleet");

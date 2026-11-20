@@ -28,7 +28,6 @@ const DashboardRoutePresentation = lazyRouteComponent(
   "DashboardRouteContent"
 );
 const DashboardViewComponent = lazyRouteComponent(() => import("./view"), "DashboardViewComponent");
-// Start the full view before the query finishes, including first-interaction controls.
 DashboardRoutePresentation.preload?.()?.catch(() => undefined);
 DashboardViewComponent.preload?.()?.catch(() => undefined);
 

@@ -26,7 +26,6 @@ const readToken = Effect.fn(function* (
   return Redacted.make(yield* Schema.decodeEffect(AccessToken)(text.trim()));
 });
 
-/** Cloudflared owns Access login; neither its JWT nor its diagnostics reach the operator terminal. */
 export const authenticateAccess = (
   operatorUrl:
     | "https://api.fidyapp.com/internal/support-recovery"

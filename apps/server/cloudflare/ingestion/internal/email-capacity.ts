@@ -98,7 +98,7 @@ const applyClaim = Effect.fn(function* (
   );
   return saved.length === 1;
 });
-/** Persist the offered generation before claiming it. Lost replies can retry or fence only that generation. */
+
 export const claimIngestionCapacity = Effect.fn(function* (
   { directory, purpose }: CapacityTarget,
   id: string,
@@ -127,7 +127,7 @@ export const claimIngestionCapacity = Effect.fn(function* (
   }
   return yield* unavailable();
 });
-/** Release also fences an unacknowledged claim that arrives after disposal or erasure. */
+
 export const updateSharedCapacity = Effect.fn(function* (
   { directory, purpose }: CapacityTarget,
   id: string,

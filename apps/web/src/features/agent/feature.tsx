@@ -18,7 +18,6 @@ type AgentState = Readonly<{
 }>;
 const AgentContext = createContext<Option.Option<AgentState>>(Option.none());
 
-/** One conversation spans independently authorized product routes in the application shell. */
 export const HostedAgentProvider = ({
   children,
   client,

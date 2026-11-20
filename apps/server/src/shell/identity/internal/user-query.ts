@@ -29,7 +29,6 @@ export const selectedCurrentUserQuery = (users: OwnedStatement): OwnedStatement 
 export const currentUserQuery = (userId: UserId): OwnedStatement =>
   selectedCurrentUserQuery({ sql: "SELECT ? AS userId", params: [userId] });
 
-/** Decode the selected User without publishing its persisted representation. */
 export const decodeUser = (row: unknown): Effect.Effect<User, Schema.SchemaError> =>
   Schema.decodeUnknownEffect(UserRow)(row).pipe(
     Effect.flatMap((value) =>

@@ -22,7 +22,6 @@ import {
 import { preparationActive, prepareQuery } from "@/transport/query-preparation";
 import type { WebRouterContext } from "./router-context";
 
-// Fetch presentation with this route's code while its unchanged query owners check live access.
 TransactionListFeature.preload().catch(() => undefined);
 
 const currentConsent = <E,>(
@@ -32,7 +31,6 @@ const currentConsent = <E,>(
     ? Option.some(state.value)
     : Option.none();
 
-/** Privacy reads use their own cookie proof after ordinary access ends; product views retain SignedInContent. */
 export const TransactionsPage = (): JSX.Element => {
   const { webAuthClient: client, sessionBinding } = useRouter().options.context;
   const [query] = useState(() => transactionEntryConsent(client));
@@ -71,7 +69,6 @@ export const TransactionsPage = (): JSX.Element => {
 
 TransactionsPage.preloadData = TransactionListFeature.preloadData;
 
-/** Await entry authority; return ordinary preparation separately so it can finish after route reveal. */
 TransactionsPage.prepareEntry = ({
   context,
   search,

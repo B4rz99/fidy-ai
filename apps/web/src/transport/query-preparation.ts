@@ -1,6 +1,6 @@
 import { Effect, Option } from "effect";
 import { AsyncResult, type Atom, AtomRegistry } from "effect/reactivity";
-/** Prepare the existing registry source. Failures stay there for the destination's normal error UI. */
+
 export const prepareQuery = <A, E>({
   registry,
   query,
@@ -30,5 +30,4 @@ export const prepareQuery = <A, E>({
     }).pipe(Effect.ignoreCause),
     { signal: Option.getOrUndefined(options.signal) }
   ).catch(() => undefined);
-/** AbortSignal can change across an asynchronous preparation even though its property is readonly. */
 export const preparationActive = (signal: AbortSignal): boolean => !signal.aborted;

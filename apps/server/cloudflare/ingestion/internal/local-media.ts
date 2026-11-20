@@ -178,7 +178,7 @@ const publish = Effect.fn(function* ({ input, digest, current }: Publication, id
   }
   return yield* response(id, current, { ...meter, used: meter.used + units });
 });
-/** Capacity is held before publication; exact cached acknowledgement never restores expired material. */
+
 export const admitLocalMedia = Effect.fn(function* ({
   request,
   env,

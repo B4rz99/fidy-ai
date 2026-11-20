@@ -69,7 +69,6 @@ const describeOperation = ({
   };
 };
 
-/** Saved capabilities select presentation only; each invocation still requires live server authority. */
 export const discoverOperations = (
   scopes: ReadonlyArray<PATScope>
 ): ReadonlyArray<OperationDescription> =>
@@ -128,7 +127,6 @@ type InvocationOptions = Readonly<{
   json: boolean;
 }>;
 
-/** Invokes one eligible operation without retries, returning only canonical encoded data and safe metadata. */
 export const invokeOperation = Effect.fn(function* (options: InvocationOptions) {
   const { id, input, credential } = options;
   const operation = operationCatalog.byId.get(id);
@@ -196,7 +194,6 @@ const terminalSafe = (text: string): string =>
 const encodeJson = (value: unknown): string =>
   Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Json))(value);
 
-/** Canonical JSON remains parseable while JSON escaping neutralizes terminal and bidi controls. */
 export const formatOperationResult = ({
   result,
   json,

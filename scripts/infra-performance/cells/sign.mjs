@@ -1,4 +1,3 @@
-// The reusable native signer receives the bound Session on stdin. Only the parent reads its proof.
 import { Effect, Schema } from "effect";
 import { installedOrigins } from "../../../apps/server/src/shell/browser-transport/contract";
 import { signAcceptanceRequest } from "../../../apps/server/cloudflare/release-isolation/operations";

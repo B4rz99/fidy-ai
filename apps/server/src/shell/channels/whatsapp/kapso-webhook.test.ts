@@ -263,7 +263,6 @@ it.effect("rejects oversized lifecycle bytes before decoding", () =>
   })
 );
 
-// OpenSSL dgst -sha256 -mac HMAC -macopt key:test-webhook-secret-32-characters of the exact bytes.
 const vectorSecret = "test-webhook-secret-32-characters";
 const vectorBody = new TextEncoder().encode(
   '{"message":{"id":"wamid.lifecycle-test","kapso":{"statuses":[{"id":"wamid.lifecycle-test","status":"delivered","timestamp":"1775217900","biz_opaque_callback_data":"11111111-1111-4111-8111-111111111111"}]}},"phone_number_id":"123456789"}'

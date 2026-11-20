@@ -7,7 +7,6 @@ const statusNoContent = 204;
 export { default } from "../core-worker";
 export * from "../core-worker";
 
-/** Simulate loss of a committed alarm delivery, then let the real watchdog and alarm recover it. */
 export class UserStore extends NativeUserStore {
   private holdChecks = false;
   private readonly checks = { admitted: 0, aborted: 0, active: 0 };

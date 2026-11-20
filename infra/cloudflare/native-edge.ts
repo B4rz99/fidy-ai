@@ -41,7 +41,6 @@ const previousExpressions = [
 ];
 const expected = edgeSecurityPolicy.rulesets.customFirewall.rules;
 
-/** Compare the exact ordered incumbent entrypoint. Preserve the reference and every writable rule field. */
 type Change = {
   path: string;
   body: Pick<
@@ -122,7 +121,6 @@ export const verifyNativeEdge = Effect.fn(function* (
     );
     return yield* Effect.try(() => nativeEdgeChanges(ruleset));
   });
-  // A provider failure can leave a prefix applied. Re-read and patch only the next reviewed rule.
   for (let mutations = 0; mutations <= previousExpressions.length; mutations++) {
     const changes = yield* inspect();
     const change = changes[0];

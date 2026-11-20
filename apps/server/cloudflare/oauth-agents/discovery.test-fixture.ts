@@ -1,4 +1,3 @@
-/** Contract examples, independent of MCP registration, installed-owner selection and access decisions. */
 export const readDiscovery: ReadonlyArray<string> = [
   "budgets.getBudget",
   "budgets.getBudgetStatus",

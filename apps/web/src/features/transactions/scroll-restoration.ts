@@ -2,7 +2,6 @@ import { useElementScrollRestoration, useRouter } from "@tanstack/react-router";
 import { Option } from "effect";
 import { useLayoutEffect, useRef, useState } from "react";
 
-/** Router restoration can run before asynchronous continuation gives the ledger its height. */
 export const useTransactionScrollRestoration = (ready: boolean): void => {
   const router = useRouter();
   const entry = useElementScrollRestoration({

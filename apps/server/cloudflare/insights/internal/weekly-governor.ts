@@ -57,8 +57,6 @@ export const findGovernor = (
     );
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
 
-/** The proof comes from the Channel's verified-delivery projection, not provider acceptance. */
-/** A delivery callback settles existing work but cannot create a new question after withdrawal. */
 const prepareQuestionIntent = (
   input: Readonly<{ db: D1Database; userId: UserId; proof: OwnedStatement }>
 ): D1PreparedStatement => {
@@ -124,7 +122,6 @@ export const prepareCount = (
   ];
 };
 
-/** Channel evidence is selected here and rechecked with the current episode at commit. */
 export const prepareReply = (
   input: Readonly<{ db: D1Database; userId: UserId; proof: WhatsAppTurnAdmission }>
 ): D1PreparedStatement => {
@@ -158,7 +155,6 @@ export const prepareReset = (
     )
     .bind(input.now.epochMilliseconds, input.userId);
 
-/** Bind a pending mention only to an admitted User request in the next session, never to a scheduler Turn. */
 export const prepareNotice = (
   input: Readonly<{
     db: D1Database;

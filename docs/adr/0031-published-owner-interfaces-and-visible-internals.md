@@ -107,9 +107,8 @@ the need to grandfather a newly encountered owner. Narrow browser publication, c
 freshness, native integration evidence and the repository verification gate remain independent
 checks.
 
-Publication changes do not authorize production actions. D1 remains authoritative, per-User
-Durable Objects serialize rather than own a ledger, and Workflows/Queues retain identity-only
-execution boundaries. User isolation, atomicity, consent, provider authenticity, replay, retention
+Publication changes do not authorize production actions. [ADR 0041](0041-per-user-durable-object-storage-direction.md)
+owns User storage and execution. Workflows and Queues retain identity-only execution boundaries. User isolation, atomicity, consent, provider authenticity, replay, retention
 and bounded evidence remain unchanged. Completion of this architecture does not enable onboarding,
 Email Routing, deployment, promotion or any live provider workflow.
 
@@ -121,3 +120,6 @@ Email Routing, deployment, promotion or any live provider workflow.
 - Blanket test/tool/runtime suffix exemptions turn names into authority
 - Copying schemas or moving native implementation into core weakens the canonical contract and
   purity boundaries rather than solving the dependency
+
+Published-only rules pin the two exact fallback-to-application edges. Maintenance owns its
+registry and shares the SQLite runtime without publishing private state.

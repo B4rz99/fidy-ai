@@ -3,7 +3,6 @@ import { UserStore as NativeUser } from "../core-worker";
 export { default } from "../core-worker";
 export * from "../core-worker";
 
-/** Drop the response only after the native owner has committed and returned it to the platform. */
 export class UserStore extends NativeUser {
   override fetch(request: Request): Promise<Response> {
     return super.fetch(request).then((response) => {

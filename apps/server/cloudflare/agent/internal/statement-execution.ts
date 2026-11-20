@@ -20,9 +20,6 @@ type Context = Readonly<{
   subject: WhatsAppHostedSubject;
 }>;
 
-/** Only the server's exact-command path invokes this mutation callback. The minted guard checks
- * the consumed challenge's exact operation/input and original visible channel again at commit.
- */
 export const whatsAppStatementMutationExecutor =
   ({
     db,
@@ -61,7 +58,6 @@ export const whatsAppStatementMutationExecutor =
           });
     }).pipe(Effect.provideService(HostedInference, inference));
 
-/** Use the installed read owner without lending the channel a WebSession or PAT. */
 export const executeWhatsAppStatementQuery = ({
   db,
   bucket,

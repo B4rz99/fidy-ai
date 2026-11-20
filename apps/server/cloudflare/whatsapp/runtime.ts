@@ -10,11 +10,10 @@ import { Effect } from "effect";
 import { WhatsAppUnavailable } from "./contract";
 import { receiveIngress } from "./internal/ingress";
 import { sweepExpiredWhatsAppWindows as sweepExpiredWhatsAppWindowsOwned } from "./internal/whatsapp-turn";
-/** Own the bounded authenticated channel ingress; Consent, Identity and Turn execution retain their authorities. */
+
 export const receiveWhatsAppWebhook: typeof receiveIngress = (environment) =>
   receiveIngress(environment);
 
-/** Expire at most 128 conversation windows that can no longer serve their channel purpose. now is the decision instant in Unix epoch milliseconds. */
 export const sweepExpiredWhatsAppWindows = (
   input: Parameters<typeof sweepExpiredWhatsAppWindowsOwned>[0]
 ): Effect.Effect<

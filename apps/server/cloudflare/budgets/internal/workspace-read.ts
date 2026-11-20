@@ -28,7 +28,6 @@ type PreparedWorkspace = Readonly<{
   decode: (rows: ReadonlyArray<D1Result>) => Effect.Effect<Option.Option<Workspace>>;
 }>;
 
-/** Prepare complete editing metadata and exact spending for the caller's same native snapshot. */
 export const prepareBudgetWorkspace = (input: WorkspaceRead): Option.Option<PreparedWorkspace> => {
   const { db, query, now } = input;
   const period = budgetPeriod({ now, query });
@@ -77,7 +76,6 @@ export const prepareBudgetWorkspace = (input: WorkspaceRead): Option.Option<Prep
   }));
 };
 
-/** Read complete editing metadata and active spending from one native, same-User snapshot. */
 export const readBudgetWorkspace = (
   input: WorkspaceRead
 ): Effect.Effect<Option.Option<Workspace>> =>

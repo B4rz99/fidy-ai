@@ -306,7 +306,6 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(yield* native(() => effective.json())).toMatchObject({
           data: [{ id: first, categoryId: added }],
         });
-        // Exercise an unreadable revision in each source the owner can select.
         expect(
           yield* native(() =>
             local.exec(

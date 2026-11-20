@@ -125,7 +125,6 @@ const projectTrace = (
 ): Option.Option<typeof TelemetryTraceId.Type> =>
   Schema.decodeUnknownOption(TelemetryTraceId)(headers[telemetryTraceHeader.toLowerCase()]);
 
-/** Fixed-origin policy for derived clients. No automatic telemetry, redirects or unbounded bytes escape. */
 export const makeProtectedClient = (
   options: Readonly<{
     client: HttpClient.HttpClient;
@@ -186,7 +185,6 @@ export const makeProtectedClient = (
     });
   });
 
-/** Bootstrap policy disallows query coordinates as well as foreign origins. */
 export const protectClient = (
   client: HttpClient.HttpClient
 ): HttpClient.HttpClient.With<CliFailure | HttpClientError.HttpClientError> =>
@@ -220,7 +218,6 @@ const safeClaimFailure = (failure: unknown): CliFailure | PollingDelayed => {
     : closed;
 };
 
-/** Constructs only the server-derived bootstrap client. Lost claims are never retried here. */
 export const makePairingClient = Effect.fn(function* (httpClient: HttpClient.HttpClient) {
   const client = yield* HttpApiClient.makeWith(PATPairingApi, {
     httpClient: protectClient(httpClient),

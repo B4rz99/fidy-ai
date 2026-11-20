@@ -8,7 +8,6 @@ export const connectionBrowserPaths = {
   begin: "/web/connections/begin",
 } as const;
 
-/** Fixed host pairs for the reviewed native release, including the isolated acceptance surface. */
 export const installedOrigins = {
   acceptance: {
     browser: "https://storage-web-acceptance.fidyapp.com",

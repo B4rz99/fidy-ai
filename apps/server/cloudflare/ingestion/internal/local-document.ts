@@ -285,8 +285,6 @@ export const admitLocalDocument = Effect.fn(
   Effect.mapError((cause) => new CanonicalAdmissionUnavailable({ cause }))
 );
 
-/** Compose with the verified Hosted Agent Turn admission before the document's private stage.
- * A repeat can only reuse the same Turn, Session, message and original deadline. */
 export const retainDocumentOrigin = Effect.fn(function* (input: {
   user: UserId;
   message: string;
@@ -315,7 +313,6 @@ export const retainDocumentOrigin = Effect.fn(function* (input: {
   return existing.length === 1;
 });
 
-/** Reoffer an uncommitted private stage after a lost writer or failed provider response. */
 export const recoverDocumentStages = Effect.fn(function* (
   current: number,
   storage: DurableObjectStorage,

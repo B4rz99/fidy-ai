@@ -10,13 +10,6 @@ import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 
 const memoryRowColumns = "id,text,created_at_ms,updated_at_ms";
 
-/**
- * Every current Memory of one explicit User in stable ascending creation and identity order —
- * exactly the order the aggregate capacity is counted in. The projection is guarded by the live
- * credential so a revoked or withdrawn authority cannot read. Supply an owner-published query
- * projecting semantic userId; it is correlated to this same User at execution, never trusted as
- * a previously checked permission or allowed to release another User's Memory.
- */
 export const memoryRowsQuery = ({
   userId,
   authority,
@@ -27,11 +20,6 @@ export const memoryRowsQuery = ({
   params: [userId, ...authority.params],
 });
 
-/**
- * One explicit owner's Memory by stable identity, or no row when it is absent or foreign. The
- * readback runs after a guarded write already proved the caller's authority, so this projection
- * stays unguarded and reuses the same row shape as the full owner query.
- */
 export const memoryRowQuery = ({
   userId,
   id,
@@ -47,7 +35,6 @@ const MemoryRow = Schema.Struct({
   updated_at_ms: Schema.DateTimeUtcFromMillis,
 });
 
-/** Rebuild untrusted D1 rows into canonical current Memories, or reject the whole projection. */
 export const memoriesFromRows = (rows: unknown): Option.Option<ReadonlyArray<Memory>> => {
   const decoded = Schema.decodeUnknownOption(Schema.Array(MemoryRow))(rows);
   return Option.flatMap(decoded, (values) => {
@@ -132,7 +119,6 @@ export const deleteMemory = ({
     .bind(subject.userId, id, ...authority.bindings);
 };
 
-/** The Memory owner's exact trigger metric, asserted for a named child before its write. */
 export const memoryCapacityGuards =
   (candidate: Memory) =>
   ({
@@ -165,7 +151,6 @@ export const memoryCapacityGuards =
       ),
   ];
 
-/** Decode the entire current aggregate under the exact subject-correlated live authority. */
 export const readCurrentMemories = ({
   db,
   userId,

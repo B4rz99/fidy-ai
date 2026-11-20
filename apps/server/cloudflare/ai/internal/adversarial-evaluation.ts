@@ -160,7 +160,6 @@ const caseResponse = (
   );
 };
 
-/** Private local fixture: no owner bindings or tool executor. Prose always requires human grading. */
 type RunState = {
   makeInference: MakeInference;
   makeBudget: (environment: EvaluationEnvironment) => EvaluationBudget;

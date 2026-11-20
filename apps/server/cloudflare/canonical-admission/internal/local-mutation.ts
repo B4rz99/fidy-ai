@@ -247,14 +247,14 @@ const validateOutput = Effect.fn(function* (
 });
 const receiptCleanupPageSize = 32;
 const refilledBucketIdleMs = 60000;
-/** Expire one bounded page, both on active use and when the maintenance owner visits an idle User. */
+
 export const sweepLocalReceipts = Effect.fn(function* (current: number) {
   const sql = yield* SqliteClient;
   yield* sql`DELETE FROM canonical_request_receipts WHERE rowid IN (
     SELECT rowid FROM canonical_request_receipts WHERE accepted_at_ms<=${current - canonicalRetryLifetimeMs}
       ORDER BY accepted_at_ms LIMIT ${receiptCleanupPageSize})`;
 });
-// A full Recurring ledger or correlated batch result can exceed the SQLite row limit.
+
 const chunkedReceipt = (id: string): boolean =>
   id === "recurringPlans.applyRecurringEdit" || id === "operations.executeAtomicBatch";
 const receiptPartCharacters = 200_000;
@@ -380,7 +380,7 @@ export const replayableOperations = new Set<string>([
   "transactions.unlinkTransactions",
   "transactions.deleteTransaction",
 ]);
-// The envelope has its own chunked receipt schema. These additional children return ordinary, repeatable data.
+
 const remainingReplayableChildren = new Set([
   "identity.updateUserPreferences",
   "ingestion.enableEmailForwarding",
@@ -400,7 +400,6 @@ const writeReceiptParts = Effect.fn(function* (body: string, user: UserId, diges
   let start = 0;
   while (start < body.length) {
     let end = Math.min(start + receiptPartCharacters, body.length);
-    // SQLite text parameters must never split a Unicode scalar.
     const tail = body.charCodeAt(end - 1);
     if (tail >= highSurrogateStart && tail <= highSurrogateEnd && end < body.length) end -= 1;
     yield* sql`INSERT INTO canonical_receipt_parts(user_id,retry_key_digest,position,part) VALUES(${user},${digest},${start},${body.slice(start, end)})`;
@@ -434,7 +433,6 @@ export const complete = Effect.fn(function* (
     yield* preserveStoreAlarm(call.storage, current + canonicalRetryLifetimeMs);
     yield* sql`DELETE FROM canonical_request_receipts WHERE user_id=${subject.userId} AND retry_key_digest=${invocation.digest.value} AND accepted_at_ms<=${current - canonicalRetryLifetimeMs}`;
     const storage = receiptStorage(operation.id, retain, body);
-    // A positive allowlist keeps future one-time responses out of storage until explicitly reviewed.
     yield* oneStored(
       yield* sql`INSERT INTO canonical_request_receipts(user_id,retry_key_digest,operation,input_digest,accepted_at_ms,status,body)
       VALUES(${subject.userId},${invocation.digest.value},${operation.id},${invocation.inputHash},${current},${outcome.status},${Option.getOrNull(storage.parent)}) RETURNING status`
@@ -463,7 +461,7 @@ export const localRetryKey = Effect.fnUntraced(function* (request: Request) {
     ? request.headers.get("Fidy-Retry-Key")
     : null;
 });
-/** Preliminary check before an external reservation. The canonical unit resolves live proof again after the RPC. */
+
 export const localPreparationSubject = Effect.fn(function* (
   request: Request,
   owns: (user: string) => boolean,

@@ -54,13 +54,11 @@ export const asJsonObject = (input: JsonInput): JsonObject => {
 
 export const canonicalJson = (value: unknown): string => JSON.stringify(asJsonValue({ value }));
 
-/** Returns the lowercase SHA-256 identity of the canonical API and operation policy. */
 export const contractDigest = (artifacts: ContractArtifacts): string =>
   new Bun.CryptoHasher("sha256").update(canonicalJson(artifacts)).digest("hex");
 
 type ContractArtifactInput = Readonly<{ openapi: unknown; policy: unknown; subject: string }>;
 
-/** Rejects malformed generated files before trusting them as a release identity. */
 export const contractArtifactsFrom = ({
   openapi,
   policy,

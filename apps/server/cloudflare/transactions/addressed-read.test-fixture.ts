@@ -5,7 +5,6 @@ import { presentationQuery } from "./internal/transaction-history";
 export { default } from "../core-worker";
 export * from "../core-worker";
 
-/** Measure the actual owner query through workerd's SQLite cursor after consuming its result. */
 export class UserStore extends ProductionUserStore {
   override fetch(request: Request): Promise<Response> {
     if (request.url !== "https://fixture.invalid/addressed-cost") return super.fetch(request);

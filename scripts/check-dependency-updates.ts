@@ -14,7 +14,6 @@ import {
 } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientError, type HttpClientResponse } from "effect/http";
 
-/** Infrastructure failure of the check, distinct from a dependency-policy finding. */
 class CheckFailed extends Data.TaggedError("CheckFailed")<{ readonly message: string }> {}
 
 const REPO_ROOT = Bun.fileURLToPath(new URL("..", import.meta.url));
@@ -32,13 +31,11 @@ const POLICY_PATH = "dependency-policy.json";
 const SCA_CONFIG_PATH = ".fluidattacks/sca.yaml";
 
 const REGISTRY_CONCURRENCY = 8;
-// The response budget applies to decoded bytes, including historical npm release metadata.
 const maximumPackumentBytes = 67_108_864;
 const rateLimitedStatus = 429;
 const serverErrorMinimumStatus = 500;
 
 const EXACT_PIN = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/;
-/** SheetJS CE publishes fixed-version tarballs after the stale npm release. */
 const EXACT_SHEETJS_CDN_PIN =
   /^https:\/\/cdn\.sheetjs\.com\/xlsx-(\d+)\.(\d+)\.(\d+)\/xlsx-\1\.\2\.\3\.tgz$/;
 
@@ -48,21 +45,18 @@ type Version = {
   readonly major: number;
   readonly minor: number;
   readonly patch: number;
-  /** True for `4.0.0-beta.98`. A prerelease is behind its own stable release even though the three numbers match. */
   readonly prerelease: boolean;
   readonly raw: string;
 };
 
 type Pin = {
   readonly name: string;
-  /** Manifest path relative to the repo root, so failures name a file a reader can open. */
   readonly manifest: string;
   readonly spec: string;
 };
 
 type ExactPin = Pin & { readonly current: Version };
 
-/** The size of the step from a pin to the newest release it could take. `stable` is the prerelease-to-release step, where the three numbers do not move at all. */
 type Step = "major" | "minor" | "patch" | "stable";
 
 type Severity = "failure" | "warning";
@@ -110,7 +104,6 @@ const step = (current: Version, latest: Version): Option.Option<Step> => {
 
 const severityOf = (kind: Step): Severity => (kind === "major" ? "warning" : "failure");
 
-/** Publish times and the latest npm release tag; releases above latest are excluded. */
 const Packument = Schema.Struct({
   "dist-tags": Schema.Struct({ latest: Schema.String }),
   time: Schema.Record(Schema.String, Schema.DateTimeUtcFromString),
@@ -121,7 +114,6 @@ type Release = {
   readonly publishedAt: DateTime.Utc;
 };
 
-/** Newest installable stable release at or below the latest tag; None when no release qualifies. */
 const newestInstallable = (
   packument: typeof Packument.Type,
   startedAt: DateTime.Utc
@@ -247,22 +239,18 @@ type Exclusion = {
   readonly path: string;
 };
 
-/** Deferred updates and accepted vulnerabilities expire at an exclusive UTC instant. */
 const Policy = Schema.Struct({
   deferredUpdates: Schema.Array(
     Schema.Struct({
       name: Schema.String,
-      /** Repo-relative manifest path; absence covers every manifest pinning the package. */
       manifest: Schema.optional(Schema.String),
       reason: Schema.NonEmptyString,
       until: Schema.DateTimeUtcFromString,
     })
   ),
-  /** Accepted advisories must have a reason and expiry, matched to the scanner exclusion. */
   acceptedVulnerabilities: Schema.Array(
     Schema.Struct({
       cve: Schema.String,
-      /** The lockfile this acceptance speaks for, as `sca.exclusions` spells it — `tools/mutation/bun.lock`. Never a wildcard: the same advisory in a second install is a second decision. */
       path: Schema.String,
       reason: Schema.NonEmptyString,
       until: Schema.DateTimeUtcFromString,
@@ -291,7 +279,6 @@ const readJson = <A>(
     )
   );
 
-/** Missing or invalid scanner configuration fails the check rather than yielding policy findings. */
 const readYaml = <A>(
   schema: Schema.Codec<A, unknown>,
   path: string
@@ -318,7 +305,6 @@ const readYaml = <A>(
     )
   );
 
-/** Missing or invalid install settings return None and are reported as policy findings. */
 const readBunfig = (directory: string): Effect.Effect<Option.Option<typeof Bunfig.Type>> =>
   Effect.tryPromise(() => Bun.file(`${REPO_ROOT}${directory}bunfig.toml`).text()).pipe(
     Effect.flatMap((text) => Effect.try(() => Bun.TOML.parse(text))),
@@ -576,7 +562,6 @@ const rangedPinFindings = (ranged: ReadonlyArray<Pin>): ReadonlyArray<Finding> =
       `  Pin the exact version the lockfile resolved.`,
   }));
 
-/** Evaluate the repository's dependency policy under the caller-owned HTTP and Clock services. */
 export const checkDependencyUpdates = Effect.gen(function* () {
   const startedAt = yield* DateTime.now;
   const policy = yield* readJson(Policy, POLICY_PATH);

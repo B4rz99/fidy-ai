@@ -334,7 +334,6 @@ export type ProviderAuthenticationPresentation = Readonly<{
   render: (children: ReactNode) => JSX.Element;
 }>;
 
-/** Keeps controller authority and lifetime behind this feature's public composition boundary. */
 export const ProviderAuthenticationFeature = ({
   handoffReference,
   children,
@@ -361,7 +360,6 @@ export const ProviderAuthenticationFeature = ({
   );
 };
 
-/** Clean provider return page; refreshing it cannot repeat provider completion or reveal recovery. */
 export const ProviderReturnFeature = (): JSX.Element => (
   <main ref={closeProviderReturn}>
     <p>Puedes volver a la ventana de Fidy para continuar.</p>

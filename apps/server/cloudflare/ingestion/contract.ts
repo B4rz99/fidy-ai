@@ -21,24 +21,21 @@ import {
   StatementSubmissionId,
 } from "../../src/shell/ingestion/contract";
 
-/** Already authenticated channel evidence; User and current association/Consent are rechecked in publication, never inferred from a provider id or caption. */
 export type MediaAdmissionInput = Readonly<{
   db: D1Database;
   userId: UserId;
   event: WhatsAppInboundEvent;
 }>;
 
-/** Retrieval and staging failures disclose neither provider material nor storage details. */
 export class StatementDocumentUnavailable extends Data.TaggedError("StatementDocumentUnavailable")<{
   reason: "invalid-material" | "media-unavailable" | "rate-limited" | "uncertain";
 }> {}
 
-/** Only a Cloudflare Email Routing event may supply this envelope; no HTTP path accepts it. */
 export type ForwardedEmailMessage = Pick<
   ForwardableEmailMessage,
   "from" | "to" | "raw" | "rawSize" | "setReject"
 >;
-/** Private Email Worker bindings, never accessible through ingress. */
+
 export type ForwardedEmailEnvironment = Readonly<{
   DB: D1Database;
   EMAIL_BUCKET: PrivateObjectBucket;
@@ -47,7 +44,6 @@ export type ForwardedEmailEnvironment = Readonly<{
   }>;
 }>;
 
-/** Secret-free, versioned identity shared by Queue, Workflow, and the User coordinator. */
 export const StatementWork = Schema.Struct({
   traceContext: Schema.optionalKey(Schema.Unknown),
   version: Schema.Literal(1),
@@ -55,28 +51,22 @@ export const StatementWork = Schema.Struct({
   submissionId: StatementSubmissionId,
 });
 
-/** Only the private Worker binding may send this coordinator activity. */
 export const StatementCoordinatorActivity = Schema.Union([
   Schema.TaggedStruct("StatementWork", StatementWork.fields),
   Schema.TaggedStruct("StatementFailed", StatementWork.fields),
 ]);
 
-/** Versioned, secret-free identity from the private forwarded-email Queue. */
 export const ForwardedEmailWork = Schema.Struct({
   traceContext: Schema.optionalKey(Schema.Unknown),
   receiptId: Schema.String.check(Schema.isUUID()),
   userId: Schema.String.check(Schema.isUUID()),
 });
 
-/** A prepared statement exposes only committed public state and exact-race retry evidence.
- * Its captured admission and storage facts never leave Ingestion. Neither observation authorizes work.
- */
 export type StatementPublicationOutcome = Readonly<{
   readCommitted: (userId: string) => Effect.Effect<Option.Option<StatementSubmission>>;
   lostReplay: Effect.Effect<boolean>;
 }>;
 
-/** Held live authority shared by canonical credential and admitted hosted statement adapters. */
 export type StatementDecisionWork = Readonly<{
   db: D1Database;
   userId: string;
@@ -90,10 +80,8 @@ export type StatementDecisionWork = Readonly<{
   input: unknown;
 }>;
 
-/** Maximum encoded input bytes accepted by one canonical statement submission. */
 export const maximumSubmissionInputBytes = 4096;
 
-/** Closed infrastructure failure; durable processing may retry without exposing storage details. */
 export class StatementProcessingUnavailable extends Data.TaggedError(
   "StatementProcessingUnavailable"
 ) {}
@@ -122,19 +110,10 @@ export const statementWorkflowRetention = {
   errorRetention: "3 days",
 } as const;
 
-/** Publish only versioned User/submission identity. A resolved send means the Queue accepted an
- * offer, not that extraction completed; a rejected send may still have been accepted, so the
- * outbox retries the same idempotent identity after its cooldown. No bytes or passwords enter it.
- */
 export type StatementQueue = Readonly<{
   send: (work: typeof StatementWork.Type) => Promise<unknown>;
 }>;
-/** Create one Workflow instance keyed by submission id. A resolved create means the instance
- * exists, not that it finished. If creation rejects ambiguously, get must resolve an existing
- * instance before Queue acknowledgement; a missing/unavailable get must reject for redelivery.
- * get may return an errored instance: the scheduled reconciler inspects status and settles it
- * under the User coordinator. The three-day retention applies to Workflow state only.
- */
+
 export type StatementWorkflow = Readonly<{
   create: (options: {
     id: string;

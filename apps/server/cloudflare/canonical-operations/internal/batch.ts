@@ -119,10 +119,6 @@ const batchRejection = ({
     { status: 400, headers: transactionNoStore }
   );
 
-/**
- * Read the canonical operation one raw child names before the catalog call schema decodes it.
- * The read stays lenient on purpose: only a decodable operation can be attributed to a child.
- */
 export const rawOperation = (call: CanonicalBatchCall): Option.Option<CanonicalOperationId> =>
   Option.flatMap(
     Schema.decodeUnknownOption(Schema.Struct({ operation: Schema.String }))(call),
@@ -152,10 +148,6 @@ const childAccess = ({
   });
 };
 
-/**
- * Map one already-recorded refusal disposition to the child-addressed batch failure contract.
- * `index` and `operation` name the child the refusal belongs to.
- */
 const recordedRefusalResponse = ({
   db,
   subject,
@@ -179,10 +171,6 @@ const recordedRefusalResponse = ({
   );
 };
 
-/**
- * Record one refused child's own refusal evidence and map it to the batch failure contract. The
- * child's owner decides the code, the message, and what evidence a refusal owes.
- */
 const rejectChild = ({
   db,
   subject,
@@ -204,12 +192,6 @@ const rejectChild = ({
       )
     );
 
-/**
- * Refuse and record one executable child whose callId or canonical input failed its published
- * schema, through the owner's own refusal vocabulary. The raw attempted input travels along so an
- * owner that classifies undecoded input (an unstable retained id, for example) answers exactly as
- * its individual entry point does.
- */
 const rejectInvalidChild = ({
   db,
   subject,
@@ -237,7 +219,6 @@ const rejectInvalidChild = ({
     refusal: adapter.invalidRefusal({ db, subject, current, input, bucket }),
   }).pipe(Effect.map((response) => ({ _tag: "Response" as const, response })));
 
-/** The canonical input one malformed child attempted; an unshaped envelope remains raw input. */
 const rawChildInput = (call: CanonicalBatchCall): unknown =>
   Option.getOrElse(
     Option.map(
@@ -330,7 +311,6 @@ const failedCallStep = ({
     )
   );
 
-/** Recheck one child's scope and confirmation authority before decoding or preparing its material. */
 const childAuthorizationStep = ({
   db,
   subject,
@@ -530,7 +510,6 @@ const prepareCall = (work: BatchChildWork): Effect.Effect<CallStep, never, Hoste
   });
 };
 
-/** Compare raw callIds before schema validation so a repeated identity is a request-shape failure. */
 const duplicateCallIndex = (calls: ReadonlyArray<CanonicalBatchCall>): Option.Option<number> => {
   const seen = new Set<string>();
   for (const [index, call] of calls.entries()) {
@@ -542,7 +521,6 @@ const duplicateCallIndex = (calls: ReadonlyArray<CanonicalBatchCall>): Option.Op
   return Option.none();
 };
 
-/** Count named statement children before admitting any child, including one with invalid material. */
 const secondStatementIndex = (calls: ReadonlyArray<CanonicalBatchCall>): Option.Option<number> => {
   let seen = false;
   for (const [index, call] of calls.entries()) {
@@ -572,7 +550,6 @@ const duplicateRejection = (calls: ReadonlyArray<CanonicalBatchCall>, index: num
     : rejectInvalidBatchInput();
 };
 
-/** Refuse envelope-only conflicts before a child can incur work or a refusal Audit. */
 const batchShapeRefusal = (calls: ReadonlyArray<CanonicalBatchCall>): Option.Option<Response> => {
   const duplicate = duplicateCallIndex(calls);
   if (Option.isSome(duplicate)) return Option.some(duplicateRejection(calls, duplicate.value));
@@ -587,11 +564,6 @@ const batchShapeRefusal = (calls: ReadonlyArray<CanonicalBatchCall>): Option.Opt
   );
 };
 
-/**
- * The retained row one prepared child addresses, when a second child must not address it again.
- * Transaction children carry their own revision and pair guards; owners of singleton documents
- * supply a collision key rather than requiring a branch in the shared batch adapter.
- */
 const childTarget = (mutation: PreparedCanonicalMutation): Option.Option<string> => {
   const outcome = mutation.outcome;
   if (outcome._tag === "Owner") return outcome.collisionKey;
@@ -660,7 +632,6 @@ const presentCommitted = ({
     return Response.json({ data: { results }, next: [] }, { headers: transactionNoStore });
   }).pipe(Effect.orElseSucceed(transactionUnavailable));
 
-/** Map one rejected unit execution to the child-addressed batch failure contract. */
 const rejectedBatchResponse = ({
   db,
   subject,
@@ -710,12 +681,6 @@ const executionResponse = ({
   }
 };
 
-/**
- * Execute one decoded canonical atomic batch under live caller authority. Every child keeps the
- * individual operation's validation, authorization, domain, and metadata-only Audit decisions;
- * all children commit in one D1 unit under one User coordination turn or none do. Unsupported
- * children fail closed before the unit is attempted.
- */
 type BatchWork = Readonly<{
   db: D1Database;
   bucket: Option.Option<R2Bucket>;

@@ -35,3 +35,19 @@ is submitted automatically. Immutable source and billing identities remain retai
 changes use forward D1 migrations that preserve authorization and billing history.
 The [Sandbox proof runbook](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/operations/daviplata-sandbox-proof.md) distinguishes synthetic fixtures,
 the opt-in real-provider check and unresolved browser/native/recovery release gates.
+
+Price snapshots describe the families represented in the terms. Enrollment availability reports
+which methods can execute now. Preparing DaviPlata admits reviewed query-free destinations. The
+Sandbox adapter owns the fixed operation and token queries. The three enrollment decisions remain
+independently representable so combined acceptance cannot stand in for any one of them.
+
+The Owner recognizes enrollment paths independently of the request method. A wrong method
+therefore receives the owned refusal and cannot fall through to canonical authority. Enrollment
+requires exact browser origin and a fresh cookie-backed WebSession. Prepared submission is
+bounded before provider work. A cleared failed payment source may be replaced only when the
+Subscription and unresolved collection guards permit it.
+
+Bind each authorized payment action to the same browser-generated request id. The owner uses it
+with the authenticated User to derive one BillingAttempt identity. Enroll only after the exact
+fresh WebSession, Consent and submitted choices win the atomic claim. A later provider response
+cannot revive a Pricing admission that has already been cancelled.

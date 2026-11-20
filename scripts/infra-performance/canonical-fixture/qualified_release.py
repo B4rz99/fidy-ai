@@ -79,7 +79,6 @@ def artifact(account_revision, artifact_id, expected_digest, get=actions_get, gi
         promotion = document("native-release.json.promoted")
         installed = document("native-verification.json")
         if account_revision != APPLICATION:
-            # Reauthenticate the dormant rollback target from the independent seal accepted by this rollout.
             from pairing_stage import sealed_pair, requires_restored_source, restored_source, OWNERS
             seal = document("native-release.json.seal")
             stage, predecessor = sealed_pair(source, seal["artifactId"], seal["sha256"], get, git)

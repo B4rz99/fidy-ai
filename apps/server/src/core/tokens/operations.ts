@@ -17,7 +17,6 @@ import {
 const publicCodeAlphabet = "BCDFGHJKLMNPQRSTVWXZ";
 const unbiasedBase20ByteLimit = 240;
 
-/** Derives the one absolute PAT expiration from its issuance instant and reviewed lifetime. */
 export const computePATExpiration = ({
   createdAt,
   lifetimeDays,
@@ -27,7 +26,6 @@ export const computePATExpiration = ({
 }>): Effect.Effect<DateTime.Utc, never, never> =>
   Effect.succeed(DateTime.addDuration(createdAt, Duration.days(lifetimeDays)));
 
-/** Exact Spanish scope labels and descriptions shared by review and Consent disclosure. */
 export const patScopeCopy: Record<
   PATScopes[number],
   Readonly<{ label: string; description: string }>
@@ -62,14 +60,12 @@ Duración fija: ${lifetimeDays} días (${lifetimeDays * hoursPerDay} horas). Ven
 
 ${delivery} Después conservará únicamente su resumen criptográfico; no podrá recuperar el valor original.`;
 
-/** Builds the exact Spanish grant text reviewed for one normalized grant and fixed expiration. */
 export const buildPATDisclosure = ({
   grant,
   expiresAt,
 }: Readonly<{ grant: ManualPATGrantInput; expiresAt: DateTime.Utc }>): string =>
   disclosureFor(grant, expiresAt, "Fidy mostrará el PAT completo una sola vez en esta respuesta.");
 
-/** Builds the distinct disclosure for direct delivery to the initiating User-owned client. */
 export const buildPairedPATDisclosure = ({
   grant,
   expiresAt,
@@ -85,14 +81,12 @@ type TokenBearerSegments = Readonly<{
   secret: Readonly<TokenSecret>;
 }>;
 
-/** Builds the sole valid opaque bearer encoding from its validated segments. */
 export const makeTokenBearer = ({
   shortId,
   secret,
 }: TokenBearerSegments): Effect.Effect<TokenBearer> =>
   Effect.succeed(TokenBearer.make(`${patBearerPrefix}${String(shortId)}_${String(secret)}`));
 
-/** Reads the safe naming id embedded in a previously validated opaque bearer. */
 export const getTokenShortId = (bearer: Readonly<TokenBearer>): Effect.Effect<TokenShortId> =>
   Effect.succeed(
     TokenShortId.make(
@@ -100,7 +94,6 @@ export const getTokenShortId = (bearer: Readonly<TokenBearer>): Effect.Effect<To
     )
   );
 
-/** Selects uniform public-code symbols by rejecting the biased random-byte tail. */
 export const selectPATPairingPublicCodeSymbols = (input: {
   readonly bytes: ReadonlyArray<number>;
   readonly maximum: number;
@@ -111,7 +104,6 @@ export const selectPATPairingPublicCodeSymbols = (input: {
     .map((byte) => publicCodeAlphabet[byte % publicCodeAlphabet.length])
     .join("");
 
-/** Computes the ten-minute deadline from the server-observed start instant. */
 export const patPairingExpiry = (createdAt: DateTime.Utc): DateTime.Utc =>
   DateTime.addDuration(createdAt, patPairingLifetime);
 
@@ -159,7 +151,6 @@ const decidePATPairingClaimValue = (input: PATPairingClaimInput): PATPairingClai
       };
 };
 
-/** Decides one claim or poll from an observed candidate; the shell must recheck authority in the committing guard. */
 export const decidePATPairingClaim = (
   input: PATPairingClaimInput
 ): Effect.Effect<PATPairingClaimDecision> => Effect.succeed(decidePATPairingClaimValue(input));

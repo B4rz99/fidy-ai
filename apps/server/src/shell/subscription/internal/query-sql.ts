@@ -22,7 +22,6 @@ export const paidAccessEndSql = `MIN(a.paid_ends_at_ms, COALESCE(
     AND NOT EXISTS (SELECT 1 FROM refund_attempts adjustment WHERE adjustment.access_ends_at_ms IS NOT NULL AND adjustment.billing_attempt_id=a.id)
     THEN ${renewalGraceMs} ELSE 0 END`;
 
-/** Published Prices are ordered and capped before projection as a complete three-Price set. */
 export const subscriptionOffersQuery = (
   authority: Option.Option<Authority> = Option.none()
 ): OwnedStatement => ({
@@ -32,7 +31,6 @@ export const subscriptionOffersQuery = (
   params: bindings(authority),
 });
 
-/** One User's original trial and latest paid period, guarded by the caller's live authority. */
 export const subscriptionStandingQuery = (
   input: Readonly<{ authority: Option.Option<Authority> }> &
     (Readonly<{ userId: string }> | Readonly<{ users: OwnedStatement }>)
@@ -63,7 +61,6 @@ export const subscriptionStandingQuery = (
   };
 };
 
-/** At most ten recent attempts for the resolved User, never provider or payment-source ids. */
 export const subscriptionAttemptsQuery = (
   input: Readonly<{ authority: Option.Option<Authority> }> &
     (Readonly<{ userId: string }> | Readonly<{ users: OwnedStatement }>)

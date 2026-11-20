@@ -6,10 +6,6 @@ export type CanonicalQueryFailure<E> =
   | Readonly<{ _tag: "BoundaryFailure" }>
   | Readonly<{ _tag: "Interrupted" }>;
 
-/**
- * Complete browser-facing state for a canonical query. Ready state retains the latest successful
- * value across refresh and refresh failure without carrying a Cause into presentation code.
- */
 export type CanonicalQueryState<A, E> =
   | Readonly<{ _tag: "Initial"; waiting: boolean }>
   | Readonly<{
@@ -36,10 +32,6 @@ const classifyFailure = <A, E>(result: AsyncResult.Failure<A, E>): CanonicalQuer
   });
 };
 
-/**
- * Projects an Effect Atom query into exhaustive UI state. Declared failures remain typed while
- * defects and interruption are reduced to safe discriminators that cannot disclose Cause details.
- */
 export const presentCanonicalQuery = <A, E>(
   result: AsyncResult.AsyncResult<A, E>
 ): CanonicalQueryState<A, E> =>

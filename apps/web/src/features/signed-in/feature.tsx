@@ -58,7 +58,6 @@ export const AccessRefused = ({ withdrawn }: Readonly<{ withdrawn: boolean }>): 
   </main>
 );
 
-/** Shared application navigation; privacy routes can retain it independently of product access. */
 type ApplicationShellProps = Readonly<
   Pick<ComponentProps<"div">, "children"> & {
     readOnly: boolean;
@@ -125,7 +124,6 @@ export const ApplicationShell = ({
   );
 };
 
-/** Refuses expired authentication without adding navigation around an already composed application shell. */
 export const SignedInContent = ({
   children,
 }: Readonly<Pick<ComponentProps<"div">, "children">>): JSX.Element => {

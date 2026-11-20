@@ -10,11 +10,6 @@ import { ProviderMessageEvidence } from "~/core/provider-evidence/contract";
 import { UtcTimestamp } from "~/core/_shared/time";
 import { Direction, TransactionExtraction, TransactionId } from "~/core/transactions/contract";
 
-/**
- * An explicit source instant or normalized local date, interpreted in captured context. An absent
- * local time means the start of that source date; invalid calendar dates and ambiguous local times
- * still require policy review. The containing proposal models absence of the entire occurrence.
- */
 export const CaptureOccurrence = Schema.Union([
   Schema.TaggedStruct("Instant", { value: UtcTimestamp }),
   Schema.TaggedStruct("LocalDate", {
@@ -28,11 +23,6 @@ export const CaptureOccurrence = Schema.Union([
 ]).annotate({ identifier: "CaptureOccurrence" });
 export type CaptureOccurrence = typeof CaptureOccurrence.Type;
 
-/**
- * Facts proposed by bounded image/text inference, not yet eligible for Transaction capture. Money
- * may omit Currency, and its proposed shape does not imply canonical precision or positivity;
- * interpretation must apply defaults and revalidate the complete TransactionExtraction.
- */
 export const CaptureProposal = Schema.Union([
   Schema.TaggedStruct("SingleMovement", {
     completion: Schema.Literals(["completed", "pending", "rejected", "cancelled", "unclear"]),
@@ -50,7 +40,6 @@ export const CaptureProposal = Schema.Union([
 ]).annotate({ identifier: "CaptureProposal" });
 export type CaptureProposal = typeof CaptureProposal.Type;
 
-/** Captured policy basis distinguishes source facts from applied defaults after raw material expires. */
 export const CaptureInterpretationEvidence = Schema.Struct({
   currencyBasis: Schema.Literals(["explicit", "default"]),
   dateBasis: Schema.Literals(["explicit", "submission-date-default"]),
@@ -58,7 +47,6 @@ export const CaptureInterpretationEvidence = Schema.Struct({
 }).annotate({ identifier: "CaptureInterpretationEvidence" });
 export type CaptureInterpretationEvidence = typeof CaptureInterpretationEvidence.Type;
 
-/** One image proposes at most one completed Transaction; uncertain material is always reviewable. */
 export const CaptureInterpretation = Schema.Union([
   Schema.TaggedStruct("Extracted", {
     extraction: TransactionExtraction,
@@ -77,7 +65,6 @@ export const CaptureInterpretation = Schema.Union([
 ]).annotate({ identifier: "CaptureInterpretation" });
 export type CaptureInterpretation = typeof CaptureInterpretation.Type;
 
-/** Already-decoded material and immutable context; now is the authoritative finalization instant. */
 export type CaptureInterpretationInput = Readonly<{
   proposal: CaptureProposal;
   context: CapturedInterpretationContext;
@@ -85,12 +72,9 @@ export type CaptureInterpretationInput = Readonly<{
   now: UtcTimestamp;
 }>;
 
-/** Default interpretation policy is immutable in historical capture evidence. */
 export const captureInterpretationRevision = InterpretationRevision.make("capture-v1");
 
-/** Content and provider message identifiers are bounded metadata, never open-ended evidence. */
 export const maximumEmailEvidenceIdCharacters = 256;
-/** Delivery identifiers are bounded to replay verification input and evidence. */
 export const maximumForwardedEmailDeliveryIdCharacters = 128;
 
 export const StatementSourceFormat = Schema.Literals(["csv", "xlsx"]);
@@ -99,19 +83,16 @@ export type StatementSourceFormat = typeof StatementSourceFormat.Type;
 export const EmailSourceFormat = Schema.Literal("notification-email");
 export type EmailSourceFormat = typeof EmailSourceFormat.Type;
 
-/** Stable identity of one durable statement submission. */
 export const StatementSubmissionId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("StatementSubmissionId"))
   .annotate({ identifier: "StatementSubmissionId" });
 export type StatementSubmissionId = typeof StatementSubmissionId.Type;
 
-/** Stable identity of one visible statement row awaiting or retaining resolution metadata. */
 export const NeedsReviewItemId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("NeedsReviewItemId"))
   .annotate({ identifier: "NeedsReviewItemId" });
 export type NeedsReviewItemId = typeof NeedsReviewItemId.Type;
 
-/** Unpredictable mailbox token for one permanent User forwarding address. */
 export const EmailForwardingLocalPart = Schema.String.check(
   Schema.isPattern(/^[a-z0-9_-]{24,64}$/u)
 )
@@ -124,73 +105,53 @@ export const EmailForwardingAddressId = Schema.String.check(Schema.isUUID())
   .annotate({ identifier: "EmailForwardingAddressId" });
 export type EmailForwardingAddressId = typeof EmailForwardingAddressId.Type;
 
-/** Stable identity of one retained email IngestSample. */
 export const IngestSampleId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("IngestSampleId"))
   .annotate({ identifier: "IngestSampleId" });
 export type IngestSampleId = typeof IngestSampleId.Type;
 
-/** Stable identity of one received forwarded email. */
 export const ReceivedEmailId = Schema.NonEmptyString.check(
   Schema.isTrimmed(),
   Schema.isMaxLength(maximumEmailEvidenceIdCharacters)
 ).pipe(Schema.brand("ReceivedEmailId"));
 export type ReceivedEmailId = typeof ReceivedEmailId.Type;
 
-/** Stable identity of one authenticated email delivery, used only as replay evidence. */
 export const ForwardedEmailDeliveryId = Schema.NonEmptyString.check(
   Schema.isTrimmed(),
   Schema.isMaxLength(maximumForwardedEmailDeliveryIdCharacters)
 ).pipe(Schema.brand("ForwardedEmailDeliveryId"));
 export type ForwardedEmailDeliveryId = typeof ForwardedEmailDeliveryId.Type;
 
-/** Free receipt and screenshot extraction share two unique submissions per Bogotá calendar month. */
 export const freeMediaSubmissionCap = freeAllowanceLimits.media_submission;
 
-/** Unique notification emails processed per Free User per Bogotá calendar month. */
 export const freeForwardedEmailCap = freeAllowanceLimits.forwarded_email;
 
-/** Deferred email capacity is independent of the monthly processing allowance. */
 export const freeForwardedEmailDeferredCap = 50;
 
-/** Unfinished email work is bounded independently of commercial standing. */
 export const forwardedEmailOutstandingCap = 100;
 
-/** Complete metadata and streamed inline-image retrieval must finish within this lease sub-window. */
 export const forwardedEmailRetrievalDeadline = "3 minutes";
 
-/** The theoretical local-part, separator, and DNS-name envelope-address maximum is 320 characters. */
 export const maximumEmailAddressCharacters = 320;
 
-/** Twenty recipients bounds one provider projection before any User address is resolved. */
 export const maximumEmailRecipients = 20;
 
-/** Internet Message Format permits at most 998 content characters on one unfolded line. */
 export const maximumEmailSubjectCharacters = 998;
 
-/** Plain text is limited to 256 KiB-equivalent characters before model projection. */
 export const maximumEmailTextCharacters = 262_144;
 
-/** HTML is allowed twice the plain-text budget because markup adds structural overhead. */
 export const maximumEmailHtmlCharacters = 524_288;
 
-/** Eight one-MiB images cap decoded inline-image bytes at eight MiB per notification email. */
 export const maximumEmailInlineImages = 8;
 
-/** Each inline image is bounded independently before interpretation. */
 export const maximumEmailInlineImageBytes = 1_048_576;
 
-/** Width and height are each capped at 4096; their product also bounds decoded pixel allocation. */
 export const maximumEmailInlineImageDimension = 4_096;
 
 const maximumStatementMebibytes = 5;
 const bytesPerKibibyte = 1024;
 const bytesPerMebibyte = bytesPerKibibyte * bytesPerKibibyte;
 
-/**
- * Largest actual statement byte length accepted by staging or parsing. Staged bytes are exactly the
- * compressed input a later parse receives, so both ceilings are the same domain bound.
- */
 export const maximumStatementBytes = maximumStatementMebibytes * bytesPerMebibyte;
 
 export const EmailForwardingAddress = Schema.Struct({
@@ -203,7 +164,6 @@ export const EmailForwardingAddress = Schema.Struct({
 }).annotate({ identifier: "EmailForwardingAddress" });
 export type EmailForwardingAddress = typeof EmailForwardingAddress.Type;
 
-/** Current Colombia-month allowance and deferred work visible beside the forwarding address. */
 export const EmailForwardingStatus = Schema.Struct({
   address: Schema.OptionFromOptionalKey(EmailForwardingAddress),
   remainingThisMonth: Schema.OptionFromOptionalKey(
@@ -215,28 +175,16 @@ export const EmailForwardingStatus = Schema.Struct({
 }).annotate({ identifier: "EmailForwardingStatus" });
 export type EmailForwardingStatus = typeof EmailForwardingStatus.Type;
 
-/**
- * Opaque, unpredictable identity of one staged statement object. It is generated by the server
- * from cryptographic entropy and never derived from a UserId, filename, digest, or byte count, so
- * possessing it proves nothing about ownership and another User's reference cannot be guessed.
- */
 export const StatementStagingId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("StatementStagingId"))
   .annotate({ identifier: "StatementStagingId" });
 export type StatementStagingId = typeof StatementStagingId.Type;
 
-/** Lowercase hexadecimal SHA-256 digest of the exact staged bytes. Not a secret. */
 export const StatementContentDigest = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u))
   .pipe(Schema.brand("StatementContentDigest"))
   .annotate({ identifier: "StatementContentDigest" });
 export type StatementContentDigest = typeof StatementContentDigest.Type;
 
-/**
- * Non-authoritative acknowledgement of one staged object: identity, the actual received byte
- * length, the digest of those bytes, the mechanically sniffed format, and the server-owned expiry.
- * It is not a StatementSubmission and confers no eligibility for extraction; only D1 publication
- * creates authority.
- */
 export const StagedStatementBytes = Schema.Struct({
   stagingId: StatementStagingId,
   byteLength: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: maximumStatementBytes })),
@@ -246,12 +194,6 @@ export const StagedStatementBytes = Schema.Struct({
 }).annotate({ identifier: "StagedStatementBytes" });
 export type StagedStatementBytes = typeof StagedStatementBytes.Type;
 
-/**
- * Bounded caller-held handle to staged bytes, as it appears inside a canonical submission input.
- * Every field is verified against the stored staging row and the private R2 object before any
- * authoritative D1 state commits; a caller can neither shorten it nor point it at another User's
- * material. The format and retention stay server-owned and are deliberately absent here.
- */
 export const StagedStatementReference = Schema.Struct({
   stagingId: StatementStagingId,
   byteLength: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: maximumStatementBytes })),
@@ -259,7 +201,6 @@ export const StagedStatementReference = Schema.Struct({
 }).annotate({ identifier: "StagedStatementReference" });
 export type StagedStatementReference = typeof StagedStatementReference.Type;
 
-/** A caller-generated key identifying one logical statement submission. */
 export const StatementIdempotencyKey = Schema.String.check(Schema.isUUID()).pipe(
   Schema.brand("StatementIdempotencyKey")
 );
@@ -288,8 +229,6 @@ const conservedStatementRows = Schema.makeFilter<typeof StatementAccountingField
     : { path: ["inputRows"], issue: "Expected acceptedRows plus needsReviewRows" }
 );
 
-/** Conserved finalized-row counts. For a failed submission with partial progress, inputRows is
- * the processed subset, not the total number of rows in the staged file. */
 export const StatementAccounting = StatementAccountingFields.check(conservedStatementRows).annotate(
   { identifier: "StatementAccounting" }
 );
@@ -303,7 +242,6 @@ export const StatementSubmissionStatus = Schema.Literals([
   "abandoned",
   "failed",
 ]);
-/** Safe terminal classifications that never expose parser or provider internals. */
 export const StatementFailureReason = Schema.Literals([
   "unsupported-format",
   "resource-limit",
@@ -319,7 +257,6 @@ const StatementSubmissionBase = Schema.Struct({
   submittedAt: UtcTimestamp,
 });
 
-/** Durable public lifecycle of one idempotent statement extraction request. */
 export const StatementSubmission = Schema.Union([
   Schema.Struct({ ...StatementSubmissionBase.fields, status: Schema.Literal("queued") }),
   Schema.Struct({
@@ -358,7 +295,6 @@ export const StatementSubmission = Schema.Union([
 ]).annotate({ identifier: "StatementSubmission" });
 export type StatementSubmission = typeof StatementSubmission.Type;
 
-/** Parser-produced original CSV evidence retained only while its row awaits review. */
 export const CsvRowEvidence = Schema.Struct({
   sourceFormat: Schema.Literal("csv"),
   recordNumber: Schema.Int.check(Schema.isGreaterThan(0)),
@@ -368,7 +304,6 @@ export const CsvRowEvidence = Schema.Struct({
   fields: Schema.Array(Schema.String),
 });
 
-/** Direct XLSX cell evidence, including display and formula metadata without evaluation. */
 export const XlsxCellEvidence = Schema.Struct({
   address: Schema.NonEmptyString,
   cellType: Schema.Literals(["blank", "string", "number", "date", "boolean", "error"]),
@@ -379,7 +314,6 @@ export const XlsxCellEvidence = Schema.Struct({
 });
 export type XlsxCellEvidence = typeof XlsxCellEvidence.Type;
 
-/** Parser-produced original XLSX row evidence retained only while review is pending. */
 export const XlsxRowEvidence = Schema.Struct({
   sourceFormat: Schema.Literal("xlsx"),
   sheetName: Schema.NonEmptyString,
@@ -403,7 +337,6 @@ export const NeedsReviewReason = Schema.Literals([
 ]);
 export type NeedsReviewReason = typeof NeedsReviewReason.Type;
 
-/** Closed deterministic interpretation outcomes that are safe to persist and expose. */
 export const NotificationEmailInterpretationReviewReason = Schema.Literals([
   "unsupported-content",
   "unknown-format",
@@ -413,14 +346,12 @@ export const NotificationEmailInterpretationReviewReason = Schema.Literals([
 export type NotificationEmailInterpretationReviewReason =
   typeof NotificationEmailInterpretationReviewReason.Type;
 
-/** Review reasons backed by a retained bounded raw IngestSample. */
 export const EmailRawSampleReviewReason = Schema.Union([
   Schema.Literal("canonical-validation-failed"),
   NotificationEmailInterpretationReviewReason,
 ]);
 export type EmailRawSampleReviewReason = typeof EmailRawSampleReviewReason.Type;
 
-/** Review reasons that have no retained raw IngestSample. */
 export const EmailNoSampleReviewReason = Schema.Literals([
   "provider-retrieval-failed",
   "processing-interrupted",
@@ -428,7 +359,6 @@ export const EmailNoSampleReviewReason = Schema.Literals([
 ]);
 export type EmailNoSampleReviewReason = typeof EmailNoSampleReviewReason.Type;
 
-/** Stable classifications for notification emails that could not be safely captured. */
 export const EmailNeedsReviewReason = Schema.Union([
   EmailRawSampleReviewReason,
   EmailNoSampleReviewReason,
@@ -456,9 +386,6 @@ const NeedsReviewBase = Schema.Struct({
   createdAt: UtcTimestamp,
 });
 
-/** Review lifecycle: actionable against live owner evidence, expired, or canonically settled.
- * Metadata-only canonical reads omit raw evidence so immutable tool results cannot outlive its purpose.
- */
 export const NeedsReviewStatus = Schema.Literals([
   "pending",
   "expired",
@@ -495,7 +422,6 @@ const matchingReviewEvidenceFormat = Schema.makeFilter<typeof NeedsReviewItemVar
       : { path: ["sourceFormat"], issue: "Expected the original evidence format" }
 );
 
-/** A visible rejected statement row; raw evidence expires independently. */
 export const StatementNeedsReviewItem = NeedsReviewItemVariants.check(
   matchingReviewEvidenceFormat
 ).annotate({ identifier: "StatementNeedsReviewItem" });
@@ -533,7 +459,6 @@ export const EmailNeedsReviewItem = Schema.Union([
 ]).annotate({ identifier: "EmailNeedsReviewItem" });
 export type EmailNeedsReviewItem = typeof EmailNeedsReviewItem.Type;
 
-/** A receipt/screenshot whose acceptance is durable even while extraction is unavailable. No bytes, captions or provider routing are disclosed by this review projection. */
 export const MediaNeedsReviewItem = Schema.Struct({
   id: NeedsReviewItemId,
   mediaSubmissionId: Schema.String.check(Schema.isUUID()).pipe(Schema.brand("MediaSubmissionId")),
@@ -584,10 +509,6 @@ const validStatementColumnStrategies = Schema.makeFilter<typeof StatementColumnM
   }
 );
 
-/**
- * One model-derived, reusable tabular format. Column indexes are zero-based. Currency is sourced
- * from exactly one column or literal; direction markers are meaningful only with a direction column.
- */
 export const StatementColumnMapping = StatementColumnMappingFields.check(
   validStatementColumnStrategies
 ).annotate({ identifier: "StatementColumnMapping" });
@@ -608,7 +529,6 @@ const matchingCsvRowEvidence = Schema.makeFilter<typeof ParsedStatementRowFields
     : { path: ["evidence"], issue: "Expected matching parsed CSV row facts" };
 });
 
-/** Parser-neutral row passed into deterministic mechanical interpretation. */
 export const ParsedStatementRow = ParsedStatementRowFields.check(matchingCsvRowEvidence);
 export type ParsedStatementRow = typeof ParsedStatementRow.Type;
 
@@ -639,40 +559,19 @@ const maximumSweepRows = 200;
 const maximumOutstandingSubmissions = 5;
 const maximumSubmissionsPerHour = 20;
 
-/**
- * How long unpublished staged statement bytes stay readable. Expiry is a hard bound, not a
- * retention preference: an expired staging row is neither publishable nor readable, and the
- * bounded sweep may delete its R2 object at any point after it.
- */
 export const statementStagingLifetimeMilliseconds =
   hoursPerDay * minutesPerHour * secondsPerMinute * millisecondsPerSecond;
 
-/**
- * How long one published submission may retain its staged material before extraction must have
- * consumed it. A queued submission past this bound becomes a visible `retention-expired` failure
- * and its bytes are reclaimed, so a submission that never runs cannot retain material forever.
- */
 export const statementSubmissionRetentionMilliseconds = statementStagingLifetimeMilliseconds;
 
-/** Largest number of expired staging rows one cleanup sweep will act on. */
 export const maximumStatementStagingSweep = maximumSweepRows;
 
-/** Largest number of a User's own submissions that may await or run extraction at once. */
 export const maximumOutstandingStatementSubmissions = maximumOutstandingSubmissions;
 
-/** Largest number of submissions one User may publish in a rolling hour. */
 export const maximumStatementSubmissionsPerHour = maximumSubmissionsPerHour;
 
-/** Stable revision of the statement interpretation pipeline recorded on every submission. */
 export const statementParserRevision = InterpretationRevision.make("statement-parser-v1");
 
-/**
- * Closed statement-material refusal vocabulary. Reasons are safe to map to canonical failures:
- * none contains statement contents, a filename, a digest, or platform detail. `cancelled` means the
- * caller's own request ended before the bytes were complete; `paywall` means the User's Free
- * statement backfill is already reserved or consumed; `unsupported-format` means the actual bytes
- * were not a tabular statement.
- */
 export const StatementStagingFailureReason = Schema.Literals([
   "resource-limit",
   "unsupported-format",
@@ -785,7 +684,6 @@ export const ReviewCommand = Schema.Union([
 export type ReviewCommand = typeof ReviewCommand.Type;
 export const ReviewEditResult = Schema.Array(ReviewDetail);
 
-/** Structural-tags-v1 has a closed vocabulary. No email strings or arbitrary metadata are reviewable. */
 const maximumStructuralTagCount = 9999;
 const count = Schema.Int.check(
   Schema.isBetween({ minimum: 0, maximum: maximumStructuralTagCount })

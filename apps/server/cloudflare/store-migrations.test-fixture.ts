@@ -44,7 +44,7 @@ const histories = {
     { ...third, statements: [...third.statements, "INSERT INTO absent VALUES(1)"] },
   ],
 };
-// Fail one published native storage boundary; every successful statement uses real workerd SQLite.
+
 const observeStorage = (
   storage: DurableObjectStorage,
   mode: string,

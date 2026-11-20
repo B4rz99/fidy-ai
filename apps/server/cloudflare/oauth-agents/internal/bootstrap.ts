@@ -22,7 +22,6 @@ export class BootstrapInvalid extends Data.TaggedError("BootstrapInvalid") {}
 export const dbWork = <A>(run: () => Promise<A>): Effect.Effect<A, BootstrapUnavailable> =>
   Effect.uninterruptible(Effect.tryPromise({ try: run, catch: () => new BootstrapUnavailable() }));
 
-/** Browser decisions stay strict; public registration discards unsupported, self-asserted metadata. */
 export const decodePayload = <Shape extends Schema.ConstraintDecoder<unknown>>(
   input: Readonly<{ request: Request; schema: Shape; onExcessProperty: "ignore" | "error" }>
 ): Effect.Effect<Shape["Type"], BootstrapInvalid> =>

@@ -21,7 +21,6 @@ import {
 
 const maximumMappingSampleRows = 5;
 
-/** Bounded inline image bytes referenced from received HTML; ordinary attachments are excluded. */
 export const ReceivedInlineImage = Schema.Struct({
   contentId: Schema.NonEmptyString.check(
     Schema.isTrimmed(),
@@ -32,7 +31,6 @@ export const ReceivedInlineImage = Schema.Struct({
 });
 export type ReceivedInlineImage = typeof ReceivedInlineImage.Type;
 
-/** Closed Email Worker projection retained as raw personal evidence for a configured 90 days. */
 export const ReceivedEmailContent = Schema.Struct({
   receivedEmailId: ReceivedEmailId,
   from: Schema.String.check(Schema.isMaxLength(maximumEmailAddressCharacters)),
@@ -75,13 +73,11 @@ const validRawEmailRetention = Schema.makeFilter<
     : { path: ["expiresAt"], issue: "Expected expiry after retention" }
 );
 
-/** Raw personal IngestSample retained only until its explicit expiry. */
 export const RawEmailIngestSample = RawEmailIngestSampleFields.check(
   validRawEmailRetention
 ).annotate({ identifier: "RawEmailIngestSample" });
 export type RawEmailIngestSample = typeof RawEmailIngestSample.Type;
 
-/** Operator-approved, User-unlinked structural evidence eligible for indefinite retention. */
 export const AnonymizedEmailIngestSample = Schema.Struct({
   id: IngestSampleId,
   serviceMarket: ServiceMarket,
@@ -95,7 +91,6 @@ export const AnonymizedEmailIngestSample = Schema.Struct({
 }).annotate({ identifier: "AnonymizedEmailIngestSample" });
 export type AnonymizedEmailIngestSample = typeof AnonymizedEmailIngestSample.Type;
 
-/** Raw headers and at most five raw rows sent once to map an unknown statement format. */
 export const StatementMappingSample = Schema.Struct({
   sourceFormat: StatementSourceFormat,
   headers: Schema.NonEmptyArray(Schema.String),

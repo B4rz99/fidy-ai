@@ -28,7 +28,6 @@ type ChatWindowProps = Readonly<{
   prepare: () => void;
 }>;
 
-/** Non-modal chat; Base UI owns focus and dismissal. */
 export const ChatWindow = ({
   open,
   onOpenChange,
@@ -116,7 +115,6 @@ type ChatComposerProps = Readonly<{
   onSubmit: (event: SubmitEvent<HTMLFormElement>) => void;
 }>;
 
-/** Text-only composer: Enter sends, Shift+Enter inserts a line, IME composition remains intact. */
 export const ChatComposer = ({
   text,
   disabled,

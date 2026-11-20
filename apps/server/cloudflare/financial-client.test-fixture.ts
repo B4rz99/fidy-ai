@@ -7,7 +7,6 @@ const request = Schema.Struct({
   body: Schema.NullOr(Schema.String),
 });
 
-/** Consume the test transport before forwarding. Early Ingress refusals may leave the actual application body unread. */
 export default {
   fetch(input: Request, { INGRESS }: { INGRESS: Fetcher }): Promise<Response> {
     return Effect.runPromise(

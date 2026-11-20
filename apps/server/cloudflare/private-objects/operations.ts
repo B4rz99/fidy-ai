@@ -8,7 +8,6 @@ import {
   type PrivateObjectWrite,
 } from "./contract";
 
-/** Delimited stable-User namespace, shared across every private content bucket. */
 export const userPrivateObjectPrefix = (userId: UserId): string => `users/${userId}/`;
 
 const maximumEtagLength = 128;
@@ -41,7 +40,7 @@ type TrackedWrite<E, R> = PrivateObjectWrite<E, R> & {
     options: R2PutOptions
   ) => Effect.Effect<unknown, E | PrivateObjectUnavailable, R>;
 };
-/** A positive result confirms payload publication. Failed or cancelled calls require owner reconciliation. Cleanup invalidates the placeholder ETag, so a delayed payload cannot restore deleted bytes. */
+
 const publishPrivateObject = <E, R>(
   input: TrackedWrite<E, R>
 ): Effect.Effect<void, E | PrivateObjectUnavailable, R> =>
@@ -96,7 +95,6 @@ export const writePrivateObject = <E, R>(
     put: (key, bytes, options) => io(() => input.bucket.put(key, bytes, options)),
   });
 
-/** Delete an owner-qualified key only after its disposition permits deletion. Removing the placeholder invalidates a delayed payload's ETag without creating another object; unknown upload outcomes remain the owner's drain responsibility. */
 export const erasePrivateObject = (
   input: Readonly<{ bucket: PrivateObjectBucket; userId: string; key: string }>
 ): Effect.Effect<void, PrivateObjectUnavailable> =>
@@ -105,9 +103,6 @@ export const erasePrivateObject = (
     Effect.asVoid
   );
 
-/** Trusted control sweep only. Preserve replacements that win before the fence. After its valid
- * acknowledgement, deletion is unconditional: lawful writers must exclude control predecessors.
- * A lost acknowledgement forbids deletion; even successful cleanup cannot settle an unknown writer. */
 export const eraseObservedPrivateObject = (
   input: Readonly<{ bucket: PrivateObjectBucket; key: string; etag: string }>
 ): Effect.Effect<void, PrivateObjectUnavailable> =>
@@ -130,8 +125,6 @@ export const eraseObservedPrivateObject = (
     yield* io(() => input.bucket.delete(input.key));
   });
 
-/** Recover the same retained upload after its first placeholder write. A changed or deleted
- * ETag prevents the late payload from recreating erased bytes. */
 export const resumePrivateUpload = Effect.fn(function* <E, R>(
   work: TrackedWrite<E, R>,
   observed: Option.Option<R2Object>

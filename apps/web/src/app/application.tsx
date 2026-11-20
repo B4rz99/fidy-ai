@@ -11,7 +11,6 @@ import { browserApiOrigin } from "@/transport/origin";
 import type { BrowserSessionLifetime } from "@/transport/session-binding";
 import type { BrowserSessionObservation } from "@/transport/session-entry";
 
-// Code loading overlaps discovery; authenticated clients still mount inside the binding boundary.
 const applicationModule = import("./bound-application").then(Result.succeed, (cause: unknown) =>
   Result.fail(cause)
 );

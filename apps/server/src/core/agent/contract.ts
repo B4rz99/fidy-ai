@@ -5,11 +5,8 @@ import { type Option, Schema, Struct } from "effect";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { UtcTimestamp } from "~/core/_shared/time";
 
-/** Maximum model rounds admitted in one hosted Turn. */
 export const maximumHostedTurnIterations = 32;
-/** Wall-clock limit for one admitted hosted model round, in milliseconds. */
 export const maximumModelRoundMillis = 120_000;
-/** Maximum canonical tool calls across all model rounds of one hosted Turn. */
 export const maximumToolCallsPerTurn = 64;
 
 const maximumToolCallIdLength = 256;
@@ -54,7 +51,6 @@ export const TranscriptTurnId = Schema.String.check(Schema.isUUID(), isCanonical
   .annotate({ identifier: "TranscriptTurnId" });
 export type TranscriptTurnId = typeof TranscriptTurnId.Type;
 
-/** Provider-issued identity linking one tool call to exactly one result. */
 export const ToolCallId = Schema.String.check(
   Schema.isMinLength(1),
   Schema.isMaxLength(maximumToolCallIdLength),
@@ -64,7 +60,6 @@ export const ToolCallId = Schema.String.check(
   .annotate({ identifier: "ToolCallId" });
 export type ToolCallId = typeof ToolCallId.Type;
 
-/** A one-based model round within a hosted-agent turn. */
 export const AgentIteration = Schema.Int.check(
   Schema.isGreaterThanOrEqualTo(1),
   Schema.isLessThanOrEqualTo(maximumHostedTurnIterations)
@@ -73,7 +68,6 @@ export const AgentIteration = Schema.Int.check(
   .annotate({ identifier: "AgentIteration" });
 export type AgentIteration = typeof AgentIteration.Type;
 
-/** Exact user-visible text retained in a Transcript. */
 export const TranscriptText = Schema.String.check(
   Schema.isMinLength(1),
   Schema.isMaxLength(maximumTranscriptTextLength),
@@ -84,7 +78,6 @@ export const TranscriptText = Schema.String.check(
   .annotate({ identifier: "TranscriptText" });
 export type TranscriptText = typeof TranscriptText.Type;
 
-/** Exact verified proactive message in the User Transcript, linked to an InsightEvent rather than a fabricated requested Turn or session. */
 export const ProactiveInsightTranscriptEntry = Schema.TaggedStruct(
   "ProactiveInsightTranscriptEntry",
   {
@@ -96,12 +89,10 @@ export const ProactiveInsightTranscriptEntry = Schema.TaggedStruct(
 );
 export type ProactiveInsightTranscriptEntry = typeof ProactiveInsightTranscriptEntry.Type;
 
-/** Identity of one frozen proactive delivery, independent of requested Turns or InsightEvent cardinality. */
 export const ProactiveDeliveryId = Schema.String.check(Schema.isUUID()).pipe(
   Schema.brand("ProactiveDeliveryId")
 );
 export type ProactiveDeliveryId = typeof ProactiveDeliveryId.Type;
-/** Exact verified question or contextual disclosure retained without inventing a financial InsightEvent. */
 export const ProactiveMessageTranscriptEntry = Schema.TaggedStruct(
   "ProactiveMessageTranscriptEntry",
   {
@@ -130,14 +121,12 @@ const TranscriptIdentity = {
   occurredAt: UtcTimestamp,
 };
 
-/** Exact text accepted from the User for one turn. */
 export const UserTranscriptEntry = Schema.TaggedStruct("UserTranscriptEntry", {
   ...TranscriptIdentity,
   text: TranscriptText,
 });
 export type UserTranscriptEntry = typeof UserTranscriptEntry.Type;
 
-/** User-visible text emitted by one model iteration. */
 export const AssistantTranscriptEntry = Schema.TaggedStruct("AssistantTranscriptEntry", {
   ...TranscriptIdentity,
   iteration: AgentIteration,
@@ -145,17 +134,11 @@ export const AssistantTranscriptEntry = Schema.TaggedStruct("AssistantTranscript
 });
 export type AssistantTranscriptEntry = typeof AssistantTranscriptEntry.Type;
 
-/**
- * Complete, losslessly persistable JSON evidence whose encoded form is at most
- * 1,000,000 UTF-8 bytes. NUL, ill-formed Unicode, and negative zero are outside
- * this canonical storage subset.
- */
 export const CanonicalToolEvidence = Schema.Json.check(canonicalToolEvidenceIsValid).annotate({
   identifier: "CanonicalToolEvidence",
 });
 export type CanonicalToolEvidence = typeof CanonicalToolEvidence.Type;
 
-/** Exact JSON arguments requested for one canonical operation. */
 export const CanonicalToolCallEntry = Schema.TaggedStruct("CanonicalToolCallEntry", {
   ...TranscriptIdentity,
   iteration: AgentIteration,
@@ -167,7 +150,6 @@ export type CanonicalToolCallEntry = typeof CanonicalToolCallEntry.Type;
 
 export const CanonicalToolOutcome = Schema.Union([
   Schema.TaggedStruct("Succeeded", { output: CanonicalToolEvidence }),
-  // A fenced mutation committed, but its canonical response was lost before retention.
   Schema.TaggedStruct("CommittedOutputUnavailable", {}),
   Schema.TaggedStruct("ToolInputRejected", { failure: CanonicalToolEvidence }),
   Schema.TaggedStruct("ToolOutputRejected", { failure: CanonicalToolEvidence }),
@@ -175,7 +157,6 @@ export const CanonicalToolOutcome = Schema.Union([
 ]);
 export type CanonicalToolOutcome = typeof CanonicalToolOutcome.Type;
 
-/** One retained canonical or host-boundary outcome linked to its canonical tool call. */
 export const CanonicalToolResultEntry = Schema.TaggedStruct("CanonicalToolResultEntry", {
   ...TranscriptIdentity,
   iteration: AgentIteration,
@@ -185,7 +166,6 @@ export const CanonicalToolResultEntry = Schema.TaggedStruct("CanonicalToolResult
 });
 export type CanonicalToolResultEntry = typeof CanonicalToolResultEntry.Type;
 
-/** Allowlisted reason retained for a Failed Turn; arbitrary failure prose is forbidden. */
 export const TurnFailureReason = Schema.Literals([
   "HostedInferenceFailed",
   "HostedInferenceTimedOut",
@@ -194,28 +174,24 @@ export const TurnFailureReason = Schema.Literals([
 ]);
 export type TurnFailureReason = typeof TurnFailureReason.Type;
 
-/** Fixed metadata-only evidence that a Turn ended in a handled failure. */
 export const FailedTurnTranscriptEntry = Schema.TaggedStruct("FailedTurnTranscriptEntry", {
   ...TranscriptIdentity,
   reason: TurnFailureReason,
 });
 export type FailedTurnTranscriptEntry = typeof FailedTurnTranscriptEntry.Type;
 
-/** Fixed metadata-only evidence recovered after a process abandoned a Pending Turn. */
 export const InterruptedTurnTranscriptEntry = Schema.TaggedStruct(
   "InterruptedTurnTranscriptEntry",
   TranscriptIdentity
 );
 export type InterruptedTurnTranscriptEntry = typeof InterruptedTurnTranscriptEntry.Type;
 
-/** Continuation evidence admitted only through an active Turn handle. */
 export const TurnContinuationEntry = Schema.Union([
   CanonicalToolCallEntry,
   CanonicalToolResultEntry,
 ]).annotate({ identifier: "TurnContinuationEntry" });
 export type TurnContinuationEntry = typeof TurnContinuationEntry.Type;
 
-/** Transcript evidence carrying User, Assistant, or canonical tool content; excludes lifecycle markers. */
 export const TranscriptContentEntry = Schema.Union([
   UserTranscriptEntry,
   AssistantTranscriptEntry,
@@ -234,7 +210,6 @@ export const TranscriptEntry = Schema.Union([
 ]).annotate({ identifier: "TranscriptEntry" });
 export type TranscriptEntry = typeof TranscriptEntry.Type;
 
-/** The User's sole lossy conversation-continuity replacement and its exact incorporated cursor. */
 export const CompactedConversation = Schema.Struct({
   text: Schema.String.check(Schema.isMinLength(1)),
   throughSequence: Schema.BigInt.check(
@@ -285,7 +260,6 @@ const InterruptedConversationTurn = InterruptedConversationTurnBase.check(
   Schema.makeFilter<typeof InterruptedConversationTurnBase.Type>(terminalTimeIssue)
 );
 
-/** One explicit persisted Turn state; only Pending is non-terminal, and terminal time cannot precede start. */
 export const ConversationTurn = Schema.Union([
   PendingConversationTurn,
   CompletedConversationTurn,
@@ -304,7 +278,6 @@ export const HostedAgentSessionId = Schema.String.check(
   .annotate({ identifier: "HostedAgentSessionId" });
 export type HostedAgentSessionId = typeof HostedAgentSessionId.Type;
 
-/** Exact onboarding Consent basis captured when a Hosted Agent Session begins. */
 export const HostedAgentSessionConsentBasis = OnboardingConsentBasis;
 export type HostedAgentSessionConsentBasis = typeof HostedAgentSessionConsentBasis.Type;
 
@@ -320,13 +293,11 @@ export type HostedAgentSession = typeof HostedAgentSession.Type;
 
 const CompactedConversationText = CompactedConversation.mapFields(Struct.pick(["text"]));
 
-/** Strict hosted output derived from the canonical replacement text before token validation. */
 export const CompactedConversationOutput = Schema.Struct({
   compactedConversation: CompactedConversationText.fields.text,
 });
 export type CompactedConversationOutput = typeof CompactedConversationOutput.Type;
 
-/** The latest durable session and Turn facts read while holding one User's coordination lock. */
 export type HostedAdmissionState = Readonly<{
   session: Option.Option<
     Readonly<{
@@ -341,7 +312,6 @@ export type HostedAdmissionState = Readonly<{
   pendingStartedAtMs: Option.Option<number>;
 }>;
 
-/** A current onboarding grant is required for every admission, even in an existing session. */
 export type HostedAdmissionRequest = Readonly<{
   userId: UserId;
   nowMs: number;
@@ -350,14 +320,12 @@ export type HostedAdmissionRequest = Readonly<{
   state: HostedAdmissionState;
 }>;
 
-/** A pending Turn must be recovered as Interrupted before a new Turn can be admitted. */
 export type HostedAdmissionDecision =
   | Readonly<{ _tag: "Refused"; reason: "ConsentRequired" | "InvalidState" }>
   | Readonly<{ _tag: "RecoverPending" }>
   | Readonly<{ _tag: "ContinueSession"; sessionId: HostedAgentSessionId }>
   | Readonly<{ _tag: "BeginSession"; consentBasis: HostedAgentSessionConsentBasis }>;
 
-/** Provider-token trigger and bounded replacement output, both expressed as positive token counts. */
 export const ConversationCompactionTokenCount = Schema.Int.check(Schema.isGreaterThan(0)).pipe(
   Schema.brand("ConversationCompactionTokenCount")
 );

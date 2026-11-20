@@ -130,7 +130,6 @@ const diagnosticsResponse = (
     })
   );
 
-// Effect 4.1 response serialization omits headers, including the validated trace receipt.
 const responseTraceDescription = (
   response: HttpClientResponse.HttpClientResponse
 ): Pick<HttpClientError.DecodeError, "description"> =>
@@ -254,7 +253,6 @@ const boundedWebResponse = (
     status,
     headers,
   });
-  // Use the active realm’s ArrayBuffer so jsdom accepts the reconstructed browser response.
   if (typeof window !== "undefined") {
     const realmBody = new window.Uint8Array(body.byteLength);
     realmBody.set(body);
@@ -309,14 +307,12 @@ const resourceRefusalDelay = (
     if (Option.isNone(loaded) || !loaded.value.isUnadmittedResourceRefusal(body.value)) {
       return Option.none();
     }
-    // Loading the decoder counts toward the existing Retry-After wait and absolute deadline.
     const decodedAt = yield* Clock.currentTimeMillis;
     return Option.some(
       Math.max(0, seconds.value * millisecondsPerSecond - Math.max(0, decodedAt - receivedAt))
     );
   });
 
-/** A declared resource refusal proves non-admission, unlike a transport failure or uncertain 5xx. */
 const retryResourceRefusals = (
   attempt: Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError.HttpClientError>
 ): Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError.HttpClientError> =>
@@ -580,18 +576,6 @@ const makePolicyClient = (
   );
 };
 
-/**
- * Places browser HTTP policy beneath one generated API client. `boundary` selects that API
- * surface's deadline and response-byte budget. `apiOrigin` must be a validated URL origin and is
- * the only destination the resulting client will send to. `httpClient` supplies the underlying
- * browser or test transport. Requests include browser credentials, disable caching and automatic
- * redirects, and expose only sanitized transport failures; only GET and HEAD transport failures
- * retry once per resource round. Canonical requests and safe web-auth reads can additionally retry a declared, unadmitted resource refusal
- * with bounded Retry-After pacing inside the same absolute deadline. Uncertain mutations and
- * enrollment/authentication refusals are never automatically replayed.
- * Canonical requests share two active transfers per API client; preparation and queue time use the original
- * deadline, cancellation removes queued work, and retry pacing leaves transfer capacity available.
- */
 export const browserHttpClientLayer: {
   (
     boundary: BrowserHttpBoundary,

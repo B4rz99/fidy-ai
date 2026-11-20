@@ -12,7 +12,6 @@ import { PATLifetimeDays, PATScope, PATScopes } from "~/core/tokens/contract";
 
 export { OAuthConnectionId } from "~/core/oauth-agents/contract";
 
-/** Admission facts only: every protected query rechecks this exact credential and grant at commit. */
 export type OAuthCaller = Readonly<{
   oauthConnectionId: OAuthConnectionId;
   credentialId: OAuthCredentialId;
@@ -22,7 +21,7 @@ export type OAuthCaller = Readonly<{
   digest: Uint8Array;
   requiredScope: Option.Option<CanonicalCapability>;
 }>;
-/** User-owned OAuth authority lent to a protected owner statement, never browser authority. */
+
 export type OAuthAuthority = Readonly<{
   table: "oauth_credentials";
   attribution: Readonly<{
@@ -33,7 +32,7 @@ export type OAuthAuthority = Readonly<{
   predicate: string;
   bindings: ReadonlyArray<string | number | Uint8Array>;
 }>;
-/** Fixed issuer and audience: neither Host nor forwarding headers select OAuth authority. */
+
 export const oauthIssuer = "https://api.fidyapp.com";
 export const oauthResource = `${oauthIssuer}/mcp`;
 export const oauthPaths = {
@@ -72,7 +71,7 @@ const nativeCallback = (value: string): boolean => {
   }
 };
 export const OAuthRedirect = UrlClaim.check(Schema.makeFilter(nativeCallback));
-/** Public native registration accepts only code/refresh grants and no client authentication. */
+
 export const OAuthRegistration = Schema.Struct({
   client_name: Schema.NonEmptyString.check(
     Schema.isMaxLength(100),
@@ -91,7 +90,6 @@ export const OAuthRegistration = Schema.Struct({
   response_types: Schema.optionalKey(Schema.Tuple([Schema.Literal("code")])),
   token_endpoint_auth_method: Schema.optionalKey(Schema.Literal("none")),
   application_type: Schema.optionalKey(Schema.Literal("native")),
-  // Registration metadata is a bounded hint; only the later request and User review authorize scopes.
   scope: Schema.optionalKey(
     Schema.NonEmptyString.check(
       Schema.isMaxLength(maximumScopeLength),
@@ -131,7 +129,7 @@ export const OAuthReviewChoice = Schema.Struct({
   expiresAt: Schema.DateTimeUtcFromString,
 });
 export type OAuthReviewChoice = typeof OAuthReviewChoice.Type;
-/** The sole code-bearing browser destination is the exact validated initiating callback. */
+
 export const OAuthConnected = Schema.Struct({
   connectionId: OAuthConnectionId,
   callback: OAuthRedirect,
@@ -161,7 +159,7 @@ const OAuthRateLimited = Schema.Struct({ error: Schema.Literal("slow_down") }).a
 const OAuthUnavailable = Schema.Struct({
   error: Schema.Literal("temporarily_unavailable"),
 }).annotate({ httpApiStatus: unavailableStatus });
-/** Safe connection identities remain distinct even when their unverified display names repeat. */
+
 export const OAuthConnectionMetadata = Schema.Struct({
   connectionId: OAuthConnectionId,
   claimedClientName: OAuthRegistration.fields.client_name,
@@ -192,7 +190,7 @@ const managementErrors = [
   OAuthRateLimited,
   OAuthUnavailable,
 ];
-/** First-party browser management is outside the agent catalog; reads need a live session and revocation needs freshness. */
+
 export const OAuthConnectionsGroup = HttpApiGroup.make("oauthConnections")
   .add(
     HttpApiEndpoint.get("list", oauthPaths.connections, {
@@ -215,7 +213,7 @@ export const OAuthConnectionsGroup = HttpApiGroup.make("oauthConnections")
       error: [...managementErrors, OAuthReauthenticationRequired],
     })
   );
-/** Browser-only request review: these declarations never enter the canonical tool catalog. */
+
 export const OAuthReviewGroup = HttpApiGroup.make("oauthReview")
   .add(
     HttpApiEndpoint.get("review", oauthPaths.review, {

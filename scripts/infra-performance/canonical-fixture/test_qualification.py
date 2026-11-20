@@ -58,7 +58,6 @@ class RetainedResourceQualificationTests(unittest.TestCase):
                        deploymentId="20000000-0000-4000-8000-"+str(i).zfill(12))
             for i,(role,name) in enumerate(self.roles.items())}
         support = {r: {k:self.workers[r][k] for k in ("versionId","deploymentId")} for r in ("Smoke","ForwardedEmail","Web")}
-        # The repair uploads a new receiver to the existing Smoke Worker. Web and Email stay untouched.
         support["Smoke"] = dict(versionId="30000000-0000-4000-8000-000000000001",
                                 deploymentId="40000000-0000-4000-8000-000000000001")
         self.pin = dict(revision=self.generation, support=support, controlsDigest="a"*64)
@@ -121,7 +120,6 @@ class RetainedResourceQualificationTests(unittest.TestCase):
                         self.verify()
                 finally:
                     owner[field]=original
-        # A served old receiver or its original deployment cannot qualify after source repair.
         worker=self.workers["Smoke"]
         for key,active,key_on_active in [("deploymentId",self.active[worker["name"]],"id"),
                                          ("versionId",self.active[worker["name"]]["versions"][0],"version_id")]:
@@ -130,7 +128,6 @@ class RetainedResourceQualificationTests(unittest.TestCase):
             with self.subTest(key=key),self.assertRaises(ValueError):
                 self.verify()
             worker[key]=active[key_on_active]=previous
-        # Matching a substituted Web deployment to a forged archive receipt still fails its independent pin.
         worker=self.workers["Web"]
         worker["deploymentId"]=self.active[worker["name"]]["id"]=self.workers["Smoke"]["deploymentId"]
         with self.assertRaises(ValueError):

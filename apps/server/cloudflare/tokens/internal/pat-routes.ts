@@ -62,7 +62,7 @@ HttpApi.reflect(declared, {
 });
 const forPath = (path: string): ReadonlyArray<Route> =>
   routes.filter((route) => matchesRouteTemplate({ template: route.template, path }));
-/** PAT paths derive from the declared direct bootstrap and canonical operation groups. */
+
 export const patRoute = (path: string): boolean => forPath(path).length > 0;
 export const patDirectRoute = (path: string): boolean =>
   forPath(path).some((route) => route.group === PATPairingDirectGroup.identifier);
@@ -70,7 +70,7 @@ export const patBrowserRoute = (path: string): boolean =>
   forPath(path).some((route) => route.group === PATsGroup.identifier);
 export const patMethods = (path: string): ReadonlyArray<string> =>
   Array.from(new Set(forPath(path).map((route) => route.method)));
-/** Execute only a declared PAT operation, never a guessed path or method. */
+
 export const handlePATRequest = ({
   request,
   db,

@@ -4,16 +4,12 @@
 - **Date:** 2026-10-07
 - **Issue:** #233 and #236, with the User's implementation decisions superseding conflicting historical text.
 
-[ADR 0041](0041-per-user-durable-object-storage-direction.md#shared-facts-and-ordering) supersedes
-the D1 publication/storage choreography for the planned migration. Immediate Price selection for
-new renewals and preservation of original terms for pending attempts and renewal retries remain.
-For the migration, exact shared registration fixes terms; an earlier registration may complete
-within its original deadline after publication without delaying other Users. The
-[background discovery decision](https://github.com/B4rz99/fidy-ai/issues/2202#issuecomment-6895944711)
-supersedes the earlier wait for outstanding User admissions.
-The D1 mechanics below describe the current implementation.
+[ADR 0041](0041-per-user-durable-object-storage-direction.md#shared-facts-and-ordering)
+owns shared Pricing and exact registration. An earlier registration can complete within its original
+deadline after Price publication without delaying other Users. The UserStore retains billing work
+and its owner alarm recovers pending intents. Queue and Workflow handoffs carry the existing work
+identity.
 
-Weekly card renewals use the existing Cloudflare D1 outbox, Queue, Workflow and User coordinator.
 Each successful period starts at its predecessor's end and advances by seven calendar days in the
 captured time zone. Provider finalization authorizes settlement but never shifts renewal dates.
 One unresolved collection blocks another; ambiguous submissions are reconciled without repeating
@@ -56,3 +52,21 @@ Historical financial facts, evidence and cancellation remain retained.
 
 Source: [Wompi payment-source cancellation](https://docs.wompi.co/docs/colombia/fuentes-de-pago/#cuentas-daviplata).
 This is development behavior; production/provider enablement remains separately gated.
+
+Monthly and yearly periods preserve the original local calendar anchor across month-end and
+leap-day clamps. Renewal execution advances by one period from the paid boundary even if
+collection is late. Support correction uses Fidy attempt identities and a closed reason
+vocabulary. A card void addresses the whole charge. An ambiguous submission remains pending and
+continues to reserve its amount. Sandbox treatment is provisional evidence.
+
+Claim an outbound charge before provider I/O. A crash between the claim and POST is already
+ambiguous. Wompi transaction id hints from a signed callback still require an independent
+bounded lookup and exact captured terms. A missing response id cannot authorize another POST.
+One verified finalized approval settles the attempt; unresolved provider transactions stay
+pending, and all-negative evidence waits until the provider retry window closes.
+
+Refund and void execution starts from separately Access-authorized support and same-User
+resource reservation. Durable claims prevent duplicate POST even when Workflow publication
+is missed or repeated. Refund correction remains Sandbox-only under both stored and current
+configuration. Read-only verification can reconcile card voids. Retain pending Money while a
+refund has no verified terminal evidence. [Refund reconciliation follow-up](https://github.com/B4rz99/fidy-ai/issues/2311).

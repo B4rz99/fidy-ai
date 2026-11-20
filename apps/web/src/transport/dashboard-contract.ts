@@ -1,4 +1,3 @@
-/** Existing Dashboard edit declarations, without assembling the canonical client runtime. */
 export {
   DashboardCatalogEntry,
   DashboardEdit,

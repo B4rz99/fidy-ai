@@ -166,6 +166,14 @@ export const validProviderRedirect = (request: {
   authorization: string;
   provider: Provider;
 }): boolean => invalidProviderRedirectFields(request).length === 0;
+const callbackOriginClass = (authorization: string): string => {
+  const callback = new URL(authorization).searchParams.get("redirect_uri");
+  if (callback === null || !URL.canParse(callback)) return "missing or malformed";
+  const origin = new URL(callback).origin;
+  if (origin === production.api) return "canonical";
+  if (origin === installedOrigins.acceptance.api) return "acceptance";
+  return "other";
+};
 
 export const hostOnlyProviderCookie =
   (provider: Provider) =>
@@ -229,7 +237,8 @@ export const verifyCanonicalSignupRedirects = Effect.fn(function* (client: HttpC
             provider +
             " signup verification failed. Unexpected redirect fields [" +
             redirectFailures.join(", ") +
-            "]" +
+            "], callback origin " +
+            callbackOriginClass(location.authorizationUrl) +
             ", host-only cookie " +
             cookieValid +
             ", browser origin " +

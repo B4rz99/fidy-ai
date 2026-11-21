@@ -2687,7 +2687,36 @@ const readOpenedCanonical = Effect.fn(function* (
   });
   yield* requireRetainedCanonicalWeb(port, source.website);
   yield* proveRecoveryCorePrivate(env, client, installationNames.Core);
+  yield* requireLiveSignupDirectory(env, client, release).pipe(
+    Effect.timeout("5 seconds"),
+    Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 25 }),
+    checkCanonicalPrerequisite("live signup Directory")
+  );
   return { hosts, source, zoneId };
+});
+const requireLiveSignupDirectory = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  release: CanonicalPromotion["release"]
+) {
+  const response = yield* client.execute(
+    HttpClientRequest.get(
+      installedOrigins.production.api + "/internal/release-smoke" + compatibilityQuery,
+      {
+        headers: { "x-fidy-smoke-proof": env.smokeProof },
+      }
+    )
+  );
+  const evidence = yield* decodePinnedStorageEvidence(response, release.publicVersionId);
+  if (
+    response.headers["x-fidy-smoke-worker-version"] !== release.publicVersionId ||
+    evidence.core.workerVersionId !== release.coreVersionId ||
+    evidence.markers.directory.workerVersionId !== release.coreVersionId
+  ) {
+    return yield* new ReleaseFailure({
+      message: "Ordinary Directory routing has not converged to the opening Workers",
+    });
+  }
 });
 const verifyOpenCanonical = Effect.fn(function* (
   env: Config,

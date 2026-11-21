@@ -1,5 +1,5 @@
 import { SecureRandom } from "effect/crypto";
-import { Effect, Redacted, Schema } from "effect";
+import { Context, Effect, Layer, Redacted, Schema } from "effect";
 import { HttpClient, HttpClientRequest } from "effect/http";
 import { authenticateAccess, protectedHttpClient } from "../../apps/cli/src/direct-client/runtime";
 import {
@@ -28,7 +28,7 @@ const failed = (reason: ProGrantFailure["reason"]): ProGrantFailure =>
 
 type Submit = (command: typeof ProOperatorCommand.Type) => Effect.Effect<unknown, ProGrantFailure>;
 
-export const makeProClient = Effect.fn(function* () {
+const makeProClient = Effect.fn(function* () {
   const proof = yield* authenticateAccess(url).pipe(Effect.mapError(() => failed("unavailable")));
   yield* Effect.addFinalizer(() => Effect.sync(() => Redacted.wipeUnsafe(proof)));
 
@@ -77,6 +77,14 @@ export const makeProClient = Effect.fn(function* () {
   return submit;
 });
 
+export class ProClient extends Context.Service<ProClient, { readonly submit: Submit }>()(
+  "fidy-ai/scripts/pro/runtime/ProClient"
+) {
+  static readonly make = Effect.map(makeProClient(), (submit) => ({ submit }));
+
+  static readonly layer = Layer.effect(this, this.make);
+}
+
 type Cursor = (typeof ProPage.Type)["next"];
 
 const advances = (before: Cursor, next: Cursor): boolean =>
@@ -84,6 +92,21 @@ const advances = (before: Cursor, next: Cursor): boolean =>
   (next.after > (before?.after ?? 0) &&
     next.after <= next.through &&
     (before === null || before.through === next.through));
+
+const admitPage = (
+  entries: Map<string, typeof ProGrantEntry.Type>,
+  rows: (typeof ProPage.Type)["entries"]
+): boolean => {
+  for (const row of rows) {
+    if (row.action !== "grant" || entries.has(row.userId) || entries.size >= maximumProGrants) {
+      return false;
+    }
+
+    entries.set(row.userId, row);
+  }
+
+  return true;
+};
 
 const list = Effect.fn(function* (submit: Submit) {
   const entries = new Map<string, typeof ProGrantEntry.Type>();
@@ -96,13 +119,7 @@ const list = Effect.fn(function* (submit: Submit) {
       yield* submit(cursor === null ? { action: "list" } : { action: "list", cursor })
     ).pipe(Effect.mapError(() => failed("unavailable")));
 
-    for (const row of page.entries) {
-      if (row.action !== "grant" || entries.has(row.userId) || entries.size >= maximumProGrants) {
-        return yield* failed("unavailable");
-      }
-
-      entries.set(row.userId, row);
-    }
+    if (!admitPage(entries, page.entries)) return yield* failed("unavailable");
 
     cursor = page.next;
 

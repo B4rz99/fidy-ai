@@ -3,7 +3,7 @@ import fixtureUpload from "./native-fixture-upload.json" with { type: "json" };
 import { Cause, Context, Effect, Exit, Layer, Option } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 import { it } from "@effect/vitest";
-import { describe, expect, vi } from "vitest";
+import { assert, describe, expect, vi } from "vitest";
 import { archivedDormant } from "./native-fallback-recovery";
 import {
   canonicalRestorePort,
@@ -143,11 +143,12 @@ it.effect(
 );
 
 it.effect("refuses staging when query privacy or native issue detection is not persisted", () =>
-  Effect.gen(function* () {
-    for (const settings of [
+  Effect.forEach(
+    [
       { redact_query_string: false, issues: { enabled: true } },
       { redact_query_string: true, issues: { enabled: false } },
-    ]) {
+    ],
+    Effect.fnUntraced(function* (settings) {
       const client = HttpClient.make((request) =>
         Effect.succeed(
           HttpClientResponse.fromWeb(
@@ -175,8 +176,9 @@ it.effect("refuses staging when query privacy or native issue detection is not p
       );
 
       expect(Exit.isFailure(result)).toBe(true);
-    }
-  })
+    }),
+    { discard: true }
+  )
 );
 
 it.live(
@@ -194,13 +196,11 @@ it.live(
         })
       );
 
-      expect(result._tag).toBe("Failure");
+      assert(Exit.isFailure(result));
 
-      if (result._tag === "Failure") {
-        expect(releaseFailureMessage(result.cause)).toBe(
-          "Release tooling failed (Cloudflare API code 10210; resource=queue); inspect traffic state"
-        );
-      }
+      expect(releaseFailureMessage(result.cause)).toBe(
+        "Release tooling failed (Cloudflare API code 10210; resource=queue); inspect traffic state"
+      );
     })
 );
 
@@ -219,13 +219,11 @@ it.live(
         })
       );
 
-      expect(result._tag).toBe("Failure");
+      assert(Exit.isFailure(result));
 
-      if (result._tag === "Failure") {
-        expect(releaseFailureMessage(result.cause)).toBe(
-          "Release tooling failed (Cloudflare API code 100405); inspect traffic state"
-        );
-      }
+      expect(releaseFailureMessage(result.cause)).toBe(
+        "Release tooling failed (Cloudflare API code 100405); inspect traffic state"
+      );
     })
 );
 
@@ -260,13 +258,11 @@ it.live("preserves a safe native rejection after routing reconciliation fails", 
       releaseController.deployExact(port, "prod-core", [{ id: coreVersion, percentage: 100 }])
     );
 
-    expect(result._tag).toBe("Failure");
+    assert(Exit.isFailure(result));
 
-    if (result._tag === "Failure") {
-      expect(releaseFailureMessage(result.cause)).toBe(
-        "Release tooling failed (Cloudflare API code 100405); inspect traffic state"
-      );
-    }
+    expect(releaseFailureMessage(result.cause)).toBe(
+      "Release tooling failed (Cloudflare API code 100405); inspect traffic state"
+    );
 
     expect(writes).toBe(1);
   })
@@ -285,13 +281,11 @@ it.live("reports only a Cloudflare API code when native release tooling refuses 
       })
     );
 
-    expect(result._tag).toBe("Failure");
+    assert(Exit.isFailure(result));
 
-    if (result._tag === "Failure") {
-      expect(releaseFailureMessage(result.cause)).toBe(
-        "Release tooling failed (Cloudflare API code 100405); inspect traffic state"
-      );
-    }
+    expect(releaseFailureMessage(result.cause)).toBe(
+      "Release tooling failed (Cloudflare API code 100405); inspect traffic state"
+    );
   })
 );
 
@@ -383,10 +377,14 @@ it.effect(
         referenceHarness({ ...trunkReference, object: { type: "commit", sha: head } }, application)
           .port;
 
-      for (const operation of ["reseal-fixture-fallback", "diagnose-fixture-pairing"]) {
-        vi.stubEnv("FIXTURE_RELEASE_OPERATION", operation);
-        expect(yield* port(verifier).trunk()).toBe(archivedDormant.revision);
-      }
+      yield* Effect.forEach(
+        ["reseal-fixture-fallback", "diagnose-fixture-pairing"],
+        Effect.fnUntraced(function* (operation) {
+          vi.stubEnv("FIXTURE_RELEASE_OPERATION", operation);
+          expect(yield* port(verifier).trunk()).toBe(archivedDormant.revision);
+        }),
+        { discard: true }
+      );
 
       expect(yield* port(revision).trunk().pipe(Effect.isFailure)).toBe(true);
       vi.stubEnv("FIXTURE_PAIRING_APPLICATION", revision);
@@ -432,14 +430,14 @@ it.effect("accepts only the exact interrupted successor under its current protec
       application
     );
 
-    for (const operation of [
-      "stage-fixture-successor",
-      "recover-fixture-successor",
-      "rollout-fixture-successor",
-    ]) {
-      vi.stubEnv("FIXTURE_RELEASE_OPERATION", operation);
-      expect(yield* port.trunk()).toBe(application);
-    }
+    yield* Effect.forEach(
+      ["stage-fixture-successor", "recover-fixture-successor", "rollout-fixture-successor"],
+      Effect.fnUntraced(function* (operation) {
+        vi.stubEnv("FIXTURE_RELEASE_OPERATION", operation);
+        expect(yield* port.trunk()).toBe(application);
+      }),
+      { discard: true }
+    );
 
     vi.stubEnv("RELEASE_GIT_SHA", revision);
     expect(yield* port.trunk().pipe(Effect.exit)).toHaveProperty("_tag", "Failure");
@@ -547,14 +545,18 @@ describe("Production release trunk guard", () => {
         { ...trunkReference, object: { type: "commit", sha: "d".repeat(40) } },
       ];
 
-      for (const reference of rejected) {
-        const { port, requests } = referenceHarness(reference);
-        const result = yield* Effect.exit(releaseController.captureRelease(port, captureInput));
-        expect(Exit.isFailure(result)).toBe(true);
-        expect(requests).toEqual([
-          "GET https://api.github.com/repos/test/fidy/git/ref/heads/trunk",
-        ]);
-      }
+      yield* Effect.forEach(
+        rejected,
+        Effect.fnUntraced(function* (reference) {
+          const { port, requests } = referenceHarness(reference);
+          const result = yield* Effect.exit(releaseController.captureRelease(port, captureInput));
+          expect(Exit.isFailure(result)).toBe(true);
+          expect(requests).toEqual([
+            "GET https://api.github.com/repos/test/fidy/git/ref/heads/trunk",
+          ]);
+        }),
+        { discard: true }
+      );
     })
   );
 
@@ -623,11 +625,9 @@ it.effect.each([
       port.deploy("prod-core", [{ id: coreVersion, percentage: 100 }])
     );
 
-    expect(Exit.isFailure(outcome)).toBe(true);
+    assert(Exit.isFailure(outcome));
 
-    if (Exit.isFailure(outcome)) {
-      expect(releaseFailureMessage(outcome.cause)).toBe(diagnostic);
-    }
+    expect(releaseFailureMessage(outcome.cause)).toBe(diagnostic);
   })
 );
 

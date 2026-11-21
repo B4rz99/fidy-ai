@@ -17,7 +17,7 @@ import {
   TelemetryWorkRecord,
 } from "@fidy/server/telemetry-contract";
 import { Clock, DateTime, Effect, Result, Schema } from "effect";
-import { describe, expect } from "vitest";
+import { assert, describe, expect } from "vitest";
 import coreWorker, {
   makeCoreWorker as composeWorker,
 } from "../../apps/server/cloudflare/core-worker";
@@ -350,15 +350,13 @@ describe("Deployment configuration", () => {
       stage: "dev-test",
     });
 
-    expect(Result.isSuccess(configuration)).toBe(true);
+    assert(Result.isSuccess(configuration));
 
-    if (Result.isSuccess(configuration)) {
-      expect(configuration.success).toEqual({
-        contractDigest: "0000000000000000000000000000000000000000000000000000000000000000",
-        gitRevision: "0000000000000000000000000000000000000000",
-        versionTag: "development",
-      });
-    }
+    expect(configuration.success).toEqual({
+      contractDigest: "0000000000000000000000000000000000000000000000000000000000000000",
+      gitRevision: "0000000000000000000000000000000000000000",
+      versionTag: "development",
+    });
   });
 
   it.each([
@@ -407,15 +405,13 @@ describe("Deployment configuration", () => {
       stage: "production",
     });
 
-    expect(Result.isSuccess(configuration)).toBe(true);
+    assert(Result.isSuccess(configuration));
 
-    if (Result.isSuccess(configuration)) {
-      expect(configuration.success).toEqual({
-        contractDigest,
-        gitRevision,
-        versionTag: "release-42379674321-1",
-      });
-    }
+    expect(configuration.success).toEqual({
+      contractDigest,
+      gitRevision,
+      versionTag: "release-42379674321-1",
+    });
   });
 });
 
@@ -711,28 +707,32 @@ describe("Cloudflare Worker topology", () => {
 
       expect(new Set(records.map((record) => record.spanId)).size).toBe(2);
 
-      for (const record of records) {
-        yield* Schema.decodeEffect(TelemetryWorkRecord, { onExcessProperty: "error" })(record);
-        expect(record.traceId).toBe(receipt);
-        expect(record).toMatchObject({
-          release: gitRevision,
-          provider: "cloudflare-workers",
-          statusClass: "2xx",
-          outcome: "succeeded",
-          attempt: 1,
-        });
-        expect(Object.keys(record).sort()).toEqual([
-          "attempt",
-          "latencyMilliseconds",
-          "operation",
-          "outcome",
-          "provider",
-          "release",
-          "spanId",
-          "statusClass",
-          "traceId",
-        ]);
-      }
+      yield* Effect.forEach(
+        records,
+        Effect.fnUntraced(function* (record) {
+          yield* Schema.decodeEffect(TelemetryWorkRecord, { onExcessProperty: "error" })(record);
+          expect(record.traceId).toBe(receipt);
+          expect(record).toMatchObject({
+            release: gitRevision,
+            provider: "cloudflare-workers",
+            statusClass: "2xx",
+            outcome: "succeeded",
+            attempt: 1,
+          });
+          expect(Object.keys(record).sort()).toEqual([
+            "attempt",
+            "latencyMilliseconds",
+            "operation",
+            "outcome",
+            "provider",
+            "release",
+            "spanId",
+            "statusClass",
+            "traceId",
+          ]);
+        }),
+        { discard: true }
+      );
     })
   );
 
@@ -844,12 +844,10 @@ describe("Cloudflare Worker topology (scheduled)", () => {
           .then(Result.succeed<void>, Result.fail<unknown>)
       );
 
-      expect(Result.isFailure(result)).toBe(true);
+      assert(Result.isFailure(result));
 
-      if (Result.isFailure(result)) {
-        expect(String(result.failure)).toContain("ScheduledWorkFailed");
-        expect(String(result.failure)).not.toContain(privateFailureDetail);
-      }
+      expect(String(result.failure)).toContain("ScheduledWorkFailed");
+      expect(String(result.failure)).not.toContain(privateFailureDetail);
 
       expect(records).toHaveLength(1);
       expect(records[0]).toMatchObject({

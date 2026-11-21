@@ -1,6 +1,16 @@
 import type { PerformanceMember } from "../../../apps/server/cloudflare/release-isolation/contract";
 import { Database } from "bun:sqlite";
-import { Config, Context, DateTime, Effect, Layer, Option, Redacted, Schema } from "effect";
+import {
+  Config,
+  Context,
+  DateTime,
+  Effect,
+  Layer,
+  Option,
+  Predicate,
+  Redacted,
+  Schema,
+} from "effect";
 import type { Miniflare } from "miniflare";
 import { installedOrigins } from "../../../apps/server/src/shell/browser-transport/contract";
 import { FetchHttpClient, HttpClient } from "effect/http";
@@ -15,12 +25,14 @@ import { transport } from "./bridge";
 import { closedRuntime } from "./closed-runtime.test-fixture";
 import { type CohortCommand, cohortAuthority, serveCohort } from "./cohort-bridge";
 
+const isRequest = Schema.is(Schema.instanceOf(Request));
+
 const readObject = Effect.fnUntraced(function* (runtime: Miniflare, directory: string, id: string) {
   if (!/^[a-f0-9]{64}$/u.test(id)) return yield* Effect.fail(Error("Unknown physical object"));
   yield* native(() =>
     runtime.unsafeEvictDurableObject("core", "UserStore", { id }).catch((error: unknown) => {
       if (
-        error instanceof Error &&
+        Predicate.isError(error) &&
         error.message === "Cannot evict Durable Object: it is not currently running."
       ) {
         return;
@@ -115,13 +127,11 @@ const dispatch = Effect.fnUntraced(function* (runtime: Miniflare, value: unknown
     return yield* Effect.fail(Error("Foreign rehearsal origin"));
   }
 
-  const response = yield* transport(runtime)(
-    new Request(req.url, {
-      method: req.method,
-      headers: req.headers,
-      ...(req.body === null ? {} : { body: req.body }),
-    })
-  );
+  const init: RequestInit = { method: req.method, headers: req.headers };
+
+  if (req.body !== null) init.body = req.body;
+
+  const response = yield* transport(runtime)(new Request(req.url, init));
 
   return {
     status: response.status,
@@ -141,7 +151,7 @@ const financialControls = Effect.fnUntraced(function* (
 
   const loopback: typeof fetch = Object.assign(
     (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]): Promise<Response> => {
-      const url = new URL(input instanceof Request ? input.url : input);
+      const url = new URL(isRequest(input) ? input.url : input);
 
       if (url.origin !== installedOrigins.acceptance.api) {
         return Promise.reject(Error("Foreign rehearsal origin"));

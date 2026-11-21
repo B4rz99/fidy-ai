@@ -370,7 +370,7 @@ export const runBrowser = async (config) => {
     browser = await launch(config.origins, api, web);
     await execute(await mountedPage(browser, config, events), config, events);
   } catch (err) {
-    events.push({ stage: "incomplete", error: err instanceof Error ? err.name : "Unknown" });
+    events.push({ stage: "incomplete", error: Predicate.isError(err) ? err.name : "Unknown" });
     throw err;
   } finally {
     await report();

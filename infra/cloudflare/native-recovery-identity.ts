@@ -1,9 +1,12 @@
-import { Data, Effect, Schema } from "effect";
+import { Data, Effect, Predicate, Schema } from "effect";
 import { type ProviderRead, readProviderList } from "./native-provider-list";
 
 export class RecoveryPinUnavailable extends Data.TaggedError("RecoveryPinUnavailable")<{
   reason: "missing" | "name matches another type" | "ambiguous" | "invalid ID";
 }> {}
+
+export const isRecoveryPinUnavailable = (value: unknown): value is RecoveryPinUnavailable =>
+  Predicate.isTagged(value, "RecoveryPinUnavailable");
 
 const loginMethod = Schema.Struct({
   id: Schema.optional(Schema.String),

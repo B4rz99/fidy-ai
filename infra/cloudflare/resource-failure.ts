@@ -1,49 +1,54 @@
-import { Cause, Data, Effect, Option, Schema } from "effect";
+import { Cause, Data, Effect, Option, Predicate, Schema } from "effect";
 import { HttpClientError } from "effect/http";
-import { FixturePlanRefused } from "./native-fixture-plan";
-import { RecoveryPinUnavailable } from "./native-recovery-identity";
+import { isFixturePlanRefused } from "./native-fixture-plan";
+import { isRecoveryPinUnavailable } from "./native-recovery-identity";
 
 const maximumRefusalReasons = 16;
 
-const ProviderRefusal = Schema.Struct({
-  _tag: Schema.Literals([
-    "Forbidden",
-    "Unauthorized",
-    "BadRequest",
-    "Conflict",
-    "NotFound",
-    "UnprocessableEntity",
-    "TooManyRequests",
-    "InternalServerError",
-    "BadGateway",
-    "ServiceUnavailable",
-    "GatewayTimeout",
-    "ConfigError",
-    "InvalidRoute",
-    "UnknownCloudflareError",
-    "CloudflareHttpError",
-    "CloudflareParseError",
-    "UnownedResource",
-    "OwnedBySomeoneElse",
-    "UnsatisfiedResourceCycle",
-    "StateStoreError",
-    "AuthError",
-    "CredentialsRequired",
-    "NeedsReauth",
-    "InvalidReferenceError",
-    "WorkerIdNotFound",
-    "MissingProviderError",
-    "WorkerVersionConfigError",
-    "WorkerNotFound",
-    "WorkerVersionNotFound",
-    "WorkerPreviewConfigError",
-    "WorkerDomainConfigError",
-  ]),
-  code: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 999999 }))),
-});
+const providerRefusalTag = Schema.Literals([
+  "Forbidden",
+  "Unauthorized",
+  "BadRequest",
+  "Conflict",
+  "NotFound",
+  "UnprocessableEntity",
+  "TooManyRequests",
+  "InternalServerError",
+  "BadGateway",
+  "ServiceUnavailable",
+  "GatewayTimeout",
+  "ConfigError",
+  "InvalidRoute",
+  "UnknownCloudflareError",
+  "CloudflareHttpError",
+  "CloudflareParseError",
+  "UnownedResource",
+  "OwnedBySomeoneElse",
+  "UnsatisfiedResourceCycle",
+  "StateStoreError",
+  "AuthError",
+  "CredentialsRequired",
+  "NeedsReauth",
+  "InvalidReferenceError",
+  "WorkerIdNotFound",
+  "MissingProviderError",
+  "WorkerVersionConfigError",
+  "WorkerNotFound",
+  "WorkerVersionNotFound",
+  "WorkerPreviewConfigError",
+  "WorkerDomainConfigError",
+]);
+
+const providerRefusalCode = Schema.optional(
+  Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 999999 }))
+);
+
+const ProviderRefusal = providerRefusalTag.mapMembers((members) =>
+  members.map((member) => Schema.TaggedStruct(member.literal, { code: providerRefusalCode }))
+);
 
 const ExceptionName = Schema.Union([
-  ProviderRefusal.fields._tag,
+  providerRefusalTag,
   Schema.Literals([
     "SchemaError",
     "HttpClientError",
@@ -61,11 +66,11 @@ const exceptionCategory = (error: unknown, failure: boolean): string => {
 
   if (Cause.isUnknownError(error)) return "UnknownError";
 
-  if (error instanceof TypeError) return "TypeError";
+  if (Schema.is(Schema.instanceOf(TypeError))(error)) return "TypeError";
 
-  if (error instanceof RangeError) return "RangeError";
+  if (Schema.is(Schema.instanceOf(RangeError))(error)) return "RangeError";
 
-  if (error instanceof Error) {
+  if (Predicate.isError(error)) {
     return Option.getOrElse(Schema.decodeUnknownOption(ExceptionName)(error.name), () => "Error");
   }
 
@@ -79,9 +84,9 @@ const StateRefusal = Schema.TaggedStruct("StateStoreError", {
 });
 
 const refusalCategory = (error: unknown, failure: boolean): string => {
-  if (error instanceof FixturePlanRefused) return "closed fixture " + error.reason;
+  if (isFixturePlanRefused(error)) return "closed fixture " + error.reason;
 
-  if (error instanceof RecoveryPinUnavailable) return "account recovery PIN " + error.reason;
+  if (isRecoveryPinUnavailable(error)) return "account recovery PIN " + error.reason;
   const state = Schema.decodeUnknownOption(StateRefusal)(error);
 
   if (Option.isSome(state)) return "StateStoreError; HTTP " + state.value.http.status;
@@ -102,7 +107,7 @@ const failureCategories = (value: unknown, failure: boolean): ReadonlyArray<stri
 
     if (depth === 0 || !category.startsWith("Unclassified")) details.push(category);
 
-    if (!(error instanceof Error) || error.cause === undefined) break;
+    if (!Predicate.isError(error) || error.cause === undefined) break;
     error = error.cause;
   }
 
@@ -141,6 +146,9 @@ type NativeStage =
 
 class NativeStageFailure extends Data.TaggedError("NativeStageFailure")<{ message: string }> {}
 
+const isNativeStageFailure = (value: unknown): value is NativeStageFailure =>
+  Predicate.isTagged(value, "NativeStageFailure");
+
 export type { NativeStageFailure };
 
 export const nativeResourceStage =
@@ -159,7 +167,7 @@ export const nativeResourceStage =
         (cause) =>
           Effect.fail(
             new NativeStageFailure({
-              message: `Native release failed during ${typeof stage === "string" ? stage : stage.stage}. ${resourceFailureMessage(cause)}${typeof stage === "string" ? "" : stage.details()}`,
+              message: `Native release failed during ${Predicate.isString(stage) ? stage : stage.stage}. ${resourceFailureMessage(cause)}${Predicate.isString(stage) ? "" : stage.details()}`,
             })
           )
       )
@@ -168,7 +176,7 @@ export const nativeResourceStage =
 export const nativeResourceFailureMessage = (cause: Cause.Cause<unknown>): string => {
   const failure = Cause.findErrorOption(cause);
 
-  return Option.isSome(failure) && failure.value instanceof NativeStageFailure
+  return Option.isSome(failure) && isNativeStageFailure(failure.value)
     ? failure.value.message
     : `Native release failed during configuration. ${resourceFailureMessage(cause)}`;
 };

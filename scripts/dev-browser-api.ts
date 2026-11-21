@@ -1,5 +1,5 @@
 import { ownerCheckUrl } from "../apps/server/cloudflare/maintenance/contract";
-import { BunFileSystem } from "@effect/platform-bun";
+import { BunFileSystem, BunRuntime } from "@effect/platform-bun";
 import { Clock, Effect } from "effect";
 import type { Miniflare } from "miniflare";
 import { browserOrigins } from "../apps/server/cloudflare/runtime/contract";
@@ -170,5 +170,5 @@ const loopback = Effect.gen(function* () {
 });
 
 if (import.meta.main) {
-  await Effect.runPromise(loopback.pipe(Effect.scoped, Effect.provide(BunFileSystem.layer)));
+  BunRuntime.runMain(loopback.pipe(Effect.scoped, Effect.provide(BunFileSystem.layer)));
 }

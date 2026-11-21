@@ -91,11 +91,15 @@ it.effect(
         { refused: () => Effect.fail(Error("Login approved")) },
       ];
 
-      for (const changed of substitutions) {
-        expect(yield* Effect.isFailure(continueAdmittedErasure({ ...options, ...changed }))).toBe(
-          true
-        );
-      }
+      yield* Effect.forEach(
+        substitutions,
+        Effect.fnUntraced(function* (changed) {
+          expect(yield* Effect.isFailure(continueAdmittedErasure({ ...options, ...changed }))).toBe(
+            true
+          );
+        }),
+        { discard: true }
+      );
     })
 );
 
@@ -261,14 +265,18 @@ it.effect("observes pending and expired redemption for the verified erased subje
 
     expect(accepted.paths.slice(-2)).toEqual(["/web/pairings/redeem", "/web/pairings/redeem"]);
 
-    for (const result of [
-      verify(503, "unavailable", "issued"),
-      verify(401, "invalid"),
-      verify(200, "approved"),
-      verify(400, "invalid", "pending"),
-    ]) {
-      expect(yield* Effect.isFailure(result.driver.refused(() => Effect.void))).toBe(true);
-    }
+    yield* Effect.forEach(
+      [
+        verify(503, "unavailable", "issued"),
+        verify(401, "invalid"),
+        verify(200, "approved"),
+        verify(400, "invalid", "pending"),
+      ],
+      Effect.fnUntraced(function* (result) {
+        expect(yield* Effect.isFailure(result.driver.refused(() => Effect.void))).toBe(true);
+      }),
+      { discard: true }
+    );
   })
 );
 

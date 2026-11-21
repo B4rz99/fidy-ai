@@ -1,4 +1,5 @@
 import { createInterface } from "node:readline/promises";
+import { BunRuntime } from "@effect/platform-bun";
 import { Clock, Config, Data, Effect, Redacted, Schema, Stream } from "effect";
 import type { Miniflare } from "miniflare";
 import { installedOrigins } from "../../../apps/server/src/shell/browser-transport/contract";
@@ -53,7 +54,17 @@ const offer = (value: unknown): void => {
   process.stdout.write("FIDY_PRIVATE_RESPONSE " + JSON.stringify(value) + "\n");
 };
 
-const sessionHeaders = (value: Session): Record<string, string> => ({
+type FixtureEnvironment = Readonly<{
+  RELEASE_GIT_SHA: string;
+  SMOKE_PROOF: string;
+  NATIVE_STORAGE_ADMISSION: string;
+  RECOVERY_ISOLATION: string;
+  BROWSER_ORIGIN: string;
+}>;
+
+type SessionHeaders = { cookie: string; "fidy-session-binding": string };
+
+const sessionHeaders = (value: Session): SessionHeaders => ({
   cookie: value.cookie,
   "fidy-session-binding": value.binding,
 });
@@ -62,13 +73,21 @@ export const transport = (runtime: Miniflare): Transport =>
   Effect.fnUntraced(function* (request: Request) {
     const body = request.body === null ? undefined : yield* io(() => request.arrayBuffer());
 
+    const headers = { ...Object.fromEntries(request.headers), "cf-connecting-ip": "192.0.2.1" };
+
     const reply = yield* io(() =>
-      runtime.dispatchFetch(request.url, {
-        method: request.method,
-        headers: { ...Object.fromEntries(request.headers), "cf-connecting-ip": "192.0.2.1" },
-        redirect: "manual",
-        ...(body === undefined ? {} : { body }),
-      })
+      body === undefined
+        ? runtime.dispatchFetch(request.url, {
+            method: request.method,
+            headers,
+            redirect: "manual",
+          })
+        : runtime.dispatchFetch(request.url, {
+            method: request.method,
+            headers,
+            redirect: "manual",
+            body,
+          })
     );
 
     const bytes = yield* io(() => reply.arrayBuffer());
@@ -79,15 +98,7 @@ export const transport = (runtime: Miniflare): Transport =>
     });
   });
 
-const environmentOf = (
-  auth: Auth
-): {
-  RELEASE_GIT_SHA: string;
-  SMOKE_PROOF: string;
-  NATIVE_STORAGE_ADMISSION: string;
-  RECOVERY_ISOLATION: string;
-  BROWSER_ORIGIN: string;
-} => ({
+const environmentOf = (auth: Auth): FixtureEnvironment => ({
   RELEASE_GIT_SHA: auth.revision,
   SMOKE_PROOF: auth.secret,
   NATIVE_STORAGE_ADMISSION: "closed",
@@ -105,14 +116,17 @@ const client = (auth: Auth, send: Transport): Client => {
   const environment = environmentOf(auth);
 
   const request = Effect.fnUntraced(function* (input: Command, headers: Record<string, string>) {
-    const outgoing = new Request(api.api + input.path, {
+    const init: RequestInit = {
       method: input.method,
       headers: { origin: api.browser, "content-type": "application/json", ...headers },
       redirect: "manual",
-      ...(input.body === null
-        ? {}
-        : { body: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))(input.body) }),
-    });
+    };
+
+    if (input.body !== null) {
+      init.body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))(input.body);
+    }
+
+    const outgoing = new Request(api.api + input.path, init);
 
     if (input.control !== "unsigned") {
       outgoing.headers.set(
@@ -295,19 +309,20 @@ const runMountedWorkspace = Effect.fnUntraced(function* (runtime: Miniflare, act
   const mutate = Effect.fnUntraced(function* (method: string, path: string, body?: unknown) {
     yield* Effect.sleep(caseIntervalMs);
 
-    return yield* forward(
-      new Request(api.api + path, {
-        method,
-        headers: {
-          origin: api.browser,
-          ...sessionHeaders(active),
-          "content-type": "application/json",
-        },
-        ...(body === undefined
-          ? {}
-          : { body: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(body) }),
-      })
-    );
+    const init: RequestInit = {
+      method,
+      headers: {
+        origin: api.browser,
+        ...sessionHeaders(active),
+        "content-type": "application/json",
+      },
+    };
+
+    if (body !== undefined) {
+      init.body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(body);
+    }
+
+    return yield* forward(new Request(api.api + path, init));
   });
 
   const mutation = yield* io(() =>
@@ -378,10 +393,16 @@ const verify = Effect.gen(function* () {
 
 if (import.meta.main) {
   if (process.argv[2] === "verify") {
-    await Effect.runPromise(verify).catch(() => {
-      process.stderr.write("Closed native fixture transport stopped\n");
-      process.exitCode = 1;
-    });
+    BunRuntime.runMain(
+      verify.pipe(
+        Effect.catchCause(() =>
+          Effect.sync(() => {
+            process.stderr.write("Closed native fixture transport stopped\n");
+            process.exitCode = 1;
+          })
+        )
+      )
+    );
   } else {
     process.stderr.write("Native fixture bridge admits offline verification only\n");
     process.exitCode = 1;

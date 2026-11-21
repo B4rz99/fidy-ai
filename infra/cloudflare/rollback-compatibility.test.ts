@@ -1,14 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  type WorkerBindings,
   type WorkerResources,
   rollbackCompatible,
   verifiedVersionResources,
 } from "./rollback-compatibility";
 
-const worker = (
-  migrationTag: string,
-  bindings: Readonly<Record<string, unknown>>
-): WorkerResources => ({
+const worker = (migrationTag: string, bindings: WorkerBindings): WorkerResources => ({
   runtime: {},
   migrationTag,
   bindings,

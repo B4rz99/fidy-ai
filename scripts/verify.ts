@@ -53,7 +53,7 @@ const parseGroup = (): Option.Option<VerifyGroup> => {
     }
 
     if (Option.isSome(group)) usageError("--group may be provided only once");
-    const valueText = Option.getOrThrow(value);
+    const valueText = Option.getOrElse(value, () => usageError("--group requires a value"));
 
     const candidate = Option.fromUndefinedOr(
       verifyGroups.find((verifyGroup) => verifyGroup === valueText)
@@ -85,6 +85,14 @@ const rootCheck = (group: VerifyGroup, label: string, command: ReadonlyArray<str
 const gitRevision = new TextDecoder()
   .decode(Bun.spawnSync(["git", "rev-parse", "HEAD"], { cwd: workspaceRoot }).stdout)
   .trim();
+
+const cloudflareShardArguments = (): ReadonlyArray<string> =>
+  Bun.env.CLOUDFLARE_TEST_SHARD === undefined ? [] : [`--shard=${Bun.env.CLOUDFLARE_TEST_SHARD}`];
+
+const cloudflareReportArguments = (report: string): ReadonlyArray<string> =>
+  Bun.env.CLOUDFLARE_TEST_REPORT === "true"
+    ? ["--reporter=default", "--reporter=json", `--outputFile=test-results/${report}.json`]
+    : [];
 
 const checks: Array<Check> = [
   {
@@ -144,16 +152,8 @@ const checks: Array<Check> = [
     "--cwd",
     "apps/server",
     "test:cloudflare",
-    ...(Bun.env.CLOUDFLARE_TEST_SHARD !== undefined
-      ? [`--shard=${Bun.env.CLOUDFLARE_TEST_SHARD}`]
-      : []),
-    ...(Bun.env.CLOUDFLARE_TEST_REPORT === "true"
-      ? [
-          "--reporter=default",
-          "--reporter=json",
-          "--outputFile=test-results/cloudflare-adapters.json",
-        ]
-      : []),
+    ...cloudflareShardArguments(),
+    ...cloudflareReportArguments("cloudflare-adapters"),
   ]),
   rootCheck("cloudflare-infra", "Cloudflare infrastructure tests", [
     "bun",
@@ -161,9 +161,7 @@ const checks: Array<Check> = [
     "--cwd",
     "infra/cloudflare",
     "test",
-    ...(Bun.env.CLOUDFLARE_TEST_REPORT === "true"
-      ? ["--reporter=default", "--reporter=json", "--outputFile=test-results/cloudflare-infra.json"]
-      : []),
+    ...cloudflareReportArguments("cloudflare-infra"),
   ]),
   rootCheck("unit", "WhatsApp provider boundary tests", [
     "bun",

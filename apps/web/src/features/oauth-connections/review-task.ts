@@ -1,5 +1,5 @@
 import { authenticationEndedEvent } from "@/session/authentication-channel";
-import { DateTime, Duration, Effect, Option, Schema } from "effect";
+import { Data, DateTime, Duration, Effect, Match, Option, Schema, Struct } from "effect";
 import type { Atom } from "effect/reactivity";
 import {
   type OAuthReview,
@@ -16,15 +16,22 @@ type Selection = Readonly<{
   days: PATLifetimeDays;
 }>;
 
-export type ReviewTaskState =
-  | (Selection & Readonly<{ _tag: "Reviewing" | "Connecting" | "Cancelling" }>)
-  | Readonly<{ _tag: "Disposed" }>
-  | Readonly<{ _tag: "Loading" }>
-  | Readonly<{ _tag: "Unavailable" }>
-  | Readonly<{ _tag: "Redirecting" }>
-  | Readonly<{ _tag: "Cancelled" }>
-  | Readonly<{ _tag: "Uncertain" }>
-  | Readonly<{ _tag: "CancellationUnconfirmed" }>;
+export type ReviewTaskState = Data.TaggedEnum<{
+  Reviewing: Selection;
+  Connecting: Selection;
+  Cancelling: Selection;
+  Disposed: {};
+  Loading: {};
+  Unavailable: {};
+  Redirecting: {};
+  Cancelled: {};
+  Uncertain: {};
+  CancellationUnconfirmed: {};
+}>;
+
+export const ReviewTaskState = Data.taggedEnum<ReviewTaskState>();
+
+type ReviewingState = Data.TaggedEnum.Value<ReviewTaskState, "Reviewing">;
 
 export type ReviewTaskActions = Readonly<{
   toggle: (scope: PATScope, checked: boolean) => void;
@@ -34,25 +41,25 @@ export type ReviewTaskActions = Readonly<{
   readAgain: () => void;
 }>;
 
-type Decision =
-  | Readonly<{
-      _tag: "ReadAgain";
-      requestId: OAuthReview["requestId"];
-      completed: (review: OAuthReview) => void;
-      failed: () => void;
-    }>
-  | Readonly<{
-      _tag: "Connect";
-      choice: OAuthReviewChoice;
-      completed: (callback: string) => void;
-      failed: () => void;
-    }>
-  | Readonly<{
-      _tag: "Cancel";
-      requestId: OAuthReview["requestId"];
-      completed: () => void;
-      failed: () => void;
-    }>;
+type Decision = Data.TaggedEnum<{
+  ReadAgain: Readonly<{
+    requestId: OAuthReview["requestId"];
+    completed: (review: OAuthReview) => void;
+    failed: () => void;
+  }>;
+  Connect: Readonly<{
+    choice: OAuthReviewChoice;
+    completed: (callback: string) => void;
+    failed: () => void;
+  }>;
+  Cancel: Readonly<{
+    requestId: OAuthReview["requestId"];
+    completed: () => void;
+    failed: () => void;
+  }>;
+}>;
+
+const Decision = Data.taggedEnum<Decision>();
 
 type Dispatch = (decision: Decision) => void;
 
@@ -75,19 +82,18 @@ const makeDecision = (client: WebAuthClient): Atom.AtomResultFn<Decision, void, 
       Effect.gen(function* () {
         const api = yield* client;
 
-        if (decision._tag === "ReadAgain") {
-          const review = yield* api.oauthReview.review({
-            query: { requestId: decision.requestId },
-          });
-
-          yield* Effect.sync(() => decision.completed(review));
-        } else if (decision._tag === "Connect") {
-          const result = yield* api.oauthReview.connect({ payload: decision.choice });
-          yield* Effect.sync(() => decision.completed(result.callback));
-        } else {
-          yield* api.oauthReview.cancel({ payload: { requestId: decision.requestId } });
-          yield* Effect.sync(decision.completed);
-        }
+        yield* Decision.$match(decision, {
+          ReadAgain: ({ requestId, completed }) =>
+            api.oauthReview.review({ query: { requestId } }).pipe(Effect.map(completed)),
+          Connect: ({ choice, completed }) =>
+            api.oauthReview
+              .connect({ payload: choice })
+              .pipe(Effect.map(Struct.get("callback")), Effect.map(completed)),
+          Cancel: ({ requestId, completed }) =>
+            api.oauthReview
+              .cancel({ payload: { requestId } })
+              .pipe(Effect.andThen(Effect.sync(completed))),
+        });
       }).pipe(Effect.catchCause(() => Effect.sync(decision.failed))),
     { concurrent: false }
   );
@@ -101,73 +107,90 @@ const choose = (selection: Selection): Option.Option<OAuthReviewChoice> =>
     expiresAt: DateTime.addDuration(selection.review.reviewedAt, Duration.days(selection.days)),
   });
 
-const decide = (
-  owner: Owner,
-  {
-    rendered,
-    dispatch,
-    connect,
-  }: Readonly<{ rendered: ReviewTaskState; dispatch: Dispatch; connect: boolean }>
-): void => {
-  if (!owner.active || owner.current !== rendered || rendered._tag !== "Reviewing") return;
-  const choice = choose(rendered);
+const reviewing = (owner: Owner, rendered: ReviewTaskState): Option.Option<ReviewingState> =>
+  owner.active && owner.current === rendered && ReviewTaskState.$is("Reviewing")(rendered)
+    ? Option.some(rendered)
+    : Option.none();
 
-  if (connect && Option.isNone(choice)) return;
-  const admitted: ReviewTaskState = { ...rendered, _tag: connect ? "Connecting" : "Cancelling" };
+type Admission = Readonly<{
+  current: () => boolean;
+  complete: (next: ReviewTaskState) => void;
+}>;
+
+const admit = (owner: Owner, admitted: ReviewTaskState): Admission => {
   publish(owner, admitted);
 
-  const complete = (next: ReviewTaskState): void => {
-    if (owner.active && owner.current === admitted) publish(owner, next);
-  };
+  const current = (): boolean => owner.active && owner.current === admitted;
 
-  if (connect) {
-    dispatch({
-      _tag: "Connect",
-      choice: Option.getOrThrow(choice),
-      completed: (callback): void => {
-        if (!owner.active || owner.current !== admitted) return;
-        owner.navigate(callback);
-        complete({ _tag: "Redirecting" });
-      },
-      failed: (): void => complete({ _tag: "Uncertain" }),
-    });
-  } else {
-    dispatch({
-      _tag: "Cancel",
-      requestId: rendered.review.requestId,
-      completed: (): void => complete({ _tag: "Cancelled" }),
-      failed: (): void => complete({ _tag: "CancellationUnconfirmed" }),
-    });
-  }
+  return {
+    current,
+    complete: (next: ReviewTaskState): void => {
+      if (current()) publish(owner, next);
+    },
+  };
 };
 
-export const initialReviewSelection = (
-  review: OAuthReview
-): Selection & Readonly<{ _tag: "Reviewing" }> => ({
-  _tag: "Reviewing",
-  review,
-  scopes: review.scopes,
-  days: defaultPATLifetimeDays,
-});
+const connect = (owner: Owner, rendered: ReviewTaskState, dispatch: Dispatch): void =>
+  Option.match(
+    Option.flatMap(reviewing(owner, rendered), (selection) =>
+      Option.map(choose(selection), (choice) => ({ selection, choice }))
+    ),
+    {
+      onNone: () => undefined,
+      onSome: ({ selection, choice }) => {
+        const admitted = admit(owner, ReviewTaskState.Connecting(selection));
+
+        dispatch(
+          Decision.Connect({
+            choice,
+            completed: (callback): void => {
+              if (!admitted.current()) return;
+              owner.navigate(callback);
+              admitted.complete(ReviewTaskState.Redirecting());
+            },
+            failed: (): void => admitted.complete(ReviewTaskState.Uncertain()),
+          })
+        );
+      },
+    }
+  );
+
+const cancel = (owner: Owner, rendered: ReviewTaskState, dispatch: Dispatch): void =>
+  Option.match(reviewing(owner, rendered), {
+    onNone: () => undefined,
+    onSome: (selection) => {
+      const admitted = admit(owner, ReviewTaskState.Cancelling(selection));
+
+      dispatch(
+        Decision.Cancel({
+          requestId: selection.review.requestId,
+          completed: (): void => admitted.complete(ReviewTaskState.Cancelled()),
+          failed: (): void => admitted.complete(ReviewTaskState.CancellationUnconfirmed()),
+        })
+      );
+    },
+  });
+
+export const initialReviewSelection = (review: OAuthReview): ReviewingState =>
+  ReviewTaskState.Reviewing({ review, scopes: review.scopes, days: defaultPATLifetimeDays });
 
 const edit = (
   owner: Owner,
   rendered: ReviewTaskState,
   update: (selection: Selection) => Selection
 ): void => {
-  if (!owner.active || owner.current !== rendered || rendered._tag !== "Reviewing") return;
-  publish(owner, { ...update(rendered), _tag: "Reviewing" });
+  Option.map(reviewing(owner, rendered), (selection) =>
+    publish(owner, ReviewTaskState.Reviewing(update(selection)))
+  );
 };
 
-const resume = (previous: ReviewTaskState): ReviewTaskState => {
-  if (previous._tag === "Connecting") return { _tag: "Uncertain" };
-
-  if (previous._tag === "Cancelling") return { _tag: "CancellationUnconfirmed" };
-
-  if (previous._tag === "Loading") return { _tag: "Unavailable" };
-
-  return { ...previous };
-};
+const resume = (previous: ReviewTaskState): ReviewTaskState =>
+  Match.value(previous).pipe(
+    Match.tag("Connecting", () => ReviewTaskState.Uncertain()),
+    Match.tag("Cancelling", () => ReviewTaskState.CancellationUnconfirmed()),
+    Match.tag("Loading", () => ReviewTaskState.Unavailable()),
+    Match.orElse((settled): ReviewTaskState => ({ ...settled }))
+  );
 
 const mount = (owner: Owner): (() => void) => {
   owner.active = true;
@@ -176,7 +199,7 @@ const mount = (owner: Owner): (() => void) => {
 
   const retire = (): void => {
     owner.active = false;
-    publish(owner, { _tag: "Disposed" });
+    publish(owner, ReviewTaskState.Disposed());
   };
 
   window.addEventListener("pagehide", retire);
@@ -193,28 +216,40 @@ const readAgain = (owner: Owner, state: ReviewTaskState, dispatch: Dispatch): vo
   if (
     !owner.active ||
     owner.current !== state ||
-    (state._tag !== "CancellationUnconfirmed" && state._tag !== "Unavailable")
+    !(
+      ReviewTaskState.$is("CancellationUnconfirmed")(state) ||
+      ReviewTaskState.$is("Unavailable")(state)
+    )
   ) {
     return;
   }
 
-  const reading: ReviewTaskState = { _tag: "Loading" };
+  const reading = ReviewTaskState.Loading();
   publish(owner, reading);
-  dispatch({
-    _tag: "ReadAgain",
-    requestId: owner.requestId,
-    completed: (review): void => {
-      if (owner.active && owner.current === reading) {
-        publish(owner, initialReviewSelection(review));
-      }
-    },
-    failed: (): void => {
-      if (owner.active && owner.current === reading) publish(owner, { _tag: "Unavailable" });
-    },
-  });
+  dispatch(
+    Decision.ReadAgain({
+      requestId: owner.requestId,
+      completed: (review): void => {
+        if (owner.active && owner.current === reading) {
+          publish(owner, initialReviewSelection(review));
+        }
+      },
+      failed: (): void => {
+        if (owner.active && owner.current === reading) {
+          publish(owner, ReviewTaskState.Unavailable());
+        }
+      },
+    })
+  );
 };
 
-export const makeReviewTask = ({
+export type ReviewTask = Readonly<{
+  atom: Atom.AtomResultFn<Decision, void, never>;
+  mount: () => () => void;
+  actions: (state: ReviewTaskState, dispatch: Dispatch) => ReviewTaskActions;
+}>;
+
+export const openReviewTask = ({
   client,
   initial,
   onChange,
@@ -224,11 +259,7 @@ export const makeReviewTask = ({
   initial: ReturnType<typeof initialReviewSelection>;
   onChange: Owner["publish"];
   navigate: Owner["navigate"];
-}>): Readonly<{
-  atom: ReturnType<typeof makeDecision>;
-  mount: () => () => void;
-  actions: (state: ReviewTaskState, dispatch: Dispatch) => ReviewTaskActions;
-}> => {
+}>): ReviewTask => {
   const owner: Owner = {
     requestId: initial.review.requestId,
     current: initial,
@@ -253,8 +284,8 @@ export const makeReviewTask = ({
           };
         }),
       select: (days): void => edit(owner, state, (selection) => ({ ...selection, days })),
-      connect: (): void => decide(owner, { rendered: state, dispatch, connect: true }),
-      cancel: (): void => decide(owner, { rendered: state, dispatch, connect: false }),
+      connect: (): void => connect(owner, state, dispatch),
+      cancel: (): void => cancel(owner, state, dispatch),
       readAgain: (): void => readAgain(owner, state, dispatch),
     }),
   };

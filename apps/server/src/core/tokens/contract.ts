@@ -1,4 +1,12 @@
-import { type DateTime, Duration, Effect, type Option, Schema, SchemaTransformation } from "effect";
+import {
+  Data,
+  type DateTime,
+  Duration,
+  Effect,
+  Option,
+  Schema,
+  SchemaTransformation,
+} from "effect";
 import { UserId } from "~/core/identity/contract";
 import { CanonicalCapability } from "~/core/canonical-operations/contract";
 import { UtcTimestamp } from "~/core/_shared/time";
@@ -145,16 +153,12 @@ export type TokenBearer = typeof TokenBearer.Type;
 
 type TokenInstant = Readonly<{ epochMilliseconds: number }>;
 
-type OptionalTokenInstant =
-  | Readonly<{ _tag: "None" }>
-  | Readonly<{ _tag: "Some"; value: TokenInstant }>;
-
 export const PATLifecycleCheck = Schema.makeFilter<
   Readonly<{
     lifetimeDays: PATLifetimeDays;
-    lastUsedAt: OptionalTokenInstant;
+    lastUsedAt: Option.Option<TokenInstant>;
     expiresAt: TokenInstant;
-    revokedAt: OptionalTokenInstant;
+    revokedAt: Option.Option<TokenInstant>;
     createdAt: TokenInstant;
   }>
 >((token) => {
@@ -169,8 +173,10 @@ export const PATLifecycleCheck = Schema.makeFilter<
     };
   }
 
-  const lastUsedAt =
-    token.lastUsedAt._tag === "Some" ? token.lastUsedAt.value.epochMilliseconds : createdAt;
+  const lastUsedAt = Option.match(token.lastUsedAt, {
+    onNone: () => createdAt,
+    onSome: (instant) => instant.epochMilliseconds,
+  });
 
   if (lastUsedAt < createdAt || lastUsedAt >= expiresAt) {
     return {
@@ -179,7 +185,7 @@ export const PATLifecycleCheck = Schema.makeFilter<
     };
   }
 
-  if (token.revokedAt._tag === "Some") {
+  if (Option.isSome(token.revokedAt)) {
     const revokedAt = token.revokedAt.value.epochMilliseconds;
 
     if (revokedAt < lastUsedAt) {
@@ -385,22 +391,17 @@ export type PATPairingClaimInput = Readonly<{
   attemptedAt: DateTime.Utc;
 }>;
 
-export type PATPairingClaimDecision =
-  | Readonly<{
-      _tag: "Pending";
-      acceptedAt: DateTime.Utc;
-      minimumPollIntervalSeconds: number;
-    }>
-  | Readonly<{ _tag: "Claim" }>
-  | Readonly<{ _tag: "WrongProof"; wrongProofAttempts: number }>
-  | Readonly<{
-      _tag: "SlowDown";
-      minimumPollIntervalSeconds: number;
-      retryAfterSeconds: number;
-    }>
-  | Readonly<{ _tag: "ExpireUnapproved" }>
-  | Readonly<{ _tag: "RevokeUnclaimed" }>
-  | Readonly<{ _tag: "Invalid" }>;
+export type PATPairingClaimDecision = Data.TaggedEnum<{
+  Pending: { readonly acceptedAt: DateTime.Utc; readonly minimumPollIntervalSeconds: number };
+  Claim: {};
+  WrongProof: { readonly wrongProofAttempts: number };
+  SlowDown: { readonly minimumPollIntervalSeconds: number; readonly retryAfterSeconds: number };
+  ExpireUnapproved: {};
+  RevokeUnclaimed: {};
+  Invalid: {};
+}>;
+
+export const PATPairingClaimDecision = Data.taggedEnum<PATPairingClaimDecision>();
 
 export const PATActivityMetadata = Schema.Struct({
   ...ActivePATMetadata.fields,

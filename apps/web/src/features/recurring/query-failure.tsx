@@ -14,8 +14,8 @@ export const RecurringQueryFailure = ({
 }>): JSX.Element => {
   const limited = states.some(
     (state) =>
-      state._tag === "Failure" &&
-      state.failure._tag === "DeclaredFailure" &&
+      Predicate.isTagged(state, "Failure") &&
+      Predicate.isTagged(state.failure, "DeclaredFailure") &&
       Predicate.isTagged(state.failure.error, "ResourceLimited")
   );
 

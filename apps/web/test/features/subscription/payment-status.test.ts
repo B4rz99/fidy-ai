@@ -5,7 +5,7 @@ import {
   isAwaitingPaymentStatus,
   paymentStatusRefreshDelay,
   paymentSubmissionIsTerminal,
-} from "./payment-status";
+} from "@/features/subscription/payment-status";
 
 const enrollmentId = PaymentEnrollmentId.make("22700000-0000-4000-8000-000000000090");
 

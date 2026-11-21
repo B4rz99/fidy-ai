@@ -21,7 +21,6 @@ Bad names cause bugs. **A good name says what the entity is and what it is not.*
 | core decisions                         | verb-first — `decideAlerts`, `matchTransaction`, `applyEdit`                                                        |
 | repo reads returning `Option`          | `find*` — `findBudget`                                                                                              |
 | repo reads where absence is impossible | `get*`                                                                                                              |
-| primary Layer on a `Context.Service`   | `static readonly layer` on the service class                                                                        |
 | classless production compositions      | `Live` suffix — `PgLive`, `ApiLive`                                                                                 |
 | layers assembling a test stack         | named for what they are — `ApiHarness`. `Live` marks the production assembly, so it would read as the opposite here |
 
@@ -86,10 +85,6 @@ Build derived shapes from their canonical schemas rather than maintaining parall
 Judge a `Record` by its actual keyspace and value contract.
 
 - A finite `Record<FailureTag, Status>` is an exhaustive table and strengthens the contract.
-- In shell production code, `Record<string, unknown>` is reserved for genuinely open property bags
-  whose keys and values Fidy does not know.
-- Do not return `Record<string, unknown>` for a value whose fields are already known. Use the
-  canonical schema-derived type or a named first-party shape.
 
 ### Runtime checks
 
@@ -110,7 +105,6 @@ Judge a `Record` by its actual keyspace and value contract.
 - Use `WeakMap` only when private data must be associated with an object by identity and must not
   extend that object's lifetime.
 - Decode raw input at the shell boundary before passing it to core.
-- Model runtime absence with `Option`, not `null`; use `undefined` where a foreign API demands it.
 - `ReadonlyArray<T>` in **return** types.
 - `Data.struct` / `Data.tuple` for value objects needing structural equality.
 - Effect's own collections (`Chunk`, `HashMap`) only where they earn it. `ReadonlyArray` is the
@@ -154,10 +148,6 @@ whether the published behavior is substantive and whether the owner is honest.
 
 Repos are not services because the main thing that buys is substitution, and we have decided not to
 substitute them. Thirteen unused substitution seams would sit there inviting someone to mock a repo.
-
-First-party `Context.Service` classes own their primary production Layer as `static readonly layer`,
-following the Effect v4 convention and keeping construction local to the service. `FooLive` remains
-for classless production compositions and configured aliases of third-party Layers.
 
 ### Classes only where an Effect API asks for one
 

@@ -1,11 +1,13 @@
 import { Effect, Option } from "effect";
 import { Atom } from "effect/reactivity";
 
-export const makeEnrollmentCommand = <A, E>(): Readonly<{
+type EnrollmentCommand<A, E> = Readonly<{
   atom: Atom.AtomResultFn<void, A, E>;
   offer: (work: Effect.Effect<A, E>) => void;
   clear: () => void;
-}> => {
+}>;
+
+export const createEnrollmentCommand = <A, E>(): EnrollmentCommand<A, E> => {
   let pending = Option.none<Effect.Effect<A, E>>();
 
   const atom = Atom.fn<void>()(() =>

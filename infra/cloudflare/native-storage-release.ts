@@ -1324,6 +1324,53 @@ const attachCanonicalHosts = Effect.fn(function* (
   });
   yield* requireSameInstallation(env, verified);
 });
+const PinnedStorageEvidence = Schema.Struct({ core: SmokeIdentity, markers: SharedStoreMarkers });
+const MarkerSections = Schema.Struct({
+  core: Schema.optionalKey(Schema.Unknown),
+  markers: Schema.optionalKey(Schema.Unknown),
+});
+const decodePinnedStorageEvidence = Effect.fn(function* (
+  response: HttpClientResponse.HttpClientResponse,
+  ingress: string
+) {
+  const served = Option.fromUndefinedOr(response.headers["x-fidy-smoke-worker-version"]);
+  const ingressEvidence = Option.match(served, {
+    onNone: () => "missing",
+    onSome: (id) => (id === ingress ? "matched" : "different"),
+  });
+  if (response.status !== successStatusStart) {
+    return yield* new ReleaseFailure({
+      message:
+        "Pinned storage probe returned HTTP " +
+        response.status +
+        " with Ingress version " +
+        ingressEvidence,
+    });
+  }
+  const raw = yield* response.json.pipe(
+    Effect.mapError(
+      () => new ReleaseFailure({ message: "Pinned storage probe returned invalid JSON" })
+    )
+  );
+  const evidence = Schema.decodeUnknownOption(PinnedStorageEvidence)(raw);
+  if (Option.isSome(evidence)) return evidence.value;
+  const sections = Schema.decodeUnknownOption(MarkerSections)(raw);
+  const presented = Option.match(sections, {
+    onNone: () => "no structured sections",
+    onSome: ({ core, markers }) =>
+      "coreIdentity=" +
+      Schema.is(SmokeIdentity)(core) +
+      " storeMarkers=" +
+      Schema.is(SharedStoreMarkers)(markers),
+  });
+  return yield* new ReleaseFailure({
+    message:
+      "Pinned storage probe returned HTTP 200 with Ingress version " +
+      ingressEvidence +
+      " and " +
+      presented,
+  });
+});
 const requireTestedStorage = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
@@ -1348,11 +1395,8 @@ const requireTestedStorage = Effect.fn(function* (
   const response = yield* client.execute(
     HttpClientRequest.get(origin + "/internal/release-smoke" + compatibilityQuery, { headers })
   );
-  const observation = yield* Schema.decodeUnknownEffect(
-    Schema.Struct({ core: SmokeIdentity, markers: SharedStoreMarkers })
-  )(yield* response.json);
+  const observation = yield* decodePinnedStorageEvidence(response, input.ingress);
   if (
-    response.status !== successStatusStart ||
     response.headers["x-fidy-smoke-worker-version"] !== input.ingress ||
     observation.core.workerVersionId !== input.core ||
     observation.core.gitRevision !== input.revision ||

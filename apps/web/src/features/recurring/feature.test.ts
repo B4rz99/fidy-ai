@@ -333,11 +333,14 @@ const checkFailedRetry = (container: HTMLElement): WorkspaceCheck =>
     );
     expect(button(container, "Reintentar").disabled).toBe(false);
   });
-it("explains a failed account-context load and a retry that fails again", () =>
-  withWorkspace(
-    checkFailedRetry,
-    Option.some({ path: "/user", ready: "No pudimos cargar tus recurrentes" })
-  ));
+it.each(["/user", "/recurring-plans"])(
+  "explains a failed %s load and a retry that fails again",
+  (path) =>
+    withWorkspace(
+      checkFailedRetry,
+      Option.some({ path, ready: "No pudimos cargar tus recurrentes" })
+    )
+);
 
 const checkEarlierDisclosure = (container: HTMLElement): WorkspaceCheck =>
   Effect.gen(function* () {

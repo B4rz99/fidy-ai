@@ -218,7 +218,7 @@ const compactNode = (
       if (schemaArrays.has(key) && Array.isArray(child)) {
         return [
           key,
-          child.map((node) =>
+          child.map((node: unknown) =>
             Predicate.isObject(node) ? compactNode(node, definitions, describeChildren) : node
           ),
         ];

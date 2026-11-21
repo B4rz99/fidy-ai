@@ -132,7 +132,7 @@ it.effect("bounds decoding work for long leading fields followed by many empty c
     const leadingField = "x".repeat(250_000);
     const rawRecord = `${leadingField}${fullRow}\n`;
     const bytes = encode(`${fullRow}\n${rawRecord.repeat(20)}`);
-    const prototype: unknown = Buffer.prototype;
+    const prototype: unknown = Object.getOwnPropertyDescriptor(Buffer, "prototype")?.value;
 
     if (!Schema.is(BufferDecoder)(prototype)) return yield* Effect.die("Missing Buffer decoder");
     const decodeBuffer = prototype.toString;

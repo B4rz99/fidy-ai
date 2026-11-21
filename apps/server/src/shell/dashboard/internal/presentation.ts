@@ -191,7 +191,7 @@ export const renderDashboardView = ({
           )
         ).pipe(
           Effect.flatMap(([first, second, ...rest]) =>
-            first === undefined || second === undefined
+            second === undefined
               ? Effect.die(new Error("A split layout node renders at least two children"))
               : Effect.succeed({
                   kind: "split" as const,

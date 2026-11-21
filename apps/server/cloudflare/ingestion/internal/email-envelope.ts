@@ -1,4 +1,4 @@
-import { Data, Effect, Schema } from "effect";
+import { Data, Effect, Predicate, Schema } from "effect";
 
 export const maximumRawBytes = 1_048_576;
 
@@ -31,7 +31,7 @@ export const io = <A>(tryWork: () => Promise<A>): Effect.Effect<A, EmailUnavaila
   Effect.tryPromise({
     try: tryWork,
     catch: (cause) =>
-      cause instanceof Error && cause.message.includes("forwarded_email_deferred_capacity")
+      Predicate.isError(cause) && cause.message.includes("forwarded_email_deferred_capacity")
         ? new EmailUnavailable({ reason: "capacity" })
         : authorityUnavailable(),
   });

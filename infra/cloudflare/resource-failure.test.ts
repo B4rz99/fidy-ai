@@ -12,6 +12,22 @@ import {
   resourceFailureMessage,
 } from "./resource-failure";
 
+const providerRefusal = {
+  code: Schema.optionalKey(Schema.Unknown),
+  message: Schema.optionalKey(Schema.String),
+  body: Schema.optionalKey(Schema.String),
+};
+
+const Forbidden = Schema.TaggedStruct("Forbidden", providerRefusal);
+
+const PrivateToken = Schema.TaggedStruct("private-token", providerRefusal);
+
+const UnknownCloudflareError = Schema.TaggedStruct("UnknownCloudflareError", providerRefusal);
+
+const CloudflareParseError = Schema.TaggedStruct("CloudflareParseError", providerRefusal);
+
+const WorkerVersionConfigError = Schema.TaggedStruct("WorkerVersionConfigError", providerRefusal);
+
 describe("resource release refusal diagnostics", () => {
   it.effect("reports the closed fixture refusal without publishing an unreviewed coordinate", () =>
     Effect.gen(function* () {
@@ -42,11 +58,9 @@ describe("resource release refusal diagnostics", () => {
   );
   it.effect("identifies the failed native release stage without disclosing the provider body", () =>
     Effect.gen(function* () {
-      const message = yield* Effect.die({
-        _tag: "Forbidden",
-        code: 10000,
-        message: "secret provider body",
-      }).pipe(
+      const message = yield* Effect.die(
+        Forbidden.make({ code: 10000, message: "secret provider body" })
+      ).pipe(
         nativeResourceStage("planning"),
         Effect.matchCause({ onFailure: nativeResourceFailureMessage, onSuccess: () => "success" })
       );
@@ -82,7 +96,7 @@ describe("resource release refusal diagnostics", () => {
     );
 
     const nested = new Error("private text", {
-      cause: new Error("private proof", { cause: { _tag: "Forbidden", code: 10000 } }),
+      cause: new Error("private proof", { cause: Forbidden.make({ code: 10000 }) }),
     });
 
     expect(resourceFailureMessage(Cause.fail(nested))).toBe(
@@ -90,7 +104,7 @@ describe("resource release refusal diagnostics", () => {
     );
 
     const unknown = new Error("private text", {
-      cause: { _tag: "private-token", message: "private" },
+      cause: PrivateToken.make({ message: "private" }),
     });
 
     expect(resourceFailureMessage(Cause.fail(unknown))).toBe(
@@ -109,20 +123,20 @@ describe("resource release refusal diagnostics", () => {
   it("identifies a rejected Worker version configuration without publishing its provider message", () => {
     expect(
       resourceFailureMessage(
-        Cause.fail({
-          _tag: "WorkerVersionConfigError",
-          message: "private Worker binding configuration",
-        })
+        Cause.fail(
+          WorkerVersionConfigError.make({ message: "private Worker binding configuration" })
+        )
       )
     ).toBe("Alchemy resource operation failed (WorkerVersionConfigError); inspect release state.");
   });
   it("retains provider refusal codes without foreign messages or bodies", () => {
-    const cause = Cause.fail({
-      _tag: "Forbidden",
-      code: 10000,
-      message: "Bearer private-token",
-      body: "private recovery proof",
-    });
+    const cause = Cause.fail(
+      Forbidden.make({
+        code: 10000,
+        message: "Bearer private-token",
+        body: "private recovery proof",
+      })
+    );
 
     expect(resourceFailureMessage(cause)).toBe(
       "Alchemy resource operation failed (Forbidden; code=10000); inspect release state."
@@ -131,8 +145,8 @@ describe("resource release refusal diagnostics", () => {
 
   it("reports concurrent provider failures and defects using closed categories", () => {
     const cause = Cause.combine(
-      Cause.fail({ _tag: "UnknownCloudflareError", code: 12130, message: "private" }),
-      Cause.die({ _tag: "CloudflareParseError", body: "private" })
+      Cause.fail(UnknownCloudflareError.make({ code: 12130, message: "private" })),
+      Cause.die(CloudflareParseError.make({ body: "private" }))
     );
 
     expect(resourceFailureMessage(cause)).toBe(
@@ -142,9 +156,9 @@ describe("resource release refusal diagnostics", () => {
 
   it("never publishes unknown tags, messages, invalid codes or arbitrary defects", () => {
     for (const error of [
-      { _tag: "private-token", code: 10000 },
-      { _tag: "Forbidden", code: "private-token" },
-      { _tag: "Forbidden", code: -1 },
+      PrivateToken.make({ code: 10000 }),
+      Forbidden.make({ code: "private-token" }),
+      Forbidden.make({ code: -1 }),
       Error("private recovery proof"),
     ]) {
       const result = resourceFailureMessage(Cause.die(error));

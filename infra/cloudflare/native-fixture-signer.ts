@@ -1,6 +1,6 @@
 import fixtureUpload from "./native-fixture-upload.json" with { type: "json" };
 import retainedProvider from "./native-retained-provider.json" with { type: "json" };
-import { Config, Data, Effect, Redacted } from "effect";
+import { Config, Data, Effect, Redacted, Result } from "effect";
 
 import { Hex } from "effect/encoding";
 import { fileURLToPath } from "node:url";
@@ -75,7 +75,8 @@ const keyOperation = <A>(run: () => Promise<A>): Effect.Effect<A, InvalidFixture
 const publicFingerprint = Effect.fnUntraced(function* (value: string) {
   const decoded = Hex.decode(value);
 
-  if (decoded._tag === "Failure") return yield* new InvalidFixtureSigner();
+  if (Result.isFailure(decoded)) return yield* new InvalidFixtureSigner();
+
   const algorithm = { name: "ECDSA", namedCurve: "P-256" };
 
   const key = yield* keyOperation(() =>
@@ -123,9 +124,17 @@ export const fixtureSignerBindings = Effect.fn(function* (release: {
     return yield* Effect.fail(Error("Candidate signing key fingerprint mismatch"));
   }
 
+  if (!release.successorPlan) {
+    return {
+      ACCEPTANCE_PROVIDER_REVISION: retainedProvider.revision,
+      NATIVE_FIXTURE_SIGNING_KEY: secret,
+      NATIVE_FIXTURE_SIGNER_SHA256: fingerprint,
+    };
+  }
+
   return {
     ACCEPTANCE_PROVIDER_REVISION: retainedProvider.revision,
-    ...(release.successorPlan ? { NATIVE_FIXTURE_MEMBER: "performance-2" as const } : {}),
+    NATIVE_FIXTURE_MEMBER: "performance-2" as const,
     NATIVE_FIXTURE_SIGNING_KEY: secret,
     NATIVE_FIXTURE_SIGNER_SHA256: fingerprint,
   };

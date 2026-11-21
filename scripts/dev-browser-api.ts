@@ -1,6 +1,6 @@
 import { ownerCheckUrl } from "../apps/server/cloudflare/maintenance/contract";
 import { BunFileSystem, BunRuntime } from "@effect/platform-bun";
-import { Clock, Effect } from "effect";
+import { Clock, Context, Effect, Layer } from "effect";
 import type { Miniflare } from "miniflare";
 import { browserOrigins } from "../apps/server/cloudflare/runtime/contract";
 import { storeReadinessUrl } from "../apps/server/cloudflare/runtime/sqlite/contract";
@@ -117,32 +117,38 @@ export const forward = Effect.fn(function* (
   return new Response(response.body, { status: response.status, headers: response.headers });
 });
 
-export const makeBrowserRuntime = Effect.gen(function* () {
-  const create = yield* nativeBrowserPlatform;
-  const revision = Bun.spawnSync(["git", "rev-parse", "HEAD"]);
+export class BrowserRuntime extends Context.Service<BrowserRuntime, Miniflare>()(
+  "fidy-ai/scripts/dev-browser-api/BrowserRuntime"
+) {
+  static readonly make = Effect.gen(function* () {
+    const create = yield* nativeBrowserPlatform;
+    const revision = Bun.spawnSync(["git", "rev-parse", "HEAD"]);
 
-  const digest = Bun.spawnSync([
-    process.execPath,
-    "run",
-    "--silent",
-    "--cwd",
-    "apps/server",
-    "contracts:digest",
-  ]);
+    const digest = Bun.spawnSync([
+      process.execPath,
+      "run",
+      "--silent",
+      "--cwd",
+      "apps/server",
+      "contracts:digest",
+    ]);
 
-  if (revision.exitCode !== 0 || digest.exitCode !== 0) {
-    return yield* Effect.die("Could not resolve local release identity");
-  }
+    if (revision.exitCode !== 0 || digest.exitCode !== 0) {
+      return yield* Effect.die("Could not resolve local release identity");
+    }
 
-  return yield* create(undefined, [], {
-    BROWSER_ORIGIN: browserOrigins.acceptance,
-    RELEASE_GIT_SHA: revision.stdout.toString().trim(),
-    CONTRACT_DIGEST: digest.stdout.toString().trim(),
+    return yield* create(undefined, [], {
+      BROWSER_ORIGIN: browserOrigins.acceptance,
+      RELEASE_GIT_SHA: revision.stdout.toString().trim(),
+      CONTRACT_DIGEST: digest.stdout.toString().trim(),
+    });
   });
-});
+
+  static readonly layer = Layer.effect(this, this.make);
+}
 
 const loopback = Effect.gen(function* () {
-  const runtime = yield* makeBrowserRuntime;
+  const runtime = yield* BrowserRuntime;
   yield* prepareBrowserUser(runtime, recurringUser);
   const run = Effect.runPromiseWith(yield* Effect.context<never>());
 
@@ -170,5 +176,10 @@ const loopback = Effect.gen(function* () {
 });
 
 if (import.meta.main) {
-  BunRuntime.runMain(loopback.pipe(Effect.scoped, Effect.provide(BunFileSystem.layer)));
+  BunRuntime.runMain(
+    loopback.pipe(
+      Effect.scoped,
+      Effect.provide(BrowserRuntime.layer.pipe(Layer.provideMerge(BunFileSystem.layer)))
+    )
+  );
 }

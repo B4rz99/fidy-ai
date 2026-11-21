@@ -4,6 +4,7 @@ import { HttpClient, HttpClientResponse } from "effect/http";
 import { runOperationCommand } from "../src/canonical/operations";
 import { canonicalClientFactory, readOperationInput } from "../src/canonical/runtime";
 import { SavedGrant, apiOrigin } from "../src/credential/contract";
+import { decodePAT } from "./support/pat";
 
 const ServerResponse = Schema.Struct({
   body: Schema.String,
@@ -12,10 +13,9 @@ const ServerResponse = Schema.Struct({
   command: Schema.Literals(["quota", "transaction", "categories"]),
 });
 
-const grant = Schema.decodeSync(Schema.toCodecJson(SavedGrant))({
+const grant = SavedGrant.make({
   origin: apiOrigin,
-  pat: {
-    _tag: "PAT",
+  pat: decodePAT({
     id: "01900000-0000-4000-8000-000000000001",
     shortId: "abcd1234",
     recipientLabel: "Allowance integration",
@@ -25,7 +25,7 @@ const grant = Schema.decodeSync(Schema.toCodecJson(SavedGrant))({
     revokedAt: null,
     createdAt: "2099-01-01T00:00:00.000Z",
     expiresAt: "2099-01-08T00:00:00.000Z",
-  },
+  }),
 });
 
 const secretCharacters = 43;

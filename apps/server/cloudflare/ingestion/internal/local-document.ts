@@ -17,7 +17,7 @@ import {
   statementParserRevision,
   statementStagingLifetimeMilliseconds,
 } from "../../../src/core/ingestion/contract";
-import { makeKapsoOutboundHttp } from "../../../src/shell/outbound-http/operations";
+import { OutboundHttp } from "../../../src/shell/outbound-http/operations";
 import { settleObservedOriginal, trackOriginalPut } from "./original-writers";
 import { resumePrivateUpload, userPrivateObjectPrefix } from "../../private-objects/operations";
 import { preserveStoreAlarm, withStoreCapacity } from "../../runtime/sqlite/operations";
@@ -25,6 +25,8 @@ import { newId } from "../../secret-material/operations";
 
 import { type LocalIngestionEnvironment, NativeStatementDocument } from "../contract";
 import { retrieveHeldStatementMedia } from "./statement-document";
+
+const isResponse = Schema.is(Schema.instanceOf(Response));
 
 const timestampResolutionMs = 1000;
 
@@ -229,7 +231,7 @@ const stageDocument = Effect.fn(function* (
   const httpClient = yield* HttpClient.HttpClient;
 
   const media = yield* retrieveHeldStatementMedia({
-    outbound: makeKapsoOutboundHttp({ httpClient, apiKey: Redacted.make(env.KAPSO_API_KEY) }),
+    outbound: OutboundHttp.kapso({ httpClient, apiKey: Redacted.make(env.KAPSO_API_KEY) }),
     mediaId: doc.mediaId,
     businessPhoneNumberId: doc.endpoint,
     current,
@@ -297,10 +299,10 @@ const publishDocument = Effect.fn(function* (
   const current = yield* Clock.currentTimeMillis;
   const row = yield* withStoreCapacity("growth")(reserve(doc, current, { storage, origin }));
 
-  if (row instanceof Response) return row;
+  if (isResponse(row)) return row;
   const material = yield* stageDocument(row, doc, { env, current });
 
-  if (material instanceof Response) {
+  if (isResponse(material)) {
     return material.status === unprocessable
       ? yield* refuseUnsupported(row.id, doc.userId)
       : material;

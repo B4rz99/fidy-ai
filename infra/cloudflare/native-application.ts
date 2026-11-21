@@ -47,7 +47,7 @@ export const nativeState = Layer.unwrap(
     if (backend === "local") return Alchemy.localState();
 
     return Alchemy.inMemoryState();
-  }).pipe(Effect.orDie)
+  }).pipe(Effect.catchTag("ConfigError", Effect.die))
 );
 
 const workerPolicy = {

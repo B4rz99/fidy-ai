@@ -21,6 +21,7 @@ export default {
   ignorePatterns: [
     "**",
     "!/src/core/**",
+    "!/test/core/**",
     "!/package.json",
     "!/tsconfig.json",
     "!/bunfig.toml",

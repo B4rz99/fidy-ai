@@ -1,7 +1,7 @@
 import { BunFileSystem, BunRuntime } from "@effect/platform-bun";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Layer, Option, Schema } from "effect";
 import type { DurableObjectStorageHandle, Miniflare } from "miniflare";
-import { approve, forward, makeBrowserRuntime, prepareBrowserUser } from "../../dev-browser-api";
+import { BrowserRuntime, approve, forward, prepareBrowserUser } from "../../dev-browser-api";
 import { seed, subject } from "./native-seed";
 import { withReviewPressureSnapshot } from "./native-review-pressure";
 
@@ -71,8 +71,7 @@ const accountability = Effect.fn(function* (
 });
 
 const start = Effect.gen(function* () {
-  process.stdout.write("REFERENCE_STAGE runtime\n");
-  const runtime = yield* makeBrowserRuntime;
+  const runtime = yield* BrowserRuntime;
   process.stdout.write("REFERENCE_STAGE user\n");
   yield* prepareBrowserUser(runtime, subject);
 
@@ -130,4 +129,17 @@ const start = Effect.gen(function* () {
   return yield* Effect.never;
 });
 
-BunRuntime.runMain(start.pipe(Effect.scoped, Effect.provide(BunFileSystem.layer)));
+BunRuntime.runMain(
+  start.pipe(
+    Effect.scoped,
+    Effect.provide(
+      BrowserRuntime.layer.pipe(
+        Layer.provideMerge(
+          Layer.effectDiscard(
+            Effect.sync(() => process.stdout.write("REFERENCE_STAGE runtime\n"))
+          ).pipe(Layer.provideMerge(BunFileSystem.layer))
+        )
+      )
+    )
+  )
+);

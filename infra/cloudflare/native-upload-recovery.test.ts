@@ -2,17 +2,16 @@ import { expect, it } from "vitest";
 import upload from "./native-fixture-upload.json" with { type: "json" };
 import { requireInterruptedUpload } from "./native-upload-recovery";
 
-const metadata = (
-  id: string,
-  ingress: boolean
-): {
+type VersionMetadata = {
   success: boolean;
   result: {
     id: string;
     annotations: Record<string, string>;
     resources: { script: object; bindings: object[] };
   };
-} => ({
+};
+
+const metadata = (id: string, ingress: boolean): VersionMetadata => ({
   success: true,
   result: {
     id,

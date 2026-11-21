@@ -50,9 +50,9 @@ const requiredConfiguration = [
 
 type ConfigurationName = (typeof requiredConfiguration)[number];
 
-const runConfigurationGate = (
-  missing?: ConfigurationName
-): { readonly exitCode: number; readonly output: string } => {
+type GateRun = { readonly exitCode: number; readonly output: string };
+
+const runConfigurationGate = (missing?: ConfigurationName): GateRun => {
   const env = { ...process.env };
 
   for (const name of requiredConfiguration) env[name] = testValue;

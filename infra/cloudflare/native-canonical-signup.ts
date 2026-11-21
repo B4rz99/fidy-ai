@@ -1,3 +1,4 @@
+import type { WorkerBindings } from "./rollback-compatibility";
 import { isDeepStrictEqual } from "node:util";
 import { installedOrigins } from "@fidy/server/browser-transport";
 import { WhatsAppBusinessPhoneNumberId } from "@fidy/server/whatsapp-contract";
@@ -61,7 +62,9 @@ const describedText = Schema.decodeUnknownOption(
 const bindingMatches = (binding: unknown, text: string): boolean =>
   Option.exists(describedText(binding), (found) => found.text === text);
 
-type Bindings = Readonly<Record<string, unknown>>;
+type Bindings = WorkerBindings;
+
+type SignupUserCensus = Readonly<{ count: number; sha256: string }>;
 
 export const requireCanonicalSignupBindings = ({
   before,
@@ -74,7 +77,7 @@ export const requireCanonicalSignupBindings = ({
 }): void => {
   const changes = sharedChanges.concat(role === "Core" ? coreChanges : []);
 
-  const unchanged = (bindings: Bindings): Record<string, unknown> =>
+  const unchanged = (bindings: Bindings): Bindings =>
     Object.fromEntries(Object.entries(bindings).filter(([name]) => !changes.includes(name)));
 
   const expected = {
@@ -124,9 +127,7 @@ const idsDigest = (ids: readonly string[]): string =>
 const populatedUsers = (objects: ReadonlyMap<string, boolean>): readonly string[] =>
   [...objects.entries()].flatMap(([id, populated]) => (populated ? [id] : []));
 
-export const signupUserCensus = (
-  objects: ReadonlyMap<string, boolean>
-): { count: number; sha256: string } => {
+export const signupUserCensus = (objects: ReadonlyMap<string, boolean>): SignupUserCensus => {
   const ids = populatedUsers(objects);
 
   return { count: ids.length, sha256: idsDigest(ids) };

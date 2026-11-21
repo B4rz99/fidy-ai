@@ -1,4 +1,4 @@
-import { Clock, Config, Effect, FileSystem, Schedule, Schema, Stream } from "effect";
+import { Clock, Config, Effect, Exit, FileSystem, Schedule, Schema, Stream } from "effect";
 import { type FleetOrdinal, type TenState, fleetOrdinals, runTenFleet } from "./native-ten-fleet";
 import type { FleetPilotBrowser } from "./native-fleet-pilot";
 import type { UserObjects } from "./native-erasure-evidence";
@@ -59,19 +59,22 @@ const Store = Schema.Struct({
     Schema.Struct({
       stage: Schema.String,
       at: Schema.Int,
-      ordinal: Schema.optional(ordinal),
-      reference: Schema.optional(Schema.String),
+      ordinal: Schema.optionalKey(ordinal),
+      reference: Schema.optionalKey(Schema.String),
     })
   ),
 });
 
 type Source = { sourceRun: string; sourceVerifierRevision: string };
 
-const persist = Effect.fn(function* (release: Release, source: Source, state: TenState) {
-  const fs = yield* FileSystem.FileSystem;
-  const { revision, verifierRevision, coreVersion, publicVersion, userNamespace, path } = release;
+const encodeState = Effect.fnUntraced(function* (
+  release: Release,
+  source: Source,
+  state: TenState
+) {
+  const { revision, verifierRevision, coreVersion, publicVersion, userNamespace } = release;
 
-  const data = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+  return yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
     requestedPilotUsers: 10,
     revision,
     verifierRevision,
@@ -81,9 +84,17 @@ const persist = Effect.fn(function* (release: Release, source: Source, state: Te
     ...source,
     ...state,
   });
+});
 
+const writeState = Effect.fn(function* (fs: FileSystem.FileSystem, path: string, data: string) {
   yield* fs.writeFileString(path + ".next", data);
   yield* fs.rename(path + ".next", path);
+});
+
+const persist = Effect.fn(function* (release: Release, source: Source, state: TenState) {
+  const fs = yield* FileSystem.FileSystem;
+
+  yield* writeState(fs, release.path, yield* encodeState(release, source, state));
 });
 
 export const prepareTen = Effect.fn(function* (release: Release) {
@@ -148,12 +159,7 @@ const restore = Effect.fn(function* (release: Release, source: Source) {
     baseline: saved.baseline.map(([id, stored]) => [id, stored]),
     survivors: [...saved.survivors],
     members: saved.members.map((item) => ({ ...item })),
-    events: saved.events.map(({ stage, at, ordinal, reference }) => ({
-      stage,
-      at,
-      ...(ordinal === undefined ? {} : { ordinal }),
-      ...(reference === undefined ? {} : { reference }),
-    })),
+    events: saved.events.map((event) => ({ ...event })),
   };
 
   return state;
@@ -230,7 +236,9 @@ export const executeTen = Effect.fn(function* (release: Release, continued: bool
   const fs = yield* FileSystem.FileSystem;
 
   const save = (): Effect.Effect<void, Error> =>
-    persist(release, source, state).pipe(Effect.provideService(FileSystem.FileSystem, fs));
+    encodeState(release, source, state).pipe(
+      Effect.flatMap((data) => writeState(fs, release.path, data))
+    );
 
   yield* save();
 
@@ -282,7 +290,7 @@ export const executeTen = Effect.fn(function* (release: Release, continued: bool
 
   yield* release.settle();
 
-  if (work._tag === "Failure") return yield* Effect.failCause(work.cause);
+  if (Exit.isFailure(work)) return yield* Effect.failCause(work.cause);
 
-  if (logs._tag === "Failure") return yield* Effect.failCause(logs.cause);
+  if (Exit.isFailure(logs)) return yield* Effect.failCause(logs.cause);
 });

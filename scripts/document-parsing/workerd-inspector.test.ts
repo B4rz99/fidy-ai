@@ -1,11 +1,7 @@
 import { it } from "@effect/vitest";
-import { Data, Effect, Option, Predicate, Schema } from "effect";
+import { Effect, Fiber, Option, Predicate, Schema } from "effect";
 import { afterEach, describe, expect, vi } from "vitest";
 import { heapUsage, profileWorkerRequest } from "./workerd-inspector";
-
-class InspectorTestError extends Data.TaggedError("InspectorTestError")<{
-  readonly cause: unknown;
-}> {}
 
 type SocketData = { readonly proof: true };
 
@@ -73,35 +69,39 @@ it.each(["heap", "profile"] as const)(
 
           const work =
             operation === "heap"
-              ? heapUsage({ debuggerUrl, signal: Option.none() })
-              : profileWorkerRequest({
-                  debuggerUrl,
-                  signal: Option.none(),
-                  sendRequest: (signal) => {
-                    requestSignal = Option.some(signal);
+              ? Effect.asVoid(heapUsage({ debuggerUrl, signal: Option.none() }))
+              : Effect.asVoid(
+                  profileWorkerRequest({
+                    debuggerUrl,
+                    signal: Option.none(),
+                    sendRequest: (signal) => {
+                      requestSignal = Option.some(signal);
 
-                    return Promise.resolve(
-                      new Response(
-                        new ReadableStream({
-                          cancel(): Promise<void> {
-                            cancelled = true;
+                      return Promise.resolve(
+                        new Response(
+                          new ReadableStream({
+                            cancel(): Promise<void> {
+                              cancelled = true;
 
-                            return Promise.withResolvers<void>().promise;
-                          },
-                        })
-                      )
-                    );
-                  },
-                });
+                              return Promise.withResolvers<void>().promise;
+                            },
+                          })
+                        )
+                      );
+                    },
+                  })
+                );
 
-          const outcome = work.then(
-            () => "unexpected success",
-            (failure: unknown) => failure
+          const outcome = yield* Effect.forkChild(
+            Effect.match(work, {
+              onSuccess: () => "unexpected success",
+              onFailure: (failure) => failure,
+            })
           );
 
           yield* Effect.tryPromise(() => requested.promise);
           yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(30_001));
-          const settled = yield* Effect.tryPromise(() => outcome);
+          const settled = yield* Fiber.join(outcome);
 
           expect(
             Predicate.isTagged(settled, "InspectorIoError") &&
@@ -134,26 +134,25 @@ describe("workerd inspector", () => {
         const requested = Promise.withResolvers<void>();
         const pending = Promise.withResolvers<Response>();
 
-        const profile = profileWorkerRequest({
-          debuggerUrl,
-          signal: Option.some(controller.signal),
-          sendRequest: (signal) => {
-            requestSignal = Option.some(signal);
-            requested.resolve();
+        const profile = yield* Effect.forkChild(
+          profileWorkerRequest({
+            debuggerUrl,
+            signal: Option.some(controller.signal),
+            sendRequest: (signal) => {
+              requestSignal = Option.some(signal);
+              requested.resolve();
 
-            return pending.promise;
-          },
-        });
+              return pending.promise;
+            },
+          })
+        );
 
         yield* Effect.tryPromise(() => requested.promise);
         controller.abort();
 
-        const failure = yield* Effect.tryPromise({
-          try: () => profile,
-          catch: (cause) => new InspectorTestError({ cause }),
-        }).pipe(Effect.flip);
+        const failure = yield* Fiber.join(profile).pipe(Effect.flip);
 
-        expect(Predicate.isTagged(failure.cause, "InspectorIoError")).toBe(true);
+        expect(Predicate.isTagged(failure, "InspectorIoError")).toBe(true);
         expect(Option.isSome(requestSignal) && requestSignal.value.aborted).toBe(true);
         yield* Effect.tryPromise(() => disconnected.promise);
       });
@@ -168,25 +167,24 @@ describe("workerd inspector", () => {
       const requested = Promise.withResolvers<void>();
       const debuggerUrl = serveInspector(acknowledgeStart);
 
-      const profile = profileWorkerRequest({
-        debuggerUrl,
-        signal: Option.some(controller.signal),
-        sendRequest: () => {
-          requested.resolve();
+      const profile = yield* Effect.forkChild(
+        profileWorkerRequest({
+          debuggerUrl,
+          signal: Option.some(controller.signal),
+          sendRequest: () => {
+            requested.resolve();
 
-          return pending.promise;
-        },
-      });
+            return pending.promise;
+          },
+        })
+      );
 
       yield* Effect.tryPromise(() => requested.promise);
       controller.abort();
 
-      const failure = yield* Effect.tryPromise({
-        try: () => profile,
-        catch: (cause) => new InspectorTestError({ cause }),
-      }).pipe(Effect.flip);
+      const failure = yield* Fiber.join(profile).pipe(Effect.flip);
 
-      expect(Predicate.isTagged(failure.cause, "InspectorIoError")).toBe(true);
+      expect(Predicate.isTagged(failure, "InspectorIoError")).toBe(true);
       const cancelled = Promise.withResolvers<void>();
       const body = new ReadableStream({ cancel: (): void => cancelled.resolve() });
       pending.resolve(new Response(body));
@@ -218,17 +216,15 @@ describe("workerd inspector", () => {
         );
       });
 
-      const result = yield* Effect.tryPromise(() =>
-        profileWorkerRequest({
-          debuggerUrl,
-          signal: Option.none(),
-          sendRequest: (signal) => {
-            requestSignal = Option.some(signal);
+      const result = yield* profileWorkerRequest({
+        debuggerUrl,
+        signal: Option.none(),
+        sendRequest: (signal) => {
+          requestSignal = Option.some(signal);
 
-            return Promise.resolve(new Response("Profile content"));
-          },
-        })
-      );
+          return Promise.resolve(new Response("Profile content"));
+        },
+      });
 
       expect(Option.isSome(requestSignal) && requestSignal.value.aborted).toBe(false);
       expect(yield* Effect.tryPromise(() => result.response.text())).toBe("Profile content");
@@ -244,26 +240,22 @@ describe("workerd inspector", () => {
         socket.send(JSON.stringify({ id: command.id, result: {} }));
       });
 
-      const failure = yield* Effect.tryPromise({
-        try: () =>
-          profileWorkerRequest({
-            debuggerUrl,
-            signal: Option.none(),
-            sendRequest: () =>
-              Promise.resolve(
-                new Response(
-                  new ReadableStream({
-                    cancel: (): void => {
-                      cancelled = true;
-                    },
-                  })
-                )
-              ),
-          }),
-        catch: (cause) => new InspectorTestError({ cause }),
+      const failure = yield* profileWorkerRequest({
+        debuggerUrl,
+        signal: Option.none(),
+        sendRequest: () =>
+          Promise.resolve(
+            new Response(
+              new ReadableStream({
+                cancel: (): void => {
+                  cancelled = true;
+                },
+              })
+            )
+          ),
       }).pipe(Effect.flip);
 
-      expect(Predicate.isTagged(failure.cause, "InspectorIoError")).toBe(true);
+      expect(Predicate.isTagged(failure, "InspectorIoError")).toBe(true);
       expect(cancelled).toBe(true);
     })
   );
@@ -272,12 +264,9 @@ describe("workerd inspector", () => {
     Effect.gen(function* () {
       const debuggerUrl = serveInspector((socket) => socket.close());
 
-      const failure = yield* Effect.tryPromise({
-        try: () => heapUsage({ debuggerUrl, signal: Option.none() }),
-        catch: (cause) => new InspectorTestError({ cause }),
-      }).pipe(Effect.flip);
+      const failure = yield* heapUsage({ debuggerUrl, signal: Option.none() }).pipe(Effect.flip);
 
-      expect(Predicate.isTagged(failure.cause, "InspectorIoError")).toBe(true);
+      expect(Predicate.isTagged(failure, "InspectorIoError")).toBe(true);
     })
   );
 });

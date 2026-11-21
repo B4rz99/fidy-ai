@@ -172,6 +172,7 @@ const makeFindTransaction = (
 
       return yield* parseTransaction(response.body);
     },
+    Effect.tapError(Effect.logDebug),
     Effect.mapError(() => new WompiTransactionLookupFailed())
   );
 
@@ -195,5 +196,9 @@ export class WompiBillingClient extends Context.Service<
   WompiBillingClient,
   WompiBillingClientService
 >()("@fidy/server/cloudflare/subscription/internal/wompi-billing-client/WompiBillingClient") {
-  static readonly layer = Layer.effect(WompiBillingClient, loadBillingAdapter);
+  static readonly make = loadBillingAdapter;
+
+  static readonly layer = Layer.effect(this, this.make);
+
+  static readonly fromOutboundHttp = makeWompiBillingClient;
 }

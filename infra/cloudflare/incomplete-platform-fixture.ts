@@ -33,14 +33,9 @@ export class SyntheticBindings {
   static withMethods<Binding extends object>(
     this: void,
     binding: Binding,
-    methods: Readonly<Record<string, unknown>>
+    methods: Partial<Record<keyof Binding, (...args: never[]) => object>>
   ): Binding {
-    return new Proxy(binding, {
-      get: (target, key, receiver): unknown =>
-        typeof key === "string" && Object.hasOwn(methods, key)
-          ? methods[key]
-          : Reflect.get(target, key, receiver),
-    });
+    return { ...binding, ...methods };
   }
 }
 

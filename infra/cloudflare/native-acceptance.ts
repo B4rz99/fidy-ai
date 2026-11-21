@@ -410,13 +410,14 @@ const deliverCallback = Effect.fn(function* (
   yield* deliver();
   yield* deliver();
 
-  const canonical = yield* Schema.encodeEffect(Schema.fromJsonString(WompiBillingEvent))({
-    _tag: "WompiBillingEvent",
-    environment: "sandbox",
-    transactionId: saved.id,
-    signedAt: stamp,
-    signedStatus: "APPROVED",
-  });
+  const canonical = yield* Schema.encodeEffect(Schema.fromJsonString(WompiBillingEvent))(
+    WompiBillingEvent.make({
+      environment: "sandbox",
+      transactionId: saved.id,
+      signedAt: stamp,
+      signedStatus: "APPROVED",
+    })
+  );
 
   return "wompi-event-" + new Bun.CryptoHasher("sha256").update(canonical).digest("hex");
 });
@@ -821,12 +822,18 @@ export const exerciseClosedUsers = Effect.fn(function* (input: Inputs) {
   const [first, second] = yield* establishSmokeUsers(input);
   const callback = yield* charge(input, first, second);
 
+  if (Option.isNone(input.erasure)) {
+    return {
+      signup: [first.outcome, second.outcome],
+      callback,
+      unassignedCommercialAuthorities: deniedStatuses,
+    };
+  }
+
   return {
     signup: [first.outcome, second.outcome],
     callback,
-    ...(Option.isNone(input.erasure)
-      ? {}
-      : { erasure: yield* erasureEvidence(input, [first, second], input.erasure.value) }),
+    erasure: yield* erasureEvidence(input, [first, second], input.erasure.value),
     unassignedCommercialAuthorities: deniedStatuses,
   };
 });

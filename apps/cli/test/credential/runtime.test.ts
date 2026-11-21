@@ -1,18 +1,7 @@
 import { deepStrictEqual } from "node:assert";
-import { IssuedPAT } from "@fidy/server/client";
 import { BunServices } from "@effect/platform-bun";
 import { describe, expect, layer } from "@effect/vitest";
-import {
-  Deferred,
-  Effect,
-  Exit,
-  Fiber,
-  FileSystem,
-  Option,
-  PlatformError,
-  Redacted,
-  Schema,
-} from "effect";
+import { Deferred, Effect, Exit, Fiber, FileSystem, Option, PlatformError, Redacted } from "effect";
 import {
   CliFailure,
   type Credential,
@@ -20,15 +9,15 @@ import {
   apiOrigin,
 } from "../../src/credential/contract";
 import { openCredentialStore } from "../../src/credential/runtime";
+import { decodeIssuedPAT } from "../support/pat";
 
 const secretLength = 43;
 
 const bearer = `fin_abcd1234_${"s".repeat(secretLength)}`;
 
-const issued = Schema.decodeSync(Schema.toCodecJson(IssuedPAT))({
+const issued = decodeIssuedPAT({
   bearer,
   pat: {
-    _tag: "PAT",
     id: "01900000-0000-4000-8000-000000000001",
     shortId: "abcd1234",
     recipientLabel: "Mi agente",
@@ -227,13 +216,7 @@ layer(BunServices.layer)((it) => {
         const directory = yield* fs.makeTempDirectoryScoped();
         const fixture = nativeFixture();
 
-        const unavailable = new PlatformError.PlatformError(
-          new PlatformError.SystemError({
-            _tag: "PermissionDenied",
-            module: "FileSystem",
-            method: "open",
-          })
-        );
+        const unavailable = PlatformError.badArgument({ module: "FileSystem", method: "open" });
 
         const failingFs: FileSystem.FileSystem = {
           ...fs,

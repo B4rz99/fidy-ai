@@ -13,6 +13,7 @@ import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
 import { workerDriftFields } from "./worker-drift";
+import { Match, Option, type Schema } from "effect";
 
 const versionId = "163ee99f-f0aa-4101-910e-aae30b4c5aca";
 
@@ -40,24 +41,38 @@ const client = HttpClient.make((request) => {
     );
   }
 
-  let result: unknown;
-
-  if (path.endsWith("/subdomain")) {
-    result = { enabled: false, previews_enabled: false };
-  } else if (path.endsWith("/settings")) {
-    result = { bindings: [], tags, logpush: false };
-  } else if (path.endsWith(`/versions/${versionId}`)) {
-    result = { id: versionId, number: 1, metadata: {}, resources: { bindings: [] } };
-  } else {
-    return Effect.die("Unexpected Worker receipt read");
-  }
-
-  return Effect.succeed(
-    HttpClientResponse.fromWeb(
-      request,
-      Response.json({ success: true, errors: [], messages: [], result })
-    )
+  const result = Match.value(path).pipe(
+    Match.when(
+      (route: string) => route.endsWith("/subdomain"),
+      () => Option.some<Schema.Json>({ enabled: false, previews_enabled: false })
+    ),
+    Match.when(
+      (route: string) => route.endsWith("/settings"),
+      () => Option.some<Schema.Json>({ bindings: [], tags, logpush: false })
+    ),
+    Match.when(
+      (route: string) => route.endsWith(`/versions/${versionId}`),
+      () =>
+        Option.some<Schema.Json>({
+          id: versionId,
+          number: 1,
+          metadata: {},
+          resources: { bindings: [] },
+        })
+    ),
+    Match.orElse(() => Option.none<Schema.Json>())
   );
+
+  return Option.match(result, {
+    onNone: () => Effect.die("Unexpected Worker receipt read"),
+    onSome: (body) =>
+      Effect.succeed(
+        HttpClientResponse.fromWeb(
+          request,
+          Response.json({ success: true, errors: [], messages: [], result: body })
+        )
+      ),
+  });
 });
 
 const services = Layer.mergeAll(

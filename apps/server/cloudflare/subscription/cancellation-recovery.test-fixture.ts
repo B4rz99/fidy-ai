@@ -216,12 +216,12 @@ const exerciseQueue = Effect.gen(function* () {
 });
 
 const exerciseProvider = Effect.fnUntraced(function* (path: string) {
-  const ticks: Readonly<Record<string, number>> = {
-    "/observe-foreign": 1,
-    "/observe-confirmed": 2,
-  };
+  const ticks = new Map([
+    ["/observe-foreign", 1],
+    ["/observe-confirmed", 2],
+  ]);
 
-  const tick = ticks[path] ?? 0;
+  const tick = ticks.get(path) ?? 0;
   let sends = 0;
   yield* observeCancellation({
     work: {

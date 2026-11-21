@@ -16,12 +16,11 @@ const safeHeaders = {
 };
 
 const requestPath = (input: Parameters<typeof globalThis.fetch>[0]): string =>
-  input instanceof Request ? new URL(input.url).pathname : new URL(input).pathname;
+  new URL(new Request(input).url).pathname;
 
-const respond = (
-  status: number,
-  headers: HeadersInit = safeHeaders
-): Readonly<{ status: number; headers: Headers }> => ({
+type EdgeResponse = Readonly<{ status: number; headers: Headers }>;
+
+const respond = (status: number, headers: HeadersInit = safeHeaders): EdgeResponse => ({
   status,
   headers: new Headers(headers),
 });
@@ -128,25 +127,29 @@ it.effect("refuses missing OAuth discovery and unsafe MCP exposure before promot
       { path: "/mcp", response: respond(401, { ...safeHeaders, "www-authenticate": "Bearer" }) },
     ];
 
-    for (const fault of faults) {
-      let inspected = false;
+    yield* Effect.forEach(
+      faults,
+      Effect.fnUntraced(function* (fault) {
+        let inspected = false;
 
-      const outcome = yield* verifyEdgeSmoke({
-        candidate: Option.none(),
-        probe: ({ path, headers }) => {
-          if (path === fault.path) {
-            inspected = true;
+        const outcome = yield* verifyEdgeSmoke({
+          candidate: Option.none(),
+          probe: ({ path, headers }) => {
+            if (path === fault.path) {
+              inspected = true;
 
-            return Effect.succeed(fault.response);
-          }
+              return Effect.succeed(fault.response);
+            }
 
-          return Effect.succeed(respond(expectedStatus(path, headers)));
-        },
-      }).pipe(Effect.exit);
+            return Effect.succeed(respond(expectedStatus(path, headers)));
+          },
+        }).pipe(Effect.exit);
 
-      expect(inspected).toBe(true);
-      expect(Exit.isFailure(outcome)).toBe(true);
-    }
+        expect(inspected).toBe(true);
+        expect(Exit.isFailure(outcome)).toBe(true);
+      }),
+      { discard: true }
+    );
   })
 );
 
@@ -186,62 +189,65 @@ it.effect("aborts every unconsumed native edge response on success and mismatch"
   Effect.gen(function* () {
     const services = yield* Layer.build(FetchHttpClient.layer);
 
-    for (const mismatch of [false, true]) {
-      const signals: AbortSignal[] = [];
-      let pulled = 0;
+    yield* Effect.forEach(
+      [false, true],
+      Effect.fnUntraced(function* (mismatch) {
+        const signals: AbortSignal[] = [];
+        let pulled = 0;
 
-      const fetch: typeof globalThis.fetch = Object.assign(
-        (
-          input: Parameters<typeof globalThis.fetch>[0],
-          init?: Parameters<typeof globalThis.fetch>[1]
-        ): Promise<Response> => {
-          if (init?.signal !== undefined && init.signal !== null) signals.push(init.signal);
-          const path = requestPath(input);
-          const foreign = new Headers(init?.headers).has("origin");
+        const fetch: typeof globalThis.fetch = Object.assign(
+          (
+            input: Parameters<typeof globalThis.fetch>[0],
+            init?: Parameters<typeof globalThis.fetch>[1]
+          ): Promise<Response> => {
+            if (init?.signal !== undefined && init.signal !== null) signals.push(init.signal);
+            const path = requestPath(input);
+            const foreign = new Headers(init?.headers).has("origin");
 
-          return Promise.resolve(
-            new Response(
-              new ReadableStream<Uint8Array>(
-                {
-                  pull() {
-                    pulled += 1;
+            return Promise.resolve(
+              new Response(
+                new ReadableStream<Uint8Array>(
+                  {
+                    pull() {
+                      pulled += 1;
+                    },
                   },
-                },
-                { highWaterMark: 0 }
-              ),
-              {
-                status: mismatch
-                  ? 503
-                  : expectedStatus(path, foreign ? { origin: "https://untrusted.invalid" } : {}),
-                headers: safeHeaders,
-              }
-            )
-          );
-        },
-        { preconnect: globalThis.fetch.preconnect }
-      );
+                  { highWaterMark: 0 }
+                ),
+                {
+                  status: mismatch
+                    ? 503
+                    : expectedStatus(path, foreign ? { origin: "https://untrusted.invalid" } : {}),
+                  headers: safeHeaders,
+                }
+              )
+            );
+          },
+          { preconnect: globalThis.fetch.preconnect }
+        );
 
-      const outcome = yield* verifyEdgeSmoke({
-        probe: productionProbe,
-        candidate: Option.none(),
-      }).pipe(
-        Effect.provideService(HttpClient.HttpClient, Context.get(services, HttpClient.HttpClient)),
-        Effect.provideService(FetchHttpClient.Fetch, fetch),
-        Effect.exit
-      );
+        const outcome = yield* verifyEdgeSmoke({
+          probe: productionProbe,
+          candidate: Option.none(),
+        }).pipe(
+          Effect.provideService(
+            HttpClient.HttpClient,
+            Context.get(services, HttpClient.HttpClient)
+          ),
+          Effect.provideService(FetchHttpClient.Fetch, fetch),
+          Effect.exit
+        );
 
-      expect(Exit.isSuccess(outcome)).toBe(!mismatch);
+        expect(Exit.isSuccess(outcome)).toBe(!mismatch);
 
-      if (mismatch) {
-        expect(signals.length).toBeGreaterThan(0);
-        expect(signals.length).toBeLessThanOrEqual(4);
-      } else {
-        expect(signals).toHaveLength(14);
-      }
+        expect(signals.length).toBeGreaterThanOrEqual(mismatch ? 1 : 14);
+        expect(signals.length).toBeLessThanOrEqual(mismatch ? 4 : 14);
 
-      expect(signals.every((signal) => signal.aborted)).toBe(true);
-      expect(pulled).toBe(0);
-    }
+        expect(signals.every((signal) => signal.aborted)).toBe(true);
+        expect(pulled).toBe(0);
+      }),
+      { discard: true }
+    );
   }).pipe(Effect.scoped)
 );
 

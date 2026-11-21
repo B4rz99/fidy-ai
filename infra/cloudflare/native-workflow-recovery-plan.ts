@@ -1,7 +1,17 @@
 import { isDeepStrictEqual } from "node:util";
 import * as Alchemist from "alchemy/Alchemist";
 import type { Plan } from "alchemy/Plan";
-import { Cause, Config, Data, Effect, ManagedRuntime, Option, Path, Schema } from "effect";
+import {
+  Cause,
+  Config,
+  Data,
+  Effect,
+  ManagedRuntime,
+  Option,
+  Path,
+  Predicate,
+  Schema,
+} from "effect";
 import { nativeResourceInventory } from "./native-graph";
 import { readNativeScopedPlan } from "./native-storage-resources";
 import { releaseEvidence } from "./production-release";
@@ -20,6 +30,9 @@ const workflowType = "Cloudflare.Workflow";
 export class WorkflowRecoveryRefused extends Data.TaggedError("WorkflowRecoveryRefused")<{
   message: string;
 }> {}
+
+const isWorkflowRecoveryRefused = (value: unknown): value is WorkflowRecoveryRefused =>
+  Predicate.isTagged(value, "WorkflowRecoveryRefused");
 
 const WorkflowProperties = Schema.Struct({
   workflowName: Schema.Literal(smokeName),
@@ -306,7 +319,7 @@ export const readQualifiedWorkflowPlan = Effect.fn("readQualifiedWorkflowPlan")(
   const unchanged = yield* Effect.try({
     try: () => qualifyWorkflowRecoveryPlan(snapshot.native),
     catch: (error) =>
-      error instanceof WorkflowRecoveryRefused
+      isWorkflowRecoveryRefused(error)
         ? error
         : new WorkflowRecoveryRefused({
             message: "Unexpected Workflow plan qualification failure",
@@ -333,7 +346,7 @@ export const readQualifiedWorkflowPlan = Effect.fn("readQualifiedWorkflowPlan")(
 export const workflowRecoveryFailureMessage = (cause: Cause.Cause<unknown>): string => {
   const failure = Cause.findErrorOption(cause);
 
-  return Option.isSome(failure) && failure.value instanceof WorkflowRecoveryRefused
+  return Option.isSome(failure) && isWorkflowRecoveryRefused(failure.value)
     ? failure.value.message
     : nativeResourceFailureMessage(cause);
 };

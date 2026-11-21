@@ -58,7 +58,10 @@ export const projectReviewDetailFromSnapshot = <E, R = never>({
     const item = yield* projectReviewSummary({ row, current });
 
     return { item, revision: row.revision, draft, suggestions };
-  }).pipe(Effect.mapError(() => new ReviewUnavailable()));
+  }).pipe(
+    Effect.tapError(Effect.logDebug),
+    Effect.mapError(() => new ReviewUnavailable())
+  );
 
 export const projectReviewSummary = ({
   row,
@@ -104,7 +107,10 @@ export const projectReviewSummary = ({
         onSome: (transactionId) => ({ transactionId }),
       }),
     });
-  }).pipe(Effect.mapError(() => new ReviewUnavailable()));
+  }).pipe(
+    Effect.tapError(Effect.logDebug),
+    Effect.mapError(() => new ReviewUnavailable())
+  );
 
 const suggestReviewCategory = <E, R = never>({
   categorize,
@@ -129,4 +135,7 @@ const suggestReviewCategory = <E, R = never>({
     ]);
 
     return Option.some({ ...suggestion, categoryId: Option.fromUndefinedOr(categories[0]) });
-  }).pipe(Effect.mapError(() => new ReviewUnavailable()));
+  }).pipe(
+    Effect.tapError(Effect.logDebug),
+    Effect.mapError(() => new ReviewUnavailable())
+  );

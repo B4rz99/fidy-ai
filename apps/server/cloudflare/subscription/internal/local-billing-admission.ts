@@ -1,5 +1,5 @@
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, DateTime, Effect, Option, Schema } from "effect";
+import { Clock, DateTime, Effect, Option, Predicate, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import { BillingAttempt, Price } from "../../../src/core/subscription/contract";
 import { type UserId } from "../../../src/core/identity/contract";
@@ -84,7 +84,7 @@ export const reportForAttempt = Effect.fn(function* (user: UserId, attemptId: st
   const [row] =
     yield* sql`SELECT * FROM billing_attempt_context WHERE user_id=${user} AND id=${attemptId}`;
 
-  if (typeof row?.price_terms !== "string") return Option.none<BillingAttempt>();
+  if (!Predicate.isString(row?.price_terms)) return Option.none<BillingAttempt>();
   const price = yield* Schema.decodeEffect(priceCodec)(row.price_terms);
 
   const data = {

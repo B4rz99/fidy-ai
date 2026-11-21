@@ -1,5 +1,5 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
-import { Clock, Effect, Option, Schema } from "effect";
+import { Clock, Effect, Layer, ManagedRuntime, Option, Schema } from "effect";
 import type { SmokeCompletion, SmokeExecutorEnvironment } from "./contract";
 import { SmokeWork, smokeExecutionId, smokeLifetimeMs, smokeMarkerKey } from "./internal/protocol";
 import { SmokeBindingFailed, platform } from "./internal/platform";
@@ -8,6 +8,8 @@ import {
   observeWorkerPromise,
   workerRelease,
 } from "../telemetry/operations";
+
+const boundaryRuntime = ManagedRuntime.make(Layer.empty);
 
 export class ReleaseSmokeWorkflowV2 extends WorkflowEntrypoint<SmokeExecutorEnvironment, unknown> {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<SmokeCompletion> {
@@ -68,7 +70,7 @@ export class ReleaseSmokeWorkflowV2 extends WorkflowEntrypoint<SmokeExecutorEnvi
       });
     });
 
-    return observeWorkerPromise(() => Effect.runPromise(work), {
+    return observeWorkerPromise(() => boundaryRuntime.runPromise(work), {
       environment: workerRelease(environment),
       telemetry: cloudflareWorkerTelemetry,
       operation: "workflow.releaseSmoke",

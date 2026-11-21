@@ -1,4 +1,4 @@
-import { Data, Effect, Option, Schedule, Schema } from "effect";
+import { Data, Effect, Option, Predicate, Schedule, Schema } from "effect";
 import { SmokeIdentity } from "../../apps/server/cloudflare/runtime/release-smoke/contract";
 import {
   type Deployment,
@@ -122,7 +122,7 @@ const routeStable = Effect.fn(function* (
     returnedId: Option.map(reported, (result) => result.id),
   }).pipe(
     Effect.retry({
-      while: (error) => error instanceof RollbackObservationPending,
+      while: (error) => Predicate.isTagged(error, "RollbackObservationPending"),
       times: 6,
       schedule: Schedule.spaced("500 millis"),
     }),

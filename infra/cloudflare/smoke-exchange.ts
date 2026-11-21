@@ -34,6 +34,13 @@ export class CandidateRoutingPending extends Data.TaggedError("CandidateRoutingP
   readonly reason: string;
 }> {}
 
+export const isCandidateRoutingPending = (value: unknown): value is CandidateRoutingPending =>
+  Predicate.isTagged(value, "CandidateRoutingPending");
+
+type SmokeHeaders =
+  | Readonly<{ "x-fidy-smoke-proof": string }>
+  | Readonly<{ "x-fidy-smoke-proof": string; "cloudflare-workers-version-overrides": string }>;
+
 export const smokeHeaders = ({
   config,
   publicVersion,
@@ -45,14 +52,14 @@ export const smokeHeaders = ({
     CORE_VERSION_ID: string;
   }>;
   publicVersion: Option.Option<string>;
-}>): Readonly<Record<string, string>> => ({
-  "x-fidy-smoke-proof": config.SMOKE_PROOF,
-  ...(Option.isSome(publicVersion)
-    ? {
-        "cloudflare-workers-version-overrides": `${config.PUBLIC_WORKER_NAME}="${publicVersion.value}", ${config.CORE_WORKER_NAME}="${config.CORE_VERSION_ID}"`,
-      }
-    : {}),
-});
+}>): SmokeHeaders =>
+  Option.match(publicVersion, {
+    onNone: () => ({ "x-fidy-smoke-proof": config.SMOKE_PROOF }),
+    onSome: (version) => ({
+      "x-fidy-smoke-proof": config.SMOKE_PROOF,
+      "cloudflare-workers-version-overrides": `${config.PUBLIC_WORKER_NAME}="${version}", ${config.CORE_WORKER_NAME}="${config.CORE_VERSION_ID}"`,
+    }),
+  });
 
 type SmokeExchange = Readonly<{
   status: number;
@@ -140,7 +147,7 @@ export const exchangeSmoke = Effect.fn(
       )
     ),
   Effect.mapError((failure) =>
-    failure instanceof ReleaseSmokeFailed || failure instanceof CandidateRoutingPending
+    isReleaseSmokeFailed(failure) || isCandidateRoutingPending(failure)
       ? failure
       : new ReleaseSmokeFailed({
           reason: Cause.isTimeoutError(failure)

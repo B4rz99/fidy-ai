@@ -1,6 +1,6 @@
 import { requireStagedDestinations } from "./native-host-plan";
 
-import { Effect, Result } from "effect";
+import { Effect, Result, type Schema } from "effect";
 import { expect, it } from "vitest";
 import { verifyIncumbentFence, verifyIncumbentMail } from "./native-incumbent-fence";
 
@@ -8,9 +8,11 @@ const core = "fidycloudflare-core-123";
 
 const oldQueue = "fidycloudflare-asyncdeadletters-123";
 
-const ok = (result: unknown): { success: true; result: unknown } => ({ success: true, result });
+type ProviderEnvelope = Readonly<{ success: true; result: Schema.Json }>;
 
-const inventory = (path: string): unknown => {
+const ok = (result: Schema.Json): ProviderEnvelope => ({ success: true, result });
+
+const inventory = (path: string): Schema.Json => {
   const url = new URL(path, "https://provider.invalid");
 
   if (url.pathname === "/workers/scripts") {
@@ -39,30 +41,36 @@ const inventory = (path: string): unknown => {
   throw Error("Unexpected inventory");
 };
 
+const fenceRefuses = Effect.fnUntraced(function* (fragment: string, replacement: Schema.Json) {
+  const verdict = yield* Effect.result(
+    verifyIncumbentFence((path) =>
+      Effect.try(() => (path.includes(fragment) ? replacement : inventory(path)))
+    )
+  );
+
+  return Result.isFailure(verdict);
+});
+
 it("requires fenced incumbent queues including the retained DLQ, stable Workers and quiescent Workflows", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const baseline = yield* verifyIncumbentFence((path) => Effect.try(() => inventory(path)));
       expect(baseline.pausedQueues).toEqual([{ id: "original-dlq", name: oldQueue }]);
 
-      for (const [fragment, replacement] of [
-        ["schedules", ok({ schedules: [{ cron: "* * * * *" }] })],
-        ["subdomain", ok({ enabled: false, previews_enabled: true })],
-        ["queues", ok([{ queue_id: "original-dlq", queue_name: oldQueue, settings: {} }])],
-        ["queues", ok([])],
-        ["status=waiting", ok([{ id: "live-job" }])],
-        ["workflows?", { success: false }],
-      ] as const) {
-        expect(
-          Result.isFailure(
-            yield* Effect.result(
-              verifyIncumbentFence((path) =>
-                Effect.try(() => (path.includes(fragment) ? replacement : inventory(path)))
-              )
-            )
-          )
-        ).toBe(true);
-      }
+      yield* Effect.forEach(
+        [
+          ["schedules", ok({ schedules: [{ cron: "* * * * *" }] })],
+          ["subdomain", ok({ enabled: false, previews_enabled: true })],
+          ["queues", ok([{ queue_id: "original-dlq", queue_name: oldQueue, settings: {} }])],
+          ["queues", ok([])],
+          ["status=waiting", ok([{ id: "live-job" }])],
+          ["workflows?", { success: false }],
+        ] as const,
+        Effect.fnUntraced(function* ([fragment, replacement]) {
+          expect(yield* fenceRefuses(fragment, replacement)).toBe(true);
+        }),
+        { discard: true }
+      );
     })
   ));
 
@@ -87,9 +95,13 @@ it("checks regular and catch-all email routing, including account-level rules, b
 
       yield* verify("off");
 
-      for (const scope of ["account", "zone", "catch"]) {
-        expect(Result.isFailure(yield* Effect.result(verify(scope)))).toBe(true);
-      }
+      yield* Effect.forEach(
+        ["account", "zone", "catch"],
+        Effect.fnUntraced(function* (scope) {
+          expect(Result.isFailure(yield* Effect.result(verify(scope)))).toBe(true);
+        }),
+        { discard: true }
+      );
     })
   ));
 

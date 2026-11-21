@@ -9,7 +9,7 @@ export default defineConfig({
     },
   },
   test: {
-    include: ["src/core/**/*.test.ts"],
+    include: ["test/core/**/*.test.ts"],
     clearMocks: true,
     environment: "node",
     pool: "forks",

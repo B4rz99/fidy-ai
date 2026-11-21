@@ -1,7 +1,7 @@
 import { routeBillingEvent } from "./native-billing";
 import { WompiEnvironment } from "../../../src/shell/secret-material/contract";
 import { verifiedWompiEventHint } from "./wompi-event";
-import { Effect, Exit, Option, Schema } from "effect";
+import { Effect, Exit, Layer, ManagedRuntime, Option, Schema } from "effect";
 import { type WompiTransportFactory } from "./wompi-runtime";
 import {
   BillingCollectionFailure,
@@ -16,6 +16,8 @@ import {
 } from "../contract";
 
 import { runLocalCancellationLoop } from "./billing-observation";
+
+const boundaryRuntime = ManagedRuntime.make(Layer.empty);
 
 export const isBillingCollectionWork = (body: unknown): boolean =>
   Option.isSome(
@@ -99,7 +101,7 @@ export const runBillingCollectionWorkflow = (input: BillingWorkflowExecution): P
       "verify-wompi-callback",
       { retries: { limit: 7, delay: "1 minute", backoff: "constant" } },
       () =>
-        Effect.runPromise(
+        boundaryRuntime.runPromise(
           Effect.gen(function* () {
             const { DIRECTORY, USER_STORE } = input.environment;
 

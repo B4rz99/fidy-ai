@@ -43,7 +43,7 @@ export const offerRefunds = Effect.fnUntraced(function* ({
   current,
 }: {
   storage: DurableObjectStorage;
-  queue: { send: (work: typeof LocalRefundWork.Type) => Promise<unknown> };
+  queue: { send: (work: typeof LocalRefundWork.Type) => Promise<QueueSendResponse | void> };
   current: number;
 }) {
   const rows = yield* Effect.gen(function* () {

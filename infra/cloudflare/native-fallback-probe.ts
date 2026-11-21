@@ -1,4 +1,4 @@
-import { ReleaseFailure } from "./production-release";
+import { ReleaseFailure, releaseFailureFrom } from "./production-release";
 import { Clock, Effect, Option, Redacted, Schema, Stream } from "effect";
 import { type HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 import { installedOrigins } from "@fidy/server/browser-transport";
@@ -62,9 +62,7 @@ export const observeDormantPair = Effect.fn(function* (
       markers: SharedStoreMarkers,
     })
   )(yield* response.json).pipe(
-    Effect.mapError(
-      () => new ReleaseFailure({ message: "Dormant Core marker document is incomplete" })
-    )
+    Effect.mapError(releaseFailureFrom("Dormant Core marker document is incomplete"))
   );
 
   if (

@@ -1,6 +1,6 @@
 import { type WompiEnvironment } from "../../../src/shell/secret-material/contract";
 import { WompiTransactionId } from "./wompi-model";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option, Predicate, Schema } from "effect";
 import { RequestBodyPolicy } from "../../http/contract";
 import { readBoundedRequestBody } from "../../http/operations";
 
@@ -39,9 +39,9 @@ const policy = Schema.decodeSync(RequestBodyPolicy)({
 });
 
 const signedScalar = (value: unknown): Option.Option<string> => {
-  if (typeof value === "string") return Option.some(value);
+  if (Predicate.isString(value)) return Option.some(value);
 
-  return typeof value === "number" && Number.isSafeInteger(value)
+  return Predicate.isNumber(value) && Number.isSafeInteger(value)
     ? Option.some(String(value))
     : Option.none();
 };
@@ -51,7 +51,7 @@ const ownValue = (data: unknown, path: string): Option.Option<string> => {
   let current: unknown = data;
 
   for (const segment of path.split(".")) {
-    if (current === null || typeof current !== "object") return Option.none();
+    if (!Predicate.isObjectOrArray(current)) return Option.none();
     const field = Object.getOwnPropertyDescriptor(current, segment);
 
     if (field === undefined || !Object.hasOwn(field, "value")) return Option.none();

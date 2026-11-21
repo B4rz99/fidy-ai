@@ -1,0 +1,16 @@
+apps/server/cloudflare/operator-access/operations.ts
+  h_c6d49c804e0ad2 2,32-34,41-48,64
+infra/cloudflare/edge-security.ts
+  h_c6d49c804e0ad2 152-153
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d9b34021c5811495b9003b83031d9c593984ab7e",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

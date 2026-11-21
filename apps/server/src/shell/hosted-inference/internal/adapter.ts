@@ -2,6 +2,7 @@ import type { Effect, Option, Schema } from "effect";
 import type { Prompt } from "effect/ai";
 import type { TranscriptEntry } from "~/core/agent/contract";
 import type {
+  HostedActiveRequest,
   HostedInferenceError,
   HostedTextResult,
   HostedTextToolPolicy,
@@ -11,7 +12,7 @@ export type HostedPromptProjection = Readonly<{
   prefix: ReadonlyArray<Prompt.MessageEncoded>;
   continuationTail: ReadonlyArray<Prompt.MessageEncoded>;
   suffix: ReadonlyArray<Prompt.MessageEncoded>;
-  activeRequest: Readonly<{ _tag: "Absent" }> | Readonly<{ _tag: "Present"; text: string }>;
+  activeRequest: HostedActiveRequest;
 }>;
 
 export type PreparedStructuredExecution<Output> = Readonly<{

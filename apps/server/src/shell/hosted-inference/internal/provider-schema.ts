@@ -23,41 +23,42 @@ const schemaNodes = new Set([
   "unevaluatedItems",
 ]);
 
-type ShapeContext = Readonly<{
-  definitions: Readonly<Record<string, unknown>>;
+type SummaryContext = Readonly<{
+  definitions: JsonSchema.Definitions;
   seen: ReadonlySet<string>;
 }>;
 
-const scalarShape = (schema: Record<string, unknown>): string => {
-  const type =
-    typeof schema.type === "string" ? schema.type : JSON.stringify(schema.type ?? "unknown");
+const scalarSummary = (schema: JsonSchema.JsonSchema): string => {
+  const type = Predicate.isString(schema.type)
+    ? schema.type
+    : JSON.stringify(schema.type ?? "unknown");
 
-  if (typeof schema.format === "string") return `${type}(${schema.format})`;
+  if (Predicate.isString(schema.format)) return `${type}(${schema.format})`;
 
-  return typeof schema.pattern === "string" ? `${type} matching /${schema.pattern}/` : type;
+  return Predicate.isString(schema.pattern) ? `${type} matching /${schema.pattern}/` : type;
 };
 
 const propertyName = (name: string): string =>
   /^[A-Za-z_$][\w$]*$/u.test(name) ? name : JSON.stringify(name);
 
-const objectShape = (
-  properties: object,
+const objectSummary = (
+  properties: JsonSchema.JsonSchema,
   required: ReadonlyArray<unknown>,
-  context: ShapeContext
+  context: SummaryContext
 ): string =>
   `{${Object.entries(properties)
     .map(
       ([name, node]) =>
-        `${propertyName(name)}${required.includes(name) ? "" : "?"}:${schemaShape(node, context)}`
+        `${propertyName(name)}${required.includes(name) ? "" : "?"}:${schemaSummary(node, context)}`
     )
     .join(",")}}`;
 
-const compositeShape = (schema: Record<string, unknown>, context: ShapeContext): string => {
+const compositeSummary = (schema: JsonSchema.JsonSchema, context: SummaryContext): string => {
   for (const key of ["anyOf", "oneOf", "allOf"]) {
     const alternatives = schema[key];
 
     if (Array.isArray(alternatives)) {
-      return `(${alternatives.map((node) => schemaShape(node, context)).join(key === "allOf" ? "&" : "|")})`;
+      return `(${alternatives.map((node) => schemaSummary(node, context)).join(key === "allOf" ? "&" : "|")})`;
     }
   }
 
@@ -66,15 +67,15 @@ const compositeShape = (schema: Record<string, unknown>, context: ShapeContext):
 
 const inlineEnumMaximum = 5;
 
-const enumShape = (values: ReadonlyArray<unknown>): string =>
+const enumSummary = (values: ReadonlyArray<unknown>): string =>
   values.length > inlineEnumMaximum
     ? `one of ${JSON.stringify(values)}`
     : values.map((item) => JSON.stringify(item)).join("|");
 
-const referenceShape = (value: unknown, context: ShapeContext): Option.Option<string> => {
+const referenceSummary = (value: unknown, context: SummaryContext): Option.Option<string> => {
   if (
     Predicate.isObject(value) &&
-    typeof value.$ref === "string" &&
+    Predicate.isString(value.$ref) &&
     value.$ref.startsWith("#/$defs/")
   ) {
     const name = decodeURIComponent(value.$ref.slice("#/$defs/".length))
@@ -85,33 +86,35 @@ const referenceShape = (value: unknown, context: ShapeContext): Option.Option<st
 
     if (context.seen.has(name) || target === undefined) return Option.some(name);
 
-    return Option.some(schemaShape(target, { ...context, seen: new Set([...context.seen, name]) }));
+    return Option.some(
+      schemaSummary(target, { ...context, seen: new Set([...context.seen, name]) })
+    );
   }
 
   return Option.none();
 };
 
-const literalShape = (schema: Record<string, unknown>): Option.Option<string> => {
+const literalSummary = (schema: JsonSchema.JsonSchema): Option.Option<string> => {
   if ("const" in schema) return Option.some(JSON.stringify(schema.const));
 
-  return Array.isArray(schema.enum) ? Option.some(enumShape(schema.enum)) : Option.none();
+  return Array.isArray(schema.enum) ? Option.some(enumSummary(schema.enum)) : Option.none();
 };
 
-const schemaShape = (value: unknown, context: ShapeContext): string => {
-  const reference = referenceShape(value, context);
+const schemaSummary = (value: unknown, context: SummaryContext): string => {
+  const reference = referenceSummary(value, context);
 
   if (Option.isSome(reference)) return reference.value;
 
   if (!Predicate.isObject(value)) return JSON.stringify(value);
-  const literal = literalShape(value);
+  const literal = literalSummary(value);
 
   if (Option.isSome(literal)) return literal.value;
-  const composite = compositeShape(value, context);
+  const composite = compositeSummary(value, context);
 
   if (composite !== "") return composite;
 
   if (Predicate.isObject(value.properties)) {
-    return objectShape(
+    return objectSummary(
       value.properties,
       Array.isArray(value.required) ? value.required : [],
       context
@@ -119,11 +122,11 @@ const schemaShape = (value: unknown, context: ShapeContext): string => {
   }
 
   return value.type === "array"
-    ? `Array<${schemaShape(value.items, context)}>`
-    : scalarShape(value);
+    ? `Array<${schemaSummary(value.items, context)}>`
+    : scalarSummary(value);
 };
 
-const compactHomogeneousArray = (schema: Record<string, unknown>): Record<string, unknown> => {
+const compactHomogeneousArray = (schema: JsonSchema.JsonSchema): JsonSchema.JsonSchema => {
   if (
     schema.type === "array" &&
     Array.isArray(schema.prefixItems) &&
@@ -140,14 +143,14 @@ const compactHomogeneousArray = (schema: Record<string, unknown>): Record<string
 };
 
 const constraintDescription = (
-  schema: Record<string, unknown>,
-  definitions: Readonly<Record<string, unknown>>
+  schema: JsonSchema.JsonSchema,
+  definitions: JsonSchema.Definitions
 ): string =>
   ["$ref", "const", "pattern", "anyOf", "oneOf", "allOf"].some((key) => key in schema)
-    ? `Shape: ${schemaShape(schema, { definitions, seen: new Set() })}`
+    ? `Shape: ${schemaSummary(schema, { definitions, seen: new Set() })}`
     : "";
 
-const compactNumericBounds = (schema: Record<string, unknown>): Record<string, unknown> => {
+const compactNumericBounds = (schema: JsonSchema.JsonSchema): JsonSchema.JsonSchema => {
   if ((schema.type !== "integer" && schema.type !== "number") || !Array.isArray(schema.allOf)) {
     return schema;
   }
@@ -171,23 +174,30 @@ const compactNumericBounds = (schema: Record<string, unknown>): Record<string, u
   }
 
   const bounds = [schema, ...members];
-  const minimum = bounds.map((bound) => bound.minimum).filter(Predicate.isNumber);
-  const maximum = bounds.map((bound) => bound.maximum).filter(Predicate.isNumber);
-  const { allOf: _allOf, ...scalar } = schema;
 
-  return {
-    ...scalar,
-    ...(minimum.length === 0 ? {} : { minimum: Math.max(...minimum) }),
-    ...(maximum.length === 0 ? {} : { maximum: Math.min(...maximum) }),
-  };
+  const minimum = bounds.flatMap((bound) =>
+    Predicate.isNumber(bound.minimum) ? [bound.minimum] : []
+  );
+
+  const maximum = bounds.flatMap((bound) =>
+    Predicate.isNumber(bound.maximum) ? [bound.maximum] : []
+  );
+
+  const { allOf: _allOf, ...scalar } = schema;
+  const bounded: JsonSchema.JsonSchema = { ...scalar };
+
+  if (minimum.length > 0) bounded.minimum = Math.max(...minimum);
+
+  if (maximum.length > 0) bounded.maximum = Math.min(...maximum);
+
+  return bounded;
 };
 
 const compactNode = (
-  value: unknown,
-  definitions: Readonly<Record<string, unknown>>,
+  value: JsonSchema.JsonSchema,
+  definitions: JsonSchema.Definitions,
   describe = true
-): unknown => {
-  if (!Predicate.isObject(value)) return value;
+): JsonSchema.JsonSchema => {
   const source = compactNumericBounds(value);
   const describeChildren = describe && !["anyOf", "oneOf", "allOf"].some((key) => key in source);
 
@@ -199,19 +209,26 @@ const compactNode = (
           Object.fromEntries(
             Object.entries(child).map(([name, node]) => [
               name,
-              compactNode(node, definitions, describeChildren),
+              Predicate.isObject(node) ? compactNode(node, definitions, describeChildren) : node,
             ])
           ),
         ];
       }
 
       if (schemaArrays.has(key) && Array.isArray(child)) {
-        return [key, child.map((node) => compactNode(node, definitions, describeChildren))];
+        return [
+          key,
+          child.map((node: unknown) =>
+            Predicate.isObject(node) ? compactNode(node, definitions, describeChildren) : node
+          ),
+        ];
       }
 
       return [
         key,
-        schemaNodes.has(key) ? compactNode(child, definitions, describeChildren) : child,
+        schemaNodes.has(key) && Predicate.isObject(child)
+          ? compactNode(child, definitions, describeChildren)
+          : child,
       ];
     })
   );
@@ -233,8 +250,6 @@ export const openAiProviderSchema = (schema: Schema.Top): JsonSchema.JsonSchema 
   });
 
   const compacted = compactNode(document.schema, document.definitions);
-
-  if (!Predicate.isObject(compacted)) throw new Error("Provider schema must remain an object");
 
   return Object.keys(document.definitions).length === 0
     ? compacted

@@ -1,8 +1,16 @@
 import { PATScope, patLifetimeDayOptions } from "@fidy/server/client";
-import { Cause, DateTime, Effect, Option, Schema } from "effect";
-import { CliFailure } from "../credential/contract";
+import { Cause, DateTime, Effect, Option, Predicate, Schema } from "effect";
+import { CliFailure, isCliFailure } from "../credential/contract";
 import { login } from "../login/operations";
-import { type CommandDependencies, PublicOutput } from "./contract";
+import {
+  type CommandDependencies,
+  LocalStatusAbsent,
+  LocalStatusAvailable,
+  LocalStatusExpired,
+  LoggedIn,
+  LoggedOut,
+  PublicOutput,
+} from "./contract";
 import { failures, messages } from "./internal/presentation";
 
 const maximumArguments = 9;
@@ -37,7 +45,7 @@ const loginInput = Effect.fn(function* (
     args[3] !== "--scopes" ||
     args[5] !== "--lifetime"
   ) {
-    return yield* new CliFailure({ reason: "InvalidInput" });
+    return yield* new CliFailure({ reason: "InvalidInput", cause: Option.none() });
   }
 
   return { recipientLabel: args[2], scopes: args[4]?.split(","), lifetimeDays: Number(args[6]) };
@@ -50,22 +58,16 @@ const showStatus = Effect.fn(function* (dependencies: CommandDependencies) {
   const now = yield* DateTime.now;
 
   if (Option.isNone(local)) {
-    return yield* dependencies.emit({
-      _tag: "LocalStatus",
-      availability: "absent",
-    });
+    return yield* dependencies.emit(LocalStatusAbsent.make({ availability: "absent" }));
   }
 
-  const availability =
-    local.value.grant.pat.expiresAt.epochMilliseconds <= now.epochMilliseconds
-      ? "expired"
-      : "available";
+  const { grant } = local.value;
 
-  yield* dependencies.emit({
-    _tag: "LocalStatus",
-    availability,
-    grant: local.value.grant,
-  });
+  yield* dependencies.emit(
+    grant.pat.expiresAt.epochMilliseconds <= now.epochMilliseconds
+      ? LocalStatusExpired.make({ availability: "expired", grant })
+      : LocalStatusAvailable.make({ availability: "available", grant })
+  );
 });
 
 const ignoreBrowser = (_url: string): Effect.Effect<void> => Effect.void;
@@ -78,7 +80,7 @@ const runLogin = Effect.fn(function* (
   const noBrowser = args.includes("--no-browser");
 
   if (args.filter((argument) => argument === "--no-browser").length > 1) {
-    return yield* new CliFailure({ reason: "InvalidInput" });
+    return yield* new CliFailure({ reason: "InvalidInput", cause: Option.none() });
   }
 
   const request = yield* loginInput(
@@ -93,7 +95,7 @@ const runLogin = Effect.fn(function* (
         .emit(event)
         .pipe(
           Effect.andThen(
-            event._tag === "ApprovalRequired" && !noBrowser
+            Predicate.isTagged(event, "ApprovalRequired") && !noBrowser
               ? openApproval(event.approvalUrl)
               : Effect.void
           )
@@ -101,7 +103,7 @@ const runLogin = Effect.fn(function* (
     dependencies
   );
 
-  return yield* dependencies.emit({ _tag: "LoggedIn", grant });
+  return yield* dependencies.emit(LoggedIn.make({ grant }));
 });
 
 export const runCommand = Effect.fn(function* (
@@ -110,7 +112,9 @@ export const runCommand = Effect.fn(function* (
   openApproval: (url: string) => Effect.Effect<void> = ignoreBrowser
 ) {
   const args = yield* Schema.decodeUnknownEffect(Arguments)(input).pipe(
-    Effect.mapError(() => new CliFailure({ reason: "InvalidInput" }))
+    Effect.mapError(
+      (cause) => new CliFailure({ reason: "InvalidInput", cause: Option.some(cause) })
+    )
   );
 
   switch (args[0]) {
@@ -119,21 +123,26 @@ export const runCommand = Effect.fn(function* (
     }
 
     case "status": {
-      if (args.length !== 1) return yield* new CliFailure({ reason: "InvalidInput" });
+      if (args.length !== 1) {
+        return yield* new CliFailure({ reason: "InvalidInput", cause: Option.none() });
+      }
 
       return yield* showStatus(dependencies);
     }
 
     case "logout": {
-      if (args.length !== 1) return yield* new CliFailure({ reason: "InvalidInput" });
+      if (args.length !== 1) {
+        return yield* new CliFailure({ reason: "InvalidInput", cause: Option.none() });
+      }
+
       yield* dependencies.store.clear;
 
-      return yield* dependencies.emit({ _tag: "LoggedOut" });
+      return yield* dependencies.emit(LoggedOut.make({}));
     }
 
     case undefined:
     default:
-      return yield* new CliFailure({ reason: "InvalidInput" });
+      return yield* new CliFailure({ reason: "InvalidInput", cause: Option.none() });
   }
 });
 
@@ -166,16 +175,13 @@ export const formatFailure = ({
     : message + "\n";
 };
 
+type CommandFailureReport = Readonly<{ message: string; interrupted: boolean }>;
+
 export const formatCommandFailure = ({
   cause,
   json,
-}: Readonly<{ cause: Cause.Cause<unknown>; json: boolean }>): Readonly<{
-  message: string;
-  interrupted: boolean;
-}> => {
-  const failure = Cause.findErrorOption(cause).pipe(
-    Option.filter((error): error is CliFailure => error instanceof CliFailure)
-  );
+}: Readonly<{ cause: Cause.Cause<unknown>; json: boolean }>): CommandFailureReport => {
+  const failure = Cause.findErrorOption(cause).pipe(Option.filter(isCliFailure));
 
   const interrupted =
     Cause.hasInterrupts(cause) || Option.exists(failure, (error) => error.reason === "Cancelled");

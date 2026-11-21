@@ -43,7 +43,7 @@ export const recoverLocalAudit = Effect.fn(function* (
   if (Option.isNone(earliest)) return { attempted: 0, failed: 0 };
   const { user_id: user, due } = earliest.value;
 
-  if (!owns(user)) return yield* new AuditUnavailable();
+  if (!owns(user)) return yield* new AuditUnavailable({ cause: undefined });
 
   if (due > now) {
     yield* preserveStoreAlarm(storage, due);
@@ -58,7 +58,7 @@ export const recoverLocalAudit = Effect.fn(function* (
       const opened =
         yield* sql`INSERT INTO audit_retention_permits(user_id,checked_ms) VALUES(${user},${now}) RETURNING user_id`;
 
-      if (opened.length !== 1) return yield* new AuditUnavailable();
+      if (opened.length !== 1) return yield* new AuditUnavailable({ cause: undefined });
 
       const rows = yield* sql.unsafe(
         `DELETE FROM audit_entries WHERE user_id=? AND id IN(SELECT id ${candidates} AND user_id=? AND ${deadline}<=? ORDER BY ${deadline},id LIMIT ?) RETURNING id`,
@@ -68,7 +68,7 @@ export const recoverLocalAudit = Effect.fn(function* (
       const closed =
         yield* sql`DELETE FROM audit_retention_permits WHERE user_id=${user} AND checked_ms=${now} RETURNING user_id`;
 
-      if (closed.length !== 1) return yield* new AuditUnavailable();
+      if (closed.length !== 1) return yield* new AuditUnavailable({ cause: undefined });
 
       return rows.length;
     })

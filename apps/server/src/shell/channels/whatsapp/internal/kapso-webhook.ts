@@ -1,3 +1,4 @@
+import { OutboundHttpRequest } from "~/shell/outbound-http/contract";
 import { HostedTurnConfirmation } from "~/shell/agent/contract";
 import {
   DisclosureDeliveryCorrelationToken,
@@ -8,9 +9,11 @@ import {
   WhatsAppBusinessPhoneNumberId,
   type WhatsAppDeliveryLookup,
   type WhatsAppDisclosureLifecycleEvidence,
+  WhatsAppDocument,
   WhatsAppDocumentFileName,
   type WhatsAppHostedLifecycleEvidence,
   type WhatsAppIdentityChangeEvent,
+  WhatsAppImage,
   type WhatsAppInboundContent,
   type WhatsAppInboundEvent,
   type WhatsAppLifecycleAuthentication,
@@ -19,10 +22,13 @@ import {
   WhatsAppProviderMessageId,
   type WhatsAppStatusLookupAdmission,
   WhatsAppStatusUnavailable,
+  WhatsAppText,
+  WhatsAppUnusableVoiceTranscript,
+  WhatsAppVoiceTranscript,
   maxWhatsAppFutureTimestampMinutes,
   maxWhatsAppWebhookBytes,
 } from "~/shell/channels/whatsapp/contract";
-import { DateTime, Effect, Option, Redacted, Result, Schema } from "effect";
+import { Data, DateTime, Effect, Option, Redacted, Result, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import { Model } from "effect/schema";
 import {
@@ -308,23 +314,22 @@ const parseOccurredAt = Effect.fn(function* (timestamp: string, receivedAt: Date
 const projectInboundContent = (
   message: typeof RawKapsoEvent.Type.message
 ): WhatsAppInboundContent => {
-  if (message.type === "text") return { _tag: "Text", text: message.text.body };
+  if (message.type === "text") return WhatsAppText.make({ text: message.text.body });
 
   if (message.type === "interactive") {
-    return { _tag: "Text", text: TranscriptText.make(message.interactive.button_reply.id) };
+    return WhatsAppText.make({ text: TranscriptText.make(message.interactive.button_reply.id) });
   }
 
   if (message.type === "image") {
-    return { _tag: "Image", mediaId: message.image.id, caption: message.image.caption };
+    return WhatsAppImage.make({ mediaId: message.image.id, caption: message.image.caption });
   }
 
   if (message.type === "document") {
-    return {
-      _tag: "Document",
+    return WhatsAppDocument.make({
       mediaId: message.document.id,
       fileName: message.document.filename,
       caption: message.document.caption,
-    };
+    });
   }
 
   const kapso = Schema.decodeUnknownOption(Schema.Struct({ transcript: Schema.Unknown }))(
@@ -336,10 +341,10 @@ const projectInboundContent = (
   );
 
   if (Option.isNone(transcript) || transcript.value.text.trim().length === 0) {
-    return { _tag: "UnusableVoiceTranscript" };
+    return WhatsAppUnusableVoiceTranscript.make({});
   }
 
-  return { _tag: "VoiceTranscript", text: transcript.value.text, mediaId: message.audio.id };
+  return WhatsAppVoiceTranscript.make({ text: transcript.value.text, mediaId: message.audio.id });
 };
 
 export const projectEvent = Effect.fn(function* (
@@ -404,9 +409,36 @@ export const DisclosureLifecycleEventName = Schema.Literals([
   "whatsapp.message.failed",
 ]);
 
-const lifecycleFailure = (
-  code: number
-): Readonly<{ reason: DisclosureDeliveryFailureReason; automaticRetry: boolean }> => {
+type LatestDisclosureStatus = Readonly<{
+  evidence: WhatsAppDisclosureLifecycleEvidence;
+  status: typeof RawDisclosureStatus.Type;
+}>;
+
+type ReceiptCorrelation = Data.TaggedEnum<{
+  Absent: {};
+  Uncorrelated: {};
+  Correlated: { readonly value: LatestDisclosureStatus };
+}>;
+
+const ReceiptCorrelation = Data.taggedEnum<ReceiptCorrelation>();
+
+export type LookupCorrelation = Data.TaggedEnum<{
+  Absent: {};
+  Uncorrelated: {};
+  Correlated: {
+    readonly value: LatestDisclosureStatus &
+      Readonly<{ businessPhoneNumberId: WhatsAppBusinessPhoneNumberId }>;
+  };
+}>;
+
+export const LookupCorrelation = Data.taggedEnum<LookupCorrelation>();
+
+type DisclosureLifecycleFailure = Readonly<{
+  reason: DisclosureDeliveryFailureReason;
+  automaticRetry: boolean;
+}>;
+
+const lifecycleFailure = (code: number): DisclosureLifecycleFailure => {
   const disposition = classifyKapsoMetaFailureCode(code);
 
   return { reason: disposition.safeReason, automaticRetry: disposition.automaticRetry };
@@ -521,29 +553,22 @@ const projectReceiptHistory = Effect.fn(function* (
 
   const selected = statuses.filter((status) => status.status === requested);
 
-  if (selected.length === 0) return { _tag: "Absent" as const };
+  if (selected.length === 0) return ReceiptCorrelation.Absent();
 
-  if (Option.isNone(token)) return { _tag: "Uncorrelated" as const };
+  if (Option.isNone(token)) return ReceiptCorrelation.Uncorrelated();
 
   const correlated = yield* Effect.forEach(selected, (status) =>
-    Schema.decodeUnknownEffect(RawDisclosureStatus)({
-      id: status.id,
-      ...(status.recipient_user_id === undefined
-        ? {}
-        : { recipient_user_id: status.recipient_user_id }),
-      ...(status.recipient_id === undefined ? {} : { recipient_id: status.recipient_id }),
-      status: status.status,
-      timestamp: status.timestamp,
-      ...Option.match(status.errors, { onNone: () => ({}), onSome: (errors) => ({ errors }) }),
-      biz_opaque_callback_data: token.value,
-    }).pipe(Effect.mapError(invalidKapsoPayload))
+    Schema.encodeEffect(RawReceiptStatus)({ ...status, biz_opaque_callback_data: token }).pipe(
+      Effect.flatMap(Schema.decodeUnknownEffect(RawDisclosureStatus)),
+      Effect.mapError(invalidKapsoPayload)
+    )
   );
 
   const latest = yield* latestDisclosureLifecycleStatus(correlated, receivedAt);
 
-  if (Option.isNone(latest)) return { _tag: "Absent" as const };
+  if (Option.isNone(latest)) return ReceiptCorrelation.Absent();
 
-  return { _tag: "Correlated" as const, value: latest.value };
+  return ReceiptCorrelation.Correlated({ value: latest.value });
 });
 
 const matchesStoredCoordinates = (
@@ -565,20 +590,23 @@ export const lookupLifecycleStatus = Effect.fn(function* (
   }>
 ) {
   const response = yield* input.outboundHttp
-    .execute({
-      _tag: "KapsoMessageStatus",
-      businessPhoneNumberId: input.businessPhoneNumberId,
-      messageId: input.messageId,
-    })
+    .execute(
+      OutboundHttpRequest.KapsoMessageStatus({
+        businessPhoneNumberId: input.businessPhoneNumberId,
+        messageId: input.messageId,
+      })
+    )
     .pipe(
-      Effect.mapError(() => new WhatsAppStatusUnavailable()),
+      Effect.mapError((cause) => new WhatsAppStatusUnavailable({ cause })),
       Effect.timeoutOrElse({
         duration: "8 seconds",
-        orElse: () => Effect.fail(new WhatsAppStatusUnavailable()),
+        orElse: () => Effect.fail(new WhatsAppStatusUnavailable({ cause: undefined })),
       })
     );
 
-  if (response.status !== okStatus) return yield* new WhatsAppStatusUnavailable();
+  if (response.status !== okStatus) {
+    return yield* new WhatsAppStatusUnavailable({ cause: undefined });
+  }
 
   const stored = yield* Schema.decodeEffect(Schema.fromJsonString(RawStoredLifecycle))(
     new TextDecoder().decode(response.body)
@@ -593,17 +621,19 @@ export const lookupLifecycleStatus = Effect.fn(function* (
   if (statuses === undefined) {
     if (input.status !== "sent") return yield* invalidKapsoInvariant("missing provider status");
 
-    return { _tag: "Uncorrelated" as const };
+    return LookupCorrelation.Uncorrelated();
   }
 
   const projected = yield* projectReceiptHistory(statuses, input.status, input.receivedAt);
 
-  return projected._tag === "Correlated"
-    ? {
-        ...projected,
-        value: { ...projected.value, businessPhoneNumberId: input.businessPhoneNumberId },
-      }
-    : projected;
+  return ReceiptCorrelation.$match(projected, {
+    Absent: () => LookupCorrelation.Absent(),
+    Uncorrelated: () => LookupCorrelation.Uncorrelated(),
+    Correlated: ({ value }) =>
+      LookupCorrelation.Correlated({
+        value: { ...value, businessPhoneNumberId: input.businessPhoneNumberId },
+      }),
+  });
 });
 
 const resolveLifecycleHint = Effect.fn(function* (
@@ -644,9 +674,11 @@ const resolveLifecycleHint = Effect.fn(function* (
     receivedAt,
   });
 
-  if (latest._tag === "Absent") return yield* invalidKapsoInvariant("missing provider status");
+  if (LookupCorrelation.$is("Absent")(latest)) {
+    return yield* invalidKapsoInvariant("missing provider status");
+  }
 
-  return latest._tag === "Uncorrelated" ? Option.none() : Option.some(latest.value);
+  return LookupCorrelation.$is("Correlated")(latest) ? Option.some(latest.value) : Option.none();
 });
 
 const projectReceiptEvent = Effect.fn(function* (
@@ -664,9 +696,11 @@ const projectReceiptEvent = Effect.fn(function* (
     receivedAt
   );
 
-  if (latest._tag === "Absent") return yield* invalidKapsoInvariant("missing provider status");
+  if (ReceiptCorrelation.$is("Absent")(latest)) {
+    return yield* invalidKapsoInvariant("missing provider status");
+  }
 
-  if (latest._tag === "Uncorrelated") return Option.none();
+  if (!ReceiptCorrelation.$is("Correlated")(latest)) return Option.none();
 
   const times = yield* Effect.forEach(raw.message.kapso.statuses, (status) =>
     parseOccurredAt(status.timestamp, receivedAt)
@@ -695,7 +729,7 @@ export const decodeLifecycleStatus = Effect.fn(function* (
   input: WhatsAppLifecycleAuthentication,
   lookup: Option.Option<OutboundHttpService> = Option.none(),
   admitLookup: WhatsAppStatusLookupAdmission = (): Effect.Effect<void, WhatsAppStatusUnavailable> =>
-    Effect.fail(new WhatsAppStatusUnavailable())
+    Effect.fail(new WhatsAppStatusUnavailable({ cause: undefined }))
 ) {
   const unknown = yield* authenticateAndDecodeKapsoBody(input);
 

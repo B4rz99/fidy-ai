@@ -2,7 +2,7 @@ import { TokenBearer } from "@fidy/server/client";
 import { Effect, Redacted, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { runOperationCommand } from "../src/canonical/operations";
-import { makeCanonicalClient, readOperationInput } from "../src/canonical/runtime";
+import { canonicalClientFactory, readOperationInput } from "../src/canonical/runtime";
 import { SavedGrant, apiOrigin } from "../src/credential/contract";
 
 const ServerResponse = Schema.Struct({
@@ -44,7 +44,7 @@ await Effect.runPromise(
     const response = yield* Schema.decodeEffect(Schema.fromJsonString(ServerResponse))(wire);
 
     const failed = yield* runOperationCommand(commands[response.command], {
-      clientFactory: makeCanonicalClient,
+      clientFactory: canonicalClientFactory,
       store: {
         load: Effect.succeedSome({ grant, bearer }),
         save: () => Effect.void,

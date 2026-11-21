@@ -1,4 +1,4 @@
-import { Effect, type PlatformError, Redacted, Schema, Stream } from "effect";
+import { Effect, Option, type PlatformError, Redacted, Schema, Stream } from "effect";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 import { CliFailure } from "../../credential/contract";
 
@@ -9,7 +9,8 @@ const AccessToken = Schema.String.check(
   Schema.isPattern(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/u)
 );
 
-const unavailable = (): CliFailure => new CliFailure({ reason: "DependencyUnavailable" });
+const unavailable = (): CliFailure =>
+  new CliFailure({ reason: "DependencyUnavailable", cause: Option.none() });
 
 const readToken = Effect.fn(function* (
   stream: Stream.Stream<Uint8Array, PlatformError.PlatformError>

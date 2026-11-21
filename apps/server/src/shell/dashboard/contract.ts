@@ -28,6 +28,7 @@ import {
   NotFound,
   OperationResponse,
   ValidationFailed,
+  omittedTag,
 } from "~/shell/public-http/contract";
 import { operationPolicy, userOwnedAgentScoped } from "~/shell/canonical-policy/contract";
 
@@ -36,7 +37,7 @@ const SpendingChartResult = Schema.Struct({
   buckets: Schema.Array(DashboardChartBucket),
 }).annotate({ identifier: "SpendingChartResult" });
 
-const AvailableBudgetResultShape = Schema.Struct({
+const UncheckedAvailableBudgetResult = Schema.Struct({
   availability: Schema.Literal("available"),
   appliedPeriod: AppliedDashboardPeriod,
   category: Category,
@@ -44,31 +45,33 @@ const AvailableBudgetResultShape = Schema.Struct({
   ...BudgetProgress.fields,
 });
 
-const validBudgetCurrencies = Schema.makeFilter<typeof AvailableBudgetResultShape.Type>((data) => {
-  if (data.cap.currency !== data.currency) {
-    return { path: ["cap", "currency"], issue: "Expected the Budget Currency" };
+const validBudgetCurrencies = Schema.makeFilter<typeof UncheckedAvailableBudgetResult.Type>(
+  (data) => {
+    if (data.cap.currency !== data.currency) {
+      return { path: ["cap", "currency"], issue: "Expected the Budget Currency" };
+    }
+
+    if (data.spent.currency !== data.currency) {
+      return { path: ["spent", "currency"], issue: "Expected the Budget Currency" };
+    }
+
+    if (data.status.type === "under" && data.status.remaining.currency !== data.currency) {
+      return { path: ["status", "remaining", "currency"], issue: "Expected the Budget Currency" };
+    }
+
+    if (data.status.type === "over" && data.status.overBy.currency !== data.currency) {
+      return { path: ["status", "overBy", "currency"], issue: "Expected the Budget Currency" };
+    }
+
+    if (!Schema.is(BudgetProgress)(data)) {
+      return { path: ["status", "type"], issue: "Expected exact Budget progress" };
+    }
+
+    return undefined;
   }
+);
 
-  if (data.spent.currency !== data.currency) {
-    return { path: ["spent", "currency"], issue: "Expected the Budget Currency" };
-  }
-
-  if (data.status.type === "under" && data.status.remaining.currency !== data.currency) {
-    return { path: ["status", "remaining", "currency"], issue: "Expected the Budget Currency" };
-  }
-
-  if (data.status.type === "over" && data.status.overBy.currency !== data.currency) {
-    return { path: ["status", "overBy", "currency"], issue: "Expected the Budget Currency" };
-  }
-
-  if (!Schema.is(BudgetProgress)(data)) {
-    return { path: ["status", "type"], issue: "Expected exact Budget progress" };
-  }
-
-  return undefined;
-});
-
-const AvailableBudgetResult = AvailableBudgetResultShape.check(validBudgetCurrencies);
+const AvailableBudgetResult = UncheckedAvailableBudgetResult.check(validBudgetCurrencies);
 
 const MissingBudgetResult = Schema.Struct({
   availability: Schema.Literal("missing-budget"),
@@ -133,7 +136,7 @@ export class DashboardUninitialized extends Schema.Error<
   Brand.Brand<"DashboardUninitialized">
 >("DashboardUninitialized")(
   {
-    _tag: Schema.tagDefaultOmit("DashboardUninitialized"),
+    ...omittedTag("DashboardUninitialized"),
     error: Schema.Struct({
       code: Schema.Literal("dashboard_uninitialized"),
       message: Schema.NonEmptyString,
@@ -244,7 +247,9 @@ export const DashboardGroup = HttpApiGroup.make("dashboard")
       )
   );
 
-export class DashboardUnavailable extends Data.TaggedError("DashboardUnavailable") {}
+export class DashboardUnavailable extends Data.TaggedError("DashboardUnavailable")<{
+  readonly cause: unknown;
+}> {}
 
 export type DashboardFacts = Readonly<{
   groups: ReadonlyMap<string, ReadonlyArray<ProjectedRange>>;

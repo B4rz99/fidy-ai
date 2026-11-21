@@ -18,6 +18,7 @@
     "scripts/**/*.ts",
     "src/**/*.ts",
     "src/**/*.json",
+    "test/**/*.ts",
     "tools/contracts/**/*.ts",
     "tools/hosted-inference/**/*.ts",
     "tools/telemetry/**/*.ts"

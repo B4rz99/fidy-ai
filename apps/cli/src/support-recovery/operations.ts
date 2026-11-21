@@ -1,4 +1,4 @@
-import { Effect, Redacted, Schema } from "effect";
+import { Effect, Option, Redacted, Schema } from "effect";
 import {
   RecoveryFailure,
   RecoveryInput,
@@ -36,7 +36,7 @@ export const runSupportRecovery = Effect.fn(function* (
 ) {
   return yield* Effect.gen(function* () {
     if (!operator.interactive || args.length !== 1 || args[0] !== "support-recovery") {
-      return yield* new RecoveryFailure({ reason: "InvalidInput" });
+      return yield* new RecoveryFailure({ reason: "InvalidInput", cause: Option.none() });
     }
 
     yield* operator.write(
@@ -47,7 +47,11 @@ export const runSupportRecovery = Effect.fn(function* (
 
     const pairingCode = yield* Schema.decodeEffect(RecoveryInput.fields.pairingCode)(
       yield* operator.readPairing
-    ).pipe(Effect.mapError(() => new RecoveryFailure({ reason: "InvalidInput" })));
+    ).pipe(
+      Effect.mapError(
+        (cause) => new RecoveryFailure({ reason: "InvalidInput", cause: Option.some(cause) })
+      )
+    );
 
     const code = yield* operator.readCode;
     yield* Effect.addFinalizer(() => discardProof(code));
@@ -55,7 +59,11 @@ export const runSupportRecovery = Effect.fn(function* (
     const input = yield* Schema.decodeEffect(RecoveryInput)({
       pairingCode,
       backupRecoveryCode: Redacted.value(code),
-    }).pipe(Effect.mapError(() => new RecoveryFailure({ reason: "InvalidInput" })));
+    }).pipe(
+      Effect.mapError(
+        (cause) => new RecoveryFailure({ reason: "InvalidInput", cause: Option.some(cause) })
+      )
+    );
 
     yield* Effect.addFinalizer(() => discardProof(input.backupRecoveryCode));
 

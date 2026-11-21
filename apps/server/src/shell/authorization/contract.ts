@@ -2,7 +2,13 @@ import { type Digest } from "effect/crypto";
 import { Context, type DateTime, type Effect } from "effect";
 import type { SqlClient } from "effect/sql";
 import { HttpApiMiddleware, HttpApiSecurity, OpenApi } from "effect/http-api";
-import type { AuditCaller, AuditOutcome } from "~/core/audit/contract";
+import type {
+  AuditOutcome,
+  HostedAuditCaller,
+  OAuthAuditCaller,
+  PatAuditCaller,
+  WebSessionAuditCaller,
+} from "~/core/audit/contract";
 import type {
   CanonicalCapabilities,
   CanonicalOperationId,
@@ -23,22 +29,14 @@ import type { CanonicalAuthorityRoot } from "~/shell/canonical-policy/contract";
 
 export const webSessionCookieName = "__Host-fidy_session";
 
-type HostedAuditCaller = Extract<AuditCaller, { readonly _tag: "HostedAgentSession" }>;
-
-type OAuthAuditCaller = Extract<AuditCaller, { readonly _tag: "OAuthAgent" }>;
-
-type PatAuditCaller = Extract<AuditCaller, { readonly _tag: "PAT" }>;
-
-type WebSessionAuditCaller = Extract<AuditCaller, { readonly _tag: "WebSession" }>;
-
 type CanonicalAuthority =
-  | Readonly<{ auditCaller: HostedAuditCaller; authorityRoot: CanonicalAuthorityRoot }>
+  | Readonly<{ auditCaller: typeof HostedAuditCaller.Type; authorityRoot: CanonicalAuthorityRoot }>
   | Readonly<{
-      auditCaller: PatAuditCaller | OAuthAuditCaller;
+      auditCaller: typeof PatAuditCaller.Type | typeof OAuthAuditCaller.Type;
       authorityRoot: "no-verified-whatsapp-authority";
     }>
   | Readonly<{
-      auditCaller: WebSessionAuditCaller;
+      auditCaller: typeof WebSessionAuditCaller.Type;
       authorityRoot: "no-verified-whatsapp-authority";
       fresh: boolean;
     }>;

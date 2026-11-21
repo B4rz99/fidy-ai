@@ -1,13 +1,14 @@
 import { readWhatsAppStatementMedia as readStatementMedia } from "~/shell/ingestion/internal/whatsapp-media";
 import { type StatementSourceFormat, maximumStatementBytes } from "~/core/ingestion/contract";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option, Predicate, Schema } from "effect";
 
 import type { CapturedInterpretationContext } from "~/core/interpretation-evidence/contract";
 import { ReceivedEmailContent } from "~/shell/ingestion/internal/material";
 import {
-  type NotificationEmailOutcome,
+  NotificationEmailOutcome,
   type ParsedStatement,
   StatementParseFailed,
+  StatementParseFailureReason,
 } from "./contract";
 import { interpretNotificationEmail as interpretDecodedEmail } from "~/shell/ingestion/internal/email-interpretation/interpret";
 
@@ -35,8 +36,10 @@ export const statementSourceFormat = (bytes: Uint8Array): StatementSourceFormat 
   bytes.slice(0, 2).join(",") === `${zipFirstByte},${zipSecondByte}` ? "xlsx" : "csv";
 
 const statementParseFailure = (failure: unknown): StatementParseFailed =>
-  failure instanceof StatementParseFailed
-    ? failure
+  Predicate.isTagged(failure, "StatementParseFailed") &&
+  Predicate.hasProperty(failure, "safeReason") &&
+  Schema.is(StatementParseFailureReason)(failure.safeReason)
+    ? new StatementParseFailed({ safeReason: failure.safeReason })
     : new StatementParseFailed({ safeReason: "malformed-file" });
 
 export const parseStatementFile = (
@@ -85,7 +88,7 @@ export const interpretNotificationEmail = (
     const content = Schema.decodeUnknownOption(ReceivedEmailContent)(input.content);
 
     if (Option.isNone(content)) {
-      return { _tag: "NeedsReview", reason: "canonical-validation-failed" };
+      return NotificationEmailOutcome.NeedsReview({ reason: "canonical-validation-failed" });
     }
 
     return yield* interpretDecodedEmail({ content: content.value, context: input.context });

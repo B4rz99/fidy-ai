@@ -1,12 +1,7 @@
 import { type StartedPATPairing, patPairingLifetime } from "@fidy/server/client";
 import { DateTime, Duration, Effect, Option, Schema } from "effect";
 import { CliFailure, type SavedGrant, apiOrigin, managementUrl } from "../credential/contract";
-import {
-  type LoginDependencies,
-  LoginRequest,
-  type PublicProgress,
-  approvalPageUrl,
-} from "./contract";
+import { type LoginDependencies, LoginRequest, PublicProgress, approvalPageUrl } from "./contract";
 
 const requestDeadlineMilliseconds = 15_000;
 
@@ -17,12 +12,18 @@ const preparePairing = Effect.fn(function* (input: unknown, dependencies: LoginD
   const request = yield* Schema.decodeUnknownEffect(LoginRequest, {
     errors: "all",
     onExcessProperty: "error",
-  })(input).pipe(Effect.mapError(() => new CliFailure({ reason: "InvalidInput" })));
+  })(input).pipe(
+    Effect.mapError(
+      (cause) => new CliFailure({ reason: "InvalidInput", cause: Option.some(cause) })
+    )
+  );
 
   yield* dependencies.verifyStorage;
   const existing = yield* dependencies.store.load;
 
-  if (Option.isSome(existing)) return yield* new CliFailure({ reason: "AlreadyLoggedIn" });
+  if (Option.isSome(existing)) {
+    return yield* new CliFailure({ reason: "AlreadyLoggedIn", cause: Option.none() });
+  }
 
   return yield* dependencies.pairing.start(request);
 });
@@ -48,24 +49,26 @@ const completeLogin = Effect.fn(function* (
     const attemptAt = yield* DateTime.now;
 
     if (attemptAt.epochMilliseconds >= pairing.expiresAt.epochMilliseconds) {
-      return yield* new CliFailure({ reason: "Expired" });
+      return yield* new CliFailure({ reason: "Expired", cause: Option.none() });
     }
 
     interruption.reason = "ClaimAmbiguous";
 
     const result = yield* dependencies.pairing.claim(pairing).pipe(
       Effect.catchTag("PollingDelayed", (failure) =>
-        progress({
-          _tag: "PollingDelayed",
-          retryAfterSeconds: Math.max(delaySeconds, failure.retryAfterSeconds),
-        }).pipe(Effect.as(failure))
+        progress(
+          PublicProgress.PollingDelayed({
+            retryAfterSeconds: Math.max(delaySeconds, failure.retryAfterSeconds),
+          })
+        ).pipe(Effect.as(failure))
       ),
       Effect.timeoutOrElse({
         duration: Math.min(
           pairing.expiresAt.epochMilliseconds - attemptAt.epochMilliseconds,
           requestDeadlineMilliseconds
         ),
-        orElse: () => Effect.fail(new CliFailure({ reason: "ClaimAmbiguous" })),
+        orElse: () =>
+          Effect.fail(new CliFailure({ reason: "ClaimAmbiguous", cause: Option.none() })),
       })
     );
 
@@ -84,14 +87,16 @@ const completeLogin = Effect.fn(function* (
     const grant: SavedGrant = { origin: apiOrigin, pat: result.pat };
     interruption.reason = "LoginSaveInterrupted";
     yield* dependencies.store.save({ grant, bearer: result.bearer }).pipe(
-      Effect.mapError(() => new CliFailure({ reason: "ClaimStorageFailed" })),
+      Effect.mapError(
+        (cause) => new CliFailure({ reason: "ClaimStorageFailed", cause: Option.some(cause) })
+      ),
       Effect.uninterruptible
     );
 
     return grant;
   }
 
-  return yield* new CliFailure({ reason: "Expired" });
+  return yield* new CliFailure({ reason: "Expired", cause: Option.none() });
 });
 
 export const login = Effect.fn(
@@ -106,9 +111,12 @@ export const login = Effect.fn(
       return completeLogin(input, progress, { dependencies, interruption }).pipe(
         Effect.timeoutOrElse({
           duration: maximumLoginMilliseconds,
-          orElse: () => Effect.fail(new CliFailure({ reason: "ClaimAmbiguous" })),
+          orElse: () =>
+            Effect.fail(new CliFailure({ reason: "ClaimAmbiguous", cause: Option.none() })),
         }),
-        Effect.onInterrupt(() => Effect.fail(new CliFailure({ reason: interruption.reason })))
+        Effect.onInterrupt(() =>
+          Effect.fail(new CliFailure({ reason: interruption.reason, cause: Option.none() }))
+        )
       );
     })
 );
@@ -116,9 +124,9 @@ export const login = Effect.fn(
 const approvalUrl = (publicCode: StartedPATPairing["publicCode"]): string =>
   `${approvalPageUrl}?cliCode=${encodeURIComponent(publicCode)}`;
 
-const approvalProgress = (publicCode: StartedPATPairing["publicCode"]): PublicProgress => ({
-  _tag: "ApprovalRequired",
-  publicCode,
-  managementUrl,
-  approvalUrl: approvalUrl(publicCode),
-});
+const approvalProgress = (publicCode: StartedPATPairing["publicCode"]): PublicProgress =>
+  PublicProgress.ApprovalRequired({
+    publicCode,
+    managementUrl,
+    approvalUrl: approvalUrl(publicCode),
+  });

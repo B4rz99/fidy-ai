@@ -39,7 +39,7 @@ prove which server request caused it. Do not attribute it using an unrelated rec
    provider status/failure, clock/deadline, concurrency and retry schedule. Use owner-published
    interfaces. Do not retrieve real financial content or substitute retained Audit or Transcript
    data for diagnostic telemetry.
-4. Write a failing regression at the smallest meaningful seam. Durable queues, D1 atomicity,
+4. Write a failing regression at the smallest meaningful seam. Durable queues, SQLite atomicity,
    coordinator serialization and Workflows require the native adapter tests; a pure mock cannot
    prove their behavior. Assert safe classifications, cancellation, retry/ack behavior, and privacy.
 5. Apply the fix, demonstrate the regression passing, and run the affected verification groups.

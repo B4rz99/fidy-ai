@@ -158,7 +158,7 @@ export const TelemetryRegistry = {
     "POST /internal/support-recovery",
   ],
   repositoryOperation: ["capture_transaction"],
-  databaseSystem: ["d1"],
+  databaseSystem: ["sqlite"],
   model: ["openai", "hosted_inference"],
   spanOperation: [
     "http.server",

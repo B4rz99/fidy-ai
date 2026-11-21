@@ -224,7 +224,6 @@ const runMountedWorkspace = Effect.fnUntraced(function* (runtime: Miniflare, act
   const before = yield* nativeMeters(runtime);
   yield* io(() =>
     runBrowser({
-      variant: "do",
       origins: api,
       cookie: active.cookie,
       expected: manifest.history,

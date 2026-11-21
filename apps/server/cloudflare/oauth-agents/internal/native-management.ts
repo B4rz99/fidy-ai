@@ -59,7 +59,9 @@ const list = Effect.fn(function* (request: Request, session: FreshSessionSubject
     Effect.gen(function* () {
       const recentActivity = histories.get(row.id);
 
-      if (recentActivity === undefined) return yield* new BootstrapUnavailable();
+      if (recentActivity === undefined) {
+        return yield* new BootstrapUnavailable({ cause: Option.none() });
+      }
 
       return yield* projectConnection({ current, row, recentActivity });
     })
@@ -103,7 +105,9 @@ const revoke = Effect.fn(function* ({
 
   const retained = yield* sql.unsafe(selected.sql, selected.params);
 
-  if (retained.length > maximumRevocations) return yield* new BootstrapUnavailable();
+  if (retained.length > maximumRevocations) {
+    return yield* new BootstrapUnavailable({ cause: Option.none() });
+  }
 
   const statement = revokeOAuthUserConsent({
     session,
@@ -122,7 +126,7 @@ const revoke = Effect.fn(function* ({
   );
 
   if (evidence.length !== retained.length || revoked.length !== retained.length) {
-    return yield* new BootstrapUnavailable();
+    return yield* new BootstrapUnavailable({ cause: Option.none() });
   }
 
   return oauthResponse({ body: { revoked: true }, status: 200 });

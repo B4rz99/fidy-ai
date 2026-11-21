@@ -24,7 +24,7 @@ import {
 } from "../../../src/core/ingestion/contract";
 import { ResolveNeedsReviewItemInput } from "../../../src/shell/ingestion/contract";
 import { CanonicalToolEvidence } from "../../../src/core/agent/contract";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { type Data, DateTime, Effect, Option, Predicate, Schema } from "effect";
 import { CanonicalOperationId } from "../../../src/core/canonical-operations/contract";
 import { Budget, CreateBudgetInput, UpdateBudgetInput } from "../../../src/core/budgets/contract";
 import { CreateKeywordRuleInput, KeywordRule } from "../../../src/core/categories/contract";
@@ -49,6 +49,20 @@ export type ConfirmationRead = (
 ) => Effect.Effect<Option.Option<Schema.Json>>;
 
 type Context = Readonly<{ read: ConfirmationRead; timeZone: string }>;
+
+const allPresent = <Item, Value>(
+  items: Iterable<Item>,
+  present: (item: Item) => Effect.Effect<Option.Option<Value>>
+): Effect.Effect<Option.Option<ReadonlyArray<Value>>> =>
+  Effect.reduce(
+    items,
+    () => Option.some<ReadonlyArray<Value>>([]),
+    (collected, item) =>
+      Option.match(collected, {
+        onNone: () => Effect.succeedNone,
+        onSome: (prior) => present(item).pipe(Effect.map(Option.map((value) => [...prior, value]))),
+      })
+  );
 
 const addressed = Schema.Struct({ params: Schema.Struct({ id: Schema.String }) });
 
@@ -377,36 +391,39 @@ const describeTransactionChange = (
     );
   });
 
-const recordDescriptions: Readonly<
-  Record<
-    string,
-    (context: Context, operation: string, input: unknown) => Effect.Effect<Option.Option<string>>
-  >
-> = {
-  "budgets.createBudget": describeBudgetCreation,
-  "budgets.updateBudget": describeBudgetChange,
-  "budgets.deleteBudget": describeBudgetChange,
-  "memory.remember": describeRemember,
-  "memory.forget": describeMemoryChange,
-  "memory.revise": describeMemoryChange,
-  "categories.createKeywordRule": describeKeywordChange,
-  "categories.updateKeywordRule": describeKeywordChange,
-  "categories.deleteKeywordRule": describeKeywordChange,
-  "transactions.createTransaction": describeTransactionCreation,
-  "transactions.updateTransaction": describeTransactionChange,
-  "transactions.updateTransactions": describeGroupCorrection,
-  "transactions.deleteTransaction": describeTransactionChange,
-};
+type RecordDescription = (
+  context: Context,
+  operation: string,
+  input: unknown
+) => Effect.Effect<Option.Option<string>>;
+
+const recordDescriptions = new Map<string, RecordDescription>(
+  Object.entries({
+    "budgets.createBudget": describeBudgetCreation,
+    "budgets.updateBudget": describeBudgetChange,
+    "budgets.deleteBudget": describeBudgetChange,
+    "memory.remember": describeRemember,
+    "memory.forget": describeMemoryChange,
+    "memory.revise": describeMemoryChange,
+    "categories.createKeywordRule": describeKeywordChange,
+    "categories.updateKeywordRule": describeKeywordChange,
+    "categories.deleteKeywordRule": describeKeywordChange,
+    "transactions.createTransaction": describeTransactionCreation,
+    "transactions.updateTransaction": describeTransactionChange,
+    "transactions.updateTransactions": describeGroupCorrection,
+    "transactions.deleteTransaction": describeTransactionChange,
+  })
+);
 
 const describeRecord = (
   context: Context,
   operation: string,
   input: unknown
-): Effect.Effect<Option.Option<string>> => {
-  const describe = recordDescriptions[operation];
-
-  return describe === undefined ? Effect.succeedNone : describe(context, operation, input);
-};
+): Effect.Effect<Option.Option<string>> =>
+  Option.match(Option.fromUndefinedOr(recordDescriptions.get(operation)), {
+    onNone: () => Effect.succeedNone,
+    onSome: (description) => description(context, operation, input),
+  });
 
 const periods = {
   "this-week": "esta semana",
@@ -494,7 +511,7 @@ const describeDashboardChange = (
     const placement = (
       at: Extract<DashboardEdit, { op: "move-widget" }>["at"]
     ): Option.Option<string> =>
-      typeof at === "string"
+      Predicate.isString(at)
         ? Option.some(at === "top" ? "al principio del tablero" : "al final del tablero")
         : Option.map(
             name(at.besideWidget),
@@ -741,21 +758,16 @@ const reviewName = (context: Context, id: string): Effect.Effect<Option.Option<s
 
 const describeReviewSelection = (
   context: Context,
-  edit: Extract<ReviewCommand, { _tag: "Skip" | "Restore" }>
+  edit: Data.TaggedEnum.Value<ReviewCommand, "Skip" | "Restore">
 ): Effect.Effect<Option.Option<string>> =>
-  Effect.gen(function* () {
-    const rows: Array<string> = [];
-
-    for (const item of edit.items) {
-      const name = yield* reviewName(context, item.id);
-
-      if (Option.isNone(name)) return Option.none();
-      rows.push(name.value);
-    }
-
-    return Option.some(`${edit._tag === "Skip" ? "Omitir" : "Restablecer"} estos registros:
-${rows.map((name) => `- ${name}`).join("\n")}.`);
-  });
+  allPresent(edit.items, (item) => reviewName(context, item.id)).pipe(
+    Effect.map(
+      Option.map(
+        (rows) => `${Predicate.isTagged(edit, "Skip") ? "Omitir" : "Restablecer"} estos registros:
+${rows.map((name) => `- ${name}`).join("\n")}.`
+      )
+    )
+  );
 
 const describeReviewEdit = (
   context: Context,
@@ -767,7 +779,7 @@ const describeReviewEdit = (
     if (Option.isNone(decoded)) return Option.none();
     const edit = decoded.value.payload;
 
-    if (edit._tag === "Skip" || edit._tag === "Restore") {
+    if (Predicate.isTagged(edit, "Skip") || Predicate.isTagged(edit, "Restore")) {
       return yield* describeReviewSelection(context, edit);
     }
 
@@ -775,7 +787,7 @@ const describeReviewEdit = (
 
     if (Option.isNone(name)) return Option.none();
 
-    if (edit._tag === "Create") {
+    if (Predicate.isTagged(edit, "Create")) {
       return Option.map(
         localDateText({ date: edit.extraction.occurredAt, timeZone: context.timeZone }),
         (date) =>
@@ -869,6 +881,16 @@ const describeFeature = (
     return Option.none();
   });
 
+const transactionNameFor = Effect.fnUntraced(function* (context: Context, id: string) {
+  const found = yield* load(context)(
+    "transactions.getTransaction",
+    { params: { id } },
+    Schema.Struct({ data: Schema.toCodecJson(Transaction) })
+  );
+
+  return Option.flatMap(found, ({ data }) => transactionName(data, context.timeZone));
+});
+
 const describeTransactionPair = (
   context: Context,
   operation: string,
@@ -878,27 +900,16 @@ const describeTransactionPair = (
     const decoded = decode(Schema.Struct({ payload: TransactionPairInput }), input);
 
     if (Option.isNone(decoded)) return Option.none();
-    const names: Array<string> = [];
 
-    for (const id of [
-      decoded.value.payload.firstTransactionId,
-      decoded.value.payload.secondTransactionId,
-    ]) {
-      const found = yield* load(context)(
-        "transactions.getTransaction",
-        { params: { id } },
-        Schema.Struct({ data: Schema.toCodecJson(Transaction) })
-      );
+    const names = yield* allPresent(
+      [decoded.value.payload.firstTransactionId, decoded.value.payload.secondTransactionId],
+      (id) => transactionNameFor(context, id)
+    );
 
-      if (Option.isNone(found)) return Option.none();
-      const name = transactionName(found.value.data, context.timeZone);
-
-      if (Option.isNone(name)) return Option.none();
-      names.push(name.value);
-    }
+    if (Option.isNone(names)) return Option.none();
 
     return Option.some(
-      `${operation === "transactions.linkTransactions" ? "Vincular" : "Separar"} estos dos registros: ${names.join("; ")}. Los importes guardados se conservan.`
+      `${operation === "transactions.linkTransactions" ? "Vincular" : "Separar"} estos dos registros: ${names.value.join("; ")}. Los importes guardados se conservan.`
     );
   });
 
@@ -996,23 +1007,21 @@ export const describeConfirmation = ({
       const batch = decode(AtomicBatchAdmission, input);
 
       if (Option.isNone(batch)) return Option.none();
-      const descriptions: Array<string> = [];
 
-      for (const raw of batch.value.payload.calls) {
-        const call = decode(
-          Schema.Struct({ operation: Schema.String, input: CanonicalToolEvidence }),
-          raw
-        );
+      const descriptions = yield* allPresent(batch.value.payload.calls, (raw) =>
+        Option.match(
+          decode(Schema.Struct({ operation: Schema.String, input: CanonicalToolEvidence }), raw),
+          {
+            onNone: () => Effect.succeedNone,
+            onSome: (call) => describeSingle(context, call.operation, call.input),
+          }
+        )
+      );
 
-        if (Option.isNone(call)) return Option.none();
-        const description = yield* describeSingle(context, call.value.operation, call.value.input);
-
-        if (Option.isNone(description)) return Option.none();
-        descriptions.push(`${descriptions.length + 1}. ${description.value}`);
-      }
-
-      return Option.some(
-        `Revisa estos cambios. Se aplicarán todos juntos:\n${descriptions.join("\n")}`
+      return Option.map(
+        descriptions,
+        (described) =>
+          `Revisa estos cambios. Se aplicarán todos juntos:\n${described.map((description, index) => `${index + 1}. ${description}`).join("\n")}`
       );
     }
 

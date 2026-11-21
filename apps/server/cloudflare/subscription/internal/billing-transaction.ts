@@ -87,11 +87,16 @@ export const verifiedOutcome = Effect.fn(function* (
     if (Option.isNone(found.finalizedAt)) return yield* failure();
 
     const period = Option.isSome(captured.previous_paid_attempt_id)
-      ? {
-          startsAt: DateTime.makeUnsafe(Option.getOrThrow(captured.period_starts_at_ms)),
-          endsAt: DateTime.makeUnsafe(Option.getOrThrow(captured.period_ends_at_ms)),
-          renewalAnchor: DateTime.makeUnsafe(Option.getOrThrow(captured.period_ends_at_ms)),
-        }
+      ? yield* Effect.fromOption(
+          Option.all({ startsAt: captured.period_starts_at_ms, endsAt: captured.period_ends_at_ms })
+        ).pipe(
+          Effect.orDie,
+          Effect.map(({ startsAt, endsAt }) => ({
+            startsAt: DateTime.makeUnsafe(startsAt),
+            endsAt: DateTime.makeUnsafe(endsAt),
+            renewalAnchor: DateTime.makeUnsafe(endsAt),
+          }))
+        )
       : yield* paidPeriodFor(captured.billing_period, captured.time_zone, found.finalizedAt.value);
 
     settlement = {

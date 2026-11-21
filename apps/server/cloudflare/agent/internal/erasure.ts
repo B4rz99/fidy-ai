@@ -1,11 +1,14 @@
+import { Data } from "effect";
 import type { ErasureProjection } from "../../erasure-store/contract";
+
+const Quiescence = Data.taggedEnum<ErasureProjection["quiescence"]>();
 
 export const projections: ReadonlyArray<ErasureProjection> = [
   {
     id: "hosted_agent_sessions",
     dataClass: "conversation",
     dependencies: ["hosted_turns", "transcript_entries"],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: Quiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM hosted_agent_sessions r WHERE r.user_id=?",
@@ -26,7 +29,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "hosted_confirmations",
     dataClass: "conversation",
     dependencies: [],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: Quiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM hosted_confirmations r WHERE r.user_id=?",
@@ -47,7 +50,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "hosted_mutation_commits",
     dataClass: "conversation",
     dependencies: [],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: Quiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM hosted_mutation_commits r WHERE r.user_id=?",
@@ -80,13 +83,12 @@ export const projections: ReadonlyArray<ErasureProjection> = [
       "transactions",
       "transcript_entries",
     ],
-    quiescence: {
-      _tag: "Durable",
+    quiescence: Quiescence.Durable({
       select: ({ userId }) => ({
         sql: "SELECT 1 FROM hosted_turns WHERE user_id=? AND status='pending'",
         params: [userId],
       }),
-    },
+    }),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM hosted_turns r WHERE r.user_id=?",
@@ -107,7 +109,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "proactive_transcript_entries",
     dataClass: "conversation",
     dependencies: ["proactive_transcript_event_links"],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: Quiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM proactive_transcript_entries r WHERE r.user_id=?",
@@ -128,7 +130,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "proactive_transcript_event_links",
     dataClass: "conversation",
     dependencies: [],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: Quiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT rowid,user_id AS user_id,transcript_id AS transcript_id,id AS insight_event_id,transcript_kind AS transcript_kind FROM insight_events WHERE transcript_id IS NOT NULL) r WHERE r.user_id=?",
@@ -149,7 +151,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "transcript_entries",
     dataClass: "conversation",
     dependencies: [],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: Quiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM transcript_entries r WHERE r.user_id=?",

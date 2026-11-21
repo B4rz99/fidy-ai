@@ -21,17 +21,24 @@ export const executeSchedule = <E>(
   activities: ReadonlyArray<ScheduledActivity<E>>
 ): Effect.Effect<void, ScheduledWorkFailed> =>
   Effect.gen(function* () {
-    let failed = false;
+    const failed = yield* Effect.reduce(
+      activities,
+      () => false,
+      (anyFailed, { operation, work }) =>
+        Effect.exit(work.pipe(Effect.withSpan(operation))).pipe(
+          Effect.flatMap((result) => {
+            if (Exit.isSuccess(result)) return Effect.succeed(anyFailed);
 
-    for (const { operation, work } of activities) {
-      const result = yield* Effect.exit(work.pipe(Effect.withSpan(operation)));
+            if (Cause.hasInterrupts(result.cause)) return Effect.interrupt;
 
-      if (Exit.isFailure(result)) {
-        if (Cause.hasInterrupts(result.cause)) return yield* Effect.interrupt;
-        failed = true;
-        yield* Effect.logWarning({ component: "scheduled-work", operation, outcome: "failed" });
-      }
-    }
+            return Effect.logWarning({
+              component: "scheduled-work",
+              operation,
+              outcome: "failed",
+            }).pipe(Effect.as(true));
+          })
+        )
+    );
 
     if (failed) return yield* new ScheduledWorkFailed();
   });

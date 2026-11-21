@@ -280,9 +280,9 @@ export const boundaryViolations = (report, packageRoot) => {
           published: trio.test(to) && owner(to) === dirname(to),
         };
 
-        return [...directionRules, ...boundaryRules]
-          .filter((rule) => rule.rejects(edge))
-          .map(({ name, reason }) => ({ name, reason, from, to }));
+        return [...directionRules, ...boundaryRules].flatMap(({ name, reason, rejects }) =>
+          rejects(edge) ? [{ name, reason, from, to }] : []
+        );
       });
     });
 };

@@ -8,17 +8,19 @@ import type {
 } from "../../canonical-admission/contract";
 import type { CatalogOperation } from "../../../src/shell/canonical-catalog/contract";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, Effect, Option, Schema } from "effect";
+import { Clock, Data, Effect, Option, Schema } from "effect";
 import {
   AgentIteration,
   CanonicalToolEvidence,
   type CanonicalToolOutcome,
   ToolCallId,
+  type TranscriptEntry,
 } from "../../../src/core/agent/contract";
 import type {
   HostedContinuationEvent,
   HostedTextToolCall,
 } from "../../../src/shell/hosted-inference/contract";
+import type { ConsentSubject } from "../../../src/shell/consent/contract";
 import { activeProUserCondition } from "../../../src/shell/access-tier/operations";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
 import {
@@ -36,10 +38,16 @@ type Action = { turn: LocalTurn; iteration: number; storage: DurableObjectStorag
   commercial: { origin: string; offers: Option.Option<Schema.Json> };
 }>;
 
-const failure = (code: string): CanonicalToolOutcome => ({
-  _tag: "CanonicalOperationFailed",
-  failure: { error: { code } },
-});
+const Outcome = Data.taggedEnum<CanonicalToolOutcome>();
+
+const Entry = Data.taggedEnum<TranscriptEntry>();
+
+const Continuation = Data.taggedEnum<HostedContinuationEvent>();
+
+const Subject = Data.taggedEnum<ConsentSubject>();
+
+const failure = (code: string): CanonicalToolOutcome =>
+  Outcome.CanonicalOperationFailed({ failure: { error: { code } } });
 
 const firstFailureStatus = 400;
 
@@ -47,7 +55,7 @@ const currentConsent = Effect.fn(function* (turn: LocalTurn) {
   const sql = yield* SqliteClient;
 
   const guard = protectConsentStatement({
-    subject: { _tag: "User", userId: turn.user_id },
+    subject: Subject.User({ userId: turn.user_id }),
     requirement: "active",
     statement: { sql: "SELECT 1 FROM users WHERE id=?", params: [turn.user_id] },
   });
@@ -70,12 +78,12 @@ const decodedOutcome = Effect.fn(function* (
   operation: CatalogOperation
 ) {
   if (result.status >= firstFailureStatus) {
-    return { _tag: "CanonicalOperationFailed", failure: result.body } as const;
+    return Outcome.CanonicalOperationFailed({ failure: result.body });
   }
 
   yield* Schema.decodeEffect(operation.success)(result.body);
 
-  return { _tag: "Succeeded", output: result.body } as const;
+  return Outcome.Succeeded({ output: result.body });
 });
 
 const approve = Effect.fn(function* (
@@ -101,10 +109,14 @@ const approve = Effect.fn(function* (
 
 const channelContext = (
   turn: LocalTurn
-): { accountability: { turnId: string; sessionId: string } } & Partial<{ hostedTurn: string }> => ({
-  accountability: { turnId: turn.id, sessionId: turn.session_id },
-  ...(Option.isNone(turn.browser_id) ? { hostedTurn: turn.id } : {}),
-});
+): { accountability: { turnId: string; sessionId: string } } & Partial<{ hostedTurn: string }> => {
+  const accountability = { turnId: turn.id, sessionId: turn.session_id };
+
+  return Option.match(turn.browser_id, {
+    onNone: () => ({ accountability, hostedTurn: turn.id }),
+    onSome: () => ({ accountability }),
+  });
+};
 
 const describeBatchChild = Effect.fnUntraced(function* (
   turn: LocalTurn,
@@ -148,13 +160,15 @@ const ownerForTool = Effect.fnUntraced(function* (
 ) {
   const { turn } = action;
 
-  const context = {
+  const base = {
     user: turn.user_id,
     current: now,
     storage: action.storage,
-    ...(action.commercial === undefined ? {} : { commercial: action.commercial }),
     ...channelContext(turn),
   };
+
+  const context =
+    action.commercial === undefined ? base : { ...base, commercial: action.commercial };
 
   return operation.id === "operations.executeAtomicBatch"
     ? Option.some(
@@ -232,33 +246,26 @@ export const applyTool = Effect.fn(function* (tool: HostedTextToolCall, action: 
 
   if (existing !== undefined) return yield* new AgentUnavailable();
   const common = { iteration, toolCallId, operation: tool.operation };
-  yield* appendEntry(turn.session_id, {
-    ...entryIdentity(turn.id)(current),
-    ...common,
-    _tag: "CanonicalToolCallEntry",
-    input,
-  });
+  yield* appendEntry(
+    turn.session_id,
+    Entry.CanonicalToolCallEntry({ ...entryIdentity(turn.id)(current), ...common, input })
+  );
   const resultIdentity = entryIdentity(turn.id)(current);
 
-  const outcome = yield* meterHistory(turn, {
-    ...resultIdentity,
-    ...common,
-    _tag: "CanonicalToolResultEntry",
-    outcome: yield* executeOwner(tool, input, action),
-  });
+  const outcome = yield* meterHistory(
+    turn,
+    Entry.CanonicalToolResultEntry({
+      ...resultIdentity,
+      ...common,
+      outcome: yield* executeOwner(tool, input, action),
+    })
+  );
 
   yield* sql`INSERT INTO hosted_tool_calls VALUES(${turn.id},${toolCallId},${tool.operation},${outcome._tag},${current})`;
-  yield* appendEntry(turn.session_id, {
-    ...resultIdentity,
-    ...common,
-    _tag: "CanonicalToolResultEntry",
-    outcome,
-  });
+  yield* appendEntry(
+    turn.session_id,
+    Entry.CanonicalToolResultEntry({ ...resultIdentity, ...common, outcome })
+  );
 
-  return {
-    _tag: "ToolResult",
-    toolCallId,
-    operation: tool.operation,
-    outcome,
-  } satisfies HostedContinuationEvent;
+  return Continuation.ToolResult({ toolCallId, operation: tool.operation, outcome });
 });

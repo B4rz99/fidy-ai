@@ -1,12 +1,15 @@
+import { Data } from "effect";
 import { browserPairingsForErasureQuery } from "../../browser-login/operations";
 import type { ErasureProjection } from "../../erasure-store/contract";
+
+const Quiescence = Data.taggedEnum<ErasureProjection["quiescence"]>();
 
 export const projections: ReadonlyArray<ErasureProjection> = [
   {
     id: "provider_authentication_attempts",
     dataClass: "credentials",
     dependencies: [],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: Quiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM provider_authentication_attempts r WHERE r.user_id=?",
@@ -27,7 +30,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "provider_credentials",
     dataClass: "credentials",
     dependencies: [],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: Quiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM provider_credentials r WHERE r.user_id=?",
@@ -48,7 +51,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "whatsapp_provider_handoffs",
     dataClass: "credentials",
     dependencies: ["provider_authentication_attempts"],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: Quiescence.Synchronous(),
 
     candidates: (userId) => {
       const pairings = browserPairingsForErasureQuery(userId);
@@ -81,7 +84,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "whatsapp_signup_invitations",
     dataClass: "credentials",
     dependencies: ["provider_authentication_attempts"],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: Quiescence.Synchronous(),
 
     candidates: (userId) => {
       const pairings = browserPairingsForErasureQuery(userId);

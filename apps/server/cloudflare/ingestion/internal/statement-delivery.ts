@@ -1,6 +1,6 @@
 import { sanitizeWorkTrace, workTraceHeaders } from "../../runtime/telemetry/operations";
 import type { WorkflowStepConfig } from "cloudflare:workers";
-import { Cause, Effect, Exit, Option, Schema } from "effect";
+import { Cause, Data, Effect, Exit, Option, Ref, Schema } from "effect";
 import {
   StatementCoordinatorActivity,
   StatementDeliveryUnavailable,
@@ -13,6 +13,8 @@ import { maximumStatementChunkActivities } from "./statement-processing-limits";
 const Work = StatementWork;
 
 const CoordinatorWork = StatementCoordinatorActivity;
+
+const coordinatorActivity = Data.taggedEnum<typeof CoordinatorWork.Type>();
 
 const WorkflowState = Schema.Struct({
   status: Schema.Literals([
@@ -48,18 +50,21 @@ const handoffStatements = (input: {
   pending: (work: typeof Work.Type) => Effect.Effect<boolean, StatementDeliveryUnavailable>;
   reconcile: (work: typeof Work.Type) => Effect.Effect<void, StatementDeliveryUnavailable>;
 }): Effect.Effect<void, StatementDeliveryUnavailable> =>
-  Effect.gen(function* () {
-    for (const message of input.messages) {
+  Effect.forEach(
+    input.messages,
+    Effect.fnUntraced(function* (message) {
       const work = Schema.decodeUnknownOption(Work)(message.body);
 
       if (Option.isNone(work)) {
         message.ack();
-        continue;
+
+        return;
       }
 
       if (!(yield* input.pending(work.value))) {
         message.ack();
-        continue;
+
+        return;
       }
 
       const params = yield* sanitizeWorkTrace(work.value);
@@ -80,8 +85,9 @@ const handoffStatements = (input: {
       }
 
       message.ack();
-    }
-  }).pipe(Effect.withSpan("ingestion.statementReceive"));
+    }),
+    { discard: true }
+  ).pipe(Effect.withSpan("ingestion.statementReceive"));
 
 export const receiveNativeStatementExtraction = (input: {
   environment: {
@@ -178,10 +184,9 @@ const coordinatedStatementStep = (
       const safeWork = yield* sanitizeWorkTrace(work);
       const traceHeaders = yield* workTraceHeaders(safeWork);
 
-      const body = yield* Schema.encodeEffect(Schema.fromJsonString(CoordinatorWork))({
-        _tag: kind,
-        ...safeWork,
-      }).pipe(Effect.mapError((cause) => new StatementDeliveryUnavailable({ cause })));
+      const body = yield* Schema.encodeEffect(Schema.fromJsonString(CoordinatorWork))(
+        coordinatorActivity[kind](safeWork)
+      ).pipe(Effect.mapError((cause) => new StatementDeliveryUnavailable({ cause })));
 
       const result = yield* Effect.tryPromise({
         try: () =>
@@ -219,9 +224,11 @@ export const runStatementExtractionWorkflow = (
 
   return Effect.runPromise(
     Effect.gen(function* () {
-      let finished = false;
+      const nextIndex = yield* Ref.make(0);
 
-      for (let index = 0; index < maximumStatementChunkActivities; index += 1) {
+      const finalizeChunk = Effect.gen(function* () {
+        const index = yield* Ref.getAndUpdate(nextIndex, (current) => current + 1);
+
         const outcome = yield* Effect.exit(
           Effect.tryPromise({
             try: () =>
@@ -236,16 +243,18 @@ export const runStatementExtractionWorkflow = (
 
         if (Exit.isFailure(outcome)) {
           if (Cause.hasInterrupts(outcome.cause)) return yield* Effect.failCause(outcome.cause);
-          break;
+
+          return Option.some(false);
         }
 
-        if (!outcome.value) {
-          finished = true;
-          break;
-        }
-      }
+        return outcome.value ? Option.none<boolean>() : Option.some(true);
+      });
 
-      if (finished) return;
+      const finished = yield* finalizeChunk.pipe(
+        Effect.repeat({ while: Option.isNone, times: maximumStatementChunkActivities - 1 })
+      );
+
+      if (Option.getOrElse(finished, () => false)) return;
       yield* Effect.tryPromise({
         try: () =>
           input.activity(

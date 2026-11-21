@@ -2,6 +2,7 @@ import {
   Clock,
   type Config,
   ConfigProvider,
+  Data,
   DateTime,
   Effect,
   Option,
@@ -20,6 +21,18 @@ import {
   type Validation,
   type VerifiedProviderIdentity,
 } from "./token-contract";
+
+const OidcRequest = Data.taggedEnum<Parameters<ProviderOidcHttpService["execute"]>[0]>();
+
+const isJwtExpired = Schema.is(Schema.instanceOf(errors.JWTExpired));
+
+const isJwtClaimValidationFailed = Schema.is(Schema.instanceOf(errors.JWTClaimValidationFailed));
+
+const isJwksNoMatchingKey = Schema.is(Schema.instanceOf(errors.JWKSNoMatchingKey));
+
+const isJwsSignatureVerificationFailed = Schema.is(
+  Schema.instanceOf(errors.JWSSignatureVerificationFailed)
+);
 
 const successStatus = 200;
 
@@ -63,18 +76,33 @@ const validClaims = ({
   multipleAudiences: boolean;
 }>): Effect.Effect<void, ProviderVerificationFailure> => {
   if (claims.nonce !== attempt.nonce) {
-    return Effect.fail(new ProviderVerificationFailure({ reason: "nonce_mismatch" }));
+    return Effect.fail(
+      new ProviderVerificationFailure({
+        reason: "nonce_mismatch",
+        cause: Option.none(),
+      })
+    );
   }
 
   if (claims.iat * millisecondsPerSecond > current) {
-    return Effect.fail(new ProviderVerificationFailure({ reason: "issued_in_future" }));
+    return Effect.fail(
+      new ProviderVerificationFailure({
+        reason: "issued_in_future",
+        cause: Option.none(),
+      })
+    );
   }
 
   if (
     (claims.azp !== undefined && claims.azp !== clientId) ||
     (multipleAudiences && claims.azp !== clientId)
   ) {
-    return Effect.fail(new ProviderVerificationFailure({ reason: "authorized_party_mismatch" }));
+    return Effect.fail(
+      new ProviderVerificationFailure({
+        reason: "authorized_party_mismatch",
+        cause: Option.none(),
+      })
+    );
   }
 
   return Effect.void;
@@ -123,7 +151,7 @@ const signingKeys = (
   | "invalid"
 > =>
   Effect.gen(function* () {
-    const response = yield* http.execute({ _tag: "SigningKeys" });
+    const response = yield* http.execute(OidcRequest.SigningKeys());
 
     if (response.status !== successStatus) {
       return yield* Effect.fail("invalid" as const);
@@ -141,32 +169,58 @@ const signingKeys = (
     });
   });
 
+const verificationFailure =
+  (reason: ProviderVerificationFailure["reason"]) =>
+  (cause: unknown): ProviderVerificationFailure =>
+    new ProviderVerificationFailure({ reason, cause: Option.some(cause) });
+
 const tokenVerificationFailure = (failure: unknown): ProviderVerificationFailure => {
-  if (failure instanceof errors.JWTExpired) {
-    return new ProviderVerificationFailure({ reason: "token_expired" });
+  if (isJwtExpired(failure)) {
+    return new ProviderVerificationFailure({
+      reason: "token_expired",
+      cause: Option.none(),
+    });
   }
 
-  if (failure instanceof errors.JWTClaimValidationFailed) {
+  if (isJwtClaimValidationFailed(failure)) {
     if (failure.claim === "aud") {
-      return new ProviderVerificationFailure({ reason: "audience_mismatch" });
+      return new ProviderVerificationFailure({
+        reason: "audience_mismatch",
+        cause: Option.none(),
+      });
     }
 
     if (failure.claim === "iss") {
-      return new ProviderVerificationFailure({ reason: "issuer_mismatch" });
+      return new ProviderVerificationFailure({
+        reason: "issuer_mismatch",
+        cause: Option.none(),
+      });
     }
 
-    return new ProviderVerificationFailure({ reason: "claims_invalid" });
+    return new ProviderVerificationFailure({
+      reason: "claims_invalid",
+      cause: Option.none(),
+    });
   }
 
-  if (failure instanceof errors.JWKSNoMatchingKey) {
-    return new ProviderVerificationFailure({ reason: "signing_key_unmatched" });
+  if (isJwksNoMatchingKey(failure)) {
+    return new ProviderVerificationFailure({
+      reason: "signing_key_unmatched",
+      cause: Option.none(),
+    });
   }
 
-  if (failure instanceof errors.JWSSignatureVerificationFailed) {
-    return new ProviderVerificationFailure({ reason: "signature_invalid" });
+  if (isJwsSignatureVerificationFailed(failure)) {
+    return new ProviderVerificationFailure({
+      reason: "signature_invalid",
+      cause: Option.none(),
+    });
   }
 
-  return new ProviderVerificationFailure({ reason: "token_verification_failed" });
+  return new ProviderVerificationFailure({
+    reason: "token_verification_failed",
+    cause: Option.none(),
+  });
 };
 
 const exchangeToken = (
@@ -176,14 +230,13 @@ const exchangeToken = (
 ): Effect.Effect<typeof TokenResponse.Type, ProviderVerificationFailure> =>
   Effect.gen(function* () {
     const response = yield* http
-      .execute({
-        _tag: "TokenExchange",
-        code: Redacted.make(code),
-        verifier: Redacted.make(verifier),
-      })
-      .pipe(
-        Effect.mapError(() => new ProviderVerificationFailure({ reason: "token_transport_failed" }))
-      );
+      .execute(
+        OidcRequest.TokenExchange({
+          code: Redacted.make(code),
+          verifier: Redacted.make(verifier),
+        })
+      )
+      .pipe(Effect.mapError(verificationFailure("token_transport_failed")));
 
     if (response.status !== successStatus) {
       const refusal = Schema.decodeOption(Schema.fromJsonString(TokenRefusal))(
@@ -196,17 +249,19 @@ const exchangeToken = (
             refusal.value.error === "invalid_client"
               ? "token_invalid_client"
               : "token_invalid_grant",
+          cause: Option.none(),
         });
       }
 
-      return yield* new ProviderVerificationFailure({ reason: "token_refused" });
+      return yield* new ProviderVerificationFailure({
+        reason: "token_refused",
+        cause: Option.none(),
+      });
     }
 
     return yield* Schema.decodeEffect(Schema.fromJsonString(TokenResponse))(
       new TextDecoder().decode(response.body)
-    ).pipe(
-      Effect.mapError(() => new ProviderVerificationFailure({ reason: "token_response_invalid" }))
-    );
+    ).pipe(Effect.mapError(verificationFailure("token_response_invalid")));
   });
 
 export const validateGoogleToken = (
@@ -226,13 +281,13 @@ export const validateGoogleToken = (
     const clientId = input.environment.GOOGLE_CLIENT_ID ?? "";
 
     const http = yield* googleHttp(input.environment).pipe(
-      Effect.mapError(() => new ProviderVerificationFailure({ reason: "configuration_invalid" }))
+      Effect.mapError(verificationFailure("configuration_invalid"))
     );
 
     const token = yield* exchangeToken(http, code, input.verifier);
 
     const keys = yield* signingKeys(http).pipe(
-      Effect.mapError(() => new ProviderVerificationFailure({ reason: "signing_keys_failed" }))
+      Effect.mapError(verificationFailure("signing_keys_failed"))
     );
 
     const current = yield* Clock.currentTimeMillis;
@@ -251,7 +306,7 @@ export const validateGoogleToken = (
     });
 
     const claims = yield* Schema.decodeUnknownEffect(Claims)(verified.payload).pipe(
-      Effect.mapError(() => new ProviderVerificationFailure({ reason: "claims_invalid" }))
+      Effect.mapError(verificationFailure("claims_invalid"))
     );
 
     yield* validClaims({

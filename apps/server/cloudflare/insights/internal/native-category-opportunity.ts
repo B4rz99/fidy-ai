@@ -1,5 +1,6 @@
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Clock, Effect, Option, Schema } from "effect";
+import { ConsentSubject } from "./consent-subject";
 import { disclosureWindowAt } from "./category-window";
 import {
   UserId,
@@ -46,6 +47,51 @@ const Due = Schema.Struct({
   endpoint: WhatsAppBusinessPhoneNumberId,
 });
 
+const offerOpportunity = Effect.fn(function* (
+  row: typeof Due.Type,
+  {
+    sender,
+    storage,
+    now,
+    next,
+  }: { sender: ProactivityTemplateSender; storage: DurableObjectStorage; now: number; next: number }
+) {
+  const sql = yield* SqliteClient;
+
+  const [previous] =
+    yield* sql`SELECT w.started_ms,o.expires_ms FROM category_opportunities q JOIN reminder_disclosures o ON o.id=q.offer_id LEFT JOIN whatsapp_deliveries w ON w.user_id=o.user_id AND w.operation_id=o.id AND w.family='disclosure' WHERE q.user_id=${row.user_id} AND q.kind=${row.kind}`;
+
+  if (
+    previous !== undefined &&
+    (previous.started_ms !== null || row.kind === "new-recurring-series")
+  ) {
+    return;
+  }
+
+  if (next > now) {
+    yield* sql`UPDATE category_opportunities SET next_ms=${next} WHERE user_id=${row.user_id} AND kind=${row.kind}`;
+    yield* preserveStoreAlarm(storage, next);
+
+    return;
+  }
+
+  const id = yield* enqueueDisclosure(
+    {
+      userId: row.user_id,
+      portfolioId: row.portfolio,
+      bsuid: row.bsuid,
+      businessPhoneNumberId: row.endpoint,
+      occurredAtMs: now,
+      messageId: row.kind + ":" + newId(),
+    },
+    { kind: row.kind, senders: { category: Option.some(sender), weekly: Option.none() }, now }
+  );
+
+  const retry = now + offerLifetime;
+  yield* sql`UPDATE category_opportunities SET offer_id=coalesce(${Option.getOrNull(id)},offer_id),next_ms=${retry} WHERE user_id=${row.user_id} AND kind=${row.kind}`;
+  yield* preserveStoreAlarm(storage, now);
+});
+
 export const materializeCategoryOpportunity = Effect.fn(function* (
   sender: ProactivityTemplateSender,
   storage: DurableObjectStorage
@@ -56,7 +102,7 @@ export const materializeCategoryOpportunity = Effect.fn(function* (
   yield* sql`UPDATE category_opportunities AS q SET closed_ms=${now},next_ms=NULL WHERE q.closed_ms IS NULL AND q.kind='budget-threshold' AND EXISTS(SELECT 1 FROM proactive_grants g WHERE g.user_id=q.user_id AND g.kind=q.kind AND g.revoked_at_ms IS NULL)`;
 
   const guarded = protectConsentStatement({
-    subject: { _tag: "Owner", column: "u.id" },
+    subject: ConsentSubject.Owner({ column: "u.id" }),
     requirement: "active",
     statement: {
       sql: "SELECT q.user_id,q.kind,q.source,c.portfolio,c.bsuid,c.endpoint FROM category_opportunities q JOIN insight_contacts c ON c.user_id=q.user_id JOIN users u ON u.id=q.user_id AND u.whatsapp_portfolio_id=c.portfolio AND u.whatsapp_bsuid=c.bsuid WHERE q.next_ms<=? AND q.closed_ms IS NULL AND NOT EXISTS(SELECT 1 FROM erasure_requests) AND NOT EXISTS(SELECT 1 FROM proactive_grants g WHERE g.user_id=u.id AND g.kind=q.kind AND g.revoked_at_ms IS NULL) ",
@@ -71,37 +117,7 @@ export const materializeCategoryOpportunity = Effect.fn(function* (
   yield* sql`UPDATE category_opportunities SET next_ms=NULL WHERE next_ms<=${now}`;
   const next = disclosureWindowAt(now);
 
-  for (const row of due) {
-    const [previous] =
-      yield* sql`SELECT w.started_ms,o.expires_ms FROM category_opportunities q JOIN reminder_disclosures o ON o.id=q.offer_id LEFT JOIN whatsapp_deliveries w ON w.user_id=o.user_id AND w.operation_id=o.id AND w.family='disclosure' WHERE q.user_id=${row.user_id} AND q.kind=${row.kind}`;
-
-    if (
-      previous !== undefined &&
-      (previous.started_ms !== null || row.kind === "new-recurring-series")
-    ) {
-      continue;
-    }
-
-    if (next > now) {
-      yield* sql`UPDATE category_opportunities SET next_ms=${next} WHERE user_id=${row.user_id} AND kind=${row.kind}`;
-      yield* preserveStoreAlarm(storage, next);
-      continue;
-    }
-
-    const id = yield* enqueueDisclosure(
-      {
-        userId: row.user_id,
-        portfolioId: row.portfolio,
-        bsuid: row.bsuid,
-        businessPhoneNumberId: row.endpoint,
-        occurredAtMs: now,
-        messageId: row.kind + ":" + newId(),
-      },
-      { kind: row.kind, senders: { category: Option.some(sender), weekly: Option.none() }, now }
-    );
-
-    const retry = now + offerLifetime;
-    yield* sql`UPDATE category_opportunities SET offer_id=coalesce(${Option.getOrNull(id)},offer_id),next_ms=${retry} WHERE user_id=${row.user_id} AND kind=${row.kind}`;
-    yield* preserveStoreAlarm(storage, now);
-  }
+  yield* Effect.forEach(due, (row) => offerOpportunity(row, { sender, storage, now, next }), {
+    discard: true,
+  });
 });

@@ -3,9 +3,13 @@ import { activateDigest } from "./native-recurring-digest";
 import { ProactivityOptInKind } from "../../../src/shell/consent/contract";
 import { IanaTimeZone } from "../../../src/core/_shared/context";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, DateTime, Effect, Option, Schema } from "effect";
+import { Clock, Data, DateTime, Effect, Option, Predicate, Schema } from "effect";
+import { ConsentSubject } from "./consent-subject";
 import { Hex } from "effect/encoding";
 import {
+  type ConsentDecisionEvidence,
+  type ConsentEvent,
+  type ConsentGrant,
   ConsentRecord,
   ConsentRecordId,
   DisclosureSnapshot,
@@ -64,7 +68,7 @@ export const available = Effect.fn(function* (
   const guard = privacy
     ? association
     : protectConsentStatement({
-        subject: { _tag: "User", userId: event.userId },
+        subject: ConsentSubject.User({ userId: event.userId }),
         requirement: "active",
         statement: association,
       });
@@ -121,6 +125,8 @@ export const enqueueDisclosure = Effect.fn(function* (
   const [grant] =
     yield* sql`SELECT id FROM proactive_grants WHERE user_id=${event.userId} AND kind=${kind} AND revoked_at_ms IS NULL`;
 
+  const grantId = grant?.id;
+
   const disclosure =
     kind === "weekly-summary" ? weeklyDisclosureFor() : proactivityDisclosureFor(kind);
 
@@ -152,7 +158,7 @@ export const enqueueDisclosure = Effect.fn(function* (
 
   const inserted =
     yield* sql`INSERT INTO reminder_disclosures(id,user_id,portfolio,bsuid,endpoint,request_message,created_ms,expires_ms,attempt_ms,correlation,disclosure,body,digest,grant_id,kind)
-    SELECT ${id},${event.userId},${event.portfolioId},${event.bsuid},${event.businessPhoneNumberId},${event.messageId},${event.occurredAtMs},${expires},${now},${newId()},${serialized},${body},${digest},${typeof grant?.id === "string" ? grant.id : null},${kind}
+    SELECT ${id},${event.userId},${event.portfolioId},${event.bsuid},${event.businessPhoneNumberId},${event.messageId},${event.occurredAtMs},${expires},${now},${newId()},${serialized},${body},${digest},${Predicate.isString(grantId) ? grantId : null},${kind}
     WHERE (SELECT count(*) FROM reminder_disclosures WHERE user_id=${event.userId} AND created_ms>${now - day})<8 AND NOT EXISTS(SELECT 1 FROM reminder_disclosures o WHERE o.user_id=${event.userId} AND o.kind=${kind} AND o.expires_ms>${now} AND NOT EXISTS(SELECT 1 FROM reminder_choices c WHERE c.offer_id=o.id)) ON CONFLICT DO NOTHING RETURNING id`;
 
   return inserted.length === 1 ? Option.some(id) : Option.none<string>();
@@ -286,24 +292,34 @@ const decide = Effect.fn(function* (
   return yield* retainDecision(event, held, { choice, storage, now });
 });
 
+const ConsentEventOf = Data.taggedEnum<ConsentEvent>();
+
+const ConsentGrantOf = Data.taggedEnum<ConsentGrant>();
+
+const ConsentEvidenceOf = Data.taggedEnum<ConsentDecisionEvidence>();
+
 const legalDecision = Effect.fn(function* (
   event: WhatsAppTurnAdmission,
   held: Proof,
   { choice, now }: { choice: Decision; now: number }
 ) {
   const id = ConsentRecordId.make(newId()),
-    revoke = choice !== "accept" && Option.isSome(held.live_id);
+    revocation = choice === "accept" ? Option.none<ConsentRecordId>() : held.live_id,
+    revoke = Option.isSome(revocation);
 
   const record = ConsentRecord.make({
     id,
     subjectUserId: event.userId,
     occurredAt: DateTime.makeUnsafe(now),
     disclosure: held.disclosure,
-    event: revoke
-      ? { _tag: "Revoked", grantId: Option.getOrThrow(held.live_id) }
-      : { _tag: "Granted", grant: { _tag: "InsightDelivery", insightKind: held.kind } },
-    evidence: {
-      _tag: "ProviderQualifiedMessages",
+    event: Option.match(revocation, {
+      onNone: () =>
+        ConsentEventOf.Granted({
+          grant: ConsentGrantOf.InsightDelivery({ insightKind: held.kind }),
+        }),
+      onSome: (grantId) => ConsentEventOf.Revoked({ grantId }),
+    }),
+    evidence: ConsentEvidenceOf.ProviderQualifiedMessages({
       disclosureMessage: {
         channel: "whatsapp",
         provider: "kapso",
@@ -314,14 +330,20 @@ const legalDecision = Effect.fn(function* (
         provider: "kapso",
         providerMessageId: event.messageId,
       },
-    },
+    }),
   });
 
   const jsonRecord = yield* Schema.encodeEffect(
     Schema.fromJsonString(Schema.toCodecJson(ConsentRecord))
   )(record);
 
-  return { id, jsonRecord, revoke, newGrant: choice === "accept" && Option.isNone(held.live_id) };
+  return {
+    id,
+    jsonRecord,
+    revocation,
+    revoke,
+    newGrant: choice === "accept" && Option.isNone(held.live_id),
+  };
 });
 
 const resetAttention = Effect.fn(function* (held: Proof, now: number) {
@@ -341,11 +363,15 @@ const retainDecision = Effect.fn(function* (
 ) {
   const sql = yield* SqliteClient;
   const { choice, now } = action;
-  const { id, jsonRecord, revoke, newGrant } = yield* legalDecision(event, held, { choice, now });
 
-  if (revoke) {
+  const { id, jsonRecord, revocation, revoke, newGrant } = yield* legalDecision(event, held, {
+    choice,
+    now,
+  });
+
+  if (Option.isSome(revocation)) {
     const changed =
-      yield* sql`UPDATE proactive_grants SET revoked_at_ms=${now} WHERE id=${Option.getOrThrow(held.live_id)} AND user_id=${event.userId} AND revoked_at_ms IS NULL AND (id=${Option.getOrNull(held.grant_id)} OR json_extract(record_json,'$.evidence.disclosureMessage.providerMessageId')=${held.provider_message_id}) RETURNING id`;
+      yield* sql`UPDATE proactive_grants SET revoked_at_ms=${now} WHERE id=${revocation.value} AND user_id=${event.userId} AND revoked_at_ms IS NULL AND (id=${Option.getOrNull(held.grant_id)} OR json_extract(record_json,'$.evidence.disclosureMessage.providerMessageId')=${held.provider_message_id}) RETURNING id`;
 
     if (changed.length !== 1) return refused();
   } else if (newGrant) {
@@ -374,13 +400,13 @@ const deliveredOffer = Effect.fn(function* (
   return raw;
 });
 
-const choiceFor = (
-  text: string
-): {
+type ChoiceText = Readonly<{
   kind: Option.Option<string>;
   choice: Option.Option<Decision>;
   offer: Option.Option<string>;
-} => {
+}>;
+
+const choiceFor = (text: string): ChoiceText => {
   const weekly = /^weekly:([0-9a-f-]{36}):(accept|decline|revoke)$/u.exec(text);
 
   if (weekly !== null) {

@@ -83,6 +83,8 @@ export type OutboundHttpRequest =
   | Readonly<{ readonly _tag: "CloudflareAccessSupportRecovery"; readonly body: string }>
   | Readonly<{ readonly _tag: "CloudflareAccessSigningKeys" }>;
 
+export const OutboundHttpRequest = Data.taggedEnum<OutboundHttpRequest>();
+
 export type ProviderOidcHttpService = Readonly<{
   execute: (
     request:

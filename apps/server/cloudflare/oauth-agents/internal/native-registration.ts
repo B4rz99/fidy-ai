@@ -77,7 +77,7 @@ export const register = Effect.fn(function* <A, Encoded>(
 
   if (result.status === absentRecord) return Option.none<A>();
 
-  if (!result.ok) return yield* new BootstrapUnavailable();
+  if (!result.ok) return yield* new BootstrapUnavailable({ cause: Option.none() });
 
   return Option.some(
     yield* Schema.decodeUnknownEffect(codec)(yield* Effect.tryPromise(() => result.json()))
@@ -109,17 +109,23 @@ export const oauthCredentialCommand = Effect.fn(function* (request: Request) {
       return row === undefined ? new Response(null, { status: 404 }) : Response.json(row);
     }
 
-    if (!currentRouteReservation({ request, now })) return yield* new BootstrapUnavailable();
-
-    for (const route of input.routes) {
-      if (route.expires <= now) return yield* new BootstrapUnavailable();
-      yield* sql`INSERT INTO oauth_routes(kind,digest,user_id,connection_id,record_id,operation,expires_at_ms) VALUES(${route.kind},${route.digest},${input.user},${input.connection},${route.record},${input.operation},${route.expires}) ON CONFLICT DO NOTHING`;
-
-      const exact =
-        yield* sql`SELECT 1 FROM oauth_routes WHERE kind=${route.kind} AND digest=${route.digest} AND user_id=${input.user} AND connection_id=${input.connection} AND record_id=${route.record} AND operation=${input.operation} AND expires_at_ms=${route.expires}`;
-
-      if (exact.length !== 1) return yield* new BootstrapUnavailable();
+    if (!currentRouteReservation({ request, now })) {
+      return yield* new BootstrapUnavailable({ cause: Option.none() });
     }
+
+    yield* Effect.forEach(
+      input.routes,
+      Effect.fnUntraced(function* (route) {
+        if (route.expires <= now) return yield* new BootstrapUnavailable({ cause: Option.none() });
+        yield* sql`INSERT INTO oauth_routes(kind,digest,user_id,connection_id,record_id,operation,expires_at_ms) VALUES(${route.kind},${route.digest},${input.user},${input.connection},${route.record},${input.operation},${route.expires}) ON CONFLICT DO NOTHING`;
+
+        const exact =
+          yield* sql`SELECT 1 FROM oauth_routes WHERE kind=${route.kind} AND digest=${route.digest} AND user_id=${input.user} AND connection_id=${input.connection} AND record_id=${route.record} AND operation=${input.operation} AND expires_at_ms=${route.expires}`;
+
+        if (exact.length !== 1) return yield* new BootstrapUnavailable({ cause: Option.none() });
+      }),
+      { discard: true }
+    );
 
     return Response.json(true);
   }).pipe(withStoreCapacity("growth"));

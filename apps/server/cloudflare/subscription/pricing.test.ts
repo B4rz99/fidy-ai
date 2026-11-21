@@ -55,6 +55,20 @@ const platform = Effect.fnUntraced(function* (routeUsers: boolean = false) {
 
   const contents = yield* Effect.tryPromise(() => output.text());
 
+  const userStoreBinding:
+    | Readonly<Record<never, never>>
+    | Readonly<{
+        USER_STORE: Readonly<{ type: "durable-object"; worker: string; exportName: string }>;
+      }> = routeUsers
+    ? {
+        USER_STORE: {
+          type: "durable-object" as const,
+          worker: "pricing-test",
+          exportName: "PricingFixture",
+        },
+      }
+    : {};
+
   const create = (): Miniflare =>
     new Miniflare({
       resourcePersistencePath: directory,
@@ -67,15 +81,7 @@ const platform = Effect.fnUntraced(function* (routeUsers: boolean = false) {
             env: {
               SQLITE_STORE_CAPACITY_BYTES: { type: "text", value: String(pricingTestCeiling) },
               CF_VERSION_METADATA: { type: "version-metadata" },
-              ...(routeUsers
-                ? {
-                    USER_STORE: {
-                      type: "durable-object" as const,
-                      worker: "pricing-test",
-                      exportName: "PricingFixture",
-                    },
-                  }
-                : {}),
+              ...userStoreBinding,
               PRICING: {
                 type: "durable-object",
                 worker: "pricing-test",

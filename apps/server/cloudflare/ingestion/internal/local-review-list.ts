@@ -70,43 +70,47 @@ export const localReviewPage = Effect.fn(function* (
 
   const items: NeedsReviewItem[] = [];
 
-  for (const raw of rows) {
-    if (raw.source_kind === "statement") {
-      const value = projectReviewRow(yield* Schema.decodeUnknownEffect(reviewRow)(raw));
+  yield* Effect.forEach(
+    rows,
+    Effect.fnUntraced(function* (raw) {
+      if (raw.source_kind === "statement") {
+        const value = projectReviewRow(yield* Schema.decodeUnknownEffect(reviewRow)(raw));
 
-      if (Option.isNone(value)) {
-        return yield* new CanonicalAdmissionUnavailable({ cause: "statement_item" });
+        if (Option.isNone(value)) {
+          return yield* new CanonicalAdmissionUnavailable({ cause: "statement_item" });
+        }
+
+        items.push(value.value);
+      } else if (raw.source_kind === "email") {
+        const value = projectEmailRow({
+          row: yield* Schema.decodeUnknownEffect(emailReviewRow)(raw),
+          asOf: current,
+        });
+
+        if (Option.isNone(value)) {
+          return yield* new CanonicalAdmissionUnavailable({ cause: "email_item" });
+        }
+
+        items.push(value.value);
+      } else {
+        items.push(
+          yield* Schema.decodeUnknownEffect(MediaNeedsReviewItem)({
+            id: raw.id,
+            reason: raw.reason,
+            createdAt: DateTime.formatIso(DateTime.makeUnsafe(Number(raw.created_at_ms))),
+            mediaSubmissionId: raw.media_submission_id,
+            serviceMarket: raw.service_market,
+            locale: raw.locale,
+            timeZone: raw.time_zone,
+            sourceChannel: "whatsapp",
+            sourceFormat: "image",
+            status: raw.status,
+          })
+        );
       }
-
-      items.push(value.value);
-    } else if (raw.source_kind === "email") {
-      const value = projectEmailRow({
-        row: yield* Schema.decodeUnknownEffect(emailReviewRow)(raw),
-        asOf: current,
-      });
-
-      if (Option.isNone(value)) {
-        return yield* new CanonicalAdmissionUnavailable({ cause: "email_item" });
-      }
-
-      items.push(value.value);
-    } else {
-      items.push(
-        yield* Schema.decodeUnknownEffect(MediaNeedsReviewItem)({
-          id: raw.id,
-          reason: raw.reason,
-          createdAt: DateTime.formatIso(DateTime.makeUnsafe(Number(raw.created_at_ms))),
-          mediaSubmissionId: raw.media_submission_id,
-          serviceMarket: raw.service_market,
-          locale: raw.locale,
-          timeZone: raw.time_zone,
-          sourceChannel: "whatsapp",
-          sourceFormat: "image",
-          status: raw.status,
-        })
-      );
-    }
-  }
+    }),
+    { discard: true }
+  );
 
   return result(
     yield* Schema.encodeEffect(Schema.toCodecJson(Schema.Array(NeedsReviewItem)))(items)

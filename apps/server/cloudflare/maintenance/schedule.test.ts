@@ -29,18 +29,22 @@ it.effect("keeps fast checks running while dispatch and cleanup wait for their d
       { operation: "audit.retention", work: Effect.sync(() => completed.push("audit")) },
     ] as const;
 
-    for (const [minute, expected] of [
-      [1, ["health"]],
-      [5, ["health", "email"]],
-      [15, ["health", "email", "cancellation", "dashboard"]],
-      [60, ["health", "email", "cancellation", "dashboard", "media"]],
-      [1_439, ["health"]],
-      [1_440, ["health", "email", "cancellation", "dashboard", "media", "audit"]],
-    ] as const) {
-      completed.length = 0;
-      yield* executeDueSchedule({ activities, nowEpochMs: minute * 60_000 + 5_000 });
-      expect(completed).toEqual(expected);
-    }
+    yield* Effect.forEach(
+      [
+        [1, ["health"]],
+        [5, ["health", "email"]],
+        [15, ["health", "email", "cancellation", "dashboard"]],
+        [60, ["health", "email", "cancellation", "dashboard", "media"]],
+        [1_439, ["health"]],
+        [1_440, ["health", "email", "cancellation", "dashboard", "media", "audit"]],
+      ] as const,
+      Effect.fnUntraced(function* ([minute, expected]) {
+        completed.length = 0;
+        yield* executeDueSchedule({ activities, nowEpochMs: minute * 60_000 + 5_000 });
+        expect(completed).toEqual(expected);
+      }),
+      { discard: true }
+    );
   })
 );
 

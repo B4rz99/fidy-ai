@@ -3,7 +3,7 @@ import { resolveLocalCategory } from "../../categories/operations";
 import type { CategoryId } from "../../../src/core/categories/contract";
 import type { UserId } from "../../../src/core/identity/contract";
 import { ReviewCommand } from "../../../src/core/ingestion/contract";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option, Predicate, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import { TransactionExtraction } from "../../../src/core/transactions/contract";
 import { digestBytes } from "../../secret-material/operations";
@@ -204,10 +204,9 @@ export const localReviewEditConfirmation = Effect.fn(function* (
 ) {
   const refs = "items" in command ? command.items : [command];
 
-  const category =
-    command._tag === "Create"
-      ? Option.some(yield* categoryFor(user, command.extraction, command.categoryId))
-      : Option.none();
+  const category = Predicate.isTagged(command, "Create")
+    ? Option.some(yield* categoryFor(user, command.extraction, command.categoryId))
+    : Option.none();
 
   const encoded = yield* Schema.encodeEffect(
     Schema.fromJsonString(Schema.toCodecJson(ReviewCommand))

@@ -1,4 +1,8 @@
-import type { WompiContracts, WompiEnrollmentClientService } from "./wompi-client";
+import {
+  type WompiContracts,
+  type WompiEnrollmentClientService,
+  WompiSourceResult,
+} from "./wompi-client";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Clock, DateTime, Effect, Option, Redacted, Result, Schema } from "effect";
 import {
@@ -310,9 +314,11 @@ const submitSource = Effect.fn(function* (
       : null;
   }
 
-  return response.success._tag === "Refused"
+  const source = response.success;
+
+  return WompiSourceResult.$is("Refused")(source)
     ? yield* close(reg, "provider-declined")
-    : response.success.sourceId;
+    : source.sourceId;
 });
 
 const createSource = Effect.fn(function* (

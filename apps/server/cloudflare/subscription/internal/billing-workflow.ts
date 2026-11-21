@@ -67,8 +67,7 @@ export const receiveWompiBillingEvent = (
 
     if (queue === undefined) return new Response(null, { status: 503 });
 
-    const event = Schema.decodeOption(WompiBillingEvent)({
-      _tag: "WompiBillingEvent",
+    const event = WompiBillingEvent.makeOption({
       environment: configured.value,
       ...verified.value.value,
     });

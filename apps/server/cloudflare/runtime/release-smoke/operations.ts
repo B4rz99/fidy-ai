@@ -18,7 +18,7 @@ import {
 } from "./contract";
 import { initializeSharedStores } from "../../storage-bootstrap/operations";
 import { releaseProbeName, storeTransactionUrl } from "../sqlite/contract";
-import { Clock, Effect, Option, Schema } from "effect";
+import { Clock, Effect, Option, Result, Schema } from "effect";
 
 import { RequestBodyPolicy } from "../../http/contract";
 import { boundedJsonBody } from "../../http/operations";
@@ -259,7 +259,7 @@ const getProbe = Effect.fn(function* (request: Request, environment: SmokeEnviro
       ).then((instance) => instance.status()),
   }).pipe(Effect.result);
 
-  if (lookup._tag === "Failure") return responseFor(environment, "pending", completedStatus);
+  if (Result.isFailure(lookup)) return responseFor(environment, "pending", completedStatus);
   const state = lookup.success;
 
   if (state.status === "errored" || state.status === "terminated") return fail("probe_state");

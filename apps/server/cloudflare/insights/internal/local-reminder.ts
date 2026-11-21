@@ -1,7 +1,8 @@
 import { produceDigest } from "./native-recurring-digest";
 import { publishCategoryMessages } from "./local-category-messages";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, DateTime, Effect, Option, Schema } from "effect";
+import { Clock, Data, DateTime, Effect, Option, Predicate, Result, Schema } from "effect";
+import { ConsentSubject } from "./consent-subject";
 import { Hex } from "effect/encoding";
 import {
   InsightEvent,
@@ -39,6 +40,7 @@ import {
   CategoryDeliveryWork,
   InsightUnavailable,
   type NativeReminderEnvironment,
+  type ProactivityActivityResult,
 } from "../contract";
 import { type ExternalEventBindings } from "../../directory/contract";
 import { sendEvidence } from "./weekly-execution";
@@ -77,7 +79,7 @@ const dueRow = Effect.fn(function* (now: number) {
 
   const guard = protectConsentStatement({
     statement: { sql: "SELECT id FROM users WHERE id=?", params: [candidate.user_id] },
-    subject: { _tag: "User", userId: candidate.user_id },
+    subject: ConsentSubject.User({ userId: candidate.user_id }),
     requirement: "active",
   });
 
@@ -164,7 +166,7 @@ export const repairReminder = Effect.fn(function* (
   const sql = yield* SqliteClient;
 
   const schedule = protectConsentStatement({
-    subject: { _tag: "Owner", column: "u.id" },
+    subject: ConsentSubject.Owner({ column: "u.id" }),
     requirement: "active",
     statement: {
       sql: `SELECT max(s.next_at_ms,s.retry_at_ms) AS at FROM reminder_schedules s JOIN proactive_grants g ON g.id=s.grant_id AND g.user_id=s.user_id AND g.revoked_at_ms IS NULL
@@ -182,7 +184,7 @@ export const repairReminder = Effect.fn(function* (
     time
   );
 
-  return typeof row.at === "number"
+  return Predicate.isNumber(row.at)
     ? yield* preserveStoreAlarm(storage, Math.max(now, row.at))
     : false;
 });
@@ -226,7 +228,9 @@ export const offerDeliveries = Effect.fn(function* (env: QueueEnv, now: number, 
 
   const queue = env.WEEKLY_DELIVERY_QUEUE;
 
-  if (rows.length > 0 && queue === undefined) return yield* new InsightUnavailable();
+  if (rows.length > 0 && queue === undefined) {
+    return yield* new InsightUnavailable({ cause: Option.none() });
+  }
 
   if (queue === undefined) return { attempted: 0, failed: 0 };
 
@@ -238,7 +242,7 @@ export const offerDeliveries = Effect.fn(function* (env: QueueEnv, now: number, 
 
   return {
     attempted: rows.length,
-    failed: results.filter((result) => result._tag === "Failure").length,
+    failed: results.filter(Result.isFailure).length,
   };
 });
 
@@ -332,6 +336,8 @@ const preparedSend = Effect.fn(function* (held: typeof deliveryRow.Type, sender:
     sender.category.send({ ...channel, template });
 });
 
+const ActivityResult = Data.taggedEnum<ProactivityActivityResult>();
+
 export const deliverReminder = Effect.fn(function* (
   env: Owners,
   work: { userId: UserId; id: string },
@@ -343,7 +349,7 @@ export const deliverReminder = Effect.fn(function* (
   const [raw] =
     yield* sql`SELECT d.*,e.event_json FROM reminder_deliveries d JOIN insight_events e ON e.user_id=d.user_id AND e.id=d.id JOIN proactive_grants g ON g.id=d.grant_id AND g.user_id=d.user_id AND g.revoked_at_ms IS NULL WHERE d.user_id=${work.userId} AND d.id=${work.id} AND d.state='ready' AND (g.kind='weekly-summary')=${Number("weekly" in sender)}`;
 
-  if (raw === undefined) return { _tag: "Done" } as const;
+  if (raw === undefined) return ActivityResult.Done();
   const held = yield* Schema.decodeUnknownEffect(deliveryRow)(raw);
 
   const decision = decideInsightDelivery({
@@ -353,20 +359,17 @@ export const deliverReminder = Effect.fn(function* (
     now,
   });
 
-  if (decision._tag === "Deferred") {
-    return {
-      _tag: "Deferred",
-      nextEligibleAtMs: decision.nextEligibleAt.epochMilliseconds,
-    } as const;
+  if (Predicate.isTagged(decision, "Deferred")) {
+    return ActivityResult.Deferred({ nextEligibleAtMs: decision.nextEligibleAt.epochMilliseconds });
   }
 
-  if (decision._tag === "Expired") return { _tag: "Done" } as const;
+  if (Predicate.isTagged(decision, "Expired")) return ActivityResult.Done();
   const send = yield* preparedSend(held, sender);
   const prepared = sendBinding(held);
   const claim = yield* claimRegisteredSend(env, prepared);
 
   if (!(yield* reserveSharedProviderSpend(env.DIRECTORY, { phase: "reminderSend", units: 4096 }))) {
-    return yield* new InsightUnavailable();
+    return yield* new InsightUnavailable({ cause: Option.none() });
   }
 
   yield* sql`UPDATE reminder_deliveries SET spend_ready=1 WHERE id=${held.id} AND user_id=${held.user_id} AND state='ready'`;
@@ -382,5 +385,5 @@ export const deliverReminder = Effect.fn(function* (
     message: Option.getOrNull(outcome.providerMessageId),
   });
 
-  return { _tag: "Done" } as const;
+  return ActivityResult.Done();
 });

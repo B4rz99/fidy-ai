@@ -21,6 +21,7 @@ export class ProviderVerificationFailure extends Data.TaggedError("ProviderVerif
     | "nonce_mismatch"
     | "issued_in_future"
     | "authorized_party_mismatch";
+  readonly cause: Option.Option<unknown>;
 }> {}
 
 export type Validation = Readonly<{

@@ -560,6 +560,7 @@ const WorkspaceBody = ({
       {tab === "monthly" ? (
         <MonthlyOverview
           view={view}
+          filtered={Object.keys(filters).length > 0}
           calendar={calendar}
           setCalendar={setCalendar}
           month={props.month}

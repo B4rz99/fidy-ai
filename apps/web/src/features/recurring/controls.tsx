@@ -102,6 +102,7 @@ const ToolbarTabs = ({ tab, setTab }: Pick<ToolbarProps, "tab" | "setTab">): JSX
 
 type MonthProps = Readonly<{
   view: Workspace;
+  filtered: boolean;
   calendar: boolean;
   setCalendar: (value: boolean) => void;
   month: (step: number) => void;
@@ -114,7 +115,12 @@ export const MonthlyOverview = (props: MonthProps): JSX.Element => (
     className="@container min-w-0"
   >
     <MonthControls {...props} />
-    <Summary view={props.view} />
+    {props.filtered ? (
+      <p data-recurring-slot="summary-scope" className="text-sm text-muted-foreground">
+        Resumen filtrado: solo incluye los recurrentes que coinciden con los filtros.
+      </p>
+    ) : null}
+    <Summary view={props.view} filtered={props.filtered} />
   </section>
 );
 

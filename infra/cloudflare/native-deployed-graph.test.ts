@@ -1,4 +1,4 @@
-import { ConfigProvider, Effect, Result } from "effect";
+import { ConfigProvider, Effect, Logger, Result } from "effect";
 import { expect, it } from "vitest";
 import {
   inspectNativeResources,
@@ -372,7 +372,8 @@ const accessReply = (path: string): unknown => {
 };
 const verify = (
   source: (path: string) => unknown,
-  installed = true
+  installed = true,
+  canonicalDiagnostics = false
 ): ReturnType<typeof inspectNativeAccess> =>
   inspectNativeAccess({
     account: "account/",
@@ -380,6 +381,7 @@ const verify = (
     hosts: [apiHost, "storage-web-acceptance.fidyapp.com"],
     apiHosts: [apiHost],
     staging: false,
+    canonicalDiagnostics,
     workers: [core],
     installed,
     bindings,
@@ -483,5 +485,64 @@ it("requires independent Access scopes, a distinct audience per role and the sol
           )
         )
       ).toBe(true);
+    })
+  ));
+
+it("reports a fixed canonical Access reason and allowlisted path projection", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const reports: unknown[] = [];
+      const loggers = new Set([
+        Logger.make<unknown, void>(({ message }) => {
+          reports.push(message);
+        }),
+      ]);
+      const unexpectedId = "bcaee459-9687-423e-958d-c25b38ca8013";
+      const privateText = "no-log@example.test";
+      const unexpected = {
+        id: unexpectedId,
+        name: privateText,
+        aud: privateText,
+        type: "self_hosted",
+        destinations: [
+          { type: "public", uri: apiHost + "/internal/support-recovery" },
+          { type: "public", uri: apiHost + "/" + privateText },
+        ],
+      };
+      const unrelatedId = "bccee459-9687-423e-958d-c25b38ca8013";
+      const source = (path: string): unknown =>
+        path.startsWith("zone/access/apps?")
+          ? {
+              ...basic,
+              result: [
+                ...applications,
+                unexpected,
+                { ...unexpected, id: unrelatedId, destinations: [] },
+              ],
+            }
+          : accessReply(path);
+      const checked = yield* verify(source, true, true).pipe(
+        Effect.result,
+        Effect.provideService(Logger.CurrentLoggers, loggers)
+      );
+      expect(Result.isFailure(checked)).toBe(true);
+      const text = reports.join("\n");
+      expect(text).toContain("selected application count");
+      expect(text).toContain(unexpectedId);
+      expect(text).toContain(apiHost + "/internal/support-recovery");
+      expect(text).toContain(apiHost + " other");
+      expect(text).toContain('"expectedNativeRole":false');
+      expect(text).toContain('"unlistedPathCount":1');
+      expect(text).not.toContain(privateText);
+      expect(text).not.toContain(unrelatedId);
+      expect(text).not.toContain(operator);
+
+      reports.length = 0;
+      const withoutDiagnostics = yield* verify(source).pipe(
+        Effect.result,
+        Effect.provideService(Logger.CurrentLoggers, loggers)
+      );
+      expect(Result.isFailure(withoutDiagnostics)).toBe(true);
+      expect(reports).toEqual([]);
     })
   ));

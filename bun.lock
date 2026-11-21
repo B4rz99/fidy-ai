@@ -60,7 +60,6 @@
       "name": "@fidy/server",
       "version": "0.0.0",
       "dependencies": {
-        "@effect/sql-d1": "4.1.4",
         "@effect/sql-sqlite-do": "4.1.4",
         "csv-parse": "7.0.3",
         "effect": "4.1.4",

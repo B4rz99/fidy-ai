@@ -317,7 +317,6 @@
     "test:memory": "bun --bun vitest run --config vitest.config.ts src/shell/memory --coverage.enabled=false"
   },
   "dependencies": {
-    "@effect/sql-d1": "4.1.4",
     "@effect/sql-sqlite-do": "4.1.4",
     "csv-parse": "7.0.3",
     "effect": "4.1.4",

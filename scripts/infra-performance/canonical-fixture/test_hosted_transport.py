@@ -8,8 +8,8 @@ from types import SimpleNamespace
 from unittest.mock import Mock, call, patch
 
 from protected_cohort import HostedPort, checked_browser_origin
-from owner_transport import NATIVE_API
-from owner_state import CustodyObject, Refused
+from native_custody import NATIVE_API
+from native_custody import CustodyObject, Refused
 from hosted import RECEIPT_PATHS
 from test_cohort import Store
 from cohort import Cohort, MAX_USER_OBJECTS

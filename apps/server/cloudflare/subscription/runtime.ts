@@ -65,9 +65,6 @@ import { observeCancellation, pendingCancellation } from "./internal/local-cance
 import { RequestBodyPolicy } from "../http/contract";
 import { boundedJsonBody } from "../http/operations";
 import { publishPrice } from "./internal/publish-price";
-import { projections as erasureProjections } from "./internal/erasure";
-import { makeErasureStore } from "../erasure-store/runtime";
-import type { ErasureStore } from "../erasure-store/contract";
 import { makeWompiTransport } from "./internal/wompi-runtime";
 import { OutboundHttpLive, installedProviderFetch } from "../outbound-http/runtime";
 import { dispatchCancellations } from "./internal/source-cancellation";
@@ -339,9 +336,6 @@ export const dispatchSubscriptionRenewals = (
 export const dispatchSubscriptionCancellations = (
   input: SubscriptionCancellationDispatchInput
 ): Effect.Effect<void, BillingCollectionFailure> => dispatchCancellations(input);
-
-export const makeSubscriptionErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
-  erasureProjections.map((projection) => makeErasureStore({ db, projection }));
 
 export class Pricing {
   private readonly version: string;

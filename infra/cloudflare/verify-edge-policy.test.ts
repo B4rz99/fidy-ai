@@ -13,15 +13,10 @@ const policyFixture = Effect.gen(function* () {
   yield* fs.copy(`${workspaceRoot}patches`, `${root}/patches`);
   yield* fs.makeDirectory(`${root}/scripts/infra-performance`, { recursive: true });
   yield* fs.copy(`${workspaceRoot}scripts/pro`, `${root}/scripts/pro`);
-  yield* fs.copy(`${workspaceRoot}scripts/retirement`, `${root}/scripts/retirement`);
-  for (const owner of ["deployed-fleet", "canonical-fixture", "cells", "hosted-browser"]) {
+  for (const owner of ["deployed-fleet", "canonical-fixture", "hosted-browser"]) {
     const directory = `scripts/infra-performance/${owner}`;
     yield* fs.copy(`${workspaceRoot}${directory}`, `${root}/${directory}`);
   }
-  yield* fs.copy(
-    `${workspaceRoot}scripts/infra-performance/d1-budget.ts`,
-    `${root}/scripts/infra-performance/d1-budget.ts`
-  );
   for (const name of [".github", "apps", "node_modules", "tsconfig.base.json"]) {
     yield* fs.symlink(`${workspaceRoot}${name}`, `${root}/${name}`);
   }
@@ -54,7 +49,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })(
     it.effect.each([
       "worker-observability.ts",
       "../../scripts/pro/runtime.ts",
-      "../../scripts/retirement/provider.py",
+      "../../scripts/infra-performance/canonical-fixture/canonical_activity.py",
     ])(
       "refuses changes in %s without disclosing their contents",
       (source) =>

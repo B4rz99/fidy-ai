@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 
 from installation import HOST, SCRIPTS
 from successor_artifacts import OWNERS, STAGED_ACCOUNTING_ARTIFACT, main as authenticate
-from owner_transport import cloudflare, fetch
+from native_custody import cloudflare, fetch
 
 PASSED_STORAGE_RUN = "44835921933"
 PASSED_STORAGE_WINDOW = (1795216915000, 1795216955000)

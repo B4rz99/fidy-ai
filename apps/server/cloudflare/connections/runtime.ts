@@ -20,9 +20,6 @@ import { observeApplicationOperation } from "../runtime/application-observation/
 import { sweepAttempts } from "./internal/retention";
 import { sweepGrants } from "./internal/cleanup";
 import { digestBytes } from "../secret-material/operations";
-import { projections as erasureProjections } from "./internal/erasure";
-import { makeErasureStore } from "../erasure-store/runtime";
-import type { ErasureStore } from "../erasure-store/contract";
 import { captureTraceHeaders } from "../runtime/telemetry/operations";
 import { protectCanonicalPressure } from "../canonical-admission/operations";
 import { Cause, Clock, Effect, Exit, Option, Redacted, Schema } from "effect";
@@ -270,9 +267,6 @@ export const handleConnectionBrowserRequest = (input: BrowserRequest): Effect.Ef
         ),
     });
   }).pipe(Effect.orElseSucceed(() => continuationFailure(unavailableStatus)));
-
-export const makeConnectionsErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
-  erasureProjections.map((projection) => makeErasureStore({ db, projection }));
 
 const minuteMilliseconds = 60_000;
 const retentionCadenceMinutes = 60;

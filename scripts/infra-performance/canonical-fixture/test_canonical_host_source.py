@@ -23,7 +23,7 @@ ENV = {
     "GITHUB_EVENT_NAME": "workflow_dispatch",
     "GITHUB_WORKFLOW_REF": WORKFLOW_REF,
     "GITHUB_RUN_ATTEMPT": "1",
-    "FIXTURE_RELEASE_OPERATION": "plan-stage-hosts",
+    "FIXTURE_RELEASE_OPERATION": "open-canonical-signup",
     "NATIVE_STORAGE_ADMISSION": "closed",
     "NATIVE_STORAGE_HOSTS": "staged",
 }

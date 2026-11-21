@@ -4,13 +4,7 @@ import {
   signupUserCensus,
   verifyCanonicalSignupRedirects,
 } from "./native-canonical-signup";
-import {
-  type CanonicalDomainPort,
-  canonicalDomains,
-  checkCanonicalIncumbents,
-  confirmCanonicalDomainMove,
-  transferCanonicalDomains,
-} from "./native-canonical-domains";
+import { canonicalDomains } from "./native-canonical-domains";
 import { SuccessorSource } from "./native-fixture-plan";
 import { resourceFailureMessage } from "./resource-failure";
 import {
@@ -56,7 +50,6 @@ import { isDeepStrictEqual } from "node:util";
 import { verifyIncumbentFence, verifyIncumbentMail } from "./native-incumbent-fence";
 import { readProviderList } from "./native-provider-list";
 import { verifyInstalledWebsite } from "./native-deployed-web";
-import { type IncumbentAccessApplication, readIncumbentAccess } from "./native-deployed-access";
 import {
   canonicalDomainReader,
   inspectDeployedEdge,
@@ -1399,136 +1392,6 @@ const inspectIncumbentWriters = Effect.fn(function* (
   yield* mail;
   return yield* writers;
 });
-const checkCanonicalHosts = Effect.fn(function* (
-  env: Config,
-  client: HttpClient.HttpClient,
-  { port, mode }: { port: ReleasePort; mode: "plan" | "transfer" | "transferred" }
-) {
-  const transferring = mode !== "transferred";
-  const { source, bindings } = yield* readCanonicalSource(env, client, port).pipe(
-    checkCanonicalPrerequisite("authenticated native source")
-  );
-  yield* verifyNativeEdge(env, client, "verify").pipe(
-    checkCanonicalPrerequisite("zone firewall policy")
-  );
-  const edge = yield* inspectDeployedEdge(env, client, {
-    installed: true,
-    bindings,
-    hosts: "staged",
-    staging: transferring,
-    incumbentTransfer: transferring,
-  }).pipe(
-    checkCanonicalPrerequisite("DNS, Workers Builds or protected Access"),
-    Effect.mapError(
-      () => new ReleaseFailure({ message: "Canonical DNS, host or Access inventory differs" })
-    )
-  );
-  const read = canonicalDomainReader({
-    readAccount: accountReader(env, client),
-    readZone: zoneReader(env, client, { zoneId: edge.zoneId, reportRejection: false }),
-    zoneId: edge.zoneId,
-  });
-  if (transferring) {
-    yield* checkCanonicalIncumbents(read).pipe(
-      checkCanonicalPrerequisite("exact incumbent DNS and attachments")
-    );
-  }
-  yield* requireStagedHostDomains(accountReader(env, client), edge.zoneId, transferring).pipe(
-    checkCanonicalPrerequisite("native Worker domain inventory")
-  );
-  if (mode === "plan") {
-    const { mail, writers } = incumbentFenceChecks(env, client, edge.zoneId);
-    yield* Effect.ignore(mail);
-    yield* Effect.ignore(writers);
-  } else {
-    yield* inspectIncumbentWriters(env, client, edge.zoneId);
-  }
-  return { source, edge, read };
-});
-const planHostStage = Effect.fn(function* (
-  env: Config,
-  client: HttpClient.HttpClient,
-  port: ReleasePort
-) {
-  const operation = yield* ReleaseConfig.Literals(
-    ["plan-stage-hosts", "transfer-canonical-hosts"],
-    "FIXTURE_RELEASE_OPERATION"
-  );
-  const { edge } = yield* checkCanonicalHosts(env, client, {
-    port,
-    mode: operation === "plan-stage-hosts" ? "plan" : "transfer",
-  });
-  const incumbentAccess = yield* canonicalIncumbentAccess(env, client, edge.zoneId);
-  return { zoneId: edge.zoneId, incumbentAccess };
-});
-export const planCanonicalHostPreview = Effect.gen(function* () {
-  const env = releaseEvidence.config();
-  const client = yield* HttpClient.HttpClient;
-  return yield* planHostStage(env, client, releasePort({ env, client })).pipe(
-    Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" })
-  );
-});
-const canonicalIncumbentAccess = (
-  env: Config,
-  client: HttpClient.HttpClient,
-  zoneId: string
-): ReturnType<typeof readIncumbentAccess> =>
-  readIncumbentAccess({
-    account: "accounts/" + env.account + "/",
-    zone: "zones/" + zoneId + "/",
-    read: (path) =>
-      providerJson(
-        HttpClientRequest.get("https://api.cloudflare.com/client/v4/" + path, {
-          headers: { authorization: "Bearer " + env.token },
-        })
-      ).pipe(Effect.provideService(HttpClient.HttpClient, client)),
-  });
-const confirmIncumbentAccess = Effect.fn(function* (
-  read: ReturnType<typeof readIncumbentAccess>,
-  expected: readonly IncumbentAccessApplication[]
-) {
-  if (!isDeepStrictEqual(yield* read, expected)) {
-    return yield* new ReleaseFailure({ message: "Exact incumbent Access inventory changed" });
-  }
-});
-export const retireCanonicalIncumbentAccess = Effect.fn(function* ({
-  zoneId,
-  incumbentAccess,
-}: {
-  zoneId: string;
-  incumbentAccess: readonly IncumbentAccessApplication[];
-}) {
-  yield* requiredStaging();
-  yield* ReleaseConfig.Literal("true", "GITHUB_REF_PROTECTED");
-  yield* ReleaseConfig.Literal("1", "GITHUB_RUN_ATTEMPT");
-  yield* ReleaseConfig.Literal("transfer-canonical-hosts", "FIXTURE_RELEASE_OPERATION");
-  const env = releaseEvidence.config();
-  const client = yield* HttpClient.HttpClient;
-  const port = releasePort({ env, client });
-  const read = canonicalIncumbentAccess(env, client, zoneId);
-  if (incumbentAccess.length > 0) {
-    yield* Schema.decodeUnknownEffect(
-      Schema.Struct({
-        status: Schema.Literal("available"),
-        gitRevision: Schema.Literal("3d692fb105d1cdd643cce56bc8c3547466d61efb"),
-      })
-    )(yield* providerJson(HttpClientRequest.get(installedOrigins.production.api + "/health")));
-  }
-  let remaining = incumbentAccess;
-  for (const entry of incumbentAccess) {
-    yield* releaseController.requireTrunk(port, env.revision);
-    yield* confirmIncumbentAccess(read, remaining);
-    const url = `https://api.cloudflare.com/client/v4/accounts/${env.account}/access/apps/${entry.id}`;
-    yield* providerJson(
-      HttpClientRequest.make("DELETE")(url, { headers: { authorization: "Bearer " + env.token } })
-    ).pipe(Effect.ignore);
-    remaining = remaining.slice(1);
-    yield* confirmIncumbentAccess(read, remaining).pipe(
-      Effect.retry({ schedule: Schedule.spaced("1 second"), times: 8 })
-    );
-    yield* Effect.logInfo("Verified retirement of the former Access application for " + entry.path);
-  }
-});
 const requireRetainedCanonicalWeb = (
   port: ReleasePort,
   worker: { deployment: string; version: string }
@@ -1543,10 +1406,32 @@ const verifyTransferredHosts = Effect.fn(function* (
   client: HttpClient.HttpClient,
   port: ReleasePort
 ) {
-  const { source, edge, read } = yield* checkCanonicalHosts(env, client, {
-    port,
-    mode: "transferred",
+  const { source, bindings } = yield* readCanonicalSource(env, client, port).pipe(
+    checkCanonicalPrerequisite("authenticated native source")
+  );
+  yield* verifyNativeEdge(env, client, "verify").pipe(
+    checkCanonicalPrerequisite("zone firewall policy")
+  );
+  const edge = yield* inspectDeployedEdge(env, client, {
+    installed: true,
+    bindings,
+    hosts: "staged",
+    staging: false,
+  }).pipe(
+    checkCanonicalPrerequisite("DNS, Workers Builds or protected Access"),
+    Effect.mapError(
+      () => new ReleaseFailure({ message: "Canonical DNS, host or Access inventory differs" })
+    )
+  );
+  const read = canonicalDomainReader({
+    readAccount: accountReader(env, client),
+    readZone: zoneReader(env, client, { zoneId: edge.zoneId, reportRejection: false }),
+    zoneId: edge.zoneId,
   });
+  yield* requireStagedHostDomains(accountReader(env, client), edge.zoneId, false).pipe(
+    checkCanonicalPrerequisite("native Worker domain inventory")
+  );
+  yield* inspectIncumbentWriters(env, client, edge.zoneId);
   yield* requireRetainedCanonicalWeb(port, source.website);
   const website = yield* Effect.forEach(nativeHostPairs("staged"), (pair) =>
     verifyInstalledWebsite(client, source.website.revision, {
@@ -1566,83 +1451,6 @@ const verifyTransferredHosts = Effect.fn(function* (
   }
   const hosts = yield* Effect.forEach(canonicalDomains, read);
   return { source, zoneId: edge.zoneId, hosts, website, admission: "closed" };
-});
-const canonicalDomainMover = (
-  env: Config,
-  client: HttpClient.HttpClient,
-  { zoneId, read }: { zoneId: string; read: CanonicalDomainPort["read"] }
-): CanonicalDomainPort["move"] => {
-  const base = "https://api.cloudflare.com/client/v4/accounts/" + env.account + "/workers/scripts/";
-  const headers = { authorization: "Bearer " + env.token };
-  const requestChange = (
-    request: HttpClientRequest.HttpClientRequest
-  ): Effect.Effect<unknown, Error> =>
-    providerJson(request, true).pipe(
-      Effect.provideService(HttpClient.HttpClient, client),
-      checkCanonicalPrerequisite("Worker custom domain request")
-    );
-  return Effect.fn(function* (domain, service) {
-    const domains = base + encodeURIComponent(service) + "/domains";
-    const origins = [
-      {
-        hostname: domain.host,
-        zone_id: zoneId,
-        enabled: true,
-        previews_enabled: false,
-      },
-    ];
-    const changeset = yield* requestChange(
-      HttpClientRequest.post(domains + "/changeset?replace_state=false", {
-        headers,
-        body: HttpBody.text(encodeJson(origins), "application/json"),
-      })
-    );
-    yield* confirmCanonicalDomainMove(changeset, domain, { service, zoneId }).pipe(
-      checkCanonicalPrerequisite("Worker custom domain changeset for " + domain.host)
-    );
-    const current = yield* read(domain);
-    const expectedOwner = service === domain.native ? domain.incumbent : domain.native;
-    if (current.vacant || current.id !== domain.incumbentId || current.service !== expectedOwner) {
-      return yield* new ReleaseFailure({
-        message: "Canonical Worker ownership changed before the update for " + domain.host,
-      });
-    }
-    const result = yield* requestChange(
-      HttpClientRequest.put(domains + "/records", {
-        headers,
-        body: HttpBody.text(
-          encodeJson({
-            origins,
-            override_scope: false,
-            override_existing_origin: true,
-            override_existing_dns_record: false,
-          }),
-          "application/json"
-        ),
-      })
-    );
-    yield* Schema.decodeUnknownEffect(Schema.Struct({ success: Schema.Literal(true) }))(result);
-  });
-};
-const transferHostStage = Effect.fn(function* (
-  env: Config,
-  client: HttpClient.HttpClient,
-  port: ReleasePort
-) {
-  yield* ReleaseConfig.Literal("transfer-canonical-hosts", "FIXTURE_RELEASE_OPERATION");
-  const { edge, read } = yield* checkCanonicalHosts(env, client, { port, mode: "transfer" });
-  yield* confirmIncumbentAccess(canonicalIncumbentAccess(env, client, edge.zoneId), []);
-  if (edge.access.some((row) => row.paths.length !== 2)) {
-    return yield* new ReleaseFailure({ message: "Canonical Access policies are incomplete" });
-  }
-  yield* transferCanonicalDomains(
-    { read, move: canonicalDomainMover(env, client, { zoneId: edge.zoneId, read }) },
-    verifyTransferredHosts(env, client, port).pipe(
-      Effect.flatMap((proof) =>
-        writeFile(env.smokeAttestationFile + ".canonical-hosts", encodeJson(proof))
-      )
-    )
-  );
 });
 const inspectHostStage = Effect.fn(function* (
   env: Config,
@@ -4095,7 +3903,6 @@ const commands = {
   "capture-canonical-signup": captureCanonicalSignup,
   "stage-canonical-signup": targetSignupCandidates,
   "promote-canonical-signup": promoteCanonicalSignup,
-  "transfer-hosts": transferHostStage,
   "plan-hosts": planHostStage,
   "capture-hosts": captureHostStage,
   "attach-hosts": attachCanonicalHosts,
@@ -4137,7 +3944,6 @@ if (import.meta.main) {
         "capture-canonical-signup",
         "stage-canonical-signup",
         "promote-canonical-signup",
-        "transfer-hosts",
         "plan-hosts",
         "capture-hosts",
         "attach-hosts",

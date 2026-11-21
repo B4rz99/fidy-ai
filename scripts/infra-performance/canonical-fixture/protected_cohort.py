@@ -12,12 +12,9 @@ from cohort_runner import BrowserPort, collect_owned, commands
 from fixture import write
 from hosted import HERE, RECEIPT_PATHS
 from installation import validate_candidate, validate_qualification
+from native_custody import Cloud, CustodyObject, NATIVE_API, cloudflare, fetch
 from qualified_release import artifact, serving_graph
 
-sys.path.insert(0, str(HERE.parent / "cells"))
-from owner_cloud import Cloud
-from owner_state import CustodyObject
-from owner_transport import NATIVE_API, cloudflare, fetch
 fleet_path = HERE.parent / "deployed-fleet"
 sys.path.insert(0, str(fleet_path))
 from native_budget import CLEANUP_READS, CLEANUP_WRITES, DAY, check, observe, recovery_reservation
@@ -252,7 +249,7 @@ def run(args):
     candidate = verify()
     os.environ["FIDY_NATIVE_FIXTURE_PROVIDER_REVISION"] = installed["retainedProvider"]["revision"]
     coords = dict(**candidate, account=account, prefix=prefix, archive=args.archive_sha256)
-    cloud = Cloud(account,prefix)
+    cloud = Cloud(account)
     member = candidate.get("fixtureMember", "performance-1")
     if args.mode != "cleanup" and installed.get("nativeAccountingWitness") is True:
         for receipt_marker in (False, True):
@@ -304,42 +301,3 @@ def run(args):
                 observation = run_smoke(owner, port, proof, installed["website"][0], args.out, smoke_env)
                 verify()
                 write(args.out/"native-correctness.json", observation)
-
-
-def comparable_native_reads(account, candidate, proof, pairs, *, browser=False):
-    """Reserve each timed read before signing or starting either measured HTTP clock."""
-    protected_runner()
-    prefix, revision = proof["resourcePrefix"], proof["nativeRevision"]
-    member = candidate.get("fixtureMember", "performance-1")
-    if proof["member"] != member:
-        raise ValueError("Comparison receipt belongs to another native fixture member")
-    cloud = Cloud(account, prefix)
-    store = CustodyObject(account, cloud, native_revision=revision, member=member)
-    version, state = store.read()
-    run = os.environ["GITHUB_RUN_ID"] + "/" + os.environ["GITHUB_RUN_ATTEMPT"]
-    coords = state["coordinates"] if state else {}
-    if (not state or state["stage"] != "receipt-verified" or state.get("foregroundRun") != run
-            or state.get("cleanupRun") or coords.get("prefix") != prefix or coords.get("account") != account
-            or any(coords.get(k) != v for k,v in candidate.items())
-            or state.get("receiptDigest") != proof["nativeReceiptDigest"] or state.get("comparisonOffered") is not None
-            or (state.get("workload")=="mounted-transactions-ordinary") != browser
-            or (browser and pairs != 30) or pairs not in (1,30)):
-        raise ValueError("Comparison does not own this protected native receipt")
-    reserved = 0
-    def reserve():
-        nonlocal version, reserved
-        now = int(time.time())
-        if now >= state["foregroundUntil"] or reserved >= (1 if browser else pairs):
-            raise ValueError("Native comparison allowance expired")
-        current = observe(cloudflare, account)
-        check(state["usageBefore"], current, "foreground", now)
-        reserved += 1
-        state.update(comparisonOffered=reserved, lastDispatch=now, lastUsage=current)
-        if browser:
-            state["browserReservation"] = dict(refreshes=30, correction=1, staleBatch=1,
-                authenticatedRequests=69, maximumPreflights=67, accountingWitnessReads=2, admission="one-use")
-        version = store.replace(version,state)
-        if time.time() >= state["foregroundUntil"]:
-            raise ValueError("Native comparison lease expired before dispatch")
-        return state["foregroundUntil"]
-    return reserve

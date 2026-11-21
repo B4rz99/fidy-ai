@@ -10,7 +10,7 @@ from zipfile import ZipFile
 
 from qualified_release import actions_get, fixture_upload, protected_archive
 from successor_source import approved_plan, verified_predecessor
-from owner_transport import fetch
+from native_custody import fetch
 
 REVISION = "de04a192c3836be0efb488b170a7b93b9f98f28f"
 FAILED_RUN = "44806738835"

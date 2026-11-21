@@ -22,10 +22,7 @@ import {
 } from "./internal/local-statement-work";
 import { recoverIngestion, repairIngestionAlarm } from "./internal/local-retention";
 import { sweepReviewDrafts as sweepDrafts } from "./internal/review-retention";
-import { projections as erasureProjections } from "./internal/erasure";
-import { makeErasureStore } from "../erasure-store/runtime";
 import { withPublicationWake } from "./internal/publication-wake";
-import type { ErasureStore } from "../erasure-store/contract";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import { Cause, Effect, Exit, Option } from "effect";
 import type { UserId } from "../../src/core/identity/contract";
@@ -175,9 +172,6 @@ export const expireStatementReviewEvidence: typeof expireReview = (input) => exp
 export const sweepReviewDrafts = (
   input: ReviewRetentionWork
 ): Effect.Effect<void, ReviewUnavailable> => sweepDrafts(input);
-export const makeIngestionErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
-  erasureProjections.map((projection) => makeErasureStore({ db, projection }));
-
 export const admitLocalDocument: typeof admitDocument = (...args) => admitDocument(...args);
 export const localPendingStatement: typeof pendingStatement = (...args) =>
   pendingStatement(...args);

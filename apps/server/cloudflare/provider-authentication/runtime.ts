@@ -5,9 +5,6 @@ import {
 } from "../directory/contract";
 import { UserId } from "../../src/core/identity/contract";
 import { DateTime, Effect, Option, Redacted, Schema } from "effect";
-import { projections as erasureProjections } from "./internal/erasure";
-import { makeErasureStore } from "../erasure-store/runtime";
-import type { ErasureStore } from "../erasure-store/contract";
 import { makeProviderHandoffSender } from "../../src/shell/provider-authentication/runtime";
 import type {
   WhatsAppAuthenticatedInbound,
@@ -59,11 +56,6 @@ export const sweepProviderAuthentication = ({
     Effect.asVoid,
     Effect.mapError(() => new ProviderAuthenticationRetentionUnavailable())
   );
-
-export const makeProviderAuthenticationErasureStores = (
-  db: D1Database
-): ReadonlyArray<ErasureStore> =>
-  erasureProjections.map((projection) => makeErasureStore({ db, projection }));
 
 const sendInvitation = Effect.fn(function* (
   environment: WhatsAppIngressEnvironment,

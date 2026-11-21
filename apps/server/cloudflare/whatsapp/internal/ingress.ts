@@ -96,7 +96,7 @@ const boundedBody = (request: Request): Effect.Effect<Option.Option<Uint8Array>,
 };
 
 const readBounded = (
-  reader: ReadableStreamDefaultReader<Uint8Array>,
+  reader: ReadableStreamDefaultReader<unknown>,
   chunks: Array<Uint8Array>,
   length: number
 ): Effect.Effect<Option.Option<Uint8Array>, void> =>

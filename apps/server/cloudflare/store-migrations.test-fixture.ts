@@ -79,11 +79,14 @@ const observeStorage = (
     Statement: storage.sql.Statement,
   };
 
+  const isStorageMember = (property: string | symbol): property is keyof DurableObjectStorage =>
+    Predicate.hasProperty(storage, property);
+
   return new Proxy(storage, {
     get: (target, property) => {
       if (property === "sql") return sql;
 
-      if (!Predicate.hasProperty(target, property)) return undefined;
+      if (!isStorageMember(property)) return undefined;
 
       const value = target[property];
 

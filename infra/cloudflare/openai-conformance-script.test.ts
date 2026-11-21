@@ -286,10 +286,8 @@ describe.concurrent("native conformance lifecycle", () => {
       "healthy",
       "refused",
     ] as const) {
-      it.effect(
-        `settles the native conformance script and owned resources for ${scenario}`,
-        () => exercise(scenario),
-        25_000
+      it.effect(`settles the native conformance script and owned resources for ${scenario}`, () =>
+        exercise(scenario)
       );
     }
 

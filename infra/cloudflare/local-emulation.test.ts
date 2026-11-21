@@ -47,54 +47,51 @@ layer(LocalEmulationServices, {
   excludeTestServices: true,
   timeout: "30 seconds",
 })("Alchemy local emulation", (it) => {
-  it.effect(
-    "serves the browser through the real ingress-to-Core service binding",
-    () =>
-      Effect.gen(function* () {
-        const crypto = yield* SecureRandom.SecureRandom;
-        const stageId = yield* crypto.uuidV4();
+  it.effect("serves the browser through the real ingress-to-Core service binding", () =>
+    Effect.gen(function* () {
+      const crypto = yield* SecureRandom.SecureRandom;
+      const stageId = yield* crypto.uuidV4();
 
-        const developmentProcess = yield* ChildProcess.make("bun", ["run", "dev"], {
-          cwd: infrastructureRoot,
-          env: {
-            ...Bun.env,
-            ALCHEMY_STAGE: `test-${stageId}`,
-            CLOUDFLARE_ACCOUNT_ID: "00000000000000000000000000000000",
-            CLOUDFLARE_API_TOKEN: "local-development-placeholder",
-          },
-          forceKillAfter: "1 second",
-          stderr: "inherit",
-          stdin: "ignore",
-          stdout: "inherit",
-        });
+      const developmentProcess = yield* ChildProcess.make("bun", ["run", "dev"], {
+        cwd: infrastructureRoot,
+        env: {
+          ...Bun.env,
+          ALCHEMY_STAGE: `test-${stageId}`,
+          CLOUDFLARE_ACCOUNT_ID: "00000000000000000000000000000000",
+          CLOUDFLARE_API_TOKEN: "local-development-placeholder",
+        },
+        forceKillAfter: "1 second",
+        stderr: "inherit",
+        stdin: "ignore",
+        stdout: "inherit",
+      });
 
-        yield* Effect.addFinalizer(() =>
-          developmentProcess.kill({ killSignal: "SIGINT" }).pipe(Effect.ignore)
-        );
+      yield* Effect.addFinalizer(() =>
+        developmentProcess.kill({ killSignal: "SIGINT" }).pipe(Effect.ignore)
+      );
 
-        const healthResponse = yield* fetchWhenReady(`${ingressOrigin}/health`);
-        expect(yield* healthResponse.json).toEqual({
-          contractDigest: "0000000000000000000000000000000000000000000000000000000000000000",
-          gitRevision: "0000000000000000000000000000000000000000",
-          status: "available",
-        });
+      const healthResponse = yield* fetchWhenReady(`${ingressOrigin}/health`);
+      expect(yield* healthResponse.json).toEqual({
+        contractDigest: "0000000000000000000000000000000000000000000000000000000000000000",
+        gitRevision: "0000000000000000000000000000000000000000",
+        status: "available",
+      });
 
-        const categoriesResponse = yield* HttpClient.get(`${ingressOrigin}/categories`, {
-          headers: { authorization: `Bearer ${localCanonicalReadBearer}` },
-        });
+      const categoriesResponse = yield* HttpClient.get(`${ingressOrigin}/categories`, {
+        headers: { authorization: `Bearer ${localCanonicalReadBearer}` },
+      });
 
-        expect(categoriesResponse.status).toBe(401);
-        expect(yield* categoriesResponse.json).toEqual({
-          error: {
-            code: "unauthenticated",
-            message: "Present a currently authorized credential and retry.",
-          },
-          next: [],
-        });
+      expect(categoriesResponse.status).toBe(401);
+      expect(yield* categoriesResponse.json).toEqual({
+        error: {
+          code: "unauthenticated",
+          message: "Present a currently authorized credential and retry.",
+        },
+        next: [],
+      });
 
-        const browserModule = yield* fetchWhenReady(`${webOrigin}/src/app/application.tsx`);
-        expect(yield* browserModule.text).toContain(ingressOrigin);
-      }),
-    30_000
+      const browserModule = yield* fetchWhenReady(`${webOrigin}/src/app/application.tsx`);
+      expect(yield* browserModule.text).toContain(ingressOrigin);
+    })
   );
 });

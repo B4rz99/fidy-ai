@@ -15,21 +15,21 @@ export type HostedPromptProjection = Readonly<{
   activeRequest: HostedActiveRequest;
 }>;
 
-export type PreparedStructuredExecution<Output> = Readonly<{
-  execute: Effect.Effect<Output, HostedInferenceError>;
+export type PreparedStructuredExecution<Output, Requirements = never> = Readonly<{
+  execute: Effect.Effect<Output, HostedInferenceError, Requirements>;
 }>;
 
-export type HostedStructuredAdapter = Readonly<{
+export type HostedStructuredAdapter<Requirements = never> = Readonly<{
   prepare: <Output, Encoded extends Readonly<Record<string, unknown>>>(
     input: Readonly<{
       messages: ReadonlyArray<Prompt.MessageEncoded>;
       objectName: string;
       outputSchema: Schema.Codec<Output, Encoded, never, never>;
     }>
-  ) => Effect.Effect<PreparedStructuredExecution<Output>, HostedInferenceError>;
+  ) => Effect.Effect<PreparedStructuredExecution<Output, Requirements>, HostedInferenceError>;
 }>;
 
-export type HostedInferenceAdapter<Request, Continuation> = Readonly<{
+export type HostedInferenceAdapter<Request, Continuation, Requirements = never> = Readonly<{
   countText: (text: string) => Effect.Effect<number>;
   countTranscript: (entries: ReadonlyArray<TranscriptEntry>) => Effect.Effect<number>;
   prepare: (
@@ -44,7 +44,8 @@ export type HostedInferenceAdapter<Request, Continuation> = Readonly<{
     request: Request
   ) => Effect.Effect<
     Readonly<{ result: Omit<HostedTextResult, "continuation">; continuation: Continuation }>,
-    HostedInferenceError
+    HostedInferenceError,
+    Requirements
   >;
-  structured: HostedStructuredAdapter;
+  structured: HostedStructuredAdapter<Requirements>;
 }>;

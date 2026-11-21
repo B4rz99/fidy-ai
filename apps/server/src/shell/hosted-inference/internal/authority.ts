@@ -24,22 +24,20 @@ const opaque = <Behavior extends object>(properties: Behavior): Behavior => {
   return Object.freeze(authority);
 };
 
-const textAuthority = Brand.nominal<PreparedHostedText>();
+export const authorizePreparedText = <Requirements>(
+  behavior: Brand.Brand.Unbranded<PreparedHostedText<Requirements>>
+): PreparedHostedText<Requirements> =>
+  Brand.nominal<PreparedHostedText<Requirements>>()(opaque(behavior));
 
-const continuationAuthority = Brand.nominal<HostedTextContinuation>();
+export const authorizeContinuation = <Requirements>(
+  behavior: Brand.Brand.Unbranded<HostedTextContinuation<Requirements>>
+): HostedTextContinuation<Requirements> =>
+  Brand.nominal<HostedTextContinuation<Requirements>>()(opaque(behavior));
 
-export const authorizePreparedText = (
-  behavior: Brand.Brand.Unbranded<PreparedHostedText>
-): PreparedHostedText => textAuthority(opaque(behavior));
-
-export const authorizeContinuation = (
-  behavior: Brand.Brand.Unbranded<HostedTextContinuation>
-): HostedTextContinuation => continuationAuthority(opaque(behavior));
-
-export const authorizePreparedStructured = <Output>(
-  behavior: Brand.Brand.Unbranded<PreparedHostedStructured<Output>>
-): PreparedHostedStructured<Output> =>
-  Brand.nominal<PreparedHostedStructured<Output>>()(opaque(behavior));
+export const authorizePreparedStructured = <Output, Requirements>(
+  behavior: Brand.Brand.Unbranded<PreparedHostedStructured<Output, Requirements>>
+): PreparedHostedStructured<Output, Requirements> =>
+  Brand.nominal<PreparedHostedStructured<Output, Requirements>>()(opaque(behavior));
 
 export const continuationPolicy = (input: {
   readonly policy: HostedTextToolPolicy;

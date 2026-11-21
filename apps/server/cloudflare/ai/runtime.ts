@@ -71,13 +71,18 @@ export const openAiRun =
 
 const ApiKey = Schema.String.check(Schema.isPattern(/^[!-~]+$/u));
 
-export const makeLocalHostedInference = ({
+type LocalAdmission<Requirements = never> = Readonly<{
+  environment: OpenAiEnvironment;
+  admit: (units: number) => Effect.Effect<boolean, HostedInferenceError, Requirements>;
+}>;
+
+const makeLocalHostedInference = <Requirements = never>({
   environment,
   admit,
-}: {
-  environment: OpenAiEnvironment;
-  admit: (units: number) => Effect.Effect<boolean, HostedInferenceError>;
-}): Effect.Effect<HostedInferenceService, HostedInferenceError> => {
+}: LocalAdmission<Requirements>): Effect.Effect<
+  HostedInferenceService<Requirements>,
+  HostedInferenceError
+> => {
   const key = Schema.decodeOption(ApiKey)(environment.OPENAI_API_KEY);
 
   return openAiHostedInference({
@@ -118,6 +123,18 @@ export const makeLocalHostedInference = ({
     }),
   });
 };
+
+export class LocalHostedInference extends Context.Service<
+  LocalHostedInference,
+  HostedInferenceService
+>()("@fidy/server/cloudflare/ai/runtime/LocalHostedInference") {
+  static readonly make = makeLocalHostedInference;
+
+  static readonly layer = (
+    admission: LocalAdmission
+  ): Layer.Layer<LocalHostedInference, HostedInferenceError> =>
+    Layer.effect(this, this.make(admission));
+}
 
 export const cloudflareHostedInference = (
   environment: OpenAiEnvironment

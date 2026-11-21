@@ -148,104 +148,97 @@ describe("read-only smoke routing diagnosis", () => {
         }
       })
   );
-  it(
+  effectIt.effect(
     "distinguishes candidate GET from stable POST with matched URLs and overrides and only refused diagnostic bodies",
     () =>
-      Effect.runPromise(
-        Effect.gen(function* () {
-          const requests: Request[] = [];
+      Effect.gen(function* () {
+        const requests: Request[] = [];
 
-          const mockedFetch = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
-            const request = new Request(input, init);
-            requests.push(request);
+        const mockedFetch = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+          const request = new Request(input, init);
+          requests.push(request);
 
-            const intermediate =
-              request.headers
-                .get("cloudflare-workers-version-overrides")
-                ?.includes(publicCandidate) !== true;
+          const intermediate =
+            request.headers
+              .get("cloudflare-workers-version-overrides")
+              ?.includes(publicCandidate) !== true;
 
-            const publicVersion = intermediate ? publicStable : publicCandidate;
+          const publicVersion = intermediate ? publicStable : publicCandidate;
 
-            const headers = {
-              "cache-control": "no-store",
-              "x-fidy-smoke-worker-version": publicVersion,
-            };
+          const headers = {
+            "cache-control": "no-store",
+            "x-fidy-smoke-worker-version": publicVersion,
+          };
 
-            if (request.method === "POST") {
-              return rejectedPostResponse(request, headers);
-            }
-
-            return Promise.resolve(
-              Response.json(
-                {
-                  status: "pending",
-                  public: {
-                    gitRevision: "c".repeat(40),
-                    contractDigest: digest,
-                    workerVersionId: publicVersion,
-                  },
-                  core: {
-                    gitRevision: "d".repeat(40),
-                    contractDigest: digest,
-                    workerVersionId: coreCandidate,
-                  },
-                  manifest: { protocolVersion: 1, asyncWorkVersion: 1 },
-                  extra: "secret-response-body",
-                },
-                { headers }
-              )
-            );
-          });
-
-          try {
-            const observations = yield* runDiagnostic(config, mockedFetch);
-            expect(observations).toHaveLength(48);
-            expect(
-              observations
-                .filter((value) => value.method === "GET")
-                .every(
-                  (value) => value.coreVersion === coreCandidate && value.coreSource === "body"
-                )
-            ).toBe(true);
-            expect(
-              observations
-                .filter((value) => value.method === "POST")
-                .every(
-                  (value) => value.coreVersion === coreStable && value.coreSource === "equality"
-                )
-            ).toBe(true);
-
-            for (const request of requests) {
-              expect(request.url).toBe(
-                "https://api.fidyapp.com/internal/release-smoke?readiness=1"
-              );
-              const override = request.headers.get("cloudflare-workers-version-overrides");
-              expect([
-                `fidy-public="${publicCandidate}", fidy-core="${coreCandidate}"`,
-                `fidy-public="${publicStable}", fidy-core="${coreCandidate}"`,
-              ]).toContain(override);
-              expect(
-                requests.some(
-                  (other) =>
-                    other.method !== request.method &&
-                    other.url === request.url &&
-                    other.headers.get("cloudflare-workers-version-overrides") === override
-                )
-              ).toBe(true);
-            }
-
-            const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
-              observations
-            );
-
-            expect(encoded).not.toContain("secret");
-            expect(encoded).not.toContain(config.SMOKE_PROOF);
-          } finally {
-            mockedFetch.mockRestore();
+          if (request.method === "POST") {
+            return rejectedPostResponse(request, headers);
           }
-        })
-      ),
-    15_000
+
+          return Promise.resolve(
+            Response.json(
+              {
+                status: "pending",
+                public: {
+                  gitRevision: "c".repeat(40),
+                  contractDigest: digest,
+                  workerVersionId: publicVersion,
+                },
+                core: {
+                  gitRevision: "d".repeat(40),
+                  contractDigest: digest,
+                  workerVersionId: coreCandidate,
+                },
+                manifest: { protocolVersion: 1, asyncWorkVersion: 1 },
+                extra: "secret-response-body",
+              },
+              { headers }
+            )
+          );
+        });
+
+        try {
+          const fiber = yield* Effect.forkChild(runDiagnostic(config, mockedFetch));
+          yield* TestClock.adjust("10 seconds");
+          const observations = yield* Fiber.join(fiber);
+          expect(observations).toHaveLength(48);
+          expect(
+            observations
+              .filter((value) => value.method === "GET")
+              .every((value) => value.coreVersion === coreCandidate && value.coreSource === "body")
+          ).toBe(true);
+          expect(
+            observations
+              .filter((value) => value.method === "POST")
+              .every((value) => value.coreVersion === coreStable && value.coreSource === "equality")
+          ).toBe(true);
+
+          for (const request of requests) {
+            expect(request.url).toBe("https://api.fidyapp.com/internal/release-smoke?readiness=1");
+            const override = request.headers.get("cloudflare-workers-version-overrides");
+            expect([
+              `fidy-public="${publicCandidate}", fidy-core="${coreCandidate}"`,
+              `fidy-public="${publicStable}", fidy-core="${coreCandidate}"`,
+            ]).toContain(override);
+            expect(
+              requests.some(
+                (other) =>
+                  other.method !== request.method &&
+                  other.url === request.url &&
+                  other.headers.get("cloudflare-workers-version-overrides") === override
+              )
+            ).toBe(true);
+          }
+
+          const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
+            observations
+          );
+
+          expect(encoded).not.toContain("secret");
+          expect(encoded).not.toContain(config.SMOKE_PROOF);
+        } finally {
+          mockedFetch.mockRestore();
+        }
+      })
   );
 
   it("refuses incomplete capture configuration before issuing any probe", () =>
@@ -266,35 +259,34 @@ describe("read-only smoke routing diagnosis", () => {
       })
     ));
 
-  it(
+  effectIt.effect(
     "bounds response bytes and never promotes an oversized GET into an identity observation",
     () =>
-      Effect.runPromise(
-        Effect.gen(function* () {
-          const mockedFetch = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
-            const request = new Request(input, init);
+      Effect.gen(function* () {
+        const mockedFetch = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+          const request = new Request(input, init);
 
-            return Promise.resolve(
-              request.method === "GET"
-                ? new Response("x".repeat(4097), { status: 200 })
-                : new Response(null, {
-                    status: 503,
-                    headers: {
-                      "x-fidy-smoke-failure": "identity",
-                      "x-fidy-smoke-core-version": coreCandidate,
-                    },
-                  })
-            );
-          });
+          return Promise.resolve(
+            request.method === "GET"
+              ? new Response("x".repeat(4097), { status: 200 })
+              : new Response(null, {
+                  status: 503,
+                  headers: {
+                    "x-fidy-smoke-failure": "identity",
+                    "x-fidy-smoke-core-version": coreCandidate,
+                  },
+                })
+          );
+        });
 
-          try {
-            const exit = yield* Effect.exit(runDiagnostic(config, mockedFetch));
-            expect(Exit.isFailure(exit)).toBe(true);
-          } finally {
-            mockedFetch.mockRestore();
-          }
-        })
-      ),
-    15_000
+        try {
+          const fiber = yield* Effect.forkChild(runDiagnostic(config, mockedFetch));
+          yield* TestClock.adjust("10 seconds");
+          const exit = yield* Effect.exit(Fiber.join(fiber));
+          expect(Exit.isFailure(exit)).toBe(true);
+        } finally {
+          mockedFetch.mockRestore();
+        }
+      })
   );
 });

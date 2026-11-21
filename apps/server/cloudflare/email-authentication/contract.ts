@@ -1,7 +1,6 @@
 import { EmailAddress } from "../../src/core/email-authentication/contract";
 import { UserId } from "../../src/core/identity/contract";
-import type { WorkflowStepConfig } from "cloudflare:workers";
-import { type Option, Schema } from "effect";
+import { Schema } from "effect";
 
 export const loginAllowanceUrl = "https://directory.invalid/login-email/allowance";
 export const LoginMailboxCandidate = Schema.Struct({
@@ -31,29 +30,6 @@ export const NativeLoginEmailWork = Schema.Struct({
   id: Schema.String.check(Schema.isUUID()),
   userId: UserId,
 });
-export type VerifiedEmailQueryInput = Readonly<{ userId: UserId }>;
-export type EmailWorkOperation = "browserPairing" | "emailReplacement";
-export type EmailPendingWorkObservationInput = Readonly<{
-  db: D1Database;
-  operation: EmailWorkOperation;
-  limit: number;
-}>;
-export type EmailRejectedWorkObservationInput = EmailPendingWorkObservationInput &
-  Readonly<{
-    sinceMs: number;
-  }>;
-
-export type EmailProofRequest = Readonly<{ request: Request; db: D1Database }>;
-
-export type EmailProofStart = EmailProofRequest & Readonly<{ onAccepted: (id: string) => void }>;
-
-export type EmailDeliveryEnvironment = Readonly<{ DB: D1Database; RESEND_API_KEY: string }>;
-
-export type EmailWorkflowInput = Readonly<{
-  environment: EmailDeliveryEnvironment;
-  payload: unknown;
-  activity: (name: string, options: WorkflowStepConfig, run: () => Promise<void>) => Promise<void>;
-}>;
 
 export const EmailProofWork = Schema.Struct({
   traceContext: Schema.optionalKey(Schema.Unknown),
@@ -71,13 +47,3 @@ export const EmailReplacementWork = Schema.Struct({
   ...EmailProofWork.fields,
 });
 export type EmailReplacementWork = typeof EmailReplacementWork.Type;
-export type BrowserPairingEmailPublisher = {
-  send: (work: BrowserPairingEmailWork) => Promise<unknown>;
-};
-export type EmailReplacementPublisher = { send: (work: EmailReplacementWork) => Promise<unknown> };
-export type BrowserPairingEmailEnvironment = EmailDeliveryEnvironment &
-  Readonly<{ BROWSER_PAIRING_EMAIL_QUEUE: Queue; BROWSER_PAIRING_EMAIL_WORKFLOW: Workflow }>;
-export type EmailReplacementEnvironment = EmailDeliveryEnvironment &
-  Readonly<{ EMAIL_REPLACEMENT_QUEUE: Queue; EMAIL_REPLACEMENT_WORKFLOW: Workflow }>;
-
-export type EmailPublication = Readonly<{ identity: Option.Option<string> }>;

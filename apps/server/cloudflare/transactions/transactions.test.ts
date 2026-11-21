@@ -2849,7 +2849,7 @@ it("rejects a stale batch correction after a committed competing correction", ()
     }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
-it("attributes a silently skipped child Audit without exposing D1 details", () =>
+it("attributes a silently skipped child Audit without exposing database details", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* nativeTransactionJourney;

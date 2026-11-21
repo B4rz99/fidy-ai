@@ -1,5 +1,4 @@
 import { Data, Effect, Schema } from "effect";
-import { SecureRandom } from "effect/crypto";
 
 export const maximumRawBytes = 1_048_576;
 const millisecondsPerDay = 86_400_000;
@@ -27,10 +26,6 @@ export const io = <A>(tryWork: () => Promise<A>): Effect.Effect<A, EmailUnavaila
         ? new EmailUnavailable({ reason: "capacity" })
         : authorityUnavailable(),
   });
-
-export const emailSecureRandom = SecureRandom.make((size) =>
-  crypto.getRandomValues(new Uint8Array(size))
-);
 const releaseEmailReader = (reader: ReadableStreamDefaultReader<unknown>): Effect.Effect<void> =>
   Effect.sync(() => {
     reader.cancel().catch(() => undefined);

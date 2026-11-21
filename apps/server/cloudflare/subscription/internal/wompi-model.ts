@@ -30,8 +30,3 @@ export const WompiSourceId = Schema.Int.check(Schema.isGreaterThan(0))
   .pipe(Schema.brand("WompiSourceId"))
   .annotate({ identifier: "WompiSourceId" });
 export type WompiSourceId = typeof WompiSourceId.Type;
-
-export const PaymentSourceId = Schema.String.check(Schema.isUUID())
-  .pipe(Schema.brand("PaymentSourceId"))
-  .annotate({ identifier: "PaymentSourceId" });
-export type PaymentSourceId = typeof PaymentSourceId.Type;

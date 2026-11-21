@@ -129,9 +129,6 @@ it("keeps platform diagnostic opt-outs on their reviewed file boundaries", () =>
           "strictEffectProvide:./infra/cloudflare/resource-retirement.test.ts",
           "strictEffectProvide:./scripts/mcp/native-confirmation-hosts.ts",
           "strictEffectProvide:./scripts/mcp/production-catalog.test.ts",
-          "strictEffectProvide:./scripts/mcp/production-checks.test.ts",
-          "strictEffectProvide:./scripts/mcp/production-checks.ts",
-          "strictEffectProvide:./scripts/mcp/production-cleanup.test.ts",
           "strictEffectProvide:./scripts/mcp/production-native.test.ts",
           "strictEffectProvide:./scripts/document-parsing/xlsx-work.ts",
         ].toSorted()
@@ -181,11 +178,6 @@ it("keeps refactored lint rules enabled", () =>
       );
       expect(sequential).toEqual([]);
       expect(overrides.some(({ rules }) => "effect-guards/no-nullable-type" in rules)).toBe(false);
-      expect(
-        overrides.find(({ files }) =>
-          files.includes("apps/server/cloudflare/subscription/internal/payment-enrollment.ts")
-        )?.rules["max-params"]
-      ).toBeUndefined();
       expect(
         overrides.flatMap(({ rules }) =>
           ["max-depth", "max-params"].filter((rule) => rules[rule] === "off")

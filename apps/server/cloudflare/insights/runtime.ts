@@ -22,23 +22,11 @@ import {
   processReminder,
   repairReminder,
 } from "./internal/local-reminder";
-import { evidenceRetentionDue, summariesDue } from "./internal/cadence";
 import { OutboundHttpLive } from "../outbound-http/runtime";
 import { proactivityWorkflowId } from "./internal/proactivity-workflow";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
-import {
-  Clock,
-  Context,
-  DateTime,
-  Effect,
-  Layer,
-  Option,
-  Redacted,
-  Schema,
-  type Scope,
-} from "effect";
+import { Clock, Context, Effect, Layer, Option, Redacted, Schema, type Scope } from "effect";
 import { HttpClient } from "effect/http";
-import { type UserId } from "../../src/core/identity/contract";
 import {
   InsightTemplateConfiguration,
   WeeklyQuestionTemplateConfiguration,
@@ -54,7 +42,6 @@ import {
 } from "../../src/shell/outbound-http/operations";
 import {
   captureTraceHeaders,
-  captureWorkTrace,
   cloudflareWorkerTelemetry,
   observeWorkerExecution,
   observeWorkerPromise,
@@ -62,43 +49,16 @@ import {
   workTraceParent,
   workerRelease,
 } from "../runtime/telemetry/operations";
-import { executeWeeklyActivity, weeklyThresholds } from "./internal/weekly-execution";
-import { deliverProactivity, generateProactivity } from "./internal/proactivity-execution";
-import { discoverProactivityUsers, noteProactivityEvaluation } from "./internal/proactivity-work";
 import {
-  discoverDueWeeklySchedules,
-  noteWeeklyScheduleEvaluation,
-  runWeeklyGeneration,
-} from "./operations";
-import {
-  type DueWeeklySchedule,
   InsightUnavailable,
   type NativeReminderEnvironment,
   ProactivityActivity,
   ProactivityActivityResult,
   ProactivityDeliveryWork,
-  type ProactivityEnvironment,
 } from "./contract";
-import {
-  discoverDeliveryWork,
-  expireDeliveryWork,
-  markOffered,
-  recoverDeliveryWork,
-} from "./internal/proactivity-delivery-work";
-import {
-  expireWeeklyQuestions,
-  sweepInsightChannelEvidence,
-  sweepProactivityChannelEvidence,
-} from "../whatsapp/operations";
 
-type NativeExecution = Readonly<{
-  environment: ProactivityEnvironment;
-  userId: UserId;
-  work: ProactivityActivity;
-  now: DateTime.Utc;
-}>;
 const nativeOutbound = (
-  environment: Pick<ProactivityEnvironment, "KAPSO_API_KEY">
+  environment: Partial<Readonly<{ KAPSO_API_KEY: string }>>
 ): Effect.Effect<OutboundHttpService, InsightUnavailable, Scope.Scope> =>
   Effect.gen(function* () {
     if (environment.KAPSO_API_KEY === undefined || environment.KAPSO_API_KEY.length === 0) {
@@ -110,106 +70,8 @@ const nativeOutbound = (
       httpClient: Context.get(services, HttpClient.HttpClient),
     });
   });
-const executeCategory = (
-  input: NativeExecution &
-    Readonly<{ work: Extract<ProactivityActivity, { kind: "proactivity-delivery" }> }>
-): Effect.Effect<ProactivityActivityResult, InsightUnavailable, Scope.Scope> =>
-  Effect.gen(function* () {
-    if (input.environment.PROACTIVITY_ENABLED !== "enabled") return yield* new InsightUnavailable();
-    const outboundHttp = yield* nativeOutbound(input.environment);
-    const configuration = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(
-      input.environment.PROACTIVITY_TEMPLATE_JSON ?? ""
-    );
-    return yield* deliverProactivity({
-      callbackOwner: input.environment,
-      ...input,
-      db: input.environment.DB,
-      sender: makeProactivityTemplateSender({ configuration, outboundHttp }),
-    });
-  }).pipe(Effect.mapError(() => new InsightUnavailable()));
-
-const executeScheduledSummary = (
-  input: NativeExecution &
-    Readonly<{
-      work: Exclude<
-        ProactivityActivity,
-        { kind: "proactivity-recover" | "proactivity-generate" | "proactivity-delivery" }
-      >;
-    }>
-): Effect.Effect<ProactivityActivityResult, InsightUnavailable, Scope.Scope> =>
-  Effect.gen(function* () {
-    const environment = input.environment;
-    if (environment.WEEKLY_SUMMARY_ENABLED !== "enabled") return yield* new InsightUnavailable();
-    yield* weeklyThresholds(environment);
-    if (input.work.kind === "weekly-generate") {
-      if (input.work.userId !== input.userId) return yield* new InsightUnavailable();
-      yield* runWeeklyGeneration({
-        db: environment.DB,
-        userId: input.userId,
-        id: input.work.id,
-        now: input.now,
-      });
-      return { _tag: "Done" } as const;
-    }
-    const summaryConfiguration = yield* Schema.decodeEffect(
-      Schema.fromJsonString(InsightTemplateConfiguration)
-    )(environment.WEEKLY_SUMMARY_TEMPLATE_JSON ?? "");
-    const questionConfiguration = yield* Schema.decodeEffect(
-      Schema.fromJsonString(WeeklyQuestionTemplateConfiguration)
-    )(environment.WEEKLY_QUESTION_TEMPLATE_JSON ?? "");
-    const outboundHttp = yield* nativeOutbound(environment);
-    return yield* executeWeeklyActivity({
-      callbackOwner: environment,
-      ...input,
-      work: input.work,
-      db: environment.DB,
-      senders: {
-        summary: makeInsightTemplateSender({ configuration: summaryConfiguration, outboundHttp }),
-        question: makeWeeklyQuestionSender({ configuration: questionConfiguration, outboundHttp }),
-      },
-    });
-  }).pipe(Effect.mapError(() => new InsightUnavailable()));
-
-export const executeProactivityWork = (
-  input: Readonly<{
-    environment: ProactivityEnvironment;
-    userId: UserId;
-    work: ProactivityActivity;
-    now: DateTime.Utc;
-  }>
-): Effect.Effect<ProactivityActivityResult, InsightUnavailable> =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const environment = input.environment;
-      if (input.work.kind === "proactivity-recover") {
-        const admitted = yield* recoverDeliveryWork({
-          db: environment.DB,
-          userId: input.userId,
-          work: input.work.work,
-          now: input.now.epochMilliseconds,
-        });
-        return admitted ? ({ _tag: "RecoveryAdmitted" } as const) : ({ _tag: "Done" } as const);
-      }
-      if (input.work.kind === "proactivity-generate") {
-        if (environment.PROACTIVITY_ENABLED !== "enabled") return yield* new InsightUnavailable();
-        return yield* generateProactivity({ ...input, db: environment.DB, work: input.work });
-      }
-      if (input.work.kind === "proactivity-delivery") {
-        return yield* executeCategory({ ...input, work: input.work });
-      }
-      return yield* executeScheduledSummary({ ...input, work: input.work });
-    })
-  ).pipe(Effect.mapError(() => new InsightUnavailable()));
 
 type Coordinator = Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
-type ProactivityBackgroundEnvironment = ProactivityEnvironment &
-  Readonly<{ USER_TRANSACTION_COORDINATOR: Coordinator }> &
-  Partial<
-    Readonly<{
-      WEEKLY_DELIVERY_QUEUE: Pick<Queue<ProactivityDeliveryWork>, "send">;
-      WEEKLY_DELIVERY_WORKFLOW: Workflow<ProactivityDeliveryWork>;
-    }>
-  >;
 
 const runActivity = (
   input: Readonly<{ coordinator: Coordinator; work: ProactivityActivity }>
@@ -234,130 +96,6 @@ const runActivity = (
   }).pipe(
     Effect.timeout("30 seconds"),
     Effect.mapError(() => new InsightUnavailable())
-  );
-
-const attemptIndependent = (
-  activities: ReadonlyArray<Effect.Effect<unknown, Error>>
-): Effect.Effect<void, InsightUnavailable> =>
-  Effect.partition(activities, (activity) => activity, { concurrency: 1 }).pipe(
-    Effect.flatMap(([, failures]) =>
-      failures.length > 0 ? Effect.fail(new InsightUnavailable()) : Effect.void
-    )
-  );
-const maximumWeeklyGenerationsPerSweep = 4;
-const attemptGeneration = (
-  input: Readonly<{
-    environment: ProactivityBackgroundEnvironment;
-    now: DateTime.Utc;
-    schedule: DueWeeklySchedule;
-  }>
-): Effect.Effect<ProactivityActivityResult, InsightUnavailable> =>
-  Effect.gen(function* () {
-    yield* noteWeeklyScheduleEvaluation({
-      db: input.environment.DB,
-      ...input.schedule,
-      now: input.now,
-    });
-    return yield* runActivity({
-      coordinator: input.environment.USER_TRANSACTION_COORDINATOR,
-      work: { kind: "weekly-generate", version: 1, ...input.schedule },
-    });
-  });
-const generateDueWeeklyWork = (
-  input: Readonly<{ environment: ProactivityBackgroundEnvironment; now: DateTime.Utc }>
-): Effect.Effect<void, InsightUnavailable> =>
-  Effect.gen(function* () {
-    if (input.environment.WEEKLY_SUMMARY_ENABLED !== "enabled" || !summariesDue(input.now)) return;
-    const schedules = yield* discoverDueWeeklySchedules({
-      db: input.environment.DB,
-      now: input.now,
-    });
-    yield* attemptIndependent(
-      schedules
-        .slice(0, maximumWeeklyGenerationsPerSweep)
-        .map((schedule) => attemptGeneration({ ...input, schedule }))
-    );
-  });
-const generateDueProactivity = (
-  input: Readonly<{ environment: ProactivityBackgroundEnvironment; now: DateTime.Utc }>
-): Effect.Effect<void, InsightUnavailable> =>
-  Effect.gen(function* () {
-    if (input.environment.PROACTIVITY_ENABLED !== "enabled") return;
-    const users = yield* discoverProactivityUsers({ db: input.environment.DB, now: input.now });
-    yield* attemptIndependent(
-      users.slice(0, maximumWeeklyGenerationsPerSweep).map((userId) =>
-        Effect.gen(function* () {
-          yield* noteProactivityEvaluation({ db: input.environment.DB, userId, now: input.now });
-          return yield* runActivity({
-            coordinator: input.environment.USER_TRANSACTION_COORDINATOR,
-            work: { kind: "proactivity-generate", version: 1, userId },
-          });
-        })
-      )
-    );
-  });
-const publishProactivityItem = (
-  input: Readonly<{
-    queue: NonNullable<ProactivityBackgroundEnvironment["WEEKLY_DELIVERY_QUEUE"]>;
-    db: D1Database;
-    item: ProactivityDeliveryWork;
-    now: DateTime.Utc;
-  }>
-): Effect.Effect<void, InsightUnavailable> =>
-  Effect.gen(function* () {
-    const trace = yield* captureWorkTrace;
-    yield* Effect.tryPromise(() =>
-      input.queue.send({ ...input.item, ...trace }, { contentType: "json" })
-    );
-    yield* markOffered({ db: input.db, work: input.item, now: input.now.epochMilliseconds });
-  }).pipe(Effect.mapError(() => new InsightUnavailable()));
-const publishProactivityWork = (
-  input: Readonly<{ environment: ProactivityBackgroundEnvironment; now: DateTime.Utc }>
-): Effect.Effect<void, InsightUnavailable> =>
-  Effect.gen(function* () {
-    const { environment, now } = input;
-    if (
-      environment.WEEKLY_SUMMARY_ENABLED !== "enabled" &&
-      environment.PROACTIVITY_ENABLED !== "enabled"
-    ) {
-      return;
-    }
-    const queue = environment.WEEKLY_DELIVERY_QUEUE;
-    if (queue === undefined || environment.WEEKLY_DELIVERY_WORKFLOW === undefined) {
-      return yield* new InsightUnavailable();
-    }
-    const work = yield* discoverDeliveryWork({
-      db: environment.DB,
-      now: now.epochMilliseconds,
-      weeklyEnabled: environment.WEEKLY_SUMMARY_ENABLED === "enabled",
-      proactivityEnabled: environment.PROACTIVITY_ENABLED === "enabled",
-    });
-    yield* attemptIndependent(
-      work.map((item) => publishProactivityItem({ queue, db: environment.DB, item, now }))
-    );
-  });
-
-export const advanceProactivityWork = (
-  environment: ProactivityBackgroundEnvironment
-): Effect.Effect<void, InsightUnavailable> =>
-  Effect.gen(function* () {
-    const now = yield* DateTime.now;
-    yield* attemptIndependent([
-      ...(evidenceRetentionDue(now)
-        ? [
-            sweepInsightChannelEvidence({ db: environment.DB, now: now.epochMilliseconds }),
-            sweepProactivityChannelEvidence({ db: environment.DB, now: now.epochMilliseconds }),
-          ]
-        : []),
-      expireWeeklyQuestions({ db: environment.DB, now: now.epochMilliseconds }),
-      expireDeliveryWork({ db: environment.DB, now: now.epochMilliseconds }),
-      generateDueWeeklyWork({ environment, now }),
-      generateDueProactivity({ environment, now }),
-      publishProactivityWork({ environment, now }),
-    ]);
-  }).pipe(
-    Effect.mapError(() => new InsightUnavailable()),
-    Effect.withSpan("insights.weekly.dispatch")
   );
 
 export const startProactivityWorkflow = (

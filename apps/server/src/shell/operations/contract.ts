@@ -1,5 +1,5 @@
 import * as Arr from "effect/Array";
-import { type Brand, type Effect, Option, Schema } from "effect";
+import { type Brand, Option, Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import {
@@ -74,8 +74,6 @@ export class AtomicBatchRejected extends Schema.Error<
 
 let boundAtomicBatchCall = Option.none<Schema.Codec<AtomicBatchCall, Schema.Json>>();
 let boundAtomicBatchInput = Option.none<AtomicBatchInputSchema>();
-let boundAtomicBatchResult = Option.none<Schema.Codec<AtomicBatchResult, Schema.Json>>();
-let boundAtomicBatchChildren = Option.none<ReadonlyArray<CanonicalOperationId>>();
 
 export const getAtomicBatchCallSchema = (): Schema.Codec<AtomicBatchCall, Schema.Json> =>
   Option.getOrThrowWith(
@@ -87,24 +85,6 @@ export const getAtomicBatchInputSchema = (): AtomicBatchInputSchema =>
   Option.getOrThrowWith(
     boundAtomicBatchInput,
     () => new Error("Atomic batch input schema has not been derived")
-  );
-
-export const decodeAtomicBatchResult = (
-  value: unknown
-): Effect.Effect<AtomicBatchResult, Schema.SchemaError> =>
-  Schema.decodeUnknownEffect(
-    Schema.toType(
-      Option.getOrThrowWith(
-        boundAtomicBatchResult,
-        () => new Error("Atomic batch result schema has not been derived")
-      )
-    )
-  )(value);
-
-export const getAtomicBatchChildIds = (): ReadonlyArray<CanonicalOperationId> =>
-  Option.getOrThrowWith(
-    boundAtomicBatchChildren,
-    () => new Error("Atomic batch children have not been derived")
   );
 
 const mutationOperations = (catalog: OperationCatalog): ReadonlyArray<CatalogOperation> =>
@@ -211,10 +191,8 @@ export const projectAtomicBatchSchemas = (
 
 export const makeOperationsGroup = (ordinaryCatalog: OperationCatalog): OperationsGroup => {
   const mutations = mutationOperations(ordinaryCatalog);
-  const { call, result, input, output } = makeAtomicBatchSchemas(mutations);
+  const { call, input, output } = makeAtomicBatchSchemas(mutations);
   boundAtomicBatchCall = Option.some(call);
-  boundAtomicBatchResult = Option.some(result);
-  boundAtomicBatchChildren = Option.some(mutations.map((operation) => operation.id));
   boundAtomicBatchInput = Option.some(input);
   return HttpApiGroup.make(operationsGroupName).add(
     HttpApiEndpoint.post(atomicBatchEndpointName, "/operations/atomic-batch", {

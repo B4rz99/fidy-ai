@@ -4,37 +4,9 @@ import type {
   RecurringDocument,
 } from "../../../src/core/recurring-plans/contract";
 import { RecurringPlanningUnavailable } from "../contract";
-import type { CanonicalPreparationWork } from "../../canonical-operations/contract";
-import { readPlanningTransactionMonths } from "../../transactions/operations";
-import { type AutomaticProjection, automaticProjection } from "./query";
+import { type AutomaticProjection } from "./query";
 
 const monthWidth = 7;
-
-export const snapshotCompletions = ({
-  work,
-  document,
-  command,
-}: Readonly<{
-  work: CanonicalPreparationWork;
-  document: RecurringDocument;
-  command: RecurringCommand;
-}>): Effect.Effect<RecurringDocument, RecurringPlanningUnavailable> =>
-  retainCompletions({
-    document,
-    command,
-    now: DateTime.makeUnsafe(work.current),
-    months: (from, through) =>
-      readPlanningTransactionMonths({ db: work.db, userId: work.subject.userId, from, through }),
-    project: (document, month, now) =>
-      automaticProjection({
-        db: work.db,
-        userId: work.subject.userId,
-        document,
-        month,
-        now,
-        finalization: Option.none(),
-      }),
-  });
 
 export const retainCompletions = <E, R>({
   document,

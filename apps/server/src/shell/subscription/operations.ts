@@ -2,11 +2,9 @@ import { type PreparedSubscriptionRead, type SubscriptionReadAuthority } from ".
 import {
   paidAccessEndSql,
   subscriptionAttemptsQuery,
-  subscriptionOffersQuery,
   subscriptionStandingQuery,
 } from "~/shell/subscription/internal/query-sql";
 import {
-  projectSubscriptionOffers,
   projectSubscriptionStatus,
   listSubscriptionOffersResponse as readOffers,
   readSubscriptionStatus,
@@ -14,7 +12,7 @@ import {
 import { Effect, Option, Schema } from "effect";
 import { type SqlClient } from "effect/sql";
 import { type UserId } from "~/core/identity/contract";
-import { SubscriptionOffers, SubscriptionStatus } from "~/core/subscription/contract";
+import { type SubscriptionOffers, SubscriptionStatus } from "~/core/subscription/contract";
 import { type OwnedStatement } from "~/shell/owner-write/contract";
 import { type Unavailable } from "~/shell/public-http/contract";
 
@@ -50,16 +48,6 @@ export const activePaidSubscriptionForUserSelection = ({
     JOIN payment_source_context source ON source.id=a.payment_source_id AND source.user_id=a.user_id
     WHERE s.user_id IN (${users.sql}) AND (${paidAccessEndSql}) > ? AND a.paid_starts_at_ms<=?)`,
   params: [...users.params, nowEpochMs, nowEpochMs],
-});
-
-export const prepareSubscriptionOffers = (
-  authority: SubscriptionReadAuthority
-): PreparedSubscriptionRead => ({
-  statements: [subscriptionOffersQuery(Option.some(authority))],
-  decode: (rows) =>
-    Schema.encodeSync(Schema.toCodecJson(SubscriptionOffers))(
-      projectSubscriptionOffers(rows[0] ?? [])
-    ),
 });
 
 export const prepareSubscriptionStatus = (

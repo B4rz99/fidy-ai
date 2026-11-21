@@ -42,7 +42,7 @@ The route is private transport, not a canonical operation. It must remain absent
 generated clients, browser routes, and hosted-agent tools. Generic HTTP request logging is disabled;
 do not add route, header, request-body, response-body, or JWT logging.
 
-The private Worker, atomic D1 approval adapter and `bun run cli support-recovery` operator command
+The private Worker, atomic SQLite approval adapter and `bun run cli support-recovery` operator command
 are implemented. The command requires the pinned Bun runtime, installed `cloudflared`, and an
 interactive stdin and stderr terminal. It accepts no arguments, `--json`, files or piped input, and
 does not use the saved Fidy PAT or native credential store. Cloudflared opens the Access browser login
@@ -59,7 +59,7 @@ The CLI has no database credential, queue or local recovery authority. Its close
 needs no extra client telemetry; the Worker's metadata-only recovery evidence remains authoritative.
 
 Local command tests and both provider browser journeys exercise this operator workflow through real
-public/Core Workers and D1, substituting terminal entry and external Access authentication. Live
+public/Core Workers and per-User SQLite, substituting terminal entry and external Access authentication. Live
 Production Access policy, operator login, CLI approval and original-browser session completion were verified on 2026-10-09.
 On the PR #1118 release, the User confirmed consumed-code replay refusal; the original pairing
 browser remained awaiting approval without authenticated app access. The User then completed fresh
@@ -136,7 +136,7 @@ The current proof flow creates a terminal approved case only when the pre-issued
 pairing match. Invalid proof cannot attribute a User and creates no case. There is no open-case retry
 or five-rejection lifecycle in the deployed adapter; prior descriptions of those controls were inaccurate.
 
-Escalate invalid Access configuration, JWKS failures, D1 unavailability, repeated operator limits, or
+Escalate invalid Access configuration, JWKS failures, SQLite unavailability, repeated operator limits, or
 unexpected safe failures through the internal incident channel. Escalation may include timestamp,
 operator issuer/subject, HTTP status, and safe failure class only—never a JWT, pairing reference,
 BackupRecoveryCode, request body, User prose, or match detail.

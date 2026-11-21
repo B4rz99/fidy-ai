@@ -64,7 +64,7 @@ Core tests prove domain transitions, authorization, retention, redaction, and va
 tests prove reflected operation ids, access metadata, OpenAPI, browser declarations, and compatibility
 artifacts. Provider tests use the published transport contract and deterministic bounded responses.
 
-Cloudflare adapter tests are the only evidence for D1 atomicity, Durable Object coordination, Queue
+Cloudflare adapter tests are the only evidence for SQLite atomicity, Durable Object coordination, Queue
 redelivery, Workflow suspension/retry, R2 retrieval, Email Worker admission, Workers AI behavior,
 and Worker version configuration. Use isolated platform bindings and assert commit/rollback,
 redelivery, explicit User isolation, resource limits, deletion, and safe telemetry.

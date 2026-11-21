@@ -26,15 +26,6 @@ export const prepareProcessingConsentStatusRead = ({
   });
 };
 
-export const prepareInitialProcessingConsentRead = ({
-  digest,
-  current,
-}: Readonly<{ digest: Uint8Array; current: number }>): OwnedStatement =>
-  receiptRead({
-    sql: "w.token_digest=? AND w.revoked_at_ms IS NULL AND w.idle_expires_at_ms>? AND w.hard_expires_at_ms>?",
-    params: [digest, current, current],
-  });
-
 const ReceiptRow = Schema.Struct({
   status: Schema.String,
   reference: Schema.NullOr(Schema.String),

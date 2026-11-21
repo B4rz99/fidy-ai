@@ -22,7 +22,7 @@ secrets, or personal content.
 ## Middleware and routes
 
 Worker middleware owns origin, authentication, rate limits, request-size bounds, security headers,
-correlation metadata, and safe error projection. Keep private service bindings and D1 inaccessible to
+correlation metadata, and safe error projection. Keep private service bindings and SQLite inaccessible to
 public ingress. A private Core Worker may expose an internal data boundary, but it must still receive
 an explicit subject and operation policy.
 
@@ -83,6 +83,6 @@ runtime authentication or safe decoding errors.
 
 Portable tests cover schema decoding, authorization projection, errors, reflection, and operation
 policy. Provider-boundary tests use deterministic bounded transports. Cloudflare adapter tests cover
-Worker routing, D1 subject isolation/atomicity, Durable Object coordination, Queue/Workflow behavior,
+Worker routing, SQLite subject isolation/atomicity, Durable Object coordination, Queue/Workflow behavior,
 R2 bounds, Email Worker handoff, and safe response headers. A fixture transport does not claim that a
 production adapter exists.

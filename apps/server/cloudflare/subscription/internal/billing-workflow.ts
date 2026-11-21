@@ -1,17 +1,12 @@
 import { routeBillingEvent } from "./native-billing";
-import { UserId } from "../../../src/core/identity/contract";
-import { captureWorkTrace } from "../../runtime/telemetry/operations";
 import { WompiEnvironment } from "../../../src/shell/secret-material/contract";
-import { BillingAttemptId } from "../../../src/core/subscription/contract";
 import { verifiedWompiEventHint } from "./wompi-event";
-import { Clock, Effect, Exit, Option, Schema } from "effect";
+import { Effect, Exit, Option, Schema } from "effect";
 import { type WompiTransportFactory } from "./wompi-runtime";
 import {
   BillingCollectionFailure,
-  type BillingObservationWorkflow,
-  type BillingRuntime,
-  type BillingWorkRouting,
   type BillingWorkflowActivity,
+  type BillingWorkflowEnvironment,
   LocalBillingCollection,
   LocalSourceCancellationWork,
   SubscriptionCancellationWork,
@@ -20,16 +15,7 @@ import {
   collectUserBillingUrl,
 } from "../contract";
 
-import {
-  receiveLocalSourceCancellation,
-  receiveSourceCancellation,
-  runLocalCancellationLoop,
-} from "./billing-observation";
-
-type CollectionQueue = Readonly<{
-  send: (work: typeof LocalBillingCollection.Type) => Promise<unknown>;
-}>;
-type CollectionWorkflow = BillingObservationWorkflow;
+import { runLocalCancellationLoop } from "./billing-observation";
 
 export const isBillingCollectionWork = (body: unknown): boolean =>
   Option.isSome(
@@ -37,125 +23,10 @@ export const isBillingCollectionWork = (body: unknown): boolean =>
       Schema.Union([SubscriptionCancellationWork, LocalSourceCancellationWork])
     )(body)
   );
-const pendingBatchSize = 32;
-const dispatchCooldownMs = 60_000;
 const failure = (cause: Option.Option<unknown> = Option.none()): BillingCollectionFailure =>
   new BillingCollectionFailure({ cause });
 const attempt = <A>(run: () => Promise<A>): Effect.Effect<A, BillingCollectionFailure> =>
   Effect.tryPromise({ try: run, catch: (cause) => failure(Option.some(cause)) });
-const decode = <A, E>(
-  schema: Schema.Codec<A, E>,
-  value: unknown
-): Effect.Effect<A, BillingCollectionFailure> =>
-  Schema.decodeUnknownEffect(schema)(value).pipe(
-    Effect.mapError((cause) => failure(Option.some(cause)))
-  );
-
-const publishBillingEntry = (
-  input: Readonly<{
-    environment: Readonly<{ DB: D1Database; BILLING_COLLECTION_QUEUE: CollectionQueue }>;
-    entry: { readonly attempt_id: BillingAttemptId; readonly user_id: UserId };
-    now: number;
-  }>
-): Effect.Effect<boolean> =>
-  Effect.gen(function* () {
-    const trace = yield* captureWorkTrace;
-    const { environment, entry, now } = input;
-    const claimed = yield* Effect.exit(
-      attempt(() =>
-        environment.DB.prepare(`UPDATE billing_attempts AS billing_collection_work SET collection_last_attempt_at_ms = ? WHERE collection_state IS NOT NULL AND id = ?
-      AND (collection_last_attempt_at_ms IS NULL OR collection_last_attempt_at_ms < ?)`)
-          .bind(now, entry.attempt_id, now - dispatchCooldownMs)
-          .run()
-      )
-    );
-    if (Exit.isFailure(claimed)) return false;
-    if (claimed.value.meta.changes !== 1) return true;
-    const offered = yield* Effect.exit(
-      attempt(() =>
-        environment.BILLING_COLLECTION_QUEUE.send({
-          ...trace,
-          _tag: "CollectUserBillingAttempt",
-          userId: entry.user_id,
-          attemptId: entry.attempt_id,
-        })
-      )
-    );
-    if (Exit.isFailure(offered)) return false;
-    return true;
-  });
-
-export const dispatchBillingCollection = (
-  environment: Readonly<{ DB: D1Database; BILLING_COLLECTION_QUEUE: CollectionQueue }> & {
-    readonly identity: Option.Option<string>;
-  }
-): Effect.Effect<void, BillingCollectionFailure> =>
-  Effect.gen(function* () {
-    const identity = environment.identity;
-    const now = yield* Clock.currentTimeMillis;
-    const rows = yield* attempt(() =>
-      environment.DB.prepare(`SELECT o.attempt_id,o.user_id
-      FROM (SELECT rowid,user_id,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempt_context WHERE collection_state IS NOT NULL) AS o
-      WHERE o.state = 'armed' AND (o.last_attempt_at_ms IS NULL OR o.last_attempt_at_ms < ?)
-        AND (? IS NULL OR o.attempt_id = ?)
-      ORDER BY o.last_attempt_at_ms, o.attempt_id LIMIT ?`)
-        .bind(
-          now - dispatchCooldownMs,
-          Option.getOrNull(identity),
-          Option.getOrNull(identity),
-          pendingBatchSize
-        )
-        .all()
-    );
-    const entries = yield* decode(
-      Schema.Array(Schema.Struct({ attempt_id: BillingAttemptId, user_id: UserId })),
-      rows.results
-    );
-    let failed = false;
-    for (const entry of entries) {
-      const published = yield* publishBillingEntry({ environment, entry, now });
-      if (!published) failed = true;
-    }
-    if (failed) return yield* failure();
-  }).pipe(Effect.withSpan("billing.collection.dispatch"));
-
-const receiveCancellation = (
-  environment: BillingWorkRouting &
-    Readonly<{ DB: D1Database; BILLING_COLLECTION_WORKFLOW: CollectionWorkflow }>,
-  work: typeof LocalSourceCancellationWork.Type | typeof SubscriptionCancellationWork.Type
-): Effect.Effect<void, BillingCollectionFailure> =>
-  work.version === 3
-    ? receiveLocalSourceCancellation({
-        environment,
-        workflow: environment.BILLING_COLLECTION_WORKFLOW,
-        work,
-      })
-    : receiveSourceCancellation({
-        db: environment.DB,
-        workflow: environment.BILLING_COLLECTION_WORKFLOW,
-        work,
-      });
-
-export const receiveBillingCollection = (
-  input: Readonly<{
-    environment: BillingWorkRouting &
-      Readonly<{ DB: D1Database; BILLING_COLLECTION_WORKFLOW: CollectionWorkflow }>;
-    batch: Readonly<{ messages: ReadonlyArray<{ body: unknown; ack: () => void }> }>;
-  }>
-): Effect.Effect<void, BillingCollectionFailure> =>
-  Effect.gen(function* () {
-    for (const message of input.batch.messages) {
-      const work = Schema.decodeUnknownOption(
-        Schema.Union([SubscriptionCancellationWork, LocalSourceCancellationWork])
-      )(message.body);
-      if (Option.isNone(work)) {
-        message.ack();
-        continue;
-      }
-      yield* receiveCancellation(input.environment, work.value);
-      message.ack();
-    }
-  }).pipe(Effect.withSpan("billing.collection.receive"));
 
 const configuredEventEnvironment = (
   env: WompiEventEnvironment
@@ -199,7 +70,7 @@ export const receiveWompiBillingEvent = (
   });
 
 type BillingWorkflowExecution = Readonly<{
-  environment: Omit<BillingRuntime, "DB">;
+  environment: BillingWorkflowEnvironment;
   payload: unknown;
   activity: BillingWorkflowActivity;
   observe: Option.Option<BillingWorkflowActivity<boolean>>;

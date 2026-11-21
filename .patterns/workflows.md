@@ -15,11 +15,11 @@ second durable engine or replace the existing platform seam.
 A domain mutation followed by Workflow start is a dual write unless an outbox or a platform-proven
 atomic submission couples them. Prefer:
 
-1. commit the canonical state and a bounded outbox intent in one D1 atomic unit;
+1. commit the canonical state and a bounded outbox intent in one owner SQLite transaction;
 2. let a Queue or Worker claim the intent idempotently; and
 3. start or resume the Workflow with a stable identity and bounded payload.
 
-Never hold a D1 atomic unit across a provider call. Workflows may retry provider calls, but provider
+Never hold a SQLite transaction across a provider call. Workflows may retry provider calls, but provider
 ambiguity requires reconciliation rather than blind repetition. Persist correlation facts and
 idempotency keys, not broad provider responses or personal content.
 

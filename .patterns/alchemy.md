@@ -44,23 +44,11 @@ Source symbols in beta.80: `Resource` / `ResourceLike.FQN` in `src/Resource.ts`,
 
 ## Storage and private bindings
 
-Follow the `database`, `statementStagingBucket`, `emailBucket`, and `core` declarations in
-[the stack](../infra/cloudflare/alchemy.run.ts). Inside its `Effect.gen`, the D1 recipe is:
-
-```ts
-const database =
-  yield *
-  Cloudflare.D1.Database("Database", {
-    migrations: "../../apps/server/cloudflare/migrations",
-    readReplication: { mode: "disabled" },
-  });
-```
-
-Pass `database` as the appropriate Core `env` binding, not its database ID. `DatabaseProps.migrations`
-applies pending files during deployment and owns `__alchemy_migrations`; adopting an existing
-Wrangler/Drizzle history is a one-way conversion. Fidy's release policy requires additive,
-forward-only migrations and immutable applied files. Use the existing migration/release owners,
-not a second migration tool. See [SQL atomicity](sql.md) for runtime operations.
+Follow the `statementStagingBucket`, `emailBucket`, and `core` declarations in
+[the stack](../infra/cloudflare/alchemy.run.ts). Per-User persistence is the SQLite storage owned
+by each Durable Object; it is not provisioned as a shared Alchemy database resource. Schema and
+release checks use the SQLite Durable Object owners and their first-install verifier. See
+[SQL atomicity](sql.md) for runtime operations.
 
 `Cloudflare.R2.Bucket("StatementStagingBucket")` creates the resource used by Core's private byte
 staging binding. Keep `publicAccess` disabled and omit public `domains` for these private buckets.
@@ -68,7 +56,6 @@ staging binding. Keep `publicAccess` disabled and omit public `domains` for thes
 publication, or retention reconciliation. `forceDestroy` defaults to false: deleting a nonempty
 bucket fails instead of emptying it. Keep that protection for retained data.
 
-Sources: `DatabaseProps`, `Database`, `ProviderLive` in `src/Cloudflare/D1/Database.ts`;
 `BucketProps`, `BucketLifecycleRule`, `Bucket` in `src/Cloudflare/R2/Bucket.ts`.
 
 ## Queue producers, consumers, and dead letters

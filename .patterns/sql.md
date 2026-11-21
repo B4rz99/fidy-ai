@@ -1,8 +1,9 @@
-# Effect SQL and Cloudflare D1
+# Effect SQL and Durable Object SQLite
 
 Sources: `node_modules/effect/src/sql/{SqlClient,Statement,SqlError}.ts` and
-`node_modules/@effect/sql-d1/src/D1Client.ts`. Public imports are `effect/sql` and
-`@effect/sql-d1/D1Client`. D1 is implemented, not a future persistence adapter.
+`node_modules/@effect/sql-sqlite-do/src/SqliteClient.ts`. Import the owner-local
+`SqliteClient` service from `@effect/sql-sqlite-do/SqliteClient`. The store Runtime supplies
+the Durable Object’s own SQLite storage.
 
 ## Query seams
 
@@ -12,24 +13,17 @@ raw fragments are reviewed static adapter code, never user/model/provider-contro
 Bound both queries and returned rows, and decode driver output with the owned Schema.
 A generic row type is not runtime validation.
 
-## Atomicity: batch is not an interactive transaction
+## Atomicity
 
-`D1Client.batch(statements)` submits a fixed set of statements to native `D1Database.batch`,
-returning results in order with each statement's result-name transformation. A statement failure
-rolls back the native batch. The D1 driver does **not** support `SqlClient.withTransaction` or
-streaming queries; its transaction acquirer defects. Do not copy transaction examples from other
-SQL drivers into a D1 adapter.
+Use the owner’s SQLite transaction to read the current state and commit guarded mutations,
+accounting, and Audit together. Compose canonical children through the existing mutation unit
+in [the User Store batch planner](../apps/server/cloudflare/canonical-admission/internal/local-batch.ts).
+Prepared children must neither commit independently nor call a provider. Recheck live authority
+and preserve the User boundary for every child.
 
-Fidy's canonical mutation composition already lives in
-`apps/server/cloudflare/canonical-operations/internal/mutation-unit.ts` and `batch.ts`.
-Extend that owned unit rather than inventing a parallel transaction abstraction. Prepared child
-mutations participate in one commit; a child must not independently commit or call a provider.
-Authority checks and same-User guards remain part of the mutation design, not an assumption supplied
-by the SQL client. Coordination belongs to the existing Durable Object boundary.
-
-A D1 commit and Queue/Workflow submission are separate effects. Retain bounded dispatch intent with
-the state change and deliver idempotently. Never hold a unit across a provider call; ambiguous
-provider acceptance requires reconciliation, not speculative replay.
+SQLite commit and Queue or Workflow submission are separate effects. Retain the dispatch intent
+with the state change and deliver idempotently. Reconcile uncertain provider outcomes outside
+the transaction.
 
 ## Failure and telemetry boundaries
 

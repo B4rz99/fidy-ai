@@ -71,7 +71,7 @@ Historical attempt views retain their original period end; current standing and 
 use the separate access adjustment. Renewal stops remove due intents and prevent late charge
 settlement from recreating them. Renewal execution must honor these stops.
 
-Available Money is collected Money minus successful corrections and pending reservations. The D1
+Available Money is collected Money minus successful corrections and pending reservations. The SQLite store
 insertion guard enforces this atomically, including concurrent support requests. A User can have at
 most four pending corrections and twelve accepted corrections per hour. Replays retain the original
 operator evidence. Multiple approved provider transactions under one BillingAttempt fail closed;

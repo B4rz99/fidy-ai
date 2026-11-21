@@ -1,4 +1,4 @@
-import { Digest, SecureRandom } from "effect/crypto";
+import { Digest } from "effect/crypto";
 import { DaviplataOtpPolicy } from "../../../src/core/subscription/contract";
 import { type WompiBindings } from "../contract";
 
@@ -6,9 +6,6 @@ import { makeWompiOutboundHttp } from "../../../src/shell/outbound-http/operatio
 import { Effect, Option, Redacted, Schema } from "effect";
 import { type HttpClient } from "effect/http";
 
-export const workerSecureRandom = SecureRandom.make((size) =>
-  crypto.getRandomValues(new Uint8Array(size))
-);
 export const workerDigest = Effect.runSync(
   Digest.Digest.pipe(Effect.provide(Digest.layerWebCrypto))
 );

@@ -4,8 +4,6 @@ import type { PATSubject as AuthorizedPAT, PATAuthority } from "../../src/shell/
 import type { WebSessionAuthority } from "../../src/shell/web-session/contract";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 
-export type CanonicalRefusalDisposition = "recorded" | "credential_refused" | "unavailable";
-
 export class TransactionBoundaryFailure extends Data.TaggedError("TransactionBoundaryFailure")<{
   readonly cause: unknown;
 }> {}
@@ -33,7 +31,6 @@ export type TransactionCaller =
   | OAuthCaller
   | HostedCanonicalCaller;
 export type CanonicalCaller = TransactionCaller;
-export type QueryCaller = TransactionCaller;
 
 export const transactionNoStore = { "cache-control": "no-store" };
 
@@ -42,8 +39,6 @@ export const maximumTransactionGroupInputBytes = 524288;
 
 export const missingTransactionMessage = "Transaction unavailable.";
 
-export const invalidTransactionMessage = "Invalid Transaction input.";
-
 export const pairPolicyMessage =
   "Only two different Transactions with equal Currency, exact amount, and the same direction can describe one purchase.";
 
@@ -51,19 +46,6 @@ export const alreadyLinkedMessage =
   "One of the Transactions is already linked to another Transaction.";
 
 export const unlinkedPairMessage = "That exact Transaction pair is not currently linked.";
-
-export type TransactionMutationOperation =
-  | "transactions.createTransaction"
-  | "transactions.updateTransaction"
-  | "transactions.updateTransactions"
-  | "transactions.deleteTransaction"
-  | "transactions.linkTransactions"
-  | "transactions.unlinkTransactions";
-
-export type TransactionRefusal = Readonly<{
-  outcome: "not_found" | "validation_failed" | "resource_limit";
-  message: string;
-}>;
 
 export type TransactionAuthority =
   | PATAuthority

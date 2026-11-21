@@ -1,49 +1,14 @@
 import { webAuthenticationEndpoints } from "../../src/shell/web-authentication/contract";
 import { Cause, Effect, Option } from "effect";
 import type { HttpClient } from "effect/http";
-import { redeemBrowserPairing, startBrowserPairing } from "../browser-login/operations";
-import {
-  completeEmailReplacement,
-  requestEmailReplacement,
-} from "../email-authentication/operations";
 import { supportRecoveryPath } from "../recovery/contract";
-import { retainedRecoveryPairingsQuery, rotateBackupRecoveryCode } from "../recovery/operations";
-import { handlePATRequest, patRoute } from "../tokens/operations";
-import { currentWebSessionUser, logoutWebSession } from "../web-session/operations";
-import type { WebAuthenticationRequest } from "./contract";
-import type { BrowserPairingUnavailable } from "../browser-login/contract";
-
-type AuthenticationHandler = (
-  input: WebAuthenticationRequest
-) => Effect.Effect<Response, Cause.UnknownError | BrowserPairingUnavailable | void>;
-const handlers = {
-  startPairing: ({ db }): Effect.Effect<Response, BrowserPairingUnavailable> =>
-    startBrowserPairing({ db, retainedPairings: retainedRecoveryPairingsQuery() }),
-  redeemPairing: redeemBrowserPairing,
-  logout: (input): Effect.Effect<Response, void> => logoutWebSession(input),
-  startEmail: ({ loginEmail }): Effect.Effect<Response> => loginEmail,
-  completeEmail: ({ loginEmail }): Effect.Effect<Response> => loginEmail,
-  requestReplacement: ({ request, db, publish }): Effect.Effect<Response, Cause.UnknownError> =>
-    Effect.tryPromise(() =>
-      requestEmailReplacement({ request, db, onAccepted: (id) => publish("emailReplacement", id) })
-    ),
-  completeReplacement: (input): Effect.Effect<Response, Cause.UnknownError> =>
-    Effect.tryPromise(() => completeEmailReplacement(input)),
-  rotateRecovery: (input): Effect.Effect<Response, Cause.UnknownError> =>
-    Effect.tryPromise(() => rotateBackupRecoveryCode(input)),
-  currentUser: (input): Effect.Effect<Response> => currentWebSessionUser(input),
-} satisfies Record<keyof typeof webAuthenticationEndpoints, AuthenticationHandler>;
-const handlersByName: ReadonlyMap<string, AuthenticationHandler> = new Map(
-  Object.entries(handlers)
-);
-const routes = Object.entries(webAuthenticationEndpoints).map(([name, endpoint]) => {
-  const handle = handlersByName.get(name);
-  if (handle === undefined) throw new Error("Unimplemented Web Authentication operation");
-  return { path: endpoint.path, method: endpoint.method, handle };
-});
+import { patRoute } from "../tokens/operations";
+import type { TelemetryService } from "../../src/shell/observability/contract";
 
 export const ownsWebAuthenticationPath = (path: string): boolean =>
-  path === supportRecoveryPath || patRoute(path) || routes.some((route) => route.path === path);
+  path === supportRecoveryPath ||
+  patRoute(path) ||
+  Object.values(webAuthenticationEndpoints).some((endpoint) => endpoint.path === path);
 
 const unavailable = (): Response =>
   Response.json(
@@ -70,11 +35,11 @@ export const supportResponse = ({
   request,
   support,
   telemetry,
-}: Pick<WebAuthenticationRequest, "request" | "support" | "telemetry">): Effect.Effect<
-  Response,
-  never,
-  HttpClient.HttpClient
-> => {
+}: Readonly<{
+  request: Request;
+  support: Effect.Effect<Response, never, HttpClient.HttpClient>;
+  telemetry: TelemetryService;
+}>): Effect.Effect<Response, never, HttpClient.HttpClient> => {
   if (request.method !== "POST") return Effect.succeed(methodNotAllowed());
   return telemetry.rootSpan(
     {
@@ -99,35 +64,4 @@ export const supportResponse = ({
       )
     )
   );
-};
-
-export const handleWebAuthentication = (
-  input: WebAuthenticationRequest
-): Effect.Effect<Response, never, HttpClient.HttpClient> => {
-  const path = new URL(input.request.url).pathname;
-  if (path === supportRecoveryPath) return supportResponse(input);
-  if (patRoute(path)) {
-    return handlePATRequest(input).pipe(Effect.orElseSucceed(unavailable));
-  }
-  const route = routes.find((candidate) => candidate.path === path);
-  if (route === undefined) {
-    return Effect.succeed(
-      Response.json(
-        { status: "not_found" },
-        {
-          status: 404,
-          headers: {
-            "cache-control": "no-store",
-            "content-type": "application/json; charset=utf-8",
-          },
-        }
-      )
-    );
-  }
-  if (input.request.method !== route.method) return Effect.succeed(methodNotAllowed());
-  const work = route.handle(input).pipe(Effect.orElseSucceed(unavailable));
-  return path === webAuthenticationEndpoints.requestReplacement.path ||
-    path === webAuthenticationEndpoints.completeReplacement.path
-    ? work.pipe(Effect.withSpan("emailReplacement.browser"))
-    : work;
 };

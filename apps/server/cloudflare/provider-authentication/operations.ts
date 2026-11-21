@@ -1,102 +1,25 @@
-import { providerStatus } from "./internal/status";
-import { completeProvider } from "./internal/completion";
 import {
   rejectionReason as callbackFailure,
   callbackRedirect as nativeCallbackRedirect,
   cookieVerifier as nativeCookieVerifier,
   validCode as nativeValidCode,
-  providerCallback,
 } from "./internal/callback";
-import { type HttpClient } from "effect/http";
-import { admitProviderRequest } from "./internal/admission";
-import { Effect, Option } from "effect";
 import {
   microsoftProviderPaths,
   providerPaths,
 } from "../../src/shell/provider-authentication/contract";
-import { webSignupDisclosure } from "../../src/shell/consent/operations";
-import { type ProviderCompletionRequest, type ProviderEnvironment } from "./contract";
 import {
   prepareAttempt as nativePrepareAttempt,
   startedResponse as nativeStartedResponse,
-  providerJson,
-  startProvider,
 } from "./internal/start";
 import { providerConfiguration as nativeProviderConfiguration } from "./internal/configuration";
 import { validateGoogleToken as nativeValidateGoogleToken } from "./internal/google-token";
 import { validateMicrosoftToken as nativeValidateMicrosoftToken } from "./internal/microsoft-token";
 
-const invalidStatus = 400;
-
 export const ownsProviderAuthenticationPath = (path: string): boolean =>
   [...Object.values(providerPaths), ...Object.values(microsoftProviderPaths)].some(
     (owned) => owned === path
   );
-const providerGet = ({
-  request,
-  environment,
-}: Readonly<{ request: Request; environment: ProviderEnvironment }>): Effect.Effect<
-  Response,
-  never,
-  HttpClient.HttpClient
-> => {
-  const path = new URL(request.url).pathname;
-  if (path === providerPaths.disclosure) {
-    const { revision, text, policy } = webSignupDisclosure();
-    return Effect.succeed(
-      providerJson({ body: { revision, text, policy: { publicUrl: policy.publicUrl } } })
-    );
-  }
-  if (path === microsoftProviderPaths.callback) {
-    return providerCallback({ request, environment, provider: "microsoft" });
-  }
-  return path === providerPaths.callback
-    ? providerCallback({ request, environment, provider: "google" })
-    : Effect.succeed(providerJson({ body: { status: "invalid" }, status: invalidStatus }));
-};
-
-const dispatchProviderAuthentication = ({
-  request,
-  environment,
-}: Readonly<{ request: Request; environment: ProviderEnvironment }>): Effect.Effect<
-  Response,
-  never,
-  HttpClient.HttpClient
-> => {
-  const path = new URL(request.url).pathname;
-  if (request.method === "GET") return providerGet({ request, environment });
-  if (request.method !== "POST") {
-    return Effect.succeed(providerJson({ body: { status: "invalid" }, status: invalidStatus }));
-  }
-  if (path === providerPaths.status) {
-    return providerStatus({ request, environment, provider: "google" });
-  }
-  if (path === microsoftProviderPaths.status) {
-    return providerStatus({ request, environment, provider: "microsoft" });
-  }
-  if (path === providerPaths.start) {
-    return startProvider({ request, environment, provider: "google" });
-  }
-  if (path === microsoftProviderPaths.start) {
-    return startProvider({ request, environment, provider: "microsoft" });
-  }
-  return Effect.succeed(providerJson({ body: { status: "invalid" }, status: invalidStatus }));
-};
-
-export const completeProviderAuthentication = (
-  input: ProviderCompletionRequest
-): Promise<Response> => completeProvider(input);
-
-export const handleProviderAuthentication = (
-  input: Readonly<{ request: Request; environment: ProviderEnvironment }>
-): Effect.Effect<Response, never, HttpClient.HttpClient> =>
-  Effect.gen(function* () {
-    const refusal = yield* admitProviderRequest({
-      request: input.request,
-      db: input.environment.DB,
-    });
-    return Option.isSome(refusal) ? refusal.value : yield* dispatchProviderAuthentication(input);
-  });
 
 export const providerConfiguration: typeof nativeProviderConfiguration = (...args) =>
   nativeProviderConfiguration(...args);

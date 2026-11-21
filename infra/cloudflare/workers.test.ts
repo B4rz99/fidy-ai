@@ -956,7 +956,7 @@ describe("Cloudflare Worker topology (continued)", () => {
     })
   );
 
-  it.effect("rejects an unauthenticated Categories request before querying D1", () =>
+  it.effect("rejects an unauthenticated Categories request before querying the User Store", () =>
     Effect.gen(function* () {
       const response = yield* Effect.tryPromise(() =>
         publicWorker.fetch(

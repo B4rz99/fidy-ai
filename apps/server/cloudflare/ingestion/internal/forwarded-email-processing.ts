@@ -1,15 +1,10 @@
 import { PrivateObjectKey } from "../../private-objects/contract";
-import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import type { NotificationEmailOutcome } from "../../../src/shell/ingestion/contract";
-import { prepareQueuedConsentAction } from "../../consent/operations";
-import { fallbackCaptureCategory } from "../../../src/core/categories/operations";
-import { Clock, Data, DateTime, Effect, Option, type PlatformError, Schema } from "effect";
-import PostalMime from "postal-mime";
+import { DateTime, Effect, Schema } from "effect";
+import type PostalMime from "postal-mime";
 import { ReceivedEmailId } from "../../../src/core/ingestion/contract";
 import { CapturedInterpretationContext } from "../../../src/core/interpretation-evidence/contract";
-import { prepareNotificationEmailCapture } from "../../transactions/operations";
 import { interpretNotificationEmail } from "../../../src/shell/ingestion/operations";
-import { emailSecureRandom } from "./email-envelope";
 
 const maximumTimeZoneCharacters = 128;
 export const Receipt = Schema.Struct({
@@ -22,53 +17,13 @@ export const Receipt = Schema.Struct({
   time_zone: Schema.String.check(Schema.isBetweenLength(1, maximumTimeZoneCharacters)),
 });
 type Receipt = typeof Receipt.Type;
-type Input = Readonly<{
-  DB: D1Database;
-  EMAIL_BUCKET: Readonly<{
-    get: (key: string) => Promise<
-      Option.Option<
-        Readonly<{
-          size: number;
-          arrayBuffer: () => Promise<ArrayBuffer>;
-        }>
-      >
-    >;
-  }>;
-  userId: string;
-  receiptId: string;
-}>;
 type EmailOutcome =
   | NotificationEmailOutcome
   | Readonly<{
       _tag: "NeedsReview";
       reason: "canonical-validation-failed";
     }>;
-type Material = Readonly<{
-  digest: string;
-  html: Option.Option<string>;
-  interpretation: EmailOutcome;
-}>;
-type Settlement = Readonly<{
-  input: Input;
-  receipt: Receipt;
-  material: Material;
-  id: string;
-  now: number;
-  when: string;
-  guard: ReadonlyArray<string | number>;
-}>;
-const maximumRawBytes = 1_048_576;
 const maximumTagCount = 9999;
-const hexBase = 16;
-class EmailProcessingUnavailable extends Data.TaggedError("EmailProcessingUnavailable")<{
-  readonly cause: unknown;
-}> {}
-const attempt = <A>(run: () => Promise<A>): Effect.Effect<A, EmailProcessingUnavailable> =>
-  Effect.tryPromise({ try: run, catch: (cause) => new EmailProcessingUnavailable({ cause }) });
-const activeSource = `SELECT r.user_id FROM forwarded_email_receipts r
-  WHERE r.id = ? AND r.user_id = ? AND r.state = 'queued' AND r.expires_at_ms > ?
-  AND r.outcome IS NULL`;
-const active = `EXISTS (${activeSource})`;
 
 const structuralTags = ["table", "tr", "td", "p", "span", "div"] as const;
 export const anonymizeStructure = (html: string): string => {
@@ -88,53 +43,6 @@ export const anonymizeStructure = (html: string): string => {
   }
   return JSON.stringify(counts);
 };
-
-const findOwnedReceipt = (
-  input: Input
-): Effect.Effect<Option.Option<Receipt>, EmailProcessingUnavailable | Schema.SchemaError> =>
-  Effect.gen(function* () {
-    const current = yield* Clock.currentTimeMillis;
-    const raw = yield* attempt(() =>
-      prepareQueuedConsentAction({
-        db: input.DB,
-        userId: input.userId,
-        queued: { sql: activeSource, params: [input.receiptId, input.userId, current] },
-        statement: {
-          sql: `SELECT r.id, r.object_key, r.delivery_digest, r.byte_length,
-            r.received_at_ms, r.expires_at_ms, r.time_zone FROM forwarded_email_receipts r
-            WHERE r.id = ? AND r.user_id = ? AND r.state = 'queued' AND r.expires_at_ms > ?
-              AND r.outcome IS NULL`,
-          params: [input.receiptId, input.userId, current],
-        },
-      }).first()
-    );
-    if (raw === null) return Option.none();
-    return Option.some(yield* Schema.decodeUnknownEffect(Receipt)(raw));
-  });
-
-const readBytes = (
-  input: Input,
-  receipt: Receipt
-): Effect.Effect<Uint8Array, EmailProcessingUnavailable> =>
-  Effect.gen(function* () {
-    const object = yield* attempt(() => input.EMAIL_BUCKET.get(receipt.object_key));
-    if (
-      Option.isNone(object) ||
-      object.value.size !== receipt.byte_length ||
-      object.value.size > maximumRawBytes
-    ) {
-      return yield* new EmailProcessingUnavailable({
-        cause: new Error("Email evidence unavailable"),
-      });
-    }
-    const bytes = new Uint8Array(yield* attempt(() => object.value.arrayBuffer()));
-    if (bytes.byteLength !== receipt.byte_length) {
-      return yield* new EmailProcessingUnavailable({
-        cause: new Error("Email evidence unavailable"),
-      });
-    }
-    return bytes;
-  });
 
 export const decideEmail = ({
   parsed,
@@ -162,189 +70,4 @@ export const decideEmail = ({
         timeZone: receipt.time_zone,
       }),
     });
-  });
-
-const readMaterial = (
-  input: Input,
-  receipt: Receipt
-): Effect.Effect<Material, EmailProcessingUnavailable | Schema.SchemaError> =>
-  Effect.gen(function* () {
-    const bytes = yield* readBytes(input, receipt);
-    const digest = Array.from(
-      new Uint8Array(yield* attempt(() => crypto.subtle.digest("SHA-256", Uint8Array.from(bytes)))),
-      (byte) => byte.toString(hexBase).padStart(2, "0")
-    ).join("");
-    if (digest !== receipt.delivery_digest) {
-      return yield* new EmailProcessingUnavailable({
-        cause: new Error("Email evidence unavailable"),
-      });
-    }
-    const parsed = yield* attempt(() =>
-      PostalMime.parse(bytes, {
-        maxHeadersSize: 16_384,
-        maxNestingDepth: 8,
-        maxRfc822NestingDepth: 0,
-      })
-    );
-    if (parsed.attachments.length !== 0) {
-      return yield* new EmailProcessingUnavailable({
-        cause: new Error("Email evidence unavailable"),
-      });
-    }
-    return {
-      digest,
-      html: Option.fromUndefinedOr(parsed.html),
-      interpretation: yield* decideEmail({ parsed, receipt }),
-    };
-  });
-
-const acceptedStatements = (
-  settlement: Settlement
-): Effect.Effect<
-  ReadonlyArray<D1PreparedStatement>,
-  Schema.SchemaError | PlatformError.PlatformError
-> =>
-  Effect.gen(function* () {
-    const { input, material, id, when, guard } = settlement;
-    if (material.interpretation._tag !== "Interpreted") return [];
-    const { extraction, evidence: interpreted } = material.interpretation;
-    return yield* prepareNotificationEmailCapture({
-      queuedAdmission: Option.some({ sql: activeSource, params: guard }),
-      db: input.DB,
-      userId: input.userId,
-      transactionId: id,
-      extraction,
-      categoryId: fallbackCaptureCategory(extraction.direction),
-      attestation: {
-        id: yield* emailSecureRandom.uuidV4(),
-        serviceMarket: "CO",
-        locale: "es-CO",
-        timeZone: settlement.receipt.time_zone,
-        interpretationRevision: interpreted.revision,
-        createdAt: when,
-        receivedEmailId: input.receiptId,
-        messageContentSha256: material.digest,
-        sourceFormat: "notification-email",
-        messageEvidence: {
-          channel: "email",
-          provider: "cloudflare-email",
-          providerMessageId: input.receiptId,
-        },
-        extractorRevision: "forwarded-email-deterministic-v1",
-      },
-      interpretation: interpreted,
-      sourceGuard: { sql: activeSource, params: guard },
-    });
-  });
-
-const reviewStatement = (settlement: Settlement): D1PreparedStatement => {
-  const { input, receipt, material, id, now, guard } = settlement;
-  if (material.interpretation._tag !== "NeedsReview") throw new Error("Expected review decision");
-  return prepareQueuedConsentAction({
-    db: input.DB,
-    userId: input.userId,
-    queued: { sql: activeSource, params: guard },
-    statement: {
-      sql: `INSERT INTO ingestion_review_items(id,user_id,source_kind,email_receipt_id,reason,created_at_ms,evidence_expires_at_ms,service_market,locale,time_zone)
-    SELECT ?,user_id,'email',id,?,?,?,'CO','es-CO',time_zone FROM forwarded_email_receipts
-    WHERE id=? AND user_id=? AND NOT EXISTS(SELECT 1 FROM ingestion_review_items r WHERE r.source_kind='email' AND r.email_receipt_id=forwarded_email_receipts.id) AND ${active}`,
-      params: [
-        id,
-        material.interpretation.reason,
-        now,
-        receipt.expires_at_ms,
-        input.receiptId,
-        input.userId,
-        ...guard,
-      ],
-    },
-  });
-};
-
-const sampleStatement = (
-  settlement: Settlement,
-  sampleId: string,
-  html: string
-): D1PreparedStatement =>
-  prepareQueuedConsentAction({
-    db: settlement.input.DB,
-    userId: settlement.input.userId,
-    queued: { sql: activeSource, params: settlement.guard },
-    statement: {
-      sql: `INSERT INTO anonymized_email_samples
-      (id, service_market, source_format, source_provider, parser_revision,
-       anonymization_revision, structure, policy_approved_at_ms, retained_at_ms)
-      SELECT ?, 'CO', 'notification-email', 'cloudflare-email', 'cloudflare-mime-v1',
-        'structural-tags-v1', ?, ?, ? WHERE ${active}`,
-      params: [
-        sampleId,
-        anonymizeStructure(html),
-        settlement.now,
-        settlement.now,
-        ...settlement.guard,
-      ],
-    },
-  });
-
-const settle = (
-  input: Input,
-  receipt: Receipt,
-  material: Material
-): Effect.Effect<
-  void,
-  EmailProcessingUnavailable | Schema.SchemaError | PlatformError.PlatformError
-> =>
-  Effect.gen(function* () {
-    const id = yield* emailSecureRandom.uuidV4();
-    const now = yield* Clock.currentTimeMillis;
-    const settlement: Settlement = {
-      input,
-      receipt,
-      material,
-      id,
-      now,
-      when: DateTime.formatIso(DateTime.makeUnsafe(now)),
-      guard: [input.receiptId, input.userId, now],
-    };
-    const statements =
-      material.interpretation._tag === "Interpreted"
-        ? [...(yield* acceptedStatements(settlement))]
-        : [reviewStatement(settlement)];
-    if (Option.isSome(material.html) && material.interpretation._tag === "Interpreted") {
-      const sampleId = yield* emailSecureRandom.uuidV4();
-      statements.push(sampleStatement(settlement, sampleId, material.html.value));
-    }
-    statements.push(
-      prepareQueuedConsentAction({
-        db: input.DB,
-        userId: input.userId,
-        queued: { sql: activeSource, params: settlement.guard },
-        statement: {
-          sql: `UPDATE forwarded_email_receipts SET outcome=?,${material.interpretation._tag === "Interpreted" ? "outcome_transaction_id=?" : "outcome_review_id=?"},outcome_completed_at_ms=? WHERE id=? AND user_id=? AND outcome IS NULL AND ${active}`,
-          params: [
-            material.interpretation._tag === "Interpreted" ? "accepted" : "needs-review",
-            id,
-            now,
-            input.receiptId,
-            input.userId,
-            ...settlement.guard,
-          ],
-        },
-      })
-    );
-    statements.push(prepareChangedRowAssertion({ db: input.DB, scope: "forwarded_email" }));
-    yield* attempt(() => input.DB.batch(statements));
-  });
-
-export const processForwardedEmail = (input: Input): Promise<void> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const receipt = yield* findOwnedReceipt(input);
-      if (Option.isNone(receipt)) return;
-      const material = yield* readMaterial(input, receipt.value);
-      yield* settle(input, receipt.value, material);
-    })
-  ).catch((error: unknown) => {
-    if (error instanceof EmailProcessingUnavailable) throw error.cause;
-    throw error;
   });

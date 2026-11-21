@@ -12,22 +12,8 @@ import {
 } from "../../src/core/subscription/contract";
 import { Data, type Option, Schema } from "effect";
 import { type WorkflowStepConfig } from "cloudflare:workers";
-import { type QueryCaller } from "../canonical-work/contract";
 
 export type RefundAuthority = typeof RefundSupportAdmission.fields.authority.Type;
-
-export type RefundStartCall = Readonly<{
-  db: D1Database;
-  environment: string;
-  authority: RefundAuthority;
-  input: typeof StartRefundInput.Encoded;
-}>;
-export type RefundReadCall = Readonly<{
-  db: D1Database;
-  authority: RefundAuthority;
-  userId: string;
-  refundAttemptId: string;
-}>;
 export const maximumRefundOperatorIdLength = 128;
 export const refundSupportBasePath = "/internal/support/billing-refunds";
 export const refundSupportReadPath =
@@ -69,77 +55,18 @@ export type RefundSupportEnvironment = Readonly<{
       };
     }>
   >;
-
-export type SubscriptionQueryInput = Readonly<{
-  db: D1Database;
-  subject: QueryCaller;
-}> &
-  (
-    | Readonly<{
-        operation: "subscription.listSubscriptionOffers" | "subscription.getSubscriptionStatus";
-      }>
-    | Readonly<{ operation: "subscription.getUpgradeUrl"; browserOrigin: Option.Option<string> }>
-  );
-
-export type EnrollmentEnvironment = Readonly<{
-  DB: D1Database;
-  onAccepted: (id: string) => void;
-}> &
-  Partial<
-    Readonly<{
-      BROWSER_ORIGIN: string;
-      WOMPI_ENVIRONMENT: string;
-      WOMPI_PUBLIC_KEY: string;
-      WOMPI_PRIVATE_KEY: string;
-      WOMPI_INTEGRITY_SECRET: string;
-      WOMPI_DAVIPLATA_ACTIVATED: string;
-      WOMPI_DAVIPLATA_OTP_SEND_URL: string;
-      WOMPI_DAVIPLATA_OTP_CONFIRM_URL: string;
-    }>
-  >;
-
-export type BillingCollectionEnvironment = Readonly<{
-  DB: D1Database;
-  BILLING_COLLECTION_QUEUE: Queue;
-  BILLING_COLLECTION_WORKFLOW: Workflow;
-  WOMPI_ENVIRONMENT: string;
-  WOMPI_PUBLIC_KEY: string;
-  WOMPI_PRIVATE_KEY: string;
-  WOMPI_INTEGRITY_SECRET: string;
-  WOMPI_EVENT_SECRET: string;
-}>;
-
-export type RefundWorkflowExecution = Readonly<{
-  environment: BillingRuntime;
-  payload: unknown;
-  activity: (name: string, options: WorkflowStepConfig, run: () => Promise<void>) => Promise<void>;
-}>;
-export type RefundDispatchInput = Readonly<{
-  DB: D1Database;
-  BILLING_COLLECTION_QUEUE: Readonly<{
-    send: (
-      work:
-        | Readonly<{ version: 1; kind: "refund"; refundAttemptId: RefundAttemptId }>
-        | Readonly<{
-            version: 1;
-            kind: "refund-void-verification";
-            refundAttemptId: RefundAttemptId;
-            verification: number;
-          }>
-    ) => Promise<unknown>;
-  }>;
-}>;
 export type RefundReceiveInput = Readonly<{
   environment: Readonly<{ BILLING_REFUND_WORKFLOW: BillingWorkflowStarter }>;
   batch: Readonly<{ messages: ReadonlyArray<{ body: unknown; ack: () => void }> }>;
 }>;
-
-export type BillingRuntime = BillingWorkRouting &
+export type BillingWorkflowEnvironment = BillingWorkRouting &
   Partial<ExternalEventBindings> &
-  Pick<
-    BillingCollectionEnvironment,
-    "DB" | "WOMPI_ENVIRONMENT" | "WOMPI_PUBLIC_KEY" | "WOMPI_PRIVATE_KEY" | "WOMPI_INTEGRITY_SECRET"
-  >;
+  Readonly<{
+    WOMPI_ENVIRONMENT: string;
+    WOMPI_PUBLIC_KEY: string;
+    WOMPI_PRIVATE_KEY: string;
+    WOMPI_INTEGRITY_SECRET: string;
+  }>;
 
 export class RefundWorkFailure extends Data.TaggedError("RefundWorkFailure")<{
   readonly reason: "unavailable" | "invalid-work";
@@ -148,10 +75,6 @@ export class RefundWorkFailure extends Data.TaggedError("RefundWorkFailure")<{
 export class BillingCollectionFailure extends Data.TaggedError("BillingCollectionFailure")<{
   readonly cause: Option.Option<unknown>;
 }> {}
-
-export type BillingQueuePublisher = Readonly<{
-  send: (work: typeof LocalBillingCollection.Type) => Promise<unknown>;
-}>;
 
 export type BillingWorkflowStarter = Readonly<{
   create: (
@@ -169,28 +92,12 @@ export type BillingObservationWorkflow = Pick<BillingWorkflowStarter, "create"> 
     get: (id: string) => Promise<Pick<WorkflowInstance, "status" | "restart">>;
   }>;
 
-export const SubscriptionRenewalAdmission = Schema.TaggedStruct("SubscriptionRenewal", {
-  userId: UserId,
-  previousPaidAttemptId: BillingAttemptId,
-});
-export type SubscriptionRenewalDispatchInput = Readonly<{
-  DB: D1Database;
-  WOMPI_ENVIRONMENT: string;
-  USER_TRANSACTION_COORDINATOR: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
-}>;
-
 export const SubscriptionCancellationWork = Schema.Struct({
   traceContext: Schema.optionalKey(Schema.Unknown),
   version: Schema.Literal(1),
   kind: Schema.Literal("source-cancellation"),
   userId: UserId,
 });
-export type SubscriptionCancellationDispatchInput = Readonly<{
-  DB: D1Database;
-  BILLING_COLLECTION_QUEUE: Readonly<{
-    send: (work: typeof SubscriptionCancellationWork.Type) => Promise<unknown>;
-  }>;
-}>;
 
 export type WompiBindings = Readonly<{
   WOMPI_ENVIRONMENT: WompiEnvironment;

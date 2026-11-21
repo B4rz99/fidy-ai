@@ -1,31 +1,10 @@
-import type {
-  CanonicalBrowserRead,
-  PreparedCanonicalBrowserRead,
-} from "../../canonical-admission/contract";
-import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
-import { prepareAuthorizedAuditCall } from "../../../src/shell/audit/operations";
+import { transactionNow } from "../../canonical-work/operations";
+import { reviewRelation } from "./review-page";
+import { DateTime, Option, Schema } from "effect";
 import {
-  prepareChangedRowAssertion,
-  prepareReservedChangeCheck,
-} from "../../../src/shell/sql-assertions/operations";
-import {
-  transactionId,
-  transactionNoStore,
-  transactionNow,
-  transactionUnavailable,
-} from "../../canonical-work/operations";
-import { reviewPageSelection, reviewRelation } from "./review-page";
-import { DateTime, Effect, Option, Schema } from "effect";
-import { ReviewWorkspaceQuery, reviewPageSize } from "../../../src/core/ingestion/contract";
-import {
-  ReviewPageContext,
+  type ReviewPageContext,
   maximumReviewExcerptCharacters,
 } from "../../../src/shell/ingestion/contract";
-
-import { type ReviewQueryWork, ReviewUnavailable } from "../contract";
-
-import { reviewAudit } from "./review-audit";
-import { validationFailed } from "./statement-ingestion";
 
 export const maximumExcerptCells = 16;
 
@@ -36,119 +15,6 @@ export const ContextRow = Schema.Struct({
   received_at_ms: Schema.OptionFromNullOr(Schema.DateTimeUtcFromMillis),
   excerpt: Schema.OptionFromNullOr(Schema.String),
 });
-
-const prepareContext = ({
-  db,
-  users,
-  request,
-  current,
-}: Readonly<{
-  db: D1Database;
-  users: OwnedStatement;
-  request: Request;
-  current: number;
-}>): PreparedCanonicalBrowserRead => {
-  const query = Schema.decodeOption(Schema.toCodecStringTree(ReviewWorkspaceQuery))(
-    Object.fromEntries(new URL(request.url).searchParams)
-  );
-  if (Option.isNone(query)) {
-    return {
-      statements: [],
-      present: () => Effect.succeed(validationFailed("Invalid review selection.")),
-    };
-  }
-  const offset = Option.getOrElse(query.value.offset, () => 0);
-  const { filter, params } = reviewPageSelection({ query: query.value, current });
-  return {
-    statements: [
-      db
-        .prepare(
-          contextSql(filter).replace(
-            "user_id = ?",
-            `user_id IN (SELECT userId FROM (${users.sql}))`
-          )
-        )
-        .bind(
-          current,
-          ...users.params,
-          ...params,
-          query.value.limit ?? reviewPageSize,
-          offset,
-          current,
-          current,
-          maximumReviewExcerptCharacters,
-          maximumExcerptCells,
-          maximumReviewExcerptCharacters
-        ),
-    ],
-    present: (results) =>
-      Effect.gen(function* () {
-        const rows = yield* Schema.decodeUnknownEffect(Schema.Array(ContextRow))(
-          results[0]?.results
-        );
-        const data = yield* Schema.decodeEffect(Schema.toCodecJson(ReviewPageContext))({
-          items: rows.map((row, index) => projectContext({ row, position: offset + index + 1 })),
-        });
-        const encoded = yield* Schema.encodeUnknownEffect(Schema.toCodecJson(ReviewPageContext))(
-          data
-        );
-        return Response.json({ data: encoded, next: [] }, { headers: transactionNoStore });
-      }).pipe(Effect.orElseSucceed(transactionUnavailable)),
-  };
-};
-
-export const prepareBoundReviewPageContext =
-  (request: Request): CanonicalBrowserRead =>
-  ({ db, authority, reservation, current }) => {
-    const prepared = prepareContext({ db, users: reservation, request, current });
-    return {
-      statements: [
-        ...prepared.statements,
-        prepareAuthorizedAuditCall({
-          db,
-          authority,
-          id: transactionId(),
-          current,
-          operation: "ingestion.getReviewPageContext",
-          outcome: prepared.statements.length === 0 ? "rejected" : "accepted",
-          afterOwnerWrite: false,
-        }),
-        prepareReservedChangeCheck({ db, scope: "ingestion_review", reservation }),
-      ],
-      present: prepared.present,
-    };
-  };
-
-export const browseReviewPageContext = ({
-  db,
-  subject,
-  request,
-}: ReviewQueryWork): Effect.Effect<Response> =>
-  Effect.gen(function* () {
-    const current = transactionNow();
-    const prepared = prepareContext({
-      db,
-      users: { sql: "SELECT ? AS userId", params: [subject.userId] },
-      request,
-      current,
-    });
-    if (prepared.statements.length === 0) return yield* prepared.present([]);
-    const rows = yield* Effect.tryPromise(() =>
-      db.batch([
-        ...prepared.statements,
-        ...reviewAudit({
-          work: { db, subject, current },
-          operation: "ingestion.getReviewPageContext",
-          accepted: true,
-        }),
-        prepareChangedRowAssertion({ db, scope: "ingestion_review" }),
-      ])
-    );
-    return yield* prepared.present(rows);
-  }).pipe(
-    Effect.mapError(() => new ReviewUnavailable()),
-    Effect.orElseSucceed(transactionUnavailable)
-  );
 
 export const contextSql = (filter: string): string => `WITH page AS MATERIALIZED (
         SELECT id,user_id,expires_at_ms FROM (

@@ -15,9 +15,3 @@ export const institutionsForUser = (userId: string): Effect.Effect<ReadonlyArray
       ? [...registered, InstitutionId.make("bancolombia")]
       : registered;
   });
-
-export const registeredInstitutionPredicate = ({
-  column,
-  institutions,
-}: Readonly<{ column: string; institutions: ReadonlyArray<InstitutionId> }>): string =>
-  `${column} IN (${institutions.map((id) => `'${id.replaceAll("'", "''")}'`).join(",") || "NULL"})`;

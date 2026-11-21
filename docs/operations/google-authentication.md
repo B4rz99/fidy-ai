@@ -14,7 +14,7 @@ not establish Google delivery, consent-screen approval, deployed callback correc
 ## Verify configuration
 
 - [ ] Verify the actual Google application, test-user/consent-screen settings, scopes and exact callback.
-- [ ] Verify the deployed Core client ID and secret binding, fixed callback, D1 migration and cron retention.
+- [ ] Verify the deployed Core client ID and secret binding, fixed callback, SQLite schema and cron retention.
 - [ ] Inspect deployed callback log exclusions and cookie behavior on the real app/API origins.
 - [ ] Run real Google signup/login, returning login, denial and logout with approved test accounts.
 - [ ] Confirm one-time recovery presentation and ordinary-work refusal after Consent withdrawal.

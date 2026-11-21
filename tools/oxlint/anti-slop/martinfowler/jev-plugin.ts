@@ -1,4 +1,4 @@
-import { createJevPlugin } from "oxlint-plugin-jev";
+import { createJevPlugin } from "../../oxlint-plugin-jev/dist/index.mjs";
 
 import { martinFowlerJevOptions, martinFowlerJevPluginName, martinFowlerJevRules } from "./jev-rules.ts";
 

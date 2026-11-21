@@ -16,7 +16,7 @@
  * caps matches across all of its rules in source order, so raise it (see
  * `martinFowlerJevOptions`) or turn rules off when files hold many functions.
  */
-import type { JevRule } from "oxlint-plugin-jev";
+import type { JevRule } from "../../oxlint-plugin-jev/dist/index.mjs";
 
 /** A jev rule whose `message` names the smell and the refactoring, so it is required here. */
 export type MartinFowlerJevRule = JevRule & { readonly message: string };

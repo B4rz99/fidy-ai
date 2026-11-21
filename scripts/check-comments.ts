@@ -12,7 +12,11 @@ const baselineFile = cwd + baselinePath;
 
 const scanConcurrency = 16;
 
-const vendoredPrefixes = [".agents/skills/install-anti-slop/", "tools/oxlint/anti-slop/"];
+const vendoredPrefixes = [
+  ".agents/skills/install-anti-slop/",
+  "tools/oxlint/anti-slop/",
+  "tools/oxlint/oxlint-plugin-jev/",
+];
 
 class CommentParseFailed extends Data.TaggedError("CommentParseFailed")<{
   readonly message: string;

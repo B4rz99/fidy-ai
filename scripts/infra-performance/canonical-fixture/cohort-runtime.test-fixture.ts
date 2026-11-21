@@ -89,6 +89,10 @@ const recoveryProbe = Effect.fnUntraced(function* (runtime: Miniflare, secret: s
     })
   );
 
+  const ingress = response.headers.get("x-fidy-fixture-fallback-ingress") !== null;
+
+  if (!response.ok) return { status: response.status, ingress, core: false };
+
   const evidence = yield* Schema.decodeUnknownEffect(
     Schema.Struct({
       core: Schema.Struct({ workerVersionId: Schema.String }),
@@ -98,7 +102,7 @@ const recoveryProbe = Effect.fnUntraced(function* (runtime: Miniflare, secret: s
 
   return {
     status: response.status,
-    ingress: response.headers.get("x-fidy-fixture-fallback-ingress") !== null,
+    ingress,
     core: evidence.fixtureFallbackCoreVersion === evidence.core.workerVersionId,
   };
 });

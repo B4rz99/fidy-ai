@@ -692,12 +692,17 @@ const verifyInstalledMarkers = Effect.fn(function* ({
 
   const result = yield* client.execute(request);
 
+  if (result.status !== successStatusStart) {
+    return yield* new ReleaseFailure({
+      message: "First-install schema or serving release differs",
+    });
+  }
+
   const proof = yield* Schema.decodeUnknownEffect(
     Schema.Struct({ core: SmokeIdentity, markers: SharedStoreMarkers })
   )(yield* result.json);
 
   if (
-    result.status !== successStatusStart ||
     result.headers["x-fidy-smoke-worker-version"] !== pair.publicStable ||
     proof.core.workerVersionId !== pair.coreStable ||
     proof.core.gitRevision !== env.revision ||

@@ -9,6 +9,7 @@ import {
   Effect,
   Layer,
   Option,
+  Predicate,
   Schema,
   Stream,
 } from "effect";
@@ -206,13 +207,13 @@ const fetchPackument = (
       while: (failure) =>
         Cause.isTimeoutError(failure) ||
         (HttpClientError.isHttpClientError(failure) &&
-          (failure.reason._tag === "TransportError" ||
-            (failure.reason._tag === "StatusCodeError" &&
+          (Predicate.isTagged(failure.reason, "TransportError") ||
+            (Predicate.isTagged(failure.reason, "StatusCodeError") &&
               (failure.reason.response.status === rateLimitedStatus ||
                 failure.reason.response.status >= serverErrorMinimumStatus)))),
     }),
     Effect.mapError((failure) =>
-      failure instanceof CheckFailed
+      Predicate.isTagged(failure, "CheckFailed")
         ? failure
         : new CheckFailed({
             message: `Could not read ${name} from the npm registry within the request policy`,
@@ -331,8 +332,10 @@ const manifestPaths = (): ReadonlyArray<string> =>
   MANIFEST_PATTERNS.flatMap((pattern) => [
     ...new Bun.Glob(pattern).scanSync({ cwd: REPO_ROOT, dot: false }),
   ])
+    .values()
     .map((path) => path.replaceAll("\\", "/"))
     .filter((path) => !path.startsWith("node_modules/") && !path.includes("/node_modules/"))
+    .toArray()
     .sort((left, right) => left.localeCompare(right));
 
 const pinsOf = (manifest: string, declared: typeof Manifest.Type): ReadonlyArray<Pin> =>
@@ -346,6 +349,7 @@ const externalPinsOf = (
 ): ReadonlyArray<Pin> => {
   const workspaceVersions = new Map(
     manifests
+      .values()
       .filter(({ declared }) => declared.private)
       .map(({ declared }) => [declared.name, declared.version] as const)
   );

@@ -100,10 +100,9 @@ const makeFixture = (overrides: Partial<EffectFixture> = {}): string => {
       "@effect/atom-react": atomReactVersion,
     },
     devDependencies: { "@effect/vitest": vitestVersion },
-    overrides: {
-      ...(includeOverride ? { "@effect/platform-shared": overrideVersion } : {}),
-      ...overrides.extraOverrides,
-    },
+    overrides: includeOverride
+      ? { "@effect/platform-shared": overrideVersion, ...overrides.extraOverrides }
+      : { ...overrides.extraOverrides },
   };
 
   const lockfile = {

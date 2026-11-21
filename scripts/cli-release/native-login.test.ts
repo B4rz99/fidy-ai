@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Effect, Option, Redacted, Schema } from "effect";
+import { Effect, Option, Predicate, Redacted, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { expect } from "vitest";
 import type { Miniflare } from "miniflare";
@@ -20,8 +20,9 @@ import { native, nativeUserPlatform } from "../../apps/server/cloudflare/user-st
 
 const transport = (runtime: Miniflare): HttpClient.HttpClient =>
   HttpClient.make((request, url) => {
-    const body =
-      request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : undefined;
+    const body = Predicate.isTagged(request.body, "Uint8Array")
+      ? new TextDecoder().decode(request.body.body)
+      : undefined;
 
     const headers = { ...request.headers, "cf-connecting-ip": "192.0.2.49" };
 
@@ -29,7 +30,7 @@ const transport = (runtime: Miniflare): HttpClient.HttpClient =>
       runtime.dispatchFetch(url.href, {
         method: request.method,
         headers,
-        ...(body === undefined ? {} : { body }),
+        body,
       })
     ).pipe(
       Effect.flatMap((response) =>
@@ -49,7 +50,7 @@ const transport = (runtime: Miniflare): HttpClient.HttpClient =>
   });
 
 const browserApproval = Effect.fnUntraced(function* (runtime: Miniflare, event: PublicProgress) {
-  if (event._tag !== "ApprovalRequired") return;
+  if (!Predicate.isTagged(event, "ApprovalRequired")) return;
 
   const post = (
     path: string,
@@ -111,7 +112,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           verifyStorage: Effect.void,
           readLine: () => Effect.die("Unexpected prompt"),
           emit: (event) =>
-            event._tag === "ApprovalRequired" ? browserApproval(runtime, event) : Effect.void,
+            Predicate.isTagged(event, "ApprovalRequired")
+              ? browserApproval(runtime, event)
+              : Effect.void,
         }
       );
       const [credential] = saved;

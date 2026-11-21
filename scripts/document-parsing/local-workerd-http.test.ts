@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest";
-import { Data, Effect, Layer, ManagedRuntime, Option, Stream } from "effect";
+import { Data, Effect, Layer, ManagedRuntime, Option, Predicate, Stream } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { afterEach, expect, vi } from "vitest";
 import { ProofHttpLive, requestWorkerd } from "./local-workerd-http";
@@ -231,7 +231,9 @@ it.each(["headers", "body"] as const)(
 
           yield* Effect.tryPromise(() => requested.promise);
           yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(30_001));
-          expect(yield* Effect.tryPromise(() => outcome)).toMatchObject({ _tag: "TimeoutError" });
+          expect(Predicate.isTagged(yield* Effect.tryPromise(() => outcome), "TimeoutError")).toBe(
+            true
+          );
 
           if (stall === "body") {
             yield* Effect.tryPromise(() => cancelled.promise);

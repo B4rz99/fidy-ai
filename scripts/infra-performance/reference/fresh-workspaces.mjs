@@ -143,15 +143,18 @@ const usableBudgets = async (page, totals) => {
             '[aria-label="Grupo Grupo ' + currency + " " + currency + '"]'
           );
 
-          const fields = section?.querySelectorAll('input[aria-label^="Presupuesto de "]:enabled');
+          const fields =
+            section === null
+              ? []
+              : [...section.getElementsByTagName("input")].filter((item) =>
+                  item.matches('[aria-label^="Presupuesto de "]:enabled')
+                );
 
           return (
-            fields?.length === count &&
-            [...fields].every(
-              (item) =>
-                item instanceof HTMLInputElement &&
-                /^100[.]?000(?:,00)?$/u.test(item.value) &&
-                item.getClientRects().length > 0
+            section !== null &&
+            fields.length === count &&
+            fields.every(
+              (item) => /^100[.]?000(?:,00)?$/u.test(item.value) && item.getClientRects().length > 0
             )
           );
         },

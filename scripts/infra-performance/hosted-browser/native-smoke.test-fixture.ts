@@ -10,6 +10,8 @@ import { fields, parseNativeSmoke } from "./contracts";
 import { nativeAccountingSnapshot } from "./native-accounting";
 import { runNativeSmoke } from "./native-smoke";
 
+const isRequest = Schema.is(Schema.instanceOf(Request));
+
 const readLocalAsset = Effect.fnUntraced(function* (
   path: Path.Path,
   assets: string,
@@ -60,9 +62,7 @@ const run = Effect.gen(function* () {
       const client: typeof network = Object.assign(
         (input: Parameters<typeof network>[0], init?: Parameters<typeof network>[1]) =>
           resolvePromise(
-            read(
-              input instanceof Request ? new Request(input, init) : new Request(String(input), init)
-            )
+            read(isRequest(input) ? new Request(input, init) : new Request(String(input), init))
           ),
         { preconnect: network.preconnect }
       );

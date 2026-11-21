@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { mkdir, readFile, rm, stat } from "node:fs/promises";
-import { Effect, Option, Schema } from "effect";
+import { Data, Effect, Option, Schema } from "effect";
 import * as XLSX from "xlsx/xlsx.mjs";
 import { stopProofProcess } from "./proof-command";
 import { runExtractionProof } from "./extraction-proof";
@@ -141,10 +141,16 @@ const runWranglerCommand = (command: Array<string>): string => {
   return new TextDecoder().decode(result.stdout);
 };
 
+class DocumentParsingCheckFailure extends Data.TaggedError("DocumentParsingCheckFailure")<{
+  readonly message: string;
+}> {}
+
+const isArrayBuffer = Schema.is(Schema.instanceOf(ArrayBuffer));
+
 const workbookBytes = (workbook: XLSX.WorkBook, bookType: "xlsx" | "xlsm"): Uint8Array => {
   const buffer: unknown = XLSX.write(workbook, { bookType, compression: true, type: "array" });
 
-  if (!(buffer instanceof ArrayBuffer)) {
+  if (!isArrayBuffer(buffer)) {
     throw new Error("SheetJS did not produce an ArrayBuffer");
   }
 
@@ -208,12 +214,14 @@ const startupOutput = runWranglerCommand([
   profilePath,
 ]);
 
-const protectedBundleBytes = await runProtectedDocumentProof({
-  configPath: protectedConfigPath,
-  infrastructureRoot,
-  temporaryDirectory,
-  wranglerPath,
-});
+const protectedBundleBytes = await Effect.runPromise(
+  runProtectedDocumentProof({
+    configPath: protectedConfigPath,
+    infrastructureRoot,
+    temporaryDirectory,
+    wranglerPath,
+  })
+);
 
 const profile = Schema.decodeSync(Schema.fromJsonString(StartupProfile))(
   await readFile(profilePath, "utf8")
@@ -226,16 +234,18 @@ if (startupMilliseconds > maximumStartupMilliseconds) {
   throw new Error("Document parser exceeds the Worker startup limit");
 }
 
-const extractionProof = await runExtractionProof({
-  configPath: extractionConfigPath,
-  infrastructureRoot,
-  maximumBundleBytes,
-  maximumMemoryBytes,
-  maximumStartupMilliseconds,
-  runAuthenticatedRuntime: Bun.argv.includes("--remote"),
-  temporaryDirectory,
-  wranglerPath,
-});
+const extractionProof = await Effect.runPromise(
+  runExtractionProof({
+    configPath: extractionConfigPath,
+    infrastructureRoot,
+    maximumBundleBytes,
+    maximumMemoryBytes,
+    maximumStartupMilliseconds,
+    runAuthenticatedRuntime: Bun.argv.includes("--remote"),
+    temporaryDirectory,
+    wranglerPath,
+  })
+);
 
 const worker = Bun.spawn(
   [
@@ -256,24 +266,23 @@ const worker = Bun.spawn(
 
 try {
   await Effect.runPromise(
-    Effect.gen(function* () {
-      for (let attempt = 0; attempt < readinessAttempts; attempt += 1) {
-        const ready = yield* Effect.tryPromise((signal) =>
-          requestStatement("Date,Amount\n2026-01-01,1", signal)
-        ).pipe(
-          Effect.flatMap((response) =>
-            Effect.tryPromise(() => response.body?.cancel() ?? Promise.resolve()).pipe(
-              Effect.as(response.ok)
+    Effect.tryPromise((signal) => requestStatement("Date,Amount\n2026-01-01,1", signal)).pipe(
+      Effect.flatMap((response) =>
+        Effect.tryPromise(() => response.body?.cancel() ?? Promise.resolve()).pipe(
+          Effect.as(response.ok)
+        )
+      ),
+      Effect.catch(() => Effect.sleep(readinessRetryMilliseconds).pipe(Effect.as(false))),
+      Effect.repeat({ until: (ready) => ready, times: readinessAttempts - 1 }),
+      Effect.flatMap((ready) =>
+        ready
+          ? Effect.void
+          : Effect.fail(
+              new DocumentParsingCheckFailure({ message: "Document parser workerd did not start" })
             )
-          ),
-          Effect.catch(() => Effect.sleep(readinessRetryMilliseconds).pipe(Effect.as(false)))
-        );
-
-        if (ready) return;
-      }
-
-      throw new Error("Document parser workerd did not start");
-    }).pipe(Effect.timeout("15 seconds"))
+      ),
+      Effect.timeout("15 seconds")
+    )
   );
 
   const debuggerUrl = await inspectorTarget({ port: inspectorPort, signal: Option.none() });
@@ -343,7 +352,9 @@ try {
             unsupportedResponse.status !== unprocessableContentStatus ||
             rejected.reason !== "unsupported-format"
           ) {
-            throw new Error(`Document parser did not fail closed for ${document.label}`);
+            return yield* new DocumentParsingCheckFailure({
+              message: `Document parser did not fail closed for ${document.label}`,
+            });
           }
         }),
       { concurrency: 1, discard: true }
@@ -369,7 +380,9 @@ try {
           );
 
           if (!activeResponse.ok || activeResult.format !== "xlsx") {
-            throw new Error(`Workerd did not safely parse hostile workbook structure: ${fixture}`);
+            return yield* new DocumentParsingCheckFailure({
+              message: `Workerd did not safely parse hostile workbook structure: ${fixture}`,
+            });
           }
         }),
       { concurrency: 1, discard: true }
@@ -425,7 +438,9 @@ try {
             hostileResponse.status !== hostile.expectedStatus ||
             rejected.reason !== hostile.expectedReason
           ) {
-            throw new Error(`Workerd did not reject ${hostile.label}`);
+            return yield* new DocumentParsingCheckFailure({
+              message: `Workerd did not reject ${hostile.label}`,
+            });
           }
         }),
       { concurrency: 1, discard: true }

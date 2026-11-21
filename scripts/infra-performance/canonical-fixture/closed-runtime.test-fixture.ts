@@ -9,7 +9,27 @@ import {
   workerManifest,
 } from "../../../apps/server/cloudflare/user-store.test-fixture";
 
-const text = (value: string): { type: "text"; value: string } => ({ type: "text", value });
+type TextBinding = { type: "text"; value: string };
+
+const text = (value: string): TextBinding => ({ type: "text", value });
+
+type OptionalCoreBindings = Partial<
+  Record<"NATIVE_FIXTURE_SIGNING_KEY" | "NATIVE_FIXTURE_MEMBER", TextBinding>
+>;
+
+const optionalCoreBindings = (
+  baseline: boolean,
+  privateKey: string,
+  member: string
+): OptionalCoreBindings => {
+  const bindings: OptionalCoreBindings = {};
+
+  if (!baseline) bindings.NATIVE_FIXTURE_SIGNING_KEY = text(privateKey);
+
+  if (member === "performance-2") bindings.NATIVE_FIXTURE_MEMBER = text(member);
+
+  return bindings;
+};
 
 const meteredManifest = Effect.fnUntraced(function* (module: string, name: string) {
   const manifest = yield* workerManifest(module);
@@ -173,15 +193,16 @@ export const closedRuntime = Effect.fnUntraced(function* (
   const { baseline, ingressEntry, coreEntry, providerEntry, providerRevision } =
     yield* fixtureGeneration(revision);
 
-  const shared = {
-    ...sharedBindings(revision, secret),
-    ...(providerRevision === revision
-      ? {}
-      : { ACCEPTANCE_PROVIDER_REVISION: text(providerRevision) }),
-  };
+  const providerRevisionBinding: Partial<Record<"ACCEPTANCE_PROVIDER_REVISION", TextBinding>> =
+    providerRevision === revision ? {} : { ACCEPTANCE_PROVIDER_REVISION: text(providerRevision) };
+
+  const shared = { ...sharedBindings(revision, secret), ...providerRevisionBinding };
+
+  const persistence: Partial<Record<"resourcePersistencePath", string>> =
+    directory === "" ? {} : { resourcePersistencePath: directory };
 
   return new Miniflare({
-    ...(directory === "" ? {} : { resourcePersistencePath: directory }),
+    ...persistence,
     handleStructuredLogs: (): void => undefined,
     workers: yield* Effect.all([
       worker("ingress", ingressEntry, {
@@ -198,8 +219,7 @@ export const closedRuntime = Effect.fnUntraced(function* (
           EMAIL_BUCKET: { type: "r2", name: "private-email" },
           STATEMENT_STAGING_BUCKET: { type: "r2", name: "private-statements" },
           SAMPLE_BUCKET: { type: "r2", name: "private-samples" },
-          ...(baseline ? {} : { NATIVE_FIXTURE_SIGNING_KEY: text(privateKey) }),
-          ...(member === "performance-2" ? { NATIVE_FIXTURE_MEMBER: text(member) } : {}),
+          ...optionalCoreBindings(baseline, privateKey, member),
           SQLITE_STORE_CAPACITY_BYTES: text("1000000000"),
           GOOGLE_CLIENT_ID: text("fidy-native-google"),
           GOOGLE_CLIENT_SECRET: text(deriveSecret(secret, providerRevision, "google")),

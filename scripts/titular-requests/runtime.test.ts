@@ -230,14 +230,15 @@ it.live(
         evidenceRef: reference(206),
       } as const;
 
-      for (const withdrawal of [
-        { status: "Recorded", reference: reference(207) },
-        { status: "NotRequested" },
-      ] as const) {
-        expect(yield* setup.submit({ ...addressed, withdrawal }).pipe(Effect.flip)).toMatchObject({
-          reason: "InvalidTransition",
-        });
-      }
+      const withdrawalRejections = yield* Effect.forEach(
+        [{ status: "Recorded", reference: reference(207) }, { status: "NotRequested" }] as const,
+        (withdrawal) => setup.submit({ ...addressed, withdrawal }).pipe(Effect.flip)
+      );
+
+      expect(withdrawalRejections).toMatchObject([
+        { reason: "InvalidTransition" },
+        { reason: "InvalidTransition" },
+      ]);
 
       const command = {
         ...addressed,
@@ -249,9 +250,10 @@ it.live(
       expect(Option.getOrThrow(result.case.erasureHandoff).withdrawal).toEqual(command.withdrawal);
       expect(result.deletion).toBe("not-performed");
 
-      for (const action of ["RecordWithdrawal", "RecordVerification"] as const) {
-        expect(
-          yield* setup
+      const actionRejections = yield* Effect.forEach(
+        ["RecordWithdrawal", "RecordVerification"] as const,
+        (action) =>
+          setup
             .submit({
               action,
               caseId,
@@ -260,8 +262,12 @@ it.live(
               evidenceRef: reference(210),
             })
             .pipe(Effect.flip)
-        ).toMatchObject({ reason: "InvalidTransition" });
-      }
+      );
+
+      expect(actionRejections).toMatchObject([
+        { reason: "InvalidTransition" },
+        { reason: "InvalidTransition" },
+      ]);
 
       expect((yield* setup.read).case).toEqual(result.case);
     }).pipe(Effect.provide(BunServices.layer), Effect.scoped)
@@ -438,14 +444,16 @@ it.live(
       const setup = yield* fixture;
       const inputs = ["x".repeat(4097), '{"operation":"Apply","email":"private@example.test"}'];
 
-      for (const input of inputs) {
-        const result = yield* Effect.sync(() =>
+      const results = yield* Effect.forEach(inputs, (input) =>
+        Effect.sync(() =>
           Bun.spawnSync(
             [process.execPath, new URL("./main.ts", import.meta.url).pathname, setup.directory],
             { stdin: new TextEncoder().encode(input), stdout: "pipe", stderr: "pipe" }
           )
-        );
+        )
+      );
 
+      for (const result of results) {
         expect(result.exitCode).toBe(1);
         expect(new TextDecoder().decode(result.stderr)).toBe('{"error":"InvalidInput"}\n');
         expect(new TextDecoder().decode(result.stdout)).toBe("");

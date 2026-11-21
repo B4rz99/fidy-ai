@@ -2,13 +2,14 @@ import { it } from "@effect/vitest";
 import { Cause, Deferred, Effect, Exit, Fiber, Option, Schema } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 import { TestClock } from "effect/testing";
-import { expect } from "vitest";
+import { assert, expect } from "vitest";
 import { requestLocalConfirmationBridge } from "./native-confirmation-hosts";
 
 const Finished = Schema.Struct({ finished: Schema.Literal(true) });
 
-for (const mode of ["streamed-overflow", "declared-overflow", "redirect", "malformed"] as const) {
-  it.effect(`refuses ${mode} bridge data without exposing its contents`, () =>
+it.effect.each(["streamed-overflow", "declared-overflow", "redirect", "malformed"] as const)(
+  "refuses %s bridge data without exposing its contents",
+  (mode) =>
     Effect.gen(function* () {
       let cancelled = false;
 
@@ -52,13 +53,13 @@ for (const mode of ["streamed-overflow", "declared-overflow", "redirect", "malfo
       expect(Exit.isFailure(result)).toBe(true);
       expect(String(result)).not.toContain("private bridge diagnostic");
 
-      if (mode === "streamed-overflow") expect(cancelled).toBe(true);
+      expect(mode !== "streamed-overflow" || cancelled).toBe(true);
     })
-  );
-}
+);
 
-for (const mode of ["deadline", "interruption"] as const) {
-  it.effect(`bounds a stalled bridge body during ${mode}`, () =>
+it.effect.each(["deadline", "interruption"] as const)(
+  "bounds a stalled bridge body during %s",
+  (mode) =>
     Effect.gen(function* () {
       const started = Deferred.makeUnsafe<void>();
       let cancelled = false;
@@ -90,13 +91,9 @@ for (const mode of ["deadline", "interruption"] as const) {
       if (mode === "deadline") yield* TestClock.adjust("10 seconds");
       else yield* Fiber.interrupt(request);
       const result = yield* Fiber.await(request);
-      expect(Exit.isFailure(result)).toBe(true);
-
-      if (Exit.isFailure(result)) {
-        expect(Cause.hasInterrupts(result.cause)).toBe(mode === "interruption");
-      }
+      assert(Exit.isFailure(result));
+      expect(Cause.hasInterrupts(result.cause)).toBe(mode === "interruption");
 
       expect(cancelled).toBe(true);
     })
-  );
-}
+);

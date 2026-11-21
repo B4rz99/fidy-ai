@@ -4,7 +4,7 @@ import { it } from "@effect/vitest";
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Option } from "effect";
 import { HttpClient, type HttpClientError, HttpClientResponse } from "effect/http";
 import { TestClock } from "effect/testing";
-import { expect } from "vitest";
+import { assert, expect } from "vitest";
 import { checkDependencyUpdates } from "./check-dependency-updates";
 
 const clientLayer = (
@@ -55,13 +55,10 @@ it.effect.each([undefined, "1"])(
         Effect.exit
       );
 
-      expect(Exit.isFailure(exit)).toBe(true);
-
-      if (Exit.isFailure(exit)) {
-        expect(Option.getOrThrow(Cause.findErrorOption(exit.cause))).toMatchObject({
-          message: "Registry response exceeded its byte budget",
-        });
-      }
+      assert(Exit.isFailure(exit));
+      expect(Option.getOrThrow(Cause.findErrorOption(exit.cause))).toMatchObject({
+        message: "Registry response exceeded its byte budget",
+      });
 
       expect(calls).toBeGreaterThan(0);
       expect(calls).toBeLessThanOrEqual(8);
@@ -104,9 +101,8 @@ it.effect.each([
       Effect.exit
     );
 
-    expect(Exit.isFailure(exit)).toBe(true);
-
-    if (Exit.isFailure(exit)) expect(Cause.hasDies(exit.cause)).toBe(false);
+    assert(Exit.isFailure(exit));
+    expect(Cause.hasDies(exit.cause)).toBe(false);
     expect(signals.length).toBeGreaterThan(0);
     expect(signals.every((signal) => signal.aborted)).toBe(true);
   }).pipe(Effect.scoped)
@@ -145,7 +141,9 @@ it.effect(
 
       yield* Deferred.await(ready);
 
-      for (let attempt = 0; attempt < 4; attempt += 1) yield* TestClock.adjust("30 seconds");
+      yield* Effect.forEach(Array.from({ length: 4 }), () => TestClock.adjust("30 seconds"), {
+        discard: true,
+      });
       const exit = yield* Fiber.join(fiber);
       expect(Exit.isFailure(exit)).toBe(true);
       expect(calls).toBeGreaterThanOrEqual(4);

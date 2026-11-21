@@ -42,10 +42,12 @@ const transactions = Effect.fn(function* (db: Owner, size: Size) {
     Schema.fromJsonString(Schema.Array(Schema.String))
   )(currencies);
 
-  for (let start = 0; start < size.transactions; start += chunk) {
-    yield* execute(
-      db,
-      `WITH RECURSIVE series(i) AS (
+  yield* Effect.forEach(
+    Array.from({ length: Math.ceil(size.transactions / chunk) }, (_, index) => index * chunk),
+    (start) =>
+      execute(
+        db,
+        `WITH RECURSIVE series(i) AS (
       VALUES(CAST(?1 AS INTEGER)) UNION ALL SELECT i+1 FROM series WHERE i+1 < ?2
     ), facts AS (SELECT i,CASE WHEN i%100=1 THEN i-1 ELSE i END AS p FROM series),
     dated AS (SELECT *,?3-CASE WHEN p<500 THEN p*60000 ELSE ((p%3650)+1)*86400000 END AS occurred FROM facts)
@@ -53,14 +55,15 @@ const transactions = Effect.fn(function* (db: Owner, size: Size) {
     SELECT printf('81000000-0000-4000-8000-%012d',i),?4,'1000',
     json_extract(?5,printf('$[%d]', p%?6)),'outflow','Evaluación ' || p,
     printf('10000000-0000-4000-8000-%012d',CASE WHEN p%3=0 THEN 1 ELSE (p%15)+2 END),occurred,occurred FROM dated`,
-      start,
-      Math.min(start + chunk, size.transactions),
-      epoch,
-      subject,
-      encodedCurrencies,
-      size.currencies
-    );
-  }
+        start,
+        Math.min(start + chunk, size.transactions),
+        epoch,
+        subject,
+        encodedCurrencies,
+        size.currencies
+      ),
+    { discard: true }
+  );
 
   yield* execute(
     db,
@@ -74,13 +77,16 @@ const transactions = Effect.fn(function* (db: Owner, size: Size) {
     epoch
   );
 
-  for (const member of ["first_transaction_id", "second_transaction_id"] as const) {
-    yield* execute(
-      db,
-      `UPDATE transactions SET reconciliation_first_id=d.first_transaction_id,reconciliation_second_id=d.second_transaction_id
+  yield* Effect.forEach(
+    ["first_transaction_id", "second_transaction_id"] as const,
+    (member) =>
+      execute(
+        db,
+        `UPDATE transactions SET reconciliation_first_id=d.first_transaction_id,reconciliation_second_id=d.second_transaction_id
       FROM transaction_reconciliation_decisions d WHERE transactions.user_id=d.user_id AND transactions.id=d.${member}`
-    );
-  }
+      ),
+    { discard: true }
+  );
 
   yield* execute(
     db,
@@ -89,17 +95,20 @@ const transactions = Effect.fn(function* (db: Owner, size: Size) {
 });
 
 const planning = Effect.fn(function* (db: Owner, size: Size) {
-  for (const [index, currency] of currencies.slice(0, size.currencies).entries()) {
-    yield* execute(
-      db,
-      `INSERT INTO budgets(id,user_id,category_id,category_revision,currency,cap,created_at_ms,updated_at_ms,group_name,starts_month)
+  yield* Effect.forEach(
+    currencies.slice(0, size.currencies),
+    (currency, index) =>
+      execute(
+        db,
+        `INSERT INTO budgets(id,user_id,category_id,category_revision,currency,cap,created_at_ms,updated_at_ms,group_name,starts_month)
       SELECT printf('82000000-0000-4000-8000-%012d',?1*16+row_number() OVER(ORDER BY id)),?2,id,'co-1',?3,'100000',?4,?4,'Grupo ' || ?3,'2016-01' FROM categories LIMIT 16`,
-      index,
-      subject,
-      currency,
-      epoch
-    );
-  }
+        index,
+        subject,
+        currency,
+        epoch
+      ),
+    { discard: true }
+  );
 
   yield* execute(
     db,
@@ -107,29 +116,34 @@ const planning = Effect.fn(function* (db: Owner, size: Size) {
     subject
   );
 
-  for (let index = 0; index < size.plans; index++) {
-    const id = "83000000-0000-4000-8000-" + String(index).padStart(idDigits, "0");
-    yield* execute(
-      db,
-      "INSERT INTO recurring_plans(user_id,id,position,pauses_json) VALUES(?,?,?,'[]')",
-      subject,
-      id,
-      index
-    );
-    yield* execute(
-      db,
-      `WITH RECURSIVE revisions(n) AS (VALUES(0) UNION ALL SELECT n+1 FROM revisions WHERE n+1<?1),
+  yield* Effect.forEach(
+    Array.from({ length: size.plans }, (_, index) => index),
+    (index) =>
+      Effect.gen(function* () {
+        const id = "83000000-0000-4000-8000-" + String(index).padStart(idDigits, "0");
+        yield* execute(
+          db,
+          "INSERT INTO recurring_plans(user_id,id,position,pauses_json) VALUES(?,?,?,'[]')",
+          subject,
+          id,
+          index
+        );
+        yield* execute(
+          db,
+          `WITH RECURSIVE revisions(n) AS (VALUES(0) UNION ALL SELECT n+1 FROM revisions WHERE n+1<?1),
       dates AS (SELECT n,date('2018-01-01','+' || n || ' months') AS start FROM revisions)
       INSERT INTO recurring_plan_revisions(user_id,plan_id,position,from_date,plan_json)
       SELECT ?2,?3,n,start,json_object('name',printf('Recurrente %d',?4),'kind','expense','currency','COP','amountMode','fixed',
       'money',json_object('amount','100000','currency','COP'),'frequency','monthly','firstDate',start,'timeZone','America/Bogota',
       'counterparty',printf('Contraparte %d',?4)) FROM dates`,
-      size.revisions,
-      subject,
-      id,
-      index
-    );
-  }
+          size.revisions,
+          subject,
+          id,
+          index
+        );
+      }),
+    { discard: true }
+  );
 });
 
 const reviews = Effect.fn(function* (db: Owner, size: Size) {
@@ -172,6 +186,21 @@ const reviews = Effect.fn(function* (db: Owner, size: Size) {
   );
 });
 
+const seedCategories = Effect.fn(function* (db: Owner) {
+  yield* Effect.forEach(
+    listLaunchCategories(),
+    (category, position) =>
+      execute(
+        db,
+        "INSERT INTO categories(id,label,display_order) VALUES(?,?,?)",
+        category.id,
+        category.label,
+        position
+      ),
+    { discard: true }
+  );
+});
+
 export const seed = Effect.fn(function* (db: Owner, dataset: string) {
   if (
     dataset !== "small" &&
@@ -190,15 +219,7 @@ export const seed = Effect.fn(function* (db: Owner, dataset: string) {
     subject
   );
 
-  for (const [position, category] of listLaunchCategories().entries()) {
-    yield* execute(
-      db,
-      "INSERT INTO categories(id,label,display_order) VALUES(?,?,?)",
-      category.id,
-      category.label,
-      position
-    );
-  }
+  yield* seedCategories(db);
 
   process.stdout.write("REFERENCE_STAGE transactions\n");
   yield* transactions(db, size);

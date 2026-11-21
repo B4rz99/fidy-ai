@@ -3,6 +3,7 @@ import {
   Clock,
   DateTime,
   Deferred,
+  Duration,
   Effect,
   Fiber,
   type FileSystem,
@@ -521,7 +522,7 @@ it.each(independentHandoffs)(
         );
 
         yield* Deferred.await(ready).pipe(
-          Effect.timeout(5_000),
+          Effect.timeout(Duration.seconds(5)),
           Effect.tap(() => Effect.sync(() => expect(creates).toBe(limit))),
           Effect.ensuring(Deferred.succeed(release, undefined)),
           Effect.onError(() => Effect.tryPromise(() => pending).pipe(Effect.ignoreCause))

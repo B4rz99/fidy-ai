@@ -7,9 +7,11 @@ import { makeCoreHttp } from "./runtime";
 import { cloudflareWorkerTelemetry } from "../runtime/telemetry/operations";
 
 const burstLogs = (logs: ReadonlyArray<ReadonlyArray<unknown>>): ReadonlyArray<string> =>
-  logs
-    .map((call) => Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))(call))
-    .filter((call) => call.includes("component=core-rejections"));
+  logs.flatMap((call) => {
+    const encoded = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))(call);
+
+    return encoded.includes("component=core-rejections") ? [encoded] : [];
+  });
 
 const environment: CoreHttpEnvironment = {
   RELEASE_GIT_SHA: "0".repeat(40),

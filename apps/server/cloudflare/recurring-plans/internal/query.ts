@@ -331,15 +331,9 @@ const transactionSummaries = ({
 }>): (typeof RecurringWorkspace.Type)["linkedTransactions"] => {
   const ids = new Set([...marks, ...invalid].map((mark) => mark.transactionId));
 
-  return [...new Map(transactions.map((transaction) => [transaction.id, transaction])).values()]
-    .filter((transaction) => ids.has(transaction.id))
-    .map(({ id, money, counterparty, direction, categoryId, notes, occurredAt }) => ({
-      id,
-      money,
-      counterparty,
-      direction,
-      categoryId,
-      notes,
-      occurredAt,
-    }));
+  return [
+    ...new Map(transactions.map((transaction) => [transaction.id, transaction])).values(),
+  ].flatMap(({ id, money, counterparty, direction, categoryId, notes, occurredAt }) =>
+    ids.has(id) ? [{ id, money, counterparty, direction, categoryId, notes, occurredAt }] : []
+  );
 };

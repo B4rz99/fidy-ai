@@ -1,13 +1,21 @@
 #!/usr/bin/env bun
 
-import { Effect, Schema } from "effect";
+import { Data, Effect, Schema } from "effect";
 import { operationCatalog } from "~/shell/api";
+
+class TelemetryMetadataGenerationFailure extends Data.TaggedError(
+  "TelemetryMetadataGenerationFailure"
+)<{
+  readonly message: string;
+}> {}
 
 const main = Effect.gen(function* () {
   const arguments_ = Bun.argv.slice(2);
 
   if (arguments_.some((argument) => argument !== "--check")) {
-    throw new Error("Expected only --check for telemetry metadata generation");
+    return yield* new TelemetryMetadataGenerationFailure({
+      message: "Expected only --check for telemetry metadata generation",
+    });
   }
 
   const file = Bun.file(
@@ -24,7 +32,9 @@ const main = Effect.gen(function* () {
     const present = yield* Effect.tryPromise(() => file.exists());
 
     if (!present || (yield* Effect.tryPromise(() => file.text())) !== text) {
-      throw new Error("Canonical telemetry metadata are stale. Run bun run contracts:generate.");
+      return yield* new TelemetryMetadataGenerationFailure({
+        message: "Canonical telemetry metadata are stale. Run bun run contracts:generate.",
+      });
     }
   } else {
     yield* Effect.tryPromise(() => Bun.write(file, text));

@@ -1,4 +1,4 @@
-import { Config, Effect, Schema } from "effect";
+import { Config, Duration, Effect, Schema } from "effect";
 import { Miniflare } from "miniflare";
 import { expect, it } from "vitest";
 
@@ -78,7 +78,7 @@ it.skipIf(!measure)(
             deliveries = (yield* Effect.tryPromise(() => result.list())).keys.length;
 
             if (deliveries === 1) break;
-            yield* Effect.sleep(50);
+            yield* Effect.sleep(Duration.millis(50));
           }
 
           const elapsedMs = performance.now() - started;

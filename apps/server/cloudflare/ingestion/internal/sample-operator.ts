@@ -3,7 +3,7 @@ import { withdrawArtifact } from "./sample-publication";
 import { Clock, Effect, Option, Schema } from "effect";
 import { HttpClient } from "effect/http";
 import { SampleReviewCommand } from "../../../src/core/ingestion/contract";
-import { makeAccessSigningKeysOutboundHttp } from "../../../src/shell/outbound-http/operations";
+import { accessSigningKeysOutboundHttp } from "../../../src/shell/outbound-http/operations";
 import type { CoreHttpEnvironment } from "../../core-http/contract";
 import { boundedJsonBody } from "../../http/operations";
 import { RequestBodyPolicy } from "../../http/contract";
@@ -40,7 +40,7 @@ const authenticateReviewer = Effect.fn(function* (
         environment.ERASURE_SUPPORT_AUDIENCE ?? "",
       ],
     },
-    http: makeAccessSigningKeysOutboundHttp({ issuer, httpClient: yield* HttpClient.HttpClient }),
+    http: accessSigningKeysOutboundHttp({ issuer, httpClient: yield* HttpClient.HttpClient }),
   });
 });
 

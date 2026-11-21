@@ -1,4 +1,4 @@
-import { Clock, Effect } from "effect";
+import { Clock, Effect, Predicate } from "effect";
 import { userStoreHistory } from "./user-store/operations";
 import { maintenanceStoreHistory } from "./maintenance/operations";
 import { erasureStoreHistory } from "./erasure-store/operations";
@@ -53,37 +53,41 @@ const observeStorage = (
   mode: string,
   sample: (size: number) => void
 ): DurableObjectStorage => {
-  const sql = new Proxy(storage.sql, {
-    get(target, property): unknown {
-      if (property === "exec") {
-        return (
-          query: string,
-          ...bindings: SqlStorageValue[]
-        ): ReturnType<typeof storage.sql.exec> => {
-          if (
-            (mode === "busy" && query.includes("INSERT INTO result SELECT")) ||
-            (mode === "refuseGuard" && query.includes("INSERT INTO store_migration_attempts"))
-          ) {
-            throw Object.assign(new Error("synthetic busy storage"), { code: "SQLITE_BUSY" });
-          }
+  const exec = <Row extends Record<string, SqlStorageValue>>(
+    query: string,
+    ...bindings: SqlStorageValue[]
+  ): SqlStorageCursor<Row> => {
+    if (
+      (mode === "busy" && query.includes("INSERT INTO result SELECT")) ||
+      (mode === "refuseGuard" && query.includes("INSERT INTO store_migration_attempts"))
+    ) {
+      throw Object.assign(new Error("synthetic busy storage"), { code: "SQLITE_BUSY" });
+    }
 
-          const cursor = target.exec(query, ...bindings);
-          sample(target.databaseSize);
+    const cursor = storage.sql.exec<Row>(query, ...bindings);
+    sample(storage.sql.databaseSize);
 
-          return cursor;
-        };
-      }
+    return cursor;
+  };
 
-      return Reflect.get(target, property, target);
+  const sql: SqlStorage = {
+    exec,
+    get databaseSize(): number {
+      return storage.sql.databaseSize;
     },
-  });
+    Cursor: storage.sql.Cursor,
+    Statement: storage.sql.Statement,
+  };
 
   return new Proxy(storage, {
-    get(target, property): unknown {
+    get: (target, property) => {
       if (property === "sql") return sql;
-      const value: unknown = Reflect.get(target, property, target);
 
-      return typeof value === "function" ? value.bind(target) : value;
+      if (!Predicate.hasProperty(target, property)) return undefined;
+
+      const value = target[property];
+
+      return Predicate.isFunction(value) ? value.bind(target) : value;
     },
   });
 };

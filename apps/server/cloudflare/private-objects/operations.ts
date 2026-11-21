@@ -25,22 +25,25 @@ const validateTarget = (
 ): Effect.Effect<void, PrivateObjectUnavailable> =>
   Effect.gen(function* () {
     const userId = yield* Schema.decodeEffect(UserId)(input.userId).pipe(
-      Effect.mapError(() => new PrivateObjectUnavailable())
+      Effect.mapError((cause) => new PrivateObjectUnavailable({ cause: Option.some(cause) }))
     );
 
     const key = yield* Schema.decodeEffect(PrivateObjectKey)(input.key).pipe(
-      Effect.mapError(() => new PrivateObjectUnavailable())
+      Effect.mapError((cause) => new PrivateObjectUnavailable({ cause: Option.some(cause) }))
     );
 
     const prefix = userPrivateObjectPrefix(userId);
 
     if (!key.startsWith(prefix) || key.length === prefix.length) {
-      return yield* new PrivateObjectUnavailable();
+      return yield* new PrivateObjectUnavailable({ cause: Option.none() });
     }
   });
 
 const io = <A>(run: () => Promise<A>): Effect.Effect<A, PrivateObjectUnavailable> =>
-  Effect.tryPromise({ try: run, catch: () => new PrivateObjectUnavailable() });
+  Effect.tryPromise({
+    try: run,
+    catch: () => new PrivateObjectUnavailable({ cause: Option.none() }),
+  });
 
 type TrackedWrite<E, R> = PrivateObjectWrite<E, R> & {
   put: (
@@ -64,7 +67,7 @@ const publishPrivateObject = <E, R>(
         previous.purpose === "private-object-placeholder" ||
         previous.purpose === "private-object-erased"
       ) {
-        return yield* new PrivateObjectUnavailable();
+        return yield* new PrivateObjectUnavailable({ cause: Option.none() });
       }
     }
 
@@ -84,10 +87,12 @@ const publishPrivateObject = <E, R>(
     });
 
     const stored = yield* Schema.decodeUnknownEffect(Stored)(placeholder).pipe(
-      Effect.mapError(() => new PrivateObjectUnavailable())
+      Effect.mapError((cause) => new PrivateObjectUnavailable({ cause: Option.some(cause) }))
     );
 
-    if (!(yield* input.authorise)) return yield* new PrivateObjectUnavailable();
+    if (!(yield* input.authorise)) {
+      return yield* new PrivateObjectUnavailable({ cause: Option.none() });
+    }
 
     const checksum = Option.match(input.digest, {
       onNone: () => ({}),
@@ -101,7 +106,7 @@ const publishPrivateObject = <E, R>(
     });
 
     yield* Schema.decodeUnknownEffect(Stored)(published).pipe(
-      Effect.mapError(() => new PrivateObjectUnavailable())
+      Effect.mapError((cause) => new PrivateObjectUnavailable({ cause: Option.some(cause) }))
     );
   });
 
@@ -128,7 +133,7 @@ export const resumePrivateUpload = Effect.fn(function* <E, R>(
   const metadata = observed.value.customMetadata;
 
   if (metadata.sha256 !== work.metadata.sha256 || !(yield* work.authorise)) {
-    return yield* new PrivateObjectUnavailable();
+    return yield* new PrivateObjectUnavailable({ cause: Option.none() });
   }
 
   const checksum = Option.match(work.digest, {
@@ -143,6 +148,6 @@ export const resumePrivateUpload = Effect.fn(function* <E, R>(
   });
 
   yield* Schema.decodeUnknownEffect(Stored)(written).pipe(
-    Effect.mapError(() => new PrivateObjectUnavailable())
+    Effect.mapError((cause) => new PrivateObjectUnavailable({ cause: Option.some(cause) }))
   );
 });

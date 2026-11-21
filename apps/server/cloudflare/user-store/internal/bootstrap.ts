@@ -177,11 +177,10 @@ const approveOwner = Effect.fn(function* (handoff: Handoff, now: number, recover
     yield* sql`UPDATE browser_handoffs SET outcome='committed',state='ready' WHERE id=${handoff.id} RETURNING 1`
   );
 
+  const completed = completionResult(create, recovery);
+
   return Response.json(
-    {
-      ...completionResult(create, recovery),
-      ...(handoff.invitation === null ? {} : { whatsappReturnUrl: fidyWhatsAppUrl }),
-    },
+    handoff.invitation === null ? completed : { ...completed, whatsappReturnUrl: fidyWhatsAppUrl },
     { headers: { "cache-control": "no-store" } }
   );
 });

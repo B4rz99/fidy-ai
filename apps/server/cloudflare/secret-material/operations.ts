@@ -1,15 +1,11 @@
-import { Digest } from "effect/crypto";
 import { Effect, PlatformError, Redacted } from "effect";
+import { SecureRandom } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
-import { makeWorkerSecureRandom } from "./internal/worker-crypto";
-
-const workerDigest = Effect.runSync(Digest.Digest.pipe(Effect.provide(Digest.layerWebCrypto)));
+import { workerSecureRandom } from "./internal/worker-crypto";
 
 const secretBytes = 32;
 
-const workerSecureRandom = makeWorkerSecureRandom();
-
-export const newId = (): string => Effect.runSync(workerSecureRandom.uuidV4().pipe(Effect.orDie));
+export const newId = (): string => SecureRandom.uuidV4Unsafe();
 
 export const newSecret: Effect.Effect<
   Redacted.Redacted<string>,
@@ -18,39 +14,26 @@ export const newSecret: Effect.Effect<
   Effect.map((bytes) => Redacted.make(Base64Url.encode(bytes)))
 );
 
-export const secretDigest = (
-  input: Readonly<{ purpose: string; value: Redacted.Redacted<string> }>
-): Effect.Effect<Uint8Array, PlatformError.PlatformError> =>
-  workerDigest
-    .digest(
-      Digest.sha256,
-      new TextEncoder().encode(`${input.purpose}:${Redacted.value(input.value)}`)
-    )
-    .pipe(
-      Effect.catchDefect((cause) =>
-        Effect.fail(
-          PlatformError.systemError({
-            _tag: "Unknown",
-            module: "WorkerCrypto",
-            method: "digest",
-            cause,
-          })
-        )
-      )
-    );
+const digestFailure = (cause: unknown): PlatformError.PlatformError =>
+  PlatformError.badArgument({
+    module: "WorkerCrypto",
+    method: "digest",
+    description: "SHA-256 digest unavailable",
+    cause,
+  });
 
 export const digestBytes = (
   bytes: Uint8Array
 ): Effect.Effect<Uint8Array, PlatformError.PlatformError> =>
-  workerDigest.digest(Digest.sha256, bytes).pipe(
-    Effect.catchDefect((cause) =>
-      Effect.fail(
-        PlatformError.systemError({
-          _tag: "Unknown",
-          module: "WorkerCrypto",
-          method: "digest",
-          cause,
-        })
-      )
-    )
-  );
+  Effect.tryPromise({
+    try: () =>
+      crypto.subtle
+        .digest("SHA-256", new Uint8Array(bytes))
+        .then((digest) => new Uint8Array(digest)),
+    catch: digestFailure,
+  });
+
+export const secretDigest = (
+  input: Readonly<{ purpose: string; value: Redacted.Redacted<string> }>
+): Effect.Effect<Uint8Array, PlatformError.PlatformError> =>
+  digestBytes(new TextEncoder().encode(`${input.purpose}:${Redacted.value(input.value)}`));

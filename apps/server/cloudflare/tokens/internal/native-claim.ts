@@ -1,5 +1,5 @@
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, DateTime, Effect, Option, Schema } from "effect";
+import { Clock, DateTime, Effect, Option, Predicate, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import { UserId } from "../../../src/core/identity/contract";
 import { PAT, PATPairingId } from "../../../src/core/tokens/contract";
@@ -20,6 +20,8 @@ import {
   unavailable,
 } from "./pat-shared";
 import { PATUnavailable } from "../contract";
+
+const isResponse = Schema.is(Schema.instanceOf(Response));
 
 const claimResponse = Effect.fn(function* ({
   pairing,
@@ -92,13 +94,13 @@ const applyDecision = Effect.fn(function* ({
 }) {
   const sql = yield* SqliteClient;
 
-  if (decision._tag === "WrongProof") {
+  if (Predicate.isTagged(decision, "WrongProof")) {
     yield* sql`UPDATE pat_pairings SET wrong_attempts=${decision.wrongProofAttempts} WHERE id=${id}`;
 
     return invalid();
   }
 
-  if (decision._tag === "SlowDown") {
+  if (Predicate.isTagged(decision, "SlowDown")) {
     yield* sql`UPDATE pat_pairings SET minimum_poll_seconds=${Math.min(maximumPollSeconds, decision.minimumPollIntervalSeconds)} WHERE id=${id}`;
 
     return response({
@@ -107,7 +109,7 @@ const applyDecision = Effect.fn(function* ({
     });
   }
 
-  if (decision._tag === "Pending") {
+  if (Predicate.isTagged(decision, "Pending")) {
     yield* sql`UPDATE pat_pairings SET last_poll_at_ms=${current} WHERE id=${id}`;
 
     return response({
@@ -121,7 +123,7 @@ const applyDecision = Effect.fn(function* ({
   }
 
   if (
-    decision._tag !== "Claim" ||
+    !Predicate.isTagged(decision, "Claim") ||
     pairing.approved_at_ms === null ||
     pairing.pat_expires_at_ms === null
   ) {
@@ -200,11 +202,20 @@ const issueClaim = Effect.fn(function* ({
 
   const audit = recordClaimedPAT({ id: newId(), userId: pairing.user_id, patId, current });
 
-  for (const statement of [issue, audit]) {
-    if ((yield* sql.unsafe(statement.sql + " RETURNING id", statement.params)).length === 0) {
-      return yield* new PATUnavailable();
-    }
-  }
+  yield* Effect.forEach(
+    [issue, audit],
+    (statement) =>
+      sql
+        .unsafe(statement.sql + " RETURNING id", statement.params)
+        .pipe(
+          Effect.flatMap((rows) =>
+            rows.length === 0
+              ? Effect.fail(new PATUnavailable({ cause: Option.none() }))
+              : Effect.void
+          )
+        ),
+    { discard: true }
+  );
 });
 
 export const localClaim = Effect.fn(
@@ -216,7 +227,7 @@ export const localClaim = Effect.fn(
     const proof = yield* Effect.fromResult(Hex.decode(input.digest));
     const first = yield* observe(input.id, proof, owns).pipe(withStoreCapacity("required"));
 
-    if (first instanceof Response) return first;
+    if (isResponse(first)) return first;
 
     const route = yield* directoryEvidence(
       directory,
@@ -242,7 +253,7 @@ export const localClaim = Effect.fn(
     return yield* Effect.gen(function* () {
       const pairing = yield* observe(input.id, proof, owns);
 
-      if (pairing instanceof Response) return pairing;
+      if (isResponse(pairing)) return pairing;
 
       if (
         pairing.user_id !== first.user_id ||

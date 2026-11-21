@@ -1,5 +1,5 @@
 import { HttpClient } from "effect/http";
-import { makeAccessSigningKeysOutboundHttp } from "../../src/shell/outbound-http/operations";
+import { accessSigningKeysOutboundHttp } from "../../src/shell/outbound-http/operations";
 import type { ErasureRegistry } from "./contract";
 import { nativeOperatorRequest } from "./internal/operator-request";
 import { Effect } from "effect";
@@ -21,7 +21,7 @@ export const handleNativeErasureOperator = Effect.fn(function* (
   request: Request,
   environment: Parameters<typeof nativeOperatorRequest>[0]["environment"]
 ) {
-  const http = makeAccessSigningKeysOutboundHttp({
+  const http = accessSigningKeysOutboundHttp({
     issuer: environment.CLOUDFLARE_ACCESS_ISSUER,
     httpClient: yield* HttpClient.HttpClient,
   });

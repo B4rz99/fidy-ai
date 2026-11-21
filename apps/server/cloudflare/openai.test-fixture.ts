@@ -5,6 +5,8 @@ import {
   type OpenAiTransportRun,
 } from "../src/shell/hosted-inference/contract";
 
+const isRequest = Schema.is(Schema.instanceOf(Request));
+
 const FunctionCall = Schema.Struct({
   id: Schema.String,
   type: Schema.Literal("function"),
@@ -82,7 +84,7 @@ type FetchHandler = (input: string | URL | Request, init?: RequestInit) => Promi
 export const withOpenAiFetch = (fallback: FetchHandler): typeof fetch =>
   Object.assign(
     (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
-      const destination = input instanceof Request ? input.url : String(input);
+      const destination = isRequest(input) ? input.url : String(input);
 
       if (destination !== "https://api.openai.com/v1/chat/completions") {
         return fallback(input, init);

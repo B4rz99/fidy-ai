@@ -17,7 +17,7 @@ import {
   WhatsAppProviderMessageId,
 } from "../../src/shell/channels/whatsapp/contract";
 import { Model } from "effect/schema";
-import { Data, Schema } from "effect";
+import { Data, type Option, Schema } from "effect";
 
 export const WhatsAppInboundEvidence = Schema.Struct({
   messageId: WhatsAppProviderMessageId,
@@ -63,7 +63,7 @@ export type WhatsAppIngressEnvironment = Partial<
   Pick<UserStoreBindings, "DIRECTORY" | "USER_STORE"> &
     Readonly<{
       HOSTED_WHATSAPP_QUEUE: Readonly<{
-        send: (event: typeof WhatsAppLifecycleWork.Type) => Promise<unknown>;
+        send: (event: typeof WhatsAppLifecycleWork.Type) => Promise<QueueSendResponse>;
       }>;
     }>
 > &
@@ -78,7 +78,9 @@ export type WhatsAppIngressEnvironment = Partial<
     ) => Promise<Response>;
   }>;
 
-export class WhatsAppUnavailable extends Data.TaggedError("WhatsAppUnavailable")<{}> {}
+export class WhatsAppUnavailable extends Data.TaggedError("WhatsAppUnavailable")<{
+  readonly cause: Option.Option<unknown>;
+}> {}
 
 export const DeliveryFamily = Schema.Literals([
   "hosted",

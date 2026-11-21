@@ -22,7 +22,9 @@ const objectTypes = {
   ERASURE: "Erasure",
 };
 
-const text = (value: string): { type: "text"; value: string } => ({ type: "text" as const, value });
+type TextBinding = Readonly<{ type: "text"; value: string }>;
+
+const text = (value: string): TextBinding => ({ type: "text", value });
 
 const objects = Object.fromEntries(
   Object.entries(objectTypes).map(([key, exportName]) => [
@@ -173,7 +175,7 @@ const rehearse = Effect.gen(function* () {
       return;
     }
 
-    if (first) {
+    const checkReadiness = Effect.gen(function* () {
       const readiness = yield* native(() =>
         mf.dispatchFetch(origin + smokePath + "?readiness=1", {
           headers: { [smokeProofHeader]: proof },
@@ -183,7 +185,9 @@ const rehearse = Effect.gen(function* () {
       expect(readiness.status).toBe(200);
       const health = yield* native(() => mf.dispatchFetch(origin + "/health"));
       expect(health.status).toBe(200);
-    }
+    });
+
+    yield* first ? checkReadiness : Effect.void;
 
     const ordinary = yield* native(() => mf.dispatchFetch(origin + "/transactions"));
     expect(ordinary.status).toBe(503);
@@ -201,13 +205,9 @@ const rehearse = Effect.gen(function* () {
       })
     );
 
-    if (!readable) {
-      expect(probe.status).toBe(503);
+    expect(probe.status).toBe(readable ? 200 : 503);
 
-      return;
-    }
-
-    expect(probe.status).toBe(200);
+    if (!readable) return;
 
     const body = yield* Schema.decodeUnknownEffect(
       Schema.Struct({
@@ -303,8 +303,6 @@ const rehearse = Effect.gen(function* () {
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "installs native shared facts under closed admission and keeps named User data through mixed-version rollback and forward repair",
-    () => rehearse,
-
-    60_000
+    () => rehearse
   );
 });

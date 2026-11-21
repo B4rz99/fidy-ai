@@ -1,4 +1,4 @@
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option, Result, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import { installedOrigins } from "../../../src/shell/browser-transport/contract";
 import { RequestBodyPolicy } from "../../http/contract";
@@ -142,7 +142,7 @@ const authenticatedDigest = Effect.fn(function* (ctx: Context & { now: number })
   if (!windowValid(deadline, ctx.now)) return Option.none<string>();
   const mac = Hex.decode(signature);
 
-  if (mac._tag === "Failure") return Option.none<string>();
+  if (Result.isFailure(mac)) return Option.none<string>();
   const credential = yield* Effect.tryPromise(() => key(ctx.environment));
   const content = yield* signedContent(ctx, deadline, digest);
 

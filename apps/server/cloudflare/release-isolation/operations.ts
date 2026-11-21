@@ -167,12 +167,14 @@ export const releaseAdmission = Effect.fn(function* (
   return { request, denial: blocked, deadline: Option.none<number>() };
 });
 
-const cohortLimits: Readonly<Record<string, number>> = {
-  smoke: 2,
-  erasure: 1,
-  performance: 20,
-  fleet: 1000,
-};
+const cohortLimits = new Map(
+  Object.entries({
+    smoke: 2,
+    erasure: 1,
+    performance: 20,
+    fleet: 1000,
+  })
+);
 
 const syntheticSubject =
   /^fidy-acceptance-([a-f0-9]{40})-(smoke|erasure|performance|fleet)-([1-9][0-9]{0,3})$/u;
@@ -197,7 +199,7 @@ export const acceptanceSubject = ({
   const purpose = match[2] ?? "",
     ordinal = Number(match[3]);
 
-  return ordinal <= (cohortLimits[purpose] ?? 0);
+  return ordinal <= (cohortLimits.get(purpose) ?? 0);
 };
 
 const windowKey = (revision: string): string => `_release-smoke/${revision}/acceptance/work`;

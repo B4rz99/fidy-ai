@@ -36,7 +36,7 @@ export type OutboundHttpService = Readonly<{
   ) => Effect.Effect<OutboundHttpResponse, OutboundHttpFailure>;
 }>;
 
-export const makeAccessSigningKeysOutboundHttp = (
+export const accessSigningKeysOutboundHttp = (
   input: Readonly<{
     issuer: string;
     httpClient: HttpClient.HttpClient;

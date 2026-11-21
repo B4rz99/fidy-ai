@@ -5,6 +5,7 @@ import {
   Deferred,
   Duration,
   Effect,
+  Exit,
   Fiber,
   type FileSystem,
   Schema,
@@ -19,7 +20,17 @@ import { DisclosureSnapshot } from "../../src/shell/consent/contract";
 import { makeWorkerTelemetry } from "../runtime/telemetry/operations";
 import type { WorkerTelemetryEvent } from "../runtime/telemetry/contract";
 import type { CoreQueueEnvironment } from "./contract";
-import { makeCoreQueue } from "./runtime";
+import { coreQueue } from "./runtime";
+import { LocalBillingCollection, LocalRefundWork } from "../subscription/contract";
+import { UserId } from "../../src/core/identity/contract";
+import { BillingAttemptId, RefundAttemptId } from "../../src/core/subscription/contract";
+
+const makeCoreQueue =
+  (
+    telemetry: Parameters<typeof coreQueue>[0]
+  ): ((...args: Parameters<ReturnType<typeof coreQueue>>) => Promise<void>) =>
+  (...args) =>
+    Effect.runPromise(coreQueue(telemetry)(...args));
 
 const queue = makeCoreQueue(makeWorkerTelemetry(() => undefined));
 
@@ -44,14 +55,28 @@ const instance = (id: string): WorkflowInstance => ({
 
 type Owner = "statement" | "billing" | "pairing";
 
-const body = (owner: Owner, index: number): Readonly<Record<string, unknown>> => {
+const refundWork = LocalRefundWork.make({
+  userId: Schema.decodeSync(UserId)(userId),
+  refundAttemptId: Schema.decodeSync(RefundAttemptId)(identity(2)),
+  verification: 0,
+});
+
+type QueueBody =
+  | Readonly<{ version: 1; userId: string; submissionId: string }>
+  | typeof LocalBillingCollection.Type
+  | Readonly<{ version: 2; kind: "browser-pairing-email"; userId: string; id: string }>;
+
+const body = (owner: Owner, index: number): QueueBody => {
   const id = identity(index);
 
   switch (owner) {
     case "statement":
       return { version: 1, userId, submissionId: id };
     case "billing":
-      return { _tag: "CollectUserBillingAttempt", userId, attemptId: id };
+      return LocalBillingCollection.make({
+        userId: Schema.decodeSync(UserId)(userId),
+        attemptId: Schema.decodeSync(BillingAttemptId)(id),
+      });
     case "pairing":
       return { version: 2, kind: "browser-pairing-email", userId, id };
   }
@@ -71,28 +96,33 @@ const seed = Effect.fn(function* () {
     yield* Schema.encodeEffect(Schema.fromJsonString(DisclosureSnapshot))(currentDisclosureFor())
   );
 
-  for (let index = 0; index < 10; index++) {
-    const id = identity(index);
-    yield* owner.exec(
-      "INSERT INTO statement_staging_objects(id,user_id,object_key,byte_length,sha256,status,created_at_ms,expires_at_ms,published_submission_id,source_format) VALUES(?,?,?,1,?,'published',?,?,?,'csv')",
-      id,
-      userId,
-      "users/" + userId + "/" + id,
-      "f".repeat(64),
-      owner.now,
-      owner.now + 600000,
-      id
-    );
-    yield* owner.exec(
-      "INSERT INTO statement_submissions(id,user_id,idempotency_key,staging_id,submitted_at_ms,retention_expires_at_ms,source_format,parser_revision,service_market,locale,time_zone) VALUES (?,?,?,?,?,?,'csv','v1','CO','es-CO','America/Bogota')",
-      id,
-      userId,
-      id,
-      id,
-      owner.now,
-      owner.now + 600000
-    );
-  }
+  yield* Effect.forEach(
+    Array.from({ length: 10 }, (_, index) => index),
+    (index) =>
+      Effect.gen(function* () {
+        const id = identity(index);
+        yield* owner.exec(
+          "INSERT INTO statement_staging_objects(id,user_id,object_key,byte_length,sha256,status,created_at_ms,expires_at_ms,published_submission_id,source_format) VALUES(?,?,?,1,?,'published',?,?,?,'csv')",
+          id,
+          userId,
+          "users/" + userId + "/" + id,
+          "f".repeat(64),
+          owner.now,
+          owner.now + 600000,
+          id
+        );
+        yield* owner.exec(
+          "INSERT INTO statement_submissions(id,user_id,idempotency_key,staging_id,submitted_at_ms,retention_expires_at_ms,source_format,parser_revision,service_market,locale,time_zone) VALUES (?,?,?,?,?,?,'csv','v1','CO','es-CO','America/Bogota')",
+          id,
+          userId,
+          id,
+          id,
+          owner.now,
+          owner.now + 600000
+        );
+      }),
+    { discard: true }
+  );
 
   const namespace = yield* native(() => runtime.getDurableObjectNamespace("USER_STORE", "core"));
 
@@ -200,12 +230,11 @@ it.each(
           deleteBatch: unused,
         };
 
-        const env = {
-          ...environment(workflow, () => {
-            coordinatorCalls += 1;
-          }),
-          ...(owner === "statement" ? { USER_STORE: users } : {}),
-        };
+        const shared = environment(workflow, () => {
+          coordinatorCalls += 1;
+        });
+
+        const env = owner === "statement" ? { ...shared, USER_STORE: users } : shared;
 
         const acknowledged = new Set<number>();
 
@@ -216,18 +245,21 @@ it.each(
 
         let deliveryReads = 0;
 
-        for (let attempt = 1; attempt <= 4; attempt += 1) {
-          const pending = messages.filter((message) => !acknowledged.has(message.index));
-          deliveryReads += pending.length;
-          yield* Effect.tryPromise(() =>
-            expect(
-              queue(batch(pending, acknowledged, attempt), env).then(
-                () => "resolved",
-                () => "rejected"
-              )
-            ).resolves.toBe("rejected")
-          );
-        }
+        yield* Effect.forEach(
+          [1, 2, 3, 4],
+          Effect.fnUntraced(function* (attempt) {
+            const pending = messages.filter((message) => !acknowledged.has(message.index));
+
+            deliveryReads += pending.length;
+
+            const outcome = yield* Effect.exit(
+              Effect.tryPromise(() => queue(batch(pending, acknowledged, attempt), env))
+            );
+
+            expect(Exit.isFailure(outcome)).toBe(true);
+          }),
+          { discard: true }
+        );
 
         const healthy = messages
           .filter((message) => message.index !== poison)
@@ -268,7 +300,7 @@ it("keeps malformed shared billing work retryable without blocking valid collect
         { index: 1, body: body("billing", 1) },
         {
           index: 2,
-          body: { _tag: "RunUserRefund", userId, refundAttemptId: identity(2), verification: 0 },
+          body: refundWork,
         },
       ];
 
@@ -554,8 +586,7 @@ it.each(independentHandoffs)(
           }))
         );
       })
-    ),
-  15_000
+    )
 );
 
 it("retains input-order failure selection when independent handoffs fail in reverse order", () =>

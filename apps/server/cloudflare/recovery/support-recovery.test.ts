@@ -8,16 +8,19 @@ import {
   Fiber,
   Layer,
   Option,
+  Predicate,
   Schema,
   type Scope,
 } from "effect";
 import { type JWK, SignJWT, exportJWK, generateKeyPair } from "jose";
 import { FetchHttpClient, HttpClient } from "effect/http";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, assert, expect, it, vi } from "vitest";
 import type { SupportAccessConfiguration } from "./contract";
 import { OutboundHttpLive } from "../outbound-http/runtime";
-import { makeAccessSigningKeysOutboundHttp } from "../../src/shell/outbound-http/operations";
+import { accessSigningKeysOutboundHttp } from "../../src/shell/outbound-http/operations";
 import { handleSupportProof } from "./internal/support-recovery";
+
+const isRequest = Schema.is(Schema.instanceOf(Request));
 
 class TestFailure extends Data.TaggedError("TestFailure")<{ cause: unknown }> {}
 
@@ -29,9 +32,9 @@ afterEach(() => vi.restoreAllMocks());
 let sequence = 0;
 
 const fetchUrl = (input: string | URL | Request): string => {
-  if (typeof input === "string") return input;
+  if (Predicate.isString(input)) return input;
 
-  if (input instanceof Request) return input.url;
+  if (isRequest(input)) return input.url;
 
   return input.href;
 };
@@ -136,7 +139,7 @@ const checkProof = Effect.fn(function* ({
   return yield* handleSupportProof({
     request,
     config: fixture.config,
-    http: makeAccessSigningKeysOutboundHttp({
+    http: accessSigningKeysOutboundHttp({
       issuer: fixture.config.CLOUDFLARE_ACCESS_ISSUER,
       httpClient: yield* HttpClient.HttpClient,
     }),
@@ -220,9 +223,8 @@ it.each(["owning Effect", "native Request"])(
         const exit = yield* Fiber.await(pending);
         expect(Exit.isFailure(exit)).toBe(true);
 
-        if (Exit.isFailure(exit)) {
-          expect(Cause.hasInterruptsOnly(exit.cause)).toBe(true);
-        }
+        assert(Exit.isFailure(exit));
+        expect(Cause.hasInterruptsOnly(exit.cause)).toBe(true);
 
         expect(cancelStarted).toBe(true);
         expect(request.body?.locked).toBe(false);
@@ -431,12 +433,14 @@ it.each(["request", "fiber"] as const)(
 
         yield* wait(() => started.promise);
 
-        if (owner === "request") {
-          controller.abort();
-          expect((yield* Fiber.join(pending)).status).toBe(401);
-        } else {
-          yield* Fiber.interrupt(pending);
-        }
+        const status = yield* owner === "request"
+          ? Effect.sync(() => controller.abort()).pipe(
+              Effect.andThen(Fiber.join(pending)),
+              Effect.map((response) => Option.some(response.status))
+            )
+          : Fiber.interrupt(pending).pipe(Effect.as(Option.none()));
+
+        expect(status).toEqual(owner === "request" ? Option.some(401) : Option.none());
 
         expect(cancelled).toBe(true);
         expect(reader).not.toHaveBeenCalled();

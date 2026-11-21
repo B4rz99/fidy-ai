@@ -2,7 +2,7 @@ import { Clock, Effect, Option, Schema } from "effect";
 import { HttpClient } from "effect/http";
 import type { EmailAddress } from "../../src/core/email-authentication/contract";
 import { UserId } from "../../src/core/identity/contract";
-import { makeAccessSigningKeysOutboundHttp } from "../../src/shell/outbound-http/operations";
+import { accessSigningKeysOutboundHttp } from "../../src/shell/outbound-http/operations";
 import {
   type ProGrantEntry,
   ProOperatorCommand,
@@ -150,7 +150,7 @@ const verifyOperator = Effect.fn(function* (
         environment.PRICING_PUBLISH_AUDIENCE ?? "",
       ],
     },
-    http: makeAccessSigningKeysOutboundHttp({ issuer, httpClient: yield* HttpClient.HttpClient }),
+    http: accessSigningKeysOutboundHttp({ issuer, httpClient: yield* HttpClient.HttpClient }),
   });
 });
 

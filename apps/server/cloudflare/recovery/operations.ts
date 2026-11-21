@@ -20,7 +20,7 @@ import { Effect, Option } from "effect";
 import { HttpClient } from "effect/http";
 import { type OwnedStatement } from "../../src/shell/owner-write/contract";
 import { type SupportAccessConfiguration } from "./contract";
-import { makeAccessSigningKeysOutboundHttp } from "../../src/shell/outbound-http/operations";
+import { accessSigningKeysOutboundHttp } from "../../src/shell/outbound-http/operations";
 import { handleSupportProof } from "./internal/support-recovery";
 import {
   recoveryCodeDigest as nativeRecoveryCodeDigest,
@@ -47,7 +47,7 @@ export const nativeSupportRecovery = Effect.fn(function* (input: {
 }) {
   const directory = Option.map(input.directory, (value) => value.getByName(directoryName));
 
-  const post = (url: string, body: object): Promise<Response> =>
+  const post = <Body>(url: string, body: Body): Promise<Response> =>
     Option.isNone(directory)
       ? Promise.resolve(new Response(null, { status: 503 }))
       : directory.value.fetch(url, {
@@ -58,7 +58,7 @@ export const nativeSupportRecovery = Effect.fn(function* (input: {
 
   return yield* handleSupportProof({
     ...input,
-    http: makeAccessSigningKeysOutboundHttp({
+    http: accessSigningKeysOutboundHttp({
       issuer: input.config.CLOUDFLARE_ACCESS_ISSUER,
       httpClient: yield* HttpClient.HttpClient,
     }),

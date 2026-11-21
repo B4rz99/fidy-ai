@@ -12,7 +12,7 @@ import {
 } from "./maintenance/contract";
 import { inspectNativeQueues, sendCanary } from "./runtime/operational-health/operations";
 import { makeCoreHttp } from "./core-http/runtime";
-import { makeCoreQueue } from "./queue/runtime";
+import { coreQueue } from "./queue/runtime";
 import { Effect, Result } from "effect";
 import { type WorkerTelemetryEnvironment } from "./runtime/telemetry/contract";
 import { cloudflareWorkerTelemetry, observeWorkerExecution } from "./runtime/telemetry/operations";
@@ -96,7 +96,7 @@ export const makeCoreWorker = ({
   fetch: makeCoreHttp({ telemetry, institutions }),
   queue: (batch, environment) =>
     Effect.runPromise(backgroundWorkAllowed(environment)).then((allowed) => {
-      if (allowed) return makeCoreQueue(telemetry)(batch, environment);
+      if (allowed) return Effect.runPromise(coreQueue(telemetry)(batch, environment));
 
       return batch.retryAll({ delaySeconds: 60 });
     }),

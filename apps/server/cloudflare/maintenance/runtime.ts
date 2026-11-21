@@ -41,6 +41,7 @@ export class Maintenance extends DurableObject<MaintenanceEnvironment> {
   }
   private watchdog(request: Request): Promise<Response> {
     return runInstalledBackgroundRequest({
+      runtime: this.runtime,
       settings: this.env,
       run: () => this.watchdogTick(request),
     });

@@ -1181,22 +1181,6 @@
       "rules": {
         "anti-slop-effect/no-manual-tagged-construction": "off"
       }
-    },
-    {
-      "files": [
-        "scripts/dev-browser.test.ts",
-        "scripts/document-parsing/workerd-inspector.ts",
-        "scripts/infra-performance/canonical-fixture/meter.test-fixture.mjs",
-        "scripts/infra-performance/reference/native.ts",
-        "scripts/pro/runtime.ts"
-      ],
-      "rules": {
-        "anti-slop-effect/no-service-constructor-imports": "off",
-        "anti-slop/no-reflect-get": "off",
-        "anti-slop/no-runtime-typeof": "off",
-        "enfect/effect-run-in-body": "off",
-        "landmines/no-flake-masking": "off"
-      }
     }
   ]
 }

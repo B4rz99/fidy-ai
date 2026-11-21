@@ -1,13 +1,8 @@
+import { isFunction, isObjectOrArray, isString } from "effect/Predicate";
 /** @typedef {{rowsRead:number,rowsWritten:number}} NativeCursor */
-/** @typedef {(...args:unknown[])=>unknown} NativeMethod */
 /** @typedef {Record<string,unknown> & {sql:{exec:(query:string,...bindings:unknown[])=>NativeCursor}}} NativeStorage */
 /** @typedef {Record<string,unknown>} Bindings */
 /** @typedef {new (state:{storage:NativeStorage}, environment:Bindings)=>{fetch(request:Request):Promise<Response>,alarm(...args:unknown[]):Promise<void>}} OwnerClass */
-/** @param {unknown} value Reflective native method. @returns {value is NativeMethod} */
-const isMethod = (value) => typeof value === "function";
-
-/** @param {unknown} value Native runtime object. @returns {value is object} */
-const isObject = (value) => typeof value === "object" && value !== null;
 
 const empty = () => ({
   fetches: 0,
@@ -45,9 +40,9 @@ const observedCursor = (cursor, counts) => {
     return new Proxy(source, {
       get(target, property) {
         /** @type {unknown} */
-        const value = Reflect.get(target, property, target);
+        const value = target[property];
 
-        if (!isMethod(value)) return value;
+        if (!isFunction(value)) return value;
 
         return (/** @type {unknown[]} */ ...args) => {
           try {
@@ -55,7 +50,7 @@ const observedCursor = (cursor, counts) => {
 
             if (property !== "raw" && property !== Symbol.iterator) return result;
 
-            if (!isObject(result)) throw Error("SQL cursor did not return an iterator");
+            if (!isObjectOrArray(result)) throw Error("SQL cursor did not return an iterator");
 
             return wrap(result);
           } finally {
@@ -99,7 +94,7 @@ const observeStorage = (storage, counts) => {
   ]) {
     const call = storage[key];
 
-    if (!isMethod(call)) throw Error("Missing native storage method");
+    if (!isFunction(call)) throw Error("Missing native storage method");
     Object.defineProperty(storage, key, {
       value: (/** @type {unknown[]} */ ...args) => {
         if (
@@ -133,17 +128,17 @@ export const observedBindings = (environment) => {
 
     if (!bucket) continue;
 
-    if (!isObject(bucket)) throw Error("Invalid R2 binding");
+    if (!isObjectOrArray(bucket)) throw Error("Invalid R2 binding");
     const totals = bucketCalls.get(name) ?? Object.fromEntries(methods.map((key) => [key, 0]));
     bucketCalls.set(name, totals);
     env[name] = new Proxy(bucket, {
       get(target, key) {
         /** @type {unknown} */
-        const value = Reflect.get(target, key, target);
+        const value = target[key];
 
-        if (!isMethod(value)) return value;
+        if (!isFunction(value)) return value;
 
-        if (typeof key !== "string" || !methods.includes(key)) {
+        if (!isString(key) || !methods.includes(key)) {
           throw Error("Unmeasured R2 binding operation");
         }
 

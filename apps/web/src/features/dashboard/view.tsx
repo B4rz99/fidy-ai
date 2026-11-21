@@ -3,6 +3,7 @@ import { dashboardResizePreview } from "./resize-presentation";
 import { PendingRead } from "@/ui/components/pending-read";
 import { Link, lazyRouteComponent } from "@tanstack/react-router";
 import { ConfigureBudgetButton } from "./budget-configuration";
+import { RegisterTransactionAction } from "./register-action";
 import type { BudgetWidget } from "./editor-model";
 import { formatMoneyWithCode } from "@/transport/money";
 import { RefreshButton } from "@/ui/components/refresh-button";
@@ -34,7 +35,7 @@ import {
   type DashboardRecentGroup,
   DashboardRecentList,
 } from "@/ui/components/dashboard";
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/ui/components/empty";
+import { Empty, EmptyHeader, EmptyTitle } from "@/ui/components/empty";
 import { Input } from "@/ui/components/input";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { maximumSplitWeight, minimumSplitWeight } from "@/transport/dashboard-contract";
@@ -132,16 +133,11 @@ const BudgetBar = ({
 }>): JSX.Element => {
   if (data.availability === "missing-budget") {
     return (
-      <Empty>
+      <Empty className="border">
         <EmptyHeader>
           <EmptyTitle>No hay presupuesto para este mes</EmptyTitle>
-          <EmptyDescription>
-            {data.category.label} · {data.currency}. Elige otro presupuesto o créalo en
-            Presupuestos.
-          </EmptyDescription>
         </EmptyHeader>
         <ConfigureBudgetButton widget={widget} compact={false} />
-        <Link to="/app/budgets">Ir a Presupuestos</Link>
       </Empty>
     );
   }
@@ -163,10 +159,12 @@ const BudgetBar = ({
 };
 
 const TransactionList = ({
+  card,
   data,
   locale,
   timeZone,
 }: Readonly<{
+  card: string;
   data: ListResult;
   locale: DashboardLocale;
   timeZone: DashboardTimeZone;
@@ -182,6 +180,7 @@ const TransactionList = ({
         <EmptyHeader>
           <EmptyTitle>No hay transacciones para mostrar</EmptyTitle>
         </EmptyHeader>
+        <RegisterTransactionAction card={card} />
       </Empty>
     );
   }
@@ -218,14 +217,16 @@ const TransactionList = ({
 };
 
 const CustomMetric = ({
+  card,
   data,
   locale,
-}: Readonly<{ data: MetricResult; locale: DashboardLocale }>): JSX.Element =>
+}: Readonly<{ card: string; data: MetricResult; locale: DashboardLocale }>): JSX.Element =>
   data.moneyGroups.length === 0 ? (
     <Empty className="border">
       <EmptyHeader>
         <EmptyTitle>No hay transacciones para calcular</EmptyTitle>
       </EmptyHeader>
+      <RegisterTransactionAction card={card} />
     </Empty>
   ) : (
     <div className="flex flex-col gap-4">
@@ -253,13 +254,14 @@ const RenderWidget = ({
   titleEditor: Option.Option<JSX.Element>;
 }>): JSX.Element => {
   const ChartPresentation = useContext(DashboardSpendingPresentation);
+  const title = titleFor(widget);
   let content: JSX.Element;
   if ("buckets" in result) {
     content = Option.match(ChartPresentation, {
       onSome: (render) => render({ data: result, locale: context.locale }),
       onNone: () => (
         <Suspense fallback={<PendingRead label="Cargando gráfico" />}>
-          <SpendingChart data={result} locale={context.locale} />
+          <SpendingChart card={title} data={result} locale={context.locale} />
         </Suspense>
       ),
     });
@@ -271,17 +273,19 @@ const RenderWidget = ({
         <></>
       );
   } else if ("transactions" in result) {
-    content = <TransactionList data={result} locale={context.locale} timeZone={context.timeZone} />;
+    content = (
+      <TransactionList
+        card={title}
+        data={result}
+        locale={context.locale}
+        timeZone={context.timeZone}
+      />
+    );
   } else {
-    content = <CustomMetric data={result} locale={context.locale} />;
+    content = <CustomMetric card={title} data={result} locale={context.locale} />;
   }
   return (
-    <WidgetFrame
-      editing={editing}
-      kind={widget.type}
-      title={titleFor(widget)}
-      titleEditor={titleEditor}
-    >
+    <WidgetFrame editing={editing} kind={widget.type} title={title} titleEditor={titleEditor}>
       {content}
     </WidgetFrame>
   );

@@ -61,7 +61,84 @@ type EntryFixture = Readonly<{
   control: EntryControl;
   finishPreparation: () => Effect.Effect<void, Cause.UnknownError>;
 }>;
-const entryFixture = (age: Option.Option<number>): EntryFixture => {
+const emptyPeriod = {
+  requested: "this-month",
+  from: "2026-11-01T05:00:00Z",
+  toExclusive: "2026-12-01T05:00:00Z",
+  timeZone: "America/Bogota",
+};
+const emptyWidget = (
+  widget: Record<string, unknown>,
+  result: Record<string, unknown>
+): Record<string, unknown> => ({
+  weight: 1,
+  node: { kind: "leaf", widget: { widget, result } },
+});
+const emptyDashboard = {
+  title: "Mi tablero",
+  context: {
+    serviceMarket: "CO",
+    locale: "es-CO",
+    timeZone: "America/Bogota",
+    calculatedAt: "2026-11-08T12:00:00Z",
+  },
+  layout: {
+    kind: "split",
+    axis: "row",
+    children: [
+      emptyWidget(
+        {
+          id: "24000000-0000-4000-8000-000000000301",
+          type: "spending-chart",
+          title: "Gastos por categoría",
+          groupBy: "category",
+          period: "this-month",
+        },
+        { appliedPeriod: emptyPeriod, buckets: [] }
+      ),
+      emptyWidget(
+        {
+          id: "24000000-0000-4000-8000-000000000302",
+          type: "budget-bar",
+          categoryId: "24000000-0000-4000-8000-000000000242",
+          currency: "COP",
+        },
+        {
+          availability: "missing-budget",
+          appliedPeriod: emptyPeriod,
+          category: { id: "24000000-0000-4000-8000-000000000242", label: "Restaurantes" },
+          currency: "COP",
+        }
+      ),
+      emptyWidget(
+        {
+          id: "24000000-0000-4000-8000-000000000303",
+          type: "transaction-list",
+          title: "Transacciones recientes",
+          limit: 5,
+        },
+        { transactions: [] }
+      ),
+      emptyWidget(
+        {
+          id: "24000000-0000-4000-8000-000000000304",
+          type: "custom-metric",
+          title: "Ingresos y gastos del mes",
+          label: "Ingresos y gastos del mes",
+          aggregation: "sum",
+          period: "this-month",
+        },
+        { appliedPeriod: emptyPeriod, moneyGroups: [] }
+      ),
+    ],
+  },
+};
+const entryResponse = (path: string, history: ReadonlyArray<Record<string, unknown>>): unknown => {
+  if (path === "/transactions") return { data: history, next: [] };
+  if (path === "/dashboard/view") return { data: emptyDashboard, next: [] };
+  return profile;
+};
+const entryFixture = (age: Option.Option<number>, entry = "/app/transactions"): EntryFixture => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(observedAt + Option.getOrElse(age, () => 0));
   const requests: Array<Readonly<{ method: string; path: string; search: string }>> = [];
@@ -93,9 +170,7 @@ const entryFixture = (age: Option.Option<number>): EntryFixture => {
       }
       return HttpClientResponse.fromWeb(
         request,
-        Response.json(
-          url.pathname === "/transactions" ? { data: control.history, next: [] } : profile
-        )
+        Response.json(entryResponse(url.pathname, control.history))
       );
     });
   });
@@ -124,7 +199,7 @@ const entryFixture = (age: Option.Option<number>): EntryFixture => {
     hostedTurnClient: makeHostedTurnClient(options),
     sessionBinding: initial.binding ?? "none",
     registry,
-    history: Option.some(createMemoryHistory({ initialEntries: ["/app/transactions"] })),
+    history: Option.some(createMemoryHistory({ initialEntries: [entry] })),
   });
   const finishPreparation = (): Effect.Effect<void, Cause.UnknownError> =>
     Effect.gen(function* () {
@@ -295,6 +370,65 @@ const historyEntry = (
   revision: 0,
 });
 
+const renderApplication = (
+  router: EntryFixture["router"],
+  registry: EntryFixture["registry"]
+): Readonly<{
+  container: HTMLDivElement;
+  work: (task: () => void) => Effect.Effect<void, Cause.UnknownError>;
+  render: () => Effect.Effect<void, Cause.UnknownError>;
+  dispose: () => Effect.Effect<void, Cause.UnknownError>;
+}> => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query === "(min-width: 901px)",
+    addEventListener: (): void => undefined,
+    removeEventListener: (): void => undefined,
+  }));
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const work = (task: () => void): Effect.Effect<void, Cause.UnknownError> =>
+    Effect.tryPromise(() => Promise.resolve(act(task)));
+  return {
+    container,
+    work,
+    render: () =>
+      work(() =>
+        root.render(
+          createElement(
+            SessionContext.Provider,
+            {
+              value: Option.some({
+                authentication: "signed-in" as const,
+                completeLogin: (): void => undefined,
+                completeLogout: (): void => undefined,
+                expireAuthentication: (): void => undefined,
+                replaceAuthenticationLifetime: (): void => undefined,
+              }),
+            },
+            createElement(
+              RegistryContext.Provider,
+              { value: registry },
+              createElement(RouterProvider, { router })
+            )
+          )
+        )
+      ),
+    dispose: () =>
+      work(() => root.unmount()).pipe(
+        Effect.andThen(
+          Effect.sync(() => {
+            registry.dispose();
+            container.remove();
+            vi.unstubAllGlobals();
+          })
+        )
+      ),
+  };
+};
+
 const ledgerOrder = (container: HTMLElement): ReadonlyArray<string> =>
   Array.from(container.querySelectorAll("tbody tr"), (item) =>
     item.getAttribute("data-date-group") === "true"
@@ -318,42 +452,11 @@ it.live(
         historyEntry("Banco Bogotá", "2026-11-01T20:00:00Z", "9000"),
         historyEntry("Uber", "2026-11-01T15:00:00Z", "23900"),
       ];
-      vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-      vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
-      vi.stubGlobal("matchMedia", (query: string) => ({
-        matches: query === "(min-width: 901px)",
-        addEventListener: (): void => undefined,
-        removeEventListener: (): void => undefined,
-      }));
-      const container = document.createElement("div");
-      document.body.append(container);
-      const root = createRoot(container);
-      const work = (task: () => void): Effect.Effect<void, Cause.UnknownError> =>
-        Effect.tryPromise(() => Promise.resolve(act(task)));
+      const { container, work, render, dispose } = renderApplication(router, registry);
       try {
         yield* Effect.tryPromise(() => router.load());
         yield* finishPreparation();
-        yield* work(() =>
-          root.render(
-            createElement(
-              SessionContext.Provider,
-              {
-                value: Option.some({
-                  authentication: "signed-in" as const,
-                  completeLogin: (): void => undefined,
-                  completeLogout: (): void => undefined,
-                  expireAuthentication: (): void => undefined,
-                  replaceAuthenticationLifetime: (): void => undefined,
-                }),
-              },
-              createElement(
-                RegistryContext.Provider,
-                { value: registry },
-                createElement(RouterProvider, { router })
-              )
-            )
-          )
-        );
+        yield* render();
         const trigger = yield* Effect.tryPromise(() =>
           vi.waitFor(() => {
             const sort = container.querySelector<HTMLElement>("#transaction-sort");
@@ -386,10 +489,57 @@ it.live(
           )
         ).toEqual(["COP -96.500,00", "COP -32.900,00"]);
       } finally {
-        yield* work(() => root.unmount());
-        registry.dispose();
-        container.remove();
-        vi.unstubAllGlobals();
+        yield* dispose();
       }
     })
+);
+
+const panelHeadings = (container: HTMLElement): ReadonlyArray<string> =>
+  Array.from(container.querySelectorAll("h2"), (heading) => heading.textContent);
+
+const emptyCardActions = (container: HTMLElement): ReadonlyArray<HTMLAnchorElement> =>
+  Array.from(container.querySelectorAll<HTMLAnchorElement>("main a")).filter((action) =>
+    action.textContent.includes("Registrar una transacción")
+  );
+
+it.live(
+  "each empty dashboard card offers to register a transaction in its own words",
+  () =>
+    Effect.gen(function* () {
+      const { router, registry } = entryFixture(Option.some(0), "/app/dashboard");
+      const { container, work, render, dispose } = renderApplication(router, registry);
+      try {
+        yield* Effect.tryPromise(() => router.load());
+        yield* render();
+        const actions = yield* Effect.tryPromise(() =>
+          vi.waitFor(() => {
+            const found = emptyCardActions(container);
+            expect(found).toHaveLength(3);
+            return found;
+          })
+        );
+        expect(actions.map((action) => action.getAttribute("aria-label"))).toEqual([
+          "Registrar una transacción para Gastos por categoría",
+          "Registrar una transacción para Transacciones recientes",
+          "Registrar una transacción para Ingresos y gastos del mes",
+        ]);
+        expect(container.textContent).not.toContain("El gráfico aparecerá");
+        expect(container.textContent).not.toContain("Restaurantes · COP");
+        expect(container.textContent).not.toContain("Ir a Presupuestos");
+        expect(container.textContent).toContain("No hay presupuesto para este mes");
+        yield* work(() => actions[1]?.click());
+        yield* Effect.tryPromise(() =>
+          vi.waitFor(
+            () => {
+              expect(router.state.location.pathname).toBe("/app/transactions");
+              expect(panelHeadings(container)).toContain("Registrar transacción");
+            },
+            { timeout: 15000 }
+          )
+        );
+      } finally {
+        yield* dispose();
+      }
+    }),
+  20000
 );

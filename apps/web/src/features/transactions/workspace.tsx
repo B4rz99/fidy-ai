@@ -76,6 +76,7 @@ type WorkspaceProps = Readonly<{
     | Readonly<{
         readOnly: false;
         editable: boolean;
+        capture: boolean;
       }>
   );
 type WorkspaceFilters = Readonly<{
@@ -851,6 +852,19 @@ const capturePanelStatus = (
   if (capture.value.saving) return { _tag: "Capture", status: "saving" };
   return { _tag: "Capture", status: capture.value.uncertain ? "uncertain" : "idle" };
 };
+const initialWorkspacePanel = (
+  props: WorkspaceProps,
+  defaultPanel: TransactionPanel,
+  located: Option.Option<string>
+): TransactionPanel => {
+  if (defaultPanel._tag !== "Summary") return defaultPanel;
+  if (Option.isSome(located)) {
+    return { _tag: "Detail", id: located.value, mode: { _tag: "Viewing" } };
+  }
+  return !props.readOnly && props.capture && props.editable
+    ? { _tag: "Capture", status: "idle" }
+    : defaultPanel;
+};
 const useWorkspacePanel = (
   props: WorkspaceProps
 ): Readonly<{ panel: TransactionPanel; onPanel: (panel: TransactionPanel) => void }> => {
@@ -872,10 +886,7 @@ const useWorkspacePanel = (
       props.location === "Located" &&
       props.transactions.some((transaction) => transaction.id === id)
   );
-  const initialPanel: TransactionPanel =
-    defaultPanel._tag === "Summary" && Option.isSome(located)
-      ? { _tag: "Detail", id: located.value, mode: { _tag: "Viewing" } }
-      : defaultPanel;
+  const initialPanel = initialWorkspacePanel(props, defaultPanel, located);
   const panel: TransactionPanel =
     interaction.generation === generation
       ? Option.getOrElse(interaction.panel, () => initialPanel)

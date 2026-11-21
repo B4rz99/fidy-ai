@@ -5,7 +5,7 @@ import { expect, it } from "vitest";
 class PortFixtureFailure extends Data.TaggedError("PortFixtureFailure") {}
 
 const enabled =
-  process.platform === "darwin" &&
+  (process.platform === "darwin" || process.platform === "linux") &&
   Effect.runSync(Config.String("FIDY_BROWSER_SMOKE").pipe(Config.withDefault("0"))) === "1";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const run = (...args: ReadonlyArray<string>): ReturnType<typeof Bun.spawnSync> =>

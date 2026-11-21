@@ -22,6 +22,11 @@ const print = (message: string): void => {
 const label = `com.fidy.browser.${new Bun.CryptoHasher("sha256").update(root).digest("hex").slice(0, labelLength)}`;
 const target = `gui/${process.getuid?.()}/${label}`;
 const plist = `${homedir()}/Library/LaunchAgents/${label}.plist`;
+const serverScript = `${root}/scripts/dev-browser-server.ts`;
+const serverLog = `${directory}/server.log`;
+const serviceGroupFile = `${directory}/server.pgid`;
+const nssDatabase = `sql:${homedir()}/.pki/nssdb`;
+const macOS = process.platform === "darwin";
 const app = "https://127.0.0.1:4173";
 const api = "https://127.0.0.1:4174/health";
 const command = process.argv[2] ?? "start";
@@ -30,10 +35,25 @@ const execute = (args: ReadonlyArray<string>): ReturnType<typeof Bun.spawnSync> 
 const requireSuccess = (args: ReadonlyArray<string>, message: string): void => {
   if (execute(args).exitCode !== 0) throw new Error(message);
 };
-const trusted = (): boolean =>
+const trustedByMacOS = (): boolean =>
   execute(["security", "verify-cert", "-p", "ssl", "-s", "127.0.0.1", "-c", certificate])
     .exitCode === 0;
-const registered = (): boolean => execute(["launchctl", "print", target]).exitCode === 0;
+const trustedByLinux = (): boolean =>
+  execute(["openssl", "verify", certificate]).exitCode === 0 &&
+  new TextDecoder()
+    .decode(execute(["certutil", "-d", nssDatabase, "-L"]).stdout)
+    .includes("mkcert development CA");
+const trusted = (): boolean => (macOS ? trustedByMacOS() : trustedByLinux());
+const serviceGroup = Effect.fn(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  const group = yield* fs.readFileString(serviceGroupFile).pipe(Effect.orElseSucceed(() => ""));
+  return /^[1-9][0-9]*$/u.test(group.trim()) ? group.trim() : undefined;
+});
+const registered = Effect.fn(function* () {
+  if (macOS) return execute(["launchctl", "print", target]).exitCode === 0;
+  const group = yield* serviceGroup();
+  return group !== undefined && execute(["pgrep", "-g", group]).exitCode === 0;
+});
 const responding = (url: string): boolean =>
   execute(["curl", "--fail", "--silent", "--max-time", "2", "--output", "/dev/null", url])
     .exitCode === 0;
@@ -47,8 +67,13 @@ const xml = (value: string): string =>
 const portOccupied = (port: number): boolean =>
   execute(["lsof", "-nP", `-iTCP:${port}`, "-sTCP:LISTEN"]).exitCode === 0;
 const stop = Effect.fn(function* () {
-  if (!registered()) return;
-  requireSuccess(["launchctl", "bootout", target], "Could not stop the local browser service.");
+  if (!(yield* registered())) return;
+  requireSuccess(
+    macOS
+      ? ["launchctl", "bootout", target]
+      : ["pkill", "-TERM", "-g", (yield* serviceGroup()) ?? ""],
+    "Could not stop the local browser service."
+  );
   const deadline = (yield* Clock.currentTimeMillis) + startupMilliseconds;
   while ([appPort, apiPort, operatorPort].some(portOccupied)) {
     if ((yield* Clock.currentTimeMillis) >= deadline) {
@@ -62,7 +87,9 @@ const stop = Effect.fn(function* () {
 const waitReady = Effect.fn(function* () {
   const deadline = (yield* Clock.currentTimeMillis) + startupMilliseconds;
   while (!ready()) {
-    if (!registered()) throw new Error("The browser service stopped before startup completed.");
+    if (!(yield* registered())) {
+      throw new Error("The browser service stopped before startup completed.");
+    }
     if ((yield* Clock.currentTimeMillis) >= deadline) {
       throw new Error(`Startup did not complete. Read ${directory}/server.log.`);
     }
@@ -78,40 +105,65 @@ const requireFreePorts = (): void => {
     }
   }
 };
+const runInteractive = Effect.fn(function* (args: ReadonlyArray<string>) {
+  const installation = Bun.spawn([...args], {
+    stdin: "inherit",
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  return yield* Effect.tryPromise({
+    try: () => installation.exited,
+    catch: () => new CertificateProcessFailure(),
+  });
+});
+const trustOnLinux = Effect.fn(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  if (Bun.which("certutil") === null) {
+    throw new Error("Install certutil first: sudo apt-get install libnss3-tools");
+  }
+  if (!(yield* fs.exists(`${homedir()}/.pki/nssdb`))) {
+    yield* fs.makeDirectory(`${homedir()}/.pki/nssdb`, { recursive: true, mode: 0o700 });
+    requireSuccess(
+      ["certutil", "-d", nssDatabase, "-N", "--empty-password"],
+      "Could not create the browser certificate database."
+    );
+  }
+  if ((yield* runInteractive(["mkcert", "-install"])) !== 0 || !trusted()) {
+    throw new Error("Could not trust mkcert's CA. Rerun setup and approve the sudo prompt.");
+  }
+});
+const trustOnMacOS = Effect.fn(function* () {
+  const ca = execute(["mkcert", "-CAROOT"]);
+  if (ca.exitCode !== 0) throw new Error("Could not locate the mkcert CA.");
+  const installed = yield* runInteractive([
+    "security",
+    "add-trusted-cert",
+    "-r",
+    "trustRoot",
+    "-k",
+    `${homedir()}/Library/Keychains/login.keychain-db`,
+    `${new TextDecoder().decode(ca.stdout).trim()}/rootCA.pem`,
+  ]);
+  if (installed !== 0 || !trusted()) {
+    throw new Error("Approve the macOS certificate trust prompt, then rerun setup.");
+  }
+});
 const setup = Effect.fn(function* () {
   const fs = yield* FileSystem.FileSystem;
-  if (Bun.which("mkcert") === null) throw new Error("Install mkcert first: brew install mkcert");
+  if (Bun.which("mkcert") === null) {
+    throw new Error(
+      macOS
+        ? "Install mkcert first: brew install mkcert"
+        : "Install mkcert first: sudo apt-get install mkcert libnss3-tools"
+    );
+  }
   yield* fs.makeDirectory(directory, { recursive: true, mode: 0o700 });
   requireSuccess(
     ["mkcert", "-cert-file", certificate, "-key-file", key, "127.0.0.1", "localhost", "::1"],
     "Could not create the local HTTPS certificate."
   );
   yield* fs.chmod(key, privateFileMode);
-  if (!trusted()) {
-    const ca = execute(["mkcert", "-CAROOT"]);
-    if (ca.exitCode !== 0) throw new Error("Could not locate the mkcert CA.");
-    const installation = Bun.spawn(
-      [
-        "security",
-        "add-trusted-cert",
-        "-r",
-        "trustRoot",
-        "-k",
-        `${homedir()}/Library/Keychains/login.keychain-db`,
-        `${new TextDecoder().decode(ca.stdout).trim()}/rootCA.pem`,
-      ],
-      { stdin: "inherit", stdout: "inherit", stderr: "inherit" }
-    );
-    if (
-      (yield* Effect.tryPromise({
-        try: () => installation.exited,
-        catch: () => new CertificateProcessFailure(),
-      })) !== 0 ||
-      !trusted()
-    ) {
-      throw new Error("Approve the macOS certificate trust prompt, then rerun setup.");
-    }
-  }
+  if (!trusted()) yield* macOS ? trustOnMacOS() : trustOnLinux();
   print("Local HTTPS certificate is trusted. Run bun run dev:browser.");
 });
 const start = Effect.fn(function* () {
@@ -119,15 +171,37 @@ const start = Effect.fn(function* () {
   const fs = yield* FileSystem.FileSystem;
   if (!(yield* fs.exists(certificate)) || !trusted()) {
     throw new Error(
-      "Local HTTPS is not ready. Run bun run dev:browser setup once and approve the macOS prompt."
+      "Local HTTPS is not ready. Run bun run dev:browser setup once and approve its trust prompt."
     );
   }
-  if (registered() && ready()) {
+  if ((yield* registered()) && ready()) {
     print(`Already running: ${app}/app/recurring`);
     return;
   }
   yield* stop();
   requireFreePorts();
+  if (macOS) yield* launchWithLaunchd(executablePath);
+  else yield* launchDetached();
+  yield* waitReady().pipe(Effect.onError(() => stop()));
+  print(
+    `Ready: ${app}/app/recurring\nTest login: ${app}/login\nLogs: ${serverLog}\nStop: bun run dev:browser stop`
+  );
+});
+const launchDetached = Effect.fn(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  const launched = execute([
+    "sh",
+    "-c",
+    'setsid "$0" "$1" >>"$2" 2>&1 </dev/null & echo $!',
+    process.execPath,
+    serverScript,
+    serverLog,
+  ]);
+  if (launched.exitCode !== 0) throw new Error("Could not start the local browser service.");
+  yield* fs.writeFileString(serviceGroupFile, new TextDecoder().decode(launched.stdout));
+});
+const launchWithLaunchd = Effect.fn(function* (executablePath: string) {
+  const fs = yield* FileSystem.FileSystem;
   yield* fs.makeDirectory(`${homedir()}/Library/LaunchAgents`, { recursive: true });
   yield* fs.writeFileString(
     plist,
@@ -135,12 +209,12 @@ const start = Effect.fn(function* () {
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>Label</key><string>${xml(label)}</string>
-<key>ProgramArguments</key><array><string>${xml(process.execPath)}</string><string>${xml(`${root}/scripts/dev-browser-server.ts`)}</string></array>
+<key>ProgramArguments</key><array><string>${xml(process.execPath)}</string><string>${xml(serverScript)}</string></array>
 <key>WorkingDirectory</key><string>${xml(root)}</string>
 <key>EnvironmentVariables</key><dict><key>PATH</key><string>${xml(executablePath)}</string></dict>
 <key>RunAtLoad</key><false/>
-<key>StandardOutPath</key><string>${xml(`${directory}/server.log`)}</string>
-<key>StandardErrorPath</key><string>${xml(`${directory}/server.log`)}</string>
+<key>StandardOutPath</key><string>${xml(serverLog)}</string>
+<key>StandardErrorPath</key><string>${xml(serverLog)}</string>
 </dict></plist>\n`
   );
   requireSuccess(
@@ -148,21 +222,17 @@ const start = Effect.fn(function* () {
     "Could not register the local browser service."
   );
   requireSuccess(["launchctl", "kickstart", target], "Could not start the local browser service.");
-  yield* waitReady().pipe(Effect.onError(() => stop()));
-  print(
-    `Ready: ${app}/app/recurring\nTest login: ${app}/login\nLogs: ${directory}/server.log\nStop: bun run dev:browser stop`
-  );
 });
 
-const requireMacOS = (): void => {
-  if (process.platform !== "darwin") {
+const requireSupportedPlatform = (): void => {
+  if (!macOS && process.platform !== "linux") {
     throw new Error(
-      "This persistent browser helper supports macOS. Use bun run dev or the browser acceptance commands on other platforms."
+      "This persistent browser helper supports macOS and Linux. Use bun run dev or the browser acceptance commands on other platforms."
     );
   }
 };
 const program = Effect.gen(function* () {
-  requireMacOS();
+  requireSupportedPlatform();
   if (command === "setup") yield* setup();
   else if (command === "start") yield* start();
   else if (command === "stop") {
@@ -172,7 +242,7 @@ const program = Effect.gen(function* () {
     yield* stop();
     yield* start();
   } else if (command === "status") {
-    if (!registered() || !ready()) {
+    if (!(yield* registered()) || !ready()) {
       throw new Error("Local browser service is not ready. Run bun run dev:browser.");
     }
     print(`Ready: ${app}/app/recurring`);

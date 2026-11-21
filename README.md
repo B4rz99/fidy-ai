@@ -42,7 +42,7 @@ not yet an executable capture path, while hosted MCP/OAuth setup and its verific
 
 ## Local browser development
 
-On macOS, run `bun run dev:browser setup` once, then `bun run dev:browser` for a persistent
+On macOS or Linux, run `bun run dev:browser setup` once, then `bun run dev:browser` for a persistent
 HTTPS app and real local API with synthetic test accounts. See [setup and login](docs/guides/local-browser.md).
 
 ## Technical foundation

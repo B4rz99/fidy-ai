@@ -17,7 +17,7 @@ import { FetchHttpClient, HttpClient } from "effect/http";
 import { afterEach, assert, expect, it, vi } from "vitest";
 import type { SupportAccessConfiguration } from "./contract";
 import { OutboundHttpLive } from "../outbound-http/runtime";
-import { accessSigningKeysOutboundHttp } from "../../src/shell/outbound-http/operations";
+import { makeAccessSigningKeysOutboundHttp } from "../../src/shell/outbound-http/operations";
 import { handleSupportProof } from "./internal/support-recovery";
 
 const isRequest = Schema.is(Schema.instanceOf(Request));
@@ -139,7 +139,7 @@ const checkProof = Effect.fn(function* ({
   return yield* handleSupportProof({
     request,
     config: fixture.config,
-    http: accessSigningKeysOutboundHttp({
+    http: makeAccessSigningKeysOutboundHttp({
       issuer: fixture.config.CLOUDFLARE_ACCESS_ISSUER,
       httpClient: yield* HttpClient.HttpClient,
     }),

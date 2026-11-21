@@ -17,7 +17,6 @@ import {
   supportApprovalUrl,
 } from "../directory/contract";
 import { Effect, Option } from "effect";
-import { HttpClient } from "effect/http";
 import { type OwnedStatement } from "../../src/shell/owner-write/contract";
 import { type SupportAccessConfiguration } from "./contract";
 import { accessSigningKeysOutboundHttp } from "../../src/shell/outbound-http/operations";
@@ -58,10 +57,7 @@ export const nativeSupportRecovery = Effect.fn(function* (input: {
 
   return yield* handleSupportProof({
     ...input,
-    http: accessSigningKeysOutboundHttp({
-      issuer: input.config.CLOUDFLARE_ACCESS_ISSUER,
-      httpClient: yield* HttpClient.HttpClient,
-    }),
+    http: yield* accessSigningKeysOutboundHttp(input.config.CLOUDFLARE_ACCESS_ISSUER),
     admit: (operator) =>
       post(supportAdmissionUrl, operator).then((response) => {
         if (response.ok) return "allowed";

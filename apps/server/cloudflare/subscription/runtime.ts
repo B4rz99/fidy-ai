@@ -68,7 +68,7 @@ import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloud
 import { Cause, Clock, Context, Effect, Layer, Match, Option, Result, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import {
-  accessSigningKeysOutboundHttp,
+  makeAccessSigningKeysOutboundHttp,
   type makeWompiOutboundHttp,
 } from "../../src/shell/outbound-http/operations";
 import { handleRefundSupport as supportRefund } from "./internal/refund-support";
@@ -166,7 +166,7 @@ export const handleRefundSupport = (
           )
         );
 
-        const http = accessSigningKeysOutboundHttp({
+        const http = makeAccessSigningKeysOutboundHttp({
           issuer: input.environment.CLOUDFLARE_ACCESS_ISSUER,
           httpClient: Context.get(clients, HttpClient.HttpClient),
         });
@@ -382,7 +382,7 @@ export const handlePricePublication = (
   input: Readonly<{ request: Request; environment: PricingEnvironment }>
 ): Effect.Effect<Response, never, HttpClient.HttpClient> =>
   Effect.gen(function* () {
-    const http = accessSigningKeysOutboundHttp({
+    const http = makeAccessSigningKeysOutboundHttp({
       issuer: input.environment.CLOUDFLARE_ACCESS_ISSUER,
       httpClient: yield* HttpClient.HttpClient,
     });

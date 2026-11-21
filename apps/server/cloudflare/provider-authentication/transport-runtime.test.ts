@@ -3,7 +3,7 @@ import { FetchHttpClient, HttpClient } from "effect/http";
 import { Miniflare } from "miniflare";
 import { expect, it } from "vitest";
 import {
-  accessSigningKeysOutboundHttp,
+  makeAccessSigningKeysOutboundHttp,
   makeGoogleOutboundHttp,
   makeMicrosoftOutboundHttp,
 } from "../../src/shell/outbound-http/operations";
@@ -89,7 +89,7 @@ it("Access recovery signing-key requests work in Workers without following redir
                 )
               );
 
-              const http = accessSigningKeysOutboundHttp({
+              const http = makeAccessSigningKeysOutboundHttp({
                 issuer: "https://synthetic.cloudflareaccess.com",
                 httpClient: Context.get(clients, HttpClient.HttpClient),
               });

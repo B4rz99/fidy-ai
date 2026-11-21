@@ -62,9 +62,12 @@ const sealDrain = Effect.fn(function* (record: Scope, drained: Response) {
 
       if (sealed.length === 0) return;
 
-      for (const custodian of ErasureCustodian.literals) {
-        yield* sql`INSERT INTO erasure_case_custodians(reference,custodian,observed_use,status) VALUES(${record.reference},${custodian},${observed[custodian]},'Pending')`;
-      }
+      yield* Effect.forEach(
+        ErasureCustodian.literals,
+        (custodian) =>
+          sql`INSERT INTO erasure_case_custodians(reference,custodian,observed_use,status) VALUES(${record.reference},${custodian},${observed[custodian]},'Pending')`,
+        { discard: true }
+      );
     })
   );
 });

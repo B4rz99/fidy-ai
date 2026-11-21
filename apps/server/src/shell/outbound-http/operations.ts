@@ -36,12 +36,18 @@ export type OutboundHttpService = Readonly<{
   ) => Effect.Effect<OutboundHttpResponse, OutboundHttpFailure>;
 }>;
 
-export const accessSigningKeysOutboundHttp = (
+export const makeAccessSigningKeysOutboundHttp = (
   input: Readonly<{
     issuer: string;
     httpClient: HttpClient.HttpClient;
   }>
 ): OutboundHttpService => makeCloudflareAccessSigningKeysHttp(input);
+
+export const accessSigningKeysOutboundHttp = Effect.fn(function* (issuer: string) {
+  const httpClient = yield* HttpClient.HttpClient;
+
+  return makeAccessSigningKeysOutboundHttp({ issuer, httpClient });
+});
 
 export const makeKapsoOutboundHttp = (
   input: Readonly<{

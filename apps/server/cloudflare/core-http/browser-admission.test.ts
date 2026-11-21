@@ -1,3 +1,4 @@
+import type { Miniflare } from "miniflare";
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { Clock, Effect, Schema } from "effect";
@@ -80,17 +81,96 @@ const refusedHeaders: ReadonlyArray<Record<string, string>> = [
   { cookie: "" },
 ];
 
-const wrongCredentials = Effect.fnUntraced(function* (subject: Effect.Success<typeof fixture>) {
+type Subject = Effect.Success<typeof fixture>;
+
+type Endpoint = (typeof endpoints)[number];
+
+const refusedCredential = Effect.fnUntraced(function* (
+  subject: Subject,
+  target: Endpoint,
+  headers: Readonly<Record<string, string>>
+) {
+  const response = yield* subject.request(target.path, headers);
+  expect(response.status, target.id + " " + Object.keys(headers).join(",")).toBe(401);
+});
+
+const wrongCredentials = Effect.fnUntraced(function* (subject: Subject) {
   const before = yield* subject.counts();
 
-  for (const target of endpoints) {
-    for (const headers of refusedHeaders) {
-      const response = yield* subject.request(target.path, headers);
-      expect(response.status, target.id + " " + Object.keys(headers).join(",")).toBe(401);
-    }
-  }
+  yield* Effect.forEach(
+    endpoints,
+    (target) =>
+      Effect.forEach(refusedHeaders, (headers) => refusedCredential(subject, target, headers), {
+        discard: true,
+      }),
+    { discard: true }
+  );
 
   expect(yield* subject.counts()).toEqual(before);
+});
+
+const refusedListing = Effect.fnUntraced(function* (
+  subject: Subject,
+  mode: "revoked" | "expired" | "withdrawn",
+  target: Endpoint
+) {
+  const response = yield* subject.request(target.path);
+  expect(response.status, mode + " " + target.id).toBe(401);
+});
+
+const mismatchedCookie = Effect.fnUntraced(function* (
+  core: Awaited<ReturnType<Miniflare["getWorker"]>>,
+  [method, path]: readonly [string, string]
+) {
+  const reply = yield* native(() =>
+    core.fetch("https://api.fidyapp.com" + path, {
+      method,
+      headers: {
+        cookie: "__Host-fidy_session=" + alice.bearer,
+        "Fidy-Session-Binding": bob.session,
+      },
+    })
+  );
+
+  const replyBody = yield* native(() => reply.text());
+  expect(reply.status, path + " " + replyBody).toBe(401);
+});
+
+const completeListing = Effect.fnUntraced(function* (subject: Subject, target: Endpoint) {
+  const response = yield* subject.request(target.path);
+  expect(response.status, target.id).toBe(200);
+  const body = yield* native(() => response.json());
+  yield* Schema.decodeUnknownEffect(target.operation.success)(body);
+  expect(yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(body)).not.toContain(
+    "unrelated invalid Category"
+  );
+  const limit = response.headers.get(canonicalAllowanceHeaders.limit);
+  expect(limit, target.id).toMatch(/^[1-9][0-9]*$/u);
+  expect(response.headers.get(canonicalAllowanceHeaders.remaining), target.id).toBe(limit);
+});
+
+const throttledListing = Effect.fnUntraced(function* (subject: Subject, target: Endpoint) {
+  const reply = yield* subject.request(target.path);
+  expect(reply.status, target.id).toBe(429);
+  expect(reply.headers.get("retry-after"), target.id).toBe("1");
+});
+
+const unavailableListing = Effect.fnUntraced(function* (subject: Subject, target: Endpoint) {
+  expect((yield* subject.request(target.path)).status, target.id).toBe(503);
+});
+
+const lostReplyListing = Effect.fnUntraced(function* (subject: Subject, target: Endpoint) {
+  const path = target.path.split("?")[0];
+  yield* subject.sql("INSERT INTO lose_read_reply VALUES(?)", path);
+  expect((yield* subject.request(target.path)).status, target.id).toBe(503);
+  expect(
+    yield* subject.sql(
+      "SELECT count(*) AS n FROM audit_entries WHERE operation=? AND record_type='session_call'",
+      target.id
+    ),
+    target.id
+  ).toEqual([{ n: 1 }]);
+  expect(yield* subject.sql("SELECT count(*) AS n FROM lose_read_reply")).toEqual([{ n: 0 }]);
 });
 
 const refusedStanding = Effect.fnUntraced(function* (mode: "revoked" | "expired" | "withdrawn") {
@@ -133,10 +213,9 @@ const refusedStanding = Effect.fnUntraced(function* (mode: "revoked" | "expired"
 
   const before = yield* subject.counts();
 
-  for (const target of endpoints) {
-    const response = yield* subject.request(target.path);
-    expect(response.status, mode + " " + target.id).toBe(401);
-  }
+  yield* Effect.forEach(endpoints, (target) => refusedListing(subject, mode, target), {
+    discard: true,
+  });
 
   expect(yield* subject.counts()).toEqual(before);
 });
@@ -156,7 +235,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const subject = yield* fixture;
         const core = yield* native(() => subject.store.runtime.getWorker("core"));
 
-        const routes = [
+        const routes: ReadonlyArray<readonly [string, string]> = [
           ["GET", oauthPaths.authorize],
           ["POST", "/providers/kapso/callback"],
           ["POST", "/web/subscription/payment-enrollments/prepare"],
@@ -168,20 +247,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
 
         const before = yield* subject.counts();
 
-        for (const [method, path] of routes) {
-          const reply = yield* native(() =>
-            core.fetch("https://api.fidyapp.com" + path, {
-              method,
-              headers: {
-                cookie: "__Host-fidy_session=" + alice.bearer,
-                "Fidy-Session-Binding": bob.session,
-              },
-            })
-          );
-
-          const replyBody = yield* native(() => reply.text());
-          expect(reply.status, path + " " + replyBody).toBe(401);
-        }
+        yield* Effect.forEach(routes, (route) => mismatchedCookie(core, route), { discard: true });
 
         expect(yield* subject.counts()).toEqual(before);
       })
@@ -217,18 +283,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         "INSERT INTO categories VALUES('invalid-category','unrelated invalid Category',1000000)"
       );
 
-      for (const target of endpoints) {
-        const response = yield* subject.request(target.path);
-        expect(response.status, target.id).toBe(200);
-        const body = yield* native(() => response.json());
-        yield* Schema.decodeUnknownEffect(target.operation.success)(body);
-        expect(
-          yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(body)
-        ).not.toContain("unrelated invalid Category");
-        const limit = response.headers.get(canonicalAllowanceHeaders.limit);
-        expect(limit, target.id).toMatch(/^[1-9][0-9]*$/u);
-        expect(response.headers.get(canonicalAllowanceHeaders.remaining), target.id).toBe(limit);
-      }
+      yield* Effect.forEach(endpoints, (target) => completeListing(subject, target), {
+        discard: true,
+      });
 
       expect(yield* subject.sql("SELECT id FROM canonical_request_leases")).toEqual([
         { id: "own" },
@@ -244,8 +301,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     })
   );
 
-  for (const pressure of ["rate", "concurrency"] as const) {
-    test.effect("enforces shared " + pressure + " protection across all canonical listings", () =>
+  test.effect.each(["rate", "concurrency"] as const)(
+    "enforces shared %s protection across all canonical listings",
+    (pressure) =>
       Effect.gen(function* () {
         const subject = yield* fixture;
 
@@ -267,16 +325,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
 
         const before = yield* subject.counts();
 
-        for (const target of endpoints) {
-          const reply = yield* subject.request(target.path);
-          expect(reply.status, target.id).toBe(429);
-          expect(reply.headers.get("retry-after"), target.id).toBe("1");
-        }
+        yield* Effect.forEach(endpoints, (target) => throttledListing(subject, target), {
+          discard: true,
+        });
 
         expect(yield* subject.counts()).toEqual(before);
       })
-    );
-  }
+  );
 
   test.effect(
     "rolls back admission and disclosures if the User cannot commit the required Audit",
@@ -288,9 +343,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         );
         const before = yield* subject.counts();
 
-        for (const target of endpoints) {
-          expect((yield* subject.request(target.path)).status, target.id).toBe(503);
-        }
+        yield* Effect.forEach(endpoints, (target) => unavailableListing(subject, target), {
+          discard: true,
+        });
 
         expect(yield* subject.counts()).toEqual(before);
       })
@@ -302,21 +357,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const subject = yield* fixture;
         yield* subject.sql("CREATE TABLE lose_read_reply(path TEXT PRIMARY KEY) STRICT");
 
-        for (const target of endpoints) {
-          const path = target.path.split("?")[0];
-          yield* subject.sql("INSERT INTO lose_read_reply VALUES(?)", path);
-          expect((yield* subject.request(target.path)).status, target.id).toBe(503);
-          expect(
-            yield* subject.sql(
-              "SELECT count(*) AS n FROM audit_entries WHERE operation=? AND record_type='session_call'",
-              target.id
-            ),
-            target.id
-          ).toEqual([{ n: 1 }]);
-          expect(yield* subject.sql("SELECT count(*) AS n FROM lose_read_reply")).toEqual([
-            { n: 0 },
-          ]);
-        }
+        yield* Effect.forEach(endpoints, (target) => lostReplyListing(subject, target), {
+          discard: true,
+        });
 
         expect(
           yield* subject.sql("SELECT count(*) AS n FROM commercial_allowance_consumptions")

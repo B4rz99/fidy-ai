@@ -1147,6 +1147,40 @@ const installedSmokeFailure = (
         ? "Probe request did not match the owned schema"
         : failure.reason),
   });
+const requireServingAccounting = Effect.fn(function* (
+  env: Config,
+  port: ReleasePort,
+  operation: string
+) {
+  const finalize = yield* ReleaseConfig.Boolean("FIXTURE_ACCOUNTING_FINALIZE").pipe(
+    ReleaseConfig.withDefault(false)
+  );
+  if (!finalize) return false;
+  yield* ReleaseConfig.Literal("rollout-fixture-successor", "FIXTURE_RELEASE_OPERATION");
+  if (operation !== "verify" || env.revision !== stagedAccountingRevision) {
+    return yield* new ReleaseFailure({ message: "Unexpected serving accounting verification" });
+  }
+  const receipt = yield* readRollbackReceipt(env);
+  yield* releaseController.verifyRetirement(port, receipt);
+  return true;
+});
+const verifyInstalledUsers = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  erasureNamespace: Option.Option<string>
+) {
+  const synthetic = yield* Effect.forEach(nativeHostPairs(yield* hostMode), (pair) =>
+    verifySyntheticUsers(env, client, {
+      origins: pair,
+      erasureNamespace:
+        pair.api === installedOrigins.acceptance.api ? erasureNamespace : Option.none(),
+    }).pipe(Effect.map((result) => ({ api: pair.api, ...result })))
+  );
+  if (new Set(synthetic.map((result) => result.callback.workflow)).size !== 1) {
+    return yield* Effect.fail(Error("Staged hosts reached different native payment attempts"));
+  }
+  return { synthetic };
+});
 const verifyFirstInstall = Effect.fn(function* (
   verifier: Config,
   client: HttpClient.HttpClient,
@@ -1156,6 +1190,7 @@ const verifyFirstInstall = Effect.fn(function* (
   }: { port: ReleasePort; operation: "verify" | "verify-erasure" | "continue-erasure" }
 ) {
   const env = yield* installedConfig(verifier);
+  const finalizeAccounting = yield* requireServingAccounting(env, port, operation);
   const installed = yield* installedRelease(env, client, {
     port,
     staging: false,
@@ -1180,18 +1215,13 @@ const verifyFirstInstall = Effect.fn(function* (
     Effect.mapError(installedSmokeFailure)
   );
   yield* Effect.logInfo("Verified release smoke against the installed Worker versions.");
-  const synthetic = yield* Effect.forEach(nativeHostPairs(yield* hostMode), (pair) =>
-    verifySyntheticUsers(env, client, {
-      origins: pair,
-      erasureNamespace:
-        operation === "verify-erasure" && pair.api === installedOrigins.acceptance.api
-          ? Option.some(installed.userNamespace)
-          : Option.none(),
-    }).pipe(Effect.map((result) => ({ api: pair.api, ...result })))
-  );
-  if (new Set(synthetic.map((result) => result.callback.workflow)).size !== 1) {
-    return yield* Effect.fail(Error("Staged hosts reached different native payment attempts"));
-  }
+  const userEvidence = finalizeAccounting
+    ? {}
+    : yield* verifyInstalledUsers(
+        env,
+        client,
+        operation === "verify-erasure" ? Option.some(installed.userNamespace) : Option.none()
+      );
   const { accountingRollout } = yield* fixtureArtifacts(env.revision);
   yield* writeFile(
     env.smokeAttestationFile,
@@ -1200,7 +1230,7 @@ const verifyFirstInstall = Effect.fn(function* (
       ...(accountingRollout ? { nativeAccountingWitness: true } : {}),
       verifierRevision: Option.getOrElse(yield* fixtureVerifier, () => verifier.revision),
       smoke,
-      synthetic,
+      ...userEvidence,
       ...(yield* activeControlEvidence(env, client, installed)),
     })
   );

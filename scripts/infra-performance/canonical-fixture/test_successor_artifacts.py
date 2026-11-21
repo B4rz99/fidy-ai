@@ -10,7 +10,9 @@ from uuid import UUID
 from zipfile import ZipFile
 
 from successor_artifacts import (
-    ACCOUNTING_FORWARD_PROOF, ACCOUNTING_FORWARD_RUN, ACCOUNTING_FORWARD_STEPS,
+    ACCOUNTING_FINALIZE_FILE, ACCOUNTING_FINALIZE_PROOF, ACCOUNTING_FINALIZE_RUN, ACCOUNTING_FINALIZE_STEPS,
+    ACCOUNTING_FINALIZE_VERIFIER, PROMOTE_STEP, RESTORE_STEP, accounting_finalize_receipt, artifacts,
+    require_active_finalize, ACCOUNTING_FORWARD_PROOF, ACCOUNTING_FORWARD_RUN, ACCOUNTING_FORWARD_STEPS,
     ACCOUNTING_FORWARD_VERIFIER, ACTIVE_STEPS, RECOVERY_STEPS, RESUMED_STAGE_STEPS, RESUME_CAPTURE_STEP,
     STAGE_STEPS, WORKFLOW, accounting_forward_receipt, active_successor, continuation_steps, main,
     recovered_successor, require_active_forward, require_sealed_source, sealed_successor,
@@ -155,6 +157,59 @@ class AccountingForwardArchiveTests(unittest.TestCase):
         require_active_forward(promotion, None, CHECKOUT, None, None)
         with self.assertRaisesRegex(ValueError, "Unexpected accounting partial"):
             require_active_forward(promotion, ACCOUNTING_FORWARD_PROOF, CHECKOUT, None, None)
+
+
+
+class AccountingFinalizeArchiveTests(unittest.TestCase):
+    def setUp(self):
+        self.evidence = ArchiveEvidence()
+        self.stage = {"coreDeploymentId": "staged", "publicDeploymentId": "staged", "snapshot": {}}
+        self.promotion = {"release": self.stage, "rollbackTested": True,
+                          "promoted": {key: ACCOUNTING_FINALIZE_PROOF[key]
+                                       for key in ("coreDeploymentId", "publicDeploymentId")}}
+
+    def check_receipt(self, promotion, steps=ACCOUNTING_FINALIZE_STEPS):
+        ref = self.evidence.add(ACCOUNTING_FINALIZE_PROOF["artifactId"], ACCOUNTING_FINALIZE_VERIFIER,
+                                "native-fixture-successor-rollout-diagnostics-",
+                                {"native-release.json": self.stage, "native-release.json.promoted": promotion},
+                                steps, run_id=ACCOUNTING_FINALIZE_RUN, conclusion="failure")
+        proof = {**ACCOUNTING_FINALIZE_PROOF, **ref}
+        with patch("successor_artifacts.ACCOUNTING_FINALIZE_PROOF", proof):
+            return accounting_finalize_receipt(self.stage, CHECKOUT, self.evidence.get,
+                                               lambda *_args: ACCOUNTING_FINALIZE_VERIFIER)
+
+    def test_exact_failure_after_promotion_is_required(self):
+        promotion, proof = self.check_receipt(self.promotion)
+        self.assertEqual(promotion, self.promotion)
+        self.assertEqual(proof["publicDeploymentId"], self.promotion["promoted"]["publicDeploymentId"])
+        with self.assertRaisesRegex(ValueError, "did not fail after forward promotion"):
+            self.check_receipt(promotion, {**ACCOUNTING_FINALIZE_STEPS, RESTORE_STEP: "success"})
+        with self.assertRaisesRegex(ValueError, "differs from the verified live pair"):
+            self.check_receipt({**promotion, "promoted": {**promotion["promoted"], "publicDeploymentId": "other"}})
+        with self.assertRaisesRegex(ValueError, "differs from the verified live pair"):
+            self.check_receipt({**promotion, "rollbackTested": False})
+
+    def test_finalized_pair_reauthenticates_exact_promotion(self):
+        with self.assertRaisesRegex(ValueError, "lacks its exact finalization receipt"):
+            require_active_finalize(self.promotion, None, CHECKOUT, None, None)
+        with patch("successor_artifacts.accounting_finalize_receipt",
+                   return_value=(self.promotion, ACCOUNTING_FINALIZE_PROOF)) as receipt:
+            require_active_finalize(self.promotion, ACCOUNTING_FINALIZE_PROOF, CHECKOUT, None, None)
+            receipt.assert_called_once_with(self.stage, CHECKOUT, None, None)
+        with self.assertRaisesRegex(ValueError, "different pair"):
+            require_active_finalize({"promoted": {}}, ACCOUNTING_FINALIZE_PROOF, CHECKOUT, None, None)
+
+    def test_finalize_file_requires_skipped_promotion_step(self):
+        promotion = "native-release.json.promoted"
+        files = {promotion: self.promotion, ACCOUNTING_FINALIZE_FILE: ACCOUNTING_FINALIZE_PROOF}
+        prefix = "native-fixture-successor-active-"
+        options = {"optional": (ACCOUNTING_FINALIZE_FILE,),
+                   "steps_for_file": {ACCOUNTING_FINALIZE_FILE: {PROMOTE_STEP: "skipped"}}}
+        ref = self.evidence.add("707", ROLLOUT, prefix, files, {**ACTIVE_STEPS, PROMOTE_STEP: "skipped"})
+        self.assertEqual(artifacts(ROLLOUT, ref, prefix, ACTIVE_STEPS, [promotion], self.evidence.get, **options), files)
+        ref = self.evidence.add("707", ROLLOUT, prefix, files, ACTIVE_STEPS)
+        with self.assertRaisesRegex(ValueError, "step outcomes differ"):
+            artifacts(ROLLOUT, ref, prefix, ACTIVE_STEPS, [promotion], self.evidence.get, **options)
 
 
 def resumed_stage():

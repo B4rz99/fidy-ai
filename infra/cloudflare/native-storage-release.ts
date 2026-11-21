@@ -2689,7 +2689,8 @@ const readOpenedCanonical = Effect.fn(function* (
   yield* proveRecoveryCorePrivate(env, client, installationNames.Core);
   yield* requireLiveSignupDirectory(env, client, release).pipe(
     Effect.timeout("5 seconds"),
-    Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 25 }),
+    Effect.retry({ schedule: Schedule.spaced("10 seconds"), times: 35 }),
+    Effect.timeout("6 minutes"),
     checkCanonicalPrerequisite("live signup Directory")
   );
   return { hosts, source, zoneId };
@@ -2708,13 +2709,19 @@ const requireLiveSignupDirectory = Effect.fn(function* (
     )
   );
   const evidence = yield* decodePinnedStorageEvidence(response, release.publicVersionId);
-  if (
-    response.headers["x-fidy-smoke-worker-version"] !== release.publicVersionId ||
-    evidence.core.workerVersionId !== release.coreVersionId ||
-    evidence.markers.directory.workerVersionId !== release.coreVersionId
-  ) {
+  const ingressReady = response.headers["x-fidy-smoke-worker-version"] === release.publicVersionId;
+  const coreReady = evidence.core.workerVersionId === release.coreVersionId;
+  const directoryReady = evidence.markers.directory.workerVersionId === release.coreVersionId;
+  if (!ingressReady || !coreReady || !directoryReady) {
     return yield* new ReleaseFailure({
-      message: "Ordinary Directory routing has not converged to the opening Workers",
+      message:
+        "Ordinary routing has not converged. Ingress " +
+        ingressReady +
+        ", Core " +
+        coreReady +
+        ", Directory " +
+        directoryReady +
+        ".",
     });
   }
 });

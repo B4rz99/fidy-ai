@@ -54,6 +54,7 @@ import { isDeepStrictEqual } from "node:util";
 import { verifyIncumbentFence, verifyIncumbentMail } from "./native-incumbent-fence";
 import { readProviderList } from "./native-provider-list";
 import { verifyInstalledWebsite } from "./native-deployed-web";
+import { type IncumbentAccessApplication, readIncumbentAccess } from "./native-deployed-access";
 import {
   canonicalDomainReader,
   inspectDeployedEdge,
@@ -1411,10 +1412,12 @@ const planHostStage = Effect.fn(function* (
     ["plan-stage-hosts", "transfer-canonical-hosts"],
     "FIXTURE_RELEASE_OPERATION"
   );
-  yield* checkCanonicalHosts(env, client, {
+  const { edge } = yield* checkCanonicalHosts(env, client, {
     port,
     mode: operation === "plan-stage-hosts" ? "plan" : "transfer",
   });
+  const incumbentAccess = yield* canonicalIncumbentAccess(env, client, edge.zoneId);
+  return { zoneId: edge.zoneId, incumbentAccess };
 });
 export const planCanonicalHostPreview = Effect.gen(function* () {
   const env = releaseEvidence.config();
@@ -1422,6 +1425,67 @@ export const planCanonicalHostPreview = Effect.gen(function* () {
   return yield* planHostStage(env, client, releasePort({ env, client })).pipe(
     Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" })
   );
+});
+const canonicalIncumbentAccess = (
+  env: Config,
+  client: HttpClient.HttpClient,
+  zoneId: string
+): ReturnType<typeof readIncumbentAccess> =>
+  readIncumbentAccess({
+    account: "accounts/" + env.account + "/",
+    zone: "zones/" + zoneId + "/",
+    read: (path) =>
+      providerJson(
+        HttpClientRequest.get("https://api.cloudflare.com/client/v4/" + path, {
+          headers: { authorization: "Bearer " + env.token },
+        })
+      ).pipe(Effect.provideService(HttpClient.HttpClient, client)),
+  });
+const confirmIncumbentAccess = Effect.fn(function* (
+  read: ReturnType<typeof readIncumbentAccess>,
+  expected: readonly IncumbentAccessApplication[]
+) {
+  if (!isDeepStrictEqual(yield* read, expected)) {
+    return yield* new ReleaseFailure({ message: "Exact incumbent Access inventory changed" });
+  }
+});
+export const retireCanonicalIncumbentAccess = Effect.fn(function* ({
+  zoneId,
+  incumbentAccess,
+}: {
+  zoneId: string;
+  incumbentAccess: readonly IncumbentAccessApplication[];
+}) {
+  yield* requiredStaging();
+  yield* ReleaseConfig.Literal("true", "GITHUB_REF_PROTECTED");
+  yield* ReleaseConfig.Literal("1", "GITHUB_RUN_ATTEMPT");
+  yield* ReleaseConfig.Literal("transfer-canonical-hosts", "FIXTURE_RELEASE_OPERATION");
+  const env = releaseEvidence.config();
+  const client = yield* HttpClient.HttpClient;
+  const port = releasePort({ env, client });
+  const read = canonicalIncumbentAccess(env, client, zoneId);
+  if (incumbentAccess.length > 0) {
+    yield* Schema.decodeUnknownEffect(
+      Schema.Struct({
+        status: Schema.Literal("available"),
+        gitRevision: Schema.Literal("3d692fb105d1cdd643cce56bc8c3547466d61efb"),
+      })
+    )(yield* providerJson(HttpClientRequest.get(installedOrigins.production.api + "/health")));
+  }
+  let remaining = incumbentAccess;
+  for (const entry of incumbentAccess) {
+    yield* releaseController.requireTrunk(port, env.revision);
+    yield* confirmIncumbentAccess(read, remaining);
+    const url = `https://api.cloudflare.com/client/v4/accounts/${env.account}/access/apps/${entry.id}`;
+    yield* providerJson(
+      HttpClientRequest.make("DELETE")(url, { headers: { authorization: "Bearer " + env.token } })
+    ).pipe(Effect.ignore);
+    remaining = remaining.slice(1);
+    yield* confirmIncumbentAccess(read, remaining).pipe(
+      Effect.retry({ schedule: Schedule.spaced("1 second"), times: 8 })
+    );
+    yield* Effect.logInfo("Verified retirement of the former Access application for " + entry.path);
+  }
 });
 const requireRetainedCanonicalWeb = (
   port: ReleasePort,
@@ -1468,6 +1532,7 @@ const transferHostStage = Effect.fn(function* (
 ) {
   yield* ReleaseConfig.Literal("transfer-canonical-hosts", "FIXTURE_RELEASE_OPERATION");
   const { edge, read } = yield* checkCanonicalHosts(env, client, { port, mode: "transfer" });
+  yield* confirmIncumbentAccess(canonicalIncumbentAccess(env, client, edge.zoneId), []);
   if (edge.access.some((row) => row.paths.length !== 2)) {
     return yield* new ReleaseFailure({ message: "Canonical Access policies are incomplete" });
   }

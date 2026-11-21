@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import { installedOrigins } from "@fidy/server/browser-transport";
+import { WhatsAppBusinessPhoneNumberId } from "@fidy/server/whatsapp-contract";
 import { Effect, Option, Schema } from "effect";
 import { HttpBody, type HttpClient, HttpClientRequest } from "effect/http";
 import { webSignupDisclosure } from "../../apps/server/src/shell/consent/operations";
@@ -22,6 +23,7 @@ const coreChanges = [
   "MICROSOFT_CLIENT_ID",
   "WOMPI_PUBLIC_KEY",
   "WHATSAPP_BUSINESS_PORTFOLIO_ID",
+  "WHATSAPP_SANDBOX_PHONE_NUMBER_ID",
 ];
 const ordinaryProviderSecrets = [
   "GOOGLE_CLIENT_SECRET",
@@ -79,6 +81,12 @@ const requireOrdinaryProviderBindings = (bindings: Bindings): void => {
       throw Error("Ordinary provider callback must use the canonical API");
     }
   }
+  Schema.decodeUnknownSync(
+    Schema.Struct({
+      type: Schema.Literal("plain_text"),
+      text: Schema.Union([Schema.Literal(""), WhatsAppBusinessPhoneNumberId]),
+    })
+  )(bindings.WHATSAPP_SANDBOX_PHONE_NUMBER_ID);
   if (
     ordinaryProviderSecrets.some((name) => !providerSecret(bindings[name])) ||
     coreChanges.slice(0, 4).some((name) => bindings[name] !== undefined)

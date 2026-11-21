@@ -1,4 +1,4 @@
-import { Schema, SchemaAST } from "effect";
+import { Predicate, Schema, SchemaAST } from "effect";
 import { oauthResource } from "~/shell/oauth-agents/contract";
 import { UserId } from "~/core/identity/contract";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
@@ -94,15 +94,20 @@ const inaccessibleTarget = (ast: SchemaAST.AST, input: ScopeProjection): boolean
     ({ name, type }) =>
       (name === "tool" || name === "operation") &&
       SchemaAST.isLiteral(type) &&
-      typeof type.literal === "string" &&
+      Predicate.isString(type.literal) &&
       input.catalog.byId.has(type.literal) &&
       !input.allowedIds.has(type.literal)
   );
 };
 
+export type McpSchemas = Readonly<{
+  input: Schema.Codec<Schema.Json>;
+  output: Schema.Codec<Schema.Json>;
+}>;
+
 export const projectMcpSchemas = (
   input: ScopeProjection & Readonly<{ operation: CatalogOperation }>
-): Readonly<{ input: Schema.Codec<Schema.Json>; output: Schema.Codec<Schema.Json> }> => {
+): McpSchemas => {
   const memo = new Map<SchemaAST.AST, SchemaAST.AST>();
 
   const project: ProjectAst = (ast) => {

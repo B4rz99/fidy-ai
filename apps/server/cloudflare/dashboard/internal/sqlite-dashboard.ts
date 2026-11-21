@@ -148,7 +148,7 @@ export const prepareDashboardDocument = Effect.fn(function* (
           yield* sql`INSERT INTO user_documents(user_id,kind,document_json,revision) VALUES(${user},'dashboard',${encoded},${revision})
       ON CONFLICT(user_id,kind) DO UPDATE SET document_json=excluded.document_json,revision=excluded.revision WHERE revision=${expected} RETURNING revision`;
 
-        if (written.length !== 1) return yield* new DashboardUnavailable();
+        if (written.length !== 1) return yield* new DashboardUnavailable({ cause: undefined });
       }
 
       return success(yield* Schema.encodeEffect(Schema.toCodecJson(DashboardDocument))(document));

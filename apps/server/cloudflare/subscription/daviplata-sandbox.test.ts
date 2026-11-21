@@ -8,7 +8,7 @@ import {
 import {
   makeTestOutboundTransport,
   testOutboundTransportResponse,
-} from "../../src/shell/outbound-http/testing";
+} from "../../test/support/outbound-http";
 import { workerDigest } from "./internal/wompi-runtime";
 import {
   DaviplataSandboxProofFailure,

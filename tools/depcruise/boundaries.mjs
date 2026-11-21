@@ -19,7 +19,7 @@ const compositionRoots = new Set([
   "src/browser-bootstrap.ts",
   "src/browser-http.ts",
   "src/browser-transport.ts",
-  "src/shell/memory/memory-policy.test.ts",
+  "test/shell/memory/memory-policy.test.ts",
   "cloudflare/core-worker.ts",
   "cloudflare/release-smoke-worker.ts",
   "cloudflare/public-worker.ts",
@@ -52,7 +52,7 @@ const sharedTestSupport = new Set([
   "cloudflare/openai.test-fixture.ts",
   "src/shell/testing/credential-evidence-harness.ts",
   "src/shell/testing/crypto-harness.ts",
-  "src/shell/outbound-http/testing.ts",
+  "test/support/outbound-http.ts",
   "cloudflare/user-store.test-fixture.ts",
   "cloudflare/financial-user-store.test-fixture.ts",
   "cloudflare/erasure-purge.test-fixture.ts",
@@ -85,6 +85,10 @@ export const ownership = (modules) => {
 
   /** @param {string} path - Server-relative module path. */
   const owner = (path) => {
+    const mirroredSource = /^test\/((?:core|shell)\/.+)$/u.exec(path)?.[1];
+
+    if (mirroredSource !== undefined) return owner(`src/${mirroredSource}`);
+
     if (!serverModule.test(path)) return undefined;
     let candidate = dirname(path);
 

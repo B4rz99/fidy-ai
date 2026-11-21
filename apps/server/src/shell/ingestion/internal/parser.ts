@@ -1,4 +1,4 @@
-import { Option, Schema } from "effect";
+import { Option, Predicate, Schema } from "effect";
 import { admitXlsxArchive } from "./xlsx-admission";
 import { type Options, parse } from "csv-parse/sync";
 import type { CellObject, Range, WorkBook, WorkSheet } from "xlsx";
@@ -176,7 +176,7 @@ const cellText = (cell: Option.Option<CellObject>): string =>
     onSome: (value) => {
       if (value.v === undefined) return "";
 
-      return value.v instanceof Date
+      return Predicate.isDate(value.v)
         ? value.v.toISOString().slice(0, isoDateLength)
         : String(value.v);
     },
@@ -189,7 +189,7 @@ const evidenceCellType = (cell: CellObject): XlsxCellEvidence["cellType"] => {
 
   if (cell.t === "e") return "error";
 
-  if (cell.t === "d" || cell.v instanceof Date) return "date";
+  if (cell.t === "d" || Predicate.isDate(cell.v)) return "date";
 
   return cell.t === "n" ? "number" : "string";
 };
@@ -235,7 +235,7 @@ const selectedSheets = (workbook: WorkBook): ReadonlyArray<SelectedSheet> => {
     const fullReference: unknown = sheet["!fullref"];
 
     const originalRange = XLSX.utils.decode_range(
-      typeof fullReference === "string" ? fullReference : sheet["!ref"]
+      Predicate.isString(fullReference) ? fullReference : sheet["!ref"]
     );
 
     assertSheetLimits(originalRange);
@@ -358,7 +358,11 @@ export const parseXlsx = (bytes: Uint8Array): ParsedStatementMaterial => {
     }
   }
 
-  const headers = Option.getOrThrow(expectedHeaders);
+  if (Option.isNone(expectedHeaders)) {
+    throw new StatementParseFailed({ safeReason: "malformed-file" });
+  }
+
+  const headers = expectedHeaders.value;
 
   return {
     sourceFormat: "xlsx",

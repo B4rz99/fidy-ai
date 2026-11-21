@@ -1,5 +1,5 @@
 import * as Arr from "effect/Array";
-import { type Brand, Option, Schema } from "effect";
+import { type Brand, Record as EffectRecord, Option, Schema } from "effect";
 import { HttpApiMiddleware } from "effect/http-api";
 import {
   type CatalogOperation,
@@ -171,15 +171,21 @@ export const FieldIssue = Schema.Struct({
   }),
 }).annotate({ identifier: "FieldIssue" });
 
+export const omittedTag = <Tag extends string>(
+  tag: Tag
+): Readonly<Record<"_tag", ReturnType<typeof Schema.tagDefaultOmit<Tag>>>> =>
+  EffectRecord.singleton("_tag", Schema.tagDefaultOmit(tag));
+
+type ErrorResponseFields<Tag extends string, Detail extends Schema.Top> = ReturnType<
+  typeof omittedTag<Tag>
+> &
+  Readonly<{ error: Detail; next: typeof NextOperations }>;
+
 const errorResponse = <Tag extends string, Detail extends Schema.Top>(
   tag: Tag,
   error: Detail
-): {
-  readonly _tag: ReturnType<typeof Schema.tagDefaultOmit<Tag>>;
-  readonly error: Detail;
-  readonly next: typeof NextOperations;
-} => ({
-  _tag: Schema.tagDefaultOmit(tag),
+): ErrorResponseFields<Tag, Detail> => ({
+  ...omittedTag(tag),
   error,
   next: NextOperations,
 });

@@ -1,7 +1,11 @@
+import { Predicate } from "effect";
+
 export const freezeDeep: <A>(value: A) => A = (value) => {
-  if (typeof value !== "object" || value === null || Object.isFrozen(value)) return value;
+  if (!(Predicate.isObject(value) || Array.isArray(value)) || Object.isFrozen(value)) return value;
 
   for (const child of Object.values(value)) freezeDeep(child);
 
-  return Object.freeze(value);
+  Object.freeze(value);
+
+  return value;
 };

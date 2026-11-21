@@ -24,7 +24,7 @@ provider compatibility.
 
 ```sh
 bun run --cwd apps/server test:core
-bun run --cwd apps/server test src/shell/ingestion/parser.test.ts src/shell/ingestion/parser-limits.test.ts src/shell/ingestion/parser-amplification.test.ts src/shell/ingestion/xlsx-admission.test.ts src/shell/ingestion/operations.test.ts src/shell/ingestion/whatsapp-media.test.ts --coverage.enabled=false
+bun run --cwd apps/server test test/shell/ingestion/parser.test.ts test/shell/ingestion/parser-limits.test.ts test/shell/ingestion/parser-amplification.test.ts test/shell/ingestion/xlsx-admission.test.ts test/shell/ingestion/operations.test.ts test/shell/ingestion/whatsapp-media.test.ts --coverage.enabled=false
 bun run --cwd apps/server test:cloudflare cloudflare/ingestion/statement-ingestion.test.ts cloudflare/ingestion/statement-processing.test.ts cloudflare/ingestion/statement-staging.test.ts cloudflare/ingestion/statement-document.test.ts cloudflare/ingestion/statement-review-budget.test.ts --maxWorkers=1
 bun run --cwd apps/server test:cloudflare cloudflare/agent/hosted-turn.test.ts -t 'statement|upload|clarification' --maxWorkers=1
 INFRA_PERFORMANCE_MEASURE=1 bun run --cwd apps/server test:cloudflare cloudflare/ingestion/statement-processing.test.ts -t 'measures complete statement processing' --maxWorkers=1

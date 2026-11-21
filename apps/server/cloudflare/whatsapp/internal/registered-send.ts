@@ -84,7 +84,9 @@ export const makeNativeStatusAdmission =
   (env: Partial<ExternalEventBindings>): WhatsAppStatusLookupAdmission =>
   (input) =>
     Effect.gen(function* () {
-      if (env.DIRECTORY === undefined) return yield* new WhatsAppStatusUnavailable();
+      if (env.DIRECTORY === undefined) {
+        return yield* new WhatsAppStatusUnavailable({ cause: undefined });
+      }
 
       const body = yield* Schema.encodeEffect(Schema.fromJsonString(StatusLookupCoordinates))({
         endpoint: input.businessPhoneNumberId,
@@ -98,5 +100,5 @@ export const makeNativeStatusAdmission =
         owner.fetch(statusLookupAdmissionUrl, { method: "POST", body, signal })
       );
 
-      if (!reply.ok) return yield* new WhatsAppStatusUnavailable();
-    }).pipe(Effect.mapError(() => new WhatsAppStatusUnavailable()));
+      if (!reply.ok) return yield* new WhatsAppStatusUnavailable({ cause: undefined });
+    }).pipe(Effect.mapError((cause) => new WhatsAppStatusUnavailable({ cause })));

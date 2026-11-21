@@ -96,39 +96,38 @@ export const makeWompiOutboundHttp = (
 export class OutboundHttp extends Context.Service<OutboundHttp, OutboundHttpService>()(
   "@fidy/server/shell/outbound-http/operations/OutboundHttp"
 ) {
-  static readonly layer = Layer.effect(
-    this,
-    Effect.gen(function* () {
-      const kapsoApiKey = yield* Config.Redacted("KAPSO_API_KEY").pipe(Config.option);
-      const resendEmailDeliveryApiKey = yield* loadResendEmailDeliveryApiKey;
-      const wompiEnvironment = yield* Config.schema(WompiEnvironment, "WOMPI_ENVIRONMENT");
-      const environmentPrefix = wompiEnvironment === "sandbox" ? "test" : "prod";
+  static readonly make = Effect.gen(function* () {
+    const kapsoApiKey = yield* Config.Redacted("KAPSO_API_KEY").pipe(Config.option);
+    const resendEmailDeliveryApiKey = yield* loadResendEmailDeliveryApiKey;
+    const wompiEnvironment = yield* Config.schema(WompiEnvironment, "WOMPI_ENVIRONMENT");
+    const environmentPrefix = wompiEnvironment === "sandbox" ? "test" : "prod";
 
-      const wompiPublicKey = yield* Config.schema(
-        WompiPublicKey.check(Schema.isStartingWith(`pub_${environmentPrefix}_`)),
-        "WOMPI_PUBLIC_KEY"
-      );
+    const wompiPublicKey = yield* Config.schema(
+      WompiPublicKey.check(Schema.isStartingWith(`pub_${environmentPrefix}_`)),
+      "WOMPI_PUBLIC_KEY"
+    );
 
-      const wompiPrivateKey = yield* loadWompiPrivateKey(wompiEnvironment);
-      const wompiIntegritySecret = yield* loadWompiIntegritySecret(wompiEnvironment);
-      const httpClient = yield* HttpClient.HttpClient;
-      const digest = yield* Digest.Digest;
+    const wompiPrivateKey = yield* loadWompiPrivateKey(wompiEnvironment);
+    const wompiIntegritySecret = yield* loadWompiIntegritySecret(wompiEnvironment);
+    const httpClient = yield* HttpClient.HttpClient;
+    const digest = yield* Digest.Digest;
 
-      return makeOutboundHttp({
-        kapsoApiKey,
-        resendEmailDeliveryApiKey: Option.some(resendEmailDeliveryApiKey),
-        wompi: Option.some({
-          environment: wompiEnvironment,
-          publicKey: wompiPublicKey,
-          privateKey: wompiPrivateKey,
-          integritySecret: wompiIntegritySecret,
-          daviplataSandboxPolicy: Option.none(),
-        }),
-        httpClient,
-        digest: Option.some(digest),
-      });
-    })
-  );
+    return makeOutboundHttp({
+      kapsoApiKey,
+      resendEmailDeliveryApiKey: Option.some(resendEmailDeliveryApiKey),
+      wompi: Option.some({
+        environment: wompiEnvironment,
+        publicKey: wompiPublicKey,
+        privateKey: wompiPrivateKey,
+        integritySecret: wompiIntegritySecret,
+        daviplataSandboxPolicy: Option.none(),
+      }),
+      httpClient,
+      digest: Option.some(digest),
+    });
+  });
+
+  static readonly layer = Layer.effect(this, this.make);
 }
 
 export const makeGoogleOutboundHttp = (

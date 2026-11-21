@@ -131,10 +131,39 @@ export const readSubscriptionStatus = (
     Effect.catchDefect(() => Effect.fail(unavailable()))
   );
 
-const projectAttempt = (raw: unknown): unknown => {
+type AttemptSnapshot = Readonly<{
+  id: string;
+  priceId: string;
+  money: Readonly<{ amount: string; currency: string }>;
+  billingPeriod: string;
+  serviceMarket: string;
+  taxTreatment: string;
+  timeZone: string;
+  createdAt: string;
+}>;
+
+type ProjectedAttempt = AttemptSnapshot &
+  (
+    | Readonly<{ status: "pending" }>
+    | Readonly<{ status: "failed"; failedAt: string }>
+    | Readonly<{
+        status: "succeeded";
+        finalizedAt: string;
+        paidPeriodEndsAt: string;
+        renewalAnchor: string;
+      }>
+  );
+
+type ProjectedCancellation = Readonly<{
+  cancelledAt: string;
+  paidThrough: string;
+  sourceCancellation: typeof StandingRow.Type.source_cancellation;
+}>;
+
+const projectAttempt = (raw: unknown): ProjectedAttempt => {
   const attempt = decode(AttemptRow, raw);
 
-  const snapshot = {
+  const snapshot: AttemptSnapshot = {
     id: attempt.id,
     priceId: attempt.price_id,
     money: { amount: attempt.amount, currency: attempt.currency },
@@ -164,14 +193,14 @@ const projectAttempt = (raw: unknown): unknown => {
   };
 };
 
-const projectCancellation = (row: typeof StandingRow.Type): unknown =>
+const projectCancellation = (row: typeof StandingRow.Type): Option.Option<ProjectedCancellation> =>
   row.cancelled_at_ms === null
-    ? null
-    : {
+    ? Option.none()
+    : Option.some({
         cancelledAt: instant(row.cancelled_at_ms),
         paidThrough: instant(decode(Schema.Finite, row.paid_through_ms)),
         sourceCancellation: row.source_cancellation,
-      };
+      });
 
 const hasPeriodAccess = (row: typeof StandingRow.Type, now: number): boolean =>
   (row.started_at_ms <= now && row.trial_ends_at_ms > now) ||
@@ -213,7 +242,7 @@ export const projectSubscriptionStatus = ({
     accessTier: row.has_pro_grant === 1 || hasPeriodAccess(row, now) ? "pro" : "free",
     trialPeriod: { startedAt: instant(row.started_at_ms), endsAt: instant(row.trial_ends_at_ms) },
     paidSubscription,
-    cancellation: projectCancellation(row),
+    cancellation: Option.getOrNull(projectCancellation(row)),
     recentAttempts,
   });
 

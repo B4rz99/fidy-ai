@@ -1,5 +1,5 @@
 import { categoryResponseFromRows } from "~/shell/categories/internal/query";
-import { Effect, type Option } from "effect";
+import { Effect, Match, type Option } from "effect";
 import { listLaunchCategories } from "~/core/categories/operations";
 import type { ListCategoriesResponse } from "./contract";
 import {
@@ -61,17 +61,17 @@ export function toApiFailure({
   failure,
   caller,
 }: CategoryFailureInput<CategoryFailure>): NotFound | ValidationFailed {
-  switch (failure._tag) {
-    case "CategoryNotFound":
-      return NotFound.make({
+  return Match.valueTags(failure, {
+    CategoryNotFound: (failure) =>
+      NotFound.make({
         error: {
           code: "not_found",
           message: `No Category ${failure.categoryId} exists. List Categories and use one of their stable ids.`,
         },
         next: categoryRecovery(caller),
-      });
-    case "KeywordRuleAlreadyExists":
-      return ValidationFailed.make({
+      }),
+    KeywordRuleAlreadyExists: (failure) =>
+      ValidationFailed.make({
         error: {
           code: "validation_failed",
           message:
@@ -84,25 +84,25 @@ export function toApiFailure({
           ],
         },
         next: keywordRuleRecovery(caller),
-      });
-    case "KeywordRuleLimitReached":
-      return ValidationFailed.make({
+      }),
+    KeywordRuleLimitReached: (failure) =>
+      ValidationFailed.make({
         error: {
           code: "validation_failed",
           message: `A User may retain at most ${failure.maximum} keyword rules. Edit or delete an existing rule before creating another.`,
           fields: [],
         },
         next: keywordRuleRecovery(caller),
-      });
-    case "KeywordRuleNotFound":
-      return NotFound.make({
+      }),
+    KeywordRuleNotFound: (failure) =>
+      NotFound.make({
         error: {
           code: "not_found",
           message: `No keyword rule ${failure.keywordRuleId} belongs to you. List your keyword rules to find an id you can change.`,
         },
         next: keywordRuleRecovery(caller),
-      });
-  }
+      }),
+  });
 }
 
 export const categoryUnavailable = (): Unavailable =>

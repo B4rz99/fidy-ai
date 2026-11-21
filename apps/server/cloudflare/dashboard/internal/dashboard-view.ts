@@ -178,6 +178,6 @@ export const localDashboardFacts = Effect.fn(function* (
       lists,
       selected: { ...financial, snapshot },
     }),
-    () => new DashboardUnavailable()
+    () => new DashboardUnavailable({ cause: undefined })
   );
 });

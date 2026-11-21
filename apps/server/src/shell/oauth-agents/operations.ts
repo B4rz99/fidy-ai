@@ -1,3 +1,4 @@
+import { ConsentSubject } from "~/shell/consent/contract";
 import { Option } from "effect";
 import type { OAuthAuthority, OAuthCaller } from "./contract";
 import {
@@ -12,7 +13,7 @@ export const liveOAuthAuthority = (
   const scope = Option.toArray(subject.requiredScope);
 
   return protectConsentAuthority({
-    subject: { _tag: "User", userId: subject.userId },
+    subject: ConsentSubject.User({ userId: subject.userId }),
     requirement: "active",
     authority: protectOAuthGrantConsentAuthority({
       subject: { userId: subject.userId, connectionId: subject.oauthConnectionId },

@@ -100,12 +100,20 @@ const requestInput = (endpoint: HttpApiEndpoint.Top): Option.Option<PartialInput
     : Option.some(Schema.make<PartialInputSchema>(new SchemaAST.Objects(fields, [])));
 };
 
-const httpFields = (endpoint: HttpApiEndpoint.Top): CatalogOperation["httpFields"] => [
-  ...(endpoint.params === undefined ? [] : ["params" as const]),
-  ...(endpoint.query === undefined ? [] : ["query" as const]),
-  ...(endpoint.headers === undefined ? [] : ["headers" as const]),
-  ...(payloadSchemas(endpoint).length === 0 ? [] : ["payload" as const]),
-];
+type HttpField = CatalogOperation["httpFields"][number];
+
+const httpFieldOrder: ReadonlyArray<HttpField> = ["params", "query", "headers", "payload"];
+
+const httpFields = (endpoint: HttpApiEndpoint.Top): CatalogOperation["httpFields"] => {
+  const present: Readonly<Record<HttpField, boolean>> = {
+    params: endpoint.params !== undefined,
+    query: endpoint.query !== undefined,
+    headers: endpoint.headers !== undefined,
+    payload: payloadSchemas(endpoint).length > 0,
+  };
+
+  return httpFieldOrder.filter((field) => present[field]);
+};
 
 export const makeOperationCatalog = <Id extends string, Groups extends HttpApiGroup.Constraint>(
   api: HttpApi.HttpApi<Id, Groups>
@@ -154,10 +162,7 @@ export const makeOperationCatalog = <Id extends string, Groups extends HttpApiGr
         ),
         policy: getOperationPolicy(endpoint),
         atomicBatchEligible: Context.get(mergedAnnotations, AtomicBatchEligible),
-        partialInput:
-          httpFields(endpoint).length === 0
-            ? Option.none()
-            : Option.some(Schema.suspend(() => Option.getOrThrow(requestInput(endpoint)))),
+        partialInput: requestInput(endpoint),
       };
 
       operations.push(operation);

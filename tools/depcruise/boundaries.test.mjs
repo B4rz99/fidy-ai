@@ -30,6 +30,16 @@ await test("a Trio filename under another owner's internals is still private", (
   }
 });
 
+await test("a mirrored owner test reaches its owner's internals but no other owner's", () => {
+  const from = "test/shell/source/feature.test.ts";
+  assert.deepEqual(inspect(from, "src/shell/source/internal/feature.ts"), []);
+  assert.ok(
+    inspect(from, "src/shell/target/internal/feature.ts").some(
+      (violation) => violation.name === "published-only"
+    )
+  );
+});
+
 await test("closed fixture recovery entrypoints may reuse only their corresponding production Worker", () => {
   /** @type {Array<[string, string, string]>} */
   const paired = [

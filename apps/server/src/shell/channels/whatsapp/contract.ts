@@ -144,9 +144,9 @@ export const InsightTemplateSummary = Schema.Struct({
 
 export type InsightTemplateSummary = typeof InsightTemplateSummary.Type;
 
-export class InsightTemplateUnavailable extends Data.TaggedError(
-  "InsightTemplateUnavailable"
-)<{}> {}
+export class InsightTemplateUnavailable extends Data.TaggedError("InsightTemplateUnavailable")<{
+  readonly cause: unknown;
+}> {}
 
 export type InsightTemplateSender = Readonly<{
   prepare: (
@@ -217,20 +217,26 @@ export const WhatsAppDocument = Schema.TaggedStruct("Document", {
 
 export type WhatsAppDocument = typeof WhatsAppDocument.Type;
 
+export const WhatsAppText = Schema.TaggedStruct("Text", { text: TranscriptText });
+
+export const WhatsAppVoiceTranscript = Schema.TaggedStruct("VoiceTranscript", {
+  text: TranscriptText,
+  mediaId: WhatsAppMediaId,
+});
+
+export const WhatsAppUnusableVoiceTranscript = Schema.TaggedStruct("UnusableVoiceTranscript", {});
+
+export const WhatsAppImage = Schema.TaggedStruct("Image", {
+  mediaId: WhatsAppMediaId,
+  caption: Schema.Option(TranscriptText),
+});
+
 export type WhatsAppInboundContent =
   | WhatsAppDocument
-  | Readonly<{ readonly _tag: "Text"; readonly text: TranscriptText }>
-  | Readonly<{
-      readonly _tag: "VoiceTranscript";
-      readonly text: TranscriptText;
-      readonly mediaId: WhatsAppMediaId;
-    }>
-  | Readonly<{ readonly _tag: "UnusableVoiceTranscript" }>
-  | Readonly<{
-      readonly _tag: "Image";
-      readonly mediaId: WhatsAppMediaId;
-      readonly caption: Option.Option<TranscriptText>;
-    }>;
+  | typeof WhatsAppText.Type
+  | typeof WhatsAppVoiceTranscript.Type
+  | typeof WhatsAppUnusableVoiceTranscript.Type
+  | typeof WhatsAppImage.Type;
 
 export const HostedDeliveryCorrelationToken = Schema.String.check(Schema.isUUID()).pipe(
   Schema.brand("HostedDeliveryCorrelationToken")
@@ -320,7 +326,9 @@ export class InvalidWhatsAppPayload extends Data.TaggedError("InvalidWhatsAppPay
 
 export class WhatsAppBatchTooLarge extends Data.TaggedError("WhatsAppBatchTooLarge")<{}> {}
 
-export class WhatsAppStatusUnavailable extends Data.TaggedError("WhatsAppStatusUnavailable")<{}> {}
+export class WhatsAppStatusUnavailable extends Data.TaggedError("WhatsAppStatusUnavailable")<{
+  readonly cause: unknown;
+}> {}
 
 export type WhatsAppDeliveryLookup = Readonly<{
   businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;

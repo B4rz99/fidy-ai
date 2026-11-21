@@ -13,7 +13,7 @@ import {
   Redacted,
 } from "effect";
 import { OutboundHttp } from "../../../src/shell/outbound-http/operations";
-import { testOutboundTransportLayer } from "../../../src/shell/outbound-http/testing";
+import { testOutboundTransportLayer } from "../../../test/support/outbound-http";
 import { BillingEmail } from "../../../src/core/subscription/contract";
 import { WompiSourceId } from "./wompi-model";
 import {

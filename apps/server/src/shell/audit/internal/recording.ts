@@ -1,12 +1,13 @@
 import { patOwnershipQuery } from "~/shell/tokens/operations";
-import { Option } from "effect";
+import { Match } from "effect";
 import type { OwnedStatement } from "~/shell/owner-write/contract";
 import { sessionOwnershipQuery } from "~/shell/web-session/operations";
-import type {
-  AuditAuthority,
-  AuditCredentialOperation,
-  AuthorizedAuditCall,
-  OwnerAuditCall,
+import {
+  AuditActor,
+  type AuditAuthority,
+  type AuditCredentialOperation,
+  type AuthorizedAuditCall,
+  type OwnerAuditCall,
 } from "~/shell/audit/contract";
 
 const sessionKinds = new Map([
@@ -42,7 +43,11 @@ const sessionKind = (operation: AuditCredentialOperation): string => {
 
   if (owner === "ingestion") return "publication";
 
-  return Option.getOrThrow(Option.fromUndefinedOr(sessionKinds.get(owner ?? "")));
+  const kind = sessionKinds.get(owner ?? "");
+
+  if (kind === undefined) throw new Error(`Unknown audit session owner: ${owner ?? ""}`);
+
+  return kind;
 };
 
 const recordKind = (operation: AuditCredentialOperation, pat: boolean): string =>
@@ -54,24 +59,27 @@ const credentialColumn = (kind: string, pat: boolean): ReadonlyArray<string> =>
 const commitGuard = (afterOwnerWrite: boolean): string =>
   afterOwnerWrite ? "AND changes() = 1" : "";
 
-const callerOwnership = (input: OwnerAuditCall): OwnedStatement => {
-  switch (input.caller._tag) {
-    case "Publication":
-      return { sql: "SELECT 1", params: [] };
-    case "PAT":
-      return patOwnershipQuery({ patId: input.caller.id, userId: input.userId });
-    case "WebSession":
-      return sessionOwnershipQuery({ sessionId: input.caller.id, userId: input.userId });
-  }
-};
+const callerOwnership = (input: OwnerAuditCall): OwnedStatement =>
+  Match.valueTags(input.caller, {
+    Publication: (): OwnedStatement => ({ sql: "SELECT 1", params: [] }),
+    PAT: ({ id }) => patOwnershipQuery({ patId: id, userId: input.userId }),
+    WebSession: ({ id }) => sessionOwnershipQuery({ sessionId: id, userId: input.userId }),
+  });
 
 const authorityCaller = (authority: AuditAuthority): boolean => authority.table === "pats";
 
 export const ownerCallStatement = (input: OwnerAuditCall): OwnedStatement => {
   const { operation, when, caller } = input;
-  const kind = recordKind(operation, caller._tag === "PAT");
-  const credential = credentialColumn(kind, caller._tag === "PAT");
-  const credentialValues = caller._tag === "Publication" ? [] : credential.map(() => caller.id);
+  const isPat = AuditActor.$is("PAT")(caller);
+
+  const kind = recordKind(operation, isPat);
+  const credential = credentialColumn(kind, isPat);
+
+  const credentialValues = Match.valueTags(caller, {
+    Publication: (): ReadonlyArray<string> => [],
+    PAT: ({ id }) => credential.map(() => id),
+    WebSession: ({ id }) => credential.map(() => id),
+  });
 
   const columns = [
     "record_type",

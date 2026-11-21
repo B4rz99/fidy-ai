@@ -1,0 +1,20 @@
+.gitignore
+  h_c6d49c804e0ad2 49-50
+docs/operations/security-pentest.md
+  h_c6d49c804e0ad2 1-124
+docs/security/README.md
+  h_c6d49c804e0ad2 1-11
+docs/security/ledger.md
+  h_c6d49c804e0ad2 5-12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2bfee3d21ca1c13e809e59d3bddb3288c304fca4",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

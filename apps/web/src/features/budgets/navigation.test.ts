@@ -502,3 +502,25 @@ it.each(["deleted", "reassigned"] as const)(
       })
     )
 );
+
+it("names each budget assignment action after the Category it assigns", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const view = yield* setup();
+      try {
+        yield* Effect.tryPromise(() =>
+          check(() => expect(input(view.container).value).toBe("100000"))
+        );
+        yield* Effect.tryPromise(() => work(() => button(view.container, "Mes anterior").click()));
+        yield* Effect.tryPromise(() =>
+          check(() =>
+            expect(button(view.container, "Asignar presupuesto a Restaurantes").textContent).toBe(
+              "Asignar presupuesto"
+            )
+          )
+        );
+      } finally {
+        yield* Effect.tryPromise(view.close);
+      }
+    })
+  ));

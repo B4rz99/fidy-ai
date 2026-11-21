@@ -29,6 +29,9 @@ pre-push:
     anti-slop-lint:
       run: ANTI_SLOP_BASE=origin/trunk node tools/oxlint/anti-slop/modes/lint.ts push bun run lint
       skip_output: false
+    integrity:
+      run: ANTI_SLOP_BASE=origin/trunk bun run integrity
+      skip_output: false
     pushed-commit-messages:
       files: git ls-files
       run: bun scripts/check-pushed-commit-messages.ts

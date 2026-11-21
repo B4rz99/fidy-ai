@@ -58,7 +58,7 @@ import { observeCancellation, pendingCancellation } from "./internal/local-cance
 import { RequestBodyPolicy } from "../http/contract";
 import { boundedJsonBody } from "../http/operations";
 import { publishPrice } from "./internal/publish-price";
-import { wompiOutboundHttp } from "./internal/wompi-runtime";
+import { wompiTransport } from "./internal/wompi-runtime";
 import { OutboundHttpLive, installedProviderFetch } from "../outbound-http/runtime";
 import {
   receiveRefunds as receiveCorrections,
@@ -78,7 +78,7 @@ import {
   Schema,
 } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
-import { OutboundHttp } from "../../src/shell/outbound-http/operations";
+import { OutboundHttp, type OutboundHttpService } from "../../src/shell/outbound-http/operations";
 import { handleRefundSupport as supportRefund } from "./internal/refund-support";
 import {
   cloudflareWorkerTelemetry,
@@ -105,7 +105,10 @@ import type { EnrollmentContext } from "./internal/enrollment-session";
 const boundaryRuntime = ManagedRuntime.make(Layer.empty);
 
 export const offerLocalBilling = Effect.fn(function* (context: Omit<BillingRecovery, "transport">) {
-  return yield* recoverLocalBilling({ ...context, transport: wompiOutboundHttp });
+  return yield* recoverLocalBilling({
+    ...context,
+    transport: wompiOutboundHttp,
+  });
 });
 
 export const handleLocalEnrollment = Effect.fn(function* (
@@ -126,6 +129,26 @@ export const answerRegistration = Effect.fn(function* (
 export const billingWake = Effect.fn(function* (storage: DurableObjectStorage) {
   return yield* withStoreCapacity("required")(inspectBillingAlarm(storage));
 });
+
+export const wompiOutboundHttp = (environment: WompiBindings): Effect.Effect<OutboundHttpService> =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const fetcher = yield* installedProviderFetch({
+        provider: "wompi",
+        environment,
+        telemetry: cloudflareWorkerTelemetry,
+      });
+
+      const clients = yield* Layer.build(OutboundHttpLive).pipe(
+        Effect.provideService(FetchHttpClient.Fetch, fetcher)
+      );
+
+      return wompiTransport({
+        environment,
+        httpClient: Context.get(clients, HttpClient.HttpClient),
+      });
+    })
+  );
 
 const refundWorkFailure = (error: unknown): RefundWorkFailure =>
   new RefundWorkFailure({
@@ -249,7 +272,10 @@ export const runBillingCollectionWorkflow = (
   }> &
     (
       | Readonly<{ activity: BillingWorkflowActivity }>
-      | Readonly<{ activity: BillingWorkflowActivity; observe: BillingWorkflowActivity<boolean> }>
+      | Readonly<{
+          activity: BillingWorkflowActivity;
+          observe: BillingWorkflowActivity<boolean>;
+        }>
     )
 ): Promise<void> =>
   runWorkflow({
@@ -269,7 +295,12 @@ export class Pricing {
     state: DurableObjectState,
     env: StoreReleaseEnvironment &
       AcceptanceWindowBindings &
-      Partial<Readonly<{ USER_STORE: DurableObjectNamespace; ERASURE: DurableObjectNamespace }>>
+      Partial<
+        Readonly<{
+          USER_STORE: DurableObjectNamespace;
+          ERASURE: DurableObjectNamespace;
+        }>
+      >
   ) {
     this.state = state;
     this.window = env;
@@ -417,13 +448,18 @@ export const handleSourceCancellationWork = Effect.fnUntraced(function* (
 
   const pending = yield* pendingCancellation(body.value);
 
-  return new Response(null, { status: pending ? workPendingStatus : workAbsentStatus });
+  return new Response(null, {
+    status: pending ? workPendingStatus : workAbsentStatus,
+  });
 });
 
 export const handleNativeBillingCallback = Effect.fn(function* (
   input: Omit<Parameters<typeof nativeBillingRequest>[0], "transport">
 ) {
-  return yield* nativeBillingRequest({ ...input, transport: wompiOutboundHttp });
+  return yield* nativeBillingRequest({
+    ...input,
+    transport: wompiOutboundHttp,
+  });
 });
 
 const callbackWorkflowId = Effect.fn(function* (event: typeof WompiBillingEvent.Type) {

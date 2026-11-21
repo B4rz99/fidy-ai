@@ -174,7 +174,11 @@ it("attributes an inventory read failure without disclosing provider messages", 
     })
   ));
 
-const deployedBinding = (name: string, type: string): Schema.JsonObject =>
+type DeployedBinding =
+  | Readonly<{ name: string; type: string; service: string; text: string }>
+  | Readonly<{ name: string; type: string; text: string }>;
+
+const deployedBinding = (name: string, type: string): DeployedBinding =>
   type === "service"
     ? {
         name,

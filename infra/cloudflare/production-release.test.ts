@@ -1,6 +1,6 @@
 import uploadedPair from "./native-pairing-upload.json" with { type: "json" };
 import fixtureUpload from "./native-fixture-upload.json" with { type: "json" };
-import { Cause, Context, Effect, Exit, Layer, Match, Option, type Schema } from "effect";
+import { Cause, Context, Effect, Exit, Layer, Match, Option, Schema } from "effect";
 import { FetchHttpClient, type HttpBody, HttpClient, HttpClientResponse } from "effect/http";
 import { it } from "@effect/vitest";
 import { assert, describe, expect, vi } from "vitest";
@@ -36,7 +36,9 @@ const persistedObservability = {
 
 const patchJson = (body: HttpBody.HttpBody): Schema.Json =>
   Match.value(body).pipe(
-    Match.tag("Uint8Array", (bytes) => JSON.parse(new TextDecoder().decode(bytes.body))),
+    Match.tag("Uint8Array", (bytes) =>
+      Schema.decodeSync(Schema.fromJsonString(Schema.Json))(new TextDecoder().decode(bytes.body))
+    ),
     Match.orElse(({ _tag }) => _tag)
   );
 

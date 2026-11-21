@@ -155,10 +155,7 @@ export const verifyNativeEdge = Effect.fn(function* (
 
   const converge = (
     mutations: number
-  ): Effect.Effect<
-    void,
-    Effect.Error<ReturnType<typeof inspect>> | Effect.Error<ReturnType<typeof patch>> | Error
-  > =>
+  ): Effect.Effect<void, Effect.Error<ReturnType<typeof inspect>> | Error> =>
     Effect.gen(function* () {
       const changes = yield* inspect();
       const change = changes[0];

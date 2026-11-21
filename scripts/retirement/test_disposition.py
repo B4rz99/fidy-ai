@@ -5,7 +5,7 @@ import hmac
 import json
 from subprocess import CalledProcessError
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 from disposition import KINDS, SCOPE, dispose, hold_reasons, require_isolation, unchanged_remaining, validate_scope, worker_deletion_order
 from provider import Provider, Refused, multipart_read_session
@@ -107,6 +107,29 @@ class InventorySafety(unittest.TestCase):
 
 
 class ProviderReads(unittest.TestCase):
+    def test_retirement_accepts_the_longest_pinned_workflow_name(self):
+        service = Provider(account="0" * 32, zone="1" * 32, token="synthetic", builds_token="synthetic")
+        service.request = Mock()
+        workflow = next(name for name in SCOPE["workflows"] if len(name) == 64)
+        service.delete("workflows", workflow)
+        service.request.assert_called_once_with("workflows/" + workflow, method="DELETE", absent=True)
+        with self.assertRaisesRegex(Refused, "Invalid exact retirement address"):
+            service.delete("workflows", workflow + "x")
+
+    def test_provider_delete_accepts_acknowledgement_and_empty_success_but_reads_need_data(self):
+        service = Provider(account="0" * 32, zone="1" * 32, token="synthetic", builds_token="synthetic")
+        service.http = MagicMock()
+        response = service.http.open.return_value.__enter__.return_value
+        response.read.return_value = b'{"status":"deleted","success":true}'
+        service.delete("workflows", next(iter(SCOPE["workflows"])))
+        with self.assertRaisesRegex(Refused, "Incomplete provider confirmation"):
+            service.result("workflows")
+        response.read.return_value = b""
+        self.assertIsNone(service.delete("workflows", next(iter(SCOPE["workflows"]))))
+        response.read.return_value = b'{"success":false}'
+        with self.assertRaisesRegex(Refused, "Incomplete provider confirmation"):
+            service.delete("workflows", next(iter(SCOPE["workflows"])))
+
     @patch("provider.time", return_value=1770000000)
     def test_r2_session_only_lists_one_bucket_for_two_minutes(self, _time):
         account, access, parent = "0" * 32, "1" * 32, "synthetic-parent"

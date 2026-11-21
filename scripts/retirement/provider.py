@@ -19,6 +19,7 @@ MAX_REPLY = 4_000_000
 HEX_ID = re.compile(r"[a-f0-9]{32}")
 UUID = re.compile(r"[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}")
 WORKER = re.compile(r"[a-z0-9][a-z0-9-]{1,62}")
+WORKFLOW = re.compile(r"[a-z0-9][a-z0-9-]{0,63}")
 SQL = Path(__file__).with_name("legacy-inventory.sql")
 INCUMBENT_BUCKETS = frozenset(json.loads(Path(__file__).with_name("incumbent.json").read_text())["buckets"])
 CENSUS = {
@@ -105,8 +106,11 @@ class Provider:
                     return None
             raise Refused(f"Cloudflare {method} refused with HTTP {failure.status}") from None
         require(len(raw) <= MAX_REPLY, "Provider reply exceeded the private inventory bound")
+        if method == "DELETE" and not raw:
+            return None
         data = json.loads(raw)
-        require(data.get("success") is True and "result" in data, "Incomplete provider confirmation")
+        require(type(data) is dict and data.get("success") is True
+                and (method == "DELETE" or "result" in data), "Incomplete provider confirmation")
         return data
 
     def result(self, path, **kwargs):
@@ -296,6 +300,6 @@ class Provider:
             "workflows": "workflows/",
             "buckets": "r2/buckets/",
         }
-        pattern = {"databases": UUID, "queues": HEX_ID}.get(kind, WORKER)
+        pattern = {"databases": UUID, "queues": HEX_ID, "workflows": WORKFLOW}.get(kind, WORKER)
         require(kind in paths and pattern.fullmatch(key), "Invalid exact retirement address")
         return self.request(paths[kind] + quote(key, safe=""), method="DELETE", absent=True)

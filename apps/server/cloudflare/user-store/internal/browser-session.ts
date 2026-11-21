@@ -202,5 +202,6 @@ export const browserSessionRequest = Effect.fn(
       return yield* observe({ session, url, now });
     }).pipe(withStoreCapacity("required"));
   },
+  Effect.tapCause(Effect.logDebug),
   Effect.catchCause(() => Effect.succeed(Response.json({ status: "unavailable" }, { status: 503 })))
 );

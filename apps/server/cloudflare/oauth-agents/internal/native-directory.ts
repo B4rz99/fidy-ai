@@ -216,9 +216,10 @@ export const nativePublicOAuth = Effect.fn(
         Effect.forEach(
           Option.toArray(lease),
           (id) => sql`DELETE FROM oauth_leases WHERE id=${id}`
-        ).pipe(Effect.ignore)
+        ).pipe(Effect.tapError(Effect.logDebug), Effect.ignore)
     );
   },
+  Effect.tapCause(Effect.logDebug),
   Effect.catchCause(() =>
     Effect.succeed(oauthResponse({ body: { error: "temporarily_unavailable" }, status: 503 }))
   )

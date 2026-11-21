@@ -191,6 +191,7 @@ export const rotateLocalRecovery = Effect.fn(
     );
 
     yield* settle(directory, record, isResponse(result) ? "cancelled" : "committed").pipe(
+      Effect.tapError(Effect.logDebug),
       Effect.ignore
     );
 
@@ -208,6 +209,7 @@ export const rotateLocalRecovery = Effect.fn(
       { headers: { "cache-control": "no-store" } }
     );
   },
+  Effect.tapCause(Effect.logDebug),
   Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
 );
 

@@ -117,5 +117,6 @@ export const readPrivacyPage = Effect.fn(
       withStoreCapacity("required")
     );
   },
+  Effect.tapCause(Effect.logDebug),
   Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
 );

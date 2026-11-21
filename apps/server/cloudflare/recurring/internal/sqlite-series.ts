@@ -209,6 +209,7 @@ export const dispatchSeries = Effect.fn(
 
     return yield* runLocalMutation({ ...unit, input: Effect.succeed(decoded), work: browse });
   },
+  Effect.tapCause(Effect.logDebug),
   Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
 );
 

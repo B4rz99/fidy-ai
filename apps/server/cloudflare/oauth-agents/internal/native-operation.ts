@@ -90,5 +90,6 @@ export const canonicalLocalRequest = Effect.fn(
       oauth: { subject, admission },
     };
   },
+  Effect.tapCause(Effect.logDebug),
   Effect.catchCause(() => Effect.succeed(invalidRequest()))
 );

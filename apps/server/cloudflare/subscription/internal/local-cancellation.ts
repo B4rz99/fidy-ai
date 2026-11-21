@@ -202,7 +202,7 @@ export const observeCancellation = Effect.fnUntraced(function* (
   if (source.void_started_at_ms === null) {
     yield* input.http
       .execute(OutboundHttpRequest.WompiVoidPaymentSource({ sourceId: source.wompi_source_id }))
-      .pipe(Effect.ignore);
+      .pipe(Effect.tapError(Effect.logDebug), Effect.ignore);
   }
 
   if (!(yield* verifyVoidedSource(input.http, source.wompi_source_id))) return;

@@ -572,4 +572,7 @@ export const receiveIngress =
           Effect.provideService(FetchHttpClient.Fetch, fetcher)
         );
       })
-    ).pipe(Effect.catchCause(() => Effect.succeed(answer(HTTP_UNAVAILABLE))));
+    ).pipe(
+      Effect.tapCause(Effect.logDebug),
+      Effect.catchCause(() => Effect.succeed(answer(HTTP_UNAVAILABLE)))
+    );

@@ -138,6 +138,7 @@ export const observeLocalSubscription = Effect.fn(
       }),
     });
   },
+  Effect.tapCause(Effect.logDebug),
   Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
 );
 

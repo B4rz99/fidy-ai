@@ -64,6 +64,7 @@ export const receiveRefunds = (
           retention: { successRetention: "3 days", errorRetention: "3 days" },
         })
       ).pipe(
+        Effect.tapError(Effect.logDebug),
         Effect.catch(() =>
           Effect.tryPromise(() => input.environment.BILLING_REFUND_WORKFLOW.get(id))
         )

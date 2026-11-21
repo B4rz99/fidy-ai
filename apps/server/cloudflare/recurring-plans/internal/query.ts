@@ -143,27 +143,26 @@ const matchCandidates = ({
   items: Parameters<typeof recurringMatchCandidates>[0]["items"];
   transactions: ReadonlyArray<Transaction>;
 }>): ReturnType<typeof recurringMatchCandidates> => {
-  const factsByTimeZone = new Map<string, ReadonlyArray<ReturnType<typeof planningFact>>>();
-
   const allocatedOccurrences = new Set(
     document.fulfillments.map((mark) => `${mark.planId}:${mark.date}`)
   );
 
-  const pairs = items
-    .filter((item) => !allocatedOccurrences.has(`${item.planId}:${item.date}`))
-    .flatMap((item) => {
-      const timeZone = item.plan.timeZone;
-      let facts = factsByTimeZone.get(timeZone);
+  const open = items.filter((item) => !allocatedOccurrences.has(`${item.planId}:${item.date}`));
 
-      if (facts === undefined) {
-        facts = transactions.map((transaction) => planningFact({ transaction, timeZone }));
-        factsByTimeZone.set(timeZone, facts);
-      }
+  const factsByTimeZone = new Map(
+    Array.from(new Set(open.map((item) => item.plan.timeZone)), (timeZone) => [
+      timeZone,
+      transactions.map((transaction) => planningFact({ transaction, timeZone })),
+    ])
+  );
 
-      return recurringMatchCandidates({ document, items: [item], facts });
-    });
-
-  return pairs;
+  return open.flatMap((item) =>
+    recurringMatchCandidates({
+      document,
+      items: [item],
+      facts: factsByTimeZone.get(item.plan.timeZone) ?? [],
+    })
+  );
 };
 
 export const automaticMatches = (

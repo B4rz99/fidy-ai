@@ -128,6 +128,7 @@ const correctionCategory = Effect.fn(function* ({
     },
   }).pipe(
     Effect.map(({ revision }) => Option.some(revision)),
+    Effect.tapError(Effect.logDebug),
     Effect.catchTag("CategoryNotFound", () => Effect.succeedNone)
   );
 });

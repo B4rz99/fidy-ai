@@ -260,6 +260,7 @@ export const backgroundWorkAllowed = Effect.fn(
 
     return validMarker(value, revision, now);
   },
+  Effect.tapError(Effect.logDebug),
   Effect.orElseSucceed(() => false)
 );
 

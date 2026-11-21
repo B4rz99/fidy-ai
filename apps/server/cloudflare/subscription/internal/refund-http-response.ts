@@ -25,6 +25,7 @@ export const refundResultResponse = <R>(
   input.result.pipe(
     Effect.flatMap(Schema.encodeEffect(Schema.toCodecJson(RefundAttempt))),
     Effect.map((data) => Response.json({ data }, { status: input.status, headers })),
+    Effect.tapError(Effect.logDebug),
     Effect.catch((error) =>
       Effect.succeed(refundFailureResponse(Predicate.isString(error) ? error : "unavailable"))
     )

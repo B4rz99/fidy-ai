@@ -190,6 +190,7 @@ export const dispatchLocalTransaction = Effect.fn(
 
     return yield* dispatchTransaction(unit);
   },
+  Effect.tapCause(Effect.logDebug),
   Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
 );
 

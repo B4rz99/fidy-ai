@@ -36,5 +36,6 @@ export const readBetaRegistry = Effect.fn(
       })
     );
   },
+  Effect.tapCause(Effect.logDebug),
   Effect.orElseSucceed(() => new Response(null, { status: betaStatus.unavailable }))
 );

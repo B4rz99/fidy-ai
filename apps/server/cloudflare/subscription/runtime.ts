@@ -339,6 +339,7 @@ export class Pricing {
     if (request.url === participantCleanupUrl && Option.isSome(this.erasure)) {
       return this.runtime.runPromise(
         handleSharedCleanup(request, this.erasure.value, cleanPricingCase).pipe(
+          Effect.tapCause(Effect.logDebug),
           Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
         )
       );
@@ -347,6 +348,7 @@ export class Pricing {
     if (request.url === participantDrainedUrl) {
       return this.runtime.runPromise(
         participantDrain(request, outstandingPricingRegistrations).pipe(
+          Effect.tapCause(Effect.logDebug),
           Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
         )
       );
@@ -355,6 +357,7 @@ export class Pricing {
     if (request.url === participantFenceUrl && Option.isSome(this.users)) {
       return this.runtime.runPromise(
         fenceErasureParticipant(request, this.users.value, this.state.storage).pipe(
+          Effect.tapCause(Effect.logDebug),
           Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
         )
       );
@@ -392,7 +395,10 @@ export class Pricing {
             })
           )
         : work
-      ).pipe(Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 }))))
+      ).pipe(
+        Effect.tapCause(Effect.logDebug),
+        Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
+      )
     );
   }
 }

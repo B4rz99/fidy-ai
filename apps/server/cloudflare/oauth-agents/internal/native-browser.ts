@@ -117,7 +117,7 @@ const prepareBrowser = Effect.fn(function* (input: BrowserInput) {
     input.directory,
     { action: "finish", user, requestId: choice.requestId },
     Schema.Boolean
-  ).pipe(Effect.ignore);
+  ).pipe(Effect.tapError(Effect.logDebug), Effect.ignore);
 
   const scopes = requestedScopes(Option.fromUndefinedOr(pending.scope));
 
@@ -342,10 +342,12 @@ export const nativeOAuthBrowser = Effect.fn(
 
     return yield* connectReview(context, choice, input.directory);
   },
+  Effect.tapError(Effect.logDebug),
   Effect.catchTags({
     BootstrapInvalid: () => Effect.succeed(invalidRequest()),
     SchemaError: () => Effect.succeed(invalidRequest()),
   }),
+  Effect.tapCause(Effect.logDebug),
   Effect.catchCause(() =>
     Effect.succeed(oauthResponse({ body: { error: "temporarily_unavailable" }, status: 503 }))
   )

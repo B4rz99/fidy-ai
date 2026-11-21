@@ -54,6 +54,7 @@ export const offerErasureHandoff = Effect.fn(function* (
   ).pipe(
     Effect.map((response) => response.status === acknowledged),
     Effect.timeout("5 seconds"),
+    Effect.tapError(Effect.logDebug),
     Effect.orElseSucceed(() => false)
   );
 

@@ -171,12 +171,16 @@ export const installConsumers = Effect.fn(function* ({
     ["HostedWhatsAppConsumer", queues.HOSTED_WHATSAPP_QUEUE, core, workBatchSize],
   ] as const;
 
-  for (const [id, queue, worker, batchSize] of consumers) {
-    yield* Cloudflare.Queues.Consumer(id, {
-      queueId: queue.queueId,
-      scriptName: worker.workerName,
-      deadLetterQueue: queues.ASYNC_DEAD_LETTERS.queueName,
-      settings: { batchSize, maxRetries: 3, maxWaitTimeMs: 0 },
-    });
-  }
+  yield* Effect.forEach(
+    consumers,
+    Effect.fnUntraced(function* ([id, queue, worker, batchSize]) {
+      yield* Cloudflare.Queues.Consumer(id, {
+        queueId: queue.queueId,
+        scriptName: worker.workerName,
+        deadLetterQueue: queues.ASYNC_DEAD_LETTERS.queueName,
+        settings: { batchSize, maxRetries: 3, maxWaitTimeMs: 0 },
+      });
+    }),
+    { discard: true }
+  );
 });

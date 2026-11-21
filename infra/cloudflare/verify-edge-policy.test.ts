@@ -14,14 +14,22 @@ const policyFixture = Effect.gen(function* () {
   yield* fs.makeDirectory(`${root}/scripts/infra-performance`, { recursive: true });
   yield* fs.copy(`${workspaceRoot}scripts/pro`, `${root}/scripts/pro`);
 
-  for (const owner of ["deployed-fleet", "canonical-fixture", "hosted-browser"]) {
-    const directory = `scripts/infra-performance/${owner}`;
-    yield* fs.copy(`${workspaceRoot}${directory}`, `${root}/${directory}`);
-  }
+  yield* Effect.forEach(
+    ["deployed-fleet", "canonical-fixture", "hosted-browser"],
+    Effect.fnUntraced(function* (owner) {
+      const directory = `scripts/infra-performance/${owner}`;
+      yield* fs.copy(`${workspaceRoot}${directory}`, `${root}/${directory}`);
+    }),
+    { discard: true }
+  );
 
-  for (const name of [".github", "apps", "node_modules", "tsconfig.base.json"]) {
-    yield* fs.symlink(`${workspaceRoot}${name}`, `${root}/${name}`);
-  }
+  yield* Effect.forEach(
+    [".github", "apps", "node_modules", "tsconfig.base.json"],
+    Effect.fnUntraced(function* (name) {
+      yield* fs.symlink(`${workspaceRoot}${name}`, `${root}/${name}`);
+    }),
+    { discard: true }
+  );
 
   return `${root}/infra/cloudflare`;
 });

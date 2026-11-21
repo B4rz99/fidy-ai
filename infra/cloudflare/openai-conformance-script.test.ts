@@ -368,8 +368,9 @@ describe.concurrent("native conformance lifecycle", () => {
       })
     );
     it.effect("refuses invalid or raised client deadlines before starting conformance work", () =>
-      Effect.gen(function* () {
-        for (const timeout of ["0", "181", "9999", "1.5", "-1", "invalid"]) {
+      Effect.forEach(
+        ["0", "181", "9999", "1.5", "-1", "invalid"],
+        Effect.fnUntraced(function* (timeout) {
           const child = yield* ChildProcess.make(
             "bash",
             [new URL("./scripts/check-openai-conformance.sh", import.meta.url).pathname],
@@ -400,8 +401,9 @@ describe.concurrent("native conformance lifecycle", () => {
             "OpenAI conformance timeout must be an integer from 1 to 180 seconds.\n"
           );
           expect(result.stdout).toBe("");
-        }
-      }).pipe(Effect.scoped, Effect.timeout("5 seconds"))
+        }),
+        { discard: true }
+      ).pipe(Effect.scoped, Effect.timeout("5 seconds"))
     );
   });
 });

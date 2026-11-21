@@ -28,10 +28,14 @@ layer(BunServices.layer)((it) => {
 
       const beforeProbes = yield* hashInput;
 
-      for (const directory of ["test-results", "playwright-report", ".astro"]) {
-        yield* fs.makeDirectory(`${cwd}/${directory}`, { recursive: true });
-        yield* fs.writeFileString(`${cwd}/${directory}/generated.json`, '{"status":"passed"}');
-      }
+      yield* Effect.forEach(
+        ["test-results", "playwright-report", ".astro"],
+        Effect.fnUntraced(function* (directory) {
+          yield* fs.makeDirectory(`${cwd}/${directory}`, { recursive: true });
+          yield* fs.writeFileString(`${cwd}/${directory}/generated.json`, '{"status":"passed"}');
+        }),
+        { discard: true }
+      );
 
       expect(yield* hashInput).toBe(beforeProbes);
       yield* fs.writeFileString(`${cwd}/src/index.ts`, "export const revision = 2;");

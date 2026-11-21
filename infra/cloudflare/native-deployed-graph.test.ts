@@ -120,30 +120,31 @@ it("requires all four buckets, eight exact Workflow owners and nine consumers wi
         Result.isFailure(yield* Effect.result(inspectNativeResources(read, revision, false)))
       ).toBe(true);
 
-      for (const conflicting of [
-        { script: "incumbent" },
-        { script: core, script_name: "incumbent" },
-      ]) {
-        const drift = (path: string): Effect.Effect<unknown, Error> =>
-          path.includes("/billing-collection/consumers")
-            ? Effect.succeed({
-                ...basic,
-                result: [
-                  {
-                    consumer_id: "billing-collection",
-                    type: "worker",
-                    dead_letter_queue: "fidy-native-async-dead-letters",
-                    settings: { batch_size: 10, max_retries: 3, max_wait_time_ms: 0 },
-                    ...conflicting,
-                  },
-                ],
-              })
-            : read(path);
+      yield* Effect.forEach(
+        [{ script: "incumbent" }, { script: core, script_name: "incumbent" }],
+        Effect.fnUntraced(function* (conflicting) {
+          const drift = (path: string): Effect.Effect<unknown, Error> =>
+            path.includes("/billing-collection/consumers")
+              ? Effect.succeed({
+                  ...basic,
+                  result: [
+                    {
+                      consumer_id: "billing-collection",
+                      type: "worker",
+                      dead_letter_queue: "fidy-native-async-dead-letters",
+                      settings: { batch_size: 10, max_retries: 3, max_wait_time_ms: 0 },
+                      ...conflicting,
+                    },
+                  ],
+                })
+              : read(path);
 
-        expect(
-          Result.isFailure(yield* Effect.result(inspectNativeResources(drift, revision, true)))
-        ).toBe(true);
-      }
+          expect(
+            Result.isFailure(yield* Effect.result(inspectNativeResources(drift, revision, true)))
+          ).toBe(true);
+        }),
+        { discard: true }
+      );
 
       const foreign = (path: string): Effect.Effect<unknown, Error> =>
         path.includes("/async-dead-letters/consumers")
@@ -463,24 +464,32 @@ it("requires exactly one account OTP before first install regardless of its disp
     Effect.gen(function* () {
       expect(yield* verify(fresh(loginMethods), false)).toEqual([]);
 
-      for (const [methods, reason] of [
-        [[], "missing"],
+      yield* Effect.forEach(
         [
-          [{ id: pin, name: "Fidy native recovery email PIN", type: "oidc" }],
-          "name matches another type",
-        ],
-        [
+          [[], "missing"],
           [
-            ...loginMethods,
-            { id: "4fa581d3-75e5-4545-93b5-4e7b9d120f68", name: "another PIN", type: "onetimepin" },
+            [{ id: pin, name: "Fidy native recovery email PIN", type: "oidc" }],
+            "name matches another type",
           ],
-          "ambiguous",
-        ],
-        [[{ id: "", name: "Email PIN", type: "onetimepin" }], "invalid ID"],
-      ] as const) {
-        const refusal = yield* Effect.flip(verify(fresh(methods), false));
-        expect(refusal).toMatchObject({ _tag: "RecoveryPinUnavailable", reason });
-      }
+          [
+            [
+              ...loginMethods,
+              {
+                id: "4fa581d3-75e5-4545-93b5-4e7b9d120f68",
+                name: "another PIN",
+                type: "onetimepin",
+              },
+            ],
+            "ambiguous",
+          ],
+          [[{ id: "", name: "Email PIN", type: "onetimepin" }], "invalid ID"],
+        ] as const,
+        Effect.fnUntraced(function* ([methods, reason]) {
+          const refusal = yield* Effect.flip(verify(fresh(methods), false));
+          expect(refusal).toMatchObject({ _tag: "RecoveryPinUnavailable", reason });
+        }),
+        { discard: true }
+      );
     })
   ));
 
@@ -509,33 +518,37 @@ it("requires independent Access scopes, a distinct audience per role and the sol
         )
       ).toBe(true);
 
-      for (const target of [
-        "zone/access/apps",
-        "account/access/apps/SAMPLE_REVIEW_AUDIENCE/policies",
-        "account/access/apps/BETA_PRO_AUDIENCE/policies",
-      ]) {
-        expect(
-          Result.isFailure(
-            yield* Effect.result(
-              verify((path) =>
-                path.startsWith(target)
-                  ? {
-                      ...basic,
-                      result: [
-                        {
-                          ...applications[0],
-                          id: "shadow",
-                          name: "shadow",
-                          destinations: [{ type: "all_workers" }],
-                        },
-                      ],
-                    }
-                  : accessReply(path)
+      yield* Effect.forEach(
+        [
+          "zone/access/apps",
+          "account/access/apps/SAMPLE_REVIEW_AUDIENCE/policies",
+          "account/access/apps/BETA_PRO_AUDIENCE/policies",
+        ],
+        Effect.fnUntraced(function* (target) {
+          expect(
+            Result.isFailure(
+              yield* Effect.result(
+                verify((path) =>
+                  path.startsWith(target)
+                    ? {
+                        ...basic,
+                        result: [
+                          {
+                            ...applications[0],
+                            id: "shadow",
+                            name: "shadow",
+                            destinations: [{ type: "all_workers" }],
+                          },
+                        ],
+                      }
+                    : accessReply(path)
+                )
               )
             )
-          )
-        ).toBe(true);
-      }
+          ).toBe(true);
+        }),
+        { discard: true }
+      );
 
       expect(
         Result.isFailure(

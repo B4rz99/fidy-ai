@@ -1,4 +1,4 @@
-import { Cause, Data, Effect, Option, Schema, Stream } from "effect";
+import { Cause, Data, Effect, Option, Predicate, Schema, Stream } from "effect";
 import { FetchHttpClient, HttpBody, HttpClient, HttpClientRequest } from "effect/http";
 import {
   SmokeFailureStage,
@@ -26,6 +26,9 @@ const refusedStatus = 503;
 export class ReleaseSmokeFailed extends Data.TaggedError("ReleaseSmokeFailed")<{
   readonly reason: string;
 }> {}
+
+export const isReleaseSmokeFailed = (value: unknown): value is ReleaseSmokeFailed =>
+  Predicate.isTagged(value, "ReleaseSmokeFailed");
 
 export class CandidateRoutingPending extends Data.TaggedError("CandidateRoutingPending")<{
   readonly reason: string;

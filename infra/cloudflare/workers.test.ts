@@ -711,28 +711,32 @@ describe("Cloudflare Worker topology", () => {
 
       expect(new Set(records.map((record) => record.spanId)).size).toBe(2);
 
-      for (const record of records) {
-        yield* Schema.decodeEffect(TelemetryWorkRecord, { onExcessProperty: "error" })(record);
-        expect(record.traceId).toBe(receipt);
-        expect(record).toMatchObject({
-          release: gitRevision,
-          provider: "cloudflare-workers",
-          statusClass: "2xx",
-          outcome: "succeeded",
-          attempt: 1,
-        });
-        expect(Object.keys(record).sort()).toEqual([
-          "attempt",
-          "latencyMilliseconds",
-          "operation",
-          "outcome",
-          "provider",
-          "release",
-          "spanId",
-          "statusClass",
-          "traceId",
-        ]);
-      }
+      yield* Effect.forEach(
+        records,
+        Effect.fnUntraced(function* (record) {
+          yield* Schema.decodeEffect(TelemetryWorkRecord, { onExcessProperty: "error" })(record);
+          expect(record.traceId).toBe(receipt);
+          expect(record).toMatchObject({
+            release: gitRevision,
+            provider: "cloudflare-workers",
+            statusClass: "2xx",
+            outcome: "succeeded",
+            attempt: 1,
+          });
+          expect(Object.keys(record).sort()).toEqual([
+            "attempt",
+            "latencyMilliseconds",
+            "operation",
+            "outcome",
+            "provider",
+            "release",
+            "spanId",
+            "statusClass",
+            "traceId",
+          ]);
+        }),
+        { discard: true }
+      );
     })
   );
 

@@ -288,9 +288,13 @@ export const bindPlannedText = Effect.fn(function* (
   worker: Cloudflare.Worker,
   values: Readonly<Record<string, string | Output<string>>>
 ) {
-  for (const [name, text] of Object.entries(values)) {
-    yield* worker.bind`${name}`({ bindings: [{ name, type: "plain_text", text }] });
-  }
+  yield* Effect.forEach(
+    Object.entries(values),
+    Effect.fnUntraced(function* ([name, text]) {
+      yield* worker.bind`${name}`({ bindings: [{ name, type: "plain_text", text }] });
+    }),
+    { discard: true }
+  );
 });
 
 export const privateAccessBindings = Effect.fn(function* (release: NativeRelease) {

@@ -40,7 +40,7 @@ import {
   resourceRevision,
   stagedAccountingRevision,
 } from "./native-fixture-signer";
-import { BunFileSystem } from "@effect/platform-bun";
+import { BunFileSystem, BunRuntime } from "@effect/platform-bun";
 import type { ErasureProgress } from "./native-erasure-continuation";
 import type { ErasureObservation } from "./native-erasure";
 import { verificationRevision } from "./installed-verification-revision";
@@ -57,8 +57,8 @@ import {
   requireStagedHostDomains,
 } from "./native-deployed-edge";
 import {
-  NativeInventoryRefused,
   inspectNativeResources,
+  isNativeInventoryRefused,
   verifyDeployedVersion,
   verifySuccessorVersionAt,
 } from "./native-deployed-graph";
@@ -74,6 +74,7 @@ import {
   Context,
   DateTime,
   Effect,
+  Exit,
   FileSystem,
   Layer,
   Option,
@@ -97,14 +98,17 @@ import {
 } from "../../apps/server/cloudflare/storage-bootstrap/contract";
 import { ReleaseHttpLive } from "./release-http";
 import {
+  CausedReleaseFailure,
   type ProductionReleaseConfig as Config,
   ReleaseFailure,
-  WorkerVersionReadUnavailable,
   canonicalRestorePort,
   configureReleaseObservability,
   fixtureVerifier,
+  isReleaseFailure,
+  isWorkerVersionReadUnavailable,
   releaseCommand,
   releaseEvidence,
+  releaseFailureFrom,
   releaseFailureMessage,
   releasePort,
   verifyCoreDefaultPlacement,
@@ -134,7 +138,11 @@ import {
   requireAbsentInstallation,
 } from "./storage-installation";
 import { smokeHeaders } from "./smoke-exchange";
-import { rollbackCompatible, type verifiedVersionResources } from "./rollback-compatibility";
+import {
+  type WorkerBindings,
+  rollbackCompatible,
+  type verifiedVersionResources,
+} from "./rollback-compatibility";
 
 const {
   providerJson,
@@ -254,21 +262,30 @@ const requireCapturedSupport = Effect.fn(function* (
   port: ReleasePort,
   smoke: Readonly<{ deploymentId: string; versionId: string }> = fixtureUpload.support.Smoke
 ) {
-  for (const role of ["Smoke", "Web", "ForwardedEmail"] as const) {
-    const name =
-      role === "Smoke" ? "fidy-native-smoke-" + fixtureUpload.revision : installationNames[role];
+  yield* Effect.forEach(
+    ["Smoke", "Web", "ForwardedEmail"] as const,
+    (role) =>
+      Effect.gen(function* () {
+        const name =
+          role === "Smoke"
+            ? "fidy-native-smoke-" + fixtureUpload.revision
+            : installationNames[role];
 
-    const active = yield* port.current(name);
-    const expected = role === "Smoke" ? smoke : fixtureUpload.support[role];
+        const active = yield* port.current(name);
+        const expected = role === "Smoke" ? smoke : fixtureUpload.support[role];
 
-    if (
-      active.id !== expected.deploymentId ||
-      active.versions.length !== 1 ||
-      (yield* releaseController.servingVersion(active)) !== expected.versionId
-    ) {
-      return yield* new ReleaseFailure({ message: "Interrupted native auxiliary Worker changed" });
-    }
-  }
+        if (
+          active.id !== expected.deploymentId ||
+          active.versions.length !== 1 ||
+          (yield* releaseController.servingVersion(active)) !== expected.versionId
+        ) {
+          return yield* new ReleaseFailure({
+            message: "Interrupted native auxiliary Worker changed",
+          });
+        }
+      }),
+    { discard: true }
+  );
 });
 
 const verifyInterruptedUpload = Effect.fn(function* (
@@ -927,9 +944,10 @@ const verifyDeployedWorkers = Effect.fn(function* (
     (worker) =>
       verify(worker).pipe(
         Effect.mapError(
-          () =>
-            new ReleaseFailure({
+          (error) =>
+            new CausedReleaseFailure({
               message: "Native deployed Worker verification failed for " + worker[0],
+              cause: error,
             })
         )
       ),
@@ -950,12 +968,9 @@ const inspectInstalledResources = Effect.fn(function* (
     Effect.mapError(
       (failure) =>
         new ReleaseFailure({
-          message:
-            failure instanceof NativeInventoryRefused
-              ? "Native data resource inventory differs at " +
-                failure.phase +
-                " after bounded reads"
-              : "Native bucket, Queue or Workflow inventory differs after bounded reads",
+          message: isNativeInventoryRefused(failure)
+            ? "Native data resource inventory differs at " + failure.phase + " after bounded reads"
+            : "Native bucket, Queue or Workflow inventory differs after bounded reads",
         })
     )
   );
@@ -966,7 +981,7 @@ const verifyInstalledTopology = Effect.fn(function* (
   client: HttpClient.HttpClient,
   input: {
     port: ReleasePort;
-    bindings: Readonly<Record<string, unknown>>;
+    bindings: WorkerBindings;
     publicStable: string;
     coreStable: string;
     hosts: NativeHostMode;
@@ -994,11 +1009,7 @@ const verifyInstalledTopology = Effect.fn(function* (
     bindings: input.bindings,
     hosts: input.hosts,
     staging: input.staging,
-  }).pipe(
-    Effect.mapError(
-      () => new ReleaseFailure({ message: "Native DNS, host or Access inventory differs" })
-    )
-  );
+  }).pipe(Effect.mapError(releaseFailureFrom("Native DNS, host or Access inventory differs")));
 
   yield* requireStagedHostDomains(accountReader(env, client), edge.zoneId, input.staging).pipe(
     Effect.when(Effect.succeed(input.hosts === "staged"))
@@ -1009,10 +1020,7 @@ const verifyInstalledTopology = Effect.fn(function* (
     (pair) =>
       verifyInstalledWebsite(client, artifacts.supportRevision, pair).pipe(
         Effect.mapError(
-          () =>
-            new ReleaseFailure({
-              message: "Native browser asset, metadata or header verification failed",
-            })
+          releaseFailureFrom("Native browser asset, metadata or header verification failed")
         )
       )
   );
@@ -1022,12 +1030,15 @@ const verifyInstalledTopology = Effect.fn(function* (
   if (!signed) return verification;
   const retained = yield* verifyRetainedProvider(env, client, input.port);
 
-  return {
+  const signedVerification = {
     ...verification,
     resourceRevision: generation,
     retainedProvider: retained,
-    ...(artifacts.successorPlan ? { fixtureMember: "performance-2" } : {}),
   };
+
+  return artifacts.successorPlan
+    ? { ...signedVerification, fixtureMember: "performance-2" }
+    : signedVerification;
 });
 
 const firstInstallWorkers = Effect.fn(function* () {
@@ -1220,10 +1231,7 @@ const installedConfig = Effect.fn(function* (verifier: Config) {
     releaseCommand({ args: ["git", "-C", "../..", ...args], lifetime: "read-only" })
   ).pipe(
     Effect.mapError(
-      () =>
-        new ReleaseFailure({
-          message: "Installed revision must be the same protected runtime source",
-        })
+      releaseFailureFrom("Installed revision must be the same protected runtime source")
     )
   );
 
@@ -1407,11 +1415,12 @@ const verifyFirstInstall = Effect.fn(function* (
       );
 
   const { accountingRollout } = yield* fixtureArtifacts(env.revision);
+  const accountingWitness = accountingRollout ? { nativeAccountingWitness: true } : {};
   yield* writeFile(
     env.smokeAttestationFile,
     encodeJson({
       ...installed,
-      ...(accountingRollout ? { nativeAccountingWitness: true } : {}),
+      ...accountingWitness,
       verifierRevision: Option.getOrElse(yield* fixtureVerifier, () => verifier.revision),
       smoke,
       ...userEvidence,
@@ -1431,9 +1440,20 @@ const verification =
   (env, client, port) =>
     verifyFirstInstall(env, client, { port, operation });
 
-const coordinateIdentity = (
-  installed: Effect.Success<ReturnType<typeof installedRelease>>
-): Readonly<Record<string, unknown>> => ({
+type InstalledRelease = Effect.Success<ReturnType<typeof installedRelease>>;
+
+type InstalledAccess = InstalledRelease["edge"]["access"][number];
+
+type CoordinateIdentity = Pick<InstalledRelease, "revision" | "markers" | "workers" | "resources"> &
+  Readonly<{
+    namespaces: ReadonlyArray<InstalledRelease["namespaces"][number]>;
+    access: ReadonlyArray<
+      Readonly<{ id: InstalledAccess["appId"]; name: InstalledAccess["name"] }>
+    >;
+    zone: InstalledRelease["edge"]["zoneId"];
+  }>;
+
+const coordinateIdentity = (installed: InstalledRelease): CoordinateIdentity => ({
   revision: installed.revision,
   namespaces: [...installed.namespaces].sort(),
   markers: installed.markers,
@@ -1554,7 +1574,7 @@ const reportFenceRead =
   (path: string): Effect.Effect<unknown, Error> =>
     read(path).pipe(
       Effect.tapError((error) =>
-        error instanceof ReleaseFailure
+        isReleaseFailure(error)
           ? Effect.logError(
               "Canonical fence provider refused a " + scope + " read. " + error.message
             )
@@ -1562,14 +1582,16 @@ const reportFenceRead =
       )
     );
 
+type IncumbentFenceChecks = Readonly<{
+  mail: ReturnType<typeof verifyIncumbentMail>;
+  writers: ReturnType<typeof verifyIncumbentFence>;
+}>;
+
 const incumbentFenceChecks = (
   env: Config,
   client: HttpClient.HttpClient,
   zoneId: string
-): {
-  mail: ReturnType<typeof verifyIncumbentMail>;
-  writers: ReturnType<typeof verifyIncumbentFence>;
-} => {
+): IncumbentFenceChecks => {
   const account = reportFenceRead(accountReader(env, client, true), "Workers account");
 
   const zoneMail = reportFenceRead(
@@ -1631,9 +1653,7 @@ const verifyTransferredHosts = Effect.fn(function* (
     staging: false,
   }).pipe(
     checkCanonicalPrerequisite("DNS, Workers Builds or protected Access"),
-    Effect.mapError(
-      () => new ReleaseFailure({ message: "Canonical DNS, host or Access inventory differs" })
-    )
+    Effect.mapError(releaseFailureFrom("Canonical DNS, host or Access inventory differs"))
   );
 
   const read = canonicalDomainReader({
@@ -1723,62 +1743,72 @@ const requireSameInstallation = Effect.fn(function* (
   }
 });
 
+const attachCanonicalHost = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  { port, host }: Readonly<{ port: ReleasePort; host: string }>
+) {
+  const { installed } = yield* inspectHostStage(env, client, port);
+  yield* requireSameInstallation(env, installed);
+
+  if (installed.edge.access.some((row) => row.paths.length !== 2)) {
+    return yield* Effect.fail(Error("Canonical Access policies are incomplete"));
+  }
+
+  const target = installed.edge.hosts.find((row) => row.host === host);
+
+  if (target === undefined) return yield* Effect.fail(Error("Canonical hostname unavailable"));
+
+  if (!target.vacant) return;
+
+  const data = {
+    hostname: host,
+    service: target.target,
+    zone_id: installed.edge.zoneId,
+    enabled: true,
+    previews_enabled: false,
+  };
+
+  yield* providerJson(
+    HttpClientRequest.put(
+      "https://api.cloudflare.com/client/v4/accounts/" + env.account + "/workers/domains",
+      {
+        headers: { authorization: "Bearer " + env.token },
+        body: HttpBody.text(encodeJson(data), "application/json"),
+      }
+    )
+  ).pipe(
+    Effect.provideService(HttpClient.HttpClient, client),
+    Effect.flatMap(
+      Schema.decodeUnknownEffect(
+        Schema.Struct({
+          success: Schema.Literal(true),
+          result: Schema.Struct({
+            hostname: Schema.Literal(host),
+            service: Schema.Literal(target.target),
+            zone_id: Schema.Literal(installed.edge.zoneId),
+            enabled: Schema.Literal(true),
+            previews_enabled: Schema.Literal(false),
+          }),
+        })
+      )
+    )
+  );
+});
+
 const attachCanonicalHosts = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
   port: ReleasePort
 ) {
-  for (const host of [
-    new URL(installedOrigins.production.api).hostname,
-    new URL(installedOrigins.production.browser).hostname,
-  ]) {
-    const { installed } = yield* inspectHostStage(env, client, port);
-    yield* requireSameInstallation(env, installed);
-
-    if (installed.edge.access.some((row) => row.paths.length !== 2)) {
-      return yield* Effect.fail(Error("Canonical Access policies are incomplete"));
-    }
-
-    const target = installed.edge.hosts.find((row) => row.host === host);
-
-    if (target === undefined) return yield* Effect.fail(Error("Canonical hostname unavailable"));
-
-    if (!target.vacant) continue;
-
-    const data = {
-      hostname: host,
-      service: target.target,
-      zone_id: installed.edge.zoneId,
-      enabled: true,
-      previews_enabled: false,
-    };
-
-    yield* providerJson(
-      HttpClientRequest.put(
-        "https://api.cloudflare.com/client/v4/accounts/" + env.account + "/workers/domains",
-        {
-          headers: { authorization: "Bearer " + env.token },
-          body: HttpBody.text(encodeJson(data), "application/json"),
-        }
-      )
-    ).pipe(
-      Effect.provideService(HttpClient.HttpClient, client),
-      Effect.flatMap(
-        Schema.decodeUnknownEffect(
-          Schema.Struct({
-            success: Schema.Literal(true),
-            result: Schema.Struct({
-              hostname: Schema.Literal(host),
-              service: Schema.Literal(target.target),
-              zone_id: Schema.Literal(installed.edge.zoneId),
-              enabled: Schema.Literal(true),
-              previews_enabled: Schema.Literal(false),
-            }),
-          })
-        )
-      )
-    );
-  }
+  yield* Effect.forEach(
+    [
+      new URL(installedOrigins.production.api).hostname,
+      new URL(installedOrigins.production.browser).hostname,
+    ],
+    (host) => attachCanonicalHost(env, client, { port, host }),
+    { discard: true }
+  );
 
   const verified = yield* installedRelease(env, client, {
     port,
@@ -1818,9 +1848,7 @@ const decodePinnedStorageEvidence = Effect.fn(function* (
   }
 
   const raw = yield* response.json.pipe(
-    Effect.mapError(
-      () => new ReleaseFailure({ message: "Pinned storage probe returned invalid JSON" })
-    )
+    Effect.mapError(releaseFailureFrom("Pinned storage probe returned invalid JSON"))
   );
 
   const evidence = Schema.decodeUnknownOption(PinnedStorageEvidence)(raw);
@@ -2142,7 +2170,7 @@ const storageCompatibility = Effect.fn(function* (
     phase === "stage"
       ? versions.pipe(
           Effect.retry({
-            while: (error) => error instanceof WorkerVersionReadUnavailable,
+            while: isWorkerVersionReadUnavailable,
             times: 4,
             schedule: Schedule.spaced("2 seconds"),
           })
@@ -2150,7 +2178,7 @@ const storageCompatibility = Effect.fn(function* (
       : versions
   ).pipe(
     Effect.mapError((error) =>
-      error instanceof WorkerVersionReadUnavailable
+      isWorkerVersionReadUnavailable(error)
         ? new ReleaseFailure({
             message: "Immutable Worker version read returned HTTP " + error.status,
           })
@@ -2197,22 +2225,26 @@ const confirmFallbackVersions = Effect.fn(function* (
 ) {
   const fingerprint = yield* expectedFixtureSigner;
 
-  for (const [role, worker, id] of [
-    ["Core", installationNames.Core, release.coreVersionId],
-    ["Ingress", installationNames.Ingress, release.publicVersionId],
-  ] as const) {
-    const raw = yield* releaseEvidence.readWorkerVersion(env, client, { name: worker, id });
-    yield* Effect.try(() =>
-      verifyDeployedVersion({
-        role,
-        raw,
-        versionId: id,
-        revision: release.snapshot.revision,
-        account: env.account,
-        fingerprint,
-      })
-    );
-  }
+  yield* Effect.forEach(
+    [
+      ["Core", installationNames.Core, release.coreVersionId],
+      ["Ingress", installationNames.Ingress, release.publicVersionId],
+    ] as const,
+    Effect.fnUntraced(function* ([role, worker, id]) {
+      const raw = yield* releaseEvidence.readWorkerVersion(env, client, { name: worker, id });
+      yield* Effect.try(() =>
+        verifyDeployedVersion({
+          role,
+          raw,
+          versionId: id,
+          revision: release.snapshot.revision,
+          account: env.account,
+          fingerprint,
+        })
+      );
+    }),
+    { discard: true }
+  );
 });
 
 const repairedSmoke = Effect.fn(function* (
@@ -3455,25 +3487,29 @@ const successorResources = Effect.fn(function* (input: {
   const smoke = yield* port.current(smokeName);
   const versionId = yield* releaseController.servingVersion(smoke);
 
-  for (const [role, name, id] of [
-    ["Core", installationNames.Core, release.coreVersionId],
-    ["Ingress", installationNames.Ingress, release.publicVersionId],
-    ["Smoke", smokeName, versionId],
-  ] as const) {
-    const raw = yield* releaseEvidence.readWorkerVersion(env, client, { name, id });
-    yield* Effect.try(() =>
-      verifySuccessorVersionAt({
-        role,
-        raw,
-        account: env.account,
-        revision: role === "Smoke" ? generation : env.revision,
-        versionId: id,
-        fingerprint,
-        generation,
-      })
-    );
-    yield* verifyReleaseObservability(env, name, client);
-  }
+  yield* Effect.forEach(
+    [
+      ["Core", installationNames.Core, release.coreVersionId],
+      ["Ingress", installationNames.Ingress, release.publicVersionId],
+      ["Smoke", smokeName, versionId],
+    ] as const,
+    Effect.fnUntraced(function* ([role, name, id]) {
+      const raw = yield* releaseEvidence.readWorkerVersion(env, client, { name, id });
+      yield* Effect.try(() =>
+        verifySuccessorVersionAt({
+          role,
+          raw,
+          account: env.account,
+          revision: role === "Smoke" ? generation : env.revision,
+          versionId: id,
+          fingerprint,
+          generation,
+        })
+      );
+      yield* verifyReleaseObservability(env, name, client);
+    }),
+    { discard: true }
+  );
 
   yield* proveRecoveryCorePrivate(env, client, smokeName);
   yield* proveRecoveryCorePrivate(env, client, installationNames.Core);
@@ -3577,6 +3613,11 @@ const sealSuccessor = Effect.fn(function* (env: Config, client: HttpClient.HttpC
     verify: verifyStagedSuccessor({ env, client, release, fingerprint, source }),
   });
 
+  const resumeEvidence = Option.match(resume, {
+    onNone: () => ({}),
+    onSome: (value) => ({ resume: value }),
+  });
+
   yield* writeFile(
     directory + "/native-fixture-successor-stage.json",
     encodeJson({
@@ -3588,7 +3629,7 @@ const sealSuccessor = Effect.fn(function* (env: Config, client: HttpClient.HttpC
       fixtureMember: "performance-2",
       approval,
       predecessor: source,
-      ...(Option.isSome(resume) ? { resume: resume.value } : {}),
+      ...resumeEvidence,
     })
   );
 });
@@ -4052,14 +4093,17 @@ const verifyRestoredPairing = Effect.fn(function* (
   }).pipe(rollbackCheck("ordinary schema markers"));
   yield* verifyRestoredNative(env, client, { port, release, routing: "ordinary" });
 
-  for (const role of ["core", "public"] as const) {
-    yield* releaseController
-      .requireCapturedWorker(port, {
-        ...release.snapshot[role],
-        deploymentId: positions[`${role}DeploymentId`],
-      })
-      .pipe(rollbackCheck("restored " + role + " deployment identity"));
-  }
+  yield* Effect.forEach(
+    ["core", "public"] as const,
+    (role) =>
+      releaseController
+        .requireCapturedWorker(port, {
+          ...release.snapshot[role],
+          deploymentId: positions[`${role}DeploymentId`],
+        })
+        .pipe(rollbackCheck("restored " + role + " deployment identity")),
+    { discard: true }
+  );
 
   yield* writeFile(env.file + ".restored-deployments", encodeJson(positions));
 });
@@ -4326,9 +4370,9 @@ const resumeFleetCleanup = Effect.fn(function* ({
 
   yield* settleFleetMeter(installed.revision, "settle");
 
-  if (cleaned._tag === "Failure") return yield* Effect.failCause(cleaned.cause);
+  if (Exit.isFailure(cleaned)) return yield* Effect.failCause(cleaned.cause);
 
-  if (coverage._tag === "Failure") return yield* Effect.failCause(coverage.cause);
+  if (Exit.isFailure(coverage)) return yield* Effect.failCause(coverage.cause);
 });
 
 const fleetPilot = Effect.fn(function* (
@@ -4394,7 +4438,7 @@ const fleetPilot = Effect.fn(function* (
 
   yield* settleFleetMeter(env.revision, "finish");
 
-  if (measured._tag === "Failure") return yield* Effect.failCause(measured.cause);
+  if (Exit.isFailure(measured)) return yield* Effect.failCause(measured.cause);
   yield* meter(env.revision, "logs");
 });
 
@@ -4553,7 +4597,7 @@ if (import.meta.main) {
     );
   }).pipe(Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }), Effect.scoped);
 
-  await Effect.runPromise(
+  BunRuntime.runMain(
     program.pipe(
       Effect.catchCause((cause) =>
         Effect.sync(() => {

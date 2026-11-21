@@ -1,3 +1,4 @@
+import type { WorkerBindings } from "./rollback-compatibility";
 import { isDeepStrictEqual } from "node:util";
 import { Config, Effect, Schema } from "effect";
 import { readRecoveryPin } from "./native-recovery-identity";
@@ -150,7 +151,7 @@ type Input = {
   staging: boolean;
   canonicalDiagnostics: boolean;
   workers: readonly string[];
-  bindings: Readonly<Record<string, unknown>>;
+  bindings: WorkerBindings;
 };
 
 const accessStep =

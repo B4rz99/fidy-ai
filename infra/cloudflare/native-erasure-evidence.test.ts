@@ -57,14 +57,15 @@ it.effect(
         ])
       );
 
-      for (const bad of [
-        page("repeat", id),
-        { success: true, result: [{ id }], result_info: {} },
-      ]) {
-        expect(
-          yield* Effect.isFailure(readUserObjects(() => Effect.succeed(bad), "c".repeat(32)))
-        ).toBe(true);
-      }
+      yield* Effect.forEach(
+        [page("repeat", id), { success: true, result: [{ id }], result_info: {} }],
+        Effect.fnUntraced(function* (bad) {
+          expect(
+            yield* Effect.isFailure(readUserObjects(() => Effect.succeed(bad), "c".repeat(32)))
+          ).toBe(true);
+        }),
+        { discard: true }
+      );
     })
 );
 

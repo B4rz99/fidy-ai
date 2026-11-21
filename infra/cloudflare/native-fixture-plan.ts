@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import type * as Alchemist from "alchemy/Alchemist";
 import * as Apply from "alchemy/Apply";
-import { Data, Effect, Schema } from "effect";
+import { Data, Effect, Predicate, Schema } from "effect";
 import { type Plan, describePlan, describeResource } from "alchemy/Plan";
 import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
@@ -73,6 +73,9 @@ export class FixturePlanRefused extends Data.TaggedError("FixturePlanRefused")<{
     | "successor plan is not a scoped upload"
     | "successor scope has a pending replacement";
 }> {}
+
+export const isFixturePlanRefused = (value: unknown): value is FixturePlanRefused =>
+  Predicate.isTagged(value, "FixturePlanRefused");
 
 export const requireSafeScopedNativePlan = Effect.fn("requireSafeScopedNativePlan")(function* (
   plan: Plan
@@ -234,9 +237,7 @@ const requireSuccessorResourceChanges = ({
   }
 };
 
-type ReviewedSuccessor = Readonly<Record<string, unknown>> & {
-  resources: ReadonlyArray<{ logicalId: string }>;
-};
+type ReviewedSuccessor = Readonly<{ resources: ReadonlyArray<{ logicalId: string }> }>;
 
 export const requireSameSuccessorPlan = ({
   approved,
@@ -245,7 +246,7 @@ export const requireSameSuccessorPlan = ({
   approved: ReviewedSuccessor;
   observed: ReviewedSuccessor;
 }): void => {
-  const order = (plan: ReviewedSuccessor): ReviewedSuccessor => ({
+  const order = <Plan extends ReviewedSuccessor>(plan: Plan): Plan => ({
     ...plan,
     resources: plan.resources.toSorted((left, right) =>
       left.logicalId.localeCompare(right.logicalId)

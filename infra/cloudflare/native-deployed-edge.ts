@@ -1,3 +1,4 @@
+import type { WorkerBindings } from "./rollback-compatibility";
 import type { ReadCanonicalDomain } from "./native-canonical-domains";
 import { installedOrigins } from "@fidy/server/browser-transport";
 import { inspectNativeAccess } from "./native-deployed-access";
@@ -93,16 +94,20 @@ const inspectBuilds = Effect.fn(function* ({
 
       const triggers = yield* readBuildTriggers(client, account, item.tag);
 
-      for (const trigger of triggers.result) {
-        const matches = (pattern: string): boolean => new Bun.Glob(pattern).match("trunk");
+      yield* Effect.forEach(
+        triggers.result,
+        Effect.fnUntraced(function* (trigger) {
+          const matches = (pattern: string): boolean => new Bun.Glob(pattern).match("trunk");
 
-        if (
-          (trigger.branch_includes.length === 0 || trigger.branch_includes.some(matches)) &&
-          !trigger.branch_excludes.some(matches)
-        ) {
-          return yield* Effect.fail(Error("A Worker Build may deploy trunk to " + item.id));
-        }
-      }
+          if (
+            (trigger.branch_includes.length === 0 || trigger.branch_includes.some(matches)) &&
+            !trigger.branch_excludes.some(matches)
+          ) {
+            return yield* Effect.fail(Error("A Worker Build may deploy trunk to " + item.id));
+          }
+        }),
+        { discard: true }
+      );
 
       return { script: item.id, tag: item.tag, triggerCount: triggers.result.length };
     }),
@@ -271,13 +276,17 @@ const inspectHosts = Effect.fn(function* (input: {
     Schema.Struct({ pattern: Schema.NonEmptyString })
   );
 
-  for (const { pattern } of routes) {
-    const hostname = pattern.replace(/^https?:\/\//u, "").split("/")[0];
+  yield* Effect.forEach(
+    routes,
+    Effect.fnUntraced(function* ({ pattern }) {
+      const hostname = pattern.replace(/^https?:\/\//u, "").split("/")[0];
 
-    if (hostname === undefined || hosts.some(([host]) => new Bun.Glob(hostname).match(host))) {
-      return yield* Effect.fail(Error("A zone Worker route overlaps the acceptance hostname"));
-    }
-  }
+      if (hostname === undefined || hosts.some(([host]) => new Bun.Glob(hostname).match(host))) {
+        return yield* Effect.fail(Error("A zone Worker route overlaps the acceptance hostname"));
+      }
+    }),
+    { discard: true }
+  );
 
   return yield* Effect.forEach(
     hosts,
@@ -352,7 +361,7 @@ export const inspectDeployedEdge = Effect.fn(function* (
   client: HttpClient.HttpClient,
   stage: {
     installed: boolean;
-    bindings: Readonly<Record<string, unknown>>;
+    bindings: WorkerBindings;
     hosts: NativeHostMode;
     staging: boolean;
   }

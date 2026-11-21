@@ -1,8 +1,9 @@
 import { type PATScope, TokenBearer } from "@fidy/server/client";
-import { Effect, Redacted, Schema } from "effect";
+import { Effect, Redacted } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { SavedGrant, apiOrigin } from "../../src/credential/contract";
 import type { CanonicalClientFactory, CanonicalDependencies } from "../../src/canonical/contract";
+import { decodePAT } from "../support/pat";
 
 const secretCharacters = 43;
 
@@ -31,10 +32,9 @@ export const makeCanonicalFixture =
     const stderr: Array<string> = [];
     const requests: Array<string> = [];
 
-    const grant = Schema.decodeSync(Schema.toCodecJson(SavedGrant))({
+    const grant = SavedGrant.make({
       origin: apiOrigin,
-      pat: {
-        _tag: "PAT",
+      pat: decodePAT({
         id: "01900000-0000-4000-8000-000000000001",
         shortId: "abcd1234",
         recipientLabel: "Mi agente",
@@ -44,7 +44,7 @@ export const makeCanonicalFixture =
         revokedAt: null,
         createdAt: "2099-01-01T00:00:00.000Z",
         expiresAt: "2099-01-08T00:00:00.000Z",
-      },
+      }),
     });
 
     const dependencies: CanonicalDependencies = {

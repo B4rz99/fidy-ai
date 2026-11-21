@@ -101,7 +101,7 @@ const historicalPatternJourney = Effect.gen(function* () {
                 "Fidy-Session-Binding": alice.session,
                 cookie: `__Host-fidy_session=${alice.bearer}`,
               },
-              ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+              body: payload === undefined ? null : JSON.stringify(payload),
             })
           )
         )
@@ -149,24 +149,23 @@ const historicalPatternJourney = Effect.gen(function* () {
       )(yield* fromPromise(() => response.json())).pipe(Effect.orDie)).data;
     });
 
-  const created: Array<Transaction> = [];
+  const created: Array<Transaction> = yield* Effect.forEach([1, 2, 3], (month) =>
+    Effect.gen(function* () {
+      const response = yield* request("/transactions", "POST", {
+        money: { amount: "30000.25", currency: "COP" },
+        counterparty: "Netflix",
+        direction: "outflow",
+        categoryId: "10000000-0000-4000-8000-000000000016",
+        occurredAt: `2026-${String(month).padStart(2, "0")}-15T12:00:00.000Z`,
+      });
 
-  for (const month of [1, 2, 3]) {
-    const response = yield* request("/transactions", "POST", {
-      money: { amount: "30000.25", currency: "COP" },
-      counterparty: "Netflix",
-      direction: "outflow",
-      categoryId: "10000000-0000-4000-8000-000000000016",
-      occurredAt: `2026-${String(month).padStart(2, "0")}-15T12:00:00.000Z`,
-    });
+      expect(response.status).toBe(201);
 
-    expect(response.status).toBe(201);
-    created.push(
-      (yield* Schema.decodeUnknownEffect(Schema.toCodecJson(Schema.Struct({ data: Transaction })))(
-        yield* fromPromise(() => response.json())
-      ).pipe(Effect.orDie)).data
-    );
-  }
+      return (yield* Schema.decodeUnknownEffect(
+        Schema.toCodecJson(Schema.Struct({ data: Transaction }))
+      )(yield* fromPromise(() => response.json())).pipe(Effect.orDie)).data;
+    })
+  );
 
   yield* verifyCaptureWake(db);
   yield* evaluateDue();
@@ -272,8 +271,12 @@ const pagedSeriesJourney = Effect.gen(function* () {
     );
   });
 
-  const finish = Effect.fn(function* (revision: number) {
-    for (let step = 0; step < revision + 30; step++) {
+  const finishStep = (revision: number, step: number): Effect.Effect<number, Schema.SchemaError> =>
+    Effect.gen(function* () {
+      if (step >= revision + 30) {
+        return yield* Effect.die("User alarm did not finish bounded recurring discovery");
+      }
+
       const status = yield* advance();
 
       if (status !== 204) return status;
@@ -283,10 +286,12 @@ const pagedSeriesJourney = Effect.gen(function* () {
       )(yield* progress());
 
       if (record?.phase === "complete" && record.evaluated_revision === revision) return status;
-    }
 
-    return yield* Effect.die("User alarm did not finish bounded recurring discovery");
-  });
+      return yield* finishStep(revision, step + 1);
+    });
+
+  const finish = (revision: number): Effect.Effect<number, Schema.SchemaError> =>
+    finishStep(revision, 0);
 
   yield* seed(1, 33);
   expect(yield* advance()).toBe(204);

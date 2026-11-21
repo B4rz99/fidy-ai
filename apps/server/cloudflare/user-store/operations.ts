@@ -16,7 +16,7 @@ import {
 } from "./internal/credential-schema";
 import { externalEventSchema, issueForwardingAddress } from "./internal/external-event-schema";
 import { registerUserLifetime as registerReservedLifetime } from "./internal/registration";
-import { Effect, Exit, Schema } from "effect";
+import { Effect, Exit, Predicate, Schema } from "effect";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { UserId } from "../../src/core/identity/contract";
 
@@ -1308,12 +1308,12 @@ export const recoverUserWork = <E, R>(
   R
 > =>
   Effect.forEach(
-    [
-      ...("hosted" in jobs ? jobs.families : jobs).map((family) =>
-        family.pipe(Effect.timeout("45 seconds"))
-      ),
-      ...("hosted" in jobs ? [jobs.hosted.pipe(Effect.timeout(jobs.timeoutMs))] : []),
-    ],
+    "hosted" in jobs
+      ? [
+          ...jobs.families.map((family) => family.pipe(Effect.timeout("45 seconds"))),
+          jobs.hosted.pipe(Effect.timeout(jobs.timeoutMs)),
+        ]
+      : jobs.map((family) => family.pipe(Effect.timeout("45 seconds"))),
     (family) => Effect.exit(family),
     {
       concurrency: 4,
@@ -1350,8 +1350,8 @@ export const observeUserRegistration = Effect.fn(function* (
     if (
       !credentials.some(
         (credential) =>
-          typeof credential.issuer === "string" &&
-          typeof credential.subject === "string" &&
+          Predicate.isString(credential.issuer) &&
+          Predicate.isString(credential.subject) &&
           acceptanceSubject({
             revision: acceptanceProviderRevision(settings),
             issuer: credential.issuer,

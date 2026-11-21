@@ -1,5 +1,6 @@
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, Effect, Option, Schema } from "effect";
+import { Clock, Effect, Match, Option, Schema } from "effect";
+import type { OAuthConfirmationAttempt } from "../../../src/shell/mcp/contract";
 import { digestBytes, newId } from "../../secret-material/operations";
 import type { LocalOAuthInvocation } from "../../oauth-agents/contract";
 import { CanonicalAdmissionUnavailable } from "../../canonical-admission/contract";
@@ -12,6 +13,8 @@ import {
   oauthReviewResponse,
   reviewLifetimeMilliseconds,
 } from "./native-disclosure";
+
+const isResponse = Schema.is(Schema.instanceOf(Response));
 
 const refuse = (): Response =>
   Response.json(
@@ -102,7 +105,7 @@ const decideIntent = Effect.fn(function* ({
   encoded: string;
   digest: Uint8Array;
   binding: string;
-  attempt: Extract<LocalOAuthInvocation["admission"]["confirmation"], { _tag: "Decision" }>;
+  attempt: (typeof OAuthConfirmationAttempt.members)[1]["Type"];
 }) {
   const sql = yield* SqliteClient;
 
@@ -151,24 +154,27 @@ export const localConfirmation = Effect.fn(function* <E, R>(
   if (attempt === undefined) return refuse();
   const captured = yield* captureIntent(admission, read.value);
 
-  if (captured instanceof Response) return captured;
+  if (isResponse(captured)) return captured;
   const { encoded, digest, binding } = captured;
 
-  if (attempt._tag === "Review") {
-    const refused = yield* admit;
+  return yield* Match.valueTags(attempt, {
+    Review: () =>
+      Effect.gen(function* () {
+        const refused = yield* admit;
 
-    if (Option.isSome(refused)) return refused.value;
+        if (Option.isSome(refused)) return refused.value;
 
-    return yield* retainReview({
-      subject,
-      admission,
-      facts: read.value,
-      current,
-      encoded,
-      digest,
-      binding,
-    });
-  }
-
-  return yield* decideIntent({ subject, admission, current, encoded, digest, binding, attempt });
+        return yield* retainReview({
+          subject,
+          admission,
+          facts: read.value,
+          current,
+          encoded,
+          digest,
+          binding,
+        });
+      }),
+    Decision: (decision) =>
+      decideIntent({ subject, admission, current, encoded, digest, binding, attempt: decision }),
+  });
 });

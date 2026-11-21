@@ -17,7 +17,7 @@ const environment = (
   CORE: { fetch },
 });
 
-for (const route of ["/web/hosted-turns", path, "/web/hosted-turns/delivery"]) {
+["/web/hosted-turns", path, "/web/hosted-turns/delivery"].forEach((route) => {
   it.effect(`admits browser POST preflight for ${route}`, () =>
     Effect.gen(function* () {
       const fetch = vi.fn(() => Promise.resolve(new Response()));
@@ -44,7 +44,7 @@ for (const route of ["/web/hosted-turns", path, "/web/hosted-turns/delivery"]) {
       expect(fetch).not.toHaveBeenCalled();
     })
   );
-}
+});
 
 it.effect("forwards retained-Turn recovery with browser credentials and the original body", () =>
   Effect.gen(function* () {
@@ -88,7 +88,7 @@ it.effect("forwards retained-Turn recovery with browser credentials and the orig
   })
 );
 
-for (const requestOrigin of [undefined, "https://untrusted.example"]) {
+[undefined, "https://untrusted.example"].forEach((requestOrigin) => {
   it.effect(`refuses recovery without the configured browser origin (${requestOrigin})`, () =>
     Effect.gen(function* () {
       const fetch = vi.fn(() => Promise.resolve(new Response()));
@@ -108,7 +108,7 @@ for (const requestOrigin of [undefined, "https://untrusted.example"]) {
       expect(fetch).not.toHaveBeenCalled();
     })
   );
-}
+});
 
 it.effect("refuses unsupported recovery methods before forwarding", () =>
   Effect.gen(function* () {

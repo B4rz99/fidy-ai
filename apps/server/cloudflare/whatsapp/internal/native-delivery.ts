@@ -8,6 +8,7 @@ import {
 import { Clock, Effect, Option, Schema } from "effect";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
+import { ConsentSubject } from "../../../src/shell/consent/contract";
 import type { ExternalEventBindings } from "../../directory/contract";
 import { lookupExternalEventRoute, reserveExternalEventRoute } from "../../directory/operations";
 import { withStoreCapacity } from "../../runtime/sqlite/operations";
@@ -38,7 +39,7 @@ const sendAllowed = (work: Send, now: number): ReturnType<typeof protectConsentS
     params: [work.userId, work.portfolio, work.bsuid, work.userId],
   };
 
-  const subject = { _tag: "User" as const, userId: work.userId };
+  const subject = ConsentSubject.User({ userId: work.userId });
   const live = protectConsentStatement({ subject, requirement: "active", statement });
 
   if (work.family !== "hosted" || work.deadline === null) return live;

@@ -3,6 +3,7 @@ import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Redacted, Schema 
 import { TestClock } from "effect/testing";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { makeKapsoOutboundHttp } from "~/shell/outbound-http/operations";
+import { OutboundHttpRequest } from "~/shell/outbound-http/contract";
 import { OutboundHttpLive } from "./runtime";
 import { WhatsAppBusinessPhoneNumberId, WhatsAppMediaId } from "~/shell/channels/whatsapp/contract";
 
@@ -24,13 +25,12 @@ const makeTransport = Effect.fn(function* (response: Response) {
   });
 });
 
-const request = {
-  _tag: "KapsoMediaMetadata",
+const request = OutboundHttpRequest.KapsoMediaMetadata({
   mediaId: Schema.decodeSync(WhatsAppMediaId)("test"),
   businessPhoneNumberId: Schema.decodeSync(WhatsAppBusinessPhoneNumberId)("123"),
-} as const;
+});
 
-for (const declared of [false, true]) {
+[false, true].forEach((declared) => {
   it.effect(
     `releases native overflow ownership with pending cancellation (declared=${declared})`,
     () =>
@@ -58,9 +58,9 @@ for (const declared of [false, true]) {
         expect(raw.locked).toBe(false);
       })
   );
-}
+});
 
-for (const termination of ["timeout", "interruption"] as const) {
+(["timeout", "interruption"] as const).forEach((termination) => {
   it.effect(`releases stalled native response after ${termination} with pending cancellation`, () =>
     Effect.gen(function* () {
       const started = yield* Deferred.make<void>();
@@ -101,7 +101,7 @@ for (const termination of ["timeout", "interruption"] as const) {
       expect(raw.locked).toBe(false);
     })
   );
-}
+});
 
 it.effect("releases successful native body ownership", () =>
   Effect.gen(function* () {

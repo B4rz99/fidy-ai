@@ -2,7 +2,8 @@ import { BackupRecoveryCode } from "../../../src/core/recovery/contract";
 import { recoveryCodeDigest } from "./material";
 import { type JWKSCacheInput, createRemoteJWKSet, customFetch, jwksCache, jwtVerify } from "jose";
 import { type OutboundHttpService } from "../../../src/shell/outbound-http/operations";
-import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
+import { Clock, Data, DateTime, Effect, Layer, ManagedRuntime, Option, Schema } from "effect";
+import { OutboundHttpRequest } from "../../../src/shell/outbound-http/contract";
 import { RequestBodyPolicy } from "../../http/contract";
 import { boundedJsonBody } from "../../http/operations";
 
@@ -29,6 +30,8 @@ const policy = Schema.decodeSync(RequestBodyPolicy)({
   deadlineMilliseconds: 2_000,
 });
 
+const signingKeysRuntime = ManagedRuntime.make(Layer.empty);
+
 let cachedKeys: Option.Option<Readonly<{ issuer: string; data: JWKSCacheInput }>> = Option.none();
 
 const signingKeys = (
@@ -46,8 +49,8 @@ const signingKeys = (
   return createRemoteJWKSet(new URL(`${issuer}/cdn-cgi/access/certs`), {
     [jwksCache]: retained.data,
     [customFetch]: (_url, options): Promise<Response> =>
-      Effect.runPromise(
-        http.execute({ _tag: "CloudflareAccessSigningKeys" }).pipe(
+      signingKeysRuntime.runPromise(
+        http.execute(OutboundHttpRequest.CloudflareAccessSigningKeys()).pipe(
           Effect.timeout("5 seconds"),
           Effect.map(
             (response) =>
@@ -76,7 +79,7 @@ const maximumAssertionLifetimeSeconds = 900;
 
 const millisecondsPerSecond = 1_000;
 
-const response = (status: number, body: object): Response =>
+const response = (status: number, body: Readonly<{ status: string }>): Response =>
   Response.json(body, { status, headers: { "cache-control": "no-store" } });
 
 const notApproved = (): Response => response(httpBadRequest, { status: "not_approved" });

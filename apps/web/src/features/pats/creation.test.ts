@@ -8,7 +8,7 @@ import { TestClock } from "effect/testing";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, vi } from "vitest";
-import { type SensitiveClipboard, makeSensitiveClipboard } from "@/browser/sensitive-clipboard";
+import { type SensitiveClipboard, createSensitiveClipboard } from "@/browser/sensitive-clipboard";
 import { makeFidyClient } from "@/transport/client";
 import { ManualPATCreation } from "./creation";
 
@@ -98,7 +98,7 @@ for (const retirement of ["reset", "pagehide", "expiry"] as const) {
           let text = "";
           const nativeWrites = vi.fn();
 
-          const native = yield* makeSensitiveClipboard(
+          const native = yield* createSensitiveClipboard(
             Option.some({
               readText: () => Promise.resolve(text),
               writeText: (value) => {

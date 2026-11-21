@@ -1,7 +1,11 @@
 import { PendingRead } from "@/ui/components/pending-read";
 
 import type { FidyClient } from "@/transport/client";
-import { type ReviewDecisions, type ReviewWorkspaceQuery, makeReviewDecisions } from "./decisions";
+import {
+  type ReviewDecisions,
+  type ReviewWorkspaceQuery,
+  createReviewDecisions,
+} from "./decisions";
 import { ReviewFullState, ReviewWorkspaceLayout } from "@/ui/components/review-workspace";
 import { SelectionScopeDialog } from "@/ui/components/selection-scope-dialog";
 import { Button } from "@/ui/components/button";
@@ -151,7 +155,7 @@ const useReviewDecisions = ({
   query,
 }: Readonly<{ client: FidyClient; query: ReviewWorkspaceQuery }>): ReviewDecisions => {
   const [decisionAtom] = useState(() =>
-    makeReviewDecisions({ client, query, created: () => toast.success("Transacción creada") })
+    createReviewDecisions({ client, query, created: () => toast.success("Transacción creada") })
   );
 
   return useAtomValue(decisionAtom);

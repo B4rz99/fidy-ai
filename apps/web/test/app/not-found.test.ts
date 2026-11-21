@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { RegistryContext } from "@effect/atom-react";
 import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
 import { Effect, Layer, Option } from "effect";
@@ -10,19 +9,18 @@ import { expect, it, vi } from "vitest";
 import { type BrowserAuthentication, SessionContext } from "@/session/session-context";
 import { makeFidyClient, makeWebAuthClient } from "@/transport/client";
 import { makeHostedTurnClient } from "@/transport/hosted-turn-client";
-import { createWebRouter } from "./routes";
+import { createWebRouter } from "@/app/routes";
 
 const reactWork = (work: () => void): Promise<void> => Promise.resolve(act(work));
 
-const missingPage = (
-  authentication: BrowserAuthentication,
-  path: string
-): Readonly<{
+type MissingPage = Readonly<{
   router: ReturnType<typeof createWebRouter>;
   container: HTMLDivElement;
   render: () => Promise<void>;
   dispose: () => Promise<void>;
-}> => {
+}>;
+
+const missingPage = (authentication: BrowserAuthentication, path: string): MissingPage => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal("matchMedia", (query: string) => ({
     matches: query === "(min-width: 901px)",
@@ -94,30 +92,26 @@ const missingPage = (
   };
 };
 
-it(
-  "a missing signed-in app page keeps navigation and offers a named return to the dashboard",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const page = missingPage("signed-in", "/app/this-page-does-not-exist");
+it("a missing signed-in app page keeps navigation and offers a named return to the dashboard", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const page = missingPage("signed-in", "/app/this-page-does-not-exist");
 
-        try {
-          yield* Effect.tryPromise(page.render);
-          yield* Effect.tryPromise(() =>
-            vi.waitFor(() => {
-              const recovery = page.container.querySelector("main a");
-              expect(recovery?.textContent).toBe("Volver al tablero");
-              expect(recovery?.getAttribute("href")).toBe("/app/dashboard");
-              expect(page.container.querySelector('nav[aria-label="Aplicación"]')).not.toBeNull();
-            })
-          );
-        } finally {
-          yield* Effect.tryPromise(page.dispose);
-        }
-      })
-    ),
-  20000
-);
+      try {
+        yield* Effect.tryPromise(page.render);
+        yield* Effect.tryPromise(() =>
+          vi.waitFor(() => {
+            const recovery = page.container.querySelector("main a");
+            expect(recovery?.textContent).toBe("Volver al tablero");
+            expect(recovery?.getAttribute("href")).toBe("/app/dashboard");
+            expect(page.container.querySelector('nav[aria-label="Aplicación"]')).not.toBeNull();
+          })
+        );
+      } finally {
+        yield* Effect.tryPromise(page.dispose);
+      }
+    })
+  ));
 
 it.each([
   ["signed-out", "/app/this-page-does-not-exist"],

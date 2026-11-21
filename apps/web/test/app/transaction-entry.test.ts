@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { it } from "@effect/vitest";
 import { createMemoryHistory } from "@tanstack/react-router";
 import { type Cause, Deferred, Effect, Layer, Option, Schema } from "effect";
@@ -9,8 +8,8 @@ import { BrowserSessionBindingSchema, makeFidyClient, makeWebAuthClient } from "
 import { makeHostedTurnClient } from "@/transport/hosted-turn-client";
 import { PrivacyTransactionFeature, TransactionListFeature } from "@/features/transactions/feature";
 import { transactionEntryConsent } from "@/session/transaction-entry";
-import { initialApplicationValues } from "./initial-values";
-import { createWebRouter } from "./routes";
+import { initialApplicationValues } from "@/app/initial-values";
+import { createWebRouter } from "@/app/routes";
 
 const observedAt = Date.parse("2026-11-08T12:00:00Z");
 
@@ -40,7 +39,7 @@ const revoked = {
 beforeAll(() =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* Effect.tryPromise(() => import("./transactions-page"));
+      yield* Effect.tryPromise(() => import("@/app/transactions-page"));
       yield* Effect.tryPromise(() => TransactionListFeature.preload());
       yield* Effect.tryPromise(() => PrivacyTransactionFeature.preload());
     })
@@ -244,7 +243,11 @@ it.live(
   () =>
     Effect.gen(function* () {
       const { router, registry, requests, finishPreparation } = entryFixture(Option.some(0));
-      const { TransactionsPage } = yield* Effect.tryPromise(() => import("./transactions-page"));
+
+      const { TransactionsPage } = yield* Effect.tryPromise(
+        () => import("@/app/transactions-page")
+      );
+
       const cancelled = AbortSignal.abort();
 
       try {

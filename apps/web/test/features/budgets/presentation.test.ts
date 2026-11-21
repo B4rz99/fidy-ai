@@ -1,6 +1,11 @@
 import { BigDecimal, DateTime, Schema } from "effect";
 import { expect, it } from "vitest";
-import { type BudgetStatus, budgetFigures, budgetRemaining, summaryFigures } from "./presentation";
+import {
+  type BudgetStatus,
+  budgetFigures,
+  budgetRemaining,
+  summaryFigures,
+} from "@/features/budgets/presentation";
 
 const status = ({
   cap,

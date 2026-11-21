@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { RegistryContext } from "@effect/atom-react";
 import {
   RouterProvider,
@@ -13,7 +12,7 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import { makeFidyClient } from "@/transport/client";
-import { BackupRecoveryFeature } from "./feature";
+import { BackupRecoveryFeature } from "@/features/recovery/feature";
 
 const recoveryCode = "ABCDE-FGHJK-LMNPQ-RSTUV-WXY23";
 
@@ -29,7 +28,10 @@ const click = (container: HTMLElement, label: string): Promise<void> =>
       (candidate) => candidate.textContent === label
     );
 
-    if (button === undefined) throw new Error(`Missing ${label}`);
+    if (button === undefined) {
+      throw new Error(`Missing ${label}`);
+    }
+
     button.click();
   });
 
@@ -112,9 +114,12 @@ it.each(["matching", "unrelated", "pending"] as const)(
           );
           yield* Effect.tryPromise(() => click(container, "Copiar código"));
 
-          if (scenario !== "pending") expect(text).toBe(recoveryCode);
+          expect(scenario === "pending" || text === recoveryCode).toBe(true);
 
-          if (scenario === "unrelated") text = "unrelated text";
+          if (scenario === "unrelated") {
+            text = "unrelated text";
+          }
+
           yield* Effect.tryPromise(() =>
             reactWork(() => window.dispatchEvent(new Event("pagehide")))
           );

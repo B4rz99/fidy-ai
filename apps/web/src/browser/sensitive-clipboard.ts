@@ -193,7 +193,7 @@ const close = (state: ClipboardState): Effect.Effect<void> =>
     state.open = false;
   });
 
-export const makeSensitiveClipboard: {
+export const createSensitiveClipboard: {
   (
     clipboard: Option.Option<BrowserClipboard>,
     lifetime: Duration.Input

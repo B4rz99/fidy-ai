@@ -1,12 +1,10 @@
-// @vitest-environment jsdom
-
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Predicate, Schema } from "effect";
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
 import { AtomRegistry } from "effect/reactivity";
 import { it } from "@effect/vitest";
 import { afterEach, expect, vi } from "vitest";
 import { makeFidyClient, makeWebAuthClient } from "@/transport/client";
-import { makeReplacement } from "./commands";
+import { createReplacement } from "@/features/email-replacement/commands";
 
 const encodeJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 
@@ -21,6 +19,12 @@ afterEach(() => {
 
 const binding = "10000000-0000-4000-8000-000000000001";
 
+type ReplacementFixture = Readonly<{
+  interaction: ReturnType<typeof createReplacement>;
+  dispatch: Parameters<ReturnType<typeof createReplacement>["actions"]>[0];
+  sent: Array<{ path: string; body: string }>;
+}>;
+
 const fixture = (
   {
     observedBinding,
@@ -29,11 +33,7 @@ const fixture = (
     observedBinding: binding,
     bindingWait: Promise.resolve(),
   }
-): Readonly<{
-  interaction: ReturnType<typeof makeReplacement>;
-  dispatch: Parameters<ReturnType<typeof makeReplacement>["actions"]>[0];
-  sent: Array<{ path: string; body: string }>;
-}> => {
+): ReplacementFixture => {
   vi.useFakeTimers();
   const sent: Array<{ path: string; body: string }> = [];
 
@@ -41,7 +41,9 @@ const fixture = (
     const path = new URL(request.url).pathname;
     sent.push({
       path,
-      body: request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : "",
+      body: Predicate.isTagged(request.body, "Uint8Array")
+        ? new TextDecoder().decode(request.body.body)
+        : "",
     });
 
     return (
@@ -84,7 +86,7 @@ const fixture = (
 
   const registry = AtomRegistry.make();
 
-  const interaction = makeReplacement({
+  const interaction = createReplacement({
     apiClient,
     webAuthClient: makeWebAuthClient({
       apiOrigin: "https://api.test.fidyapp.com",

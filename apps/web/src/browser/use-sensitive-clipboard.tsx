@@ -1,6 +1,6 @@
 import { type Duration, Effect, Exit, Option, Scope } from "effect";
 import { type ReactNode, type RefCallback, useState } from "react";
-import { type SensitiveClipboard, makeSensitiveClipboard } from "./sensitive-clipboard";
+import { type SensitiveClipboard, createSensitiveClipboard } from "./sensitive-clipboard";
 
 type ClipboardOwner = Readonly<{
   scope: Scope.Closeable;
@@ -30,9 +30,10 @@ const makeMountedClipboard = (lifetime: Duration.Input): MountedSensitiveClipboa
     const scope = Scope.makeUnsafe();
 
     const mountedCommand = Effect.runSync(
-      makeSensitiveClipboard(Option.fromUndefinedOr(globalThis.navigator.clipboard), lifetime).pipe(
-        Scope.provide(scope)
-      )
+      createSensitiveClipboard(
+        Option.fromUndefinedOr(globalThis.navigator.clipboard),
+        lifetime
+      ).pipe(Scope.provide(scope))
     );
 
     owner = Option.some({ scope, command: mountedCommand });

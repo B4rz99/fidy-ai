@@ -1,9 +1,8 @@
-// @vitest-environment jsdom
 import { Effect, Option } from "effect";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
-import { ChoiceDropdown, InlineChoiceDropdown } from "./choice-dropdown";
+import { ChoiceDropdown, InlineChoiceDropdown } from "@/ui/components/choice-dropdown";
 
 const reactWork = (work: () => void): Promise<void> => Promise.resolve(act(work));
 
@@ -65,10 +64,13 @@ it.each(["field", "inline"] as const)(
           expect(trigger?.textContent).toBe("Categorías");
           expect(label).not.toHaveBeenCalled();
           yield* Effect.tryPromise(() => reactWork(() => trigger?.click()));
-          const option = document.querySelector('[role="menuitemradio"]');
+          const option = document.querySelector<HTMLElement>('[role="menuitemradio"]');
           expect(option?.textContent).toBe("Mercado");
 
-          if (!(option instanceof HTMLElement)) throw Error("Missing Category choice");
+          if (option === null) {
+            throw Error("Missing Category choice");
+          }
+
           yield* Effect.tryPromise(() => reactWork(() => option.click()));
           expect(change).toHaveBeenCalledExactlyOnceWith("nuevo");
         } finally {

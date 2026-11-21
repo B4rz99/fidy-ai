@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { RegistryContext } from "@effect/atom-react";
 import { Deferred, Effect, Fiber, Layer, Option } from "effect";
 import { Atom, type AtomRegistry } from "effect/reactivity";
@@ -6,8 +5,8 @@ import { act, createElement, useContext } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import { makeFreshQuery, readFreshQuery } from "@/transport/fresh-query";
-import { SessionRegistryProvider } from "./session";
-import { type SessionContextValue, useSession } from "./session-context";
+import { SessionRegistryProvider } from "@/session/session";
+import { type SessionContextValue, useSession } from "@/session/session-context";
 
 type Owner = Readonly<{ registry: AtomRegistry.AtomRegistry; session: SessionContextValue }>;
 
@@ -60,7 +59,9 @@ it.each([false, true])(
             pending ? readFreshQuery({ registry: previous.registry, query }) : Effect.succeed(false)
           ).pipe(Effect.forkChild);
 
-          if (pending) yield* Effect.tryPromise(() => vi.waitFor(() => expect(reads).toBe(1)));
+          yield* pending
+            ? Effect.tryPromise(() => vi.waitFor(() => expect(reads).toBe(1)))
+            : Effect.void;
           yield* Effect.tryPromise(() => reactWork(previous.session.replaceAuthenticationLifetime));
           yield* Deferred.succeed(held, undefined);
           expect(yield* Fiber.join(recovery)).toBe(false);
@@ -72,7 +73,10 @@ it.each([false, true])(
         } finally {
           yield* Effect.tryPromise(() => reactWork(() => root.unmount()));
 
-          for (const registry of registries) registry.dispose();
+          for (const registry of registries) {
+            registry.dispose();
+          }
+
           vi.unstubAllGlobals();
         }
       })

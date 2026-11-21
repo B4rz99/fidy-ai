@@ -1049,30 +1049,24 @@
     {
       "files": [
         "apps/web/cloudflare/**",
-        "apps/web/scripts/**",
         "apps/web/src/app/**",
         "apps/web/src/browser/**",
         "apps/web/src/features/agent/**",
         "apps/web/src/features/budgets/**",
         "apps/web/src/features/connections/**",
         "apps/web/src/features/dashboard/**",
-        "apps/web/src/features/email-replacement/**",
         "apps/web/src/features/needs-review/**",
         "apps/web/src/features/privacy/**",
         "apps/web/src/features/provider-authentication/**",
-        "apps/web/src/features/recovery/**",
         "apps/web/src/features/recurring-digest/**",
         "apps/web/src/features/signed-in/**",
         "apps/web/src/session/**",
         "apps/web/src/ui/**"
       ],
       "rules": {
-        "ai-guard/no-undeclared-import": "off",
         "anti-slop-effect/no-manual-tag-comparison": "off",
         "anti-slop-effect/no-manual-tagged-construction": "off",
         "anti-slop-effect/no-manual-tagged-type": "off",
-        "anti-slop-effect/no-service-constructor-imports": "off",
-        "anti-slop-effect/no-test-code-in-src": "off",
         "anti-slop-effect/prefer-tagged-error-handling": "off",
         "anti-slop/no-array-filter-map": "off",
         "anti-slop/no-conditional-spread": "off",
@@ -1081,12 +1075,9 @@
         "anti-slop/no-runtime-typeof": "off",
         "anti-slop/no-shape-in-symbol-names": "off",
         "anti-slop/no-unknown-returns": "off",
-        "enfect/avoid-expect-in-if": "off",
         "enfect/avoid-option-getorthrow": "off",
         "enfect/effect-run-in-body": "off",
-        "enfect/yield-in-for-loop": "off",
-        "landmines/no-flake-masking": "off",
-        "landmines/no-unsignaled-poll": "off"
+        "enfect/yield-in-for-loop": "off"
       }
     },
     {

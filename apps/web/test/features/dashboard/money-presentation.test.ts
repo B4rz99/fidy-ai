@@ -8,12 +8,11 @@ import {
   moneyProgressGeometry,
   moneySeriesGeometry,
   moneyUtilizationLabel,
-} from "./money-presentation";
+} from "@/features/dashboard/money-presentation";
 
-const money = (
-  amount: string,
-  currency: "COP" | "USD" = "USD"
-): Readonly<{ amount: BigDecimal.BigDecimal; currency: "COP" | "USD" }> => ({
+type Money = Readonly<{ amount: BigDecimal.BigDecimal; currency: "COP" | "USD" }>;
+
+const money = (amount: string, currency: "COP" | "USD" = "USD"): Money => ({
   amount: BigDecimal.fromStringUnsafe(amount),
   currency,
 });

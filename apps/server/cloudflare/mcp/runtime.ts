@@ -1161,7 +1161,7 @@ const disposeRegistry = (registry: ResidentRegistry): Effect.Effect<void, Cause.
     );
   });
 
-export const makeMcpResidency = (config: ResidencyConfig): McpResidency => {
+export const mcpResidency = (config: ResidencyConfig): McpResidency => {
   const registry: ResidentRegistry = {
     config,
     owners: new Set(),

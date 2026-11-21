@@ -1,17 +1,14 @@
 import type { TelemetryService } from "../../src/shell/observability/contract";
 import type { CoreQueueHandler } from "./contract";
-import { QueueDeliveryUnavailable, dispatchCoreQueue } from "./internal/dispatch";
+import { dispatchCoreQueue } from "./internal/dispatch";
 import { observeWorkerExecution } from "../runtime/telemetry/operations";
 import { Effect } from "effect";
 
-export const coreQueueHandler =
+export const coreQueue =
   (telemetry: TelemetryService): CoreQueueHandler =>
   (batch, environment) =>
-    dispatchCoreQueue({ batch, environment })
-      .pipe(
-        observeWorkerExecution({ environment, telemetry, operation: "worker.core.queue" }),
-        Effect.runPromise
-      )
-      .catch((failure: unknown) =>
-        Promise.reject(failure instanceof QueueDeliveryUnavailable ? failure.original : failure)
-      );
+    dispatchCoreQueue({ batch, environment }).pipe(
+      observeWorkerExecution({ environment, telemetry, operation: "worker.core.queue" }),
+      Effect.catchTag("QueueDeliveryUnavailable", ({ original }) => Effect.die(original)),
+      Effect.orDie
+    );

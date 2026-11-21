@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { assert, expect, it } from "vitest";
 import { Duration, Effect } from "effect";
 import { maxWhatsAppWebhookBytes } from "../../src/shell/channels/whatsapp/contract";
 import { receiveWhatsAppWebhook } from "./runtime";
@@ -60,7 +60,8 @@ it("releases an oversized webhook body without waiting for hostile cancellation"
       const result = yield* Effect.tryPromise(() => probeOversizedBody());
       expect(result.observed).not.toBe("pending");
 
-      if (result.observed !== "pending") expect(result.observed.status).toBe(413);
+      assert(result.observed !== "pending");
+      expect(result.observed.status).toBe(413);
       expect(result.cancellationStarted).toBe(true);
       expect(result.locked).toBe(false);
     })

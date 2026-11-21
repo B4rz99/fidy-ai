@@ -1,3 +1,4 @@
+import { ConsentSubject } from "../../../src/shell/consent/contract";
 import { protectConsentAuthority } from "../../../src/shell/consent/operations";
 import { Option, Schema } from "effect";
 import { UserId } from "../../../src/core/identity/contract";
@@ -37,18 +38,17 @@ export const sessionDigestLookup = ({
           AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?
           ${Option.isSome(binding) ? "AND id = ?" : ""}`,
     bindings: [
-      digest,
-      ...(freshness === "fresh" ? [current] : []),
-      current,
-      current,
-      ...(Option.isSome(binding) ? [binding.value] : []),
-    ],
+      [digest],
+      freshness === "fresh" ? [current] : [],
+      [current, current],
+      Option.toArray(binding),
+    ].flat(),
   };
 
   const authority = requireConsent
     ? protectConsentAuthority({
         authority: requested,
-        subject: { _tag: "Owner", column: "web_sessions.user_id" },
+        subject: ConsentSubject.Owner({ column: "web_sessions.user_id" }),
         requirement: "unrevoked",
       })
     : requested;

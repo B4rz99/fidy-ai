@@ -1,4 +1,4 @@
-import { Effect, Option } from "effect";
+import { Effect, Option, Result } from "effect";
 import { Hex } from "effect/encoding";
 import { installedOrigins } from "../../../src/shell/browser-transport/contract";
 import type { AcceptanceEnvironment, Coordinates, SealedTransactionReceipt } from "../contract";
@@ -47,7 +47,7 @@ const hex = (data: ArrayBuffer): string => Hex.encode(new Uint8Array(data));
 const unhex = (text: string): Uint8Array<ArrayBuffer> => {
   const value = Hex.decode(text);
 
-  if (value._tag === "Failure") throw new Error("Invalid sealed receipt");
+  if (Result.isFailure(value)) throw new Error("Invalid sealed receipt");
 
   return Uint8Array.from(value.success);
 };

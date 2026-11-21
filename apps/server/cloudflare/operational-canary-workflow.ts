@@ -1,6 +1,6 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
-import { Clock, Effect } from "effect";
 
+import { Clock, Layer, ManagedRuntime } from "effect";
 import type { WorkerTelemetryEnvironment } from "./runtime/telemetry/contract";
 import { completeCanary } from "./runtime/operational-health/operations";
 
@@ -9,6 +9,8 @@ import {
   observeWorkerPromise,
   workerRelease,
 } from "./runtime/telemetry/operations";
+
+const canaryRuntime = ManagedRuntime.make(Layer.empty);
 
 export class OperationalCanaryWorkflowV1 extends WorkflowEntrypoint<
   WorkerTelemetryEnvironment,
@@ -20,7 +22,7 @@ export class OperationalCanaryWorkflowV1 extends WorkflowEntrypoint<
         step.do("verify-operational-canary-v1", { retries: { limit: 0, delay: "1 second" } }, () =>
           completeCanary({
             payload: event.payload,
-            now: Effect.runSync(Clock.currentTimeMillis),
+            now: canaryRuntime.runSync(Clock.currentTimeMillis),
           })
         ),
       {

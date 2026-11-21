@@ -57,24 +57,29 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const runtime = yield* create();
         const owner = yield* seed(runtime, alice);
 
-        const send = (path: string, payload: unknown, browser = false): TransportResult =>
-          native(() =>
+        const send = (path: string, payload: unknown, browser = false): TransportResult => {
+          const transport = {
+            "content-type": "application/json",
+            "cf-connecting-ip": "192.0.2.35",
+          };
+
+          const headers = browser
+            ? {
+                ...transport,
+                origin: browserOrigins.production,
+                cookie: "__Host-fidy_session=" + alice.bearer,
+                "Fidy-Session-Binding": alice.session,
+              }
+            : transport;
+
+          return native(() =>
             runtime.dispatchFetch("https://api.fidyapp.com" + path, {
               method: "POST",
-              headers: {
-                "content-type": "application/json",
-                "cf-connecting-ip": "192.0.2.35",
-                ...(browser
-                  ? {
-                      origin: browserOrigins.production,
-                      cookie: "__Host-fidy_session=" + alice.bearer,
-                      "Fidy-Session-Binding": alice.session,
-                    }
-                  : {}),
-              },
+              headers,
               body: JSON.stringify(payload),
             })
           );
+        };
 
         const start = yield* send("/pat-pairings", {
           recipientLabel: "CLI",
@@ -180,7 +185,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
                 "content-type": "application/json",
                 "cf-connecting-ip": "192.0.2.35",
               },
-              ...(options.method === "POST" ? { body: JSON.stringify(options.body) } : {}),
+              body: options.method === "POST" ? JSON.stringify(options.body) : null,
             })
           );
 

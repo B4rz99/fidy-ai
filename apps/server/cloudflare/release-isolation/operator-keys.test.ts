@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Clock, Effect } from "effect";
+import { Clock, Effect, Option } from "effect";
 import { expect } from "vitest";
 import { native, nativeBrowserPlatform } from "../user-store.test-fixture";
 import { signAcceptanceRequest } from "./operations";
@@ -65,7 +65,8 @@ const closedKeys = Effect.fn(function* (redirected: boolean) {
   const beta = yield* invoke("beta", "beta-pro", '{"action":"list"}');
   expect(beta.status).toBe(redirected ? 401 : 200);
 
-  if (!redirected) expect(yield* native(() => beta.json())).toEqual({ entries: [], next: null });
+  const listed = redirected ? Option.none() : Option.some(yield* native(() => beta.json()));
+  expect(listed).toEqual(redirected ? Option.none() : Option.some({ entries: [], next: null }));
   expect((yield* invoke("reviewer", "sample-review", "{}")).status).toBe(redirected ? 401 : 400);
   expect((yield* invoke("reviewer", "beta-pro", '{"action":"list"}')).status).toBe(401);
   expect(

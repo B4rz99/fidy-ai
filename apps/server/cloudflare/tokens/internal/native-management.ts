@@ -43,7 +43,9 @@ const changed = Effect.fn(function* (statement: OwnedStatement) {
 });
 
 const record = Effect.fn(function* (statement: OwnedStatement) {
-  if ((yield* changed(statement)).length !== 1) return yield* new PATUnavailable();
+  if ((yield* changed(statement)).length !== 1) {
+    return yield* new PATUnavailable({ cause: Option.none() });
+  }
 });
 
 const missing: LocalMutationResult = {
@@ -89,10 +91,10 @@ const revokeSingle = Effect.fn(function* ({
     revokeOnePATConsent({ session, input: { id: newId(), shortId, current }, candidates })
   );
 
-  if (evidence.length !== 1) return yield* new PATUnavailable();
+  if (evidence.length !== 1) return yield* new PATUnavailable({ cause: Option.none() });
 
   if ((yield* changed(revokeOnePAT({ session, input: { shortId, current } }))).length !== 1) {
-    return yield* new PATUnavailable();
+    return yield* new PATUnavailable({ cause: Option.none() });
   }
 
   yield* record(recordOnePATRevocation({ session, input: { id: newId(), shortId, current } }));
@@ -113,22 +115,22 @@ const revokeAll = Effect.fn(function* (session: Session, current: number) {
     (yield* changed(revokeAllPATConsents({ session, current, candidates: pats }))).length !==
     grants.length
   ) {
-    return yield* new PATUnavailable();
+    return yield* new PATUnavailable({ cause: Option.none() });
   }
 
   const revoked = yield* changed(revokeEveryPAT({ session, current }));
 
-  if (revoked.length !== grants.length) return yield* new PATUnavailable();
+  if (revoked.length !== grants.length) return yield* new PATUnavailable({ cause: Option.none() });
 
   if (
     (yield* changed(revokeAllPairingConsents({ session, current, candidates: pairs }))).length !==
     approvals.length
   ) {
-    return yield* new PATUnavailable();
+    return yield* new PATUnavailable({ cause: Option.none() });
   }
 
   if ((yield* changed(revokeEveryPairing({ session, current }))).length !== approvals.length) {
-    return yield* new PATUnavailable();
+    return yield* new PATUnavailable({ cause: Option.none() });
   }
 
   yield* record(recordAllPATRevocations({ session, input: { id: newId(), current } }));

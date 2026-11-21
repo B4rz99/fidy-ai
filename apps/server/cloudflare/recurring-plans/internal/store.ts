@@ -32,15 +32,15 @@ const rowBodies = (rows: ReadonlyArray<typeof JsonRow.Type>): ReadonlyArray<unkn
 const Plans = Schema.Struct({
   id: Schema.String,
   position: Schema.Int,
-  pauses: Schema.Array(Schema.Unknown),
-  stoppedOn: Schema.NullOr(Schema.String),
+  pauses: Schema.Array(Schema.Json),
+  stoppedOn: Schema.OptionFromNullOr(Schema.String),
 });
 
 const Revisions = Schema.Struct({
   planId: Schema.String,
   position: Schema.Int,
   from: Schema.String,
-  plan: Schema.Unknown,
+  plan: Schema.Json,
 });
 
 const selections = [
@@ -52,14 +52,14 @@ const selections = [
 
 const ExceptionRow = Schema.Struct({
   ...RecurringDocument.fields.exceptions.value.fields,
-  replacement: Schema.NullOr(Schema.toEncoded(RecurringPlanInput)),
+  replacement: Schema.OptionFromNullOr(Schema.toEncoded(RecurringPlanInput)),
 });
 
 const FulfillmentRow = Schema.Struct({
   ...RecurringFulfillment.fields,
   money: Schema.toEncoded(RecurringFulfillment.fields.money),
-  automatic: Schema.NullOr(Schema.Boolean),
-  transactionId: Schema.NullOr(Schema.String),
+  automatic: Schema.OptionFromNullOr(Schema.Boolean),
+  transactionId: Schema.OptionFromNullOr(Schema.String),
 });
 
 type PlanningRows = Readonly<{
@@ -86,7 +86,7 @@ const decodeRows = (
 
     if (Option.isNone(snapshot.document)) {
       if (rows.some((entries) => entries.length !== 0)) {
-        return yield* new RecurringPlanningUnavailable();
+        return yield* new RecurringPlanningUnavailable({ cause: Option.none() });
       }
 
       return {
@@ -109,9 +109,11 @@ const decodeRows = (
       exceptions: yield* Schema.decodeUnknownEffect(Schema.Array(ExceptionRow))(rows[2]),
       fulfillments: yield* Schema.decodeUnknownEffect(Schema.Array(FulfillmentRow))(rows[3]),
     };
-  }).pipe(Effect.mapError(() => new RecurringPlanningUnavailable()));
+  }).pipe(
+    Effect.mapError((cause) => new RecurringPlanningUnavailable({ cause: Option.some(cause) }))
+  );
 
-const planningValue = (rows: PlanningRows): unknown => {
+const planningValue = (rows: PlanningRows): Schema.Json => {
   const revisions = Map.groupBy(rows.revisions, (revision) => revision.planId);
 
   return {
@@ -120,7 +122,10 @@ const planningValue = (rows: PlanningRows): unknown => {
     plans: rows.plans.map((plan) => ({
       id: plan.id,
       pauses: plan.pauses,
-      ...(plan.stoppedOn === null ? {} : { stoppedOn: plan.stoppedOn }),
+      ...Option.match(plan.stoppedOn, {
+        onNone: () => ({}),
+        onSome: (stoppedOn) => ({ stoppedOn }),
+      }),
       revisions: (revisions.get(plan.id) ?? []).map(({ from, plan: settings }) => ({
         from,
         plan: settings,
@@ -128,12 +133,21 @@ const planningValue = (rows: PlanningRows): unknown => {
     })),
     exceptions: rows.exceptions.map(({ replacement, ...entry }) => ({
       ...entry,
-      ...(replacement === null ? {} : { replacement }),
+      ...Option.match(replacement, {
+        onNone: () => ({}),
+        onSome: (present) => ({ replacement: present }),
+      }),
     })),
     fulfillments: rows.fulfillments.map(({ automatic, transactionId, ...entry }) => ({
       ...entry,
-      ...(automatic === null ? {} : { automatic }),
-      ...(transactionId === null ? {} : { transactionId }),
+      ...Option.match(automatic, {
+        onNone: () => ({}),
+        onSome: (present) => ({ automatic: present }),
+      }),
+      ...Option.match(transactionId, {
+        onNone: () => ({}),
+        onSome: (present) => ({ transactionId: present }),
+      }),
     })),
   };
 };
@@ -142,8 +156,8 @@ const decodeDocument = (
   snapshot: StoredSelection
 ): Effect.Effect<RecurringDocument, RecurringPlanningUnavailable> =>
   decodeRows(snapshot).pipe(
-    Effect.flatMap((rows) => Schema.decodeUnknownEffect(JsonDocument)(planningValue(rows))),
-    Effect.mapError(() => new RecurringPlanningUnavailable())
+    Effect.flatMap((rows) => Schema.decodeEffect(JsonDocument)(planningValue(rows))),
+    Effect.mapError((cause) => new RecurringPlanningUnavailable({ cause: Option.some(cause) }))
   );
 
 export const decodeReadProjection = ({
@@ -157,7 +171,7 @@ export const decodeReadProjection = ({
   RecurringPlanningUnavailable
 > =>
   Effect.gen(function* () {
-    const schedule = yield* Schema.decodeUnknownEffect(
+    const schedule = yield* Schema.decodeEffect(
       Schema.toCodecJson(
         Schema.Struct({
           plans: RecurringDocument.fields.plans,
@@ -176,7 +190,9 @@ export const decodeReadProjection = ({
     });
 
     return { editing: displayDocument({ document: editing, compact: true, now }), schedule };
-  }).pipe(Effect.mapError(() => new RecurringPlanningUnavailable()));
+  }).pipe(
+    Effect.mapError((cause) => new RecurringPlanningUnavailable({ cause: Option.some(cause) }))
+  );
 
 type EncodedDocument = typeof RecurringDocument.Encoded;
 
@@ -190,7 +206,7 @@ type Collection = Readonly<{
   rows: (document: EncodedDocument) => ReadonlyArray<StoredRow>;
 }>;
 
-const row = (key: string, value: object): StoredRow => ({
+const row = <Row>(key: string, value: Row): StoredRow => ({
   key,
   encoded: Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))(value),
 });
@@ -251,7 +267,7 @@ const chunks = (values: ReadonlyArray<string>): ReadonlyArray<string> => {
   for (const value of values) {
     const size = new TextEncoder().encode(value).length + 1;
 
-    if (size > maximumRowBytes) throw new RecurringPlanningUnavailable();
+    if (size > maximumRowBytes) throw new RecurringPlanningUnavailable({ cause: Option.none() });
 
     if (pending.length > 0 && bytes + size > maximumChunkBytes) {
       result.push("[" + pending.join(",") + "]");
@@ -365,13 +381,13 @@ export const writeLocalDocument = Effect.fn(function* (
     yield* sql`INSERT INTO user_documents(user_id,kind,document_json,revision) VALUES(${user},'recurring-plan',${root},${document.revision})
     ON CONFLICT(user_id,kind) DO UPDATE SET document_json=excluded.document_json,revision=excluded.revision WHERE revision=${base.revision} RETURNING revision`;
 
-  if (stored.length !== 1) return yield* new RecurringPlanningUnavailable();
+  if (stored.length !== 1) return yield* new RecurringPlanningUnavailable({ cause: Option.none() });
   const before = yield* Schema.encodeEffect(RecurringDocument)(base);
   const after = yield* Schema.encodeEffect(RecurringDocument)(document);
 
-  for (const collection of collections) {
-    for (const statement of collectionWrites(user, collection, { before, after })) {
-      yield* sql.unsafe(statement.sql, statement.params);
-    }
-  }
+  yield* Effect.forEach(
+    collections.flatMap((collection) => collectionWrites(user, collection, { before, after })),
+    (statement) => sql.unsafe(statement.sql, statement.params),
+    { discard: true }
+  );
 });

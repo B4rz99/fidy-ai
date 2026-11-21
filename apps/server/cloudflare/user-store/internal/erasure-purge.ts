@@ -164,6 +164,19 @@ export const drainLocalUser = Effect.fn(function* (
   );
 });
 
+const purgeObjectPage = Effect.fnUntraced(function* (
+  bucket: Pick<R2Bucket, "list" | "delete">,
+  prefix: string
+) {
+  const page = yield* Effect.tryPromise(() => bucket.list({ prefix, limit: pageSize }));
+
+  if (page.objects.length === 0) return false;
+  const keys = page.objects.map((object) => object.key);
+  yield* Effect.tryPromise(() => bucket.delete(keys));
+
+  return true;
+});
+
 export const purgeLocalUser = Effect.fn(function* (
   request: Request,
   { env, storage, owns }: LocalErasureUnit,
@@ -189,15 +202,12 @@ export const purgeLocalUser = Effect.fn(function* (
 
   const prefix = userPrivateObjectPrefix(scope.userId);
 
-  for (const bucket of [env.EMAIL_BUCKET, env.STATEMENT_STAGING_BUCKET]) {
-    const page = yield* Effect.tryPromise(() => bucket.list({ prefix, limit: pageSize }));
+  const purged = yield* Effect.findFirst(
+    [env.EMAIL_BUCKET, env.STATEMENT_STAGING_BUCKET],
+    (bucket) => purgeObjectPage(bucket, prefix)
+  );
 
-    if (page.objects.length > 0) {
-      yield* Effect.tryPromise(() => bucket.delete(page.objects.map((object) => object.key)));
-
-      return result(false);
-    }
-  }
+  if (Option.isSome(purged)) return result(false);
 
   yield* retireSessions;
   yield* Effect.tryPromise(() => storage.deleteAlarm());

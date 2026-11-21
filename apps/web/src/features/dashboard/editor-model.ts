@@ -96,7 +96,7 @@ const placementFor = (target: Readonly<DashboardDropTarget>): Placement => {
 
 const editFor = (
   gesture: Readonly<Exclude<DashboardGesture, { kind: "configure-budget" }>>
-): unknown => {
+): typeof DashboardEdit.Encoded => {
   switch (gesture.kind) {
     case "move-widget":
       return { op: "move-widget", widgetId: gesture.widgetId, at: placementFor(gesture.target) };

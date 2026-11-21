@@ -1,3 +1,4 @@
+import { Predicate } from "effect";
 import { useAtomSet } from "@effect/atom-react";
 import { useState, useSyncExternalStore } from "react";
 import type { HostedTurnClient } from "@/transport/hosted-turn-client";
@@ -39,7 +40,7 @@ const conversationOwner = (clearAcceptedDraft: () => void): ConversationOwner =>
 
   const setConversation: SetConversation = (update) => {
     if (!active) return;
-    conversation = typeof update === "function" ? update(conversation) : update;
+    conversation = Predicate.isFunction(update) ? update(conversation) : update;
     listeners.forEach((listener) => listener());
   };
 

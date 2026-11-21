@@ -19,6 +19,8 @@ import { withStoreCapacity } from "../../runtime/sqlite/operations";
 import { newId } from "../../secret-material/operations";
 import { findMailboxRoute } from "./replacement";
 
+const isResponse = Schema.is(Schema.instanceOf(Response));
+
 const hour = 3600000,
   sharedLimit = 1000,
   wrongLimit = 5;
@@ -28,7 +30,7 @@ const policy = Schema.decodeSync(RequestBodyPolicy)({
   deadlineMilliseconds: 2000,
 });
 
-const json = (body: object, status: number): Response =>
+const json = (body: unknown, status: number): Response =>
   Response.json(body, { status, headers: { "cache-control": "no-store" } });
 
 const invalidStatus = 400,
@@ -115,7 +117,7 @@ const currentMailboxRevision = Effect.fn(function* (input: Input, user: string) 
 const freeze = Effect.fn(function* (input: Input, digest: string, users: Users) {
   const mode = yield* binding(input, digest).pipe(withStoreCapacity("required"));
 
-  if (mode instanceof Response) return mode;
+  if (isResponse(mode)) return mode;
 
   if (mode === "unbound") {
     if (!("email" in input)) return invalid();
@@ -149,11 +151,12 @@ export const directoryLoginEmail = Effect.fn(function* (
   const input = proof.value;
   const frozen = yield* freeze(input, yield* digestVerifier(input.privateVerifier), users);
 
-  if (frozen instanceof Response) return frozen;
+  if (isResponse(frozen)) return frozen;
+  const recipient = "email" in input ? { address: input.email } : { code: input.combinedCode };
 
   const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
     ...frozen,
-    ...("email" in input ? { address: input.email } : { code: input.combinedCode }),
+    ...recipient,
   });
 
   return yield* Effect.tryPromise((signal) =>

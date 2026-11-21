@@ -1,7 +1,7 @@
 import { Clock, DateTime, Effect } from "effect";
 import { expect, it } from "vitest";
 import { makeWorkerTelemetry } from "../runtime/telemetry/operations";
-import { makeCoreQueue } from "./runtime";
+import { coreQueueHandler } from "./runtime";
 import type { CoreQueueEnvironment } from "./contract";
 
 const unusedWorkflowOperation = (): Promise<never> =>
@@ -25,7 +25,7 @@ it("inherits the Queue owner's Clock when validating a native canary handoff", (
       const now = 100_000;
       const base = makeWorkerTelemetry(() => undefined);
 
-      const queue = makeCoreQueue({
+      const queue = coreQueueHandler({
         ...base,
         observeWork: (observation, work) =>
           Clock.clockWith((clock) =>

@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import type { ErasureRegistryInitialization } from "../contract";
 import { ErasureUnavailable } from "../../erasure-store/contract";
 import { generationKey } from "./generation";
@@ -20,11 +20,13 @@ export const initializeRegistryStorage = <Requirements>(
       Schema.Struct({ ready: Schema.Literals([0, 1]) })
     )(raw);
 
-    if (row.ready !== 1) return yield* new ErasureUnavailable();
+    if (row.ready !== 1) return yield* new ErasureUnavailable({ cause: Option.none() });
 
     if (exists) return;
 
-    if (!(yield* input.empty)) return yield* new ErasureUnavailable();
+    if (!(yield* input.empty)) return yield* new ErasureUnavailable({ cause: Option.none() });
 
-    if (!(yield* input.install(generationKey, "initial"))) return yield* new ErasureUnavailable();
-  }).pipe(Effect.mapError(() => new ErasureUnavailable()));
+    if (!(yield* input.install(generationKey, "initial"))) {
+      return yield* new ErasureUnavailable({ cause: Option.none() });
+    }
+  }).pipe(Effect.mapError((cause) => new ErasureUnavailable({ cause: Option.some(cause) })));

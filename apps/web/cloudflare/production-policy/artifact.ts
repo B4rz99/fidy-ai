@@ -54,9 +54,9 @@ const allowedPath = (path: string): boolean =>
 
 const validatePath = (path: string): void => {
   const parts = path.toLowerCase().split("/");
-  const serverShaped = parts.some((part) => part.includes("server") || part.includes("worker"));
+  const serverNamed = parts.some((part) => part.includes("server") || part.includes("worker"));
 
-  if (!allowedPath(path) || path.endsWith(".map") || serverShaped) {
+  if (!allowedPath(path) || path.endsWith(".map") || serverNamed) {
     throw new Error(`forbidden production artifact path: ${path}`);
   }
 };

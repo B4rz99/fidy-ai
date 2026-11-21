@@ -7,7 +7,7 @@ import { useReviewExpired } from "./expiry";
 import type { ReviewDecisions, ReviewEditorState, ReviewWorkspaceQuery } from "./decisions";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { Link, useRouter } from "@tanstack/react-router";
-import { Option } from "effect";
+import { Option, Predicate } from "effect";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   CheckmarkCircle02Icon,
@@ -106,16 +106,16 @@ const ReviewItemEditor = ({
   const refreshCategories = useAtomRefresh(categoryQuery);
 
   const recover = (): void => {
-    if (detail._tag === "Ready") decisions.editor(detail.value.data).recover();
+    if (Predicate.isTagged(detail, "Ready")) decisions.editor(detail.value.data).recover();
     else refresh();
     refreshCategories();
   };
 
-  if (detail._tag === "Initial" || categories._tag === "Initial") {
+  if (Predicate.isTagged(detail, "Initial") || Predicate.isTagged(categories, "Initial")) {
     return <ReviewItemUnavailable item={item} recover={recover} loading />;
   }
 
-  if (detail._tag !== "Ready" || categories._tag !== "Ready") {
+  if (!Predicate.isTagged(detail, "Ready") || !Predicate.isTagged(categories, "Ready")) {
     return <ReviewItemUnavailable item={item} recover={recover} loading={false} />;
   }
 

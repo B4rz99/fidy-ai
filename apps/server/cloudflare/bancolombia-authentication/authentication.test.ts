@@ -2,7 +2,18 @@ import { Digest, SecureRandom } from "effect/crypto";
 import * as assert from "node:assert/strict";
 import { TestCrypto } from "../../src/shell/testing/crypto-harness";
 import { expect, it } from "@effect/vitest";
-import { Cause, Context, Data, DateTime, Effect, Exit, Layer, Redacted, Schema } from "effect";
+import {
+  Cause,
+  Context,
+  Data,
+  DateTime,
+  Effect,
+  Exit,
+  Layer,
+  Predicate,
+  Redacted,
+  Schema,
+} from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { exportJWK, exportPKCS8, generateKeyPair, jwtVerify } from "jose";
 import { BancolombiaAuthenticationFailed } from "./contract";
@@ -48,8 +59,8 @@ it.effect(
       const privateKey = Redacted.make(yield* Effect.tryPromise(() => exportPKCS8(key.privateKey)));
       const requests: string[] = [];
 
-      const httpClient = HttpClient.make((request) =>
-        Effect.gen(function* () {
+      const httpClient = HttpClient.make(
+        Effect.fnUntraced(function* (request) {
           requests.push(request.url);
 
           if (request.method === "GET") {
@@ -68,7 +79,7 @@ it.effect(
 
           expect(request.body._tag).toBe("Uint8Array");
 
-          if (request.body._tag !== "Uint8Array") throw new Error("Expected form body");
+          assert.ok(Predicate.isTagged(request.body, "Uint8Array"), "Expected form body");
           const form = new URLSearchParams(new TextDecoder().decode(request.body.body));
           expect(form.get("grant_type")).toBe("client_credentials");
           expect(form.get("scope")).toBe("accounts");
@@ -175,43 +186,51 @@ it.effect("refuses issuer or token-endpoint drift before any credential-bearing 
 
     const privateKey = Redacted.make(yield* Effect.tryPromise(() => exportPKCS8(key.privateKey)));
 
-    for (const metadata of [
-      { issuer: "https://foreign.example", token_endpoint: token },
-      { issuer, token_endpoint: "http://127.0.0.1/token" },
-      { issuer, token_endpoint: token, token_endpoint_auth_signing_alg_values_supported: ["none"] },
-    ]) {
-      let calls = 0;
+    yield* Effect.forEach(
+      [
+        { issuer: "https://foreign.example", token_endpoint: token },
+        { issuer, token_endpoint: "http://127.0.0.1/token" },
+        {
+          issuer,
+          token_endpoint: token,
+          token_endpoint_auth_signing_alg_values_supported: ["none"],
+        },
+      ],
+      Effect.fnUntraced(function* (metadata) {
+        let calls = 0;
 
-      const result = yield* authenticateBancolombiaSandbox({
-        secureRandom,
-        digest,
-        clientId,
-        publicKey,
-        privateKey,
-        httpClient: HttpClient.make((request) => {
-          calls += 1;
+        const result = yield* authenticateBancolombiaSandbox({
+          secureRandom,
+          digest,
+          clientId,
+          publicKey,
+          privateKey,
+          httpClient: HttpClient.make((request) => {
+            calls += 1;
 
-          return Effect.succeed(
-            HttpClientResponse.fromWeb(
-              request,
-              Response.json({
-                token_endpoint_auth_methods_supported: ["private_key_jwt"],
-                token_endpoint_auth_signing_alg_values_supported: ["RS256"],
-                tls_client_certificate_bound_access_tokens: true,
-                mtls_endpoint_aliases: { token_endpoint: token },
-                ...metadata,
-              })
-            )
-          );
-        }),
-      }).pipe(Effect.exit);
+            return Effect.succeed(
+              HttpClientResponse.fromWeb(
+                request,
+                Response.json({
+                  token_endpoint_auth_methods_supported: ["private_key_jwt"],
+                  token_endpoint_auth_signing_alg_values_supported: ["RS256"],
+                  tls_client_certificate_bound_access_tokens: true,
+                  mtls_endpoint_aliases: { token_endpoint: token },
+                  ...metadata,
+                })
+              )
+            );
+          }),
+        }).pipe(Effect.exit);
 
-      expect(calls).toBe(1);
-      assert.deepStrictEqual(
-        result,
-        Exit.fail(new BancolombiaAuthenticationFailed({ stage: "bancolombia_discovery" }))
-      );
-    }
+        expect(calls).toBe(1);
+        assert.deepStrictEqual(
+          result,
+          Exit.fail(new BancolombiaAuthenticationFailed({ stage: "bancolombia_discovery" }))
+        );
+      }),
+      { discard: true }
+    );
   })
 );
 
@@ -230,61 +249,65 @@ it.effect("does not retry bank rejection or expose its body or a malformed token
 
     const privateKey = Redacted.make(yield* Effect.tryPromise(() => exportPKCS8(key.privateKey)));
 
-    for (const rejection of [
-      { status: 401, body: { error: "synthetic-secret-provider-body" } },
-      {
-        status: 200,
-        body: {
-          access_token: "synthetic-secret-provider-body",
-          token_type: "Bearer",
-          expires_in: -1,
+    yield* Effect.forEach(
+      [
+        { status: 401, body: { error: "synthetic-secret-provider-body" } },
+        {
+          status: 200,
+          body: {
+            access_token: "synthetic-secret-provider-body",
+            token_type: "Bearer",
+            expires_in: -1,
+          },
         },
-      },
-    ]) {
-      let posts = 0;
+      ],
+      Effect.fnUntraced(function* (rejection) {
+        let posts = 0;
 
-      const result = yield* authenticateBancolombiaSandbox({
-        secureRandom,
-        digest,
-        clientId,
-        publicKey,
-        privateKey,
-        httpClient: HttpClient.make((request) => {
-          if (request.method === "GET") {
+        const result = yield* authenticateBancolombiaSandbox({
+          secureRandom,
+          digest,
+          clientId,
+          publicKey,
+          privateKey,
+          httpClient: HttpClient.make((request) => {
+            if (request.method === "GET") {
+              return Effect.succeed(
+                HttpClientResponse.fromWeb(
+                  request,
+                  Response.json({
+                    issuer,
+                    token_endpoint: token,
+                    token_endpoint_auth_methods_supported: ["private_key_jwt"],
+                    token_endpoint_auth_signing_alg_values_supported: ["RS256"],
+                    tls_client_certificate_bound_access_tokens: true,
+                    mtls_endpoint_aliases: { token_endpoint: token },
+                  })
+                )
+              );
+            }
+
+            posts += 1;
+
             return Effect.succeed(
               HttpClientResponse.fromWeb(
                 request,
-                Response.json({
-                  issuer,
-                  token_endpoint: token,
-                  token_endpoint_auth_methods_supported: ["private_key_jwt"],
-                  token_endpoint_auth_signing_alg_values_supported: ["RS256"],
-                  tls_client_certificate_bound_access_tokens: true,
-                  mtls_endpoint_aliases: { token_endpoint: token },
-                })
+                Response.json(rejection.body, { status: rejection.status })
               )
             );
-          }
+          }),
+        }).pipe(Effect.exit);
 
-          posts += 1;
-
-          return Effect.succeed(
-            HttpClientResponse.fromWeb(
-              request,
-              Response.json(rejection.body, { status: rejection.status })
-            )
-          );
-        }),
-      }).pipe(Effect.exit);
-
-      expect(posts).toBe(1);
-      assert.deepStrictEqual(
-        result,
-        Exit.fail(new BancolombiaAuthenticationFailed({ stage: "bancolombia_authentication" }))
-      );
-      expect(
-        yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(result)
-      ).not.toContain("synthetic-secret-provider-body");
-    }
+        expect(posts).toBe(1);
+        assert.deepStrictEqual(
+          result,
+          Exit.fail(new BancolombiaAuthenticationFailed({ stage: "bancolombia_authentication" }))
+        );
+        expect(
+          yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(result)
+        ).not.toContain("synthetic-secret-provider-body");
+      }),
+      { discard: true }
+    );
   })
 );

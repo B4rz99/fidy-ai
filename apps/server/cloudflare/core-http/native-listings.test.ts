@@ -21,6 +21,42 @@ const observedListings = [
   ["quota.getQuota", ""],
 ] as const;
 
+type Journey = Effect.Success<typeof nativeTransactionJourney>;
+
+const listingAccountability = Effect.fn(function* (
+  store: Journey,
+  [id, query]: (typeof observedListings)[number]
+) {
+  const operation = operationCatalog.byId.get(id);
+
+  if (operation === undefined) throw new Error("Unknown listing " + id);
+  const target = operation.route + query;
+  const response = yield* native(() => store.browser(0, target));
+  expect(response.status, id).toBe(200);
+  yield* native(() => response.arrayBuffer());
+  const before = yield* native(() => store.exec("SELECT count(*) AS n FROM audit_entries"));
+
+  const refused = yield* native(() =>
+    store.send(
+      new Request("https://" + productionTopology.ingress.hostname + target, {
+        headers: {
+          origin: browserOrigins.production,
+          authorization: "Bearer invalid",
+          cookie: "__Host-fidy_session=" + alice.bearer,
+          "Fidy-Session-Binding": alice.session,
+        },
+      })
+    )
+  );
+
+  expect(refused.status, id).toBe(401);
+  yield* native(() => refused.arrayBuffer());
+  expect(yield* native(() => store.exec("SELECT count(*) AS n FROM audit_entries")), id).toEqual(
+    before
+  );
+  yield* Effect.sleep("120 millis");
+});
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "serves each authorized listing through its native owner and refuses mixed credentials before accountability",
@@ -34,37 +70,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           )
         );
 
-        for (const [id, query] of observedListings) {
-          const operation = operationCatalog.byId.get(id);
-
-          if (operation === undefined) throw new Error("Unknown listing " + id);
-          const target = operation.route + query;
-          const response = yield* native(() => store.browser(0, target));
-          expect(response.status, id).toBe(200);
-          yield* native(() => response.arrayBuffer());
-          const before = yield* native(() => store.exec("SELECT count(*) AS n FROM audit_entries"));
-
-          const refused = yield* native(() =>
-            store.send(
-              new Request("https://" + productionTopology.ingress.hostname + target, {
-                headers: {
-                  origin: browserOrigins.production,
-                  authorization: "Bearer invalid",
-                  cookie: "__Host-fidy_session=" + alice.bearer,
-                  "Fidy-Session-Binding": alice.session,
-                },
-              })
-            )
-          );
-
-          expect(refused.status, id).toBe(401);
-          yield* native(() => refused.arrayBuffer());
-          expect(
-            yield* native(() => store.exec("SELECT count(*) AS n FROM audit_entries")),
-            id
-          ).toEqual(before);
-          yield* Effect.sleep("120 millis");
-        }
+        yield* Effect.forEach(
+          observedListings,
+          (listing) => listingAccountability(store, listing),
+          {
+            discard: true,
+          }
+        );
       })
   );
 });

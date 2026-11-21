@@ -6,10 +6,12 @@ const railBreakpoint = 75;
 
 export const WorkspaceDesktop = createContext<Option.Option<boolean>>(Option.none());
 
-export const useWorkspaceSize = (): Readonly<{
+type WorkspaceSize = Readonly<{
   desktop: boolean;
   measure: RefCallback<HTMLDivElement>;
-}> => {
+}>;
+
+export const useWorkspaceSize = (): WorkspaceSize => {
   const [desktop, setDesktop] = useState(false);
 
   const measure = useCallback<RefCallback<HTMLDivElement>>((node) => {

@@ -11,11 +11,8 @@ import {
 
 import {
   keywordRuleIdFromPath as decodeRuleId,
-  keywordRuleInput as decodeRuleInput,
   keywordRuleUnknownId as unknownRuleId,
 } from "./internal/canonical-keyword-rules";
-
-export const keywordRuleInput: typeof decodeRuleInput = (input) => decodeRuleInput(input);
 
 export const keywordRuleIdFromPath: typeof decodeRuleId = (input) => decodeRuleId(input);
 

@@ -16,7 +16,10 @@ const byteSize = (value: string): number => encoder.encode(value).length;
 
 export const measureStatementWork = Effect.fn(function* (parsed: ParsedStatement) {
   let logicalTextBytes = 0;
-  let serializedEvidenceBytes = 0;
+
+  const encodedEvidence = yield* Effect.forEach(parsed.rows, (row) =>
+    Schema.encodeEffect(evidenceCodec)(row.evidence)
+  );
 
   for (const row of parsed.rows) {
     logicalTextBytes += row.fields.reduce((sum, field) => sum + byteSize(field), 0);
@@ -27,9 +30,12 @@ export const measureStatementWork = Effect.fn(function* (parsed: ParsedStatement
         logicalTextBytes += Option.match(cell.formattedText, { onNone: () => 0, onSome: byteSize });
       }
     }
-
-    serializedEvidenceBytes += byteSize(yield* Schema.encodeEffect(evidenceCodec)(row.evidence));
   }
+
+  const serializedEvidenceBytes = encodedEvidence.reduce(
+    (sum, encoded) => sum + byteSize(encoded),
+    0
+  );
 
   const mapping = mechanicalMappingFor(parsed.headers);
   let interpretedRows = 0;
@@ -38,20 +44,26 @@ export const measureStatementWork = Effect.fn(function* (parsed: ParsedStatement
   const startedAt = performance.now();
 
   if (Option.isSome(mapping)) {
-    for (let start = 0; start < parsed.rows.length; start += chunkSize) {
-      const results = yield* interpretStatementRows(
+    const starts = Array.from(
+      { length: Math.ceil(parsed.rows.length / chunkSize) },
+      (_, index) => index * chunkSize
+    );
+
+    const chunks = yield* Effect.forEach(starts, (start) =>
+      interpretStatementRows(
         {
           rows: parsed.rows.slice(start, start + chunkSize),
           mapping: mapping.value,
           timeZone: "America/Bogota",
         },
         extractionDecoder
-      );
+      )
+    );
 
-      interpretedRows += results.outcomes.length;
-      acceptedRows += results.outcomes.filter((row) => row.outcome === "accepted").length;
-      reviewRows += results.outcomes.filter((row) => row.outcome === "needs-review").length;
-    }
+    const outcomes = chunks.flatMap((results) => results.outcomes);
+    interpretedRows = outcomes.length;
+    acceptedRows = outcomes.filter((row) => row.outcome === "accepted").length;
+    reviewRows = outcomes.filter((row) => row.outcome === "needs-review").length;
   }
 
   return {

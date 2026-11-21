@@ -1,7 +1,7 @@
 import { Delete02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import { Effect } from "effect";
+import { Effect, Predicate } from "effect";
 import { type JSX, type ReactNode, useState } from "react";
 import type { WebAuthClient } from "@/transport/client";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
@@ -40,7 +40,7 @@ export const ErasureRequest = ({ client }: Readonly<{ client: WebAuthClient }>):
 
   const result = useAtomValue(command);
   const submit = useAtomSet(command);
-  const accepted = result._tag === "Success" && result.value;
+  const accepted = Predicate.isTagged(result, "Success") && result.value;
 
   return (
     <ErasureSection>
@@ -64,7 +64,10 @@ export const ErasureRequest = ({ client }: Readonly<{ client: WebAuthClient }>):
           {result.waiting ? "Registrando solicitud…" : "Solicitar eliminación"}
         </Button>
       </div>
-      <ErasureFeedback accepted={accepted} failed={result._tag === "Success" && !result.value} />
+      <ErasureFeedback
+        accepted={accepted}
+        failed={Predicate.isTagged(result, "Success") && !result.value}
+      />
     </ErasureSection>
   );
 };

@@ -1,4 +1,4 @@
-import type { Array, Option } from "effect";
+import { type Array, Data, type Option } from "effect";
 import type { CaptureSources, OriginalTransactions, Transaction } from "./presentation";
 
 export type CorrectionStatus =
@@ -12,49 +12,51 @@ export type CorrectionStatus =
 
 export type DeletionStatus = "idle" | "saving" | "rejected" | "uncertain";
 
-export type ReconciliationMode = Readonly<{
-  _tag: "Reconciling";
-  pair: OriginalTransactions;
-  sources: CaptureSources;
-  deleting: boolean;
-}> &
-  (
-    | Readonly<{
-        status:
-          | "review"
-          | "saving"
-          | "rejected"
-          | "uncertain"
-          | "recovering"
-          | "success"
-          | "missing";
-      }>
-    | Readonly<{ status: "separate"; original: Transaction }>
-  );
-
 export const reconciliationFinished = (mode: ReconciliationMode): boolean =>
   ["success", "separate", "missing"].includes(mode.status);
 
 export const reconciliationLocked = (mode: ReconciliationMode): boolean =>
   mode.status !== "review" && !reconciliationFinished(mode);
 
-export type DetailMode =
-  | Readonly<{ _tag: "Viewing" }>
-  | Readonly<{ _tag: "Editing" }>
-  | ReconciliationMode
-  | Readonly<{ _tag: "Deleting"; status: DeletionStatus; original: Option.Option<Transaction> }>;
+export type ReconciliationStatus =
+  | "review"
+  | "saving"
+  | "rejected"
+  | "uncertain"
+  | "recovering"
+  | "success"
+  | "missing"
+  | "separate";
 
-export type TransactionPanel =
-  | Readonly<{ _tag: "Summary" }>
-  | Readonly<{
-      _tag: "Bulk";
-      stage: "selecting";
-      ids: ReadonlyArray<string>;
-    }>
-  | Readonly<{
-      _tag: "Bulk";
-      stage: "editing";
-      transactions: Array.NonEmptyReadonlyArray<Transaction>;
-    }>
-  | Readonly<{ _tag: "Capture"; status: "idle" | "saving" | "uncertain" }>
-  | Readonly<{ _tag: "Detail"; id: string; mode: DetailMode }>;
+export type DetailMode = Data.TaggedEnum<{
+  Viewing: {};
+  Editing: {};
+  Reconciling: {
+    readonly pair: OriginalTransactions;
+    readonly sources: CaptureSources;
+    readonly deleting: boolean;
+    readonly status: ReconciliationStatus;
+    readonly separated: Option.Option<Transaction>;
+  };
+  Deleting: { readonly status: DeletionStatus; readonly original: Option.Option<Transaction> };
+}>;
+
+export const DetailMode = Data.taggedEnum<DetailMode>();
+
+export type ReconciliationMode = Data.TaggedEnum.Value<DetailMode, "Reconciling">;
+
+export type BulkSelection = Data.TaggedEnum<{
+  Selecting: { readonly ids: ReadonlyArray<string> };
+  Editing: { readonly transactions: Array.NonEmptyReadonlyArray<Transaction> };
+}>;
+
+export const BulkSelection = Data.taggedEnum<BulkSelection>();
+
+export type TransactionPanel = Data.TaggedEnum<{
+  Summary: {};
+  Bulk: { readonly selection: BulkSelection };
+  Capture: { readonly status: "idle" | "saving" | "uncertain" };
+  Detail: { readonly id: string; readonly mode: DetailMode };
+}>;
+
+export const TransactionPanel = Data.taggedEnum<TransactionPanel>();

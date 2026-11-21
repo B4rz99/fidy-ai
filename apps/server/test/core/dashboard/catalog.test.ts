@@ -1,11 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { Schema } from "effect";
 import { CategoryId } from "~/core/categories/contract";
-import {
-  makeCatalogWidget,
-  makeDashboardCatalog,
-  makeDefaultDashboard,
-} from "~/core/dashboard/operations";
+import { dashboardCatalog, defaultDashboard, makeCatalogWidget } from "~/core/dashboard/operations";
 import { DashboardDocument, Widget, WidgetId } from "~/core/dashboard/contract";
 
 it("provides one valid direct-launch preset for every closed widget type", () => {
@@ -18,11 +14,11 @@ it("provides one valid direct-launch preset for every closed widget type", () =>
 
   const fallbackId = WidgetId.make("f1d1a000-0000-4000-8000-000000000500");
 
-  const dashboardCatalog = makeDashboardCatalog({
+  const catalogEntries = dashboardCatalog({
     restaurantCategoryId: CategoryId.make("10000000-0000-4000-8000-000000000001"),
   });
 
-  const widgets = dashboardCatalog.map((entry, index) =>
+  const widgets = catalogEntries.map((entry, index) =>
     makeCatalogWidget({ entry, id: ids[index] ?? fallbackId })
   );
 
@@ -39,7 +35,7 @@ it("provides one valid direct-launch preset for every closed widget type", () =>
 });
 
 it("creates a valid four-Widget first-use DashboardDocument in a two-by-two layout", () => {
-  const document = makeDefaultDashboard({
+  const document = defaultDashboard({
     restaurantCategoryId: CategoryId.make("10000000-0000-4000-8000-000000000001"),
     widgetIds: [
       WidgetId.make("f1d1a000-0000-4000-8000-000000000511"),
@@ -68,7 +64,7 @@ it("creates a valid four-Widget first-use DashboardDocument in a two-by-two layo
 });
 
 it("names the monthly summary preset after the income and expense figures it shows", () => {
-  const entry = makeDashboardCatalog({
+  const entry = dashboardCatalog({
     restaurantCategoryId: CategoryId.make("10000000-0000-4000-8000-000000000001"),
   }).find(({ widget }) => widget.type === "custom-metric");
 

@@ -1,7 +1,9 @@
-import { Clock, Effect, Schema } from "effect";
+import { Clock, Effect, Match, Schema } from "effect";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import {
   EmailCapacityCommand,
+  type EmailCapacityTarget,
+  EmailCapacityTargetCommand,
   type IngestionCapacity,
   mediaCapacityUrl,
   outstandingEmailLimit,
@@ -45,7 +47,7 @@ const offerSlot = Effect.fn(function* (now: number, pool: Pool) {
   return slot <= pool.retained ? Response.json({ slot, generation: 0 }) : status(full);
 });
 
-type Target = Exclude<typeof EmailCapacityCommand.Type, { _tag: "Offer" }>;
+type Target = typeof EmailCapacityTarget.Type;
 
 const slotState = Effect.fn(function* (
   { slot, generation, receipt, expires }: Target,
@@ -106,6 +108,51 @@ const claimSlot = Effect.fn(function* (
   return status(applied);
 });
 
+const isTargetCommand = Schema.is(EmailCapacityTargetCommand);
+
+const settleSlot = Effect.fn(function* (slot: number, exact: boolean, pool: Pool) {
+  const sql = yield* SqliteClient;
+
+  if (exact) {
+    yield* sql`UPDATE ${sql(pool.table)} SET state='retained' WHERE slot=${slot}`;
+  }
+
+  return status(applied);
+});
+
+const releaseSlot = Effect.fn(function* (target: Target, releasable: boolean, pool: Pool) {
+  const sql = yield* SqliteClient;
+
+  if (releasable) {
+    yield* sql`INSERT INTO ${sql(pool.table)}(slot,generation) VALUES(${target.slot},${target.generation + 1}) ON CONFLICT(slot) DO UPDATE SET generation=excluded.generation,receipt=NULL,expires_at_ms=NULL,state=NULL`;
+  }
+
+  return status(applied);
+});
+
+const targetSlot = Effect.fn(function* (
+  command: typeof EmailCapacityTargetCommand.Type,
+  pool: Pool,
+  storage: DurableObjectStorage
+) {
+  if (command.slot > pool.retained) return status(stale);
+
+  return yield* withStoreAdmission((admitGrowth) =>
+    Effect.gen(function* () {
+      const now = yield* Clock.currentTimeMillis;
+      const state = yield* slotState(command, now, pool);
+
+      return yield* Match.value(command).pipe(
+        Match.tagsExhaustive({
+          Claim: (claim) => claimSlot(claim, state, { now, pool, storage, admitGrowth }),
+          Settle: (settle) => settleSlot(settle.slot, state.exact, pool),
+          Release: (release) => releaseSlot(release, state.exact || state.available, pool),
+        })
+      );
+    })
+  );
+});
+
 export const ingestionCapacityRequest = Effect.fn(function* (
   request: Request,
   storage: DurableObjectStorage
@@ -116,35 +163,9 @@ export const ingestionCapacityRequest = Effect.fn(function* (
     yield* Effect.tryPromise(() => request.json())
   );
 
-  if (command._tag !== "Offer" && command.slot > pool.retained) return status(stale);
+  if (isTargetCommand(command)) return yield* targetSlot(command, pool, storage);
 
-  return yield* withStoreAdmission((admitGrowth) =>
-    Effect.gen(function* () {
-      const now = yield* Clock.currentTimeMillis;
-
-      if (command._tag === "Offer") return yield* offerSlot(now, pool);
-
-      const state = yield* slotState(command, now, pool);
-      const sql = yield* SqliteClient;
-
-      switch (command._tag) {
-        case "Claim":
-          return yield* claimSlot(command, state, { now, pool, storage, admitGrowth });
-        case "Settle":
-          if (state.exact) {
-            yield* sql`UPDATE ${sql(pool.table)} SET state='retained' WHERE slot=${command.slot}`;
-          }
-
-          break;
-        case "Release":
-          if (state.exact || state.available) {
-            yield* sql`INSERT INTO ${sql(pool.table)}(slot,generation) VALUES(${command.slot},${command.generation + 1}) ON CONFLICT(slot) DO UPDATE SET generation=excluded.generation,receipt=NULL,expires_at_ms=NULL,state=NULL`;
-          }
-
-          break;
-      }
-
-      return status(applied);
-    })
+  return yield* withStoreAdmission(() =>
+    Effect.flatMap(Clock.currentTimeMillis, (now) => offerSlot(now, pool))
   );
 });

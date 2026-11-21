@@ -19,7 +19,7 @@ const decode = <Value extends Schema.ConstraintDecoder<unknown>>(
 ): Value["Type"] => {
   const decoded = Schema.decodeUnknownOption(schema, { onExcessProperty: "error" })(value);
 
-  if (Option.isNone(decoded)) throw new ErasureUnavailable();
+  if (Option.isNone(decoded)) throw new ErasureUnavailable({ cause: Option.none() });
 
   return decoded.value;
 };
@@ -27,7 +27,7 @@ const decode = <Value extends Schema.ConstraintDecoder<unknown>>(
 export const checkRegistryKey = (key: string): void => {
   if (key === generationKey) return;
 
-  if (!key.startsWith(casesPrefix)) throw new ErasureUnavailable();
+  if (!key.startsWith(casesPrefix)) throw new ErasureUnavailable({ cause: Option.none() });
   decode(ErasureReference, key.slice(casesPrefix.length));
 };
 
@@ -35,7 +35,9 @@ export const checkRegistryValue = (input: Readonly<{ key: string; value: string 
   const { key, value } = input;
 
   if (key === generationKey) {
-    if (encoder.encode(value).byteLength > maximumGenerationBytes) throw new ErasureUnavailable();
+    if (encoder.encode(value).byteLength > maximumGenerationBytes) {
+      throw new ErasureUnavailable({ cause: Option.none() });
+    }
 
     if (value.startsWith("publishing:")) {
       decode(ErasureReference, value.slice("publishing:".length));
@@ -46,8 +48,13 @@ export const checkRegistryValue = (input: Readonly<{ key: string; value: string 
     return;
   }
 
-  if (encoder.encode(value).byteLength > maximumCaseBytes) throw new ErasureUnavailable();
+  if (encoder.encode(value).byteLength > maximumCaseBytes) {
+    throw new ErasureUnavailable({ cause: Option.none() });
+  }
+
   const record = decode(Schema.fromJsonString(RecoveryCase), value);
 
-  if (key !== `${casesPrefix}${record.reference}`) throw new ErasureUnavailable();
+  if (key !== `${casesPrefix}${record.reference}`) {
+    throw new ErasureUnavailable({ cause: Option.none() });
+  }
 };

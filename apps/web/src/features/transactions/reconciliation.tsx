@@ -196,9 +196,9 @@ const feedback = {
   ],
 } as const;
 
-const useReconciliationActions = (
-  props: Props
-): Readonly<{ recover: () => void; confirm: () => void }> => {
+type ReconciliationCommands = Readonly<{ recover: () => void; confirm: () => void }>;
+
+const useReconciliationActions = (props: Props): ReconciliationCommands => {
   const [command] = useState(() => makeCommand(props.apiClient));
   const submit = useAtomSet(command);
   const admission = useRef(false);
@@ -216,7 +216,7 @@ const useReconciliationActions = (
         props.onMode(
           data.reconciliation.kind === "linked"
             ? { ...mode, pair: data.reconciliation, sources: data.sources, status: "review" }
-            : { ...mode, status: "separate", original: data }
+            : { ...mode, status: "separate", separated: Option.some(data) }
         );
       },
       missing: () => {
@@ -294,7 +294,7 @@ const ReconciliationActions = (
 const SuccessActions = (props: Props): JSX.Element => {
   const original =
     props.mode.status === "separate"
-      ? props.mode.original
+      ? Option.getOrUndefined(props.mode.separated)
       : [props.mode.pair.firstTransaction, props.mode.pair.secondTransaction].find(
           (transaction) => transaction.id === props.selectedId
         );

@@ -2,7 +2,7 @@ import { type BudgetWriteContext, useBudgetWriteLifetime } from "./write-lifetim
 import { budgetStatusQuery } from "./queries";
 import { workspaceCategoriesQuery } from "@/transport/workspace-query";
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
-import { BigDecimal, Cause, Effect, Exit, Option, Predicate, Schema } from "effect";
+import { BigDecimal, Cause, Data, Effect, Exit, Option, Predicate, Schema } from "effect";
 import { type Atom, Reactivity } from "effect/reactivity";
 import { useRef, useState } from "react";
 import { type CanonicalInput, Currency, type FidyClient } from "@/transport/client";
@@ -19,9 +19,15 @@ import {
 } from "./model";
 import type { BudgetStatus, Category, CurrentUser } from "./presentation";
 
-type BudgetMonth =
-  | Readonly<{ _tag: "Loading" | "Failure"; waiting: boolean; refresh: () => void }>
-  | Readonly<{ _tag: "Ready"; stale: boolean; waiting: boolean; workspace: WorkspaceProps }>;
+type PendingMonth = { readonly waiting: boolean; readonly refresh: () => void };
+
+export type BudgetMonth = Data.TaggedEnum<{
+  Loading: PendingMonth;
+  Failure: PendingMonth;
+  Ready: { readonly stale: boolean; readonly waiting: boolean; readonly workspace: WorkspaceProps };
+}>;
+
+export const BudgetMonth = Data.taggedEnum<BudgetMonth>();
 
 type WriteOutcome = "saved" | "failed" | "uncertain";
 
@@ -100,15 +106,10 @@ const makeBudgetWrite = (
 
         return "saved" as const;
       }).pipe(
-        Effect.catch((failure) =>
-          Effect.succeed(
-            Predicate.isTagged(failure, "ValidationFailed") ||
-              Predicate.isTagged(failure, "NotFound") ||
-              Predicate.isTagged(failure, "ResourceLimited")
-              ? ("failed" as const)
-              : ("uncertain" as const)
-          )
+        Effect.catchTag(["ValidationFailed", "NotFound", "ResourceLimited"], () =>
+          Effect.succeed("failed" as const)
         ),
+        Effect.orElseSucceed(() => "uncertain" as const),
         Effect.catchCause((cause) =>
           Cause.hasInterruptsOnly(cause) ? Effect.interrupt : Effect.succeed("uncertain" as const)
         ),
@@ -130,15 +131,18 @@ type MonthInput = Readonly<{
 
 type MonthData = Omit<WorkspaceProps, "editing">;
 
-type MonthRead =
-  | Readonly<{ _tag: "Loading" | "Failure"; waiting: boolean; refresh: () => void }>
-  | Readonly<{
-      _tag: "Ready";
-      stale: boolean;
-      waiting: boolean;
-      refresh: () => void;
-      data: MonthData;
-    }>;
+type MonthRead = Data.TaggedEnum<{
+  Loading: PendingMonth;
+  Failure: PendingMonth;
+  Ready: {
+    readonly stale: boolean;
+    readonly waiting: boolean;
+    readonly refresh: () => void;
+    readonly data: MonthData;
+  };
+}>;
+
+const MonthRead = Data.taggedEnum<MonthRead>();
 
 const useMonthQueries = ({ apiClient, user, month }: MonthInput): MonthRead => {
   const [report] = useState(() => budgetStatusQuery({ apiClient, user, month }));
@@ -156,18 +160,17 @@ const useMonthQueries = ({ apiClient, user, month }: MonthInput): MonthRead => {
   const states = [reportState, categoryState];
   const waiting = states.some((state) => state.waiting);
 
-  if (states.some((state) => state._tag === "Failure")) {
-    return { _tag: "Failure", waiting, refresh };
+  if (states.some(Predicate.isTagged("Failure"))) {
+    return MonthRead.Failure({ waiting, refresh });
   }
 
-  if (reportState._tag !== "Ready" || categoryState._tag !== "Ready") {
-    return { _tag: "Loading", waiting, refresh };
+  if (!Predicate.isTagged(reportState, "Ready") || !Predicate.isTagged(categoryState, "Ready")) {
+    return MonthRead.Loading({ waiting, refresh });
   }
 
   const stale = [reportState.refreshFailure, categoryState.refreshFailure].some(Option.isSome);
 
-  return {
-    _tag: "Ready",
+  return MonthRead.Ready({
     stale,
     waiting,
     refresh,
@@ -178,7 +181,7 @@ const useMonthQueries = ({ apiClient, user, month }: MonthInput): MonthRead => {
       categories: categoryState.value.data,
       budgets: reportState.value.data.budgets,
     },
-  };
+  });
 };
 
 type BudgetWrites = Pick<
@@ -638,13 +641,18 @@ const currentTarget = (draft: BudgetDraft, data: MonthData): Option.Option<Budge
   });
 };
 
-const inlineRowEdit = (data: MonthData, status: BudgetStatus, amount: string): BudgetEdit => ({
-  target: rowDraft({ status, categories: data.categories }),
-  amount,
-  currency: status.budget.cap.currency,
-  groupCurrency: Option.none(),
-  groupName: groupFor({ status, categories: data.categories }),
-});
+const inlineRowEdit = (
+  data: MonthData,
+  status: BudgetStatus,
+  amount: string
+): Option.Option<BudgetEdit> =>
+  Option.map(rowDraft({ status, categories: data.categories }), (target) => ({
+    target,
+    amount,
+    currency: status.budget.cap.currency,
+    groupCurrency: Option.none(),
+    groupName: groupFor({ status, categories: data.categories }),
+  }));
 
 const budgetRowEditing = (
   data: MonthData,
@@ -675,14 +683,15 @@ const budgetRowEditing = (
             ? edit.amount
             : BigDecimal.format(status.budget.cap.amount),
       }),
-    changeRow: (status, amount) => writes.changeRow(inlineRowEdit(data, status, amount)),
-    saveRow: (status, amount) => {
-      const edit = inlineRowEdit(data, status, amount);
-
-      if (!inlineMatchesSaved({ inlineDraft: Option.some(edit), data: Option.some(data) })) {
-        writes.write(edit);
-      }
-    },
+    changeRow: (status, amount) =>
+      Option.map(inlineRowEdit(data, status, amount), writes.changeRow),
+    saveRow: (status, amount) =>
+      inlineRowEdit(data, status, amount).pipe(
+        Option.filter(
+          (edit) => !inlineMatchesSaved({ inlineDraft: Option.some(edit), data: Option.some(data) })
+        ),
+        Option.map(writes.write)
+      ),
   };
 };
 
@@ -711,27 +720,31 @@ const budgetEditing = (data: MonthData, writes: BudgetWrites): BudgetEditing => 
       groupCategoryIds: Option.none(),
     }),
   configureCategory: (status: BudgetStatus) =>
-    writes.openEditor(rowDraft({ status, categories: data.categories })),
+    Option.map(rowDraft({ status, categories: data.categories }), writes.openEditor),
   configureGroup: (group: string) => {
     const statuses = data.report.statuses.filter(
       (status) => groupFor({ status, categories: data.categories }) === group
     );
 
-    const first = statuses[0];
-
-    if (first !== undefined) {
-      writes.openEditor({
-        ...rowDraft({ status: first, categories: data.categories }),
-        groupCategoryIds: Option.some(statuses.map((status) => status.budget.categoryId)),
-      });
-    }
+    Option.fromUndefinedOr(statuses[0]).pipe(
+      Option.flatMap((first) => rowDraft({ status: first, categories: data.categories })),
+      Option.map((draft) =>
+        writes.openEditor({
+          ...draft,
+          groupCategoryIds: Option.some(statuses.map((status) => status.budget.categoryId)),
+        })
+      )
+    );
   },
   freezePlan: () => {
     const first = data.report.statuses[0];
 
-    if (first !== undefined) {
-      writes.write(inlineRowEdit(data, first, BigDecimal.format(first.budget.cap.amount)));
-    }
+    Option.fromUndefinedOr(first).pipe(
+      Option.flatMap((status) =>
+        inlineRowEdit(data, status, BigDecimal.format(status.budget.cap.amount))
+      ),
+      Option.map(writes.write)
+    );
   },
   rowKey: (status: BudgetStatus) =>
     `${status.budget.id}:${BigDecimal.format(status.budget.cap.amount)}:${writes.refreshVersion}`,
@@ -740,19 +753,23 @@ const budgetEditing = (data: MonthData, writes: BudgetWrites): BudgetEditing => 
 export const useMonthlyBudgets = (input: MonthInput): BudgetMonth => {
   const reads = useMonthQueries(input);
 
+  const ready = Option.liftPredicate(reads, MonthRead.$is("Ready"));
+
   const writes = useBudgetWrites({
     ...input,
-    editable: input.profileCurrent && reads._tag === "Ready" && !reads.stale && !reads.waiting,
+    editable: input.profileCurrent && Option.exists(ready, (read) => !read.stale && !read.waiting),
     refreshQueries: reads.refresh,
-    data: reads._tag === "Ready" ? Option.some(reads.data) : Option.none(),
+    data: Option.map(ready, (read) => read.data),
   });
 
-  if (reads._tag !== "Ready") return { ...reads, refresh: writes.refresh };
-
-  return {
-    _tag: "Ready",
-    stale: reads.stale,
-    waiting: reads.waiting,
-    workspace: { ...reads.data, editing: budgetEditing(reads.data, writes) },
-  };
+  return MonthRead.$match(reads, {
+    Loading: ({ waiting }) => BudgetMonth.Loading({ waiting, refresh: writes.refresh }),
+    Failure: ({ waiting }) => BudgetMonth.Failure({ waiting, refresh: writes.refresh }),
+    Ready: (read) =>
+      BudgetMonth.Ready({
+        stale: read.stale,
+        waiting: read.waiting,
+        workspace: { ...read.data, editing: budgetEditing(read.data, writes) },
+      }),
+  });
 };

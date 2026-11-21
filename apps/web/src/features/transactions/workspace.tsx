@@ -12,7 +12,7 @@ import type { JSX, ReactNode, RefCallback } from "react";
 import { observeContinuation } from "./scroll-continuation";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { FilterHorizontalIcon } from "@hugeicons/core-free-icons";
-import { Array, DateTime, Option } from "effect";
+import { Array, type Data, DateTime, Match, Option, Predicate } from "effect";
 import { Button } from "@/ui/components/button";
 import { SelectionScopeDialog } from "@/ui/components/selection-scope-dialog";
 import { SelectionSummary } from "@/ui/components/selection-summary";
@@ -33,7 +33,13 @@ import {
 } from "./view-state";
 import { InlineTransactionCategory } from "./inline-category";
 import { TransactionLedger } from "./ledger";
-import { type TransactionPanel, reconciliationFinished, reconciliationLocked } from "./panel-state";
+import {
+  BulkSelection,
+  DetailMode,
+  TransactionPanel,
+  reconciliationFinished,
+  reconciliationLocked,
+} from "./panel-state";
 import type { HistoryState } from "./history";
 import {
   type Category,
@@ -160,24 +166,18 @@ const WorkspaceToolbar = ({
   </div>
 );
 
-const panelLocked = (panel: TransactionPanel): boolean => {
-  switch (panel._tag) {
-    case "Bulk":
-      return false;
-    case "Capture":
-      return panel.status === "saving";
-    case "Detail":
-      if (panel.mode._tag === "Deleting") return panel.mode.status !== "idle";
-
-      if (panel.mode._tag === "Reconciling") {
-        return reconciliationLocked(panel.mode);
-      }
-
-      return false;
-    case "Summary":
-      return false;
-  }
-};
+const panelLocked: (panel: TransactionPanel) => boolean = TransactionPanel.$match({
+  Bulk: () => false,
+  Capture: ({ status }) => status === "saving",
+  Detail: ({ mode }) =>
+    Match.valueTags(mode, {
+      Deleting: ({ status }) => status !== "idle",
+      Reconciling: (reconciling) => reconciliationLocked(reconciling),
+      Viewing: () => false,
+      Editing: () => false,
+    }),
+  Summary: () => false,
+});
 
 type PanelProps = WorkspaceProps &
   Readonly<{
@@ -201,7 +201,7 @@ const CapturePanel = ({ onPanel, renderPanel, ...props }: PanelProps): JSX.Eleme
       }))}
       editable={props.editable}
       waiting={Option.exists(corrections, (owner) => owner.status === "recovering")}
-      onClose={() => onPanel({ _tag: "Summary" })}
+      onClose={() => onPanel(TransactionPanel.Summary())}
       onRefresh={props.onRefresh}
       onCreated={(transaction) => {
         toast.success("Transacción registrada", {
@@ -217,11 +217,11 @@ const closeTransactionPanel = (
   onPanel: (panel: TransactionPanel) => void,
   onRefresh: () => void
 ): void => {
-  onPanel({ _tag: "Summary" });
+  onPanel(TransactionPanel.Summary());
 
   if (
-    panel._tag === "Detail" &&
-    panel.mode._tag === "Reconciling" &&
+    Predicate.isTagged(panel, "Detail") &&
+    Predicate.isTagged(panel.mode, "Reconciling") &&
     reconciliationFinished(panel.mode)
   ) {
     onRefresh();
@@ -235,7 +235,7 @@ const DetailPanel = ({
   ...props
 }: PanelProps &
   Readonly<{
-    panel: Extract<TransactionPanel, { _tag: "Detail" }>;
+    panel: Data.TaggedEnum.Value<TransactionPanel, "Detail">;
   }>): JSX.Element => {
   const transaction = Option.fromNullishOr(
     props.transactions.find((record) => record.id === panel.id)
@@ -267,7 +267,7 @@ const DetailPanel = ({
       inspectable={props.readOnly !== true}
       fromReview={Option.contains(props.locate, panel.id) && props.dateFilter.value === ""}
       mode={panel.mode}
-      onMode={(mode) => onPanel({ ...panel, mode })}
+      onMode={(mode) => onPanel(TransactionPanel.Detail({ id: panel.id, mode }))}
       onClose={close}
       onRefresh={props.onRefresh}
       onDeleted={() => {
@@ -283,7 +283,9 @@ const beginBulkEditing = (
   onPanel: (panel: TransactionPanel) => void
 ): void => {
   if (Array.isReadonlyArrayNonEmpty(selected)) {
-    onPanel({ _tag: "Bulk", stage: "editing", transactions: selected });
+    onPanel(
+      TransactionPanel.Bulk({ selection: BulkSelection.Editing({ transactions: selected }) })
+    );
   }
 };
 
@@ -309,13 +311,13 @@ const SelectedTransactions = ({
 );
 
 const BulkPanel = (
-  props: PanelProps & Readonly<{ panel: Extract<TransactionPanel, { _tag: "Bulk" }> }>
+  props: PanelProps & Readonly<{ panel: Data.TaggedEnum.Value<TransactionPanel, "Bulk"> }>
 ): JSX.Element => {
-  const { panel } = props;
-  const close = (): void => props.onPanel({ _tag: "Summary" });
+  const { selection } = props.panel;
+  const close = (): void => props.onPanel(TransactionPanel.Summary());
 
-  if (panel.stage === "selecting") {
-    const selectedIds = new Set(panel.ids);
+  if (Predicate.isTagged(selection, "Selecting")) {
+    const selectedIds = new Set(selection.ids);
     const selected = props.transactions.filter((record) => selectedIds.has(record.id));
 
     return props.renderPanel(
@@ -341,7 +343,7 @@ const BulkPanel = (
     <BulkTransactionCorrection
       renderForm={props.renderPanel}
       transactions={Array.map(
-        panel.transactions,
+        selection.transactions,
         (selected) => props.transactions.find((record) => record.id === selected.id) ?? selected
       )}
       categories={props.categories}
@@ -366,7 +368,7 @@ const scopeLabel = (props: WorkspaceProps): string => {
 };
 
 const WorkspacePanel = (props: PanelProps): JSX.Element => {
-  if (props.panel._tag === "Bulk") {
+  if (Predicate.isTagged(props.panel, "Bulk")) {
     return (
       <Suspense fallback={<PendingRead label="Cargando edición" />}>
         <BulkPanel {...props} panel={props.panel} />
@@ -374,7 +376,7 @@ const WorkspacePanel = (props: PanelProps): JSX.Element => {
     );
   }
 
-  if (props.panel._tag === "Capture") {
+  if (Predicate.isTagged(props.panel, "Capture")) {
     return (
       <Suspense fallback={<PendingRead label="Cargando formulario" />}>
         <CapturePanel {...props} />
@@ -382,7 +384,7 @@ const WorkspacePanel = (props: PanelProps): JSX.Element => {
     );
   }
 
-  if (props.panel._tag === "Detail") {
+  if (Predicate.isTagged(props.panel, "Detail")) {
     return (
       <Suspense fallback={<PendingRead label="Cargando detalle" />}>
         <DetailPanel {...props} panel={props.panel} />
@@ -536,21 +538,31 @@ const TransactionFilters = ({
   </>
 );
 
-const panelEditing = (panel: TransactionPanel): boolean => {
-  if (panel._tag === "Capture") return true;
+const panelEditing: (panel: TransactionPanel) => boolean = TransactionPanel.$match({
+  Capture: () => true,
+  Bulk: ({ selection }) => Predicate.isTagged(selection, "Editing"),
+  Detail: ({ mode }) => !Predicate.isTagged(mode, "Viewing"),
+  Summary: () => false,
+});
 
-  if (panel._tag === "Bulk") return panel.stage === "editing";
+const bulkIds: (panel: TransactionPanel) => ReadonlyArray<string> = TransactionPanel.$match({
+  Bulk: ({ selection }) =>
+    BulkSelection.$match(selection, {
+      Selecting: ({ ids }) => ids,
+      Editing: ({ transactions }) => transactions.map((record) => record.id),
+    }),
+  Summary: () => [],
+  Capture: () => [],
+  Detail: () => [],
+});
 
-  return panel._tag === "Detail" && panel.mode._tag !== "Viewing";
-};
+const bulkSelecting = (panel: TransactionPanel): Option.Option<ReadonlyArray<string>> =>
+  Predicate.isTagged(panel, "Bulk") && Predicate.isTagged(panel.selection, "Selecting")
+    ? Option.some(panel.selection.ids)
+    : Option.none();
 
-const bulkIds = (panel: TransactionPanel): ReadonlyArray<string> => {
-  if (panel._tag !== "Bulk") return [];
-
-  if (panel.stage === "selecting") return panel.ids;
-
-  return panel.transactions.map((record) => record.id);
-};
+const selectingPanel = (ids: ReadonlyArray<string>): TransactionPanel =>
+  TransactionPanel.Bulk({ selection: BulkSelection.Selecting({ ids }) });
 
 const selectedTransactionItems = (
   props: WorkspaceProps,
@@ -597,12 +609,12 @@ const TransactionSelectionSummary = ({
       clearFocusId="transaction-type-filter"
       items={selectedTransactionItems(props, selected, visible)}
       label={`${ids.length} seleccionadas`}
-      disabled={disabled || panel._tag !== "Bulk" || panel.stage !== "selecting"}
-      onClear={() => onPanel({ _tag: "Bulk", ids: [], stage: "selecting" })}
+      disabled={disabled || Option.isNone(bulkSelecting(panel))}
+      onClear={() => onPanel(selectingPanel([]))}
       onRemove={(id) => {
-        if (panel._tag === "Bulk" && panel.stage === "selecting") {
-          onPanel({ ...panel, ids: panel.ids.filter((item) => item !== id) });
-        }
+        Option.map(bulkSelecting(panel), (current) =>
+          onPanel(selectingPanel(current.filter((item) => item !== id)))
+        );
       }}
     />
   );
@@ -621,23 +633,21 @@ const bulkSelection = ({
 
   return {
     summary: <TransactionSelectionSummary {...{ panel, onPanel, props, visible, disabled }} />,
-    active: panel._tag === "Bulk",
+    active: Predicate.isTagged(panel, "Bulk"),
     ids,
     allSelected: visible.every((record) => selected.has(record.id)),
     onSelectAll: () => {
-      if (panel._tag !== "Bulk" || panel.stage !== "selecting") return;
-      onPanel({
-        ...panel,
-        ids: [...new Set([...panel.ids, ...visible.map((record) => record.id)])],
-      });
+      Option.map(bulkSelecting(panel), (current) =>
+        onPanel(selectingPanel([...new Set([...current, ...visible.map((record) => record.id)])]))
+      );
     },
     onClear: () => {
-      if (panel._tag !== "Bulk" || panel.stage !== "selecting") return;
+      if (Option.isNone(bulkSelecting(panel))) return;
       document.getElementById("transaction-type-filter")?.focus();
-      onPanel({ ...panel, ids: [] });
+      onPanel(selectingPanel([]));
     },
     onContinue: () => {
-      if (panel._tag === "Bulk" && panel.stage === "selecting") {
+      if (Option.isSome(bulkSelecting(panel))) {
         beginBulkEditing(
           transactions.filter((record) => selected.has(record.id)),
           onPanel
@@ -645,35 +655,31 @@ const bulkSelection = ({
       }
     },
     onToggle: (id) => {
-      if (panel._tag !== "Bulk" || panel.stage !== "selecting") return;
+      const current = bulkSelecting(panel);
 
-      if (selected.has(id)) {
-        onPanel({ ...panel, ids: panel.ids.filter((item) => item !== id) });
-      } else {
-        onPanel({ ...panel, ids: [...panel.ids, id] });
-      }
+      if (Option.isNone(current)) return;
+
+      onPanel(
+        selectingPanel(
+          selected.has(id) ? current.value.filter((item) => item !== id) : [...current.value, id]
+        )
+      );
     },
   };
 };
 
-const panelTitle = (panel: TransactionPanel): string => {
-  if (panel._tag === "Summary") return "Resumen";
-
-  if (panel._tag === "Capture") return "Registrar transacción";
-
-  if (panel._tag === "Bulk") return "Editar transacciones";
-
-  return "Detalle de transacción";
-};
-
-const detailPanel = (id: string, editable: boolean): TransactionPanel => ({
-  _tag: "Detail",
-  id,
-  mode: editable ? { _tag: "Editing" } : { _tag: "Viewing" },
+const panelTitle: (panel: TransactionPanel) => string = TransactionPanel.$match({
+  Summary: () => "Resumen",
+  Capture: () => "Registrar transacción",
+  Bulk: () => "Editar transacciones",
+  Detail: () => "Detalle de transacción",
 });
 
+const detailPanel = (id: string, editable: boolean): TransactionPanel =>
+  TransactionPanel.Detail({ id, mode: editable ? DetailMode.Editing() : DetailMode.Viewing() });
+
 const selectionPanel = (panel: TransactionPanel): TransactionPanel =>
-  panel._tag === "Bulk" ? { _tag: "Summary" } : { _tag: "Bulk", ids: [], stage: "selecting" };
+  Predicate.isTagged(panel, "Bulk") ? TransactionPanel.Summary() : selectingPanel([]);
 
 const renderCategoryCell = (
   row: React.ComponentProps<typeof InlineTransactionCategory>["row"],
@@ -693,9 +699,9 @@ const renderCategoryCell = (
 
 const ledgerDisabled = (panel: TransactionPanel): boolean =>
   panelLocked(panel) ||
-  (panelEditing(panel) && panel._tag !== "Detail") ||
-  (panel._tag === "Detail" &&
-    (panel.mode._tag === "Deleting" || panel.mode._tag === "Reconciling"));
+  (panelEditing(panel) && !Predicate.isTagged(panel, "Detail")) ||
+  (Predicate.isTagged(panel, "Detail") &&
+    (Predicate.isTagged(panel.mode, "Deleting") || Predicate.isTagged(panel.mode, "Reconciling")));
 
 const WorkspaceContext = ({
   panel,
@@ -709,12 +715,14 @@ const WorkspaceContext = ({
   busy: boolean;
 }>): JSX.Element => (
   <TransactionContextPanel
-    active={panel._tag !== "Summary" && !(panel._tag === "Bulk" && panel.stage === "selecting")}
-    identity={panel._tag === "Detail" ? `${panel.id}:${panel.mode._tag}` : panel._tag}
+    active={!Predicate.isTagged(panel, "Summary") && Option.isNone(bulkSelecting(panel))}
+    identity={Predicate.isTagged(panel, "Detail") ? `${panel.id}:${panel.mode._tag}` : panel._tag}
     locked={panelLocked(panel) || busy}
     onClose={onClose}
     title={panelTitle(panel)}
-    returnFocusId={panel._tag === "Detail" ? Option.some(`transaction-${panel.id}`) : Option.none()}
+    returnFocusId={
+      Predicate.isTagged(panel, "Detail") ? Option.some(`transaction-${panel.id}`) : Option.none()
+    }
   >
     {children}
   </TransactionContextPanel>
@@ -792,7 +800,7 @@ const WorkspaceContent = ({
           locate={props.locate}
           rows={rows}
           locale={props.currentUser.locale}
-          selected={panel._tag === "Detail" ? Option.some(panel.id) : Option.none()}
+          selected={Predicate.isTagged(panel, "Detail") ? Option.some(panel.id) : Option.none()}
           disabled={ledgerDisabled(panel) || correctionBusy}
           renderCategory={(row, disabled) => renderCategoryCell(row, disabled, props)}
           onSelect={(id) => onPanel(detailPanel(id, props.editable))}
@@ -804,7 +812,7 @@ const WorkspaceContent = ({
           {...props}
           panel={panel}
           onPanel={onPanel}
-          transactions={panel._tag === "Summary" ? visible : props.transactions}
+          transactions={Predicate.isTagged(panel, "Summary") ? visible : props.transactions}
           renderPanel={(content) => content}
         />
       </WorkspaceContext>
@@ -910,7 +918,7 @@ const CaptureNotice = ({
   const capture = use(ManualCaptureContext);
 
   if (
-    panel._tag === "Capture" ||
+    Predicate.isTagged(panel, "Capture") ||
     !Option.exists(capture, (owner) => Option.isSome(owner.attempt))
   ) {
     return <></>;
@@ -919,7 +927,10 @@ const CaptureNotice = ({
   return (
     <div className="flex flex-wrap items-center gap-3 px-4 py-2">
       <p>Hay un borrador por revisar. El guardado original sigue sin confirmar.</p>
-      <Button variant="outline" onClick={() => onPanel({ _tag: "Capture", status: "uncertain" })}>
+      <Button
+        variant="outline"
+        onClick={() => onPanel(TransactionPanel.Capture({ status: "uncertain" }))}
+      >
         Ver borrador
       </Button>
     </div>
@@ -930,23 +941,26 @@ const capturePanelStatus = (
   panel: TransactionPanel,
   capture: React.ContextType<typeof ManualCaptureContext>
 ): TransactionPanel => {
-  if (panel._tag !== "Capture" || Option.isNone(capture)) return panel;
+  if (!Predicate.isTagged(panel, "Capture") || Option.isNone(capture)) return panel;
 
-  if (capture.value.saving) return { _tag: "Capture", status: "saving" };
+  if (capture.value.saving) return TransactionPanel.Capture({ status: "saving" });
 
-  return { _tag: "Capture", status: capture.value.uncertain ? "uncertain" : "idle" };
+  return TransactionPanel.Capture({ status: capture.value.uncertain ? "uncertain" : "idle" });
 };
 
-const useWorkspacePanel = (
-  props: WorkspaceProps
-): Readonly<{ panel: TransactionPanel; onPanel: (panel: TransactionPanel) => void }> => {
+type WorkspacePanelState = Readonly<{
+  panel: TransactionPanel;
+  onPanel: (panel: TransactionPanel) => void;
+}>;
+
+const useWorkspacePanel = (props: WorkspaceProps): WorkspacePanelState => {
   const generation = props.generation;
   const capture = use(ManualCaptureContext);
   const corrections = use(TransactionCorrectionContext);
 
   const defaultPanel: TransactionPanel = Option.exists(capture, (owner) => owner.uncertain)
-    ? { _tag: "Capture", status: "uncertain" }
-    : { _tag: "Summary" };
+    ? TransactionPanel.Capture({ status: "uncertain" })
+    : TransactionPanel.Summary();
 
   const [interaction, setInteraction] = useState<
     Readonly<{ generation: number; panel: Option.Option<TransactionPanel> }>
@@ -964,8 +978,8 @@ const useWorkspacePanel = (
   );
 
   const initialPanel: TransactionPanel =
-    defaultPanel._tag === "Summary" && Option.isSome(located)
-      ? { _tag: "Detail", id: located.value, mode: { _tag: "Viewing" } }
+    Predicate.isTagged(defaultPanel, "Summary") && Option.isSome(located)
+      ? TransactionPanel.Detail({ id: located.value, mode: DetailMode.Viewing() })
       : defaultPanel;
 
   const panel: TransactionPanel =
@@ -975,9 +989,13 @@ const useWorkspacePanel = (
 
   const onPanel = (next: TransactionPanel): void => {
     if (
-      panel._tag === "Detail" &&
-      panel.mode._tag === "Deleting" &&
-      (next._tag !== "Detail" || next.mode._tag !== "Deleting" || next.id !== panel.id)
+      Predicate.isTagged(panel, "Detail") &&
+      Predicate.isTagged(panel.mode, "Deleting") &&
+      !(
+        Predicate.isTagged(next, "Detail") &&
+        Predicate.isTagged(next.mode, "Deleting") &&
+        next.id === panel.id
+      )
     ) {
       Option.map(corrections, (owner) => owner.cancelDeletion());
     }
@@ -990,11 +1008,13 @@ const useWorkspacePanel = (
 
 type PeriodChoice = Readonly<{ kind: "date" | "month"; value: string }>;
 
+type PeriodSelection = Readonly<{ props: WorkspaceProps; confirmation: JSX.Element }>;
+
 const usePeriodSelection = (
   source: WorkspaceProps,
   panel: TransactionPanel,
   onPanel: (panel: TransactionPanel) => void
-): Readonly<{ props: WorkspaceProps; confirmation: JSX.Element }> => {
+): PeriodSelection => {
   const [pending, setPending] = useState<Option.Option<PeriodChoice>>(Option.none);
   const count = bulkIds(panel).length;
 
@@ -1036,7 +1056,7 @@ const usePeriodSelection = (
         onKeep={() => setPending(Option.none())}
         onDiscard={() => {
           if (Option.isNone(pending)) return;
-          onPanel({ _tag: "Summary" });
+          onPanel(TransactionPanel.Summary());
           apply(pending.value);
           setPending(Option.none());
         }}
@@ -1087,11 +1107,11 @@ export const TransactionWorkspace = (source: WorkspaceProps): JSX.Element => {
     <>
       {confirmation}
       <Toaster position="bottom-right" richColors />
-      <TransactionSurface panelOpen={panelEditing(activePanel) || activePanel._tag === "Detail"}>
+      <TransactionSurface panelOpen={editing || Predicate.isTagged(activePanel, "Detail")}>
         <WorkspaceHeader
           disabled={editing || (!props.editable && !props.readOnly)}
           readOnly={props.readOnly}
-          onCapture={() => onPanel({ _tag: "Capture", status: "idle" })}
+          onCapture={() => onPanel(TransactionPanel.Capture({ status: "idle" }))}
         />
         <WorkspacePeriod props={props} disabled={editing || (!props.editable && !props.readOnly)} />
         {props.queryNotice}

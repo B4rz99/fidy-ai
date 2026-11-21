@@ -11,7 +11,9 @@ const completion = (content: string): Response =>
     usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
   });
 
-const fixtureTool = (mode: string): { name: string; arguments: string } => {
+type FixtureTool = Readonly<{ name: string; arguments: string }>;
+
+const fixtureTool = (mode: string): FixtureTool => {
   const id = "22460000-0000-4000-8000-000000000020";
 
   if (mode === "/batch") {

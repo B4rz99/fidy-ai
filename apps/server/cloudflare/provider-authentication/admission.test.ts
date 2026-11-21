@@ -1,11 +1,30 @@
 import publicWorker from "../public-worker";
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Clock, Effect, Schema } from "effect";
+import { Array as Arr, Clock, Effect, Schema } from "effect";
+import type { Miniflare, Response } from "miniflare";
 import { expect } from "vitest";
 import { native, nativeBrowserPlatform } from "../user-store.test-fixture";
 import { browser } from "../browser-bootstrap.test-fixture";
 import { webSignupDisclosure } from "../../src/shell/consent/operations";
+
+const drain = (response: Pick<Response, "arrayBuffer">): Effect.Effect<ArrayBuffer> =>
+  native(() => response.arrayBuffer());
+
+const pollStatus =
+  (
+    runtime: Miniflare,
+    context: ReturnType<typeof browser>,
+    payload: string
+  ): ((index: number) => Effect.Effect<Response>) =>
+  (index) =>
+    native(() =>
+      runtime.dispatchFetch(context.api + "/web/providers/google/status", {
+        method: "POST",
+        headers: { ...context.headers, "CF-Connecting-IP": "192.0.2." + index },
+        body: payload,
+      })
+    ).pipe(Effect.tap(drain));
 
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
@@ -103,7 +122,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           results.map((response) => response.status).sort((left, right) => left - right)
         ).toEqual([200, 429]);
 
-        for (const response of results) yield* native(() => response.arrayBuffer());
+        yield* Effect.forEach(results, drain, { discard: true });
         expect(
           yield* native(() =>
             directory.exec("SELECT count(*) AS n FROM bootstrap_admissions WHERE scope='expired'")
@@ -126,18 +145,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const proof = yield* context.pair;
         const payload = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(proof);
 
-        for (let index = 0; index < 6; index++) {
-          const response = yield* native(() =>
-            runtime.dispatchFetch(context.api + "/web/providers/google/status", {
-              method: "POST",
-              headers: { ...context.headers, "CF-Connecting-IP": "192.0.2." + index },
-              body: payload,
-            })
-          );
+        const polls = yield* Effect.forEach(Arr.range(0, 5), pollStatus(runtime, context, payload));
 
-          expect(response.status).toBe(index === 5 ? 429 : 400);
-          yield* native(() => response.arrayBuffer());
-        }
+        expect(polls.map(({ status }) => status)).toEqual([400, 400, 400, 400, 400, 429]);
 
         const headers = new Headers(context.headers);
         headers.set("CF-Connecting-IP", "");

@@ -1,4 +1,4 @@
-import { DateTime, Effect, Schema } from "effect";
+import { DateTime, Effect, Option, Schema } from "effect";
 import { Base64Url } from "effect/encoding";
 import { expect } from "vitest";
 import { oauthIssuer, oauthPaths, oauthResource } from "../../src/shell/oauth-agents/contract";
@@ -102,7 +102,7 @@ const approved = Effect.fn(function* (
           cookie: "__Host-fidy_session=" + subject.bearer,
           "Fidy-Session-Binding": subject.session,
         },
-        ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+        body: payload === undefined ? null : JSON.stringify(payload),
       })
     );
 
@@ -184,13 +184,19 @@ export const nativeGrantWithScopes = Effect.fn(function* (
 
 export const nativeGrant = nativeGrantWithScopes(["read", "write"]);
 
+type ToolCall = Readonly<{ name: string; args: unknown }>;
+
+type ContinuedToolCall = ToolCall & Readonly<{ continuation: string }>;
+
+type RetriedToolCall = ToolCall & Readonly<{ retryKey: string }>;
+
 export const protocolFor =
   (
     runtime: Miniflare
   ): ((
     bearer: string,
     method: string,
-    input?: { name: string; args: unknown } & ({} | { continuation: string } | { retryKey: string })
+    input?: ToolCall | ContinuedToolCall | RetriedToolCall
   ) => NativeResponse) =>
   (bearer, method, input) => {
     const name = input?.name,
@@ -202,31 +208,34 @@ export const protocolFor =
     return native(() =>
       runtime.dispatchFetch(oauthResource, {
         method: "POST",
-        headers: {
-          "cf-connecting-ip": "192.0.2.75",
-          authorization: "Bearer " + bearer,
-          "content-type": "application/json",
-          accept: "application/json, text/event-stream",
-          "mcp-protocol-version": "2026-07-28",
-          "mcp-method": method,
-          ...(name === undefined ? {} : { "mcp-name": name }),
-        },
+        headers: [
+          ["cf-connecting-ip", "192.0.2.75"],
+          ["authorization", "Bearer " + bearer],
+          ["content-type", "application/json"],
+          ["accept", "application/json, text/event-stream"],
+          ["mcp-protocol-version", "2026-07-28"],
+          ["mcp-method", method],
+          ...Option.toArray(
+            Option.map(Option.fromUndefinedOr(name), (value): [string, string] => [
+              "mcp-name",
+              value,
+            ])
+          ),
+        ],
         body: JSON.stringify({
           jsonrpc: "2.0",
           id: 1,
           method,
           params: {
-            ...(name === undefined ? {} : { name, arguments: args }),
-            ...(continuation === undefined
-              ? {}
-              : {
-                  requestState: continuation,
-                  inputResponses: {
-                    review: { action: "accept", content: { confirm: true } },
-                  },
-                }),
+            name,
+            arguments: name === undefined ? undefined : args,
+            requestState: continuation,
+            inputResponses:
+              continuation === undefined
+                ? undefined
+                : { review: { action: "accept", content: { confirm: true } } },
             _meta: {
-              ...(retryKey === undefined ? {} : { "co.fidy/retryKey": retryKey }),
+              "co.fidy/retryKey": retryKey,
               "io.modelcontextprotocol/protocolVersion": "2026-07-28",
               "io.modelcontextprotocol/clientCapabilities": { elicitation: { form: {} } },
             },

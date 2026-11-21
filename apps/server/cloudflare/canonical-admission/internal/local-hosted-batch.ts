@@ -24,7 +24,10 @@ import { localStanding } from "./local-mutation";
 type HostedContext = Context & {
   turnId: string;
   toolCallId: string;
-  describe: (operation: string, input: Schema.Json) => Effect.Effect<Option.Option<string>>;
+  describe: (
+    operation: string,
+    input: Schema.Json
+  ) => Effect.Effect<Option.Option<string>, never, SqliteClient>;
   authorityRoot: CanonicalAuthorityRoot;
 };
 

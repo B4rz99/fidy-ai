@@ -2,7 +2,8 @@ import nativeCore, { UserStore as NativeUser } from "../core-worker";
 
 export * from "../core-worker";
 
-type Core = Parameters<typeof nativeCore.scheduled>[1] & { MONITOR_FIXTURE: string };
+type Core = Parameters<typeof nativeCore.scheduled>[1] &
+  Partial<{ WEEKLY_DELIVERY_QUEUE: Queue }> & { MONITOR_FIXTURE: string };
 
 type Owner = ConstructorParameters<typeof NativeUser>[1] & { MONITOR_FIXTURE: string };
 
@@ -31,14 +32,13 @@ export default {
     if (env.MONITOR_FIXTURE === "queue" || env.MONITOR_FIXTURE === "both") {
       delete configured.WEEKLY_DELIVERY_QUEUE;
     } else if (env.WEEKLY_DELIVERY_QUEUE !== undefined) {
-      configured.WEEKLY_DELIVERY_QUEUE = new Proxy(env.WEEKLY_DELIVERY_QUEUE, {
-        get(target, key): unknown {
-          if (key === "metrics") return metrics;
-          const value: unknown = Reflect.get(target, key);
+      const queue = env.WEEKLY_DELIVERY_QUEUE;
 
-          return typeof value === "function" ? value.bind(target) : value;
-        },
-      });
+      configured.WEEKLY_DELIVERY_QUEUE = {
+        send: queue.send.bind(queue),
+        sendBatch: queue.sendBatch.bind(queue),
+        metrics,
+      };
     }
 
     if (env.MONITOR_FIXTURE === "workflow" || env.MONITOR_FIXTURE === "both") {
@@ -70,21 +70,18 @@ export class UserStore extends NativeUser {
     if (env.MONITOR_FIXTURE === "workflow" || env.MONITOR_FIXTURE === "both") {
       Reflect.deleteProperty(config, "WEEKLY_DELIVERY_WORKFLOW");
     } else {
-      config.WEEKLY_DELIVERY_WORKFLOW = new Proxy(env.WEEKLY_DELIVERY_WORKFLOW, {
-        get(target, key): unknown {
-          if (key === "get") {
-            return (id: string): ReturnType<Workflow["get"]> => {
-              inspections.push(id);
+      const workflow = env.WEEKLY_DELIVERY_WORKFLOW;
 
-              return target.get(id);
-            };
-          }
+      config.WEEKLY_DELIVERY_WORKFLOW = {
+        get: (id: string): Promise<WorkflowInstance> => {
+          inspections.push(id);
 
-          const value: unknown = Reflect.get(target, key);
-
-          return typeof value === "function" ? value.bind(target) : value;
+          return workflow.get(id);
         },
-      });
+        create: workflow.create.bind(workflow),
+        createBatch: workflow.createBatch.bind(workflow),
+        deleteBatch: workflow.deleteBatch.bind(workflow),
+      };
     }
 
     super(state, config);

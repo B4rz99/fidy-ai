@@ -1,7 +1,7 @@
 import { PendingRead } from "@/ui/components/pending-read";
 
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
-import { Option } from "effect";
+import { Option, Predicate } from "effect";
 import { type JSX, type RefCallback, useCallback, useRef, useState } from "react";
 import type { SensitiveClipboard } from "@/browser/sensitive-clipboard";
 import type { FidyClient } from "@/transport/client";
@@ -38,7 +38,10 @@ const ResumedPATCreation = (props: CreationProps): JSX.Element => {
   const consumed = useRef(false);
   const user = presentCanonicalQuery(result);
   const [draft, setDraft] = useState<Option.Option<Option.Option<PATDraft>>>(() => Option.none());
-  const userId = user._tag === "Ready" ? Option.some(user.value.data.id) : Option.none();
+
+  const userId = Predicate.isTagged(user, "Ready")
+    ? Option.some(user.value.data.id)
+    : Option.none();
 
   const mounted = useCallback<RefCallback<HTMLElement>>(
     (node) => {
@@ -50,7 +53,7 @@ const ResumedPATCreation = (props: CreationProps): JSX.Element => {
     [userId, setDraft]
   );
 
-  if (user._tag === "Failure") {
+  if (Predicate.isTagged(user, "Failure")) {
     return (
       <div role="alert">
         <p>No pudimos comprobar tu identidad. El formulario sigue guardado en esta pestaña.</p>

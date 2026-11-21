@@ -74,7 +74,7 @@ type MonthPickerProps = Readonly<{
 }>;
 export const MonthPicker = ({ month, today, select }: MonthPickerProps): JSX.Element => {
   const [open, setOpen] = useState(false);
-  const [year, setYear] = useState(yearOf(month));
+  const [year, setYear] = useState(() => yearOf(month));
   const choose = (value: string): void => {
     setOpen(false);
     select(value);

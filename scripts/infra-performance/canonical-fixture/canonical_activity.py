@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+from urllib.error import HTTPError
 from zipfile import ZipFile
 
 from canonical_host_source import WORKFLOW_REF, protected_release_job
@@ -28,6 +29,10 @@ RECOVERY_RUN = "44662489274"
 RECOVERY_DIGEST = "6e62f659994e237a7787ea326cda069e101344bc2b40960489a93ccaf348f5e0"
 RECOVERY_REVISION = "b992abd28797606fa74fb0c7a4fda91bf13dc5a4"
 RECOVERY_RUN_HEAD = "0bb23f4d28baef7ca37e908dad32a56a0aed4d00"
+
+
+class ActivityRefused(ValueError):
+    pass
 
 
 def opened_release(reference, verifier, get=actions_get, git=git_read):
@@ -145,7 +150,7 @@ def native_canary(account, since, until, read=cloudflare):
             detail = read(path + "/instances/" + row["id"])
             if detail["status"] == "complete" and since <= timestamp(detail["end"]) < until:
                 return row["id"]
-    raise ValueError("No actual native background canary completion after the ordinary signup")
+    raise ActivityRefused("No actual native background canary completion after the ordinary signup")
 
 
 def outcomes(opening, account, end, read=query, read_canary=native_canary):
@@ -153,10 +158,13 @@ def outcomes(opening, account, end, read=query, read_canary=native_canary):
     if end <= start:
         raise ValueError("Canonical activity cannot predate opening")
     version = opening["workers"][CORE]["version"]
-    signup, = exact_events(account, version, start, end, "component=canonical-signup", SIGNUP, read)
+    signups = exact_events(account, version, start, end, "component=canonical-signup", SIGNUP, read)
+    if len(signups) != 1:
+        raise ActivityRefused(f"Expected one native provider account creation, observed {len(signups)}")
+    signup, = signups
     complete = exact_events(account, version, signup["at"], end, "component=inspection-coverage", WATCHDOG, read)
     if not complete:
-        raise ValueError("No completed native watchdog traversal was observed after canonical signup")
+        raise ActivityRefused("No completed native watchdog traversal was observed after canonical signup")
     first = min(complete, key=lambda row: row["at"])
     canary = read_canary(account, signup["at"], end)
     background = hashlib.sha256((version + "/" + first["sha256"] + "/" + canary).encode()).hexdigest()
@@ -185,6 +193,10 @@ def main():
         with (directory / "native-canonical-observations.json").open("x") as evidence:
             json.dump({"opening": opening, "activity": activity,
                        "reference": reference, "recovery": accepted_workerd_recovery()}, evidence)
+    except HTTPError as failure:
+        sys.exit(f"Cloudflare canonical activity request returned HTTP {failure.code}.")
+    except ActivityRefused as failure:
+        sys.exit(str(failure))
     except (KeyError, ValueError, OSError, subprocess.SubprocessError):
         sys.exit("Protected canonical activity could not authenticate the opening, ordinary signup or actual native recovery.")
 

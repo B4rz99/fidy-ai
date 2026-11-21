@@ -4,6 +4,7 @@ import {
   RouterProvider,
   createMemoryHistory,
   createRootRoute,
+  createRoute,
   createRouter,
 } from "@tanstack/react-router";
 import { type Cause, Effect, Layer, Option, Schema } from "effect";
@@ -18,8 +19,16 @@ import type { PlanInput } from "./model";
 import { PlanForm } from "./plan-form";
 
 const plans = [
-  { id: "24000000-0000-4000-8000-000000017231", name: "Arriendo de prueba", kind: "expense" },
-  { id: "24000000-0000-4000-8000-000000017232", name: "Ingreso de prueba", kind: "income" },
+  {
+    id: "24000000-0000-4000-8000-000000017231",
+    name: "Arriendo de prueba",
+    kind: "expense",
+  },
+  {
+    id: "24000000-0000-4000-8000-000000017232",
+    name: "Ingreso de prueba",
+    kind: "income",
+  },
 ].map(({ id, name, kind }) => ({
   id,
   pauses: [],
@@ -178,9 +187,12 @@ const withWorkspace = (
       });
 
       const registry = AtomRegistry.make();
+      const parent = createRootRoute({ component: Workspace });
 
       const router = createRouter({
-        routeTree: createRootRoute({ component: Workspace }),
+        routeTree: parent.addChildren([
+          createRoute({ getParentRoute: () => parent, path: "/app/recurring" }),
+        ]),
         context: { apiClient, sessionBinding: "recurring-feature-test" },
         history: createMemoryHistory({ initialEntries: ["/app/recurring"] }),
       });
@@ -365,7 +377,11 @@ it("explains an out-of-range twice-monthly day at its field without the card-pay
 });
 
 it("asks for two different twice-monthly days", () => {
-  const { container, onSubmit } = renderForm({ frequency: "twice-monthly", monthDays: [15, 15] });
+  const { container, onSubmit } = renderForm({
+    frequency: "twice-monthly",
+    monthDays: [15, 15],
+  });
+
   save(container);
   expect(onSubmit).not.toHaveBeenCalled();
   expect(described(document.activeElement)).toBe("Elige un día diferente del primero.");
@@ -383,7 +399,11 @@ it("identifies an end date that precedes the first date", () => {
 });
 
 it("explains the card-payment rule only for card payments that are not transfers", () => {
-  const { container, onSubmit } = renderForm({ cardPayment: true, kind: "expense" });
+  const { container, onSubmit } = renderForm({
+    cardPayment: true,
+    kind: "expense",
+  });
+
   save(container);
   expect(onSubmit).not.toHaveBeenCalled();
   expect(document.activeElement?.id).toBe("recurring-cardPayment");
@@ -400,6 +420,88 @@ it("submits a valid twice-monthly plan with its last-day choice", () => {
 
   save(container);
   expect(onSubmit).toHaveBeenCalledWith(
-    expect.objectContaining({ frequency: "twice-monthly", monthDays: [15, "last"] })
+    expect.objectContaining({
+      frequency: "twice-monthly",
+      monthDays: [15, "last"],
+    })
   );
 });
+
+const panelElement = (): HTMLElement => {
+  const panel = document.querySelector('[role="dialog"]');
+
+  if (!(panel instanceof HTMLElement)) throw new Error("Missing recurring panel");
+
+  return panel;
+};
+
+const panelInput = (id: string): HTMLInputElement => {
+  const input = panelElement().querySelector(`#${id}`);
+
+  if (!(input instanceof HTMLInputElement)) throw new Error(`Missing ${id}`);
+
+  return input;
+};
+
+const nameField = (): HTMLInputElement => panelInput("recurring-name");
+
+const expectBlankCreation = (): Promise<void> =>
+  reactAssertion(() => {
+    expect(nameField().value).toBe("");
+    expect(panelElement().textContent).not.toContain("Borrador sin guardar");
+  });
+
+const openOccurrence = (container: HTMLElement): Promise<void> =>
+  reactWork(() =>
+    Array.from(container.querySelectorAll("button"))
+      .find((candidate) => candidate.textContent.includes("Ingreso de prueba"))
+      ?.click()
+  );
+
+const openCreation = (container: HTMLElement): WorkspaceCheck =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() => click(container, "Nuevo recurrente"));
+    yield* Effect.tryPromise(() => reactAssertion(() => nameField()));
+  });
+
+const leaveDraft = (container: HTMLElement, name: string): WorkspaceCheck =>
+  Effect.gen(function* () {
+    yield* openCreation(container);
+
+    if (name !== "") {
+      typeInto(nameField(), name);
+      typeInto(panelInput("recurring-counterparty"), "Inmobiliaria Sur");
+    }
+
+    yield* Effect.tryPromise(() => openOccurrence(container));
+    yield* Effect.tryPromise(() =>
+      reactAssertion(() =>
+        expect(panelElement().querySelector("h2")?.textContent).toBe("Ingreso de prueba")
+      )
+    );
+    yield* openCreation(container);
+  });
+
+it("keeps a modified creation draft when another occurrence opens until it is discarded", () =>
+  withWorkspace((container) =>
+    Effect.gen(function* () {
+      yield* leaveDraft(container, "Arriendo oficina");
+      expect(nameField().value).toBe("Arriendo oficina");
+      expect(panelInput("recurring-counterparty").value).toBe("Inmobiliaria Sur");
+      expect(panelElement().textContent).toContain("Borrador sin guardar");
+      yield* Effect.tryPromise(() => click(panelElement(), "Descartar borrador"));
+      yield* Effect.tryPromise(expectBlankCreation);
+    })
+  ));
+
+it("opens a blank creation form after an untouched form or an explicit cancellation", () =>
+  withWorkspace((container) =>
+    Effect.gen(function* () {
+      yield* leaveDraft(container, "");
+      expect(panelElement().textContent).not.toContain("Borrador sin guardar");
+      typeInto(nameField(), "Arriendo oficina");
+      yield* Effect.tryPromise(() => click(panelElement(), "Cancelar"));
+      yield* openCreation(container);
+      yield* Effect.tryPromise(expectBlankCreation);
+    })
+  ));

@@ -86,7 +86,7 @@ const manifest = (metadata: Metadata): Promise<Response> =>
             "image/OCR extraction",
             "audio decoding and signed voice admission",
             "full ingestion parser/owner execution",
-            "D1 authority/confirmation effects",
+            "authority and confirmation effects",
           ],
         })
       )

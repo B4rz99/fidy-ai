@@ -73,10 +73,6 @@ export const ErasureOperatorAction = Schema.Union([
     reference: ErasureReference,
     ...custodyScopeFields,
   }),
-  Schema.Struct({ action: Schema.Literal("MigrateRegistry") }),
-  Schema.Struct({ action: Schema.Literal("Initialize") }),
-  Schema.Struct({ action: Schema.Literal("Restore") }),
-  Schema.Struct({ action: Schema.Literal("ReleaseRestore") }),
   Schema.Struct({
     action: Schema.Literal("CustodyEvidence"),
     userId: UserId,

@@ -129,9 +129,6 @@ it("keeps platform diagnostic opt-outs on their reviewed file boundaries", () =>
           "strictEffectProvide:./infra/cloudflare/resource-retirement.test.ts",
           "strictEffectProvide:./scripts/mcp/native-confirmation-hosts.ts",
           "strictEffectProvide:./scripts/mcp/production-catalog.test.ts",
-          "strictEffectProvide:./scripts/mcp/production-checks.test.ts",
-          "strictEffectProvide:./scripts/mcp/production-checks.ts",
-          "strictEffectProvide:./scripts/mcp/production-cleanup.test.ts",
           "strictEffectProvide:./scripts/mcp/production-native.test.ts",
           "strictEffectProvide:./scripts/document-parsing/xlsx-work.ts",
         ].toSorted()

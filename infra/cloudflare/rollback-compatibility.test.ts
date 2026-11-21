@@ -15,8 +15,8 @@ const worker = (
   exports: { Counter: { type: "durable-object", state: "created" } },
 });
 const base = {
-  stable: worker("v1", { DB: { type: "d1" } }),
-  candidate: worker("v1", { DB: { type: "d1" } }),
+  stable: worker("v1", { USER_STORE: { type: "durable_object_namespace" } }),
+  candidate: worker("v1", { USER_STORE: { type: "durable_object_namespace" } }),
   workflowPaths: ["apps/server/cloudflare/subscription/runtime.ts"],
 };
 describe("rollback compatibility evidence", () => {
@@ -66,7 +66,7 @@ describe("rollback compatibility evidence", () => {
     expect(
       rollbackCompatible({
         ...base,
-        candidate: worker("v1", { DB: { type: "d1" }, SECRET: { type: "secret_text" } }),
+        candidate: worker("v1", { ...base.candidate.bindings, SECRET: { type: "secret_text" } }),
         changedPaths: [],
       })
     ).toBe(false);

@@ -70,21 +70,16 @@ export const nativeOperatorRequest = (input: OperatorCall): Effect.Effect<Respon
     const erasure = input.environment.ERASURE;
     if (erasure === undefined) return Effect.succeed(reply(unavailableStatus));
     const command = admission.command;
-    if ("userId" in command) {
-      return forwardCommand({
-        ...admission,
-        command,
-        request: input.request,
-        target: () => erasure.getByName(erasureRegistryName),
-      });
-    }
-    return Effect.succeed(reply(invalidStatus));
+    if (!("userId" in command)) return Effect.succeed(reply(invalidStatus));
+    return forwardCommand({
+      ...admission,
+      command,
+      request: input.request,
+      target: () => erasure.getByName(erasureRegistryName),
+    });
   });
 
-type UserCommand = Exclude<
-  typeof ErasureOperatorAction.Type,
-  { action: "Restore" | "ReleaseRestore" | "Initialize" | "MigrateRegistry" }
->;
+type UserCommand = typeof ErasureOperatorAction.Type;
 const forwardCommand = (
   input: Readonly<{
     request: Request;
@@ -119,12 +114,7 @@ const forwardCommand = (
     });
   });
 
-const commandPath = (
-  command: Exclude<
-    typeof ErasureOperatorAction.Type,
-    { action: "Restore" | "ReleaseRestore" | "Initialize" | "MigrateRegistry" }
-  >
-): string => {
+const commandPath = (command: UserCommand): string => {
   switch (command.action) {
     case "Continue":
       return "erasure-continue";
@@ -137,10 +127,7 @@ const commandPath = (
   }
 };
 const commandBody = (
-  command: Exclude<
-    typeof ErasureOperatorAction.Type,
-    { action: "Restore" | "ReleaseRestore" | "Initialize" | "MigrateRegistry" }
-  >,
+  command: UserCommand,
   admission: Readonly<{
     userId: string;
     deadlineMs: number;

@@ -13,8 +13,8 @@ registration does not create an OAuth connection or authorize canonical operatio
 
 ## Execution
 
-Native client → public ingress Worker → authenticated Core → SQLite User Durable
-Object → canonical operation owner → D1 and Audit.
+Native client → public ingress Worker → authenticated Core → User Durable Object with
+SQLite storage → canonical operation owner. Audit evidence commits with the owner’s guarded work.
 
 Both supported protocols (`2026-07-28`, `2025-11-25`) execute MCP SDK work in the
 Durable Object. Core authenticates and forwards bounded requests. Moving repeated
@@ -41,18 +41,17 @@ evidence. Run the same journey separately for Claude Code and Codex.
 ## Automated coverage
 
 The [Production runner](../../../../../scripts/mcp/README.md) repeats the five
-journeys above with both native clients. Local public-ingress → Core/D1 tests cover
-the failure cases without exhausting or corrupting the Production fixture:
+journeys above with both native clients. Current local integration and native SQLite tests cover the failure cases without exhausting or
+corrupting the Production fixture:
 
-| MCP behavior                                                                       | Existing integration checks                                                                                                                                       |
-| ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Registration, metadata, callbacks, review and narrowed permissions                 | [Ingress](../../../cloudflare/oauth-agents/oauth-ingress.test.ts), [discovery](../../../cloudflare/oauth-agents/oauth-discovery.test.ts)                          |
-| Stateless 2026 and session-based 2025 transport, bounds, deadlines and disconnects | [Free-tier handoff](../../../cloudflare/oauth-agents/oauth-mcp-free.test.ts), [native residency](../../../cloudflare/oauth-agents/oauth-native-residency.test.ts) |
-| Canonical calls, atomic batches, ambiguous delivery and shared allowances          | [Canonical execution](../../../cloudflare/oauth-agents/oauth-canonical.test.ts), [allowances](../../../cloudflare/oauth-agents/oauth-allowance.test.ts)           |
-| Sensitive confirmation, cancellation and replay refusal                            | [Confirmation](../../../cloudflare/oauth-agents/oauth-confirmation.test.ts)                                                                                       |
-| Refresh rotation, exact expiry, replay, connection inspection and revocation       | [Refresh](../../../cloudflare/oauth-agents/oauth-refresh.test.ts), [management](../../../cloudflare/oauth-agents/oauth-management.test.ts)                        |
+| MCP behavior                                     | Existing integration checks                                                                                                                                                                                         |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Native catalog and MCP request handling          | [Catalog](../../../cloudflare/mcp/native-catalog.test.ts), [native reader](../../../cloudflare/mcp/internal/native-reader.test.ts), [public Worker MCP](../../../cloudflare/public-worker-mcp.test.ts)              |
+| OAuth grants, connection lifecycle and discovery | [Grants](../../../cloudflare/oauth-agents/native-grant.test.ts), [connections](../../../cloudflare/oauth-agents/native-connections.test.ts), [discovery](../../../cloudflare/oauth-agents/native-discovery.test.ts) |
+| Allowance and confirmation                       | [Allowance](../../../cloudflare/oauth-agents/native-allowance.test.ts), [ingestion confirmation](../../../cloudflare/oauth-agents/native-ingestion-confirmation.test.ts)                                            |
+| Atomic canonical User Store work                 | [Canonical User Store](../../../cloudflare/canonical-operations/user-store.test.ts)                                                                                                                                 |
 
-Run all nine files with `bun run --cwd apps/server test:cloudflare cloudflare/oauth-agents`.
+Run the focused current suite with `bun run --cwd apps/server test:cloudflare cloudflare/mcp cloudflare/oauth-agents cloudflare/public-worker-mcp.test.ts cloudflare/canonical-operations/user-store.test.ts`.
 Canonical financial behavior remains the owning feature's testing responsibility.
 
 ## Production audit, 20 October 2026
@@ -69,7 +68,7 @@ attempts timed out at the client. Independent workspace reads still returned rev
 synthetic plan active. A later call returned declared `unavailable` before review. Closed Worker
 observations for that later run showed successful ingress/DO outcomes without CPU termination;
 they do not diagnose the earlier timeout. The same Inspector's decline completed against the isolated
-local Worker/D1 confirmation bridge, leaving its disposable Budget and accepted-mutation count unchanged.
+local Worker/SQLite confirmation bridge, leaving its disposable Budget and accepted-mutation count unchanged.
 The 14 confirmation integration checks passed. Production mutation completion and cancellation remain
 open; neither a displayed review nor a local pass establishes them.
 
@@ -98,7 +97,7 @@ with retained credentials again required new authorization and remained disconne
 replacement grant was approved. Production native mutation completion remains open.
 
 Local diagnostic follow-up on the same revision used a temporary native workerd composition:
-real ingress-to-Core service binding, real User Durable Object, and isolated D1. The existing
+real ingress-to-Core service binding, real User Durable Object, and isolated User SQLite. The existing
 legacy delayed-acceptance case passed through that composition. Inspector 2.10.1 also completed
 decline through the complete local chain, retaining the disposable Budget with zero accepted
 deletions. A loopback-only synthetic OAuth provider then exercised Inspector's token-backed
@@ -122,7 +121,7 @@ settings. No speculative production fix was deployed. The grant was explicitly r
 three Inspector rows displayed as Revocado; the traced client and tail were stopped.
 
 Further temporary local probes passed delayed legacy acceptance through a real HTTP listener
-and through the production-required erasure registry guard with native R2 and D1. This narrows
+and through the production-required erasure registry guard with native R2 and User SQLite. This narrows
 configuration differences without reproducing the live stall. Client-native production completion
 remains open; the supported Codex/Claude Code host journey is separate from Inspector evidence.
 
@@ -155,7 +154,7 @@ A separate six-second legacy concurrency probe used Inspector 2.10.1's installed
 and its actual `@modelcontextprotocol/client` 2.2.0 transport against a synthetic Node HTTP server.
 The cancellation reply reached that server, the parent tool completed, and a second read completed
 while the review was pending. This does not reproduce the live stall or prove behavior through
-Fidy's Worker/D1 chain; it narrows the generic client-serialization hypothesis without diagnosing
+Fidy's Worker/User SQLite chain; it narrows the generic client-serialization hypothesis without diagnosing
 production. No speculative runtime patch or deployment was made. A new live Inspector comparison
 needs separately approved access and arrival-time-correlated observations.
 

@@ -53,7 +53,7 @@ describe("operator alert decisions", () => {
     ).toEqual(["critical", "critical"]);
   });
 
-  it("alerts when a primary Queue accumulates work even before a D1 outbox ages", () => {
+  it("alerts when a primary Queue accumulates work even before retained work ages", () => {
     expect(
       severities([
         {

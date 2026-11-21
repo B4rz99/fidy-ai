@@ -128,7 +128,8 @@ export const nativeSmokeExecutor = Effect.fn(function* (input: {
     reference: Cloudflare.Workflow("ReleaseSmokeReference", {
       workflowName,
       className: "ReleaseSmokeWorkflowV2",
-      scriptName: smoke.workerName,
+      // Opening uses the already qualified Workflow without replanning its closed Worker.
+      scriptName: input.release.signupOpening ? workflowName : smoke.workerName,
     }),
   };
 });

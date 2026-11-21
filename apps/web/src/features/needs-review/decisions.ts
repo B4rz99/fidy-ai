@@ -396,6 +396,13 @@ const acceptDraft = (entry: Entry, items: ReadonlyArray<Detail>, draft: Draft): 
   entry.detail = { ...latest, item: { ...latest.item, expiresAt: entry.detail.item.expiresAt } };
   entry.feedback = Option.isSome(entry.wanted) ? "unsaved" : "saved";
 };
+const completionFeedback = (items: ReadonlyArray<Detail>, skipped: boolean): string => {
+  if (skipped) return `${items.length} elementos omitidos.`;
+  if (!items.every((detail) => detail.item.status === "pending")) return "Cambio guardado.";
+  return items.length === 1
+    ? "1 elemento restaurado en Pendientes."
+    : `${items.length} elementos restaurados en Pendientes.`;
+};
 const complete = (owner: Owner, items: ReadonlyArray<Detail>, skipped: boolean): void => {
   for (const detail of items) {
     const entry = makeEntry(detail);
@@ -403,7 +410,7 @@ const complete = (owner: Owner, items: ReadonlyArray<Detail>, skipped: boolean):
   }
   owner.completed = Option.some({ ids: items.map((detail) => detail.item.id) });
   if (owner.phase === "idle") {
-    owner.feedback = skipped ? `${items.length} elementos omitidos.` : "Cambio guardado.";
+    owner.feedback = completionFeedback(items, skipped);
   }
   if (skipped) owner.undo = items.map((detail) => detail.item);
   notify(owner);

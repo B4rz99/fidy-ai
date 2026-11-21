@@ -562,17 +562,17 @@ const planFixtureSuccessor = Effect.fn(function* (action: SuccessorAction) {
   );
 });
 
-const requireCanonicalOpeningPlan = (plan: Plan): void => {
-  const inventory = nativeResourceInventory(accountingFixture.revision);
+const requireCanonicalOpeningPlan = (rows: ReturnType<typeof describePlan>["resources"]): void => {
   const changes = new Set(["Core", "Ingress"]);
-  for (const row of describePlan(plan).resources) {
+  for (const row of rows) {
+    if (row.action === "noop") continue;
     if (
-      inventory.get(row.logicalId) !== row.resourceType ||
-      row.action !== (changes.has(row.logicalId) ? "update" : "noop")
+      row.resourceType !== "Cloudflare.Worker" ||
+      row.action !== "update" ||
+      !changes.delete(row.logicalId)
     ) {
       throw Error("Canonical signup plan changes an unapproved resource or retained dependency");
     }
-    changes.delete(row.logicalId);
   }
   if (changes.size !== 0) throw Error("Canonical signup requires both existing Worker versions");
 };
@@ -590,7 +590,23 @@ const uploadCanonicalSignup = Effect.fn(function* () {
     ...nativePlanOptions({ profile, preview: true, fingerprint: "" }),
     include: ["Core", "Ingress"],
   }).pipe(diagnoseNativePlan(revision));
-  yield* Effect.try(() => requireCanonicalOpeningPlan(snapshot.native));
+  const rows = describePlan(snapshot.native).resources;
+  yield* Effect.try(() => requireCanonicalOpeningPlan(rows)).pipe(
+    nativeResourceStage({
+      stage: "planning",
+      details: () => {
+        const inventory = nativeResourceInventory(accountingFixture.revision);
+        const changes = rows
+          .filter((row) => row.action !== "noop")
+          .map((row) => {
+            const label =
+              inventory.get(row.logicalId) === row.resourceType ? row.logicalId : "unrecognized";
+            return label + " " + row.action;
+          });
+        return " Canonical opening changes [" + changes.join(", ") + "].";
+      },
+    })
+  );
   yield* applyScopedNativePlan(snapshot.native).pipe(
     Effect.provide(snapshot.session.context),
     Effect.uninterruptible,

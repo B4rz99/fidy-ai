@@ -1,4 +1,5 @@
 from functools import partial
+from io import BytesIO
 import json
 from pathlib import Path
 import subprocess
@@ -6,8 +7,9 @@ from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
+from zipfile import ZipFile
 
-from canonical_host_source import (WORKFLOW_REF, protected_release_job, require_ordinary_source,
+from canonical_host_source import (WORKFLOW_REF, approved_transfer, protected_release_job, require_ordinary_source,
                                    require_protected_preview, verified_source)
 
 VERIFIER = "a" * 40
@@ -28,6 +30,36 @@ ENV = {
 
 
 class CanonicalHostSourceTest(unittest.TestCase):
+    @patch("canonical_host_source.protected_release_job")
+    @patch("canonical_host_source.protected_archive")
+    def test_reuses_exact_transferred_source_in_protected_descendant(self, archive, job):
+        producer = "d" * 40
+        source = {"verifierRevision": VERIFIER, "revision": REVISION, "deployments": {"core": "exact-core"}}
+        source_at_transfer = {**source, "verifierRevision": producer}
+        get = Mock(return_value=json.dumps({"workflow_run": {"head_sha": producer}}))
+        git = Mock(return_value=producer)
+        job.return_value = {"steps": [{"name": name, "conclusion": "success"} for name in (
+            "Authenticate the exact closed active source for canonical host planning",
+            "Fence the exact incumbent writers before transferring canonical hosts",
+            "Apply the approved canonical Access changes",
+            "Transfer and verify the two closed canonical hosts",
+            "Retain the verified closed canonical host transfer",
+        )]}
+        encoded = BytesIO()
+        with ZipFile(encoded, "w") as received:
+            received.writestr("native-verification.json.canonical-hosts",
+                              json.dumps({"source": source_at_transfer, "admission": "closed"}))
+        archive.return_value = ("44863387877", encoded.getvalue())
+
+        result = approved_transfer(REFERENCE, source, VERIFIER, get, git)
+        self.assertEqual(result["source"], source)
+        self.assertEqual(archive.call_args.args[0], producer)
+        git.assert_called_with("merge-base", producer, VERIFIER)
+        with self.assertRaisesRegex(ValueError, "differs from the approved"):
+            approved_transfer(REFERENCE, {**source, "deployments": {"core": "other"}}, VERIFIER, get, git)
+        with self.assertRaisesRegex(ValueError, "outside the protected verifier lineage"):
+            approved_transfer(REFERENCE, source, VERIFIER, get, Mock(return_value=REVISION))
+
     def test_requires_exact_release_and_skipped_site(self):
         release = {"name": "release", "status": "completed", "conclusion": "success", "steps": []}
         site = {"name": "site", "status": "completed", "conclusion": "skipped", "steps": []}

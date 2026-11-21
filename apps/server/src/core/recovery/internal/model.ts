@@ -1,4 +1,4 @@
-import { DateTime, Schema } from "effect";
+import { DateTime, Match, Schema } from "effect";
 import { UtcTimestamp } from "~/core/_shared/time";
 import { BrowserLoginPairingId } from "~/core/browser-login/contract";
 import { UserId } from "~/core/identity/contract";
@@ -32,28 +32,41 @@ export const SupportRecoveryCaseEventId = Schema.String.check(Schema.isUUID())
 
 export type SupportRecoveryCaseEventId = typeof SupportRecoveryCaseEventId.Type;
 
+export const ActiveBackupRecoveryCredential = Schema.TaggedStruct("Active", {
+  userId: UserId,
+  codeDigest: BackupRecoveryDigest,
+  revision: Schema.Int.check(Schema.isGreaterThan(0)),
+  createdAt: UtcTimestamp,
+});
+
+export const ConsumedBackupRecoveryCredential = Schema.TaggedStruct("Consumed", {
+  userId: UserId,
+  consumedAt: UtcTimestamp,
+  consumedByCaseId: Schema.Option(SupportRecoveryCaseId),
+  revision: Schema.Int.check(Schema.isGreaterThan(0)),
+  createdAt: UtcTimestamp,
+});
+
 const BackupRecoveryCredentialVariants = Schema.Union([
-  Schema.TaggedStruct("Active", {
-    userId: UserId,
-    codeDigest: BackupRecoveryDigest,
-    revision: Schema.Int.check(Schema.isGreaterThan(0)),
-    createdAt: UtcTimestamp,
-  }),
-  Schema.TaggedStruct("Consumed", {
-    userId: UserId,
-    consumedAt: UtcTimestamp,
-    consumedByCaseId: Schema.Option(SupportRecoveryCaseId),
-    revision: Schema.Int.check(Schema.isGreaterThan(0)),
-    createdAt: UtcTimestamp,
-  }),
+  ActiveBackupRecoveryCredential,
+  ConsumedBackupRecoveryCredential,
 ]);
 
-type BackupRecoveryCredentialTimeView =
-  | Readonly<{ _tag: "Active" }>
-  | Readonly<{ _tag: "Consumed"; createdAt: DateTime.Utc; consumedAt: DateTime.Utc }>;
+type BackupRecoveryCredentialTimes =
+  | Pick<typeof ActiveBackupRecoveryCredential.Type, "_tag">
+  | Pick<typeof ConsumedBackupRecoveryCredential.Type, "_tag" | "createdAt" | "consumedAt">;
 
-const validCredentialTimes = Schema.makeFilter<BackupRecoveryCredentialTimeView>((credential) =>
-  credential._tag === "Active" || DateTime.Order(credential.createdAt, credential.consumedAt) <= 0
+const consumedNoEarlierThanCreated = Match.type<BackupRecoveryCredentialTimes>().pipe(
+  Match.tag("Active", () => true),
+  Match.tag(
+    "Consumed",
+    (credential) => DateTime.Order(credential.createdAt, credential.consumedAt) <= 0
+  ),
+  Match.exhaustive
+);
+
+const validCredentialTimes = Schema.makeFilter<BackupRecoveryCredentialTimes>((credential) =>
+  consumedNoEarlierThanCreated(credential)
     ? undefined
     : { path: ["consumedAt"], issue: "Expected an instant at or after createdAt" }
 );
@@ -119,7 +132,7 @@ const EventIdentity = {
   occurredAt: UtcTimestamp,
 };
 
-const OperatorActor = Schema.TaggedStruct("Operator", { operatorId: SupportOperatorId });
+export const OperatorActor = Schema.TaggedStruct("Operator", { operatorId: SupportOperatorId });
 
 const ExpiryActor = Schema.TaggedStruct("Policy", {
   policyRevision: Schema.Literal("support-recovery-expiry-v1"),

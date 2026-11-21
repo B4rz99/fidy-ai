@@ -1,5 +1,5 @@
 import { Option } from "effect";
-import type { HostedAdmissionDecision, HostedAdmissionRequest } from "./contract";
+import { HostedAdmissionDecision, type HostedAdmissionRequest } from "./contract";
 
 const millisecondsPerSecond = 1_000;
 
@@ -27,13 +27,15 @@ const invalidState = ({ userId, nowMs, state }: HostedAdmissionRequest): boolean
 };
 
 export const decideHostedAdmission = (request: HostedAdmissionRequest): HostedAdmissionDecision => {
-  if (invalidState(request)) return { _tag: "Refused", reason: "InvalidState" };
+  if (invalidState(request)) return HostedAdmissionDecision.Refused({ reason: "InvalidState" });
 
   if (request.revoked || Option.isNone(request.currentConsent)) {
-    return { _tag: "Refused", reason: "ConsentRequired" };
+    return HostedAdmissionDecision.Refused({ reason: "ConsentRequired" });
   }
 
-  if (Option.isSome(request.state.pendingStartedAtMs)) return { _tag: "RecoverPending" };
+  if (Option.isSome(request.state.pendingStartedAtMs)) {
+    return HostedAdmissionDecision.RecoverPending();
+  }
 
   if (Option.isSome(request.state.session)) {
     const session = request.state.session.value;
@@ -43,11 +45,11 @@ export const decideHostedAdmission = (request: HostedAdmissionRequest): HostedAd
       session.status === "active" &&
       request.nowMs - lastActivity < hostedSessionIdleMilliseconds
     ) {
-      return { _tag: "ContinueSession", sessionId: session.id };
+      return HostedAdmissionDecision.ContinueSession({ sessionId: session.id });
     }
   }
 
-  return { _tag: "BeginSession", consentBasis: request.currentConsent.value };
+  return HostedAdmissionDecision.BeginSession({ consentBasis: request.currentConsent.value });
 };
 
 export const defaultCompactionTriggerTokens = 100_000;

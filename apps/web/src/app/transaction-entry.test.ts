@@ -1,13 +1,17 @@
 // @vitest-environment jsdom
 import { it } from "@effect/vitest";
 import { createMemoryHistory } from "@tanstack/react-router";
-import { type Cause, Deferred, Effect, Layer, Option, Schema } from "effect";
+import { BigDecimal, type Cause, Deferred, Effect, Layer, Option, Schema } from "effect";
 import { AsyncResult, AtomRegistry } from "effect/reactivity";
 import { HttpClient, HttpClientResponse, UrlParams } from "effect/http";
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, expect, vi } from "vitest";
 import { BrowserSessionBindingSchema, makeFidyClient, makeWebAuthClient } from "@/transport/client";
 import { makeHostedTurnClient } from "@/transport/hosted-turn-client";
 import { PrivacyTransactionFeature, TransactionListFeature } from "@/features/transactions/feature";
+import { TransactionLedger } from "@/features/transactions/ledger";
+import type { TransactionListRow } from "@/features/transactions/presentation";
 import { transactionEntryConsent } from "@/session/transaction-entry";
 import { initialApplicationValues } from "./initial-values";
 import { createWebRouter } from "./routes";
@@ -268,6 +272,110 @@ it.live(
       } finally {
         yield* Deferred.succeed(release, undefined);
         registry.dispose();
+      }
+    })
+);
+
+const ledgerRow = (counterpartyLabel: string, day: string, amount: number): TransactionListRow => ({
+  id: counterpartyLabel,
+  categoryId: "compras",
+  categoryLabel: "Compras",
+  counterpartyLabel,
+  direction: "outflow",
+  transactionTypeLabel: "Gasto",
+  moneyText: `-$ ${amount}`,
+  money: { amount: BigDecimal.fromNumberUnsafe(amount), currency: "COP" },
+  dateLabel: `${day} de noviembre de 2026`,
+  occurredOnText: `2026-11-0${day}`,
+});
+
+const ledgerRows = [
+  ledgerRow("Mercado Zeta", "2", 84_000),
+  ledgerRow("Café Alba", "2", 12_500),
+  ledgerRow("Banco Bogotá", "1", 9000),
+  ledgerRow("Uber", "1", 23_900),
+];
+
+const ledgerOrder = (container: HTMLElement): ReadonlyArray<string> =>
+  Array.from(container.querySelectorAll("tbody tr"), (item) =>
+    item.getAttribute("data-date-group") === "true"
+      ? (item.querySelector("span")?.textContent ?? "")
+      : (ledgerRows.find(({ counterpartyLabel }) => item.textContent.includes(counterpartyLabel))
+          ?.counterpartyLabel ?? "")
+  );
+
+const sortChoices = (): ReadonlyArray<HTMLElement> =>
+  Array.from(document.querySelectorAll<HTMLElement>('[role="menuitemradio"]'));
+
+it.live(
+  "states that a counterparty sort applies inside each day while days stay newest first",
+  () =>
+    Effect.gen(function* () {
+      vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+      const container = document.createElement("div");
+      document.body.append(container);
+      const root = createRoot(container);
+      const work = (task: () => void): Effect.Effect<void, Cause.UnknownError> =>
+        Effect.tryPromise(() => Promise.resolve(act(task)));
+      try {
+        yield* work(() =>
+          root.render(
+            createElement(TransactionLedger, {
+              rows: ledgerRows,
+              locate: Option.none(),
+              emptyTitle: "Sin transacciones",
+              continuation: "complete",
+              readOnly: false,
+              selected: Option.none(),
+              onSelect: () => undefined,
+              renderCategory: (item) => createElement("span", null, item.categoryLabel),
+              disabled: false,
+              locale: "es-CO",
+              toolbar: createElement("div"),
+              onEdit: () => undefined,
+              canEdit: true,
+              selection: {
+                summary: createElement("div"),
+                active: false,
+                ids: [],
+                onToggle: () => undefined,
+                onContinue: () => undefined,
+                allSelected: false,
+                onSelectAll: () => undefined,
+                onClear: () => undefined,
+              },
+            })
+          )
+        );
+        const trigger = container.querySelector<HTMLElement>("#transaction-sort");
+        expect(trigger?.textContent).toBe("Más recientes primero");
+        yield* work(() => trigger?.click());
+        expect(sortChoices().map((item) => item.textContent.trim())).toEqual([
+          "Más recientes primero",
+          "Contraparte A–Z en cada día",
+          "Contraparte Z–A en cada día",
+          "Categoría A–Z en cada día",
+        ]);
+        yield* work(() => sortChoices()[2]?.click());
+        expect(trigger?.textContent).toBe("Contraparte Z–A en cada día");
+        expect(ledgerOrder(container)).toEqual([
+          "2 de noviembre de 2026",
+          "Mercado Zeta",
+          "Café Alba",
+          "1 de noviembre de 2026",
+          "Uber",
+          "Banco Bogotá",
+        ]);
+        expect(
+          Array.from(
+            container.querySelectorAll('[aria-label="Totales del día por moneda"]'),
+            (totals) => totals.textContent
+          )
+        ).toEqual(["COP -96.500,00", "COP -32.900,00"]);
+      } finally {
+        yield* work(() => root.unmount());
+        container.remove();
+        vi.unstubAllGlobals();
       }
     })
 );

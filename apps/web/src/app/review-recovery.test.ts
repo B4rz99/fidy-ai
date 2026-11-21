@@ -15,7 +15,7 @@ import { makeHostedTurnClient } from "@/transport/hosted-turn-client";
 const reactWork = (work: () => void): Promise<void> => Promise.resolve(act(work));
 const expiredReview = (
   source: CanonicalSuccess<"ingestion.getReviewWorkspace">["data"]["items"][number]["source"] = "statement",
-  status: "expired" | "created" = "expired",
+  status: "expired" | "created" | "skipped" = "expired",
   originalExpired = false
 ): Readonly<{
   container: HTMLDivElement;
@@ -46,11 +46,19 @@ const expiredReview = (
     const path = new URL(request.url).pathname;
     requests.push(`${request.method} ${path}`);
     let data: unknown;
-    if (path.endsWith("review-workspace")) {
+    if (request.method === "POST") {
+      data = [{ item: { ...item, status: "pending", revision: 1 }, revision: 1 }];
+    } else if (path.endsWith("review-workspace")) {
       data = { pendingCount: 0, total: 1, items: [item], selectedDetail: { item, revision: 0 } };
     } else if (path.endsWith("/context")) {
       data = {
-        items: [{ id: item.id, reference: "Extracto · Fila 1", expiresAt: "2026-01-02T00:00:00Z" }],
+        items: [
+          {
+            id: item.id,
+            reference: "Extracto · Fila 1",
+            expiresAt: status === "skipped" ? item.expiresAt : "2026-01-02T00:00:00Z",
+          },
+        ],
       };
     } else if (path.endsWith("/categories")) {
       data = [];
@@ -312,3 +320,36 @@ it(
     ),
   20000
 );
+
+const restoreFromDetails = (container: HTMLElement): Promise<void> =>
+  reactWork(() =>
+    Array.from(container.querySelectorAll<HTMLButtonElement>('[data-review="history"] button'))
+      .find((button) => button.textContent === "Restaurar")
+      ?.click()
+  );
+
+it("restores an omitted item from its details without selecting it first", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const page = expiredReview("statement", "skipped", true);
+      try {
+        yield* Effect.tryPromise(page.render);
+        yield* Effect.tryPromise(() =>
+          vi.waitFor(() => {
+            expect(page.container.textContent).toContain(
+              "Restáuralo para devolverlo a Pendientes y volver a editarlo. Su vencimiento original se conserva."
+            );
+          })
+        );
+        yield* Effect.tryPromise(() => restoreFromDetails(page.container));
+        yield* Effect.tryPromise(() =>
+          vi.waitFor(() => {
+            expect(page.requests).toContain("POST /ingestion/review-workspace/edits");
+            expect(page.container.textContent).toContain("1 elemento restaurado en Pendientes.");
+          })
+        );
+      } finally {
+        yield* Effect.tryPromise(page.dispose);
+      }
+    })
+  ));

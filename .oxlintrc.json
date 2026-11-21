@@ -437,12 +437,7 @@
         "mode": "changed"
       }
     ],
-    "anti-slop-martinfowler-jev/primitive-obsession": [
-      "error",
-      {
-        "mode": "changed"
-      }
-    ],
+    "anti-slop-martinfowler-jev/primitive-obsession": "off",
     "anti-slop-martinfowler-jev/repeated-switches": [
       "error",
       {

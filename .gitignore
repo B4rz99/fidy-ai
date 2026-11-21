@@ -46,6 +46,8 @@ npm-debug.log*
 reports/
 stryker.log
 
+docs/security/runs/
+
 .hosted-evaluation.*/
 
 apps/site/.astro/

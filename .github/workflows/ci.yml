@@ -9,6 +9,7 @@ on:
       - feat/publish-categories
       - "stack/580/**"
       - feat/anti-slop
+      - feat/anti-slop-jev
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

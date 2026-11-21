@@ -66,8 +66,7 @@ jobs:
     environment: production
     timeout-minutes: 60
     env:
-      FIXTURE_RELEASE_OPERATION:
-        ${{ inputs.diagnostics_only && 'diagnose-fixture-accounting'
+      FIXTURE_RELEASE_OPERATION: ${{ inputs.diagnostics_only && 'diagnose-fixture-accounting'
         || (inputs.operation == 'resume' || inputs.operation == 'reseal') && 'stage-fixture-successor'
         || inputs.operation == 'recover-resumed' && 'recover-fixture-successor'
         || (inputs.operation == 'rollout-resumed' || endsWith(inputs.operation, '-accounting')) && 'rollout-fixture-successor'

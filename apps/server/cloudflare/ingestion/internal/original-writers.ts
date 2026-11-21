@@ -25,7 +25,7 @@ export const trackOriginalPut = Effect.fn(function* (
     sql`INSERT INTO original_writers(nonce,bucket,object_key) SELECT ${nonce},${kind},${key} FROM users WHERE id=${user} AND NOT EXISTS(SELECT 1 FROM erasure_requests) RETURNING nonce`
   );
 
-  if (saved.length !== 1) return yield* new PrivateObjectUnavailable();
+  if (saved.length !== 1) return yield* new PrivateObjectUnavailable({ cause: Option.none() });
 
   const output = yield* Effect.tryPromise(() =>
     bucket.put(key, Uint8Array.from(bytes), {
@@ -61,7 +61,7 @@ export const settleBeforeDisposal = Effect.fn(function* (
   const user = yield* Schema.decodeEffect(UserId)(row.user_id);
 
   if (!row.object_key.startsWith(userPrivateObjectPrefix(user))) {
-    return yield* new PrivateObjectUnavailable();
+    return yield* new PrivateObjectUnavailable({ cause: Option.none() });
   }
 
   const sql = yield* SqliteClient;
@@ -91,7 +91,7 @@ export const reconcileOriginals = Effect.fn(function* (
     writers,
     Effect.fnUntraced(function* (writer) {
       if (!writer.object_key.startsWith(userPrivateObjectPrefix(user))) {
-        return yield* new PrivateObjectUnavailable();
+        return yield* new PrivateObjectUnavailable({ cause: Option.none() });
       }
 
       const bucket = writer.bucket === "email" ? env.EMAIL_BUCKET : env.STATEMENT_STAGING_BUCKET;

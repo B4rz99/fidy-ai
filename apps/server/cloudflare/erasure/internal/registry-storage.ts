@@ -1,9 +1,11 @@
 import { registryBody, registryObject } from "./registry-object";
-import { Clock, Effect, Option, Schema } from "effect";
+import { Clock, Layer, ManagedRuntime, Option, Schema } from "effect";
 import { ErasureUnavailable } from "../../erasure-store/contract";
 import { newId } from "../../secret-material/operations";
 import type { ErasureRegistry } from "../contract";
 import { checkRegistryKey, checkRegistryValue } from "./registry-value";
+
+const storageRuntime = ManagedRuntime.make(Layer.empty);
 
 const casesPrefix = "recovery/cases/";
 
@@ -35,7 +37,7 @@ const decode = <Value extends Schema.ConstraintDecoder<unknown>>(
 ): Value["Type"] => {
   const decoded = Schema.decodeUnknownOption(schema, { onExcessProperty: "error" })(value);
 
-  if (Option.isNone(decoded)) throw new ErasureUnavailable();
+  if (Option.isNone(decoded)) throw new ErasureUnavailable({ cause: Option.none() });
 
   return decoded.value;
 };
@@ -96,7 +98,7 @@ const put = (
       if (!matches(find(storage, key), condition)) return null;
 
       const etag = newId(),
-        uploaded = Effect.runSync(Clock.currentTimeMillis);
+        uploaded = storageRuntime.runSync(Clock.currentTimeMillis);
 
       storage.sql.exec(
         "INSERT INTO erasure_registry(key,value,etag,uploaded) VALUES(?,?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,etag=excluded.etag,uploaded=excluded.uploaded",
@@ -118,11 +120,16 @@ const afterKey = (
 ): string => {
   if (options.cursor === undefined) return "";
 
-  if (options.cursor.length > maximumCursorLength) throw new ErasureUnavailable();
+  if (options.cursor.length > maximumCursorLength) {
+    throw new ErasureUnavailable({ cause: Option.none() });
+  }
+
   const cursor = decode(Schema.fromJsonString(Cursor), options.cursor);
   checkRegistryKey(cursor.after);
 
-  if (cursor.prefix !== prefix || !cursor.after.startsWith(prefix)) throw new ErasureUnavailable();
+  if (cursor.prefix !== prefix || !cursor.after.startsWith(prefix)) {
+    throw new ErasureUnavailable({ cause: Option.none() });
+  }
 
   return cursor.after;
 };
@@ -135,7 +142,9 @@ const list = (
     const limit = decode(pageLimit, options.limit ?? maximumPage),
       prefix = options.prefix ?? "";
 
-    if (prefix !== "" && prefix !== casesPrefix) throw new ErasureUnavailable();
+    if (prefix !== "" && prefix !== casesPrefix) {
+      throw new ErasureUnavailable({ cause: Option.none() });
+    }
 
     const rows = storage.sql
       .exec(
@@ -153,7 +162,7 @@ const list = (
     if (rows.length <= limit) return { objects, delimitedPrefixes: [], truncated: false };
     const last = objects.at(-1);
 
-    if (last === undefined) throw new ErasureUnavailable();
+    if (last === undefined) throw new ErasureUnavailable({ cause: Option.none() });
 
     return {
       objects,

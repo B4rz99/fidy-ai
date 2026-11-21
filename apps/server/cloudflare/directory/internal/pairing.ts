@@ -5,7 +5,7 @@ import {
   invalidPairing,
   sampleBrowserLoginPublicCode,
 } from "../../browser-login/operations";
-import { Clock, DateTime, Effect, Option, Redacted, Schema } from "effect";
+import { Clock, DateTime, Effect, Option, Predicate, Redacted, Schema } from "effect";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { ProviderBrowserProof } from "../../../src/shell/provider-authentication/contract";
 import {
@@ -16,6 +16,8 @@ import { newId, newSecret } from "../../secret-material/operations";
 import { withStoreCapacity } from "../../runtime/sqlite/operations";
 import { boundedJsonBody } from "../../http/operations";
 import { UserId } from "../../../src/core/identity/contract";
+
+const isResponse = Schema.is(Schema.instanceOf(Response));
 
 const maximumWrongProofs = 5;
 
@@ -81,11 +83,11 @@ const inspectPairing = Effect.fn(function* (pairingId: string, digest: string) {
         ),
       });
 
-      if (decision._tag === "WrongVerifier") {
+      if (Predicate.isTagged(decision, "WrongVerifier")) {
         yield* sql`UPDATE browser_pairings SET wrong_attempts=${decision.wrongVerifierAttempts} WHERE id=${pairingId}`;
       }
 
-      if (decision._tag === "Pending") {
+      if (Predicate.isTagged(decision, "Pending")) {
         yield* sql`UPDATE browser_pairings SET last_poll_ms=${DateTime.toEpochMillis(decision.acceptedAt)} WHERE id=${pairingId}`;
 
         return Response.json(
@@ -98,7 +100,7 @@ const inspectPairing = Effect.fn(function* (pairingId: string, digest: string) {
         );
       }
 
-      if (decision._tag === "SlowDown") {
+      if (Predicate.isTagged(decision, "SlowDown")) {
         const retry = Math.min(maximumPollSeconds, decision.retryAfterSeconds);
         yield* sql`UPDATE browser_pairings SET minimum_poll_seconds=${Math.min(maximumPollSeconds, decision.minimumPollIntervalSeconds)} WHERE id=${pairingId}`;
 
@@ -128,7 +130,7 @@ export const pollPairing = Effect.fn(function* (
   const digest = yield* digestVerifier(privateVerifier);
   const result = yield* inspectPairing(pairingId, digest);
 
-  if (result instanceof Response) return result;
+  if (isResponse(result)) return result;
   const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(proof.value);
 
   return yield* Effect.tryPromise((signal) =>

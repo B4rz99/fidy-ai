@@ -179,6 +179,17 @@ const supportWindows = Effect.gen(function* () {
       })
     ).pipe(Effect.map((reply) => reply.status));
 
+  const admitted = (subject: string): Effect.Effect<ReadonlyArray<number>> =>
+    Effect.forEach(
+      Array.from({ length: 5 }, () => subject),
+      admit
+    );
+
+  const admitBurst = Effect.fnUntraced(function* (subject: string) {
+    expect(yield* admitted(subject)).toEqual(Array.from({ length: 5 }, () => 204));
+    expect(yield* admit(subject)).toBe(429);
+  });
+
   const age = (interval: number): Effect.Effect<unknown> =>
     native(() =>
       storage.exec(
@@ -187,21 +198,28 @@ const supportWindows = Effect.gen(function* () {
       )
     );
 
-  for (let window = 0; window < 4; window++) {
-    for (const operator of ["one", "two", "three", "four"]) {
-      for (let request = 0; request < 5; request++) expect(yield* admit(operator)).toBe(204);
-      expect(yield* admit(operator)).toBe(429);
-    }
+  yield* Effect.forEach(
+    Array.from({ length: 4 }, (_, window) => window),
+    () =>
+      Effect.gen(function* () {
+        yield* Effect.forEach(["one", "two", "three", "four"], admitBurst, { discard: true });
 
-    expect(yield* admit("extra")).toBe(429);
-    yield* age(minute + 1);
-  }
+        expect(yield* admit("extra")).toBe(429);
+        yield* age(minute + 1);
+      }),
+    { discard: true }
+  );
 
   expect(yield* admit("one")).toBe(429);
 
-  for (const operator of ["five", "six", "seven", "eight"]) {
-    for (let request = 0; request < 5; request++) expect(yield* admit(operator)).toBe(204);
-  }
+  yield* Effect.forEach(
+    ["five", "six", "seven", "eight"],
+    (operator) =>
+      admitted(operator).pipe(
+        Effect.map((statuses) => expect(statuses).toEqual(Array.from({ length: 5 }, () => 204)))
+      ),
+    { discard: true }
+  );
 
   yield* age(minute + 1);
   expect(yield* admit("extra")).toBe(429);

@@ -2,6 +2,11 @@ import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { BigDecimal, Clock, Effect, Schedule, Schema } from "effect";
 import { expect } from "vitest";
+import type {
+  RecurringEdit,
+  RecurringFulfillment,
+  RecurringPlanInput,
+} from "../../src/core/recurring-plans/contract";
 import { RecurringWorkspace } from "../../src/shell/recurring-plans/contract";
 import {
   alice,
@@ -14,9 +19,12 @@ import { native } from "../user-store.test-fixture";
 
 const planId = "40000000-0000-4000-8000-000000000123";
 
-const money = { amount: "9007199254740993.15", currency: "USD" };
+const money: typeof RecurringFulfillment.Encoded.money = {
+  amount: "9007199254740993.15",
+  currency: "USD",
+};
 
-const plan = {
+const plan: typeof RecurringPlanInput.Encoded = {
   name: "Arriendo",
   kind: "expense",
   currency: "USD",
@@ -29,7 +37,7 @@ const plan = {
 
 const month = "/recurring-plans?month=2024-02";
 
-const fulfillment = {
+const fulfillment: Omit<typeof RecurringFulfillment.Encoded, "transactionId"> = {
   id: "40000000-0000-4000-8000-000000000151",
   planId,
   date: "2024-02-29",
@@ -105,7 +113,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
 
         const edit = (
           expectedRevision: number,
-          change: object,
+          change: typeof RecurringEdit.Encoded,
           key: string
         ): Effect.Effect<Response> =>
           native(() =>
@@ -189,7 +197,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const subjectEdit = (
           subject: typeof alice,
           expectedRevision: number,
-          edit: object
+          edit: typeof RecurringEdit.Encoded
         ): Effect.Effect<Response> =>
           browserWrite(db, subject, {
             path: "/recurring-plans/edits",
@@ -203,7 +211,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const foreign = yield* capture(db, bob);
         const own = yield* capture(db, alice);
 
-        const fulfill = (transactionId: string): object => ({
+        const fulfill = (transactionId: string): typeof RecurringEdit.Encoded => ({
           kind: "fulfill",
           fulfillment: { ...fulfillment, transactionId },
         });

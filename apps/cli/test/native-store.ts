@@ -1,5 +1,5 @@
 import { BunServices } from "@effect/platform-bun";
-import { IssuedPAT, TokenBearer } from "@fidy/server/client";
+import { TokenBearer } from "@fidy/server/client";
 import { Effect, Exit, FileSystem, Option, Redacted, Result, Schema } from "effect";
 import { bunSecrets, openCredentialStore, supportedBunRevision } from "../src/credential/runtime";
 import {
@@ -9,6 +9,7 @@ import {
   apiOrigin,
 } from "../src/credential/contract";
 import { scopedProcess } from "./process.test-fixture";
+import { decodePAT } from "./support/pat";
 
 const probe = Redacted.make("fidy-native-cross-process-probe");
 
@@ -40,8 +41,7 @@ const secretCharacterCount = 43;
 const credential: Credential = {
   grant: {
     origin: apiOrigin,
-    pat: Schema.decodeSync(Schema.toCodecJson(IssuedPAT.fields.pat))({
-      _tag: "PAT",
+    pat: decodePAT({
       id: "01900000-0000-4000-8000-000000000001",
       shortId: "abcd1234",
       recipientLabel: "Native conformance",

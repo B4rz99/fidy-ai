@@ -92,7 +92,7 @@ const prepare = Effect.fn(function* ({
   const sql = yield* SqliteClient;
   const session = yield* readProof(proof, owns);
 
-  if (session instanceof Response) return session;
+  if (isResponse(session)) return session;
 
   const [raw] =
     yield* sql`SELECT lower(hex(code_digest)) AS prior_digest,revision FROM backup_recovery_credentials WHERE user_id=${session.user_id}`;
@@ -128,10 +128,10 @@ const activate = Effect.fn(function* ({
   const now = yield* Clock.currentTimeMillis;
   const session = yield* readProof(proof, owns);
 
-  if (session instanceof Response || session.user_id !== record.user_id) {
+  if (isResponse(session) || session.user_id !== record.user_id) {
     yield* sql`UPDATE recovery_rotations SET state='cancelled' WHERE id=${record.id} AND state='pending'`;
 
-    return session instanceof Response ? session : noAuthority();
+    return isResponse(session) ? session : noAuthority();
   }
 
   const changed =
@@ -153,6 +153,8 @@ const activate = Effect.fn(function* ({
 
   return now;
 });
+
+const isResponse = Schema.is(Schema.instanceOf(Response));
 
 export const rotateLocalRecovery = Effect.fn(
   function* ({
@@ -179,7 +181,7 @@ export const rotateLocalRecovery = Effect.fn(
       storage,
     }).pipe(withStoreCapacity("growth"));
 
-    if (record instanceof Response) return record;
+    if (isResponse(record)) return record;
     const reserved = yield* publish(directory, record, "reserve");
 
     if (!reserved.ok) return canonicalAdmissionUnavailable();
@@ -188,11 +190,11 @@ export const rotateLocalRecovery = Effect.fn(
       withStoreCapacity("required")
     );
 
-    yield* settle(directory, record, result instanceof Response ? "cancelled" : "committed").pipe(
+    yield* settle(directory, record, isResponse(result) ? "cancelled" : "committed").pipe(
       Effect.ignore
     );
 
-    if (result instanceof Response) return result;
+    if (isResponse(result)) return result;
 
     return Response.json(
       {
@@ -227,6 +229,22 @@ export const repairRecoveryAlarm = Effect.fn(function* (
     : yield* preserveStoreAlarm(storage, Math.max(deadline, current));
 });
 
+const settleRotation = Effect.fn(function* (directory: Directory, row: unknown) {
+  const sql = yield* SqliteClient;
+  const record = yield* Schema.decodeUnknownEffect(RecoveryRotation)(row);
+
+  const [marked] =
+    yield* sql`UPDATE recovery_rotations SET state=CASE WHEN state='pending' THEN 'cancelled' ELSE state END WHERE id=${record.id} RETURNING state`;
+
+  if (marked === undefined) return;
+
+  const state = yield* Schema.decodeUnknownEffect(Schema.Literals(["committed", "cancelled"]))(
+    marked.state
+  );
+
+  yield* settle(directory, record, state);
+});
+
 export const recoverRotations = Effect.fn(function* (
   now: number,
   directory: Directory,
@@ -237,20 +255,7 @@ export const recoverRotations = Effect.fn(function* (
   const rows =
     yield* sql`SELECT * FROM recovery_rotations WHERE state<>'pending' OR expires_at_ms<=${now} ORDER BY expires_at_ms LIMIT ${pageSize}`;
 
-  for (const row of rows) {
-    const record = yield* Schema.decodeUnknownEffect(RecoveryRotation)(row);
-
-    const [marked] =
-      yield* sql`UPDATE recovery_rotations SET state=CASE WHEN state='pending' THEN 'cancelled' ELSE state END WHERE id=${record.id} RETURNING state`;
-
-    if (marked === undefined) continue;
-
-    const state = yield* Schema.decodeUnknownEffect(Schema.Literals(["committed", "cancelled"]))(
-      marked.state
-    );
-
-    yield* settle(directory, record, state);
-  }
+  yield* Effect.forEach(rows, (row) => settleRotation(directory, row), { discard: true });
 
   yield* repairRecoveryAlarm(now, storage);
 

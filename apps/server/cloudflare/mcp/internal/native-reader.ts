@@ -1,12 +1,14 @@
 import { Option } from "effect";
 
+export type NativeReaderLease = Readonly<{ finish: () => void; cancel: () => Promise<void> }>;
+
 export const leaseNativeReader = ({
   reader,
   releaseLease,
 }: Readonly<{
   reader: Pick<ReadableStreamDefaultReader<unknown>, "cancel" | "releaseLock">;
   releaseLease: () => void;
-}>): Readonly<{ finish: () => void; cancel: () => Promise<void> }> => {
+}>): NativeReaderLease => {
   let released = false;
   let cancelling = false;
   let cancellation: Option.Option<Promise<void>> = Option.none();

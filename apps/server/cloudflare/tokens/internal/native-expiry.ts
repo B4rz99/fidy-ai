@@ -45,7 +45,7 @@ const expire = Effect.fn(function* (
   const closed = yield* sql.unsafe(transition.sql + " RETURNING id", transition.params);
 
   if (recorded.length !== candidates.length || closed.length !== recorded.length) {
-    return yield* new PATUnavailable();
+    return yield* new PATUnavailable({ cause: Option.none() });
   }
 
   return closed.length;

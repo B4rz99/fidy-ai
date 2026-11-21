@@ -2,7 +2,7 @@ import {
   makeTestOutboundTransport,
   testOutboundTransportResponse,
 } from "../../../support/outbound-http";
-import { makeLifecycleVerifier } from "~/shell/channels/whatsapp/runtime";
+import { lifecycleVerifier } from "~/shell/channels/whatsapp/runtime";
 import { expect, it } from "@effect/vitest";
 import { Cause, Data, DateTime, Effect, Exit, Option, Predicate, Redacted, Schema } from "effect";
 import assert from "node:assert/strict";
@@ -429,7 +429,7 @@ it.effect.each([
 
     let reads = 0;
 
-    const verifier = makeLifecycleVerifier({
+    const verifier = lifecycleVerifier({
       apiKey: Redacted.make("test-kapso-key"),
       admitLookup: () => Effect.void,
       httpClient: makeTestOutboundTransport((request) => {

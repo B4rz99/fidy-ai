@@ -21,7 +21,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
 
       const send = (
         path: string,
-        payload: object
+        payload: unknown
       ): ReturnType<ReturnType<typeof browser>["post"]> =>
         native(() =>
           runtime.dispatchFetch(`https://${productionTopology.ingress.hostname}${path}`, {

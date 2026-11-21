@@ -10,6 +10,8 @@ import { withStoreCapacity } from "../../runtime/sqlite/operations";
 import { invalidPairing } from "../../browser-login/operations";
 import { UserId } from "../../../src/core/identity/contract";
 
+const isResponse = Schema.is(Schema.instanceOf(Response));
+
 export const channelApprovalEvidence = Effect.fn(function* (id: string) {
   const sql = yield* SqliteClient;
 
@@ -53,7 +55,7 @@ export const approveChannelPairing = Effect.fn(function* (
     return { id, user };
   }).pipe(withStoreCapacity("growth"));
 
-  if (result instanceof Response) return result;
+  if (isResponse(result)) return result;
 
   return yield* Effect.tryPromise((signal) =>
     users

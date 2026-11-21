@@ -1,5 +1,5 @@
 import { Link, useSearch } from "@tanstack/react-router";
-import { Option, Predicate } from "effect";
+import { type Data, Option, Predicate } from "effect";
 import type { JSX } from "react";
 import type { presentCanonicalQuery } from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
@@ -29,7 +29,10 @@ export const TransactionDestinationFailure = ({
   state,
   refresh,
 }: Readonly<{
-  state: Exclude<ReturnType<typeof presentCanonicalQuery>, { _tag: "Initial" }>;
+  state: Exclude<
+    ReturnType<typeof presentCanonicalQuery>,
+    Data.TaggedEnum.Value<ReturnType<typeof presentCanonicalQuery>, "Initial">
+  >;
   refresh: () => void;
 }>): JSX.Element => {
   const failure = Predicate.isTagged(state, "Failure")

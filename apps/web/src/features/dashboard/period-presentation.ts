@@ -8,12 +8,12 @@ export const periodLabel = ({
 }: Readonly<{ period: SpendingResult["appliedPeriod"]; locale: string }>): string => {
   const month = period.requested === "this-month" || period.requested === "last-month";
 
-  const format = new Intl.DateTimeFormat(locale, {
-    month: month ? "long" : "short",
-    year: "numeric",
-    ...(month ? {} : { day: "numeric" }),
-    timeZone: period.timeZone,
-  });
+  const format = new Intl.DateTimeFormat(
+    locale,
+    month
+      ? { month: "long", year: "numeric", timeZone: period.timeZone }
+      : { month: "short", year: "numeric", day: "numeric", timeZone: period.timeZone }
+  );
 
   const start = format.format(period.from.epochMilliseconds);
 

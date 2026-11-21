@@ -1,7 +1,8 @@
+import { browserRuntime } from "@/transport/browser-runtime";
 import { destinationAfterLogin } from "@/session/login-destination";
 import { useAtomSet } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
-import { Cause, Clock, type Context, DateTime, Effect, Option, Redacted } from "effect";
+import { Cause, Clock, DateTime, Effect, Option, Redacted, Schema } from "effect";
 import { Atom } from "effect/reactivity";
 import { type RefCallback, useCallback, useState } from "react";
 import { useSession } from "@/session/session-context";
@@ -12,7 +13,7 @@ import {
   fidyWhatsAppUrl,
 } from "@/transport/client";
 
-type Client = Context.Service.Shape<WebAuthClient>;
+type Client = WebAuthClient["Service"];
 
 type Pairing = WebAuthSuccess<"browserLogin", "startPairing">;
 
@@ -107,60 +108,74 @@ const withinPairingLifetime = <Value, Error>(
     );
   });
 
+type ProviderVerificationInput = Pick<ControllerInput, "setState"> &
+  Readonly<{
+    popup: Window;
+    provider: AuthenticationProvider;
+    poll: ProviderPoll;
+  }>;
+
+const pollProviderVerification = (
+  client: Client,
+  pairing: Pairing,
+  input: ProviderVerificationInput
+): Effect.Effect<
+  Option.Option<AssociationReview>,
+  Effect.Error<ReturnType<ProviderPoll>> | "rejected" | "cancelled"
+> =>
+  Effect.gen(function* () {
+    let popupClosed = input.popup.closed;
+
+    const observePopup = (): void => {
+      popupClosed = input.popup.closed;
+    };
+
+    const result = yield* input
+      .poll(client, {
+        provider: input.provider,
+        pairing,
+        beforeRequest: Option.some(observePopup),
+      })
+      .pipe(
+        Effect.catchCauseIf(
+          (cause) => !Cause.hasInterruptsOnly(cause),
+          () => Effect.fail(input.popup.closed ? ("cancelled" as const) : ("rejected" as const))
+        )
+      );
+
+    if (result.status === "verified") return Option.none();
+
+    if (result.status === "awaiting_association") return Option.some(result);
+
+    if (result.status === "awaiting_confirmation") {
+      input.setState({ status: "confirming", code: result.associationCode });
+    }
+
+    if (result.status === "rejected") return yield* Effect.fail("rejected" as const);
+
+    if (result.status === "pending" && popupClosed) return yield* Effect.fail("cancelled" as const);
+
+    return yield* pollProviderVerification(client, pairing, input);
+  });
+
 const awaitProviderVerification = (
   client: Client,
   pairing: Pairing,
-  input: Pick<ControllerInput, "setState"> &
-    Readonly<{
-      popup: Window;
-      provider: AuthenticationProvider;
-      poll: ProviderPoll;
-    }>
+  input: ProviderVerificationInput
 ): Effect.Effect<Option.Option<AssociationReview>, "rejected" | "cancelled"> =>
-  withinPairingLifetime(
-    pairing,
-    Effect.gen(function* () {
-      for (;;) {
-        let popupClosed = input.popup.closed;
+  withinPairingLifetime(pairing, pollProviderVerification(client, pairing, input)).pipe(
+    Effect.mapError((error) => (error === "cancelled" ? error : ("rejected" as const)))
+  );
 
-        const observePopup = (): void => {
-          popupClosed = input.popup.closed;
-        };
-
-        const result = yield* input
-          .poll(client, {
-            provider: input.provider,
-            pairing,
-            beforeRequest: Option.some(observePopup),
-          })
-          .pipe(
-            Effect.catchCauseIf(
-              (cause) => !Cause.hasInterruptsOnly(cause),
-              () => Effect.fail(input.popup.closed ? ("cancelled" as const) : ("rejected" as const))
-            )
-          );
-
-        if (result.status === "verified") return Option.none();
-
-        if (result.status === "awaiting_association") return Option.some(result);
-
-        if (result.status === "awaiting_confirmation") {
-          input.setState({ status: "confirming", code: result.associationCode });
-        }
-
-        if (result.status === "rejected") return yield* Effect.fail("rejected");
-
-        if (result.status === "pending" && popupClosed) return yield* Effect.fail("cancelled");
-      }
-    })
-  ).pipe(Effect.mapError((error) => (error === "cancelled" ? error : ("rejected" as const))));
-
-const proof = (
-  pairing: Pairing
-): Readonly<{
+type PairingProof = Readonly<{
   pairingId: Pairing["pairingId"];
   privateVerifier: Redacted.Redacted.Value<Pairing["privateVerifier"]>;
-}> => ({ pairingId: pairing.pairingId, privateVerifier: Redacted.value(pairing.privateVerifier) });
+}>;
+
+const proof = (pairing: Pairing): PairingProof => ({
+  pairingId: pairing.pairingId,
+  privateVerifier: Redacted.value(pairing.privateVerifier),
+});
 
 const redeem = (
   input: Readonly<{
@@ -223,6 +238,8 @@ type ActiveAttempt = {
   poll: ProviderPoll;
 };
 
+const isDOMException = Schema.is(Schema.instanceOf(DOMException));
+
 const closeProviderPopup = (popup: Window): void => {
   if (popup.closed) return;
   let location: string;
@@ -230,7 +247,7 @@ const closeProviderPopup = (popup: Window): void => {
   try {
     location = popup.location.href;
   } catch (cause) {
-    if (cause instanceof DOMException && cause.name === "SecurityError") return;
+    if (isDOMException(cause) && cause.name === "SecurityError") return;
     throw cause;
   }
 
@@ -398,6 +415,31 @@ const executeCompletion = (
     }
   });
 
+const awaitChatVerification = (
+  client: Client,
+  active: ActiveAttempt,
+  attempt: Readonly<{ pairing: Pairing; generation: number; code: string }>
+): Effect.Effect<boolean, "rejected"> =>
+  Effect.gen(function* () {
+    const result = yield* active
+      .poll(client, {
+        provider: active.provider,
+        pairing: attempt.pairing,
+        beforeRequest: Option.none(),
+      })
+      .pipe(Effect.mapError(() => "rejected" as const));
+
+    if (active.generation !== attempt.generation) return false;
+
+    if (result.status === "verified") return true;
+
+    if (result.status !== "awaiting_association" || result.associationCode !== attempt.code) {
+      return yield* Effect.fail("rejected" as const);
+    }
+
+    return yield* awaitChatVerification(client, active, attempt);
+  });
+
 const awaitChatApproval = (
   input: ControllerInput,
   active: ActiveAttempt,
@@ -415,25 +457,13 @@ const awaitChatApproval = (
     yield* withinPairingLifetime(
       pairing.value,
       Effect.gen(function* () {
-        for (;;) {
-          const result = yield* active
-            .poll(client, {
-              provider: active.provider,
-              pairing: pairing.value,
-              beforeRequest: Option.none(),
-            })
-            .pipe(Effect.mapError(() => "rejected" as const));
+        const verified = yield* awaitChatVerification(client, active, {
+          pairing: pairing.value,
+          generation: current,
+          code,
+        });
 
-          if (active.generation !== current) return;
-
-          if (result.status === "verified") break;
-
-          if (result.status !== "awaiting_association" || result.associationCode !== code) {
-            return yield* Effect.fail("rejected" as const);
-          }
-        }
-
-        if (active.generation === current) {
+        if (verified && active.generation === current) {
           yield* executeCompletion(input, active, Option.some(code));
         }
       })
@@ -496,7 +526,8 @@ const guardedCommand = <Value extends AttemptCommand>(
 const refuseExpiredAttempt = (input: ControllerInput, active: ActiveAttempt): boolean => {
   if (
     Option.isNone(active.pairing) ||
-    DateTime.toEpochMillis(active.pairing.value.expiresAt) > Effect.runSync(Clock.currentTimeMillis)
+    DateTime.toEpochMillis(active.pairing.value.expiresAt) >
+      browserRuntime.runSync(Clock.currentTimeMillis)
   ) {
     return false;
   }

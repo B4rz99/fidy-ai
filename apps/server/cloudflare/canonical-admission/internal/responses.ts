@@ -1,4 +1,4 @@
-import { DateTime } from "effect";
+import { DateTime, Match } from "effect";
 import { allowancePeriod } from "../../../src/core/quotas/operations";
 import type { QuotaStatus } from "../../../src/core/quotas/contract";
 import { canonicalRequestProtection } from "../contract";
@@ -83,11 +83,14 @@ export const attachStanding = ({
   headers.set(canonicalAllowanceHeaders.allowance, "canonical_call");
   headers.set(
     canonicalAllowanceHeaders.limit,
-    meter._tag === "Uncapped" ? "uncapped" : String(meter.limit)
+    Match.valueTags(meter, { Uncapped: () => "uncapped", Limited: ({ limit }) => String(limit) })
   );
   headers.set(
     canonicalAllowanceHeaders.remaining,
-    meter._tag === "Uncapped" ? "uncapped" : String(meter.remaining)
+    Match.valueTags(meter, {
+      Uncapped: () => "uncapped",
+      Limited: ({ remaining }) => String(remaining),
+    })
   );
   headers.set(
     canonicalAllowanceHeaders.resetsAt,

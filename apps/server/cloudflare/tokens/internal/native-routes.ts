@@ -82,7 +82,7 @@ export const directoryEvidence = Effect.fn(function* <A, Encoded>(
 
   if (response.status === absentRecord) return Option.none<A>();
 
-  if (!response.ok) return yield* new PATUnavailable();
+  if (!response.ok) return yield* new PATUnavailable({ cause: Option.none() });
 
   return Option.some(
     yield* Schema.decodeUnknownEffect(schema)(yield* Effect.tryPromise(() => response.json()))

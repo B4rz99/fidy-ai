@@ -1,8 +1,9 @@
-import { Digest } from "effect/crypto";
+import { Digest, type SecureRandom } from "effect/crypto";
 import { Clock, DateTime, Effect, Option, Redacted, Schema } from "effect";
 import { Base64Url } from "effect/encoding";
 import { createLocalJWKSet, jwtVerify } from "jose";
-import { makeBancolombiaSandboxOutboundHttp } from "../../../src/shell/outbound-http/operations";
+import { BancolombiaSandboxHttpRequest } from "../../../src/shell/outbound-http/contract";
+import { sandboxHttp } from "./sandbox-http";
 import {
   type BancolombiaActivationInput,
   type BancolombiaAuthenticationFailed,
@@ -132,7 +133,8 @@ const AccountPage = Schema.Struct({
   }),
 });
 
-const failed = (): BancolombiaAuthorizationFailed => new BancolombiaAuthorizationFailed();
+const failed = (): BancolombiaAuthorizationFailed =>
+  new BancolombiaAuthorizationFailed({ cause: undefined });
 
 const checkHash = (
   input: Input,
@@ -214,31 +216,32 @@ const appendAccounts = (
   accounts: Set<string>,
   page: typeof AccountPage.Type
 ): Effect.Effect<void, BancolombiaAuthorizationFailed> =>
-  Effect.gen(function* () {
-    for (const account of page.Data.AccountReport) {
-      if (accounts.has(account.AccountIdentification) || accounts.size >= maximumAccounts) {
-        return yield* failed();
-      }
-
-      accounts.add(account.AccountIdentification);
-    }
-  });
+  Effect.forEach(
+    page.Data.AccountReport,
+    (account) =>
+      accounts.has(account.AccountIdentification) || accounts.size >= maximumAccounts
+        ? Effect.fail(failed())
+        : Effect.sync(() => {
+            accounts.add(account.AccountIdentification);
+          }),
+    { discard: true }
+  );
 
 const validatePosition = (
   links: (typeof AccountPage.Type)["Data"]["Links"],
   pageCount: number
 ): Effect.Effect<void, BancolombiaAuthorizationFailed> =>
-  Effect.gen(function* () {
-    for (const { link, position } of [
+  Effect.forEach(
+    [
       { link: links?.Self, position: pageCount },
       { link: links?.Previous, position: pageCount - 1 },
-    ]) {
-      if (link === undefined) continue;
-      const parsed = nextPage(link);
-
-      if (Option.isNone(parsed) || parsed.value !== position) return yield* failed();
-    }
-  });
+    ],
+    ({ link, position }) =>
+      link === undefined || Option.exists(nextPage(link), (parsed) => parsed === position)
+        ? Effect.void
+        : Effect.fail(failed()),
+    { discard: true }
+  );
 
 const validateCompletion = (
   totalPages: Option.Option<number>,
@@ -310,44 +313,55 @@ const discoverAccounts = (
   bearer: Redacted.Redacted<string>
 ): Effect.Effect<ReadonlyArray<string>, BancolombiaAuthorizationFailed> =>
   Effect.gen(function* () {
-    const http = makeBancolombiaSandboxOutboundHttp(input.httpClient);
+    const http = yield* sandboxHttp(input.httpClient);
     const accounts = new Set<string>();
     const visited = new Set<number>();
-    let page = Option.none<number>();
-    let totalPages = Option.none<number>();
 
-    for (let index = 0; index < maximumPages; index += 1) {
-      if ((yield* Clock.currentTimeMillis) >= input.expiresAtMilliseconds) return yield* failed();
-      const interactionId = yield* input.secureRandom.uuidV4();
+    const readPage = (
+      index: number,
+      page: Option.Option<number>,
+      previousTotal: Option.Option<number>
+    ): Effect.Effect<ReadonlyArray<string>, BancolombiaAuthorizationFailed> =>
+      Effect.gen(function* () {
+        if (index >= maximumPages) return yield* failed();
 
-      const response = yield* http.execute({
-        _tag: "ReadBankAccounts",
-        bearer,
-        interactionId,
-        page,
-      });
+        if ((yield* Clock.currentTimeMillis) >= input.expiresAtMilliseconds) return yield* failed();
+        const interactionId = yield* input.secureRandom.uuidV4();
 
-      if (response.status !== successfulResponse) return yield* failed();
+        const response = yield* http.execute(
+          BancolombiaSandboxHttpRequest.ReadBankAccounts({ bearer, interactionId, page })
+        );
 
-      const decoded = yield* Schema.decodeEffect(Schema.fromJsonString(AccountPage))(
-        new TextDecoder().decode(response.body)
-      );
+        if (response.status !== successfulResponse) return yield* failed();
 
-      totalPages = yield* reconcilePageTotal(totalPages, decoded);
-      yield* appendAccounts(accounts, decoded);
-      page = yield* followingPage({
-        decoded,
-        totalPages,
-        visited,
-        accountCount: accounts.size,
-        pageCount: index + 1,
-      });
+        const decoded = yield* Schema.decodeEffect(Schema.fromJsonString(AccountPage))(
+          new TextDecoder().decode(response.body)
+        );
 
-      if (Option.isNone(page)) return Array.from(accounts);
-    }
+        const totalPages = yield* reconcilePageTotal(previousTotal, decoded);
+        yield* appendAccounts(accounts, decoded);
 
-    return yield* failed();
+        const following = yield* followingPage({
+          decoded,
+          totalPages,
+          visited,
+          accountCount: accounts.size,
+          pageCount: index + 1,
+        });
+
+        if (Option.isNone(following)) return Array.from(accounts);
+
+        return yield* readPage(index + 1, following, totalPages);
+      }).pipe(Effect.mapError(failed));
+
+    return yield* readPage(0, Option.none(), Option.none());
   }).pipe(Effect.mapError(failed));
+
+type Activation = Effect.Effect<
+  ReadonlyArray<string>,
+  BancolombiaAuthorizationFailed,
+  SecureRandom.SecureRandom
+>;
 
 export const activate = (
   input: Input &
@@ -355,18 +369,18 @@ export const activate = (
       assertion: Effect.Effect<Redacted.Redacted<string>, BancolombiaAuthenticationFailed>;
       consentBearer: Effect.Effect<Redacted.Redacted<string>, BancolombiaAuthenticationFailed>;
     }>
-): Effect.Effect<ReadonlyArray<string>, BancolombiaAuthorizationFailed> =>
+): Activation =>
   Effect.gen(function* () {
     if (input.expiresAtMilliseconds <= (yield* Clock.currentTimeMillis)) return yield* failed();
     const signed = yield* input.assertion;
-    const http = makeBancolombiaSandboxOutboundHttp(input.httpClient);
-    const discovery = yield* http.execute({ _tag: "Discovery" });
+    const http = yield* sandboxHttp(input.httpClient);
+    const discovery = yield* http.execute(BancolombiaSandboxHttpRequest.Discovery());
 
     if (discovery.status !== successfulResponse) return yield* failed();
     yield* Schema.decodeEffect(Schema.fromJsonString(Discovery))(
       new TextDecoder().decode(discovery.body)
     );
-    const keyResponse = yield* http.execute({ _tag: "BankSigningKeys" });
+    const keyResponse = yield* http.execute(BancolombiaSandboxHttpRequest.BankSigningKeys());
 
     if (keyResponse.status !== successfulResponse) return yield* failed();
 
@@ -378,12 +392,13 @@ export const activate = (
 
     if (exchangedAt >= input.expiresAtMilliseconds) return yield* failed();
 
-    const response = yield* http.execute({
-      _tag: "ExchangeBankCode",
-      assertion: signed,
-      code: input.code,
-      verifier: input.verifier,
-    });
+    const response = yield* http.execute(
+      BancolombiaSandboxHttpRequest.ExchangeBankCode({
+        assertion: signed,
+        code: input.code,
+        verifier: input.verifier,
+      })
+    );
 
     const body = new TextDecoder().decode(response.body);
     const held = yield* Schema.decodeEffect(Schema.fromJsonString(HeldGrant))(body);
@@ -425,14 +440,15 @@ const verifyConsent = (
   bearer: Redacted.Redacted<string>
 ): Effect.Effect<void, BancolombiaAuthorizationFailed> =>
   Effect.gen(function* () {
-    const http = makeBancolombiaSandboxOutboundHttp(input.httpClient);
+    const http = yield* sandboxHttp(input.httpClient);
 
-    const consent = yield* http.execute({
-      _tag: "ReadBankConsent",
-      bearer,
-      consentId: input.consentId,
-      interactionId: yield* input.secureRandom.uuidV4(),
-    });
+    const consent = yield* http.execute(
+      BancolombiaSandboxHttpRequest.ReadBankConsent({
+        bearer,
+        consentId: input.consentId,
+        interactionId: yield* input.secureRandom.uuidV4(),
+      })
+    );
 
     if (consent.status !== successfulResponse) return yield* failed();
 

@@ -22,26 +22,33 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
 
         const cases = "SELECT id FROM support_recovery_cases ORDER BY id";
 
-        for (const person of [alice, bob]) {
-          const store = db.owner(person.user);
-          yield* native(() =>
-            store.exec(
-              "INSERT INTO support_recovery_cases(id,user_id,pairing_id,operator_issuer,operator_subject,credential_revision,opened_at_ms,expires_at_ms,state,closed_at_ms) VALUES('case',?,'pair','issuer','subject',1,?,?,'approved',?)",
-              person.user,
-              closed,
-              closed + 60000,
-              closed
-            )
-          );
-          yield* native(() =>
-            store.exec(
-              "INSERT OR REPLACE INTO backup_recovery_credentials(user_id,code_digest,created_at_ms,revision,consumed_at_ms) VALUES(?,zeroblob(32),?,1,?)",
-              person.user,
-              closed,
-              closed
-            )
-          );
-        }
+        yield* Effect.forEach(
+          [alice, bob],
+          Effect.fnUntraced(function* (person) {
+            const store = db.owner(person.user);
+
+            const insertCase = (): ReturnType<typeof store.exec> =>
+              store.exec(
+                "INSERT INTO support_recovery_cases(id,user_id,pairing_id,operator_issuer,operator_subject,credential_revision,opened_at_ms,expires_at_ms,state,closed_at_ms) VALUES('case',?,'pair','issuer','subject',1,?,?,'approved',?)",
+                person.user,
+                closed,
+                closed + 60000,
+                closed
+              );
+
+            const insertCredential = (): ReturnType<typeof store.exec> =>
+              store.exec(
+                "INSERT OR REPLACE INTO backup_recovery_credentials(user_id,code_digest,created_at_ms,revision,consumed_at_ms) VALUES(?,zeroblob(32),?,1,?)",
+                person.user,
+                closed,
+                closed
+              );
+
+            yield* native(insertCase);
+            yield* native(insertCredential);
+          }),
+          { discard: true }
+        );
 
         const owner = (yield* native(() =>
           db.runtime.getDurableObjectNamespace("USER_STORE", "core")

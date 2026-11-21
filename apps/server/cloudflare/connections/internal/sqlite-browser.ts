@@ -1,5 +1,5 @@
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, Data, Effect, Option, Redacted, Schema } from "effect";
+import { Clock, Data, Effect, Option, Redacted, Result, Schema } from "effect";
 import {
   ConnectionAuthorizationHandoff,
   ConnectionContinuationInput,
@@ -37,7 +37,7 @@ const unauthorizedStatus = 401;
 const unavailableStatus = 503;
 
 export const failed = (): ConnectionAuthorizationUnavailable =>
-  new ConnectionAuthorizationUnavailable();
+  new ConnectionAuthorizationUnavailable({ cause: undefined });
 
 export const one = (
   rows: ReadonlyArray<unknown>
@@ -142,6 +142,8 @@ const maximumWait = 30000;
 
 type AuthorizationProof = Effect.Success<ReturnType<typeof prepareProof>>;
 
+type ClaimedAttempt<Claim> = Claim extends Result.Result<infer Claimed, unknown> ? Claimed : never;
+
 const claimAttempt = Effect.fn(function* (
   unit: BrowserUnit,
   proof: BrowserProof,
@@ -163,13 +165,13 @@ const claimAttempt = Effect.fn(function* (
       const subject = yield* session(proof, unit.owns, { fresh: true, current });
 
       if ((yield* admitLocalRequest({ user: subject.userId, current })).length === 0) {
-        return continuationFailure(limitedStatus);
+        return Result.fail(continuationFailure(limitedStatus));
       }
 
       if (
         !(yield* institutionsForUser(subject.userId)).includes(InstitutionId.make("bancolombia"))
       ) {
-        return continuationFailure(missingStatus);
+        return Result.fail(continuationFailure(missingStatus));
       }
 
       const [raw] =
@@ -178,7 +180,7 @@ const claimAttempt = Effect.fn(function* (
       AND EXISTS(SELECT 1 FROM connections c WHERE c.id=connection_attempts.connection_id AND c.user_id=${subject.userId} AND c.state='Connecting')
       AND NOT EXISTS(SELECT 1 FROM connection_attempts newer WHERE newer.connection_id=connection_attempts.connection_id AND newer.rowid>connection_attempts.rowid) RETURNING id,expires_at_ms`;
 
-      if (raw === undefined) return continuationFailure(missingStatus);
+      if (raw === undefined) return Result.fail(continuationFailure(missingStatus));
 
       const row = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ id: Schema.String, expires_at_ms: Schema.Int })
@@ -195,20 +197,20 @@ const claimAttempt = Effect.fn(function* (
       const [standing] =
         yield* sql`SELECT coalesce(max(rowid),0) AS withdrawal FROM consent_history WHERE user_id=${subject.userId} AND record_type='processing_withdrawal'`;
 
-      return {
+      return Result.succeed({
         ...row,
         user: subject.userId,
         withdrawal: (yield* Schema.decodeUnknownEffect(Schema.Struct({ withdrawal: Schema.Int }))(
           standing
         )).withdrawal,
-      };
+      });
     })
   );
 });
 
 const settleHandoff = Effect.fn(function* (
   input: {
-    claim: Exclude<Effect.Success<ReturnType<typeof claimAttempt>>, Response>;
+    claim: ClaimedAttempt<Effect.Success<ReturnType<typeof claimAttempt>>>;
     unit: BrowserUnit;
     proof: BrowserProof;
   },
@@ -244,7 +246,7 @@ const settleHandoff = Effect.fn(function* (
 
 const prepareHandoff = Effect.fn(function* (
   context: {
-    claim: Exclude<Effect.Success<ReturnType<typeof claimAttempt>>, Response>;
+    claim: ClaimedAttempt<Effect.Success<ReturnType<typeof claimAttempt>>>;
     unit: BrowserUnit;
     proof: BrowserProof;
   },
@@ -328,10 +330,14 @@ const beginBrowserAttempt = Effect.fn(function* (
   const intent = yield* encodeConsentIntent(bank);
   const claim = yield* claimAttempt(unit, proof, { attempt, auth, intent });
 
-  if (claim instanceof Response) return claim;
+  if (Result.isFailure(claim)) return claim.failure;
 
   if (Option.isSome(auth) && Option.isSome(bank)) {
-    yield* prepareHandoff({ claim, unit, proof }, { attempt, auth: auth.value }, bank.value);
+    yield* prepareHandoff(
+      { claim: claim.success, unit, proof },
+      { attempt, auth: auth.value },
+      bank.value
+    );
   }
 
   return yield* sql.withTransaction(attemptRead(unit, proof, { attempt, pressure: false }));

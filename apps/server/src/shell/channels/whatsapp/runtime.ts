@@ -36,7 +36,7 @@ import {
   type WhatsAppStatusUnavailable,
 } from "./contract";
 
-export const makeLifecycleVerifier = (
+export const lifecycleVerifier = (
   input: Readonly<{
     apiKey: Redacted.Redacted<string>;
     httpClient: HttpClient.HttpClient;
@@ -143,7 +143,7 @@ export const makeWhatsAppDelivery: (
   input: Parameters<typeof buildDelivery>[0]
 ) => WhatsAppDelivery = (input) => buildDelivery(input);
 
-export const makeVoiceUnavailableSender = (
+export const voiceUnavailableSender = (
   input: Readonly<{
     apiKey: Redacted.Redacted<string>;
     httpClient: HttpClient.HttpClient;

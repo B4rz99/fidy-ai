@@ -1,11 +1,13 @@
 import { Data, Schema } from "effect";
 import type { Effect, Option } from "effect";
 
-export class PrivateObjectUnavailable extends Data.TaggedError("PrivateObjectUnavailable") {}
+export class PrivateObjectUnavailable extends Data.TaggedError("PrivateObjectUnavailable")<{
+  readonly cause: Option.Option<unknown>;
+}> {}
 
 export type PrivateObjectBucket = Readonly<{
-  put: (key: string, bytes: Uint8Array, options: R2PutOptions) => Promise<unknown>;
-  delete: (key: string) => Promise<unknown>;
+  put: (key: string, bytes: Uint8Array, options: R2PutOptions) => ReturnType<R2Bucket["put"]>;
+  delete: (key: string) => ReturnType<R2Bucket["delete"]>;
 }>;
 
 export type PrivateObjectWrite<E, R> = Readonly<{

@@ -1,7 +1,7 @@
 import { deepStrictEqual } from "node:assert";
 import { TestClock } from "effect/testing";
 import { type LoginDependencies } from "../../src/login/contract";
-import { IssuedPAT, StartedPATPairing } from "@fidy/server/client";
+import { StartedPATPairing } from "@fidy/server/client";
 import { assert, expect, it } from "@effect/vitest";
 import { Cause, Deferred, Effect, Exit, Fiber, Option, Predicate, Schema } from "effect";
 import { CliFailure, type Credential, SavedGrant, apiOrigin } from "../../src/credential/contract";
@@ -17,15 +17,15 @@ import {
   formatOutput,
   runCommand,
 } from "../../src/command/operations";
+import { decodeIssuedPAT } from "../support/pat";
 
 const secretLength = 43;
 
 const secret = `fin_abcd1234_${"s".repeat(secretLength)}`;
 
-const issued = Schema.decodeSync(Schema.toCodecJson(IssuedPAT))({
+const issued = decodeIssuedPAT({
   bearer: secret,
   pat: {
-    _tag: "PAT",
     id: "01900000-0000-4000-8000-000000000001",
     shortId: "abcd1234",
     recipientLabel: "Agente\u001b[31m\u009b2J\u007f\u202e",

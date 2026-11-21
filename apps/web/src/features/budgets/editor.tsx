@@ -108,12 +108,7 @@ const GroupField = ({
   </>
 );
 
-const useEditor = ({
-  draft,
-  groupCurrencies,
-  disabled,
-  onSubmit,
-}: Pick<EditorProps, "draft" | "groupCurrencies" | "disabled" | "onSubmit">): Readonly<{
+type EditorForm = Readonly<{
   amount: string;
   setAmount: (value: string) => void;
   currency: string;
@@ -121,7 +116,14 @@ const useEditor = ({
   group: string;
   onGroup: (value: string) => void;
   submit: (event: FormEvent<HTMLFormElement>) => void;
-}> => {
+}>;
+
+const useEditor = ({
+  draft,
+  groupCurrencies,
+  disabled,
+  onSubmit,
+}: Pick<EditorProps, "draft" | "groupCurrencies" | "disabled" | "onSubmit">): EditorForm => {
   const [amount, setAmount] = useState(() =>
     Option.match(draft.budget, {
       onNone: () => "",

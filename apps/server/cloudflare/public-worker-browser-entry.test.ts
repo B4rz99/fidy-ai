@@ -88,22 +88,26 @@ it.effect("allows the matching native browser preflight and refuses another brow
       CORE: { fetch },
     };
 
-    for (const origin of [browser, "https://app.fidyapp.com"]) {
-      const result = yield* Effect.tryPromise(() =>
-        publicWorker.fetch(
-          new Request("https://storage-acceptance.fidyapp.com/transactions", {
-            method: "OPTIONS",
-            headers: { origin, "access-control-request-method": "GET" },
-          }),
-          environment
-        )
-      );
+    yield* Effect.forEach(
+      [browser, "https://app.fidyapp.com"],
+      Effect.fnUntraced(function* (origin) {
+        const result = yield* Effect.tryPromise(() =>
+          publicWorker.fetch(
+            new Request("https://storage-acceptance.fidyapp.com/transactions", {
+              method: "OPTIONS",
+              headers: { origin, "access-control-request-method": "GET" },
+            }),
+            environment
+          )
+        );
 
-      expect(result.status).toBe(origin === browser ? 204 : 403);
-      expect(result.headers.get("access-control-allow-origin")).toBe(
-        origin === browser ? browser : null
-      );
-    }
+        expect(result.status).toBe(origin === browser ? 204 : 403);
+        expect(result.headers.get("access-control-allow-origin")).toBe(
+          origin === browser ? browser : null
+        );
+      }),
+      { discard: true }
+    );
 
     expect(fetch).not.toHaveBeenCalled();
   })

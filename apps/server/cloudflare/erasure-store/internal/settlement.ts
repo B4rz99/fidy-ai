@@ -1,5 +1,5 @@
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, Effect, Schema } from "effect";
+import { Clock, Effect, Predicate, Schema } from "effect";
 import { ErasureCustodian } from "../../../src/core/erasure/contract";
 import { directoryName } from "../../directory/contract";
 import { pricingName } from "../../subscription/contract";
@@ -82,6 +82,28 @@ const lifetime = Effect.fn(function* (env: Participants, scope: Scope, url: stri
   return response.status === acknowledged;
 });
 
+const settleParticipant = Effect.fn(function* (
+  scope: Scope,
+  owner: Pick<Fetcher, "fetch">,
+  flag: "directory_clean" | "pricing_clean"
+) {
+  const sql = yield* SqliteClient;
+
+  const pending =
+    yield* sql`SELECT 1 FROM erasure_cases WHERE reference=${scope.reference} AND state='ExternalPending' AND ${sql(flag)}=0`;
+
+  if (pending.length !== 1) return;
+  const response = yield* cleanup(owner, scope, "clean");
+
+  if (response.status !== okStatus) return;
+
+  const progress = yield* Schema.decodeUnknownEffect(CleanupProgress)(
+    yield* Effect.tryPromise(() => response.json())
+  );
+
+  yield* sql`UPDATE erasure_cases SET ${sql(flag)}=${Number(progress.done)},last_erased_at_ms=max(last_erased_at_ms,${progress.lastErasedAtMs}),protect_until_ms=max(protect_until_ms,${progress.protectUntilMs}) WHERE reference=${scope.reference} AND state='ExternalPending' AND ${sql(flag)}=0`;
+});
+
 const settleCustodians = Effect.fn(function* (scope: Scope, env: Participants) {
   const sql = yield* SqliteClient;
 
@@ -90,21 +112,9 @@ const settleCustodians = Effect.fn(function* (scope: Scope, env: Participants) {
     { owner: env.PRICING.getByName(pricingName), flag: "pricing_clean" },
   ] as const;
 
-  for (const { owner, flag } of owners) {
-    const pending =
-      yield* sql`SELECT 1 FROM erasure_cases WHERE reference=${scope.reference} AND state='ExternalPending' AND ${sql(flag)}=0`;
-
-    if (pending.length !== 1) continue;
-    const response = yield* cleanup(owner, scope, "clean");
-
-    if (response.status !== okStatus) continue;
-
-    const progress = yield* Schema.decodeUnknownEffect(CleanupProgress)(
-      yield* Effect.tryPromise(() => response.json())
-    );
-
-    yield* sql`UPDATE erasure_cases SET ${sql(flag)}=${Number(progress.done)},last_erased_at_ms=max(last_erased_at_ms,${progress.lastErasedAtMs}),protect_until_ms=max(protect_until_ms,${progress.protectUntilMs}) WHERE reference=${scope.reference} AND state='ExternalPending' AND ${sql(flag)}=0`;
-  }
+  yield* Effect.forEach(owners, ({ owner, flag }) => settleParticipant(scope, owner, flag), {
+    discard: true,
+  });
 
   const now = yield* Clock.currentTimeMillis;
   yield* sql`UPDATE erasure_cases SET state='Complete' WHERE user_id=${scope.userId} AND reference=${scope.reference} AND state='ExternalPending' AND directory_fenced=1 AND pricing_fenced=1 AND maintenance_fenced=1 AND shared_drained=1 AND drained_at_ms IS NOT NULL AND directory_clean=1 AND pricing_clean=1 AND last_erased_at_ms+${erasureRecoveryWindowMs}<=${now}
@@ -146,15 +156,31 @@ export const finishErasure = Effect.fn(function* (
   yield* expireCase(scope, env, row);
 });
 
-const expireCase = Effect.fn(function* (
+const ExpiringCase = Schema.Struct({
+  protect_until_ms: Schema.Unknown,
+  directory_expired: Schema.Unknown,
+  pricing_expired: Schema.Unknown,
+  maintenance_expired: Schema.Unknown,
+});
+
+const expireParticipant = Effect.fn(function* (
   scope: Scope,
-  env: Participants,
-  row: Readonly<Record<string, unknown>>
+  owner: Pick<Fetcher, "fetch">,
+  flag: "directory_expired" | "pricing_expired"
 ) {
   const sql = yield* SqliteClient;
-  const now = yield* Clock.currentTimeMillis;
 
-  if (typeof row.protect_until_ms !== "number") return;
+  if ((yield* cleanup(owner, scope, "expire")).status === acknowledged) {
+    yield* sql`UPDATE erasure_cases SET ${sql(flag)}=1 WHERE reference=${scope.reference}`;
+  }
+});
+
+const expireCase = Effect.fn(function* (scope: Scope, env: Participants, raw: unknown) {
+  const sql = yield* SqliteClient;
+  const now = yield* Clock.currentTimeMillis;
+  const row = yield* Schema.decodeUnknownEffect(ExpiringCase)(raw);
+
+  if (!Predicate.isNumber(row.protect_until_ms)) return;
 
   if (row.protect_until_ms > now) {
     yield* sql`UPDATE erasure_cases SET next_check_ms=protect_until_ms WHERE reference=${scope.reference} AND next_check_ms>${now}`;
@@ -162,14 +188,16 @@ const expireCase = Effect.fn(function* (
     return;
   }
 
-  for (const { owner, flag } of [
+  const owners = [
     { owner: env.DIRECTORY.getByName(directoryName), flag: "directory_expired" },
     { owner: env.PRICING.getByName(pricingName), flag: "pricing_expired" },
-  ] as const) {
-    if (row[flag] !== 1 && (yield* cleanup(owner, scope, "expire")).status === acknowledged) {
-      yield* sql`UPDATE erasure_cases SET ${sql(flag)}=1 WHERE reference=${scope.reference}`;
-    }
-  }
+  ] as const;
+
+  const unexpired = owners.filter(({ flag }) => row[flag] !== 1);
+
+  yield* Effect.forEach(unexpired, ({ owner, flag }) => expireParticipant(scope, owner, flag), {
+    discard: true,
+  });
 
   if (row.maintenance_expired !== 1 && (yield* lifetime(env, scope, expireLifetimeUrl))) {
     yield* sql`UPDATE erasure_cases SET maintenance_expired=1 WHERE reference=${scope.reference}`;

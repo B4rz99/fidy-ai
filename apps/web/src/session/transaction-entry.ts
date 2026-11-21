@@ -1,9 +1,9 @@
-import { type Context, DateTime, type Effect, Option } from "effect";
+import { DateTime, type Effect, Option } from "effect";
 import { type AsyncResult, Atom, type AtomRegistry } from "effect/reactivity";
 import type { ProcessingConsentStatus, WebAuthClient } from "@/transport/client";
 
 type ConsentError = Effect.Error<
-  ReturnType<Context.Service.Shape<WebAuthClient>["processingConsent"]["status"]>
+  ReturnType<WebAuthClient["Service"]["processingConsent"]["status"]>
 >;
 
 type ConsentValue = Option.Option<AsyncResult.AsyncResult<ProcessingConsentStatus, ConsentError>>;

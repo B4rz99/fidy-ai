@@ -57,14 +57,14 @@ const objectKey = (env: AcceptanceProviderEnvironment, kind: string, id: string)
 const get = Effect.fn(function* <A>(
   env: AcceptanceProviderEnvironment,
   key: string,
-  shape: Schema.Codec<A>
+  schema: Schema.Codec<A>
 ) {
   const saved = yield* Effect.tryPromise(() => env.SMOKE_BUCKET.get(key));
 
   if (saved === null) return Option.none<A>();
 
   return Option.some(
-    yield* Schema.decodeUnknownEffect(shape)(yield* Effect.tryPromise(() => saved.json()))
+    yield* Schema.decodeUnknownEffect(schema)(yield* Effect.tryPromise(() => saved.json()))
   );
 });
 

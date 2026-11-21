@@ -1,3 +1,4 @@
+import { browserRuntime } from "@/transport/browser-runtime";
 import { Effect } from "effect";
 import { preloadReviewMaterial, prepareReviewWorkspace } from "./query";
 import { lazyRouteComponent } from "@tanstack/react-router";
@@ -16,7 +17,7 @@ export const NeedsReviewFeature = (props: ComponentProps<typeof Workspace>): JSX
 );
 
 NeedsReviewFeature.preload = (): Promise<void> =>
-  Effect.runPromise(
+  browserRuntime.runPromise(
     Effect.asVoid(Effect.tryPromise(() => Promise.all([Workspace.preload?.(), Route.preload?.()])))
   );
 

@@ -15,31 +15,40 @@ import { native } from "../user-store.test-fixture";
 
 const statusBody = (response: Response): Effect.Effect<unknown> => native(() => response.json());
 
+const grant = "80000000-0000-4000-8000-000000000001";
+
+const grantConsent = Effect.fn(function* (
+  journey: Effect.Success<typeof nativeTransactionJourney>,
+  user: typeof alice,
+  encoded: string
+) {
+  yield* native(() =>
+    journey
+      .owner(user.user)
+      .exec(
+        "INSERT INTO consent_history(id,user_id,record_type,occurred_at_ms,disclosure_json) VALUES (?,?,'processing_grant',0,?)",
+        grant,
+        user.user,
+        encoded
+      )
+  );
+});
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "withdraws one User's live Consent once and renews only its exact reviewed disclosure with fresh browser proof",
     () =>
       Effect.gen(function* () {
         const journey = yield* nativeTransactionJourney;
-        const grant = "80000000-0000-4000-8000-000000000001";
         const disclosure = webSignupDisclosure();
 
         const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(DisclosureSnapshot))(
           disclosure
         );
 
-        for (const user of [alice, bob]) {
-          yield* native(() =>
-            journey
-              .owner(user.user)
-              .exec(
-                "INSERT INTO consent_history(id,user_id,record_type,occurred_at_ms,disclosure_json) VALUES (?,?,'processing_grant',0,?)",
-                grant,
-                user.user,
-                encoded
-              )
-          );
-        }
+        yield* Effect.forEach([alice, bob], (user) => grantConsent(journey, user, encoded), {
+          discard: true,
+        });
 
         const call = nativeBrowserWrite(journey);
 

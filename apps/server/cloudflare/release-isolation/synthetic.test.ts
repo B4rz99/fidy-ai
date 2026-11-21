@@ -124,50 +124,54 @@ it("binds each closed Core request to the browser and provider callbacks selecte
 
       const now = 1_800_000_000_000;
 
-      for (const [api, browser] of [
-        ["https://api.fidyapp.com", "https://app.fidyapp.com"],
-        ["https://storage-acceptance.fidyapp.com", "https://storage-web-acceptance.fidyapp.com"],
-      ] as const) {
-        const ingress = closedHostEnvironment({
-          request: new Request(api + "/transactions", {
-            headers: { "x-fidy-acceptance-api": "https://unknown.invalid" },
-          }),
-          environment: env,
-          boundary: "ingress",
-        });
+      yield* Effect.forEach(
+        [
+          ["https://api.fidyapp.com", "https://app.fidyapp.com"],
+          ["https://storage-acceptance.fidyapp.com", "https://storage-web-acceptance.fidyapp.com"],
+        ] as const,
+        Effect.fnUntraced(function* ([api, browser]) {
+          const ingress = closedHostEnvironment({
+            request: new Request(api + "/transactions", {
+              headers: { "x-fidy-acceptance-api": "https://unknown.invalid" },
+            }),
+            environment: env,
+            boundary: "ingress",
+          });
 
-        expect([
-          ingress.BROWSER_ORIGIN,
-          ingress.GOOGLE_REDIRECT_URI,
-          ingress.MICROSOFT_REDIRECT_URI,
-        ]).toEqual([
-          browser,
-          api + "/providers/google/callback",
-          api + "/providers/microsoft/callback",
-        ]);
+          expect([
+            ingress.BROWSER_ORIGIN,
+            ingress.GOOGLE_REDIRECT_URI,
+            ingress.MICROSOFT_REDIRECT_URI,
+          ]).toEqual([
+            browser,
+            api + "/providers/google/callback",
+            api + "/providers/microsoft/callback",
+          ]);
 
-        const request = new Request("https://core.internal/transactions", {
-          headers: { "x-fidy-acceptance-api": api },
-        });
+          const request = new Request("https://core.internal/transactions", {
+            headers: { "x-fidy-acceptance-api": api },
+          });
 
-        const core = closedHostEnvironment({ request, environment: env, boundary: "core" });
+          const core = closedHostEnvironment({ request, environment: env, boundary: "core" });
 
-        const proof = yield* signAcceptanceRequest({
-          request,
-          boundary: "core",
-          environment: ingress,
-          deadline: now + 30000,
-        });
+          const proof = yield* signAcceptanceRequest({
+            request,
+            boundary: "core",
+            environment: ingress,
+            deadline: now + 30000,
+          });
 
-        request.headers.set("x-fidy-acceptance-proof", proof);
-        expect(
-          yield* acceptanceRequestAdmitted({ request, boundary: "core", environment: core, now })
-        ).toBe(true);
-        request.headers.set("x-fidy-acceptance-api", "https://unknown.invalid");
-        expect(
-          yield* acceptanceRequestAdmitted({ request, boundary: "core", environment: core, now })
-        ).toBe(false);
-      }
+          request.headers.set("x-fidy-acceptance-proof", proof);
+          expect(
+            yield* acceptanceRequestAdmitted({ request, boundary: "core", environment: core, now })
+          ).toBe(true);
+          request.headers.set("x-fidy-acceptance-api", "https://unknown.invalid");
+          expect(
+            yield* acceptanceRequestAdmitted({ request, boundary: "core", environment: core, now })
+          ).toBe(false);
+        }),
+        { discard: true }
+      );
     })
   ));
 

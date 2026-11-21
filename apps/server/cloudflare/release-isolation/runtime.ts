@@ -2,14 +2,11 @@ import type { AcceptanceWindowBindings } from "./contract";
 import { backgroundWorkAllowed } from "./operations";
 import { deploymentPhase } from "./internal/deployment";
 import { env } from "cloudflare:workers";
-import { Effect, Option, Schema } from "effect";
+import { type ManagedRuntime, Option, Predicate, Schema } from "effect";
 
 const Fixture = Schema.declare<Pick<Fetcher, "fetch">>(
   (value): value is Pick<Fetcher, "fetch"> =>
-    typeof value === "object" &&
-    value !== null &&
-    "fetch" in value &&
-    typeof value.fetch === "function"
+    Predicate.hasProperty(value, "fetch") && Predicate.isFunction(value.fetch)
 );
 
 const Configuration = Schema.Struct({
@@ -83,12 +80,14 @@ export const fetchForInstalledRelease = ({
   );
 
 export const runInstalledBackgroundRequest = ({
+  runtime,
   settings,
   run,
 }: {
+  runtime: Pick<ManagedRuntime.ManagedRuntime<never, never>, "runPromise">;
   settings: AcceptanceWindowBindings;
   run: () => Promise<Response>;
 }): Promise<Response> =>
-  Effect.runPromise(backgroundWorkAllowed(settings)).then((allowed) =>
-    allowed ? run() : new Response(null, { status: 403 })
-  );
+  runtime
+    .runPromise(backgroundWorkAllowed(settings))
+    .then((allowed) => (allowed ? run() : new Response(null, { status: 403 })));

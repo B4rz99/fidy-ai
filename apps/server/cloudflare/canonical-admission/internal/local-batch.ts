@@ -1,3 +1,7 @@
+import {
+  OperationAccessCaller,
+  OperationAccessDecision,
+} from "../../../src/shell/canonical-policy/contract";
 import { confirmLocalOAuth } from "../../oauth-confirmation/operations";
 import {
   type Audit,
@@ -12,7 +16,7 @@ import {
 } from "./local-batch-plans";
 import type { StoreCapacityUnavailable } from "../../runtime/sqlite/contract";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, Effect, Option, Schema } from "effect";
+import { Clock, Effect, Option, Predicate, Schema } from "effect";
 import { CanonicalRetryKey } from "../../../src/core/quotas/contract";
 import type { UserId } from "../../../src/core/identity/contract";
 import {
@@ -62,6 +66,8 @@ import {
   scopeMissing,
 } from "./responses";
 
+const isResponse = Schema.is(Schema.instanceOf(Response));
+
 const firstFailureStatus = 400;
 
 const envelope = Schema.Struct({
@@ -76,15 +82,12 @@ const childEnvelope = Schema.Struct({
 
 const ordinaryBatchBytes = maximumAtomicBatchCalls * maximumTransactionInputBytes;
 
+const isTransactionUpdate = Schema.is(
+  Schema.Struct({ operation: Schema.Literal("transactions.updateTransactions") })
+);
+
 const withinEnvelopeLimit = (body: typeof envelope.Type, byteLength: number): boolean =>
-  body.calls.some(
-    (call) =>
-      typeof call === "object" &&
-      call !== null &&
-      !Array.isArray(call) &&
-      "operation" in call &&
-      call.operation === "transactions.updateTransactions"
-  ) || byteLength <= ordinaryBatchBytes;
+  body.calls.some(isTransactionUpdate) || byteLength <= ordinaryBatchBytes;
 
 const bodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes:
@@ -231,66 +234,72 @@ export const selectChildren = <Owner>({
 };
 
 const childCaller = Effect.fn(function* ({ subject, current }: Pick<Call, "subject" | "current">) {
-  if ("oauth" in subject) return { _tag: "OAuthAgent" as const, capabilities: subject.scopes };
+  if ("oauth" in subject) return OperationAccessCaller.OAuthAgent({ capabilities: subject.scopes });
 
-  if ("patId" in subject) return { _tag: "PAT" as const, capabilities: subject.scopes };
+  if ("patId" in subject) return OperationAccessCaller.PAT({ capabilities: subject.scopes });
   const sql = yield* SqliteClient;
 
-  return {
-    _tag: "WebSession" as const,
+  return OperationAccessCaller.WebSession({
     fresh:
       (yield* sql`SELECT 1 FROM web_sessions WHERE id=${subject.sessionId} AND user_id=${subject.userId} AND fresh_until_ms>${current}`)
         .length === 1,
-  };
+  });
 });
 
 const childAccess = Effect.fn(function* (call: Call, children: ReadonlyArray<Child>) {
   const { status } = call;
   const caller = yield* childCaller(call);
 
-  for (const child of children) {
-    const access = decideOperationAccess(child.operation.policy.access, caller);
+  const entitled = (child: Child): boolean =>
+    grantsRequiredTier({
+      requiredTier: child.operation.policy.requiredTier,
+      callerTier: status.accessTier,
+    });
 
-    if (access._tag === "Denied") {
-      yield* audit({ ...call, operation: child.operation }, "validation_failed");
+  const blocked = Option.fromUndefinedOr(
+    children.find(
+      (child) =>
+        !OperationAccessDecision.$is("Allowed")(
+          decideOperationAccess(child.operation.policy.access, caller)
+        ) || !entitled(child)
+    )
+  );
 
-      if (access.reason === "caller_ineligible") {
-        const failure = failed({
-          ...child,
-          code: "scope_missing",
-          message: "This caller cannot invoke the child operation.",
-        });
+  if (Option.isNone(blocked)) return Option.none<Response>();
+  const child = blocked.value;
 
-        return Option.some(
-          attachStanding({
-            ...call,
-            response: Response.json(failure.body, { status: failure.status }),
-          })
-        );
-      }
+  const access = decideOperationAccess(child.operation.policy.access, caller);
 
-      return Option.some(yield* reject(call, scopeMissing()));
-    }
+  if (OperationAccessDecision.$is("Denied")(access)) {
+    yield* audit({ ...call, operation: child.operation }, "validation_failed");
 
-    if (
-      !grantsRequiredTier({
-        requiredTier: child.operation.policy.requiredTier,
-        callerTier: status.accessTier,
-      })
-    ) {
+    if (access.reason === "caller_ineligible") {
       const failure = failed({
         ...child,
-        code: "paywall_required",
-        message: "Your Subscription tier does not grant this operation.",
+        code: "scope_missing",
+        message: "This caller cannot invoke the child operation.",
       });
 
-      yield* audit({ ...call, operation: child.operation }, "validation_failed");
-
-      return Option.some(yield* reject(call, Response.json(failure.body, { status: 400 })));
+      return Option.some(
+        attachStanding({
+          ...call,
+          response: Response.json(failure.body, { status: failure.status }),
+        })
+      );
     }
+
+    return Option.some(yield* reject(call, scopeMissing()));
   }
 
-  return Option.none<Response>();
+  const failure = failed({
+    ...child,
+    code: "paywall_required",
+    message: "Your Subscription tier does not grant this operation.",
+  });
+
+  yield* audit({ ...call, operation: child.operation }, "validation_failed");
+
+  return Option.some(yield* reject(call, Response.json(failure.body, { status: 400 })));
 });
 
 const applyChildren = Effect.fn(function* (call: Call, children: ReadonlyArray<Child>) {
@@ -333,7 +342,7 @@ const commitAuthorizedBatch = Effect.fn(function* (
   if (Option.isSome(denied)) return denied.value;
   const confirmation = yield* batchConfirmation(call);
 
-  if (confirmation instanceof Response) return attachStanding({ ...call, response: confirmation });
+  if (isResponse(confirmation)) return attachStanding({ ...call, response: confirmation });
   yield* sweepLocalReceipts(call.current);
   const prior = yield* replay(call, invocation);
 
@@ -367,14 +376,16 @@ const reserveRoutes = Effect.fn(function* (
       const current = yield* Clock.currentTimeMillis;
       const preliminary = yield* resolve(current);
 
-      if (typeof preliminary === "string") return;
+      if (Predicate.isString(preliminary)) return;
       const caller = yield* childCaller({ subject: preliminary, current });
       const status = yield* localStanding(preliminary.userId, current);
 
       if (
         children.value.children.every(
           (child) =>
-            decideOperationAccess(child.operation.policy.access, caller)._tag === "Allowed" &&
+            OperationAccessDecision.$is("Allowed")(
+              decideOperationAccess(child.operation.policy.access, caller)
+            ) &&
             grantsRequiredTier({
               requiredTier: child.operation.policy.requiredTier,
               callerTier: status.accessTier,
@@ -426,10 +437,9 @@ const prepareBatch = Effect.fn(function* <E, R>(
     "children" in selected
       ? yield* Effect.forEach(selected.children, (child) =>
           Effect.gen(function* () {
-            const prepare =
-              typeof child.prepare === "function"
-                ? child.prepare
-                : yield* child.prepare.reserve(child.input);
+            const prepare = Predicate.isFunction(child.prepare)
+              ? child.prepare
+              : yield* child.prepare.reserve(child.input);
 
             return { ...child, prepare };
           })

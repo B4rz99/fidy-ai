@@ -1,6 +1,7 @@
+import { browserRuntime } from "@/transport/browser-runtime";
 import { useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
-import { Clock, type DateTime, Effect, Option } from "effect";
+import { Clock, type DateTime, Effect, Option, Predicate } from "effect";
 import { Atom } from "effect/reactivity";
 import { type RefCallback, useCallback, useState } from "react";
 import type {
@@ -42,10 +43,10 @@ const makeLifetime = (): Lifetime => {
 export const continuationDeadline = (review: Review): DateTime.Utc =>
   review.authorization?.expiresAt ?? review.expiresAt;
 
-const now = (): number => Effect.runSync(Clock.currentTimeMillis);
+const now = (): number => browserRuntime.runSync(Clock.currentTimeMillis);
 
 const freshReview = (result: CanonicalQueryState<Review, unknown>): Option.Option<Review> =>
-  result._tag === "Ready" &&
+  Predicate.isTagged(result, "Ready") &&
   !result.waiting &&
   Option.isNone(result.refreshFailure) &&
   continuationDeadline(result.value).epochMilliseconds > now()
@@ -54,7 +55,8 @@ const freshReview = (result: CanonicalQueryState<Review, unknown>): Option.Optio
 
 const canRefresh = (result: CanonicalQueryState<Review, unknown>): boolean =>
   !result.waiting &&
-  (result._tag !== "Ready" || continuationDeadline(result.value).epochMilliseconds > now());
+  (!Predicate.isTagged(result, "Ready") ||
+    continuationDeadline(result.value).epochMilliseconds > now());
 
 type Submission = Readonly<{ generation: number; deadline: number }>;
 
@@ -135,7 +137,7 @@ export const useContinuation = (attempt: Attempt): Continuation => {
   return {
     result: useAtomValue(query).pipe(presentCanonicalQuery),
     busy: execution.waiting,
-    uncertain: execution._tag === "Ready" && execution.value,
+    uncertain: Predicate.isTagged(execution, "Ready") && execution.value,
     submitted: useAtomValue(submitted),
     mounted,
     begin: () => {

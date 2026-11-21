@@ -84,7 +84,7 @@ def validate_candidate(read, *, account, revision, versions, public_key):
                 deployments=deployments, userNamespace=user_namespace, resourceRevision=resource_revision, **member)
 
 
-def validate_qualification(candidate, promotion, installation):
+def validate_qualification(candidate, promotion, installation, *, restored=None):
     """Match independently pinned protected release artifacts to the current serving deployment."""
     release = promotion["release"]
     snapshot = release["snapshot"]
@@ -98,7 +98,9 @@ def validate_qualification(candidate, promotion, installation):
         raise ValueError("Closed native release or rollback qualification differs")
     for role, label in (("core", "core"), ("ingress", "public")):
         version = candidate["versions"][role]
+        original = promotion["promoted"][label + "DeploymentId"]
+        expected = original if restored is None else restored[role]
         if (snapshot[label]["name"] != SCRIPTS[role]
                 or installation[label + "VersionId"] != version or release[label + "VersionId"] != version
-                or promotion["promoted"][label + "DeploymentId"] != candidate["deployments"][role]):
+                or expected != candidate["deployments"][role]):
             raise ValueError("Native deployment differs from the qualified release")

@@ -56,6 +56,14 @@ on:
         description: Reviewed SHA-256 of the exact closed canonical host transfer
         required: false
         type: string
+      canonical_rollback_artifact:
+        description: Protected failed opening artifact for retrying after an exact rollback
+        required: false
+        type: string
+      canonical_rollback_sha256:
+        description: Reviewed SHA-256 of the failed opening evidence
+        required: false
+        type: string
       canonical_opening_artifact:
         description: Exact protected opening artifact ID for actual signup and background verification
         required: false
@@ -206,6 +214,8 @@ jobs:
         env:
           CANONICAL_TRANSFER_ARTIFACT: ${{ inputs.canonical_transfer_artifact }}
           CANONICAL_TRANSFER_SHA256: ${{ inputs.canonical_transfer_sha256 }}
+          CANONICAL_ROLLBACK_ARTIFACT: ${{ inputs.canonical_rollback_artifact }}
+          CANONICAL_ROLLBACK_SHA256: ${{ inputs.canonical_rollback_sha256 }}
           CANONICAL_SMOKE_ARTIFACT: ${{ inputs.canonical_smoke_artifact }}
           CANONICAL_SMOKE_SHA256: ${{ inputs.canonical_smoke_sha256 }}
           CANONICAL_PLAN_ARTIFACT: ${{ inputs.canonical_plan_artifact }}

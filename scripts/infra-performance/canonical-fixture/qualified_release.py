@@ -131,7 +131,7 @@ def fixture_upload():
     return json.loads((Path(__file__).resolve().parents[3] / "infra/cloudflare/native-fixture-upload.json").read_bytes())
 
 
-def serving_graph(read, account, revision, installed):
+def serving_graph(read, account, revision, installed, *, restored=None):
     upload = fixture_upload()
     support = upload["revision"]
     successor = installed.get("fixtureMember") == "performance-2"
@@ -186,7 +186,8 @@ def serving_graph(read, account, revision, installed):
         deployments = read(f"accounts/{account}/workers/scripts/{name}/deployments")["deployments"]
         active = deployments[0]
         version, = active["versions"]
-        if (active["id"] != recorded["deploymentId"] or version["version_id"] != recorded["versionId"]
+        expected_deployment = (restored or {}).get(role.lower(), recorded["deploymentId"])
+        if (active["id"] != expected_deployment or version["version_id"] != recorded["versionId"]
                 or version["percentage"] != 100):
             raise ValueError("A qualified native Worker deployment changed")
         if role in ("Smoke", "ForwardedEmail"):

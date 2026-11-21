@@ -229,3 +229,86 @@ it(
     ),
   20000
 );
+
+const visiblePanel = (container: HTMLElement): HTMLElement =>
+  container.querySelector<HTMLElement>('[data-review="panel"]:not([hidden])') ?? container;
+
+const reviewLabels = (
+  container: HTMLElement
+): Readonly<{ heading: string; placeholder: string; name: string; empty: string }> => {
+  const panel = visiblePanel(container);
+  const search = panel.querySelector<HTMLInputElement>('[data-review="search"] input');
+  return {
+    heading: panel.querySelector('[data-review="inbox-head"] h2')?.textContent ?? "",
+    placeholder: search?.placeholder ?? "",
+    name: search?.getAttribute("aria-label") ?? "",
+    empty: panel.querySelector('[data-review="grid"]') === null ? panel.textContent : "",
+  };
+};
+
+const searchFor = (container: HTMLElement, text: string): Promise<void> =>
+  reactWork(() => {
+    const search = visiblePanel(container).querySelector<HTMLInputElement>(
+      '[data-review="search"] input'
+    );
+    if (search === null) return;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(search, text);
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+const openPending = (container: HTMLElement): Promise<void> =>
+  reactWork(() =>
+    Array.from(visiblePanel(container).querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent.startsWith("Pendientes"))
+      ?.click()
+  );
+
+it(
+  "names the history view's ordering, search and empty results after history rather than pending items",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const page = expiredReview("statement", "created");
+        try {
+          yield* Effect.tryPromise(page.render);
+          yield* Effect.tryPromise(() =>
+            vi.waitFor(() => {
+              expect(reviewLabels(page.container)).toEqual({
+                heading: "Por fecha límite, las más antiguas primero",
+                placeholder: "Buscar en el historial de esta página",
+                name: "Buscar en el historial de esta página",
+                empty: "",
+              });
+            })
+          );
+          yield* Effect.tryPromise(() => searchFor(page.container, "sin coincidencias"));
+          expect(reviewLabels(page.container).empty).toContain(
+            "Sin elementos del historial en esta página"
+          );
+          expect(reviewLabels(page.container).empty).toContain(
+            "Prueba con otros filtros o búsquedas para encontrar elementos del historial en esta página."
+          );
+          yield* Effect.tryPromise(() => searchFor(page.container, ""));
+          yield* Effect.tryPromise(() => openPending(page.container));
+          yield* Effect.tryPromise(() =>
+            vi.waitFor(() => {
+              expect(reviewLabels(page.container)).toEqual({
+                heading: "Vencen primero",
+                placeholder: "Buscar pendientes en esta página",
+                name: "Buscar pendientes en esta página",
+                empty: "",
+              });
+            })
+          );
+          yield* Effect.tryPromise(() => searchFor(page.container, "sin coincidencias"));
+          expect(reviewLabels(page.container).empty).toContain("Sin pendientes en esta página");
+          expect(reviewLabels(page.container).empty).toContain(
+            "Prueba con otros filtros o búsquedas para encontrar pendientes en esta página."
+          );
+        } finally {
+          yield* Effect.tryPromise(page.dispose);
+        }
+      })
+    ),
+  20000
+);

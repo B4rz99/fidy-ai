@@ -395,7 +395,7 @@ const ReadyInboxView = ({
         contextLoading={context.loading}
         workspaceQuery={workspaceQuery}
         freshness={freshness}
-        caughtUp={inboxCaughtUp(view, { filter, source, search })}
+        filters={{ filter, source, search }}
         view={visible}
         control={control}
         page={page}
@@ -405,10 +405,24 @@ const ReadyInboxView = ({
     </>
   );
 };
+const emptyView = (filter: Filter): Readonly<{ title: string; description: string }> =>
+  filter === "pending"
+    ? {
+        title: "Sin pendientes en esta página",
+        description:
+          "Prueba con otros filtros o búsquedas para encontrar pendientes en esta página.",
+      }
+    : {
+        title: "Sin elementos del historial en esta página",
+        description:
+          "Prueba con otros filtros o búsquedas para encontrar elementos del historial en esta página.",
+      };
 const EmptyInbox = ({
+  filter,
   caughtUp,
   freshness,
 }: Readonly<{
+  filter: Filter;
   caughtUp: boolean;
   freshness: ReadyInboxProps["freshness"];
 }>): JSX.Element =>
@@ -417,11 +431,11 @@ const EmptyInbox = ({
   ) : (
     <ReviewFullState
       state={freshness === "refreshing" ? "loading" : "empty"}
-      title={caughtUp ? "Todo al día" : "Sin elementos en esta vista"}
+      title={caughtUp ? "Todo al día" : emptyView(filter).title}
       description={
         caughtUp
           ? "Cuando haya material por completar, aparecerá aquí."
-          : "Prueba con otros filtros para encontrar elementos en esta página."
+          : emptyView(filter).description
       }
     >
       {null}
@@ -432,7 +446,7 @@ type InboxWorkspaceProps = Readonly<{
   unfilteredItems: ReadonlyArray<Workspace["items"][number]>;
   contexts: PageContexts;
   contextLoading: boolean;
-  caughtUp: boolean;
+  filters: Readonly<{ filter: Filter; source: string; search: string }>;
   freshness: ReadyInboxProps["freshness"];
   workspaceQuery: ReviewWorkspaceQuery;
   view: Workspace;
@@ -447,7 +461,7 @@ const InboxWorkspace = ({
   contexts,
   contextLoading,
   workspaceQuery,
-  caughtUp,
+  filters,
   freshness,
   view,
   control,
@@ -459,7 +473,11 @@ const InboxWorkspace = ({
   if (item === undefined) {
     return (
       <>
-        <EmptyInbox caughtUp={caughtUp} freshness={freshness} />
+        <EmptyInbox
+          filter={filters.filter}
+          caughtUp={inboxCaughtUp(view, filters)}
+          freshness={freshness}
+        />
         {view.total > 0 ? (
           <ReviewPagination page={page} pageLength={pageLength} total={view.total} move={move} />
         ) : null}
@@ -473,6 +491,7 @@ const InboxWorkspace = ({
         contexts={contexts}
         contextLoading={contextLoading}
         view={view}
+        filter={filters.filter}
         selected={Option.some(item.id)}
         checked={control.checked}
         choose={control.choose}

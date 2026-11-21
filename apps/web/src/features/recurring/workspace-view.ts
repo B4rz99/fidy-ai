@@ -14,13 +14,15 @@ const HistoryView = Schema.Struct({ recurringWorkspace: WorkspaceView });
 
 type WorkspaceView = typeof WorkspaceView.Type;
 
-export const useRecurringWorkspaceView = (): Readonly<{
+type RecurringWorkspaceViewControl = Readonly<{
   filters: Filters;
   previous: Option.Option<string>;
   applyFilters: (filters: Filters) => void;
   earlier: (month: string) => void;
   selectMonth: (month: string) => void;
-}> => {
+}>;
+
+export const useRecurringWorkspaceView = (): RecurringWorkspaceViewControl => {
   const router = useRouter();
   const state = useRouterState({ select: (value) => value.location.state });
   const binding = router.options.context.sessionBinding;

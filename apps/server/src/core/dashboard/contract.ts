@@ -66,20 +66,21 @@ export const DashboardQueryContext = UserContext.annotate({ identifier: "Dashboa
 
 export type DashboardQueryContext = typeof DashboardQueryContext.Type;
 
-const AppliedDashboardPeriodShape = Schema.Struct({
+const UncheckedAppliedDashboardPeriod = Schema.Struct({
   requested: DashboardPeriod,
   from: UtcTimestamp,
   toExclusive: UtcTimestamp,
   timeZone: IanaTimeZone,
 });
 
-const validAppliedPeriod = Schema.makeFilter<typeof AppliedDashboardPeriodShape.Type>((period) =>
-  DateTime.Order(period.from, period.toExclusive) < 0
-    ? undefined
-    : { path: ["toExclusive"], issue: "Expected an instant after from" }
+const validAppliedPeriod = Schema.makeFilter<typeof UncheckedAppliedDashboardPeriod.Type>(
+  (period) =>
+    DateTime.Order(period.from, period.toExclusive) < 0
+      ? undefined
+      : { path: ["toExclusive"], issue: "Expected an instant after from" }
 );
 
-export const AppliedDashboardPeriod = AppliedDashboardPeriodShape.check(
+export const AppliedDashboardPeriod = UncheckedAppliedDashboardPeriod.check(
   validAppliedPeriod
 ).annotate({ identifier: "AppliedDashboardPeriod" });
 
@@ -265,12 +266,12 @@ export type LeafNode = Extract<LayoutNode, { readonly kind: "leaf" }>;
 
 export type SplitNode = Extract<LayoutNode, { readonly kind: "split" }>;
 
-const DashboardDocumentShape = Schema.Struct({
+const UncheckedDashboardDocument = Schema.Struct({
   title: DashboardTitle,
   layout: LayoutNode,
 });
 
-type DashboardDocumentShape = typeof DashboardDocumentShape.Type;
+type UncheckedDashboardDocument = typeof UncheckedDashboardDocument.Type;
 
 export type DashboardStructureIssue = Readonly<{
   readonly path: ReadonlyArray<string | number>;
@@ -284,7 +285,7 @@ type VisitContext = Readonly<{
 }>;
 
 export const findDashboardStructureIssue = (
-  document: Readonly<DashboardDocumentShape>
+  document: Readonly<UncheckedDashboardDocument>
 ): Option.Option<DashboardStructureIssue> => {
   const widgetIds = new Set<WidgetId>();
   let widgetCount = 0;
@@ -353,11 +354,11 @@ export const findDashboardStructureIssue = (
   return issue;
 };
 
-const validDocumentStructure = Schema.makeFilter<DashboardDocumentShape>((document) =>
+const validDocumentStructure = Schema.makeFilter<UncheckedDashboardDocument>((document) =>
   Option.toArray(findDashboardStructureIssue(document))
 );
 
-export const DashboardDocument = DashboardDocumentShape.check(validDocumentStructure).annotate({
+export const DashboardDocument = UncheckedDashboardDocument.check(validDocumentStructure).annotate({
   identifier: "DashboardDocument",
 });
 

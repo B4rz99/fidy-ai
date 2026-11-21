@@ -1,4 +1,4 @@
-import { BigDecimal, Schema } from "effect";
+import { BigDecimal, Data, Schema } from "effect";
 import { Currency, Money, type ReadonlyMoney } from "~/core/_shared/money";
 import { WeeklyPeriods } from "~/core/insights/contract";
 import { CategoryId } from "~/core/categories/contract";
@@ -162,6 +162,9 @@ export type WeeklySummaryPresentation = Readonly<{
   sections: ReadonlyArray<Readonly<{ currency: Currency; text: string }>>;
 }>;
 
-export type WeeklySummaryOutcome =
-  | Readonly<{ _tag: "NoActivity" }>
-  | Readonly<{ _tag: "Summary"; payload: WeeklySummaryPayload }>;
+export type WeeklySummaryOutcome = Data.TaggedEnum<{
+  NoActivity: {};
+  Summary: { readonly payload: WeeklySummaryPayload };
+}>;
+
+export const WeeklySummaryOutcome = Data.taggedEnum<WeeklySummaryOutcome>();

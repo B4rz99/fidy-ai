@@ -51,7 +51,7 @@ const PositiveMoney = Money.check(
   )
 );
 
-const PlanShape = Schema.Struct({
+const UncheckedRecurringPlan = Schema.Struct({
   name: Schema.NonEmptyString.check(Schema.isTrimmed(), Schema.isMaxLength(maximumNameLength)),
   kind: Schema.Literals(["income", "expense", "transfer"]),
   cardPayment: Schema.optionalKey(Schema.Boolean),
@@ -70,7 +70,7 @@ const PlanShape = Schema.Struct({
   accountId: Schema.optionalKey(Schema.String.check(Schema.isUUID())),
 });
 
-export const RecurringPlanInput = PlanShape.check(
+export const RecurringPlanInput = UncheckedRecurringPlan.check(
   Schema.makeFilter((plan: RecurringPlanInput) => {
     if (plan.cardPayment === true && plan.kind !== "transfer") {
       return "Card payments must be transfers";
@@ -268,7 +268,7 @@ export type RecurringMatch = Readonly<{ item: RecurringOccurrence; fact: Recurri
 
 export const RecurringFilters = Schema.Struct({
   search: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(maximumNameLength))),
-  kind: Schema.optionalKey(PlanShape.fields.kind),
+  kind: Schema.optionalKey(UncheckedRecurringPlan.fields.kind),
   frequency: Schema.optionalKey(RecurringFrequency),
   currency: Schema.optionalKey(Currency),
   categoryId: Schema.optionalKey(Schema.String),
@@ -281,7 +281,7 @@ export const RecurringFilters = Schema.Struct({
 export type RecurringFilters = typeof RecurringFilters.Type;
 
 export const RecurringSummary = Schema.Struct({
-  kind: PlanShape.fields.kind,
+  kind: UncheckedRecurringPlan.fields.kind,
   currency: Currency,
   completed: Money,
   remaining: Money,

@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Data, Schema, type Types } from "effect";
 import { Locale, ServiceMarket } from "~/core/_shared/context";
 import {
   ProviderMessageEvidence,
@@ -174,14 +174,17 @@ export const ConsentInboundContent = Schema.Union([
 
 export type ConsentInboundContent = typeof ConsentInboundContent.Type;
 
-export type ConsentReplyDecision =
-  | Readonly<{ readonly _tag: "Accepted" }>
-  | Readonly<{ readonly _tag: "Declined" }>
-  | Readonly<{ readonly _tag: "Clarify" }>;
+export type ConsentReplyDecision = Data.TaggedEnum<{
+  Accepted: {};
+  Declined: {};
+  Clarify: {};
+}>;
 
-type AwaitingDisclosureDelivery = Extract<
+export const ConsentReplyDecision = Data.taggedEnum<ConsentReplyDecision>();
+
+type AwaitingDisclosureDelivery = Types.ExtractTag<
   PendingConsentExchange,
-  { readonly _tag: "AwaitingDisclosureDelivery" }
+  "AwaitingDisclosureDelivery"
 >;
 
 type ReadonlyPolicySnapshot = Readonly<PolicySnapshot>;
@@ -203,6 +206,8 @@ export type PendingConsentInput = Omit<
 };
 
 export type PendingConsentDraft = Omit<AwaitingDisclosureDelivery, "caller">;
+
+export const PendingConsentDraft = Data.taggedEnum<PendingConsentDraft>();
 
 export const ConsentIngressExchange = Schema.Struct({
   initiatingMessageId: WhatsAppProviderMessageId,
@@ -248,21 +253,33 @@ export const PATRevocationOrigin = Schema.Literals([
 
 export type PATRevocationOrigin = typeof PATRevocationOrigin.Type;
 
+const PATRevocationStatement = { revision: Schema.String, text: Schema.String };
+
+export const AuthenticatedWebPATRevocation = Schema.TaggedStruct(
+  "AuthenticatedWeb",
+  PATRevocationStatement
+);
+
+export const ApprovedUnclaimedExpiryPATRevocation = Schema.TaggedStruct("AutomaticPolicy", {
+  ...PATRevocationStatement,
+  policyReason: Schema.Literal("pat-approved-unclaimed-expiry"),
+});
+
+export const FixedLifetimeExpiryPATRevocation = Schema.TaggedStruct("AutomaticPolicy", {
+  ...PATRevocationStatement,
+  policyReason: Schema.Literal("pat-fixed-lifetime-expiry"),
+});
+
+export type PATRevocationDisclosures = Readonly<{
+  "user-revoke-one": typeof AuthenticatedWebPATRevocation.Type;
+  "user-revoke-all": typeof AuthenticatedWebPATRevocation.Type;
+  "user-revoke-unclaimed": typeof AuthenticatedWebPATRevocation.Type;
+  "approved-unclaimed-expiry": typeof ApprovedUnclaimedExpiryPATRevocation.Type;
+  "fixed-lifetime-expiry": typeof FixedLifetimeExpiryPATRevocation.Type;
+}>;
+
 export type PATRevocationDisclosure<Origin extends PATRevocationOrigin = PATRevocationOrigin> =
-  Readonly<{ revision: string; text: string }> &
-    {
-      "user-revoke-one": Readonly<{ _tag: "AuthenticatedWeb" }>;
-      "user-revoke-all": Readonly<{ _tag: "AuthenticatedWeb" }>;
-      "user-revoke-unclaimed": Readonly<{ _tag: "AuthenticatedWeb" }>;
-      "approved-unclaimed-expiry": Readonly<{
-        _tag: "AutomaticPolicy";
-        policyReason: "pat-approved-unclaimed-expiry";
-      }>;
-      "fixed-lifetime-expiry": Readonly<{
-        _tag: "AutomaticPolicy";
-        policyReason: "pat-fixed-lifetime-expiry";
-      }>;
-    }[Origin];
+  PATRevocationDisclosures[Origin];
 
 export const WebOnboardingConsentGrantId = Schema.String.check(
   Schema.isPattern(/^[A-Za-z0-9_-]{43}$/u)

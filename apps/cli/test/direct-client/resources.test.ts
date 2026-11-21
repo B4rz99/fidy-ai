@@ -3,6 +3,7 @@ import { expect, it, layer } from "@effect/vitest";
 import { Data, Effect, Exit, Fiber, Match, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { FetchHttpClient, HttpBody, HttpClient, HttpClientResponse } from "effect/http";
+import { isCliFailure } from "../../src/credential/contract";
 import { protectClient } from "../../src/direct-client/runtime";
 
 class NativeLifetimeTestFailed extends Data.TaggedError("NativeLifetimeTestFailed")<{
@@ -134,17 +135,16 @@ layer(FetchHttpClient.layer)((it) => {
         expect(
           Exit.match(exit, {
             onFailure: () => "interrupted",
-            onSuccess: (result) => (Result.isSuccess(result) ? "success" : result),
+            onSuccess: Result.match({
+              onSuccess: () => "success",
+              onFailure: (failure) => (isCliFailure(failure) ? failure.reason : "unexpected"),
+            }),
           })
-        ).toEqual(
+        ).toBe(
           Match.value(completion).pipe(
             Match.when("interruption", () => "interrupted"),
             Match.when("success", () => "success"),
-            Match.orElse(() =>
-              expect.objectContaining({
-                failure: expect.objectContaining({ reason: "TransportUnavailable" }),
-              })
-            )
+            Match.orElse(() => "TransportUnavailable")
           )
         );
 

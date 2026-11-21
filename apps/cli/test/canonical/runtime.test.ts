@@ -1,6 +1,6 @@
 import { BunFileSystem } from "@effect/platform-bun";
 import { expect, layer } from "@effect/vitest";
-import { Effect, Exit, Fiber, FileSystem, Match, Option, Schema } from "effect";
+import { Effect, Exit, Fiber, FileSystem, Match, Option, Result, Schema } from "effect";
 import { identity } from "effect/Function";
 import { TestClock } from "effect/testing";
 import { makeCanonicalFixture } from "./canonical.test-fixture";
@@ -73,17 +73,17 @@ layer(BunFileSystem.layer)((it) => {
 
       const exit = yield* Fiber.await(fiber);
 
-      expect(Exit.match(exit, { onFailure: () => "interrupted", onSuccess: identity })).toEqual(
+      expect(
+        Exit.match(exit, {
+          onFailure: () => "interrupted",
+          onSuccess: Result.match({ onSuccess: identity, onFailure: ({ reason }) => reason }),
+        })
+      ).toBe(
         Match.value(completion).pipe(
           Match.when("interruption", () => "interrupted"),
-          Match.when("success", () => expect.objectContaining({ success: "{}" })),
-          Match.orElse((failed) =>
-            expect.objectContaining({
-              failure: expect.objectContaining({
-                reason: failed === "overflow" ? "InputTooLarge" : "InvalidInput",
-              }),
-            })
-          )
+          Match.when("success", () => "{}"),
+          Match.when("overflow", () => "InputTooLarge"),
+          Match.orElse(() => "InvalidInput")
         )
       );
 
@@ -115,17 +115,18 @@ layer(BunFileSystem.layer)((it) => {
           ],
           Effect.fnUntraced(function* ({ name, input }) {
             const call = Option.getOrThrow(Option.fromUndefinedOr(client.transactions?.[name]));
-            expect(
-              yield* Effect.result(
-                call({
-                  params: undefined,
-                  query: undefined,
-                  payload: undefined,
-                  headers: undefined,
-                  ...input,
-                })
-              )
-            ).toMatchObject({ failure: expect.any(Schema.SchemaError) });
+
+            const result = yield* Effect.result(
+              call({
+                params: undefined,
+                query: undefined,
+                payload: undefined,
+                headers: undefined,
+                ...input,
+              })
+            );
+
+            expect(Result.isFailure(result) && Schema.isSchemaError(result.failure)).toBe(true);
           }),
           { discard: true }
         );

@@ -5,8 +5,7 @@ import {
   decideOperationAccess,
   operationCatalog,
 } from "@fidy/server/client";
-import { Data, Effect, Exit, Fiber, Predicate, Schema } from "effect";
-import { identity } from "effect/Function";
+import { Data, Effect, Exit, Fiber, Predicate, Result, Schema } from "effect";
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
 import { TestClock } from "effect/testing";
 import { formatFailure } from "../../src/command/operations";
@@ -318,13 +317,15 @@ it.effect(
           expect(test.stderr.join("").includes("servidor puede haber confirmado cambios")).toBe(
             interrupt
           );
-          expect(Exit.match(exit, { onFailure: () => "interrupted", onSuccess: identity })).toEqual(
-            interrupt
-              ? "interrupted"
-              : expect.objectContaining({
-                  failure: expect.objectContaining({ reason: "MutationAmbiguous" }),
-                })
-          );
+          expect(
+            Exit.match(exit, {
+              onFailure: () => "interrupted",
+              onSuccess: Result.match({
+                onSuccess: () => "succeeded",
+                onFailure: ({ reason }) => reason,
+              }),
+            })
+          ).toBe(interrupt ? "interrupted" : "MutationAmbiguous");
 
           expect(cancelled).toBe(true);
         }),

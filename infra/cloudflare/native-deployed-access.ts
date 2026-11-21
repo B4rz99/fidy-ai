@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
-import { Config, Effect, Option, Schema } from "effect";
+import { Config, Effect, Schema } from "effect";
 import { readRecoveryPin } from "./native-recovery-identity";
 
 import { type ProviderRead as Read, readProviderList as readNamed } from "./native-provider-list";
@@ -131,7 +131,6 @@ type Input = {
   hosts: readonly string[];
   apiHosts: readonly string[];
   staging: boolean;
-  allowIncumbentAccess: boolean;
   canonicalDiagnostics: boolean;
   workers: readonly string[];
   bindings: Readonly<Record<string, unknown>>;
@@ -159,33 +158,6 @@ type RelevantScope = Readonly<{
   rows: readonly (typeof App.Type)[];
 }>;
 type AccessRead = Pick<Input, "read" | "account" | "zone">;
-const incumbentCanonicalAccess = [
-  {
-    id: "af54bc92-73be-472a-b5a7-5002954dca47",
-    path: "api.fidyapp.com/internal/titular-erasure",
-  },
-  {
-    id: "8b963f88-6e96-44d5-acd1-a1bad374048b",
-    path: "api.fidyapp.com/internal/support-recovery",
-  },
-] as const;
-export type IncumbentAccessApplication = (typeof incumbentCanonicalAccess)[number];
-const exactIncumbentApplication = (
-  app: typeof App.Type,
-  pin: IncumbentAccessApplication
-): boolean => {
-  const matches = (uri: string): boolean => uri === pin.path || uri === "https://" + pin.path;
-  const paths = findUris(app);
-  return (
-    app.type === "self_hosted" &&
-    !subjects.some((role) => role.name === app.name) &&
-    paths.length > 0 &&
-    paths.every(matches) &&
-    (app.destinations ?? []).every(
-      (row) => row.type === "public" && row.worker_id === undefined && matches(row.uri ?? "")
-    )
-  );
-};
 const readApplicationInventory = Effect.fn(function* (
   input: AccessRead & Pick<Input, "canonicalDiagnostics">
 ) {
@@ -202,41 +174,6 @@ const readApplicationInventory = Effect.fn(function* (
       return { scope, rows };
     })
   );
-});
-const singleApplication = (rows: readonly (typeof App.Type)[]): Option.Option<typeof App.Type> =>
-  rows.length === 1 ? Option.fromUndefinedOr(rows[0]) : Option.none();
-const corroborateIncumbentApplication = Effect.fn(function* (
-  scopes: readonly RelevantScope[],
-  pin: IncumbentAccessApplication,
-  input: Pick<Input, "canonicalDiagnostics">
-) {
-  const matches = scopes.map(({ rows }) => rows.filter((row) => row.id === pin.id));
-  if (matches.every((rows) => rows.length === 0)) return false;
-  const [account = Option.none(), zone = Option.none()] = matches.map(singleApplication);
-  if (
-    Option.isNone(account) ||
-    Option.isNone(zone) ||
-    !isDeepStrictEqual(account.value, zone.value) ||
-    !exactIncumbentApplication(account.value, pin)
-  ) {
-    return yield* accessRefusal(input, "incumbent application scope or canonical path");
-  }
-  return true;
-});
-const checkIncumbentAccess = Effect.fn(function* (
-  scopes: readonly RelevantScope[],
-  input: Pick<Input, "canonicalDiagnostics">
-) {
-  const found = yield* Effect.forEach(incumbentCanonicalAccess, (pin) =>
-    corroborateIncumbentApplication(scopes, pin, input)
-  );
-  return incumbentCanonicalAccess.filter((_, index) => found[index] === true);
-});
-export const readIncumbentAccess: (
-  read: AccessRead
-) => Effect.Effect<readonly IncumbentAccessApplication[], Error> = Effect.fn(function* (read) {
-  const input = { ...read, canonicalDiagnostics: true };
-  return yield* checkIncumbentAccess(yield* readApplicationInventory(input), input);
 });
 const maxDiagnosticApplications = 24;
 const accessIdPattern = /^(?:[a-f0-9]{32}|[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})$/iu;
@@ -328,8 +265,6 @@ const configuredRole = Effect.fn(function* (
     membership: email ?? role.binding,
   };
 });
-const includesPinnedIncumbents = (input: Input): boolean =>
-  input.installed && input.staging && input.allowIncumbentAccess;
 const relevantApplications = Effect.fn(function* (input: Input) {
   const inventory = yield* readApplicationInventory(input);
   const appScopes = inventory.map(({ scope, rows }) => ({
@@ -339,14 +274,9 @@ const relevantApplications = Effect.fn(function* (input: Input) {
   if (input.canonicalDiagnostics) {
     yield* Effect.logInfo(applicationDiagnostic(input, appScopes));
   }
-  const incumbent = includesPinnedIncumbents(input)
-    ? yield* checkIncumbentAccess(inventory, input)
-    : [];
-  const incumbentIds = new Set<string>(incumbent.map((row) => row.id));
   const active = new Map<string, typeof App.Type>();
   for (const { rows } of appScopes) {
     for (const app of rows) {
-      if (incumbentIds.has(app.id)) continue;
       const previous = active.get(app.id);
       if (previous !== undefined && !isDeepStrictEqual(previous, app)) {
         return yield* accessRefusal(input, "account and zone application disagreement");

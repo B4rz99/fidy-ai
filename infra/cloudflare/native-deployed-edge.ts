@@ -1,4 +1,4 @@
-import { type CanonicalDomainPort, canonicalDomains } from "./native-canonical-domains";
+import type { ReadCanonicalDomain } from "./native-canonical-domains";
 import { installedOrigins } from "@fidy/server/browser-transport";
 import { inspectNativeAccess } from "./native-deployed-access";
 import { Config, Effect, Schema } from "effect";
@@ -196,7 +196,7 @@ export const canonicalDomainReader = ({
   readAccount: Read;
   readZone: Read;
   zoneId: string;
-}): CanonicalDomainPort["read"] =>
+}): ReadCanonicalDomain =>
   Effect.fn(function* (route) {
     const hosts = yield* readList(
       readAccount,
@@ -225,21 +225,6 @@ const hostStateAllowed = (state: {
   installed: boolean;
   stagingAlias: boolean;
 }): boolean => state.expected || (state.vacant && (!state.installed || state.stagingAlias));
-const matchesCanonicalIncumbent = (
-  host: string,
-  observed: {
-    attachments: ReadonlyArray<typeof domain.Type>;
-    dns: ReadonlyArray<typeof record.Type>;
-    zoneId: string;
-  }
-): boolean =>
-  canonicalDomains.some(
-    (route) =>
-      route.host === host &&
-      observed.attachments[0]?.id === route.incumbentId &&
-      attachedTo(observed.attachments, host, { worker: route.incumbent, zone: observed.zoneId }) &&
-      dnsConfirmed(observed.dns, host)
-  );
 const inspectHosts = Effect.fn(function* (input: {
   read: Read;
   account: string;
@@ -248,7 +233,6 @@ const inspectHosts = Effect.fn(function* (input: {
   installed: boolean;
   hosts: ReturnType<typeof hostWorkers>;
   staging: boolean;
-  incumbentTransfer: boolean;
 }) {
   const { read, account, zone, zoneId, installed, hosts } = input;
   const routes = yield* readList(
@@ -284,9 +268,6 @@ const inspectHosts = Effect.fn(function* (input: {
         attachedTo(attachments, host, { worker: target, zone: zoneId }) &&
         dnsConfirmed(dns, host);
       if (
-        !(
-          input.incumbentTransfer && matchesCanonicalIncumbent(host, { attachments, dns, zoneId })
-        ) &&
         !hostStateAllowed({ expected, vacant, installed, stagingAlias: input.staging && canonical })
       ) {
         return yield* Effect.fail(Error("Unexpected DNS or Worker attachment for " + host));
@@ -333,7 +314,7 @@ export const inspectDeployedEdge = Effect.fn(function* (
     bindings: Readonly<Record<string, unknown>>;
     hosts: NativeHostMode;
     staging: boolean;
-  } & (Readonly<Record<never, never>> | { incumbentTransfer: boolean })
+  }
 ) {
   const { installed } = stage;
   const read: Read = (path) =>
@@ -354,7 +335,6 @@ export const inspectDeployedEdge = Effect.fn(function* (
     zoneId: zone.id,
     hosts,
     staging: stage.staging === true,
-    incumbentTransfer: "incumbentTransfer" in stage && stage.incumbentTransfer,
     installed,
   }).pipe(checkCanonicalInventory(stage.hosts, "DNS and Worker attachments"));
   const builds = yield* inspectBuilds({ read, account, installed, client }).pipe(
@@ -366,8 +346,6 @@ export const inspectDeployedEdge = Effect.fn(function* (
     zone: "zones/" + zone.id + "/",
     installed,
     staging: stage.staging === true,
-    allowIncumbentAccess:
-      stage.hosts === "staged" && "incumbentTransfer" in stage && stage.incumbentTransfer,
     canonicalDiagnostics: stage.hosts === "staged",
     hosts: hosts.map(([host]) => host),
     apiHosts: hosts

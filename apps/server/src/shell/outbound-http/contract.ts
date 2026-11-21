@@ -137,7 +137,7 @@ export type ProviderOidcHttpService = Readonly<{
 }>;
 
 export type CliReleaseHttpService = Readonly<{
-  readLatest: () => Effect.Effect<OutboundHttpResponse, OutboundHttpFailure>;
+  readLatest: Effect.Effect<OutboundHttpResponse, OutboundHttpFailure>;
 }>;
 
 export type BancolombiaSandboxHttpService = Readonly<{

@@ -51,11 +51,16 @@ const scenario = Effect.gen(function* () {
     { cookie, [binding]: bob.session, authorization: "Bearer unrelated-credential" },
   ];
 
-  for (const headers of refusals) {
-    const rejected = yield* send(headers);
-    expect(rejected.status).toBe(401);
-    expect(yield* native(() => rejected.text())).not.toContain(alice.user);
-  }
+  yield* Effect.forEach(
+    refusals,
+    (headers) =>
+      Effect.gen(function* () {
+        const rejected = yield* send(headers);
+        expect(rejected.status).toBe(401);
+        expect(yield* native(() => rejected.text())).not.toContain(alice.user);
+      }),
+    { discard: true }
+  );
 
   expect(yield* native(() => db.exec("SELECT idle_expires_at_ms FROM web_sessions"))).toEqual(
     original

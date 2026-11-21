@@ -42,8 +42,18 @@ export const nativeScopeRequest = Effect.fn(function* (
   }
 
   if (custodian === "Resend") {
-    const rows =
+    const scope =
       yield* sql`SELECT rowid AS cursor, work_id AS workId,requested_at_ms AS requestedAtMs FROM erasure_resend_scope WHERE reference=${reference} AND rowid>${after} ORDER BY rowid LIMIT 17`;
+
+    const rows = yield* Schema.decodeUnknownEffect(
+      Schema.Array(
+        Schema.Struct({
+          cursor: Schema.Unknown,
+          workId: Schema.Unknown,
+          requestedAtMs: Schema.Unknown,
+        })
+      )
+    )(scope);
 
     return custodyScopePage(rows);
   }

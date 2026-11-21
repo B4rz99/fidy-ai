@@ -1,11 +1,11 @@
 import { TransactionBoundaryFailure, transactionNoStore } from "./contract";
-import { Clock, Effect } from "effect";
+import { DateTime } from "effect";
 import { newId } from "../secret-material/operations";
 
 export const boundaryFailure = (cause: unknown): TransactionBoundaryFailure =>
   new TransactionBoundaryFailure({ cause });
 
-export const transactionNow = (): number => Effect.runSync(Clock.currentTimeMillis);
+export const transactionNow = (): number => DateTime.toEpochMillis(DateTime.nowUnsafe());
 
 export const transactionId = (): string => newId();
 
@@ -25,11 +25,14 @@ export const transactionFailure = ({
     | "user_action_required";
   status: number;
   message: string;
-}>): Response =>
-  Response.json(
-    { error: { code, message, ...(code === "validation_failed" ? { fields: [] } : {}) }, next: [] },
+}>): Response => {
+  const error = { code, message };
+
+  return Response.json(
+    { error: code === "validation_failed" ? { ...error, fields: [] } : error, next: [] },
     { status, headers: transactionNoStore }
   );
+};
 
 export type {
   CanonicalCaller,

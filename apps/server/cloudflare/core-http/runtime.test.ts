@@ -3,7 +3,7 @@ import { Effect, Schema } from "effect";
 import { type CoreHttpEnvironment } from "./contract";
 import { it } from "@effect/vitest";
 import { expect, vi } from "vitest";
-import { makeCoreHttp } from "./runtime";
+import { coreHttpHandler } from "./runtime";
 import { cloudflareWorkerTelemetry } from "../runtime/telemetry/operations";
 
 const burstLogs = (logs: ReadonlyArray<ReadonlyArray<unknown>>): ReadonlyArray<string> =>
@@ -29,6 +29,25 @@ const environment: CoreHttpEnvironment = {
   WOMPI_INTEGRITY_SECRET: "",
 };
 
+type CoreHandler = ReturnType<typeof coreHttpHandler>;
+
+const refusedBody = Effect.fn(function* (core: CoreHandler, request: Request) {
+  const response = yield* Effect.tryPromise(() => core(request, environment));
+  expect(response.status).toBe(401);
+
+  return yield* Effect.tryPromise(() => response.text());
+});
+
+const discardedReply = Effect.fn(function* (
+  send: (path: string) => Promise<Response>,
+  path: string,
+  status: number
+) {
+  const response = yield* Effect.tryPromise(() => send(path));
+  expect(response.status).toBe(status);
+  yield* Effect.tryPromise(() => response.text());
+});
+
 it.live("preserves actual Core callback refusals and never stores attacker request content", () =>
   Effect.gen(function* () {
     const logs = vi.spyOn(console, "log").mockImplementation(() => undefined);
@@ -37,7 +56,7 @@ it.live("preserves actual Core callback refusals and never stores attacker reque
       (clock) => Effect.sync(() => clock.mockRestore())
     );
 
-    const core = makeCoreHttp({
+    const core = coreHttpHandler({
       telemetry: cloudflareWorkerTelemetry,
       institutions: registeredConnectionInstitutionIds,
     });
@@ -54,16 +73,11 @@ it.live("preserves actual Core callback refusals and never stores attacker reque
         body: '{"secret":"private-user-content"}',
       });
 
-    let original = "";
+    const bodies = yield* Effect.forEach(Array.from({ length: 101 }), () =>
+      refusedBody(core, request())
+    );
 
-    for (let count = 0; count < 101; count += 1) {
-      const response = yield* Effect.tryPromise(() => core(request(), environment));
-      expect(response.status).toBe(401);
-      const body = yield* Effect.tryPromise(() => response.text());
-
-      if (count === 0) original = body;
-      expect(body).toBe(original);
-    }
+    expect(new Set(bodies).size).toBe(1);
 
     const warnings = burstLogs(logs.mock.calls);
     expect(warnings).toHaveLength(1);
@@ -82,7 +96,7 @@ it.live(
         (clock) => Effect.sync(() => clock.mockRestore())
       );
 
-      const core = makeCoreHttp({
+      const core = coreHttpHandler({
         telemetry: cloudflareWorkerTelemetry,
         institutions: registeredConnectionInstitutionIds,
       });
@@ -102,19 +116,19 @@ it.live(
           environment
         );
 
-      for (let index = 0; index < 100; index += 1) {
-        const response = yield* Effect.tryPromise(() => send("/providers/kapso/callback-extra"));
-        expect(response.status).toBe(404);
-        yield* Effect.tryPromise(() => response.text());
-      }
+      yield* Effect.forEach(
+        Array.from({ length: 100 }),
+        () => discardedReply(send, "/providers/kapso/callback-extra", 404),
+        { discard: true }
+      );
 
       expect(burstLogs(logs.mock.calls)).toEqual([]);
 
-      for (let index = 0; index < 100; index += 1) {
-        const response = yield* Effect.tryPromise(() => send("/providers/kapso/callback"));
-        expect(response.status).toBe(422);
-        yield* Effect.tryPromise(() => response.text());
-      }
+      yield* Effect.forEach(
+        Array.from({ length: 100 }),
+        () => discardedReply(send, "/providers/kapso/callback", 422),
+        { discard: true }
+      );
 
       const warnings = burstLogs(logs.mock.calls);
       expect(warnings).toHaveLength(1);

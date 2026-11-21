@@ -6,7 +6,7 @@ import {
   runLocalMutation,
 } from "../../canonical-admission/operations";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { DateTime, Effect, Option, Result, Schema } from "effect";
+import { DateTime, Effect, Option, Predicate, Result, Schema } from "effect";
 import {
   DashboardCatalog,
   DashboardDocument,
@@ -15,7 +15,7 @@ import {
 import {
   applyDashboardEdit,
   collectDashboardCategoryReferences,
-  makeDashboardCatalog,
+  dashboardCatalog,
 } from "../../../src/core/dashboard/operations";
 import { categoryIds } from "../../../src/core/categories/contract";
 import { listLaunchCategories } from "../../../src/core/categories/operations";
@@ -93,7 +93,8 @@ const editDocument = Effect.fn(function* (base: DashboardDocument, edit: Dashboa
 
   if (Result.isFailure(result)) {
     return Result.fail(
-      result.failure._tag === "WidgetNotFound" || result.failure._tag === "RegionNotFound"
+      Predicate.isTagged(result.failure, "WidgetNotFound") ||
+        Predicate.isTagged(result.failure, "RegionNotFound")
         ? missingWidget
         : invalidEdit
     );
@@ -165,7 +166,7 @@ const runDashboard = Effect.fn(function* (
   current: number
 ) {
   if (operation === "dashboard.listDashboardCatalog") {
-    const catalog = makeDashboardCatalog({ restaurantCategoryId: categoryIds.restaurantes });
+    const catalog = dashboardCatalog({ restaurantCategoryId: categoryIds.restaurantes });
 
     return success(yield* Schema.encodeEffect(Schema.toCodecJson(DashboardCatalog))(catalog));
   }

@@ -1,4 +1,5 @@
-import { Clock, Data, DateTime, Effect, Exit, Option, Redacted, Schema } from "effect";
+import { ConsentSubject } from "../../../src/shell/consent/contract";
+import { Clock, Data, DateTime, Effect, Exit, Option, Predicate, Redacted, Schema } from "effect";
 import { proofPolicy } from "../contract";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
 import {
@@ -20,6 +21,8 @@ import { boundedJsonBody } from "../../http/operations";
 import { withStoreCapacity } from "../../runtime/sqlite/operations";
 import { sessionSetCookie } from "../../web-session/operations";
 import { UserId } from "../../../src/core/identity/contract";
+
+const isResponse = Schema.is(Schema.instanceOf(Response));
 
 const maximumWrongProofs = 5;
 
@@ -76,13 +79,13 @@ const prepareClaim = Effect.fn(function* (
     attemptedAt: DateTime.makeUnsafe(current),
   });
 
-  if (decision._tag === "WrongVerifier") {
+  if (Predicate.isTagged(decision, "WrongVerifier")) {
     yield* sql`UPDATE browser_handoffs SET wrong_attempts=${decision.wrongVerifierAttempts},state=${decision.lifecycle} WHERE id=${row.id}`;
 
     return invalidPairing();
   }
 
-  if (decision._tag === "SlowDown") {
+  if (Predicate.isTagged(decision, "SlowDown")) {
     const retry = Math.min(maximumPollSeconds, decision.retryAfterSeconds);
     yield* sql`UPDATE browser_handoffs SET minimum_poll_seconds=${Math.min(maximumPollSeconds, decision.minimumPollIntervalSeconds)} WHERE id=${row.id}`;
 
@@ -92,7 +95,7 @@ const prepareClaim = Effect.fn(function* (
     );
   }
 
-  if (decision._tag === "Pending") {
+  if (Predicate.isTagged(decision, "Pending")) {
     yield* sql`UPDATE browser_handoffs SET last_poll_ms=${current} WHERE id=${row.id}`;
 
     return Response.json(
@@ -105,7 +108,7 @@ const prepareClaim = Effect.fn(function* (
     );
   }
 
-  if (decision._tag !== "Consume") return invalidPairing();
+  if (!Predicate.isTagged(decision, "Consume")) return invalidPairing();
 
   const changed =
     yield* sql`UPDATE browser_handoffs SET claim_id=${session},claim_at_ms=${current} WHERE id=${row.id} AND (claim_id IS NULL OR claim_at_ms<${current - claimLeaseMs}) RETURNING id`;
@@ -152,7 +155,7 @@ export const redeemLocalPairing = Effect.fn(function* (
     withStoreCapacity("required")
   );
 
-  if (prepare instanceof Response) return prepare;
+  if (isResponse(prepare)) return prepare;
   const deadlines = calculateWebSessionDeadlines(DateTime.makeUnsafe(prepare.current));
   const hard = DateTime.toEpochMillis(deadlines.hardExpiresAt);
 
@@ -251,7 +254,7 @@ export const localChannelRequest = Effect.fn(function* (
         sql: "SELECT 1 FROM users u WHERE u.id=? AND u.whatsapp_portfolio_id=? AND u.whatsapp_bsuid=? AND u.lifetime_registered=1 AND NOT EXISTS(SELECT 1 FROM erasure_requests)",
         params: [handoff.user_id, handoff.portfolio, handoff.bsuid],
       },
-      subject: { _tag: "User", userId: handoff.user_id },
+      subject: ConsentSubject.User({ userId: handoff.user_id }),
       requirement: "granted",
     });
 

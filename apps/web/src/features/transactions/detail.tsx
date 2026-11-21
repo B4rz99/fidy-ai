@@ -1,4 +1,4 @@
-import { Option, Predicate } from "effect";
+import { Array, type Data, Option, Predicate } from "effect";
 import { type JSX, use, useState } from "react";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
@@ -11,7 +11,7 @@ import { CategoryVisual } from "@/ui/components/category-visual";
 import { Button } from "@/ui/components/button";
 import { Badge } from "@/ui/components/badge";
 import type { CanonicalSuccess, FidyClient } from "@/transport/client";
-import { type DetailMode, reconciliationLocked } from "./panel-state";
+import { DetailMode, reconciliationLocked } from "./panel-state";
 import { TransactionCorrection } from "./correction";
 import { TransactionDeletion } from "./deletion";
 import {
@@ -95,13 +95,15 @@ const TransactionRelationship = ({ props }: Readonly<{ props: InspectedProps }>)
               !["idle", "rejected"].includes(props.mode.status))
           }
           onClick={() =>
-            props.onMode({
-              _tag: "Reconciling",
-              pair,
-              sources: props.sources,
-              deleting: Predicate.isTagged(props.mode, "Deleting"),
-              status: "review",
-            })
+            props.onMode(
+              DetailMode.Reconciling({
+                pair,
+                sources: props.sources,
+                deleting: Predicate.isTagged(props.mode, "Deleting"),
+                status: "review",
+                separated: Option.none(),
+              })
+            )
           }
         >
           {Predicate.isTagged(props.mode, "Deleting") ? "Revisar vínculo" : "Ver vínculo"}
@@ -117,16 +119,14 @@ const detailRow = ({
   locale,
   timeZone,
 }: Pick<DetailProps, "transaction" | "categories" | "locale" | "timeZone">): TransactionListRow =>
-  Option.getOrThrow(
-    Option.fromNullishOr(
-      presentTransactionRows({
-        transactions: [transaction],
-        categories,
-        locale,
-        timeZone,
-        counterpartyFallback: "Contraparte no identificada",
-      })[0]
-    )
+  Array.headNonEmpty(
+    presentTransactionRows({
+      transactions: Array.of(transaction),
+      categories,
+      locale,
+      timeZone,
+      counterpartyFallback: "Contraparte no identificada",
+    })
   );
 
 const DetailFacts = ({ transaction, categories, locale, timeZone }: DetailProps): JSX.Element => {
@@ -181,7 +181,7 @@ const DetailDeleteButton = ({ props }: Readonly<{ props: InspectedProps }>): JSX
       data-transaction-slot="transaction-danger"
       onClick={() => {
         if (owner.reviewDeletion(props.transaction.id)) {
-          props.onMode({ _tag: "Deleting", status: "idle", original: Option.none() });
+          props.onMode(DetailMode.Deleting({ status: "idle", original: Option.none() }));
         }
       }}
     >
@@ -261,7 +261,7 @@ const DetailFrame = ({
 const ReconciliationPanel = ({
   props,
 }: Readonly<{
-  props: InspectedProps & { mode: Extract<DetailMode, { _tag: "Reconciling" }> };
+  props: InspectedProps & { mode: Data.TaggedEnum.Value<DetailMode, "Reconciling"> };
 }>): JSX.Element => {
   const owner = useTransactionCorrections();
 
@@ -275,14 +275,14 @@ const ReconciliationPanel = ({
           if (props.mode.deleting) owner.reviewDeletion(props.transaction.id);
           props.onMode(
             props.mode.deleting
-              ? { _tag: "Deleting", status: "idle", original: Option.none() }
-              : { _tag: "Editing" }
+              ? DetailMode.Deleting({ status: "idle", original: Option.none() })
+              : DetailMode.Editing()
           );
         }}
         onHistory={props.onRefresh}
         onDelete={(original) => {
           if (owner.reviewDeletion(original.id)) {
-            props.onMode({ _tag: "Deleting", status: "idle", original: Option.some(original) });
+            props.onMode(DetailMode.Deleting({ status: "idle", original: Option.some(original) }));
           }
         }}
       />
@@ -293,7 +293,7 @@ const ReconciliationPanel = ({
 const DeletionPanel = ({
   props,
 }: Readonly<{
-  props: InspectedProps & { mode: Extract<DetailMode, { _tag: "Deleting" }> };
+  props: InspectedProps & { mode: Data.TaggedEnum.Value<DetailMode, "Deleting"> };
 }>): JSX.Element => {
   const owner = useTransactionCorrections();
 
@@ -308,7 +308,9 @@ const DeletionPanel = ({
         }
         onDeleted={props.onDeleted}
         onCancel={() =>
-          Option.isSome(props.mode.original) ? props.onRefresh() : props.onMode({ _tag: "Editing" })
+          Option.isSome(props.mode.original)
+            ? props.onRefresh()
+            : props.onMode(DetailMode.Editing())
         }
         onRefresh={props.onRefresh}
       />
@@ -329,7 +331,7 @@ const useEditingAdmission = (input: InspectedProps): boolean => {
 
 const DetailEditAction = ({ props }: Readonly<{ props: InspectedProps }>): JSX.Element =>
   Predicate.isTagged(props.mode, "Viewing") && props.editable && props.correctionReady ? (
-    <Button variant="outline" onClick={() => props.onMode({ _tag: "Editing" })}>
+    <Button variant="outline" onClick={() => props.onMode(DetailMode.Editing())}>
       Editar transacción
     </Button>
   ) : (

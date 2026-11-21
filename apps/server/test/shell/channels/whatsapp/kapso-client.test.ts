@@ -40,8 +40,8 @@ import {
 } from "~/shell/channels/whatsapp/contract";
 import {
   makeHostedSender,
-  makeVoiceUnavailableSender,
   makeWhatsAppDelivery,
+  voiceUnavailableSender,
 } from "~/shell/channels/whatsapp/runtime";
 
 it.effect.each(["123456789", "987654321"])(
@@ -148,7 +148,7 @@ it.effect("addresses the fixed voice failure reply to the authenticated sandbox 
   Effect.gen(function* () {
     let addressedByPhone = false;
 
-    const sender = makeVoiceUnavailableSender({
+    const sender = voiceUnavailableSender({
       apiKey: Redacted.make("sandbox-test-key"),
       sandboxPhoneNumberId: Option.some("123456789"),
       httpClient: makeTestOutboundTransport((request) => {

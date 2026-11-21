@@ -56,20 +56,22 @@ export type EvaluationStore = Readonly<{
 
 type Work = EvaluationStore;
 
-const jsonCodec = <Shape extends Schema.Top>(
-  schema: Shape
-): Schema.fromJsonString<Schema.toCodecJson<Shape>> =>
+const jsonCodec = <Model extends Schema.Top>(
+  schema: Model
+): Schema.fromJsonString<Schema.toCodecJson<Model>> =>
   Schema.fromJsonString(Schema.toCodecJson(schema));
 
-export const decode = <Shape extends Schema.Top>({
+export const decode = <Model extends Schema.Top>({
   schema,
   input,
-}: Readonly<{ schema: Shape; input: unknown }>): Effect.Effect<
-  Shape["Type"],
+}: Readonly<{ schema: Model; input: unknown }>): Effect.Effect<
+  Model["Type"],
   RecurringUnavailable,
-  Shape["DecodingServices"]
+  Model["DecodingServices"]
 > =>
-  Schema.decodeUnknownEffect(schema)(input).pipe(Effect.mapError(() => new RecurringUnavailable()));
+  Schema.decodeUnknownEffect(schema)(input).pipe(
+    Effect.mapError((cause) => new RecurringUnavailable({ cause: Option.some(cause) }))
+  );
 
 export const initialize = ({
   work,
@@ -102,23 +104,29 @@ export const scan = ({
       transactionId: progress.cursor_id,
     });
 
-    if (Option.isNone(read)) return yield* new RecurringUnavailable();
-    const statements: Statement[] = [];
+    if (Option.isNone(read)) return yield* new RecurringUnavailable({ cause: Option.none() });
 
-    for (const fact of read.value.facts) {
-      if (Option.isNone(fact.counterparty)) continue;
-      const encoded = yield* Schema.encodeEffect(jsonCodec(RecurringTransactionFact))(fact);
-      statements.push(
-        statement(
-          "INSERT INTO recurring_evaluation_records (kind,user_id,id,group_key,occurred_at_ms,fact_json) VALUES ('fact',?,?,?,?,?) ON CONFLICT(user_id,kind,id) DO NOTHING",
-          work.userId,
-          fact.id,
-          `${fact.money.currency}|${normalizeCounterparty(fact.counterparty.value)}`,
-          fact.occurredAt.epochMilliseconds,
-          encoded
+    const named = read.value.facts.flatMap((fact) =>
+      Option.match(fact.counterparty, {
+        onNone: () => [],
+        onSome: (counterparty) => [{ fact, counterparty }],
+      })
+    );
+
+    const statements: Statement[] = yield* Effect.forEach(named, ({ fact, counterparty }) =>
+      Schema.encodeEffect(jsonCodec(RecurringTransactionFact))(fact).pipe(
+        Effect.map((encoded) =>
+          statement(
+            "INSERT INTO recurring_evaluation_records (kind,user_id,id,group_key,occurred_at_ms,fact_json) VALUES ('fact',?,?,?,?,?) ON CONFLICT(user_id,kind,id) DO NOTHING",
+            work.userId,
+            fact.id,
+            `${fact.money.currency}|${normalizeCounterparty(counterparty)}`,
+            fact.occurredAt.epochMilliseconds,
+            encoded
+          )
         )
-      );
-    }
+      )
+    );
 
     const cursorAt =
       read.value.cursor.occurredAt === ""
@@ -137,7 +145,7 @@ export const scan = ({
       )
     );
     yield* work.commit(progress.revision, statements);
-  }).pipe(Effect.mapError(() => new RecurringUnavailable()));
+  }).pipe(Effect.mapError((cause) => new RecurringUnavailable({ cause: Option.some(cause) })));
 
 export const processGroup = ({
   work,
@@ -153,7 +161,10 @@ export const processGroup = ({
       [work.userId, group]
     );
 
-    if (raw.length > maximumGroupFacts) return yield* new RecurringUnavailable();
+    if (raw.length > maximumGroupFacts) {
+      return yield* new RecurringUnavailable({ cause: Option.none() });
+    }
+
     const rows = yield* decode({ schema: Schema.Array(StringRow), input: raw });
 
     const facts = yield* Effect.forEach(rows, (row) =>
@@ -161,20 +172,19 @@ export const processGroup = ({
     );
 
     const proposals = detectMonthlySeries({ facts, timeZone: progress.time_zone });
-    const statements: Statement[] = [];
 
-    for (const proposal of proposals) {
-      const encoded = yield* Schema.encodeEffect(jsonCodec(Proposal))(proposal);
-      const key = `${group}|${DateTime.formatIso(proposal.firstOccurredAt)}`;
-      statements.push(
-        statement(
-          "INSERT INTO recurring_evaluation_records (kind,user_id,id,proposal_json) VALUES ('proposal',?,?,?) ON CONFLICT(user_id,kind,id) DO UPDATE SET proposal_json = excluded.proposal_json",
-          work.userId,
-          key,
-          encoded
+    const statements: Statement[] = yield* Effect.forEach(proposals, (proposal) =>
+      Schema.encodeEffect(jsonCodec(Proposal))(proposal).pipe(
+        Effect.map((encoded) =>
+          statement(
+            "INSERT INTO recurring_evaluation_records (kind,user_id,id,proposal_json) VALUES ('proposal',?,?,?) ON CONFLICT(user_id,kind,id) DO UPDATE SET proposal_json = excluded.proposal_json",
+            work.userId,
+            `${group}|${DateTime.formatIso(proposal.firstOccurredAt)}`,
+            encoded
+          )
         )
-      );
-    }
+      )
+    );
 
     statements.push(
       statement(
@@ -185,7 +195,7 @@ export const processGroup = ({
       )
     );
     yield* work.commit(progress.revision, statements);
-  }).pipe(Effect.mapError(() => new RecurringUnavailable()));
+  }).pipe(Effect.mapError((cause) => new RecurringUnavailable({ cause: Option.some(cause) })));
 
 type Retained = Readonly<{
   series: RecurringSeries;
@@ -200,7 +210,10 @@ const retainedSeries = (work: Work): Effect.Effect<ReadonlyArray<Retained>, Recu
       [work.userId]
     );
 
-    if (rows.length > maximumSeries) return yield* new RecurringUnavailable();
+    if (rows.length > maximumSeries) {
+      return yield* new RecurringUnavailable({ cause: Option.none() });
+    }
+
     const stored = yield* decode({ schema: Schema.Array(StoredSeries), input: rows });
 
     return yield* Effect.forEach(stored, (row) =>
@@ -316,7 +329,7 @@ const seriesStatement = (
       eventId === null ? null : 0,
       eventId
     );
-  }).pipe(Effect.mapError(() => new RecurringUnavailable()));
+  }).pipe(Effect.mapError((cause) => new RecurringUnavailable({ cause: Option.some(cause) })));
 
 const retainedAssignments = ({
   proposals,
@@ -327,31 +340,33 @@ const retainedAssignments = ({
 }>): Effect.Effect<
   ReadonlyArray<Pick<SeriesInput, "proposal" | "retained">>,
   RecurringUnavailable
-> =>
-  Effect.gen(function* () {
-    const assignments: Array<Pick<SeriesInput, "proposal" | "retained">> = [];
-    const used = new Set<string>();
-    let retainedCount = retained.length;
+> => {
+  const assignments: Array<Pick<SeriesInput, "proposal" | "retained">> = [];
+  const used = new Set<string>();
+  let retainedCount = retained.length;
 
-    for (const proposal of proposals) {
-      const matches = retained.filter((old) => matchingRetained(proposal, old));
+  for (const proposal of proposals) {
+    const matches = retained.filter((old) => matchingRetained(proposal, old));
 
-      if (matches.length > 1) return yield* new RecurringUnavailable();
-      const old = Option.fromUndefinedOr(matches[0]);
+    if (matches.length > 1) return Effect.fail(new RecurringUnavailable({ cause: Option.none() }));
+    const old = Option.fromUndefinedOr(matches[0]);
 
-      if (Option.isSome(old) && used.has(old.value.series.id)) {
-        return yield* new RecurringUnavailable();
-      }
-
-      if (Option.isSome(old)) used.add(old.value.series.id);
-      else retainedCount += 1;
-
-      if (retainedCount > maximumSeries) return yield* new RecurringUnavailable();
-      assignments.push({ proposal, retained: old });
+    if (Option.isSome(old) && used.has(old.value.series.id)) {
+      return Effect.fail(new RecurringUnavailable({ cause: Option.none() }));
     }
 
-    return assignments;
-  });
+    if (Option.isSome(old)) used.add(old.value.series.id);
+    else retainedCount += 1;
+
+    if (retainedCount > maximumSeries) {
+      return Effect.fail(new RecurringUnavailable({ cause: Option.none() }));
+    }
+
+    assignments.push({ proposal, retained: old });
+  }
+
+  return Effect.succeed(assignments);
+};
 
 export const cutover = ({
   work,
@@ -363,7 +378,10 @@ export const cutover = ({
       [work.userId]
     );
 
-    if (rows.length > maximumSeries) return yield* new RecurringUnavailable();
+    if (rows.length > maximumSeries) {
+      return yield* new RecurringUnavailable({ cause: Option.none() });
+    }
+
     const stored = yield* decode({ schema: Schema.Array(StringRow), input: rows });
 
     const proposals = yield* Effect.forEach(stored, (row) =>
@@ -379,11 +397,11 @@ export const cutover = ({
       statement("UPDATE recurring_series SET valid = 0 WHERE user_id = ?", work.userId),
     ];
 
-    for (const { proposal, retained: old } of assignments) {
-      statements.push(
-        yield* seriesStatement(work, { proposal, progress, current, retained: old, context })
-      );
-    }
+    const series = yield* Effect.forEach(assignments, ({ proposal, retained: old }) =>
+      seriesStatement(work, { proposal, progress, current, retained: old, context })
+    );
+
+    statements.push(...series);
 
     statements.push(
       statement(
@@ -440,4 +458,4 @@ export const advanceEvaluation = ({
       progress,
       group: (yield* decode({ schema: StringRow, input: group })).value,
     });
-  }).pipe(Effect.mapError(() => new RecurringUnavailable()));
+  }).pipe(Effect.mapError((cause) => new RecurringUnavailable({ cause: Option.some(cause) })));

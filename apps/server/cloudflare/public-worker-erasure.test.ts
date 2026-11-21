@@ -31,17 +31,20 @@ it.each(cases)(
       Effect.gen(function* () {
         let reachedCore = false;
 
+        const headers = new Headers({
+          "content-type": "application/json",
+          "cf-access-jwt-assertion": assertion,
+          "cloudflare-workers-version-overrides": override,
+          cookie: "test-only-session",
+        });
+
+        if (origin !== "") headers.set("origin", origin);
+
         const response = yield* Effect.tryPromise(() =>
           makePublicWorker(makeWorkerTelemetry(() => undefined)).fetch(
             new Request(`https://api.fidyapp.com${path}`, {
               method: path === "/categories" ? "GET" : "POST",
-              headers: {
-                "content-type": "application/json",
-                "cf-access-jwt-assertion": assertion,
-                "cloudflare-workers-version-overrides": override,
-                cookie: "test-only-session",
-                ...(origin === "" ? {} : { origin }),
-              },
+              headers,
             }),
             {
               BROWSER_ORIGIN: "https://app.fidyapp.com",

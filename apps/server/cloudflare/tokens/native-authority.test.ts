@@ -50,7 +50,7 @@ const issuedFixture = Effect.gen(function* () {
         new Request("https://api.fidyapp.com" + path, {
           method: body === undefined ? "GET" : "POST",
           headers: { authorization: "Bearer " + data.bearer, "content-type": "application/json" },
-          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+          body: body === undefined ? null : JSON.stringify(body),
         })
       )
     );
@@ -124,7 +124,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const usage = yield* inspect();
         expect(usage).toHaveLength(1);
         expect(usage[0]?.expires_at_ms).toBe(before?.expires_at_ms);
-        expect(typeof usage[0]?.last_used_at_ms).toBe("number");
+        expect(usage[0]?.last_used_at_ms).toEqual(expect.any(Number));
         const listing = yield* native(() => db.browser(0, "/pats"));
 
         const listed = yield* Schema.decodeUnknownEffect(
@@ -150,9 +150,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         )
       );
 
-      for (const path of ["/categories", "/transactions"]) {
-        expect((yield* call(path)).status).toBe(503);
-      }
+      yield* Effect.forEach(
+        ["/categories", "/transactions"],
+        Effect.fnUntraced(function* (path) {
+          expect((yield* call(path)).status).toBe(503);
+        }),
+        { discard: true }
+      );
 
       expect(
         yield* native(() =>

@@ -1,6 +1,7 @@
+import * as assert from "node:assert/strict";
 import { Digest, SecureRandom } from "effect/crypto";
 import { expect, it } from "@effect/vitest";
-import { Context, Effect, Exit, Layer, Option, Redacted, Schema } from "effect";
+import { Context, Effect, Exit, Layer, Option, Predicate, Redacted, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { exportJWK, exportPKCS8, generateKeyPair } from "jose";
 import { TestCrypto } from "../../src/shell/testing/crypto-harness";
@@ -70,7 +71,7 @@ const cleanup = Effect.fn(function* (scenario: Scenario) {
         );
       }
 
-      if (request.body._tag !== "Uint8Array") throw new Error("Expected form");
+      assert.ok(Predicate.isTagged(request.body, "Uint8Array"), "Expected form");
       const form = new URLSearchParams(new TextDecoder().decode(request.body.body));
       const token = yield* Schema.decodeUnknownEffect(Schema.String)(form.get("token"));
       const hint = yield* Schema.decodeUnknownEffect(Schema.String)(form.get("token_type_hint"));
@@ -109,7 +110,8 @@ const cleanup = Effect.fn(function* (scenario: Scenario) {
       scenario === "proof-write"
         ? Option.some({
             observedTokens: [],
-            recordActive: () => Effect.fail(new BancolombiaAuthorizationFailed()),
+            recordActive: () =>
+              Effect.fail(new BancolombiaAuthorizationFailed({ cause: undefined })),
           })
         : Option.none(),
     grant: {
@@ -171,7 +173,7 @@ it.effect.each([
     expect(encoded).not.toContain("synthetic-access");
     expect(encoded).not.toContain("synthetic-refresh");
 
-    if (scenario !== "still-active") expect([...revoked]).toEqual([]);
+    expect(scenario === "still-active" ? [] : [...revoked]).toEqual([]);
   })
 );
 

@@ -15,7 +15,7 @@ export const completeLogoutNavigation = ({
   runLogout,
 }: Readonly<{
   completeLogout: () => void;
-  navigate: () => Promise<unknown>;
+  navigate: () => Promise<void>;
   runLogout: LogoutTrigger;
 }>): void => {
   runLogout({

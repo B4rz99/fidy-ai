@@ -108,7 +108,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               new Request("https://api.fidyapp.com/memories" + suffix, {
                 method,
                 headers: { authorization: "Bearer " + token, "content-type": "application/json" },
-                ...(method === "POST" ? { body: JSON.stringify({ text: "pat" }) } : {}),
+                body: method === "POST" ? JSON.stringify({ text: "pat" }) : null,
               })
             )
           );

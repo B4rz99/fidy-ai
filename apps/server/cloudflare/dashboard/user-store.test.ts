@@ -15,6 +15,7 @@ import {
   Effect,
   type FileSystem,
   Option,
+  Predicate,
   Schema,
   type Scope,
 } from "effect";
@@ -68,31 +69,127 @@ const runNative = <A, E>(
 
 const setup = (): typeof nativeTransactionJourney => nativeTransactionJourney;
 
-const send = (
-  store: Journey,
-  index: number,
-  call:
-    | string
-    | { path: string; method: "POST" | "PUT"; body: object }
-    | { path: string; method: "DELETE" }
-): Promise<Response> =>
+type DashboardCall =
+  | string
+  | Readonly<{ path: string; method: "POST" | "PUT"; body: Schema.Json }>
+  | Readonly<{ path: string; method: "DELETE" }>;
+
+const send = (store: Journey, index: number, call: DashboardCall): Promise<Response> =>
   Bun.sleep(canonicalRequestProtection.intervalMs).then(() => {
-    if (typeof call === "string") return store.browser(index, call);
+    if (Predicate.isString(call)) return store.browser(index, call);
     const subject = index === 0 ? alice : bob;
 
+    const init = {
+      method: call.method,
+      headers: {
+        origin: "https://app.fidyapp.com",
+        "Fidy-Session-Binding": subject.session,
+        cookie: "__Host-fidy_session=" + subject.bearer,
+        "content-type": "application/json",
+      },
+    };
+
     return store.send(
-      new Request("https://api.fidyapp.com" + call.path, {
-        method: call.method,
-        headers: {
-          origin: "https://app.fidyapp.com",
-          "Fidy-Session-Binding": subject.session,
-          cookie: "__Host-fidy_session=" + subject.bearer,
-          "content-type": "application/json",
-        },
-        ...("body" in call ? { body: JSON.stringify(call.body) } : {}),
-      })
+      new Request(
+        "https://api.fidyapp.com" + call.path,
+        "body" in call ? { ...init, body: JSON.stringify(call.body) } : init
+      )
     );
   });
+
+type ScopedCall = (path: string, body?: Schema.Json) => Effect.Effect<Response>;
+
+type DashboardScope = "read" | "write" | "dashboard";
+
+const scopedCall =
+  (owner: Journey, token: string): ScopedCall =>
+  (path, body) => {
+    const headers = {
+      authorization: "Bearer " + token,
+      "cf-connecting-ip": "192.0.2.35",
+      "content-type": "application/json",
+    };
+
+    return native(() =>
+      owner.send(
+        new Request(
+          "https://api.fidyapp.com" + path,
+          body === undefined
+            ? { method: "GET", headers }
+            : { method: "POST", headers, body: JSON.stringify(body) }
+        )
+      )
+    );
+  };
+
+const uninitializedRead = Effect.fn(function* (call: ScopedCall, path: string) {
+  const response = yield* call(path);
+  expect(response.status).toBe(404);
+  expect(yield* native(() => response.json())).toMatchObject({
+    error: { code: "dashboard_uninitialized" },
+  });
+});
+
+const deniedInitialization = Effect.fn(function* (call: ScopedCall, owner: Journey) {
+  expect((yield* call("/dashboard/initialize", {})).status).toBe(403);
+  expect(yield* native(() => owner.exec("SELECT count(*) AS docs FROM user_documents"))).toEqual([
+    { docs: 0 },
+  ]);
+});
+
+const readScopeObservation = Effect.fn(function* (call: ScopedCall, owner: Journey) {
+  yield* Effect.forEach(
+    ["/dashboard", "/dashboard/view"],
+    (path) => uninitializedRead(call, path),
+    {
+      discard: true,
+    }
+  );
+  expect((yield* call("/dashboard/edits", { op: "set-title", title: "Denied" })).status).toBe(403);
+  yield* deniedInitialization(call, owner);
+});
+
+const dashboardScopeObservation = Effect.fn(function* (call: ScopedCall) {
+  expect(
+    (yield* call("/transactions", {
+      money: { currency: "COP", amount: "2" },
+      direction: "outflow",
+      occurredAt: "2025-01-01T00:00:00Z",
+    })).status
+  ).toBe(403);
+  expect((yield* call("/dashboard/initialize", {})).status).toBe(200);
+});
+
+const scopeObservations = {
+  read: readScopeObservation,
+  write: deniedInitialization,
+  dashboard: dashboardScopeObservation,
+};
+
+const verifyDashboardScope = Effect.fn(function* (
+  owner: Journey,
+  scope: DashboardScope,
+  index: number
+) {
+  const token = "fin_dbscope" + index + "_" + "x".repeat(43);
+  yield* seedNativePAT({
+    db: owner,
+    userId: alice.user,
+    token,
+    scopes: [scope],
+    current: DateTime.nowUnsafe().epochMilliseconds,
+  });
+  yield* scopeObservations[scope](scopedCall(owner, token), owner);
+});
+
+const expectReplay = Effect.fn(function* ([retry, response]: readonly [
+  () => Effect.Effect<Response>,
+  Response,
+]) {
+  const replay = yield* retry();
+  expect(replay.status).toBe(200);
+  expect(yield* native(() => replay.text())).toBe(yield* native(() => response.text()));
+});
 
 const initialize = (store: Journey, index = 0): Promise<Response> =>
   send(store, index, { path: "/dashboard/initialize", method: "POST", body: {} });
@@ -741,61 +838,11 @@ scenario(
       Effect.gen(function* () {
         const owner = yield* setup();
 
-        for (const [index, scope] of (["read", "write", "dashboard"] as const).entries()) {
-          const token = "fin_dbscope" + index + "_" + "x".repeat(43);
-          yield* seedNativePAT({
-            db: owner,
-            userId: alice.user,
-            token,
-            scopes: [scope],
-            current: DateTime.nowUnsafe().epochMilliseconds,
-          });
-
-          const call = (path: string, body?: object): Effect.Effect<Response> =>
-            native(() =>
-              owner.send(
-                new Request("https://api.fidyapp.com" + path, {
-                  method: body === undefined ? "GET" : "POST",
-                  headers: {
-                    authorization: "Bearer " + token,
-                    "cf-connecting-ip": "192.0.2.35",
-                    "content-type": "application/json",
-                  },
-                  ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-                })
-              )
-            );
-
-          if (scope === "read") {
-            for (const path of ["/dashboard", "/dashboard/view"]) {
-              const response = yield* call(path);
-              expect(response.status).toBe(404);
-              expect(yield* native(() => response.json())).toMatchObject({
-                error: { code: "dashboard_uninitialized" },
-              });
-            }
-
-            expect(
-              (yield* call("/dashboard/edits", { op: "set-title", title: "Denied" })).status
-            ).toBe(403);
-          }
-
-          if (scope === "dashboard") {
-            expect(
-              (yield* call("/transactions", {
-                money: { currency: "COP", amount: "2" },
-                direction: "outflow",
-                occurredAt: "2025-01-01T00:00:00Z",
-              })).status
-            ).toBe(403);
-            expect((yield* call("/dashboard/initialize", {})).status).toBe(200);
-          } else {
-            expect((yield* call("/dashboard/initialize", {})).status).toBe(403);
-            expect(
-              yield* native(() => owner.exec("SELECT count(*) AS docs FROM user_documents"))
-            ).toEqual([{ docs: 0 }]);
-          }
-        }
+        yield* Effect.forEach(
+          ["read", "write", "dashboard"] as const,
+          (scope, index) => verifyDashboardScope(owner, scope, index),
+          { discard: true }
+        );
       })
     ),
   30000
@@ -817,7 +864,7 @@ scenario(
           current: DateTime.nowUnsafe().epochMilliseconds,
         });
 
-        const post = (path: string, key: string, body: object): Effect.Effect<Response> =>
+        const post = (path: string, key: string, body: Schema.Json): Effect.Effect<Response> =>
           native(() =>
             store.send(
               new Request("https://api.fidyapp.com" + path, {
@@ -868,14 +915,16 @@ scenario(
         const chunk = 256 * 1024;
         const padding = target - healthyBytes;
 
-        for (let remaining = padding; remaining > 0; remaining -= chunk) {
-          yield* native(() =>
-            store.exec(
-              "INSERT INTO storage_pressure VALUES(zeroblob(?))",
-              Math.min(chunk, remaining)
-            )
-          );
-        }
+        const paddingChunks = Array.from({ length: Math.ceil(padding / chunk) }, (_, index) =>
+          Math.min(chunk, padding - index * chunk)
+        );
+
+        yield* Effect.forEach(
+          paddingChunks,
+          (size) =>
+            native(() => store.exec("INSERT INTO storage_pressure VALUES(zeroblob(?))", size)),
+          { discard: true }
+        );
 
         const pressureBytes = yield* readBytes();
         expect(pressureBytes).toBeGreaterThanOrEqual(restricted);
@@ -890,14 +939,14 @@ scenario(
 
         process.stdout.write(`DASHBOARD_CAPACITY ${measurement}\n`);
 
-        for (const [retry, response] of [
-          [initialize, original],
-          [edit, changed],
-        ] as const) {
-          const replay = yield* retry();
-          expect(replay.status).toBe(200);
-          expect(yield* native(() => replay.text())).toBe(yield* native(() => response.text()));
-        }
+        yield* Effect.forEach(
+          [
+            [initialize, original],
+            [edit, changed],
+          ] as const,
+          expectReplay,
+          { discard: true }
+        );
 
         expect(
           (yield* post("/dashboard/edits", "new-edit", { op: "set-title", title: "Otra" })).status
@@ -1125,19 +1174,26 @@ scenario(
           layout: {
             kind: "split",
             axis: "column",
-            children: Array.from({ length: 24 }, (_, index) => ({
-              weight: 1,
-              node: {
-                kind: "leaf",
-                widget: {
-                  id: `33300000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
-                  type: "transaction-list",
-                  limit: index === 23 ? 2 : 50,
-                  ...(index === 21 ? { categories: ["10000000-0000-4000-8000-000000000002"] } : {}),
-                  ...(index === 22 ? { search: "missing" } : {}),
+            children: Array.from({ length: 24 }, (_, index) => {
+              const widget = {
+                id: `33300000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+                type: "transaction-list",
+                limit: index === 23 ? 2 : 50,
+              };
+
+              const categorized =
+                index === 21
+                  ? { ...widget, categories: ["10000000-0000-4000-8000-000000000002"] }
+                  : widget;
+
+              return {
+                weight: 1,
+                node: {
+                  kind: "leaf",
+                  widget: index === 22 ? { ...categorized, search: "missing" } : categorized,
                 },
-              },
-            })),
+              };
+            }),
           },
         });
 

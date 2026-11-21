@@ -99,7 +99,7 @@ const awaitingCanonicalRead = (
   dashboard: CanonicalQueryState<Readonly<{ data: DashboardView }>, unknown>,
   baseline: DashboardView
 ): boolean =>
-  dashboard._tag !== "Ready" ||
+  !Predicate.isTagged(dashboard, "Ready") ||
   (dashboard.value.data === baseline && Option.isNone(dashboard.refreshFailure));
 
 type EditQueue = Readonly<{
@@ -152,7 +152,9 @@ const submitGesture = (
 ): void => {
   const owner = queue.owner;
 
-  if (!owner.active || (owner.halted && !recovered) || dashboard._tag !== "Ready") return;
+  if (!owner.active || (owner.halted && !recovered) || !Predicate.isTagged(dashboard, "Ready")) {
+    return;
+  }
 
   if (recovered) {
     owner.halted = false;

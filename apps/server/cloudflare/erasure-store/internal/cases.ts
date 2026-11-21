@@ -74,10 +74,38 @@ type Participants = Readonly<
   Record<"DIRECTORY" | "PRICING" | "MAINTENANCE", Pick<DurableObjectNamespace, "getByName">>
 >;
 
-const fenceCase = Effect.fn(function* (record: typeof Case.Type, env: Participants) {
+type FenceParticipant = Readonly<{
+  column: "directory_fenced" | "pricing_fenced" | "maintenance_fenced";
+  owner: Pick<DurableObjectNamespace, "getByName">;
+  name: string;
+  url: string;
+}>;
+
+const fenceParticipant = Effect.fn(function* (
+  record: typeof Case.Type,
+  participant: FenceParticipant,
+  body: string
+) {
   const sql = yield* SqliteClient;
-  const body = yield* Schema.encodeEffect(Schema.fromJsonString(ErasureHandoff))(record);
   const headers = { "fidy-user-id": record.userId, "fidy-erasure-reference": record.reference };
+
+  const fenced = yield* Effect.tryPromise((signal) =>
+    participant.owner
+      .getByName(participant.name)
+      .fetch(participant.url, { method: "POST", body, headers, signal })
+  ).pipe(
+    Effect.map((response) => response.status === acknowledged),
+    Effect.timeout("5 seconds"),
+    Effect.orElseSucceed(() => false)
+  );
+
+  if (fenced) {
+    yield* sql`UPDATE erasure_cases SET ${sql(participant.column)}=1 WHERE reference=${record.reference} AND user_id=${record.userId}`;
+  }
+});
+
+const fenceCase = Effect.fn(function* (record: typeof Case.Type, env: Participants) {
+  const body = yield* Schema.encodeEffect(Schema.fromJsonString(ErasureHandoff))(record);
 
   const participants = [
     {
@@ -95,23 +123,11 @@ const fenceCase = Effect.fn(function* (record: typeof Case.Type, env: Participan
     },
   ] as const;
 
-  for (const participant of participants) {
-    if (record[participant.column] === 1) continue;
+  const unfenced = participants.filter((participant) => record[participant.column] !== 1);
 
-    const fenced = yield* Effect.tryPromise((signal) =>
-      participant.owner
-        .getByName(participant.name)
-        .fetch(participant.url, { method: "POST", body, headers, signal })
-    ).pipe(
-      Effect.map((response) => response.status === acknowledged),
-      Effect.timeout("5 seconds"),
-      Effect.orElseSucceed(() => false)
-    );
-
-    if (fenced) {
-      yield* sql`UPDATE erasure_cases SET ${sql(participant.column)}=1 WHERE reference=${record.reference} AND user_id=${record.userId}`;
-    }
-  }
+  yield* Effect.forEach(unfenced, (participant) => fenceParticipant(record, participant, body), {
+    discard: true,
+  });
 });
 
 const advanceCase = Effect.fn(function* (

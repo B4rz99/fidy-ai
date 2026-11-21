@@ -27,26 +27,24 @@ it.effect("publishes the latest released CLI version anonymously as plain text",
   })
 );
 
-for (const [name, status, body] of [
-  ["missing release", 404, "not found"],
-  ["upstream failure", 500, "0.1.2\n"],
-  ["malformed version", 200, "<html>application</html>"],
-  ["oversized version", 200, "1".repeat(65)],
-  ["provider body overflow", 200, "1".repeat(4097)],
-] as const) {
-  it.effect(`rejects ${name} without publishing a default version`, () =>
-    Effect.gen(function* () {
-      vi.stubGlobal("fetch", () => Promise.resolve(new Response(body, { status })));
+it.effect.each([
+  { name: "missing release", status: 404, body: "not found" },
+  { name: "upstream failure", status: 500, body: "0.1.2\n" },
+  { name: "malformed version", status: 200, body: "<html>application</html>" },
+  { name: "oversized version", status: 200, body: "1".repeat(65) },
+  { name: "provider body overflow", status: 200, body: "1".repeat(4097) },
+])("rejects $name without publishing a default version", ({ status, body }) =>
+  Effect.gen(function* () {
+    vi.stubGlobal("fetch", () => Promise.resolve(new Response(body, { status })));
 
-      const response = yield* Effect.tryPromise(() =>
-        publicWorker.fetch(new Request("https://api.fidyapp.com/cli/latest.txt"), environment)
-      );
+    const response = yield* Effect.tryPromise(() =>
+      publicWorker.fetch(new Request("https://api.fidyapp.com/cli/latest.txt"), environment)
+    );
 
-      expect(response.status).toBe(503);
-      expect(yield* Effect.tryPromise(() => response.text())).toBe("CLI release unavailable.\n");
-    })
-  );
-}
+    expect(response.status).toBe(503);
+    expect(yield* Effect.tryPromise(() => response.text())).toBe("CLI release unavailable.\n");
+  })
+);
 
 it.effect("rejects a write to the release pointer without contacting the upstream", () =>
   Effect.gen(function* () {

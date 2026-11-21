@@ -59,7 +59,7 @@ const result = Effect.fn(
       ),
     };
   },
-  Effect.mapError(() => new PATUnavailable())
+  Effect.mapError((cause) => new PATUnavailable({ cause: Option.some(cause) }))
 );
 
 const refuse = (response: () => Response): StagedPAT => ({
@@ -77,7 +77,7 @@ const execute = Effect.fn(function* (statement: OwnedStatement) {
   const sql = yield* SqliteClient;
   const rows = yield* sql.unsafe(statement.sql + " RETURNING 1", statement.params);
 
-  if (rows.length !== 1) return yield* new PATUnavailable();
+  if (rows.length !== 1) return yield* new PATUnavailable({ cause: Option.none() });
 });
 
 const recordGrant = (
@@ -156,7 +156,7 @@ const review = Effect.fn(function* (directory: Directory, session: Session, payl
           claimBy: iso(pairing.expires_at_ms),
         });
       },
-      Effect.mapError(() => new PATUnavailable())
+      Effect.mapError((cause) => new PATUnavailable({ cause: Option.some(cause) }))
     ),
   } satisfies StagedPAT;
 });
@@ -222,7 +222,7 @@ const approve = Effect.fn(function* (directory: Directory, session: Session, pay
           claimBy: iso(pairing.expires_at_ms),
         });
       },
-      Effect.mapError(() => new PATUnavailable())
+      Effect.mapError((cause) => new PATUnavailable({ cause: Option.some(cause) }))
     ),
   } satisfies StagedPAT;
 });
@@ -305,7 +305,7 @@ const prepareManual = Effect.fn(function* ({ reservation, input, session }: Manu
           issuedResponse({ input, session, current, expires, shortId, patId, bearer })
         );
       },
-      Effect.mapError(() => new PATUnavailable())
+      Effect.mapError((cause) => new PATUnavailable({ cause: Option.some(cause) }))
     ),
   } satisfies StagedPAT;
 });

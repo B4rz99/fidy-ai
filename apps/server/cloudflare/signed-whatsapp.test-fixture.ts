@@ -1,4 +1,4 @@
-import { Clock, Effect, Schema } from "effect";
+import { Clock, Effect, Predicate, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import type { Miniflare } from "miniflare";
 import { newId } from "./secret-material/operations";
@@ -28,7 +28,7 @@ export const chatWith = Effect.fn(function* (
     yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
       message: {
         id: options.message ?? newId(),
-        ...(options.reply === undefined ? {} : { context: { id: options.reply } }),
+        context: options.reply === undefined ? undefined : { id: options.reply },
         timestamp: String(Math.floor((options.occurredMs ?? now) / millisecondsPerSecond)),
         type: "text",
         from_user_id: caller,
@@ -48,10 +48,9 @@ export const signedWebhook = Effect.fn(function* (
   bytes: Uint8Array<ArrayBuffer>,
   signature: string | Readonly<{ secret: string; event: string }>
 ) {
-  const { secret, event } =
-    typeof signature === "string"
-      ? { secret: signature, event: "whatsapp.message.received" }
-      : signature;
+  const { secret, event } = Predicate.isString(signature)
+    ? { secret: signature, event: "whatsapp.message.received" }
+    : signature;
 
   const key = yield* native(() =>
     crypto.subtle.importKey(

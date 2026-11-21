@@ -81,7 +81,9 @@ const unavailableInstitution = (found: boolean): LocalMutationResult => {
     status: found ? invalidStatus : missingStatus,
     outcome: code,
     body: {
-      error: { code, message: "Institution unavailable.", ...(found ? { fields: [] } : {}) },
+      error: found
+        ? { code, message: "Institution unavailable.", fields: [] }
+        : { code, message: "Institution unavailable." },
       next: [],
     },
   };

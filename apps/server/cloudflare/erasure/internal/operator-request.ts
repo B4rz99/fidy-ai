@@ -133,7 +133,7 @@ const forwardCommand = (
             signal: input.request.signal,
           })
         ),
-      catch: () => new ErasureUnavailable(),
+      catch: () => new ErasureUnavailable({ cause: Option.none() }),
     });
   });
 
@@ -150,14 +150,28 @@ const commandPath = (command: UserCommand): string => {
   }
 };
 
-const commandBody = (
-  command: UserCommand,
-  admission: Readonly<{
-    userId: string;
-    deadlineMs: number;
-    authority: Readonly<{ permission: string; operatorRef: string; expiresAtMs: number }>;
-  }>
-): unknown => {
+type OperatorAdmission = Readonly<{
+  userId: string;
+  deadlineMs: number;
+  authority: Readonly<{ permission: string; operatorRef: string; expiresAtMs: number }>;
+}>;
+
+type CustodyScopeCommand = Extract<UserCommand, { action: "CustodyScope" }>;
+
+type CustodyEvidenceCommand = Extract<UserCommand, { action: "CustodyEvidence" }>;
+
+type OperatorCommandBody =
+  | (OperatorAdmission &
+      Readonly<{ reference: string; evidence: CustodyEvidenceCommand["evidence"] }>)
+  | (OperatorAdmission &
+      Readonly<{
+        reference: string;
+        custodian: CustodyScopeCommand["custodian"];
+        after: CustodyScopeCommand["after"];
+      }>)
+  | (OperatorAdmission & Readonly<{ reference: string }>);
+
+const commandBody = (command: UserCommand, admission: OperatorAdmission): OperatorCommandBody => {
   if (command.action === "CustodyEvidence") {
     return { ...admission, reference: command.evidence.reference, evidence: command.evidence };
   }

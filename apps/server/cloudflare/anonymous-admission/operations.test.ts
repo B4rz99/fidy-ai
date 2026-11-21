@@ -66,11 +66,12 @@ it.effect("admits a fixed source only in the configured local development topolo
 it.effect(
   "refuses missing source and short admission keys before forwarding any anonymous work",
   () =>
-    Effect.gen(function* () {
-      for (const headers of [
+    Effect.forEach(
+      [
         new Headers({ "x-forwarded-for": "198.51.100.10", "x-pat-source": "forged-source" }),
         new Headers({ "cf-connecting-ip": "198.51.100.10" }),
-      ]) {
+      ],
+      Effect.fnUntraced(function* (headers) {
         let forwarded = false;
 
         const response = yield* Effect.tryPromise(() =>
@@ -97,6 +98,7 @@ it.effect(
 
         expect(response.status).toBe(503);
         expect(forwarded).toBe(false);
-      }
-    })
+      }),
+      { discard: true }
+    )
 );

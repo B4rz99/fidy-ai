@@ -9,6 +9,8 @@ import { chargeBootstrapWindows } from "./admission";
 import { withStoreCapacity } from "../../runtime/sqlite/operations";
 import { invalidProvider } from "../../browser-login/operations";
 
+const isResponse = Schema.is(Schema.instanceOf(Response));
+
 const maximumAccountLabelLength = 254;
 
 const pairingLifetimeMs = 600000;
@@ -30,11 +32,17 @@ const AccountLabel = Schema.Struct({
   decision: Schema.NullOr(Schema.String),
 });
 
+type ReviewMessage = Readonly<{
+  existing: boolean;
+  confirmationText: string;
+  associationCode: string;
+}>;
+
 const reviewMessage = (
   row: typeof AccountLabel.Type,
   attempt: string,
   accountLabel: string
-): Readonly<{ existing: boolean; confirmationText: string; associationCode: string }> => {
+): ReviewMessage => {
   const reusable =
     row.review_attempt === attempt && row.review_code !== null && row.review_text !== null;
 
@@ -191,7 +199,7 @@ export const whatsappBootstrap = Effect.fn(function* (
 
   const route = yield* prepareInvitation(event);
 
-  if (route instanceof Response) return route;
+  if (isResponse(route)) return route;
 
   const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
     portfolio: event.portfolio,

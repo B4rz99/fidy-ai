@@ -1,5 +1,5 @@
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, Effect, Option, type Redacted, Schema } from "effect";
+import { Clock, Effect, Option, type Redacted, Result, Schema } from "effect";
 import type { ConnectionBankCleanup } from "../contract";
 import { newId } from "../../secret-material/operations";
 import { preserveStoreAlarm } from "../../runtime/sqlite/operations";
@@ -7,6 +7,8 @@ import { Candidate } from "./cleanup";
 import { retentionStatements } from "./retention";
 import { failed, one } from "./sqlite-browser";
 import { grantPurpose, openGrant } from "./grant";
+
+const observableTokens = ["access_token", "refresh_token"] as const;
 
 const leaseMs = 120000;
 
@@ -48,9 +50,13 @@ export const expireAttempts = Effect.fn(function* (
         return;
       }
 
-      for (const statement of retentionStatements(now)) {
-        yield* sql.unsafe(statement.sql, statement.params);
-      }
+      yield* Effect.forEach(
+        retentionStatements(now),
+        Effect.fnUntraced(function* (statement) {
+          yield* sql.unsafe(statement.sql, statement.params);
+        }),
+        { discard: true }
+      );
 
       yield* repairRetention(storage, cleanupEnabled);
     })
@@ -112,10 +118,9 @@ export const cleanupGrant = Effect.fn(function* (input: Cleanup) {
 
     yield* bank.revoke({
       grant,
-      observedTokens: [
-        ...(row.accessSeen === 1 ? ["access_token" as const] : []),
-        ...(row.refreshSeen === 1 ? ["refresh_token" as const] : []),
-      ],
+      observedTokens: observableTokens.filter((token) =>
+        token === "access_token" ? row.accessSeen === 1 : row.refreshSeen === 1
+      ),
       recordActive: (token) =>
         Effect.gen(function* () {
           yield* one(
@@ -132,7 +137,7 @@ export const cleanupGrant = Effect.fn(function* (input: Cleanup) {
     );
   }).pipe(Effect.timeout("60 seconds"), Effect.result);
 
-  if (revoked._tag === "Failure") {
+  if (Result.isFailure(revoked)) {
     yield* sql.withTransaction(
       Effect.gen(function* () {
         yield* sql`UPDATE connection_grants SET cleanup_claim=NULL,cleanup_after_ms=${now + retryMs} WHERE attempt_id=${row.attemptId} AND cleanup_claim=${claim} AND cleaned_at_ms IS NULL AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE state<>'Draining')`;
@@ -141,5 +146,5 @@ export const cleanupGrant = Effect.fn(function* (input: Cleanup) {
     );
   }
 
-  return { attempted: 1, failed: revoked._tag === "Failure" ? 1 : 0 };
+  return { attempted: 1, failed: Result.isFailure(revoked) ? 1 : 0 };
 });

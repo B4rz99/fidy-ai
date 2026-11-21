@@ -48,7 +48,17 @@ import {
 } from "./internal/erasure-handoff";
 import { requestLocalErasure } from "./internal/erasure-request";
 import { HttpClient } from "effect/http";
-import { Cause, Clock, Context, Effect, Layer, ManagedRuntime, Option, Result } from "effect";
+import {
+  Cause,
+  Clock,
+  Context,
+  Effect,
+  Layer,
+  ManagedRuntime,
+  Option,
+  Result,
+  Schema,
+} from "effect";
 import { OutboundHttpLive } from "../outbound-http/runtime";
 import {
   type LocalIngestionEnvironment,
@@ -88,7 +98,7 @@ import { connectionBrowserTransport } from "../../src/shell/connections/runtime"
 import type { BancolombiaSandboxEnvironment } from "../bancolombia-authentication/contract";
 import { bancolombiaSandboxAdmission } from "../bancolombia-authentication/runtime";
 import { localPATClaimUrl } from "../tokens/contract";
-import { type McpResidency, localProtocolAdmission, makeMcpResidency } from "../mcp/runtime";
+import { type McpResidency, localProtocolAdmission, mcpResidency } from "../mcp/runtime";
 import {
   denyMcpAccess,
   handleLocalOAuthManagement,
@@ -290,6 +300,8 @@ const alarmObservation = {
 const completedAlarm = (summary: { failedFamilies: number }): Effect.Effect<void, Error> =>
   summary.failedFamilies > 0 ? Effect.fail(Error("User work discovery unavailable")) : Effect.void;
 
+const isResponse = Schema.is(Schema.instanceOf(Response));
+
 export class UserStore extends DurableObject<UserStoreEnvironment> {
   private browserEnvironment(request: Request): UserStoreEnvironment {
     return closedHostEnvironment({ request, environment: this.env, boundary: "core" });
@@ -307,7 +319,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
 
         if (Option.isNone(credential)) return denyMcpAccess();
         const admission = yield* localProtocolAdmission(request, credential.value);
-        this.mcp ??= makeMcpResidency({
+        this.mcp ??= mcpResidency({
           userId: admission.userId,
           resolveCaller: (input) =>
             Effect.tryPromise({
@@ -318,7 +330,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
             Effect.gen({ self: this }, function* () {
               const prepared = yield* localOAuthCanonicalRequest(call, signal);
 
-              if (prepared instanceof Response) return prepared;
+              if (isResponse(prepared)) return prepared;
               const answer = this.mutation(prepared.request, owns, prepared.operation);
 
               const work = Option.getOrElse(answer, () =>
@@ -497,13 +509,15 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
   override alarm(): Promise<void> {
     if (this.erased) return Promise.resolve();
 
-    return Effect.runPromise(backgroundWorkAllowed(this.env)).then((allowed) =>
-      allowed
-        ? this.registration().then((registration) =>
-            registration === "registered" ? this.checkWork() : undefined
-          )
-        : undefined
-    );
+    return this.runtime
+      .runPromise(backgroundWorkAllowed(this.env))
+      .then((allowed) =>
+        allowed
+          ? this.registration().then((registration) =>
+              registration === "registered" ? this.checkWork() : undefined
+            )
+          : undefined
+      );
   }
 
   private patOperation(

@@ -54,21 +54,20 @@ const sameEncoding = (workspace: Workspace): Effect.Effect<void> =>
     const original = yield* Effect.exit(encodeOriginal(workspace));
     const optimized = yield* Effect.exit(encodeBudgetWorkspace(workspace));
     expect(Exit.isSuccess(optimized)).toBe(Exit.isSuccess(original));
-
-    if (Exit.isSuccess(original) && Exit.isSuccess(optimized)) {
-      expect(optimized.value).toEqual(original.value);
-    }
+    expect(Exit.getSuccess(optimized)).toEqual(Exit.getSuccess(original));
   });
 
 it.each(["America/Bogota", "America/New_York", "Asia/Kathmandu"])(
   "preserves complete Budget encodings for shared calendar periods in %s",
   (zone) =>
     Effect.runPromise(
-      Effect.gen(function* () {
-        for (const type of ["under", "reached", "over"] as const) {
+      Effect.forEach(
+        ["under", "reached", "over"] as const,
+        Effect.fnUntraced(function* (type) {
           yield* sameEncoding(fixture(type, zone));
-        }
-      })
+        }),
+        { discard: true }
+      )
     )
 );
 
@@ -77,18 +76,22 @@ it("preserves valid independently represented status periods", () =>
     Effect.gen(function* () {
       const workspace = fixture("under", "America/Bogota");
 
-      for (const period of [
-        { ...workspace.period },
-        deriveCurrentBudgetMonth({
-          now: DateTime.makeUnsafe("2024-02-15T12:00:00Z"),
-          timeZone: IanaTimeZone.make("America/Bogota"),
+      yield* Effect.forEach(
+        [
+          { ...workspace.period },
+          deriveCurrentBudgetMonth({
+            now: DateTime.makeUnsafe("2024-02-15T12:00:00Z"),
+            timeZone: IanaTimeZone.make("America/Bogota"),
+          }),
+        ],
+        Effect.fnUntraced(function* (period) {
+          yield* sameEncoding({
+            ...workspace,
+            statuses: workspace.statuses.map((status) => ({ ...status, period })),
+          });
         }),
-      ]) {
-        yield* sameEncoding({
-          ...workspace,
-          statuses: workspace.statuses.map((status) => ({ ...status, period })),
-        });
-      }
+        { discard: true }
+      );
     })
   ));
 
@@ -160,9 +163,13 @@ it("retains invalid month, exact progress, Currency, cap, group and timestamp re
         },
       ];
 
-      for (const invalid of cases) {
-        expect(Exit.isFailure(yield* Effect.exit(encodeOriginal(invalid)))).toBe(true);
-        yield* sameEncoding(invalid);
-      }
+      yield* Effect.forEach(
+        cases,
+        Effect.fnUntraced(function* (invalid) {
+          expect(Exit.isFailure(yield* Effect.exit(encodeOriginal(invalid)))).toBe(true);
+          yield* sameEncoding(invalid);
+        }),
+        { discard: true }
+      );
     })
   ));

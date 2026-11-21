@@ -36,13 +36,17 @@ export const resolveLocalCategory = Effect.fn(function* ({
       )
     : [];
 
-  for (const row of rows) {
-    const stored = yield* Schema.decodeUnknownEffect(CategoryReference)(row);
+  yield* Effect.forEach(
+    rows,
+    Effect.fnUntraced(function* (row) {
+      const stored = yield* Schema.decodeUnknownEffect(CategoryReference)(row);
 
-    if (Option.isNone(interpretCategory({ release, reference: stored }))) {
-      return yield* new CategoriesUnavailable();
-    }
-  }
+      if (Option.isNone(interpretCategory({ release, reference: stored }))) {
+        return yield* new CategoriesUnavailable();
+      }
+    }),
+    { discard: true }
+  );
 
   const rules = keywordRulesFromRows(rows);
 

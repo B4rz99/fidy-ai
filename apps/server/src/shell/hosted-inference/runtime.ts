@@ -15,7 +15,7 @@ const unavailableProvider = (): HostedInferenceError =>
     retryAfter: Option.none(),
   });
 
-export const makeOpenAiHostedInference = (
+export const openAiHostedInference = (
   configuration: OpenAiConfiguration
 ): Effect.Effect<HostedInferenceService, HostedInferenceError> =>
   Effect.gen(function* () {

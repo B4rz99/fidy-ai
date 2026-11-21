@@ -2,7 +2,17 @@ import { Digest, SecureRandom } from "effect/crypto";
 import * as assert from "node:assert/strict";
 import { BancolombiaAuthorizationFailed, BancolombiaConsentProfile } from "./contract";
 import { expect, it } from "@effect/vitest";
-import { type Cause, Context, DateTime, Effect, Exit, Layer, Redacted, Schema } from "effect";
+import {
+  type Cause,
+  Context,
+  DateTime,
+  Effect,
+  Exit,
+  Layer,
+  Predicate,
+  Redacted,
+  Schema,
+} from "effect";
 import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/http";
 import { exportJWK, exportPKCS8, generateKeyPair, jwtVerify } from "jose";
 import { TestCrypto } from "../../src/shell/testing/crypto-harness";
@@ -55,7 +65,7 @@ const checkPar = (
   publicKey: CryptoKey
 ): Effect.Effect<void> =>
   Effect.gen(function* () {
-    if (request.body._tag !== "Uint8Array") throw new Error("Expected encoded PAR");
+    assert.ok(Predicate.isTagged(request.body, "Uint8Array"), "Expected encoded PAR");
     const form = new URLSearchParams(new TextDecoder().decode(request.body.body));
     expect(
       Object.fromEntries(Array.from(form).filter(([name]) => name !== "client_assertion"))
@@ -91,8 +101,8 @@ it.effect(
       const { secureRandom, digest, key, publicKey, privateKey } = yield* signing;
       const urls: string[] = [];
 
-      const httpClient = HttpClient.make((request) =>
-        Effect.gen(function* () {
+      const httpClient = HttpClient.make(
+        Effect.fnUntraced(function* (request) {
           urls.push(request.url);
 
           if (request.method === "GET") {
@@ -144,39 +154,46 @@ it.effect("refuses hostile discovery before disclosing a signed PAR assertion", 
   Effect.gen(function* () {
     const keys = yield* signing;
 
-    for (const changed of [
-      { authorization_endpoint: "https://foreign.example/auth" },
-      { pushed_authorization_request_endpoint: "http://127.0.0.1/par" },
-      { issuer: "https://foreign.example" },
-      {
-        mtls_endpoint_aliases: {
-          token_endpoint: `${as}/token`,
-          pushed_authorization_request_endpoint: "https://foreign.example/par",
+    yield* Effect.forEach(
+      [
+        { authorization_endpoint: "https://foreign.example/auth" },
+        { pushed_authorization_request_endpoint: "http://127.0.0.1/par" },
+        { issuer: "https://foreign.example" },
+        {
+          mtls_endpoint_aliases: {
+            token_endpoint: `${as}/token`,
+            pushed_authorization_request_endpoint: "https://foreign.example/par",
+          },
         },
-      },
-      { code_challenge_methods_supported: ["plain"] },
-    ]) {
-      const urls: string[] = [];
+        { code_challenge_methods_supported: ["plain"] },
+      ],
+      Effect.fnUntraced(function* (changed) {
+        const urls: string[] = [];
 
-      const result = yield* pushBancolombiaSandboxAuthorization({
-        ...keys,
-        clientId,
-        consentId: "synthetic-consent",
-        state,
-        challenge,
-        expiresAtMilliseconds: 600000,
-        httpClient: HttpClient.make((request) => {
-          urls.push(request.url);
+        const result = yield* pushBancolombiaSandboxAuthorization({
+          ...keys,
+          clientId,
+          consentId: "synthetic-consent",
+          state,
+          challenge,
+          expiresAtMilliseconds: 600000,
+          httpClient: HttpClient.make((request) => {
+            urls.push(request.url);
 
-          return Effect.succeed(
-            HttpClientResponse.fromWeb(request, Response.json({ ...discovery, ...changed }))
-          );
-        }),
-      }).pipe(Effect.exit);
+            return Effect.succeed(
+              HttpClientResponse.fromWeb(request, Response.json({ ...discovery, ...changed }))
+            );
+          }),
+        }).pipe(Effect.exit);
 
-      assert.deepStrictEqual(result, Exit.fail(new BancolombiaAuthorizationFailed()));
-      expect(urls).toEqual([`${issuer}/.well-known/openid-configuration`]);
-    }
+        assert.deepStrictEqual(
+          Exit.mapError(result, (error) => error._tag),
+          Exit.fail("BancolombiaAuthorizationFailed")
+        );
+        expect(urls).toEqual([`${issuer}/.well-known/openid-configuration`]);
+      }),
+      { discard: true }
+    );
   })
 );
 
@@ -184,55 +201,62 @@ it.effect("does not retry uncertain or malformed PAR outcomes or expose provider
   Effect.gen(function* () {
     const keys = yield* signing;
 
-    for (const returned of [
-      { status: 302, body: { error: "synthetic-secret" } },
-      { status: 500, body: { error: "synthetic-secret" } },
-      {
-        status: 200,
-        body: { request_uri: "urn:ietf:params:oauth:request_uri:synthetic", expires_in: 90 },
-      },
-      { status: 201, body: { request_uri: "https://foreign.example/secret", expires_in: 90 } },
-      {
-        status: 201,
-        body: { request_uri: "urn:ietf:params:oauth:request_uri:synthetic", expires_in: 0 },
-      },
-      {
-        status: 201,
-        body: { request_uri: "urn:ietf:params:oauth:request_uri:synthetic", expires_in: 36000 },
-      },
-    ]) {
-      let calls = 0;
+    yield* Effect.forEach(
+      [
+        { status: 302, body: { error: "synthetic-secret" } },
+        { status: 500, body: { error: "synthetic-secret" } },
+        {
+          status: 200,
+          body: { request_uri: "urn:ietf:params:oauth:request_uri:synthetic", expires_in: 90 },
+        },
+        { status: 201, body: { request_uri: "https://foreign.example/secret", expires_in: 90 } },
+        {
+          status: 201,
+          body: { request_uri: "urn:ietf:params:oauth:request_uri:synthetic", expires_in: 0 },
+        },
+        {
+          status: 201,
+          body: { request_uri: "urn:ietf:params:oauth:request_uri:synthetic", expires_in: 36000 },
+        },
+      ],
+      Effect.fnUntraced(function* (returned) {
+        let calls = 0;
 
-      const result = yield* pushBancolombiaSandboxAuthorization({
-        ...keys,
-        clientId,
-        consentId: "synthetic-consent",
-        state,
-        challenge,
-        expiresAtMilliseconds: 600000,
-        httpClient: HttpClient.make((request) => {
-          calls += 1;
+        const result = yield* pushBancolombiaSandboxAuthorization({
+          ...keys,
+          clientId,
+          consentId: "synthetic-consent",
+          state,
+          challenge,
+          expiresAtMilliseconds: 600000,
+          httpClient: HttpClient.make((request) => {
+            calls += 1;
 
-          return Effect.succeed(
-            HttpClientResponse.fromWeb(
-              request,
-              request.method === "GET"
-                ? Response.json(discovery)
-                : Response.json(returned.body, {
-                    status: returned.status,
-                    headers: { location: "https://foreign.example/par" },
-                  })
-            )
-          );
-        }),
-      }).pipe(Effect.exit);
+            return Effect.succeed(
+              HttpClientResponse.fromWeb(
+                request,
+                request.method === "GET"
+                  ? Response.json(discovery)
+                  : Response.json(returned.body, {
+                      status: returned.status,
+                      headers: { location: "https://foreign.example/par" },
+                    })
+              )
+            );
+          }),
+        }).pipe(Effect.exit);
 
-      assert.deepStrictEqual(result, Exit.fail(new BancolombiaAuthorizationFailed()));
-      expect(calls).toBe(2);
-      expect(
-        yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(result)
-      ).not.toContain("synthetic-secret");
-    }
+        assert.deepStrictEqual(
+          Exit.mapError(result, (error) => error._tag),
+          Exit.fail("BancolombiaAuthorizationFailed")
+        );
+        expect(calls).toBe(2);
+        expect(
+          yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(result)
+        ).not.toContain("synthetic-secret");
+      }),
+      { discard: true }
+    );
   })
 );
 
@@ -293,20 +317,67 @@ const returnedPermissions = (mode: string): readonly string[] => {
   return consentResponse.Data.Permissions;
 };
 
+const refusedRequests = [
+  `${issuer}/.well-known/openid-configuration`,
+  `${as}/token`,
+  createdConsentEndpoint,
+];
+
+const completedRequests = [
+  ...refusedRequests,
+  `${issuer}/.well-known/openid-configuration`,
+  `${as}/par`,
+];
+
+const consentReply = Effect.fnUntraced(function* (
+  request: HttpClientRequest.HttpClientRequest,
+  body: Uint8Array,
+  mode: string
+) {
+  expect(request.headers.authorization).toBe("Bearer synthetic-bearer");
+  expect(request.headers["x-fapi-financial-id"]).toBe(syntheticProfile.financialId);
+  expect(request.headers["x-fapi-interaction-id"]).toMatch(/^[0-9a-f-]{36}$/u);
+  expect(
+    yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(
+      new TextDecoder().decode(body)
+    )
+  ).toEqual({
+    Data: {
+      Permissions: [
+        "ReadAccountsBasic",
+        "ReadBalances",
+        "ReadTransactionsDetail",
+        "ReadTransactionsCredits",
+        "ReadTransactionsDebits",
+      ],
+      AccountOwner: syntheticProfile.accountOwner,
+    },
+  });
+
+  return HttpClientResponse.fromWeb(
+    request,
+    Response.json(
+      mode === "minimal"
+        ? { Data: { ConsentId: "synthetic-consent" } }
+        : {
+            Data: {
+              ...consentResponse.Data,
+              Permissions: returnedPermissions(mode),
+            },
+          },
+      { status: mode === "uncertain" ? 503 : 200 }
+    )
+  );
+});
+
 it.effect(
   "creates and durably records the exact consent before PAR, refuses uncertainty and mismatched intent",
-  () =>
-    Effect.gen(function* () {
-      const keys = yield* signing;
+  Effect.fnUntraced(function* () {
+    const keys = yield* signing;
 
-      for (const mode of [
-        "ready",
-        "minimal",
-        "uncertain",
-        "mismatch",
-        "duplicate",
-        "record-failure",
-      ] as const) {
+    yield* Effect.forEach(
+      ["ready", "minimal", "uncertain", "mismatch", "duplicate", "record-failure"] as const,
+      Effect.fnUntraced(function* (mode) {
         const urls: string[] = [];
         const recorded: string[] = [];
         const assertions: string[] = [];
@@ -319,43 +390,10 @@ it.effect(
               return HttpClientResponse.fromWeb(request, Response.json(discovery));
             }
 
-            if (request.body._tag !== "Uint8Array") throw new Error("Expected encoded body");
+            assert.ok(Predicate.isTagged(request.body, "Uint8Array"), "Expected encoded body");
 
             if (request.url === createdConsentEndpoint) {
-              expect(request.headers.authorization).toBe("Bearer synthetic-bearer");
-              expect(request.headers["x-fapi-financial-id"]).toBe(syntheticProfile.financialId);
-              expect(request.headers["x-fapi-interaction-id"]).toMatch(/^[0-9a-f-]{36}$/u);
-              expect(
-                yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(
-                  new TextDecoder().decode(request.body.body)
-                )
-              ).toEqual({
-                Data: {
-                  Permissions: [
-                    "ReadAccountsBasic",
-                    "ReadBalances",
-                    "ReadTransactionsDetail",
-                    "ReadTransactionsCredits",
-                    "ReadTransactionsDebits",
-                  ],
-                  AccountOwner: syntheticProfile.accountOwner,
-                },
-              });
-
-              return HttpClientResponse.fromWeb(
-                request,
-                Response.json(
-                  mode === "minimal"
-                    ? { Data: { ConsentId: "synthetic-consent" } }
-                    : {
-                        Data: {
-                          ...consentResponse.Data,
-                          Permissions: returnedPermissions(mode),
-                        },
-                      },
-                  { status: mode === "uncertain" ? 503 : 200 }
-                )
-              );
+              return yield* consentReply(request, request.body.body, mode);
             }
 
             const form = new URLSearchParams(new TextDecoder().decode(request.body.body));
@@ -403,29 +441,20 @@ it.effect(
             recorded.push(consentId);
 
             return mode === "record-failure"
-              ? Effect.fail(new BancolombiaAuthorizationFailed())
+              ? Effect.fail(new BancolombiaAuthorizationFailed({ cause: undefined }))
               : Effect.void;
           },
         }).pipe(Effect.exit);
 
-        if (mode === "ready" || mode === "minimal") {
-          expect(Exit.isSuccess(result)).toBe(true);
-          expect(urls).toEqual([
-            `${issuer}/.well-known/openid-configuration`,
-            `${as}/token`,
-            createdConsentEndpoint,
-            `${issuer}/.well-known/openid-configuration`,
-            `${as}/par`,
-          ]);
-          expect(new Set(assertions).size).toBe(2);
-        } else {
-          assert.deepStrictEqual(result, Exit.fail(new BancolombiaAuthorizationFailed()));
-          expect(urls).toEqual([
-            `${issuer}/.well-known/openid-configuration`,
-            `${as}/token`,
-            createdConsentEndpoint,
-          ]);
-        }
-      }
-    })
+        const succeeds = mode === "ready" || mode === "minimal";
+        assert.deepStrictEqual(
+          Exit.mapError(Exit.asVoid(result), (error) => error._tag),
+          succeeds ? Exit.succeed(undefined) : Exit.fail("BancolombiaAuthorizationFailed")
+        );
+        expect(urls).toEqual(succeeds ? completedRequests : refusedRequests);
+        expect(new Set(assertions).size).toBe(succeeds ? 2 : 1);
+      }),
+      { discard: true }
+    );
+  })
 );

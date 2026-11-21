@@ -2871,7 +2871,7 @@ const CanonicalActivity = Schema.Struct({
     digest: evidenceDigest,
   }),
   activity: Schema.Struct({
-    provider: Schema.Literals(["google", "microsoft"]),
+    provider: Schema.Literals(["google", "microsoft", "ordinary"]),
     signupDigest: evidenceDigest,
     background: Schema.Struct({
       watchdogCompleted: Schema.Literal(true),
@@ -2987,6 +2987,7 @@ const verifyCanonicalActivity = Effect.fn(function* (
       openingSha256: reference.sha256,
       signup: {
         provider: activity.provider,
+        verification: activity.provider === "ordinary" ? "operator-confirmed" : "provider-log",
         outcome: "created",
         synthetic: false,
         origin: installedOrigins.production.api,

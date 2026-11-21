@@ -62,6 +62,7 @@ layer(LocalEmulationServices, {
             CLOUDFLARE_ACCOUNT_ID: "00000000000000000000000000000000",
             CLOUDFLARE_API_TOKEN: "local-development-placeholder",
           },
+          forceKillAfter: "1 second",
           stderr: "inherit",
           stdin: "ignore",
           stdout: "inherit",

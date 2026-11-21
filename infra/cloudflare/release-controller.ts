@@ -1,4 +1,4 @@
-import { Cause, Effect, Schedule, Schema } from "effect";
+import { Cause, Effect, Option, Schedule, Schema } from "effect";
 import { gitRevisionPattern } from "../../apps/server/cloudflare/runtime/contract";
 import { SmokeIdentity } from "../../apps/server/cloudflare/runtime/release-smoke/contract";
 
@@ -276,15 +276,13 @@ const restoreCore = Effect.fn(function* (
 ) {
   const { snapshot } = input.release;
 
-  const observedPublic = yield* port
-    .current(snapshot.public.name)
-    .pipe(Effect.catch(() => Effect.void));
+  const observedPublic = yield* port.current(snapshot.public.name).pipe(Effect.option);
+  const observedCore = yield* port.current(snapshot.core.name).pipe(Effect.option);
 
-  const observedCore = yield* port
-    .current(snapshot.core.name)
-    .pipe(Effect.catch(() => Effect.void));
-
-  if (observedPublic?.id === input.publicStaged.id && observedCore?.id === input.corePromoted.id) {
+  if (
+    Option.exists(observedPublic, (deployment) => deployment.id === input.publicStaged.id) &&
+    Option.exists(observedCore, (deployment) => deployment.id === input.corePromoted.id)
+  ) {
     const restoreStable = port.restoreStable;
 
     const restorationPort =
@@ -328,21 +326,21 @@ const restoreAmbiguousCore = Effect.fn(function* (
   release: StagedRelease,
   publicStaged: Deployment
 ) {
-  const observedCore = yield* port
-    .current(release.snapshot.core.name)
-    .pipe(Effect.catch(() => Effect.void));
+  const observedCore = Option.filter(
+    yield* port.current(release.snapshot.core.name).pipe(Effect.option),
+    (core) =>
+      core.versions.length === 1 &&
+      core.versions[0]?.id === release.coreVersionId &&
+      core.versions[0].percentage === 100
+  );
 
-  if (
-    observedCore?.versions.length !== 1 ||
-    observedCore.versions[0]?.id !== release.coreVersionId ||
-    observedCore.versions[0].percentage !== 100
-  ) {
+  if (Option.isNone(observedCore)) {
     return yield* Effect.fail(
       Error("Core promotion not confirmed; inspect both Worker deployments")
     );
   }
 
-  return yield* restoreCore(port, { release, publicStaged, corePromoted: observedCore });
+  return yield* restoreCore(port, { release, publicStaged, corePromoted: observedCore.value });
 });
 
 const promoteRelease = Effect.fn(function* (

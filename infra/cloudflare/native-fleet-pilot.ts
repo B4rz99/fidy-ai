@@ -1,4 +1,4 @@
-import { Clock, Effect, Option, Schedule } from "effect";
+import { Clock, Effect, Exit, Option, Result, Schedule } from "effect";
 import { type UserObjects, newStoredUser, physicalErasure } from "./native-erasure-evidence";
 
 type Member = {
@@ -65,10 +65,9 @@ const baseline = (rows: UserObjects): Option.Option<UserObjects> =>
 const submitErasure = Effect.fn(function* (member: Member, record: Port["record"]) {
   const admission = yield* Effect.exit(member.erase().pipe(Effect.timeout("2 minutes")));
 
-  const receipt: Readonly<Record<string, string>> =
-    admission._tag === "Success"
-      ? { stage: "erasure-admitted", reference: admission.value }
-      : { stage: "erasure-reply-unconfirmed" };
+  const receipt: Readonly<Record<string, string>> = Exit.isSuccess(admission)
+    ? { stage: "erasure-admitted", reference: admission.value }
+    : { stage: "erasure-reply-unconfirmed" };
 
   const recorded = yield* Effect.exit(record(receipt));
 
@@ -118,11 +117,11 @@ const cleanupPilot = Effect.fn(function* ({
 
   yield* member.denied().pipe(Effect.timeout("1 minute"));
 
-  if (admission._tag === "Failure") return yield* Effect.failCause(admission.cause);
+  if (Exit.isFailure(admission)) return yield* Effect.failCause(admission.cause);
 
-  if (starting._tag === "Failure") return yield* Effect.failCause(starting.cause);
+  if (Exit.isFailure(starting)) return yield* Effect.failCause(starting.cause);
 
-  if (recorded._tag === "Failure") return yield* Effect.failCause(recorded.cause);
+  if (Exit.isFailure(recorded)) return yield* Effect.failCause(recorded.cause);
 });
 
 export const runFleetPilot = Effect.fn(function* (port: Port) {
@@ -144,7 +143,7 @@ export const runFleetPilot = Effect.fn(function* (port: Port) {
   let physical: Option.Option<string> = Option.none();
   let member: Member;
 
-  if (registration._tag === "Success") {
+  if (Exit.isSuccess(registration)) {
     member = registration.value;
 
     if (member.outcome !== "created") return yield* Effect.fail(Error("Fresh fleet User required"));
@@ -160,7 +159,7 @@ export const runFleetPilot = Effect.fn(function* (port: Port) {
 
   const observation = yield* Effect.exit(
     Effect.gen(function* () {
-      if (registration._tag === "Failure") return yield* Effect.failCause(registration.cause);
+      if (Exit.isFailure(registration)) return yield* Effect.failCause(registration.cause);
       yield* port.record({ stage: "signup-created" });
       const target = yield* targetFromCensus;
       physical = Option.some(target);
@@ -176,7 +175,7 @@ export const runFleetPilot = Effect.fn(function* (port: Port) {
 
   yield* cleanupPilot({ port, member, before, physical });
 
-  if (observation._tag === "Failure") return yield* Effect.failCause(observation.cause);
+  if (Exit.isFailure(observation)) return yield* Effect.failCause(observation.cause);
 });
 
 const digest = (value: string): string =>
@@ -197,7 +196,7 @@ const eraseEstablished = Effect.fn(function* (input: Cleanup, transition: Transi
   yield* input.renewCleanup();
   const session = yield* input.login().pipe(Effect.timeout("2 minutes"), Effect.result);
 
-  if (session._tag === "Failure") {
+  if (Result.isFailure(session)) {
     yield* input.record({ stage: "established-login-unconfirmed" });
 
     return Option.none<Member>();
@@ -217,7 +216,7 @@ const eraseEstablished = Effect.fn(function* (input: Cleanup, transition: Transi
     yield* input.record({ stage: "erasure-submission-started" });
     const { recorded } = yield* submitErasure(member, input.record);
 
-    if (recorded._tag === "Failure") return yield* Effect.failCause(recorded.cause);
+    if (Exit.isFailure(recorded)) return yield* Effect.failCause(recorded.cause);
   }
 
   return Option.some(member);

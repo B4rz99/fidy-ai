@@ -34,18 +34,22 @@ it.effect("uses the deployed ancestor only after confirming the unchanged runtim
 
 it.effect("refuses changed build inputs, unrelated commits and non-commit arguments", () =>
   Effect.gen(function* () {
-    for (const path of [
-      "apps/web/src/app.ts",
-      "infra/cloudflare/native-application.ts",
-      "infra/cloudflare/native-erasure-evidence.ts",
-      "bun.lock",
-    ]) {
-      const result = yield* verificationRevision(trunk, installed, (args) =>
-        Effect.succeed(args.includes("diff") ? path + "\0" : "")
-      ).pipe(Effect.result);
+    yield* Effect.forEach(
+      [
+        "apps/web/src/app.ts",
+        "infra/cloudflare/native-application.ts",
+        "infra/cloudflare/native-erasure-evidence.ts",
+        "bun.lock",
+      ],
+      Effect.fnUntraced(function* (path) {
+        const result = yield* verificationRevision(trunk, installed, (args) =>
+          Effect.succeed(args.includes("diff") ? path + "\0" : "")
+        ).pipe(Effect.result);
 
-      expect(Result.isFailure(result)).toBe(true);
-    }
+        expect(Result.isFailure(result)).toBe(true);
+      }),
+      { discard: true }
+    );
 
     expect(
       Result.isFailure(
@@ -80,26 +84,34 @@ it.effect(
           Effect.succeed(args.includes("diff") ? path + "\0" : "")
         );
 
-      for (const path of [
-        "scripts/infra-performance/deployed-fleet/pilot.py",
-        "scripts/infra-performance/deployed-fleet/ten.py",
-        "scripts/infra-performance/deployed-fleet/ten-source.sh",
-        "infra/cloudflare/native-ten-fleet.ts",
-        "infra/cloudflare/native-ten-release.ts",
-        "docs/adr/0041-per-user-durable-object-storage-direction.md",
-      ]) {
-        expect(yield* changed(path)).toBe(installed);
-      }
+      yield* Effect.forEach(
+        [
+          "scripts/infra-performance/deployed-fleet/pilot.py",
+          "scripts/infra-performance/deployed-fleet/ten.py",
+          "scripts/infra-performance/deployed-fleet/ten-source.sh",
+          "infra/cloudflare/native-ten-fleet.ts",
+          "infra/cloudflare/native-ten-release.ts",
+          "docs/adr/0041-per-user-durable-object-storage-direction.md",
+        ],
+        Effect.fnUntraced(function* (path) {
+          expect(yield* changed(path)).toBe(installed);
+        }),
+        { discard: true }
+      );
 
-      for (const path of [
-        "apps/server/cloudflare/maintenance/runtime.ts",
-        "scripts/infra-performance/deployed-fleet/other.py",
-        "infra/cloudflare/native-ten-runtime.ts",
-        "docs/adr/0000-unreviewed.md",
-        "apps/server/package.json",
-      ]) {
-        expect(Result.isFailure(yield* Effect.result(changed(path)))).toBe(true);
-      }
+      yield* Effect.forEach(
+        [
+          "apps/server/cloudflare/maintenance/runtime.ts",
+          "scripts/infra-performance/deployed-fleet/other.py",
+          "infra/cloudflare/native-ten-runtime.ts",
+          "docs/adr/0000-unreviewed.md",
+          "apps/server/package.json",
+        ],
+        Effect.fnUntraced(function* (path) {
+          expect(Result.isFailure(yield* Effect.result(changed(path)))).toBe(true);
+        }),
+        { discard: true }
+      );
     })
 );
 

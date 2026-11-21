@@ -1,6 +1,7 @@
+import type { WorkerBindings } from "./rollback-compatibility";
 import { resourceRevision } from "./native-fixture-signer";
 import retainedProvider from "./native-retained-provider.json" with { type: "json" };
-import { Data, Effect, Schema } from "effect";
+import { Data, Effect, Predicate, Schema } from "effect";
 import {
   type NativeBinding,
   NativeBindings,
@@ -32,6 +33,9 @@ type InventoryPhase =
 export class NativeInventoryRefused extends Data.TaggedError("NativeInventoryRefused")<{
   phase: InventoryPhase;
 }> {}
+
+export const isNativeInventoryRefused = (value: unknown): value is NativeInventoryRefused =>
+  Predicate.isTagged(value, "NativeInventoryRefused");
 
 const inventoryPhase =
   (phase: InventoryPhase) =>
@@ -133,7 +137,7 @@ const requireQueueName = (
 type DeployedRole = {
   role: Exclude<NativeRole, "Web">;
   revision: string;
-  bindings: Readonly<Record<string, unknown>>;
+  bindings: WorkerBindings;
   fingerprint: string;
 };
 
@@ -284,7 +288,7 @@ const buckets = Effect.fn(function* (read: Read) {
 
   let cursor = "";
 
-  const shape = Schema.Struct({
+  const bucketPage = Schema.Struct({
     success: Schema.Literal(true),
     result: Schema.Struct({ buckets: Schema.Array(named) }),
     result_info: Schema.Struct({ cursor: Schema.optional(Schema.NullOr(Schema.String)) }),
@@ -294,7 +298,7 @@ const buckets = Effect.fn(function* (read: Read) {
     const query = new URLSearchParams({ name_contains: prefix, per_page: String(limit) });
 
     if (cursor.length > 0) query.set("cursor", cursor);
-    const body = yield* Schema.decodeUnknownEffect(shape)(yield* read("r2/buckets?" + query));
+    const body = yield* Schema.decodeUnknownEffect(bucketPage)(yield* read("r2/buckets?" + query));
     result.push(...body.result.buckets.map((bucket) => bucket.name));
     cursor = body.result_info.cursor ?? "";
 
@@ -376,6 +380,31 @@ const inspectConsumers = Effect.fn(function* (
   return [row.consumer_id];
 });
 
+const verifyWorkflowHosts = Effect.fnUntraced(function* (
+  items: ReadonlyArray<typeof Workflow.Type>,
+  revision: string
+) {
+  const wanted = Object.values(workflowTargets(revision));
+
+  yield* Effect.forEach(
+    items,
+    (item) => {
+      const target = wanted.find(([slug]) => item.name === prefix + slug);
+
+      return Effect.try(() =>
+        requireTarget(
+          target !== undefined &&
+            item.class_name === target[1] &&
+            item.script_name ===
+              (item.name === smokeName(revision) ? item.name : installationNames.Core),
+          item.name
+        )
+      ).pipe(inventoryPhase("Workflow host bindings"));
+    },
+    { discard: true }
+  );
+});
+
 export const inspectNativeResources = Effect.fn(function* (
   read: Read,
   revision: string,
@@ -415,18 +444,7 @@ export const inspectNativeResources = Effect.fn(function* (
     wantedWorkflows.map(([slug]) => prefix + slug)
   );
 
-  for (const item of presentWorkflows) {
-    const target = wantedWorkflows.find(([slug]) => item.name === prefix + slug);
-    yield* Effect.try(() =>
-      requireTarget(
-        target !== undefined &&
-          item.class_name === target[1] &&
-          item.script_name ===
-            (item.name === smokeName(revision) ? item.name : installationNames.Core),
-        item.name
-      )
-    ).pipe(inventoryPhase("Workflow host bindings"));
-  }
+  yield* verifyWorkflowHosts(presentWorkflows, revision);
 
   const queues = yield* Effect.forEach(
     presentQueues,

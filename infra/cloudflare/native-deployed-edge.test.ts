@@ -175,13 +175,17 @@ it.effect("admits only the closed acceptance and canonical hosts during staged t
     yield* inspectDomains([acceptance], true);
     yield* inspectDomains([acceptance, canonical], false);
 
-    for (const hosts of [
-      [canonical],
-      [acceptance],
-      [acceptance, { ...canonical, zone_id: "foreign" }],
-      [acceptance, canonical, attachment("other.fidyapp.com", web)],
-    ]) {
-      expect(Result.isFailure(yield* Effect.result(inspectDomains(hosts, false)))).toBe(true);
-    }
+    yield* Effect.forEach(
+      [
+        [canonical],
+        [acceptance],
+        [acceptance, { ...canonical, zone_id: "foreign" }],
+        [acceptance, canonical, attachment("other.fidyapp.com", web)],
+      ],
+      Effect.fnUntraced(function* (hosts) {
+        expect(Result.isFailure(yield* Effect.result(inspectDomains(hosts, false)))).toBe(true);
+      }),
+      { discard: true }
+    );
   })
 );

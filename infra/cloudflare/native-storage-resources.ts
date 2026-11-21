@@ -1,3 +1,4 @@
+import { BunRuntime } from "@effect/platform-bun";
 import {
   SuccessorSource,
   applyScopedNativePlan,
@@ -106,17 +107,18 @@ const verifyResourcePlan = Effect.fn(function* ({
   hosts: NativeHostMode;
   pin: string;
 }) {
-  yield* Effect.gen(function* () {
-    const allowed = Schema.Struct({ allowedIdps: Schema.Tuple([Schema.Literal(pin)]) });
+  const allowed = Schema.Struct({ allowedIdps: Schema.Tuple([Schema.Literal(pin)]) });
 
-    for (const node of Object.values(plan.resources)) {
-      if (describeResource(node).resourceType === "Cloudflare.Access.Application") {
-        yield* Schema.decodeUnknownEffect(allowed)(
-          node.action === "noop" ? node.state.props : node.props
-        );
-      }
-    }
-  }).pipe(nativeResourceStage("account recovery PIN"));
+  yield* Effect.forEach(
+    Object.values(plan.resources),
+    (node) =>
+      describeResource(node).resourceType === "Cloudflare.Access.Application"
+        ? Schema.decodeUnknownEffect(allowed)(
+            node.action === "noop" ? node.state.props : node.props
+          )
+        : Effect.void,
+    { discard: true }
+  ).pipe(nativeResourceStage("account recovery PIN"));
 
   if (phase === "stage-hosts") {
     yield* Effect.sync(() => requireHostPlan(plan)).pipe(nativeResourceStage("Access host plan"));
@@ -657,7 +659,7 @@ if (import.meta.main) {
       : ordinary
   ).pipe(Effect.provide(Alchemist.layer()), Effect.scoped);
 
-  await Effect.runPromise(
+  BunRuntime.runMain(
     program.pipe(
       Effect.catchCause((cause) =>
         Effect.sync(() => {

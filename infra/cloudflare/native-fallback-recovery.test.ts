@@ -301,11 +301,15 @@ it.effect(
         namespaces: { ...stage.namespaces, user: stage.namespaces.directory },
       };
 
-      for (const invalid of [foreign, alias]) {
-        expect(
-          (yield* Effect.flip(recoverFixtureFallback(port, invalid, verify))).message
-        ).toContain("Inconsistent");
-      }
+      yield* Effect.forEach(
+        [foreign, alias],
+        Effect.fnUntraced(function* (invalid) {
+          expect(
+            (yield* Effect.flip(recoverFixtureFallback(port, invalid, verify))).message
+          ).toContain("Inconsistent");
+        }),
+        { discard: true }
+      );
 
       expect(writes).toEqual([]);
     })

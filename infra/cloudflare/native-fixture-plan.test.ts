@@ -27,13 +27,13 @@ const row = (logicalId: string, resourceType: string, action: Row["action"]): Ro
 const validate = (rows: readonly Row[], fallback = false): void =>
   requireFixtureLifecycle({ rows, fallback });
 
-const retained = [...nativeResourceInventory(provider.revision)]
-  .filter(([id]) => id.includes(provider.revision))
-  .map(([id, type]) => row(id, type, "delete"));
+const retained = [...nativeResourceInventory(provider.revision)].flatMap(([id, type]) =>
+  id.includes(provider.revision) ? [row(id, type, "delete")] : []
+);
 
-const creation = [...nativeResourceInventory(revision)]
-  .filter(([id]) => id.includes(revision))
-  .map(([id, type]) => row(id, type, "create"));
+const creation = [...nativeResourceInventory(revision)].flatMap(([id, type]) =>
+  id.includes(revision) ? [row(id, type, "create")] : []
+);
 
 it("updates only the repaired pair and its existing smoke executor on the captured installation", () => {
   const approved = [

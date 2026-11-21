@@ -4,9 +4,21 @@ import { stagedAccountingRevision } from "./native-fixture-signer";
 import { archivedDormant } from "./native-fallback-recovery";
 import { CategoryTaxonomyRelease } from "../../apps/server/src/core/categories/contract";
 import { compatibleCategoryReleases } from "../../apps/server/src/core/categories/operations";
-import { ReleaseSmokeFailed } from "./smoke-exchange";
+
 import { verifyStableWorkerIdentity } from "./stable-worker-identity";
-import { Cause, Data, Effect, Option, Schema, Stream } from "effect";
+import {
+  Cause,
+  Data,
+  Effect,
+  Exit,
+  Fiber,
+  Option,
+  Predicate,
+  Result,
+  Schema,
+  Stream,
+} from "effect";
+import { isReleaseSmokeFailed } from "./smoke-exchange";
 import { isDeepStrictEqual } from "node:util";
 import {
   FetchHttpClient,
@@ -42,11 +54,16 @@ const ListResponse = Schema.Struct({
   result: Schema.Struct({ deployments: Schema.Array(ApiDeployment) }),
 });
 
-const CreateResponse = Schema.Struct({ success: Schema.Literal(true), result: ApiDeployment });
+const CreateResponse = Schema.Struct({
+  success: Schema.Literal(true),
+  result: ApiDeployment,
+});
 
 const DeployableResponse = Schema.Struct({
   success: Schema.Literal(true),
-  result: Schema.Struct({ items: Schema.Array(Schema.Struct({ id: VersionId })) }),
+  result: Schema.Struct({
+    items: Schema.Array(Schema.Struct({ id: VersionId })),
+  }),
 });
 
 const ResourceIdentity = Schema.Struct({ logicalId: Schema.String });
@@ -126,13 +143,30 @@ class ModifiedDeploymentSecrets extends Data.TaggedError("ModifiedDeploymentSecr
 
 export class ReleaseFailure extends Data.TaggedError("ReleaseFailure")<{ message: string }> {}
 
+export class CausedReleaseFailure extends ReleaseFailure {
+  constructor(args: Readonly<{ message: string; cause: unknown }>) {
+    super(args);
+  }
+}
+
+export const releaseFailureFrom =
+  (message: string) =>
+  (cause: unknown): ReleaseFailure =>
+    new CausedReleaseFailure({ message, cause });
+
+export const isReleaseFailure = (value: unknown): value is ReleaseFailure =>
+  Predicate.isTagged(value, "ReleaseFailure");
+
+const isModifiedDeploymentSecrets = (value: unknown): value is ModifiedDeploymentSecrets =>
+  Predicate.isTagged(value, "ModifiedDeploymentSecrets");
+
 export const releaseFailureMessage = (cause: Cause.Cause<unknown>): string => {
   for (const reason of cause.reasons) {
-    if (Cause.isFailReason(reason) && reason.error instanceof ReleaseFailure) {
+    if (Cause.isFailReason(reason) && isReleaseFailure(reason.error)) {
       return reason.error.message;
     }
 
-    if (Cause.isFailReason(reason) && reason.error instanceof ModifiedDeploymentSecrets) {
+    if (Cause.isFailReason(reason) && isModifiedDeploymentSecrets(reason.error)) {
       return `Cloudflare deployment rejected (HTTP ${badRequest}; code ${modifiedSecretsCode})`;
     }
   }
@@ -373,6 +407,11 @@ export class WorkerVersionReadUnavailable extends Data.TaggedError("WorkerVersio
   status: number;
 }> {}
 
+export const isWorkerVersionReadUnavailable = (
+  value: unknown
+): value is WorkerVersionReadUnavailable =>
+  Predicate.isTagged(value, "WorkerVersionReadUnavailable");
+
 const notFound = 404,
   requestTimeout = 408,
   rateLimited = 429,
@@ -404,7 +443,9 @@ const providerJson = Effect.fn(
       .pipe(Effect.mapError(() => Error("Provider request failed; inspect traffic state")));
 
     if (immutableVersion && request.method === "GET" && transientVersionRead.has(response.status)) {
-      return yield* new WorkerVersionReadUnavailable({ status: response.status });
+      return yield* new WorkerVersionReadUnavailable({
+        status: response.status,
+      });
     }
 
     return yield* boundedJson(response, reportDeploymentRejection);
@@ -442,9 +483,10 @@ export const verifyCoreDefaultPlacement = Effect.fn(function* (
     Effect.provideService(HttpClient.HttpClient, client),
     Effect.flatMap(Schema.decodeUnknownEffect(response)),
     Effect.mapError(
-      () =>
-        new ReleaseFailure({
+      (error) =>
+        new CausedReleaseFailure({
           message: "Release staging refused: Core default placement is unverified",
+          cause: error,
         })
     )
   );
@@ -478,9 +520,10 @@ export const verifyReleaseObservability = Effect.fn(function* (
     Effect.provideService(HttpClient.HttpClient, client),
     Effect.flatMap(Schema.decodeUnknownEffect(VerifiedObservability)),
     Effect.mapError(
-      () =>
-        new ReleaseFailure({
+      (error) =>
+        new CausedReleaseFailure({
           message: "Release staging refused: private operational observability is unverified",
+          cause: error,
         })
     )
   );
@@ -491,34 +534,39 @@ export const configureReleaseObservability = Effect.fn(function* (
   names: ReadonlyArray<string>,
   client: HttpClient.HttpClient
 ) {
-  for (const name of names) {
-    const base = `https://api.cloudflare.com/client/v4/accounts/${env.account}/workers/scripts/${encodeURIComponent(name)}`;
-    const headers = { authorization: `Bearer ${env.token}` };
-    yield* providerJson(
-      HttpClientRequest.patch(`${base}/script-settings`, {
-        headers: { ...headers, "content-type": "application/json" },
-        body: HttpBody.text(
-          encodeJson({
-            observability: {
-              enabled: freeTierWorkerObservability.enabled,
-              head_sampling_rate: freeTierWorkerObservability.headSamplingRate,
-              redact_query_string: freeTierWorkerObservability.redactQueryString,
-              issues: freeTierWorkerObservability.issues,
-              logs: {
-                enabled: freeTierWorkerObservability.logs.enabled,
-                head_sampling_rate: freeTierWorkerObservability.logs.headSamplingRate,
-                invocation_logs: freeTierWorkerObservability.logs.invocationLogs,
-                persist: freeTierWorkerObservability.logs.persist,
-              },
-              traces: { enabled: false },
-            },
-          }),
-          "application/json"
-        ),
-      })
-    ).pipe(Effect.provideService(HttpClient.HttpClient, client));
-    yield* verifyReleaseObservability(env, name, client);
-  }
+  yield* Effect.forEach(
+    names,
+    (name) =>
+      Effect.gen(function* () {
+        const base = `https://api.cloudflare.com/client/v4/accounts/${env.account}/workers/scripts/${encodeURIComponent(name)}`;
+        const headers = { authorization: `Bearer ${env.token}` };
+        yield* providerJson(
+          HttpClientRequest.patch(`${base}/script-settings`, {
+            headers: { ...headers, "content-type": "application/json" },
+            body: HttpBody.text(
+              encodeJson({
+                observability: {
+                  enabled: freeTierWorkerObservability.enabled,
+                  head_sampling_rate: freeTierWorkerObservability.headSamplingRate,
+                  redact_query_string: freeTierWorkerObservability.redactQueryString,
+                  issues: freeTierWorkerObservability.issues,
+                  logs: {
+                    enabled: freeTierWorkerObservability.logs.enabled,
+                    head_sampling_rate: freeTierWorkerObservability.logs.headSamplingRate,
+                    invocation_logs: freeTierWorkerObservability.logs.invocationLogs,
+                    persist: freeTierWorkerObservability.logs.persist,
+                  },
+                  traces: { enabled: false },
+                },
+              }),
+              "application/json"
+            ),
+          })
+        ).pipe(Effect.provideService(HttpClient.HttpClient, client));
+        yield* verifyReleaseObservability(env, name, client);
+      }),
+    { discard: true }
+  );
 });
 
 const toolingRefusal = (stream: ReadableStream<Uint8Array>): Promise<Option.Option<string>> => {
@@ -588,74 +636,78 @@ const stopReadOnlyCommand = Effect.fn(function* (child: Bun.Subprocess) {
 const releaseOutput = (
   stream: ReadableStream<Uint8Array>,
   overflow: () => Effect.Effect<void, ReleaseFailure>
-): Promise<string> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const limit = 1_048_576;
-      const decoder = new TextDecoder();
-      let size = 0;
-      let retained = "";
-      const outputState = { exceeded: false };
-      yield* Stream.fromReadableStream({
-        evaluate: () => stream,
-        onError: () => new ReleaseFailure({ message: "Release tooling output could not be read" }),
-        releaseLockOnEnd: true,
-      }).pipe(
-        Stream.runForEach((chunk) => {
-          if (outputState.exceeded) return Effect.void;
-          size += chunk.byteLength;
+): Effect.Effect<string, ReleaseFailure> =>
+  Effect.gen(function* () {
+    const limit = 1_048_576;
+    const decoder = new TextDecoder();
+    let size = 0;
+    let retained = "";
+    const outputState = { exceeded: false };
+    yield* Stream.fromReadableStream({
+      evaluate: () => stream,
+      onError: () =>
+        new ReleaseFailure({
+          message: "Release tooling output could not be read",
+        }),
+      releaseLockOnEnd: true,
+    }).pipe(
+      Stream.runForEach((chunk) => {
+        if (outputState.exceeded) return Effect.void;
+        size += chunk.byteLength;
 
-          if (size > limit) {
-            outputState.exceeded = true;
-            retained = "";
+        if (size > limit) {
+          outputState.exceeded = true;
+          retained = "";
 
-            return overflow();
-          }
+          return overflow();
+        }
 
-          retained += decoder.decode(chunk, { stream: true });
+        retained += decoder.decode(chunk, { stream: true });
 
-          return Effect.void;
-        })
-      );
+        return Effect.void;
+      })
+    );
 
-      if (outputState.exceeded) {
-        return yield* new ReleaseFailure({ message: "Release tooling output exceeded limit" });
-      }
+    if (outputState.exceeded) {
+      return yield* new ReleaseFailure({
+        message: "Release tooling output exceeded limit",
+      });
+    }
 
-      return retained + decoder.decode();
-    })
-  );
-
-const startReleaseCommand = (
-  args: ReadonlyArray<string>,
-  lifetime: "read-only" | "started-write"
-): {
-  child: Bun.Subprocess<"ignore", "pipe", "pipe">;
-  settlement: Promise<
-    [
-      PromiseSettledResult<string>,
-      PromiseSettledResult<number>,
-      PromiseSettledResult<Option.Option<string>>,
-    ]
-  >;
-} => {
-  const child = Bun.spawn([...args], {
-    cwd: import.meta.dir,
-    stdout: "pipe",
-    stderr: "pipe",
-    env: process.env,
+    return retained + decoder.decode();
   });
 
-  const settlement = Promise.allSettled([
-    releaseOutput(child.stdout, () =>
-      lifetime === "read-only" ? stopReadOnlyCommand(child) : Effect.void
-    ),
-    child.exited,
-    toolingRefusal(child.stderr),
+const startReleaseCommand = Effect.fnUntraced(function* (
+  args: ReadonlyArray<string>,
+  lifetime: "read-only" | "started-write"
+) {
+  const child = yield* Effect.try({
+    try: () =>
+      Bun.spawn([...args], {
+        cwd: import.meta.dir,
+        stdout: "pipe",
+        stderr: "pipe",
+        env: process.env,
+      }),
+    catch: (cause) => new CausedReleaseFailure({ message: "Release tooling failed", cause }),
+  });
+
+  const processSettlement = Promise.allSettled([child.exited, toolingRefusal(child.stderr)]);
+
+  const output = yield* releaseOutput(child.stdout, () =>
+    lifetime === "read-only" ? stopReadOnlyCommand(child) : Effect.void
+  ).pipe(Effect.result, Effect.forkDetach);
+
+  const settlement = Effect.all([
+    Fiber.join(output),
+    Effect.tryPromise({
+      try: () => processSettlement,
+      catch: (cause) => new CausedReleaseFailure({ message: "Release tooling failed", cause }),
+    }),
   ]);
 
   return { child, settlement };
-};
+});
 
 export const releaseCommand = ({
   args,
@@ -665,18 +717,12 @@ export const releaseCommand = ({
   lifetime: "read-only" | "started-write";
 }>): Effect.Effect<string, ReleaseFailure> =>
   Effect.acquireUseRelease(
-    Effect.try({
-      try: () => startReleaseCommand(args, lifetime),
-      catch: () => new ReleaseFailure({ message: "Release tooling failed" }),
-    }),
+    startReleaseCommand(args, lifetime),
     ({ settlement }) =>
-      Effect.tryPromise({
-        try: () => settlement,
-        catch: () => new ReleaseFailure({ message: "Release tooling failed" }),
-      }).pipe(
-        Effect.flatMap(([output, exit, code]) =>
-          output.status === "fulfilled" && exit.status === "fulfilled" && exit.value === 0
-            ? Effect.succeed(output.value)
+      settlement.pipe(
+        Effect.flatMap(([output, [exit, code]]) =>
+          Result.isSuccess(output) && exit.status === "fulfilled" && exit.value === 0
+            ? Effect.succeed(output.success)
             : Effect.fail(
                 new ReleaseFailure({
                   message:
@@ -690,19 +736,24 @@ export const releaseCommand = ({
     ({ child, settlement }, exit) =>
       Effect.gen(function* () {
         const cancellation = yield* Effect.exit(
-          lifetime === "read-only" && exit._tag === "Failure" && child.exitCode === null
+          lifetime === "read-only" && Exit.isFailure(exit) && child.exitCode === null
             ? stopReadOnlyCommand(child)
             : Effect.void
         );
 
-        const results = yield* Effect.tryPromise({
-          try: () => settlement,
-          catch: () => new ReleaseFailure({ message: "Release tooling cleanup failed" }),
-        });
+        const [, [processExit]] = yield* settlement.pipe(
+          Effect.mapError(
+            (error) =>
+              new CausedReleaseFailure({
+                message: "Release tooling cleanup failed",
+                cause: error,
+              })
+          )
+        );
 
-        if (cancellation._tag === "Failure") return yield* Effect.failCause(cancellation.cause);
+        if (Exit.isFailure(cancellation)) return yield* Effect.failCause(cancellation.cause);
 
-        if (results[1].status !== "fulfilled") {
+        if (processExit.status !== "fulfilled") {
           return yield* new ReleaseFailure({
             message: "Release tooling exit could not be confirmed",
           });
@@ -926,7 +977,7 @@ const workersFromState = Effect.fn(function* (
     catch: (cause) =>
       new ReleaseFailure({
         message:
-          cause instanceof Error && safeWorkerReceiptMessages.has(cause.message)
+          Predicate.isError(cause) && safeWorkerReceiptMessages.has(cause.message)
             ? cause.message
             : "Alchemy Worker state JSON could not be decoded",
       }),
@@ -954,7 +1005,10 @@ const stableIdentity = Effect.fn(function* (
     releaseOrigin
   );
 
-  return { stableRevision: health.gitRevision, stableContractDigest: health.contractDigest };
+  return {
+    stableRevision: health.gitRevision,
+    stableContractDigest: health.contractDigest,
+  };
 });
 
 const asDeployment = (value: typeof ApiDeployment.Type): Deployment => ({
@@ -971,7 +1025,10 @@ const createDeployment = Effect.fn(function* (
 ) {
   const raw = yield* json(
     HttpClientRequest.post(input.url, {
-      headers: { authorization: `Bearer ${input.token}`, "content-type": "application/json" },
+      headers: {
+        authorization: `Bearer ${input.token}`,
+        "content-type": "application/json",
+      },
       body: HttpBody.text(
         encodeJson({
           strategy: "percentage",
@@ -1118,20 +1175,21 @@ const readStablePair = Effect.fn(function* (
     { concurrency: 2 }
   ).pipe(
     Effect.mapError(
-      () =>
-        new ReleaseFailure({
+      (error) =>
+        new CausedReleaseFailure({
           message: "Release capture could not read stable Worker deployments",
+          cause: error,
         })
     )
   );
 
   const publicStable = yield* releaseController
     .servingVersion(publicDeployment)
-    .pipe(Effect.mapError(() => new ReleaseFailure({ message: "Unstable public Worker" })));
+    .pipe(Effect.mapError(releaseFailureFrom("Unstable public Worker")));
 
   const coreStable = yield* releaseController
     .servingVersion(coreDeployment)
-    .pipe(Effect.mapError(() => new ReleaseFailure({ message: "Unstable Core Worker" })));
+    .pipe(Effect.mapError(releaseFailureFrom("Unstable Core Worker")));
 
   const identity = yield* stableIdentity(
     {
@@ -1145,10 +1203,9 @@ const readStablePair = Effect.fn(function* (
     Effect.mapError(
       (failure) =>
         new ReleaseFailure({
-          message:
-            failure instanceof ReleaseSmokeFailed
-              ? `Stable Worker capture rejected: ${failure.reason}`
-              : "Release capture could not verify the stable Worker pair",
+          message: isReleaseSmokeFailed(failure)
+            ? `Stable Worker capture rejected: ${failure.reason}`
+            : "Release capture could not verify the stable Worker pair",
         })
     )
   );
@@ -1229,7 +1286,9 @@ const proveRecoveryCorePrivate = Effect.fn(function* (
     Schema.Struct({
       success: Schema.Literal(true),
       result: Schema.Array(
-        Schema.Struct({ script: Schema.optional(Schema.NullOr(Schema.String)) })
+        Schema.Struct({
+          script: Schema.optional(Schema.NullOr(Schema.String)),
+        })
       ),
     })
   )(raw.routes);
@@ -1238,7 +1297,9 @@ const proveRecoveryCorePrivate = Effect.fn(function* (
     domains.result.some((domain) => domain.service === name) ||
     routes.result.some((route) => route.script === name)
   ) {
-    return yield* new ReleaseFailure({ message: "Recovery refused: Core is publicly reachable" });
+    return yield* new ReleaseFailure({
+      message: "Recovery refused: Core is publicly reachable",
+    });
   }
 });
 
@@ -1266,7 +1327,11 @@ const versionResources = Effect.fn(function* (
   const raw = yield* readWorkerVersion(env, client, worker);
 
   return yield* Effect.try(() =>
-    verifiedVersionResources({ raw, versionId: worker.id, revision: worker.revision })
+    verifiedVersionResources({
+      raw,
+      versionId: worker.id,
+      revision: worker.revision,
+    })
   );
 });
 
@@ -1300,20 +1365,24 @@ const rollbackSource = Effect.fn(function* (snapshot: typeof releaseSchemas.snap
 
   const workflowPaths = new Set<string>();
 
-  for (const revision of [snapshot.stableRevision, snapshot.revision]) {
-    const found = yield* shell([
-      "git",
-      "-C",
-      "../..",
-      "grep",
-      "-l",
-      "-F",
-      "WorkflowEntrypoint",
-      revision,
-      "--",
-      "apps/server/cloudflare/",
-    ]);
+  const foundByRevision = yield* Effect.forEach(
+    [snapshot.stableRevision, snapshot.revision],
+    (revision) =>
+      shell([
+        "git",
+        "-C",
+        "../..",
+        "grep",
+        "-l",
+        "-F",
+        "WorkflowEntrypoint",
+        revision,
+        "--",
+        "apps/server/cloudflare/",
+      ])
+  );
 
+  for (const found of foundByRevision) {
     for (const line of found.trim().split("\n")) {
       workflowPaths.add(line.slice(line.indexOf(":") + 1));
     }
@@ -1448,7 +1517,7 @@ const restoreCanonicalStable = Effect.fn(function* (
 
   return yield* port.deploy(target.name, [{ id: captured.stableVersionId, percentage: 100 }]).pipe(
     Effect.catchIf(
-      (error) => error instanceof ModifiedDeploymentSecrets,
+      (error) => isModifiedDeploymentSecrets(error),
       () => retryClosedRestoration(config, input, before)
     )
   );

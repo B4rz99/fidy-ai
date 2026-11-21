@@ -3,6 +3,7 @@ import { Data, Effect, Option, Predicate, Schema } from "effect";
 import type { Atom } from "effect/reactivity";
 import { type Dispatch, type RefCallback, type SetStateAction, useCallback, useState } from "react";
 import { type FidyClient, PATPairingPublicCode, type PATPairingReview } from "@/transport/client";
+import { reportBrowserDefect } from "@/transport/browser-defects";
 
 type InspectCommand = Readonly<{
   publicCode: string;
@@ -45,6 +46,12 @@ export type PATPairingActions = Readonly<{
 
 const entering: PairingState = PairingState.Entering({ publicCode: "" });
 
+const reportCommandFailure = (failed: () => void): Effect.Effect<void> =>
+  Effect.sync(() => {
+    reportBrowserDefect("command_failed");
+    failed();
+  });
+
 const inspectCommand = (apiClient: FidyClient): Atom.AtomResultFn<InspectCommand, void, never> =>
   apiClient.runtime.fn<InspectCommand>()(
     (command) =>
@@ -56,7 +63,7 @@ const inspectCommand = (apiClient: FidyClient): Atom.AtomResultFn<InspectCommand
         });
 
         yield* Effect.sync(() => command.inspected(result.data));
-      }).pipe(Effect.catch(() => Effect.sync(command.failed))),
+      }).pipe(Effect.catch(() => reportCommandFailure(command.failed))),
     { concurrent: false }
   );
 
@@ -67,7 +74,7 @@ const approveCommand = (apiClient: FidyClient): Atom.AtomResultFn<ApproveCommand
         const client = yield* apiClient;
         yield* client.pats.approvePATPairing({ payload: { pairingId: command.pairingId } });
         yield* Effect.sync(command.approved);
-      }).pipe(Effect.catch(() => Effect.sync(command.failed))),
+      }).pipe(Effect.catch(() => reportCommandFailure(command.failed))),
     { concurrent: false }
   );
 

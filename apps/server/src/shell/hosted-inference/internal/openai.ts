@@ -478,8 +478,10 @@ const providerRefusal = (response: Response): Effect.Effect<never, HostedInferen
           })
         : fallback
     ),
-    Effect.orElseSucceed(() => fallback),
-    Effect.flatMap(Effect.fail)
+    Effect.matchEffect({
+      onFailure: () => Effect.fail(fallback),
+      onSuccess: Effect.fail,
+    })
   );
 };
 

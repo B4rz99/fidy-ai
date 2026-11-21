@@ -5,12 +5,11 @@ import {
   readBoundedWompiResponse,
   wompiTokenizationOrigin,
 } from "./wompi-tokenization";
+import { reportBrowserDefect } from "./browser-defects";
 
 export class NequiAuthorizationFailed extends Data.TaggedError("NequiAuthorizationFailed")<{
   readonly reason: "declined" | "unavailable" | "expired";
 }> {}
-
-const ignoreCancellation = (): void => {};
 
 const maximumTokenCharacters = 4096;
 
@@ -74,7 +73,7 @@ const requestToken = (
 
     if (!response.ok) {
       yield* Effect.sync(() => {
-        response.body?.cancel().catch(ignoreCancellation);
+        response.body?.cancel().catch(() => reportBrowserDefect("client_defect"));
       });
 
       return yield* failure();
@@ -121,7 +120,9 @@ const initiateAuthorization = (
   });
 
 const notify = (callback: () => void): Effect.Effect<void> =>
-  Effect.try({ try: callback, catch: () => undefined }).pipe(Effect.ignore);
+  Effect.sync(callback).pipe(
+    Effect.catchDefect(() => Effect.sync(() => reportBrowserDefect("client_defect")))
+  );
 
 type TokenObservation = Effect.Success<ReturnType<typeof requestToken>>;
 

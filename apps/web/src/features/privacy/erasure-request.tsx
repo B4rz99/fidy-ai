@@ -32,15 +32,14 @@ export const ErasureRequest = ({ client }: Readonly<{ client: WebAuthClient }>):
     client.runtime.fn<void>()(() =>
       client.pipe(
         Effect.flatMap((api) => api.processingConsent.erase({ payload: { confirm: true } })),
-        Effect.as(true),
-        Effect.catchCause(() => Effect.succeed(false))
+        Effect.asVoid
       )
     )
   );
 
   const result = useAtomValue(command);
   const submit = useAtomSet(command);
-  const accepted = Predicate.isTagged(result, "Success") && result.value;
+  const accepted = Predicate.isTagged(result, "Success");
 
   return (
     <ErasureSection>
@@ -64,10 +63,7 @@ export const ErasureRequest = ({ client }: Readonly<{ client: WebAuthClient }>):
           {result.waiting ? "Registrando solicitud…" : "Solicitar eliminación"}
         </Button>
       </div>
-      <ErasureFeedback
-        accepted={accepted}
-        failed={Predicate.isTagged(result, "Success") && !result.value}
-      />
+      <ErasureFeedback accepted={accepted} failed={Predicate.isTagged(result, "Failure")} />
     </ErasureSection>
   );
 };

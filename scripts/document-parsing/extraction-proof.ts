@@ -294,15 +294,17 @@ const proveRejected = (input: HostileInput): Effect.Effect<void, ProofError> =>
   Effect.gen(function* () {
     const response = yield* fromPromise((signal) => requestExtraction(input.body, signal));
 
+    const failure = new ExtractionEvidenceFailure({
+      message: `Document extraction did not fail closed for ${input.label}`,
+    });
+
+    if (response.status !== input.expectedStatus) return yield* failure;
+
     const rejected = yield* Schema.decodeUnknownEffect(RejectedResult)(
       yield* fromPromise(() => response.json())
     );
 
-    if (response.status !== input.expectedStatus || rejected.reason !== input.expectedReason) {
-      return yield* new ExtractionEvidenceFailure({
-        message: `Document extraction did not fail closed for ${input.label}`,
-      });
-    }
+    if (rejected.reason !== input.expectedReason) return yield* failure;
   });
 
 const proveHostileInputs = (

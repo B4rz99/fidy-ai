@@ -16,6 +16,7 @@ import {
 } from "@/transport/workspace-query";
 import { preservedDates, restoredDates } from "./edit-scope";
 import { type Edit, type Plan, type Save, type Workspace, currentPlan, planStatus } from "./model";
+import { reportBrowserDefect } from "@/transport/browser-defects";
 
 type Query = CanonicalInput<"recurringPlans.getRecurringWorkspace">["query"];
 
@@ -136,7 +137,7 @@ type Queries = Readonly<{
 type CompletionInput = Readonly<{ query: Query; revision: Workspace["document"]["revision"] }>;
 
 type Commands = Readonly<{
-  completion: Atom.AtomResultFn<CompletionInput, boolean, never>;
+  completion: Atom.AtomResultFn<CompletionInput, void, unknown>;
   queries: Queries;
   write: Atom.AtomResultFn<
     CanonicalInput<"recurringPlans.applyRecurringEdit">,
@@ -178,9 +179,7 @@ const completionCommand = (apiClient: FidyClient, queries: Queries): Commands["c
         (result) => AsyncResult.isSuccess(result) && result.value.data.document.revision >= revision
       ),
       Stream.take(1),
-      Stream.runDrain,
-      Effect.as(true),
-      Effect.catchCause(() => Effect.succeed(false))
+      Stream.runDrain
     )
   );
 
@@ -412,7 +411,7 @@ type Actions = Readonly<{
   submit: (
     input: CanonicalInput<"recurringPlans.applyRecurringEdit">
   ) => Promise<Exit.Exit<WriteOutcome>>;
-  complete: (input: CompletionInput) => Promise<Exit.Exit<boolean>>;
+  complete: (input: CompletionInput) => Promise<Exit.Exit<void, unknown>>;
   reread: (query: Query) => Promise<Exit.Exit<boolean>>;
   feedback: ReturnType<typeof useSaveFeedback>;
   setSaveState: (state: SaveState) => void;
@@ -493,9 +492,9 @@ const saveEdit = (options: Actions, edit: Edit, onSaved: () => void): void => {
     feedback.confirm(outcome);
     complete({ query: originatingQuery, revision: outcome.revision })
       .then((exit) => {
-        if (current() && Exit.isSuccess(exit) && exit.value) onSaved();
+        if (current() && Exit.isSuccess(exit)) onSaved();
       })
-      .catch(() => undefined);
+      .catch(() => reportBrowserDefect("client_defect"));
   };
 
   submit({
@@ -509,7 +508,7 @@ const saveEdit = (options: Actions, edit: Edit, onSaved: () => void): void => {
       (exit) => finish(Exit.isSuccess(exit) ? exit.value : { state: "uncertain" }),
       () => finish({ state: "uncertain" })
     )
-    .catch(() => undefined);
+    .catch(() => reportBrowserDefect("client_defect"));
 };
 
 const retryReads = ({ owner, setSaveState, refreshProfile, reread, query }: Actions): void => {

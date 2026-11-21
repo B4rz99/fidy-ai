@@ -55,10 +55,12 @@ const fetchTargets = (
     catch: (cause) => new InspectorIoError({ cause }),
   }).pipe(
     Effect.flatMap((response) =>
-      Effect.tryPromise({
-        try: () => response.json(),
-        catch: (cause) => new InspectorIoError({ cause }),
-      })
+      response.ok
+        ? Effect.tryPromise({
+            try: () => response.json(),
+            catch: (cause) => new InspectorIoError({ cause }),
+          })
+        : Effect.fail(new InspectorIoError({ cause: response.status }))
     )
   );
 

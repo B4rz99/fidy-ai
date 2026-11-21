@@ -23,6 +23,7 @@ import {
 import { Button } from "@/ui/components/button";
 import { OAuthManagementView } from "./management-view";
 import { workspaceQueryRetention } from "@/transport/workspace-query";
+import { reportBrowserDefect } from "@/transport/browser-defects";
 
 const connectionKey = "oauth-connections";
 
@@ -206,7 +207,7 @@ export const ManagementPage = ({
           after: id,
         }),
       })
-      .catch(() => undefined);
+      .catch(() => reportBrowserDefect("navigation_failed"));
   };
 
   return (

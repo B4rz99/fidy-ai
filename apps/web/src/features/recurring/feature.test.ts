@@ -19,8 +19,16 @@ import type { PlanInput } from "./model";
 import { PlanForm } from "./plan-form";
 
 const plans = [
-  { id: "24000000-0000-4000-8000-000000017231", name: "Arriendo de prueba", kind: "expense" },
-  { id: "24000000-0000-4000-8000-000000017232", name: "Ingreso de prueba", kind: "income" },
+  {
+    id: "24000000-0000-4000-8000-000000017231",
+    name: "Arriendo de prueba",
+    kind: "expense",
+  },
+  {
+    id: "24000000-0000-4000-8000-000000017232",
+    name: "Ingreso de prueba",
+    kind: "income",
+  },
 ].map(({ id, name, kind }) => ({
   id,
   pauses: [],
@@ -333,7 +341,10 @@ it("explains an out-of-range twice-monthly day at its field without the card-pay
 });
 
 it("asks for two different twice-monthly days", () => {
-  const { container, onSubmit } = renderForm({ frequency: "twice-monthly", monthDays: [15, 15] });
+  const { container, onSubmit } = renderForm({
+    frequency: "twice-monthly",
+    monthDays: [15, 15],
+  });
   save(container);
   expect(onSubmit).not.toHaveBeenCalled();
   expect(described(document.activeElement)).toBe("Elige un día diferente del primero.");
@@ -351,7 +362,10 @@ it("identifies an end date that precedes the first date", () => {
 });
 
 it("explains the card-payment rule only for card payments that are not transfers", () => {
-  const { container, onSubmit } = renderForm({ cardPayment: true, kind: "expense" });
+  const { container, onSubmit } = renderForm({
+    cardPayment: true,
+    kind: "expense",
+  });
   save(container);
   expect(onSubmit).not.toHaveBeenCalled();
   expect(document.activeElement?.id).toBe("recurring-cardPayment");
@@ -367,7 +381,10 @@ it("submits a valid twice-monthly plan with its last-day choice", () => {
   });
   save(container);
   expect(onSubmit).toHaveBeenCalledWith(
-    expect.objectContaining({ frequency: "twice-monthly", monthDays: [15, "last"] })
+    expect.objectContaining({
+      frequency: "twice-monthly",
+      monthDays: [15, "last"],
+    })
   );
 });
 
@@ -376,11 +393,12 @@ const panelElement = (): HTMLElement => {
   if (!(panel instanceof HTMLElement)) throw new Error("Missing recurring panel");
   return panel;
 };
-const nameField = (): HTMLInputElement => {
-  const input = panelElement().querySelector("#recurring-name");
-  if (!(input instanceof HTMLInputElement)) throw new Error("Missing recurring name");
+const panelInput = (id: string): HTMLInputElement => {
+  const input = panelElement().querySelector(`#${id}`);
+  if (!(input instanceof HTMLInputElement)) throw new Error(`Missing ${id}`);
   return input;
 };
+const nameField = (): HTMLInputElement => panelInput("recurring-name");
 const expectBlankCreation = (): Promise<void> =>
   reactAssertion(() => {
     expect(nameField().value).toBe("");
@@ -400,7 +418,10 @@ const openCreation = (container: HTMLElement): WorkspaceCheck =>
 const leaveDraft = (container: HTMLElement, name: string): WorkspaceCheck =>
   Effect.gen(function* () {
     yield* openCreation(container);
-    if (name !== "") typeInto(nameField(), name);
+    if (name !== "") {
+      typeInto(nameField(), name);
+      typeInto(panelInput("recurring-counterparty"), "Inmobiliaria Sur");
+    }
     yield* Effect.tryPromise(() => openOccurrence(container));
     yield* Effect.tryPromise(() =>
       reactAssertion(() =>
@@ -415,6 +436,7 @@ it("keeps a modified creation draft when another occurrence opens until it is di
     Effect.gen(function* () {
       yield* leaveDraft(container, "Arriendo oficina");
       expect(nameField().value).toBe("Arriendo oficina");
+      expect(panelInput("recurring-counterparty").value).toBe("Inmobiliaria Sur");
       expect(panelElement().textContent).toContain("Borrador sin guardar");
       yield* Effect.tryPromise(() => click(panelElement(), "Descartar borrador"));
       yield* Effect.tryPromise(expectBlankCreation);

@@ -807,20 +807,6 @@
       }
     },
     {
-      "files": ["apps/server/src/core/**/*.test.ts"],
-      "rules": {
-        "anti-slop-effect/no-manual-tag-comparison": "off",
-        "anti-slop-effect/no-manual-tagged-construction": "off",
-        "anti-slop-effect/no-manual-tagged-type": "off",
-        "anti-slop-effect/no-test-code-in-src": "off",
-        "anti-slop/no-conditional-spread": "off",
-        "anti-slop/no-known-value-widening": "off",
-        "anti-slop/no-unknown-returns": "off",
-        "enfect/avoid-expect-in-if": "off",
-        "enfect/yield-in-for-loop": "off"
-      }
-    },
-    {
       "files": [
         "apps/server/cloudflare/ingestion/**",
         "apps/server/cloudflare/runtime/**",
@@ -906,19 +892,6 @@
       ],
       "rules": {
         "landmines/no-flake-masking": "off"
-      }
-    },
-    {
-      "files": [
-        "apps/cli/test/allowance-entry.ts",
-        "apps/cli/test/canonical/canonical.test-fixture.ts",
-        "apps/cli/test/command/operations.test.ts",
-        "apps/cli/test/credential/runtime.test.ts",
-        "apps/cli/test/login/login.test-fixture.ts",
-        "apps/cli/test/native-store.ts"
-      ],
-      "rules": {
-        "anti-slop-effect/no-manual-tagged-construction": "off"
       }
     },
     {

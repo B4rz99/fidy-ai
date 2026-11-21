@@ -201,7 +201,7 @@ Remaining checks:
 
 ```sh
 bun run --cwd apps/web test src/features/agent src/application.test.ts
-bun run --cwd apps/server test:core src/core/agent/hosted-agent-session.test.ts --coverage.enabled=false
+bun run --cwd apps/server test:core test/core/agent/hosted-agent-session.test.ts --coverage.enabled=false
 bun run --cwd apps/server test:hosted-inference
 bun run --cwd apps/server test:cloudflare cloudflare/agent/hosted-turn.test.ts --maxWorkers=1
 ```

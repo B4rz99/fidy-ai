@@ -18,7 +18,7 @@ digests and verification dates. A matching version alone does not prove byte-ide
 | Outbound HTTP clients, retries, redirects, bounded responses       | [http-client.md](http-client.md)           |
 | HttpApi operations, typed clients, OpenAPI, middleware, testing    | [http-api.md](http-api.md)                 |
 | Schema, JSON codecs, brands, models, Money                         | [schema.md](schema.md)                     |
-| SQL, D1 batches, and atomic mutation units                         | [sql.md](sql.md)                           |
+| SQLite and atomic mutation units                                   | [sql.md](sql.md)                           |
 | Native Cloudflare Workflows and Effect step boundaries             | [workflows.md](workflows.md)               |
 | Crypto, encoding, redacted secrets                                 | [crypto-encoding.md](crypto-encoding.md)   |
 | AI model, tools, toolkit, OpenAI boundary                          | [ai.md](ai.md)                             |

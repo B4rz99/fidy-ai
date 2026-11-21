@@ -1,42 +1,14 @@
 import type { OAuthRecentActivity } from "../../../src/core/audit/contract";
-import { captureTraceHeaders } from "../../runtime/telemetry/operations";
-import { BootstrapUnavailable, OAuthRevocationAdmission } from "../contract";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { OAuthConnectionId } from "../../../src/core/oauth-agents/contract";
 import { PATScopes } from "../../../src/core/tokens/contract";
 import { oauthScopeCopy } from "../../../src/core/oauth-agents/operations";
 import {
-  OAuthConnectionList,
-  OAuthConnectionListQuery,
   OAuthConnectionMetadata,
-  OAuthConnectionRevoke,
-  OAuthConnectionRevokeAll,
   OAuthRegistration,
-  oauthConnectionPageSize,
-  oauthPaths,
 } from "../../../src/shell/oauth-agents/contract";
-import { AuditUnavailable } from "../../../src/shell/audit/contract";
-import { prepareOAuthActivityPage } from "../../../src/shell/audit/operations";
-import { liveSessionConditions } from "../../../src/shell/web-session/operations";
-import type { FreshSessionSubject } from "../../../src/shell/web-session/contract";
-import { browserSession } from "../../web-session/operations";
-import { type BootstrapInvalid, dbWork, decodePayload } from "./bootstrap";
-import { oauthResponse } from "./response";
+import { type AuditUnavailable } from "../../../src/shell/audit/contract";
 
-type ManagementInput = Readonly<{
-  request: Request;
-  db: D1Database;
-  browserOrigin: string;
-  current: number;
-  listingSession: Option.Option<FreshSessionSubject>;
-  coordinator: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
-  admitUser: (userId: string) => Effect.Effect<void, BootstrapUnavailable>;
-  readForUser: (
-    userId: string,
-    statements: D1PreparedStatement[]
-  ) => Effect.Effect<ReadonlyArray<D1Result>, BootstrapUnavailable>;
-}>;
-type AuthorizedInput = ManagementInput & Readonly<{ session: FreshSessionSubject }>;
 export const ConnectionRow = Schema.Struct({
   id: OAuthConnectionId,
   claimed_client_name: OAuthRegistration.fields.client_name,
@@ -77,141 +49,4 @@ export const projectConnection = ({
       state: connectionState(row, current),
       recentActivity,
     });
-  });
-const listConnections = (
-  input: AuthorizedInput
-): Effect.Effect<Response, BootstrapUnavailable | AuditUnavailable | Schema.SchemaError> =>
-  Effect.gen(function* () {
-    const query = new URL(input.request.url).searchParams;
-    if (new Set(query.keys()).size !== Array.from(query.keys()).length) {
-      yield* input.admitUser(input.session.user_id);
-      return oauthResponse({ body: { error: "invalid_request" }, status: 400 });
-    }
-    const decoded = yield* Schema.decodeEffect(OAuthConnectionListQuery, {
-      onExcessProperty: "error",
-    })(Object.fromEntries(query)).pipe(
-      Effect.tapError(() => input.admitUser(input.session.user_id))
-    );
-    const guard = liveSessionConditions(input);
-    const after = Option.getOrElse(decoded.after, () => "");
-    const activity = prepareOAuthActivityPage({
-      connections: {
-        sql: "SELECT id,user_id FROM oauth_connections WHERE user_id=? AND id>? ORDER BY id LIMIT 25",
-        params: [input.session.user_id, after],
-      },
-      guard,
-    });
-    const results = yield* input.readForUser(input.session.user_id, [
-      input.db.prepare(`SELECT 1 AS live WHERE ${guard.sql}`).bind(...guard.params),
-      input.db
-        .prepare(`SELECT id,claimed_client_name,scopes_json,expires_at_ms,revoked_at_ms FROM oauth_connections
-      WHERE user_id = ? AND id > ? AND ${guard.sql} ORDER BY id LIMIT 26`)
-        .bind(input.session.user_id, after, ...guard.params),
-      input.db.prepare(activity.statement.sql).bind(...activity.statement.params),
-    ]);
-    if (results[0]?.results.length !== 1) {
-      return oauthResponse({ body: { error: "unauthenticated" }, status: 401 });
-    }
-    const rows = yield* Schema.decodeUnknownEffect(
-      Schema.Array(ConnectionRow).check(Schema.isMaxLength(oauthConnectionPageSize + 1))
-    )(results[1]?.results).pipe(Effect.mapError(() => new BootstrapUnavailable()));
-    const page = rows.slice(0, oauthConnectionPageSize);
-    const activities = yield* activity.decode(results[2]?.results);
-    const connections = yield* Effect.forEach(page, (row) => {
-      const recent = activities.get(row.id);
-      return recent === undefined
-        ? Effect.fail(new AuditUnavailable())
-        : projectConnection({ current: input.current, row, recentActivity: recent });
-    });
-    const body = yield* Schema.decodeEffect(Schema.toType(OAuthConnectionList))({
-      connections,
-      nextCursor:
-        rows.length > oauthConnectionPageSize
-          ? Option.fromUndefinedOr(page.at(-1)?.id)
-          : Option.none(),
-    });
-    return oauthResponse({
-      body: yield* Schema.encodeEffect(OAuthConnectionList)(body),
-      status: 200,
-    });
-  });
-const managementDeadlineMs = 5000;
-const requestRevocation = (
-  input: AuthorizedInput
-): Effect.Effect<Response, BootstrapInvalid | BootstrapUnavailable | Schema.SchemaError> =>
-  Effect.gen(function* () {
-    const all = new URL(input.request.url).pathname === oauthPaths.revokeAll;
-    const connectionId = all
-      ? yield* decodePayload({
-          request: input.request,
-          schema: OAuthConnectionRevokeAll,
-          onExcessProperty: "error",
-        }).pipe(Effect.as(Option.none<OAuthConnectionId>()))
-      : Option.some(
-          (yield* decodePayload({
-            request: input.request,
-            schema: OAuthConnectionRevoke,
-            onExcessProperty: "error",
-          })).connectionId
-        );
-    const admission = yield* Schema.decodeUnknownEffect(Schema.toType(OAuthRevocationAdmission))({
-      userId: input.session.user_id,
-      sessionId: input.session.id,
-      connectionId,
-      deadlineAtMs: input.current + managementDeadlineMs,
-    });
-    const body = yield* Schema.encodeEffect(Schema.fromJsonString(OAuthRevocationAdmission))(
-      admission
-    );
-    const traceHeaders = yield* captureTraceHeaders;
-    return yield* Effect.tryPromise({
-      try: (signal) =>
-        input.coordinator.getByName(admission.userId).fetch(
-          new Request("https://coordinator.internal/oauth-revoke", {
-            method: "POST",
-            headers: { "content-type": "application/json", ...traceHeaders },
-            body,
-            signal,
-          })
-        ),
-      catch: () => new BootstrapUnavailable(),
-    });
-  });
-
-export const manageConnections = (
-  input: ManagementInput
-): Effect.Effect<Response, BootstrapUnavailable | AuditUnavailable | Schema.SchemaError> =>
-  Effect.gen(function* () {
-    if (input.request.headers.get("origin") !== input.browserOrigin) {
-      return oauthResponse({ body: { error: "forbidden_origin" }, status: 403 });
-    }
-    const listing =
-      input.request.method === "GET" &&
-      new URL(input.request.url).pathname === oauthPaths.connections;
-    const session = listing
-      ? input.listingSession
-      : yield* dbWork(() =>
-          browserSession({ ...input, input: { current: input.current, fresh: true } })
-        );
-    if (Option.isNone(session)) {
-      if (!listing) {
-        const live = yield* dbWork(() =>
-          browserSession({ ...input, input: { current: input.current, fresh: false } })
-        );
-        if (Option.isSome(live)) {
-          yield* input.admitUser(live.value.user_id);
-          return oauthResponse({ body: { error: "reauthentication_required" }, status: 403 });
-        }
-      }
-      return oauthResponse({ body: { error: "unauthenticated" }, status: 401 });
-    }
-    if (!listing) {
-      yield* input.admitUser(session.value.user_id);
-      return yield* requestRevocation({ ...input, session: session.value }).pipe(
-        Effect.catchTag("BootstrapInvalid", () =>
-          Effect.succeed(oauthResponse({ body: { error: "invalid_request" }, status: 400 }))
-        )
-      );
-    }
-    return yield* listConnections({ ...input, session: session.value });
   });

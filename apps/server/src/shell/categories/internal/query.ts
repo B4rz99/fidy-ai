@@ -1,24 +1,9 @@
-import { listLaunchCategories } from "~/core/categories/operations";
 import { Option, Schema } from "effect";
 import { Category } from "~/core/categories/contract";
-import type { OwnedStatement } from "~/shell/owner-write/contract";
 import type { ListCategoriesResponse } from "~/shell/categories/contract";
 
 const maximumCategoryCount = 100;
 const decodeCategoryRows = Schema.decodeUnknownOption(Schema.Array(Category));
-
-type Authority = Readonly<{
-  table: "pats" | "web_sessions" | "oauth_credentials" | "hosted_turns";
-  predicate: string;
-  bindings: ReadonlyArray<string | number | Uint8Array>;
-}>;
-
-export const categoryRowsQuery = (authority?: Authority): OwnedStatement => ({
-  sql: `SELECT json_extract(value,'$.id') AS id,json_extract(value,'$.label') AS label FROM json_each(?)
-    ${authority === undefined ? "" : `WHERE EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`}
-    ORDER BY key LIMIT ${maximumCategoryCount + 1}`,
-  params: [JSON.stringify(listLaunchCategories()), ...(authority?.bindings ?? [])],
-});
 
 export const categoryResponseFromRows = (
   rows: unknown

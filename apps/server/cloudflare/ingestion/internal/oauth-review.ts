@@ -3,15 +3,9 @@ import { resolveLocalCategory } from "../../categories/operations";
 import type { CategoryId } from "../../../src/core/categories/contract";
 import type { UserId } from "../../../src/core/identity/contract";
 import { ReviewCommand } from "../../../src/core/ingestion/contract";
-import { type Cause, Effect, Option, Schema } from "effect";
-import type { OAuthMutationReview } from "../../oauth-confirmation/contract";
+import { Effect, Option, Schema } from "effect";
 import { Hex } from "effect/encoding";
-import { IngestionGroup } from "../../../src/shell/ingestion/contract";
 import { TransactionExtraction } from "../../../src/core/transactions/contract";
-import { getOperationPolicy } from "../../../src/shell/canonical-policy/contract";
-import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
-import { type TransactionCaller, isOAuthCaller } from "../../canonical-work/operations";
-import { oauthMutationReview } from "../../oauth-confirmation/operations";
 import { digestBytes } from "../../secret-material/operations";
 import type { StatementClarificationOperation } from "./clarification-operation";
 
@@ -90,32 +84,7 @@ const snapshotSql = `SELECT json_object(
   JOIN statement_staging_objects o ON o.id=s.staging_id AND o.user_id=s.user_id
   WHERE s.id=? AND s.user_id=?`;
 
-export const needsOAuthReview = (
-  input: Readonly<{ subject: TransactionCaller; operation: StatementClarificationOperation }>
-): boolean => {
-  const { subject, operation } = input;
-  if (!isOAuthCaller(subject)) return false;
-  switch (operation) {
-    case "ingestion.resolveNeedsReviewItem":
-      return (
-        getOperationPolicy(IngestionGroup.endpoints.resolveNeedsReviewItem).agentConfirmation ===
-        "required"
-      );
-    case "ingestion.skipNeedsReviewItem":
-      return (
-        getOperationPolicy(IngestionGroup.endpoints.skipNeedsReviewItem).agentConfirmation ===
-        "required"
-      );
-    case "ingestion.abandonStatementSubmission":
-      return (
-        getOperationPolicy(IngestionGroup.endpoints.abandonStatementSubmission)
-          .agentConfirmation === "required"
-      );
-  }
-};
-
 type ReviewInput = Readonly<{
-  db: D1Database;
   userId: string;
   submissionId: string;
   operation: StatementClarificationOperation;
@@ -128,7 +97,7 @@ const reserveState = (snapshot: typeof Snapshot.Type, submissionId: string): str
   }
   return snapshot.entitlement.consumed_at_ms === null ? "sin consumir" : "consumida";
 };
-const exactEffect = (input: Omit<ReviewInput, "db">, snapshot: typeof Snapshot.Type): string => {
+const exactEffect = (input: ReviewInput, snapshot: typeof Snapshot.Type): string => {
   const undecided = snapshot.reviews.filter(
     (row) => !snapshot.decisions.some((decision) => decision.review_id === row.id)
   );
@@ -159,36 +128,6 @@ const exactEffect = (input: Omit<ReviewInput, "db">, snapshot: typeof Snapshot.T
   );
 };
 
-export const clarificationOAuthReview = (
-  input: ReviewInput
-): Effect.Effect<
-  Readonly<{
-    guard: OwnedStatement;
-    review: OAuthMutationReview;
-  }>,
-  Schema.SchemaError | Cause.UnknownError | Effect.Error<ReturnType<typeof digestBytes>>
-> =>
-  Effect.gen(function* () {
-    const stored = yield* Effect.tryPromise(() =>
-      input.db.prepare(snapshotSql).bind(input.submissionId, input.userId).first()
-    );
-    const encoded = yield* Schema.decodeUnknownEffect(StoredSnapshot)(stored);
-    const snapshot = yield* Schema.decodeEffect(Schema.fromJsonString(Snapshot))(encoded.snapshot);
-    const guard: OwnedStatement = {
-      sql: `SELECT 1 WHERE (${snapshotSql}) = ?`,
-      params: [input.submissionId, input.userId, encoded.snapshot],
-    };
-    return {
-      guard,
-      review: oauthMutationReview({
-        db: input.db,
-        effect: exactEffect(input, snapshot),
-        revision: Hex.encode(yield* digestBytes(new TextEncoder().encode(encoded.snapshot))),
-        guard,
-      }),
-    };
-  });
-
 const categoryFor = Effect.fn(function* (
   user: UserId,
   extraction: TransactionExtraction,
@@ -202,7 +141,7 @@ const categoryFor = Effect.fn(function* (
 });
 
 export const localClarificationReview = Effect.fn(function* (
-  input: Omit<ReviewInput, "db" | "userId"> & { userId: UserId }
+  input: Omit<ReviewInput, "userId"> & { userId: UserId }
 ) {
   const sql = yield* SqliteClient;
   const [raw] = yield* sql.unsafe(

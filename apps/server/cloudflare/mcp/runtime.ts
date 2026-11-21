@@ -1,5 +1,4 @@
 import { makeCoreRejectionObserver } from "../runtime/operational-health/runtime";
-import { captureTraceHeaders } from "../runtime/telemetry/operations";
 import {
   type Cause,
   Clock,
@@ -33,12 +32,8 @@ import { Unavailable } from "../../src/shell/public-http/contract";
 import { type PATScopes } from "../../src/core/tokens/contract";
 import { decideOperationAccess } from "../../src/shell/canonical-policy/operations";
 import { RequestBodyPolicy } from "../http/contract";
-import { awaitRequestAbort, readBoundedRequestBody } from "../http/operations";
-import { authenticateOAuth, resolveOAuthMcpCaller } from "../oauth-agents/operations";
-import {
-  discloseCanonicalAllowance,
-  protectCanonicalPressure,
-} from "../canonical-admission/operations";
+import { readBoundedRequestBody } from "../http/operations";
+import { type resolveLocalOAuthCaller } from "../oauth-agents/operations";
 
 const queryLifetimeMilliseconds = 3000;
 const mutationLifetimeMilliseconds = 30000;
@@ -55,13 +50,11 @@ const responsePolicy = Schema.decodeSync(RequestBodyPolicy)({
   deadlineMilliseconds: 3000,
 });
 const noStore = { "cache-control": "no-store" };
-type Coordinator = Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
 type CanonicalQueue = (
   input: Readonly<{ admission: OAuthCanonicalAdmission; signal: AbortSignal }>
 ) => Effect.Effect<Response>;
 type ToolAdmission = Readonly<{
   observeRejections: ReturnType<typeof makeCoreRejectionObserver>;
-  storage: CallerStorage;
   subject: OAuthCaller;
   scopes: PATScopes;
   enqueueCanonicalWork: CanonicalQueue;
@@ -260,34 +253,6 @@ const executeAdmittedTool = (
     Effect.scoped,
     Effect.catchCause(() => toolFailure(work.operation))
   );
-const executeTool = (
-  input: ToolAdmission,
-  operation: CatalogOperation,
-  payload: unknown
-): Effect.Effect<
-  McpSchema.CallToolResult | McpSchema.InputRequired,
-  McpSchema.InternalError,
-  McpSchema.McpRequestContext
-> => {
-  if (!("db" in input.storage)) {
-    return executeAdmittedTool(input, { operation, payload, confirmation: Option.none() });
-  }
-  const database = input.storage.db;
-  return protectCanonicalPressure({
-    db: input.storage.db,
-    userId: input.subject.userId,
-    work: executeAdmittedTool(input, { operation, payload, confirmation: Option.none() }),
-    refused: (response) =>
-      discloseCanonicalAllowance({
-        db: database,
-        caller: { _tag: "OAuth", value: input.subject },
-        response,
-      }).pipe(
-        Effect.flatMap((response) => decodeToolResponse(input, operation, response)),
-        Effect.catchCause(() => toolFailure(operation))
-      ),
-  });
-};
 const schemaDocument = (schema: Schema.Top): Schema.Json => {
   const document = Schema.toJsonSchemaDocument(schema);
   return Schema.decodeUnknownSync(Schema.Json)({ ...document.schema, $defs: document.definitions });
@@ -357,25 +322,6 @@ const prepareMcp = (
       body: Array.from(body),
     });
   });
-const forwardMcp = Effect.fn(function* (
-  input: Readonly<{ request: Request; coordinator: Coordinator; lifetimeMilliseconds: number }>,
-  subject: OAuthCaller,
-  body: Uint8Array
-) {
-  const admitted = yield* prepareMcp(input, subject, body);
-  const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(OAuthMcpAdmission))(admitted);
-  const traceHeaders = yield* captureTraceHeaders;
-  return yield* Effect.tryPromise((signal) =>
-    input.coordinator.getByName(admitted.userId).fetch(
-      new Request("https://coordinator.internal/oauth-mcp", {
-        method: "POST",
-        headers: { "content-type": "application/json", ...traceHeaders },
-        body: encoded,
-        signal,
-      })
-    )
-  );
-});
 const TimedToolCall = Schema.fromJsonString(
   Schema.Struct({
     method: Schema.Literal(McpSchema.CallTool._tag),
@@ -389,44 +335,6 @@ const requestLifetime = (body: Uint8Array): number => {
     ? transportLifetimeMilliseconds
     : admissionLifetimeMilliseconds;
 };
-
-export const handleMcpRequest = (
-  input: Readonly<{ request: Request; db: D1Database; coordinator: Coordinator }>
-): Effect.Effect<Response> =>
-  Effect.gen(function* () {
-    const admission = yield* Effect.gen(function* () {
-      if (input.request.signal.aborted) {
-        return { _tag: "Refused" as const, response: unavailable() };
-      }
-      const caller = yield* authenticateOAuth({
-        ...input,
-        current: yield* Clock.currentTimeMillis,
-      });
-      if (Option.isNone(caller)) return { _tag: "Refused" as const, response: denied() };
-      const body = yield* readBoundedRequestBody(input.request, bodyPolicy);
-      return { _tag: "Admitted" as const, subject: caller.value.subject, body };
-    }).pipe(
-      Effect.timeoutOrElse({
-        duration: admissionLifetimeMilliseconds,
-        orElse: () => Effect.succeed({ _tag: "Refused" as const, response: unavailable() }),
-      })
-    );
-    if (admission._tag === "Refused") return admission.response;
-    const lifetimeMilliseconds = requestLifetime(admission.body);
-    return yield* forwardMcp(
-      { ...input, lifetimeMilliseconds },
-      admission.subject,
-      admission.body
-    ).pipe(
-      Effect.timeoutOrElse({
-        duration: lifetimeMilliseconds,
-        orElse: () => Effect.succeed(unavailable()),
-      })
-    );
-  }).pipe(
-    Effect.raceFirst(awaitRequestAbort(input.request)),
-    Effect.catchCause(() => Effect.succeed(unavailable()))
-  );
 
 type NativeToolAdmission = Readonly<{
   admission: ToolAdmission;
@@ -549,26 +457,17 @@ export type McpResidency = Readonly<{
   retireConnections: (connectionId: Option.Option<string>) => Effect.Effect<void>;
 }>;
 
-type CallerStorage =
-  | { db: D1Database }
-  | {
-      resolveCaller: (input: {
-        subject: OAuthCaller;
-        current: number;
-      }) => ReturnType<typeof resolveOAuthMcpCaller>;
-    };
-const currentCaller = (
-  storage: CallerStorage,
-  input: { subject: OAuthCaller; current: number }
-): ReturnType<typeof resolveOAuthMcpCaller> =>
-  "db" in storage
-    ? resolveOAuthMcpCaller({ ...input, db: storage.db })
-    : storage.resolveCaller(input);
-type ResidencyConfig = CallerStorage &
-  Readonly<{
-    userId: string;
-    enqueueCanonicalWork: CanonicalQueue;
-  }>;
+type ResidencyConfig = Readonly<{
+  userId: string;
+  resolveCaller: (input: {
+    subject: OAuthCaller;
+    current: number;
+  }) => Effect.Effect<
+    Effect.Success<ReturnType<typeof resolveLocalOAuthCaller>>,
+    Effect.Error<ReturnType<typeof resolveLocalOAuthCaller>>
+  >;
+  enqueueCanonicalWork: CanonicalQueue;
+}>;
 type ResidentRegistry = {
   readonly observeRejections: ReturnType<typeof makeCoreRejectionObserver>;
   readonly config: ResidencyConfig;
@@ -676,7 +575,7 @@ const executeResidentTool = (
   McpSchema.McpRequestContext
 > =>
   Effect.gen(function* () {
-    const live = yield* currentCaller(target.registry.config, {
+    const live = yield* target.registry.config.resolveCaller({
       subject: current.subject,
       current: yield* Clock.currentTimeMillis,
     });
@@ -693,7 +592,14 @@ const executeResidentTool = (
       target.owner.retiring = true;
       return yield* toolFailure(target.operation);
     }
-    return yield* executeTool({ ...current, scopes: live.value.scopes }, target.operation, payload);
+    return yield* executeAdmittedTool(
+      { ...current, scopes: live.value.scopes },
+      {
+        operation: target.operation,
+        payload,
+        confirmation: Option.none(),
+      }
+    );
   }).pipe(Effect.catch(() => toolFailure(target.operation)));
 const residentToolCallback = (
   target: ResidentTool,
@@ -905,7 +811,6 @@ const invokeResidentHandler = (
       Context.add(NativeToolAdmissionContext, {
         admission: {
           observeRejections: registry.observeRejections,
-          storage: registry.config,
           subject: catalog.subject,
           scopes: catalog.scopes,
           enqueueCanonicalWork: registry.config.enqueueCanonicalWork,
@@ -988,7 +893,7 @@ const handleResidentRequest = (
     const current = yield* Clock.currentTimeMillis;
     if (current >= admission.deadlineMilliseconds) return unavailable();
     const subject = admissionSubject(admission);
-    const live = yield* currentCaller(registry.config, { subject, current });
+    const live = yield* registry.config.resolveCaller({ subject, current });
     if (Option.isNone(live)) {
       retireBinding(registry, callerBinding(subject));
       return denied();

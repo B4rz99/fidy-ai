@@ -1,6 +1,5 @@
 import { Data, Struct } from "effect";
 import type { OAuthAuthority } from "~/shell/oauth-agents/contract";
-import type { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import type { OwnedStatement } from "~/shell/owner-write/contract";
 import { AuditLogEntry } from "~/core/audit/contract";
 
@@ -137,20 +136,6 @@ export type AuthorizedAuditCall = Readonly<{
         SessionDecision)
   );
 
-export type CanonicalAdmissionRefusal = Readonly<{
-  authority: AuditAuthority;
-  id: string;
-  operation: CanonicalOperationId;
-  current: number;
-}>;
-
-export type CanonicalReplayAccess = CanonicalAdmissionRefusal &
-  Readonly<{
-    authority: AuditAuthority & Readonly<{ table: "pats" | "oauth_credentials" }>;
-    retainedResponseProof: OwnedStatement;
-    outcome: "accepted" | "rejected";
-  }>;
-
 export type AuditQueryCall = Readonly<{
   authority: AuditAuthority;
   id: string;
@@ -195,22 +180,6 @@ export type OwnerAuditCall = Readonly<{
         caller: Extract<AuditActor, { _tag: "Publication" }>;
         operation: AuditPublicationOperation;
         outcome: "success";
-      }>
-  );
-
-export type EmailReplacementEvidence = Readonly<{
-  id: string;
-  userId: string;
-  sessionId: string;
-  current: number;
-  afterOwnerWrite: boolean;
-}> &
-  (
-    | Readonly<{ operation: "requestEmailReplacement"; outcome: "accepted" }>
-    | Readonly<{ operation: "completeEmailReplacement"; outcome: "replaced" }>
-    | Readonly<{
-        operation: "requestEmailReplacement" | "completeEmailReplacement";
-        outcome: "rejected";
       }>
   );
 

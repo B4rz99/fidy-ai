@@ -15,7 +15,7 @@ The deterministic HTTPS acceptance topology uses synthetic credentials, not a re
 ## Verify configuration
 
 - [ ] Verify actual app registration/account types, exact redirect, permissions and current secret.
-- [ ] Verify deployed Core bindings, current D1 schema and retention.
+- [ ] Verify deployed Core bindings, current SQLite schema and retention.
 - [ ] Verify callback query exclusion in edge/proxy logs, tail consumers and error reporting; never capture HAR, traces, video or screenshots containing protocol/recovery secrets.
 - [ ] Verify secure cookie behavior on the real app/API origins and applicable browser policies.
 - [ ] Exercise real personal and work/school signup/login, denial/logout and one-time recovery.

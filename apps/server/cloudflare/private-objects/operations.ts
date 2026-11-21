@@ -87,14 +87,6 @@ const publishPrivateObject = <E, R>(
     );
   });
 
-export const writePrivateObject = <E, R>(
-  input: PrivateObjectWrite<E, R>
-): Effect.Effect<void, E | PrivateObjectUnavailable, R> =>
-  publishPrivateObject({
-    ...input,
-    put: (key, bytes, options) => io(() => input.bucket.put(key, bytes, options)),
-  });
-
 export const erasePrivateObject = (
   input: Readonly<{ bucket: PrivateObjectBucket; userId: string; key: string }>
 ): Effect.Effect<void, PrivateObjectUnavailable> =>
@@ -102,28 +94,6 @@ export const erasePrivateObject = (
     Effect.andThen(io(() => input.bucket.delete(input.key))),
     Effect.asVoid
   );
-
-export const eraseObservedPrivateObject = (
-  input: Readonly<{ bucket: PrivateObjectBucket; key: string; etag: string }>
-): Effect.Effect<void, PrivateObjectUnavailable> =>
-  Effect.gen(function* () {
-    const nonce = yield* Effect.sync(newId);
-    const current = yield* Clock.currentTimeMillis;
-    const fenced = yield* io(() =>
-      input.bucket.put(input.key, new TextEncoder().encode(nonce), {
-        onlyIf: { etagMatches: input.etag },
-        customMetadata: {
-          purpose: "private-object-erased",
-          expiresAtMs: String(current + controlLifetimeMs),
-        },
-      })
-    );
-    if (fenced === null) return;
-    yield* Schema.decodeUnknownEffect(Stored)(fenced).pipe(
-      Effect.mapError(() => new PrivateObjectUnavailable())
-    );
-    yield* io(() => input.bucket.delete(input.key));
-  });
 
 export const resumePrivateUpload = Effect.fn(function* <E, R>(
   work: TrackedWrite<E, R>,

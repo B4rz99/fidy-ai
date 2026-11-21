@@ -1,24 +1,9 @@
-import type { BootstrapUnavailable } from "../contract";
-import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
-import { Clock, Effect, type PlatformError, Redacted, Schema } from "effect";
-import { Base64Url } from "effect/encoding";
+import { Effect, Schema } from "effect";
 import { OAuthRedirect, oauthResource } from "../../../src/shell/oauth-agents/contract";
-import { PATScopes } from "../../../src/core/tokens/contract";
-import { decideOAuthCredentialExpirations } from "../../../src/core/oauth-agents/operations";
-import {
-  OAuthClientId,
-  OAuthConnectionId,
-  type OAuthCredentialExpirations,
-} from "../../../src/core/oauth-agents/contract";
-import { UserId } from "../../../src/core/identity/contract";
-import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
+import { OAuthClientId } from "../../../src/core/oauth-agents/contract";
 import { RequestBodyPolicy } from "../../http/contract";
 import { readBoundedRequestBody } from "../../http/operations";
-import { digestBytes, newId, newSecret, secretDigest } from "../../secret-material/operations";
-import { protectConsentStatement } from "../../../src/shell/consent/operations";
-import { BootstrapInvalid, dbWork } from "./bootstrap";
-import { oauthResponse } from "./response";
-import { forwardRefresh } from "./refresh";
+import { BootstrapInvalid } from "./bootstrap";
 
 const CodeExchange = Schema.Struct({
   grant_type: Schema.Literal("authorization_code"),
@@ -40,43 +25,10 @@ const RefreshExchange = Schema.Struct({
   ),
 });
 const TokenExchange = Schema.Union([CodeExchange, RefreshExchange]);
-const CodeRow = Schema.Struct({
-  connection_id: OAuthConnectionId,
-  user_id: UserId,
-  expires_at_ms: Schema.Int,
-  scopes_json: Schema.String,
-});
-type CodeRow = typeof CodeRow.Type;
-const TokenResponse = Schema.Struct({
-  access_token: Schema.String,
-  refresh_token: Schema.String,
-  token_type: Schema.Literal("Bearer"),
-  expires_in: Schema.Int,
-  scope: Schema.String,
-});
 const bodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 16384,
   deadlineMilliseconds: 3000,
 });
-const secondMs = 1000;
-const databaseCurrentMillis = `(CAST(strftime('%s', 'now') AS INTEGER) * 1000
-  + CAST(substr(strftime('%f', 'now'), 4, 3) AS INTEGER))`;
-const tokenDeadlineMs = 5000;
-type ExchangeInput = Readonly<{
-  request: Request;
-  db: D1Database;
-  current: number;
-  coordinator: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
-  admitUser: (userId: string) => Effect.Effect<void, BootstrapUnavailable>;
-}>;
-type CodeProof = Readonly<{ payload: CodeExchange; digest: Uint8Array; challenge: string }>;
-type Issuance = OAuthCredentialExpirations &
-  Readonly<{
-    accessDigest: Uint8Array;
-    refreshDigest: Uint8Array;
-  }>;
-const invalidGrant = (): Response =>
-  oauthResponse({ body: { error: "invalid_grant" }, status: 400 });
 export const decodeExchange = (
   request: Request
 ): Effect.Effect<typeof TokenExchange.Type, BootstrapInvalid> =>
@@ -91,152 +43,3 @@ export const decodeExchange = (
       Object.fromEntries(fields)
     );
   }).pipe(Effect.mapError(() => new BootstrapInvalid()));
-const findGrant = (
-  input: ExchangeInput,
-  proof: CodeProof
-): Effect.Effect<CodeRow, BootstrapUnavailable | Schema.SchemaError> =>
-  Effect.gen(function* () {
-    const found = yield* dbWork(() =>
-      input.db
-        .prepare(`SELECT g.id AS connection_id,g.user_id,g.expires_at_ms,g.scopes_json
-    FROM (SELECT rowid,code_digest AS digest,id AS connection_id,code_challenge AS challenge,code_expires_at_ms AS expires_at_ms,code_consumed_at_ms AS consumed_at_ms FROM oauth_connections WHERE code_digest IS NOT NULL) c JOIN oauth_connections g ON g.id = c.connection_id WHERE c.digest = ?
-    AND c.challenge = ? AND c.consumed_at_ms IS NULL AND c.expires_at_ms > ? AND g.client_id = ?
-    AND g.redirect_uri = ? AND g.resource = ? AND g.revoked_at_ms IS NULL AND g.expires_at_ms > ?`)
-        .bind(
-          proof.digest,
-          proof.challenge,
-          input.current,
-          proof.payload.client_id,
-          proof.payload.redirect_uri,
-          proof.payload.resource,
-          input.current
-        )
-        .first()
-    );
-    return yield* Schema.decodeUnknownEffect(CodeRow)(found);
-  });
-const consumptionStatement = (
-  input: ExchangeInput,
-  proof: CodeProof,
-  grant: CodeRow
-): OwnedStatement =>
-  protectConsentStatement({
-    subject: { _tag: "User", userId: grant.user_id },
-    requirement: "active",
-    statement: {
-      sql: `UPDATE oauth_connections AS oauth_codes SET code_consumed_at_ms = ? WHERE code_digest IS NOT NULL AND code_digest = ? AND id = ?
-    AND code_consumed_at_ms IS NULL AND code_expires_at_ms > ? AND code_expires_at_ms > ${databaseCurrentMillis} AND code_challenge = ?
-    AND EXISTS (SELECT 1 FROM oauth_connections WHERE id = ? AND user_id = ? AND client_id = ?
-      AND redirect_uri = ? AND resource = ? AND revoked_at_ms IS NULL AND expires_at_ms > ? AND expires_at_ms > ${databaseCurrentMillis})`,
-      params: [
-        input.current,
-        proof.digest,
-        grant.connection_id,
-        input.current,
-        proof.challenge,
-        grant.connection_id,
-        grant.user_id,
-        proof.payload.client_id,
-        proof.payload.redirect_uri,
-        proof.payload.resource,
-        input.current,
-      ],
-    },
-  });
-const commitExchange = ({
-  input,
-  proof,
-  grant,
-  issuance,
-}: Readonly<{
-  input: ExchangeInput;
-  proof: CodeProof;
-  grant: CodeRow;
-  issuance: Issuance;
-}>): Effect.Effect<unknown, BootstrapUnavailable> =>
-  dbWork(() => {
-    const auditStatement = consumptionStatement(input, proof, grant);
-    return input.db.batch([
-      input.db.prepare(auditStatement.sql).bind(...auditStatement.params),
-      input.db
-        .prepare(
-          `INSERT INTO oauth_credentials AS oauth_credentials(kind,id,connection_id,user_id,digest,issued_at_ms,expires_at_ms,scopes_json) SELECT 'access', ?,?,?,?,?,?,? WHERE changes() = 1`
-        )
-        .bind(
-          newId(),
-          grant.connection_id,
-          grant.user_id,
-          issuance.accessDigest,
-          input.current,
-          issuance.accessExpiresAt,
-          grant.scopes_json
-        ),
-      input.db
-        .prepare(
-          `INSERT INTO oauth_credentials AS oauth_credentials(kind,id,connection_id,digest,issued_at_ms,expires_at_ms,user_id,scopes_json) SELECT 'refresh', ?,?,?,?,?,?,? WHERE changes() = 1`
-        )
-        .bind(
-          newId(),
-          grant.connection_id,
-          issuance.refreshDigest,
-          input.current,
-          issuance.refreshExpiresAt,
-          grant.user_id,
-          grant.scopes_json
-        ),
-      prepareChangedRowAssertion({ db: input.db, scope: "oauth_atomic" }),
-    ]);
-  });
-
-export const exchangeToken = (
-  input: ExchangeInput
-): Effect.Effect<Response, BootstrapInvalid | BootstrapUnavailable | PlatformError.PlatformError> =>
-  Effect.gen(function* () {
-    if (
-      input.request.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !==
-      "application/x-www-form-urlencoded"
-    ) {
-      return invalidGrant();
-    }
-    const payload = yield* decodeExchange(input.request);
-    if (payload.grant_type === "refresh_token") {
-      return yield* forwardRefresh({
-        ...input,
-        payload,
-        deadlineAtMs: input.current + tokenDeadlineMs,
-      });
-    }
-    const digest = yield* secretDigest({
-      purpose: "oauth-code",
-      value: Redacted.make(payload.code),
-    });
-    const challenge = Base64Url.encode(
-      yield* digestBytes(new TextEncoder().encode(payload.code_verifier))
-    );
-    const admitted = { ...input, current: yield* Clock.currentTimeMillis };
-    const proof = { payload, digest, challenge };
-    const grant = yield* findGrant(admitted, proof);
-    const scopes = yield* Schema.decodeEffect(Schema.fromJsonString(PATScopes))(grant.scopes_json);
-    const access = yield* newSecret;
-    const refresh = yield* newSecret;
-    const accessDigest = yield* secretDigest({ purpose: "oauth-access", value: access });
-    const refreshDigest = yield* secretDigest({ purpose: "oauth-refresh", value: refresh });
-    const { accessExpiresAt, refreshExpiresAt } = decideOAuthCredentialExpirations({
-      current: admitted.current,
-      grantExpiresAt: grant.expires_at_ms,
-    });
-    const body = yield* Schema.encodeEffect(TokenResponse)({
-      access_token: Redacted.value(access),
-      refresh_token: Redacted.value(refresh),
-      token_type: "Bearer",
-      expires_in: Math.floor((accessExpiresAt - admitted.current) / secondMs),
-      scope: scopes.join(" "),
-    });
-    yield* commitExchange({
-      input: admitted,
-      proof,
-      grant,
-      issuance: { accessDigest, refreshDigest, accessExpiresAt, refreshExpiresAt },
-    });
-    return oauthResponse({ body, status: 200 });
-  }).pipe(Effect.catchCause(() => Effect.succeed(invalidGrant())));

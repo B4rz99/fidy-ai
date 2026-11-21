@@ -1,12 +1,8 @@
 import type { OutboundHttpFailure } from "../../src/shell/outbound-http/contract";
-import { OpenAiAdmissionUnavailable, type OpenAiEnvironment } from "./contract";
-import { makeAdmittedOpenAiRun } from "./internal/admitted-run";
-import { HostedInference } from "../../src/shell/hosted-inference/operations";
+import { type OpenAiEnvironment } from "./contract";
 import { makeOpenAiHostedInference } from "../../src/shell/hosted-inference/runtime";
-import { Context, Effect, Layer, Option, Redacted, Schema, type Scope } from "effect";
+import { Context, Effect, Layer, Option, Redacted, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
-import type { TranscriptTurnId } from "../../src/core/agent/contract";
-import { sweepExpiredOpenAiAdmission as expireAdmission } from "./internal/admission-retention";
 import {
   HostedInferenceError,
   type HostedInferenceFailureReason,
@@ -68,24 +64,6 @@ export const makeOpenAiRun =
 
 const ApiKey = Schema.String.check(Schema.isPattern(/^[!-~]+$/u));
 
-const constructInference = (
-  environment: OpenAiEnvironment,
-  admission?: Readonly<{
-    db: D1Database;
-    userId: string;
-    admittedTurnId: () => Option.Option<TranscriptTurnId>;
-  }>
-): Effect.Effect<HostedInferenceService, HostedInferenceError> => {
-  const key = Schema.decodeOption(ApiKey)(environment.OPENAI_API_KEY);
-  return makeOpenAiHostedInference({
-    model: Option.fromNullishOr(environment.HOSTED_AI_MODEL),
-    run: Option.map(key, (apiKey) => {
-      const run = makeOpenAiRun(Redacted.make(apiKey));
-      return admission === undefined ? run : makeAdmittedOpenAiRun({ ...admission, run });
-    }),
-  });
-};
-
 export const makeLocalHostedInference = ({
   environment,
   admit,
@@ -131,45 +109,10 @@ export const makeLocalHostedInference = ({
 
 export const makeCloudflareHostedInference = (
   environment: OpenAiEnvironment
-): Effect.Effect<HostedInferenceService, HostedInferenceError> => constructInference(environment);
-
-export const makeUserCloudflareHostedInference = ({
-  environment,
-  db,
-  userId,
-  admittedTurnId,
-}: Readonly<{
-  environment: OpenAiEnvironment;
-  db: D1Database;
-  userId: string;
-  admittedTurnId: () => Option.Option<TranscriptTurnId>;
-}>): Effect.Effect<HostedInferenceService, HostedInferenceError> =>
-  constructInference(environment, { db, userId, admittedTurnId });
-
-export const cloudflareHostedInferenceLive = ({
-  environment,
-  db,
-  userId,
-  admittedTurnId,
-}: Readonly<{
-  environment: OpenAiEnvironment;
-  db: D1Database;
-  userId: string;
-  admittedTurnId: () => Option.Option<TranscriptTurnId>;
-}>): Layer.Layer<HostedInference, HostedInferenceError> =>
-  HostedInference.layer(
-    makeUserCloudflareHostedInference({ environment, db, userId, admittedTurnId })
-  );
-
-export const optionalHostedInference = (
-  input: Parameters<typeof cloudflareHostedInferenceLive>[0]
-): Effect.Effect<Option.Option<HostedInferenceService>, never, Scope.Scope> =>
-  Layer.build(cloudflareHostedInferenceLive(input)).pipe(
-    Effect.option,
-    Effect.map(Option.map((services) => Context.get(services, HostedInference)))
-  );
-
-export const sweepExpiredOpenAiAdmission = (
-  input: Readonly<{ db: D1Database; now: number }>
-): Effect.Effect<void, OpenAiAdmissionUnavailable> =>
-  expireAdmission(input).pipe(Effect.mapError(() => new OpenAiAdmissionUnavailable()));
+): Effect.Effect<HostedInferenceService, HostedInferenceError> =>
+  makeOpenAiHostedInference({
+    model: Option.fromNullishOr(environment.HOSTED_AI_MODEL),
+    run: Option.map(Schema.decodeOption(ApiKey)(environment.OPENAI_API_KEY), (apiKey) =>
+      makeOpenAiRun(Redacted.make(apiKey))
+    ),
+  });

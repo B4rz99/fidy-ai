@@ -1,48 +1,16 @@
 import type { UserStoreBindings } from "../directory/contract";
 import {
   WhatsAppBusinessPhoneNumberId,
-  type WhatsAppInboundEvent,
   WhatsAppMediaId,
 } from "../../src/shell/channels/whatsapp/contract";
-import type { ReviewCommand } from "../../src/core/ingestion/contract";
-import type { UserId } from "../../src/core/identity/contract";
 
-import { Data, type Effect, type Option, Schema } from "effect";
-import type { OwnedStatement } from "../../src/shell/owner-write/contract";
-import type {
-  QueryCaller,
-  TransactionAuthority,
-  TransactionCaller,
-} from "../canonical-work/contract";
-import type { CanonicalCapability } from "../../src/core/canonical-operations/contract";
-import type { PrivateObjectBucket } from "../private-objects/contract";
-import {
-  type StatementSubmission,
-  StatementSubmissionId,
-} from "../../src/shell/ingestion/contract";
-
-export type MediaAdmissionInput = Readonly<{
-  db: D1Database;
-  userId: UserId;
-  event: WhatsAppInboundEvent;
-}>;
-
-export class StatementDocumentUnavailable extends Data.TaggedError("StatementDocumentUnavailable")<{
-  reason: "invalid-material" | "media-unavailable" | "rate-limited" | "uncertain";
-}> {}
+import { Data, Schema } from "effect";
+import { StatementSubmissionId } from "../../src/shell/ingestion/contract";
 
 export type ForwardedEmailMessage = Pick<
   ForwardableEmailMessage,
   "from" | "to" | "raw" | "rawSize" | "setReject"
 >;
-
-export type ForwardedEmailEnvironment = Readonly<{
-  DB: D1Database;
-  EMAIL_BUCKET: PrivateObjectBucket;
-  EMAIL_QUEUE: Readonly<{
-    send: (job: Readonly<{ receiptId: string; userId: string }>) => Promise<unknown>;
-  }>;
-}>;
 
 export const StatementWork = Schema.Struct({
   traceContext: Schema.optionalKey(Schema.Unknown),
@@ -62,57 +30,14 @@ export const ForwardedEmailWork = Schema.Struct({
   userId: Schema.String.check(Schema.isUUID()),
 });
 
-export type StatementPublicationOutcome = Readonly<{
-  readCommitted: (userId: string) => Effect.Effect<Option.Option<StatementSubmission>>;
-  lostReplay: Effect.Effect<boolean>;
-}>;
-
-export type StatementDecisionWork = Readonly<{
-  db: D1Database;
-  userId: string;
-  authority: TransactionAuthority;
-  originSessionId: Option.Option<string>;
-  originTurns: Option.Option<OwnedStatement>;
-  publicationOrigin: Option.Option<OwnedStatement>;
-  requiredScope: Option.Option<CanonicalCapability>;
-  current: number;
-  bucket: Option.Option<R2Bucket>;
-  input: unknown;
-}>;
-
 export const maximumSubmissionInputBytes = 4096;
 
-export class StatementProcessingUnavailable extends Data.TaggedError(
-  "StatementProcessingUnavailable"
-) {}
-
 export class ReviewUnavailable extends Data.TaggedError("ReviewUnavailable") {}
-export type ReviewQueryWork = Readonly<{
-  db: D1Database;
-  subject: QueryCaller;
-  request: Request;
-  bucket: Option.Option<R2Bucket>;
-}>;
-export type ReviewEditWork = Readonly<{
-  work: Readonly<{
-    db: D1Database;
-    subject: TransactionCaller;
-    current: number;
-    bucket: Option.Option<R2Bucket>;
-  }>;
-  command: ReviewCommand;
-}>;
-export type ReviewAuditWork = Readonly<{ db: D1Database; subject: QueryCaller; current: number }>;
-export type ReviewRetentionWork = Readonly<{ db: D1Database; current: number }>;
 
 export const statementWorkflowRetention = {
   successRetention: "3 days",
   errorRetention: "3 days",
 } as const;
-
-export type StatementQueue = Readonly<{
-  send: (work: typeof StatementWork.Type) => Promise<unknown>;
-}>;
 
 export type StatementWorkflow = Readonly<{
   create: (options: {
@@ -126,11 +51,6 @@ export type StatementWorkflow = Readonly<{
 export class StatementDeliveryUnavailable extends Data.TaggedError("StatementDeliveryUnavailable")<{
   readonly cause: unknown;
 }> {}
-export type StatementDispatchBindings = Readonly<{
-  DB: D1Database;
-  STATEMENT_EXTRACTION_QUEUE: StatementQueue;
-  STATEMENT_EXTRACTION_WORKFLOW: Option.Option<StatementWorkflow>;
-}>;
 
 export const localDocumentUrl = "https://user.invalid/ingestion/document";
 export const NativeStatementDocument = Schema.Struct({

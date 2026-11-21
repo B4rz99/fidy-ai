@@ -11,25 +11,14 @@ import type { OAuthAuthority } from "~/shell/oauth-agents/contract";
 import type { OwnedStatement } from "~/shell/owner-write/contract";
 import {
   type AuditCredentialOperation,
-  type AuditQueryCall,
   AuditUnavailable,
   type AuthorizedAuditCall,
-  type CanonicalAdmissionRefusal,
-  type CanonicalReplayAccess,
-  type EmailReplacementEvidence,
   type OwnerAuditCall,
   type PATActivityAuthority,
   auditRetentionDays,
   utcDayMilliseconds,
 } from "./contract";
-import { emailReplacementEvidence } from "~/shell/audit/internal/email-evidence";
-import {
-  admissionRefusalStatement,
-  authorizedCallStatement,
-  ownerCallStatement,
-  queryCallStatement,
-  replayAccessStatement,
-} from "~/shell/audit/internal/recording";
+import { authorizedCallStatement, ownerCallStatement } from "~/shell/audit/internal/recording";
 
 import * as patEvidence from "~/shell/audit/internal/pat-evidence";
 
@@ -118,47 +107,6 @@ export const recordAuthorizedCall = (input: AuthorizedAuditCall): OwnedStatement
 
 export const recordOwnerCall = (input: OwnerAuditCall): OwnedStatement => ownerCallStatement(input);
 
-export const prepareAuditQueryCall = ({
-  db,
-  missingWhen,
-  ...input
-}: AuditQueryCall & Readonly<{ db: D1Database }>): D1PreparedStatement => {
-  const statement = queryCallStatement({ ...input, missingWhen });
-  return db.prepare(statement.sql).bind(...statement.params);
-};
-
-export const prepareAuthorizedAuditCall = ({
-  db,
-  ...input
-}: AuthorizedAuditCall & Readonly<{ db: D1Database }>): D1PreparedStatement => {
-  const statement = authorizedCallStatement(input);
-  return db.prepare(statement.sql).bind(...statement.params);
-};
-
-export const prepareCanonicalAdmissionRefusal = ({
-  db,
-  ...input
-}: CanonicalAdmissionRefusal & Readonly<{ db: D1Database }>): D1PreparedStatement => {
-  const statement = admissionRefusalStatement(input);
-  return db.prepare(statement.sql).bind(...statement.params);
-};
-
-export const prepareCanonicalReplayAccess = ({
-  db,
-  ...input
-}: CanonicalReplayAccess & Readonly<{ db: D1Database }>): D1PreparedStatement => {
-  const statement = replayAccessStatement(input);
-  return db.prepare(statement.sql).bind(...statement.params);
-};
-
-export const prepareEmailReplacementEvidence = ({
-  db,
-  ...input
-}: EmailReplacementEvidence & Readonly<{ db: D1Database }>): D1PreparedStatement => {
-  const statement = emailReplacementEvidence(input);
-  return db.prepare(statement.sql).bind(...statement.params);
-};
-
 export const recordedPATCallProof: typeof patEvidence.recordedPATCallProof = (input) =>
   patEvidence.recordedPATCallProof(input);
 
@@ -182,14 +130,6 @@ export const recordCanonicalPATWork: typeof patEvidence.recordCanonicalPATWork =
   patEvidence.recordCanonicalPATWork(input);
 export const recordRejectedPATWork: typeof patEvidence.recordRejectedPATWork = (input) =>
   patEvidence.recordRejectedPATWork(input);
-
-export const prepareOwnerAuditCall = ({
-  db,
-  ...input
-}: OwnerAuditCall & Readonly<{ db: D1Database }>): D1PreparedStatement => {
-  const statement = ownerCallStatement(input);
-  return db.prepare(statement.sql).bind(...statement.params);
-};
 
 const ActivityRow = Schema.Struct({
   operation: PATActivityEntry.fields.operation,

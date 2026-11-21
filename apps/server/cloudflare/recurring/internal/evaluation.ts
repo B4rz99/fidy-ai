@@ -21,8 +21,6 @@ import type {
   RecurringFactPage,
   RecurringFactSnapshot,
 } from "../../transactions/contract";
-import { prepareRecurringFactGuard, readRecurringFacts } from "../../transactions/operations";
-import { prepareUserContext } from "../../identity/user-context/operations";
 import { transactionId } from "../../canonical-work/operations";
 import { RecurringUnavailable } from "../contract";
 import {
@@ -54,34 +52,6 @@ export type EvaluationStore = Readonly<{
   context: Effect.Effect<UserContext, RecurringUnavailable>;
 }>;
 type Work = EvaluationStore;
-export const databaseEvaluation = (work: { db: D1Database; userId: UserId }): EvaluationStore => ({
-  userId: work.userId,
-  select: (sql, values) => query({ db: work.db, sql, values }),
-  commit: (revision, statements) =>
-    batch({
-      db: work.db,
-      statements: [
-        prepareRecurringFactGuard({ ...work, revision }),
-        ...statements.map(({ sql, params }) => work.db.prepare(sql).bind(...params)),
-      ],
-    }),
-  facts: (revision, cursor) =>
-    readRecurringFacts({ ...work, revision, cursor }).pipe(
-      Effect.mapError(() => new RecurringUnavailable())
-    ),
-  context: Effect.tryPromise(() =>
-    prepareUserContext({
-      ...work,
-      statement: {
-        sql: "SELECT serviceMarket,locale,timeZone FROM identity_user_context WHERE userId=?",
-        params: [work.userId],
-      },
-    }).all()
-  ).pipe(
-    Effect.flatMap((rows) => decode({ schema: UserContext, input: rows.results[0] })),
-    Effect.mapError(() => new RecurringUnavailable())
-  ),
-});
 
 const jsonCodec = <Shape extends Schema.Top>(
   schema: Shape
@@ -96,34 +66,6 @@ export const decode = <Shape extends Schema.Top>({
   Shape["DecodingServices"]
 > =>
   Schema.decodeUnknownEffect(schema)(input).pipe(Effect.mapError(() => new RecurringUnavailable()));
-export const batch = ({
-  db,
-  statements,
-}: Readonly<{ db: D1Database; statements: ReadonlyArray<D1PreparedStatement> }>): Effect.Effect<
-  void,
-  RecurringUnavailable
-> =>
-  Effect.tryPromise({
-    try: () => db.batch([...statements]),
-    catch: () => new RecurringUnavailable(),
-  }).pipe(Effect.asVoid);
-export const query = ({
-  db,
-  sql,
-  values,
-}: Readonly<{
-  db: D1Database;
-  sql: string;
-  values: ReadonlyArray<string | number>;
-}>): Effect.Effect<ReadonlyArray<unknown>, RecurringUnavailable> =>
-  Effect.tryPromise({
-    try: () =>
-      db
-        .prepare(sql)
-        .bind(...values)
-        .all(),
-    catch: () => new RecurringUnavailable(),
-  }).pipe(Effect.map((result) => result.results));
 
 export const initialize = ({
   work,

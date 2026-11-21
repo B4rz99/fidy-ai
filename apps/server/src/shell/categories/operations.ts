@@ -1,7 +1,7 @@
-import { categoryResponseFromRows, categoryRowsQuery } from "~/shell/categories/internal/query";
-import { Effect, Option } from "effect";
+import { categoryResponseFromRows } from "~/shell/categories/internal/query";
+import { Effect, type Option } from "effect";
 import { listLaunchCategories } from "~/core/categories/operations";
-import type { CategoryReadInput, ListCategoriesResponse } from "./contract";
+import type { ListCategoriesResponse } from "./contract";
 import {
   type CategoryFailure,
   type CategoryNotFound,
@@ -116,11 +116,6 @@ export const categoryUnavailable = (): Unavailable =>
 
 export const listCategoriesResponse: Effect.Effect<typeof ListCategoriesResponse.Type> =
   Effect.sync(() => ({ data: listLaunchCategories(), next: [] }));
-
-export const prepareCategoryRead = ({ db, authority }: CategoryReadInput): D1PreparedStatement => {
-  const query = categoryRowsQuery(Option.getOrUndefined(authority));
-  return db.prepare(query.sql).bind(...query.params);
-};
 
 export const decodeCategoryRead = (
   result: unknown

@@ -1,9 +1,7 @@
-import { BootstrapUnavailable } from "../contract";
-import { DateTime, Effect, Array as EffectArray, Option, Schema } from "effect";
-import { approveRequest } from "./approval";
+import { type BootstrapUnavailable } from "../contract";
+import { DateTime, Effect, Array as EffectArray, Schema } from "effect";
 import type { PlatformError } from "effect";
 import {
-  OAuthAuthorization,
   OAuthRegistration,
   OAuthRequestId,
   OAuthReview,
@@ -13,34 +11,13 @@ import {
 import { type PATScopes } from "../../../src/core/tokens/contract";
 import { oauthScopeCopy } from "../../../src/core/oauth-agents/operations";
 import { oauthResponse as response } from "./response";
-import type { FreshSessionSubject } from "../../../src/shell/web-session/contract";
-import { freshSessionConditions } from "../../../src/shell/web-session/operations";
-import { freshBrowserSession } from "../../web-session/operations";
-import {
-  BootstrapInvalid,
-  dbWork,
-  decodePayload,
-  invalidRequest,
-  requestedScopes,
-} from "./bootstrap";
+import { type BootstrapInvalid, decodePayload } from "./bootstrap";
 
 import type {
   ResourceAdmissionRefused,
   ResourceAdmissionUnavailable,
 } from "../../resource-admission/contract";
 
-type ReviewInput = Readonly<{
-  admitUser: (
-    userId: string
-  ) => Effect.Effect<
-    void,
-    ResourceAdmissionRefused | ResourceAdmissionUnavailable | Schema.SchemaError
-  >;
-  request: Request;
-  db: D1Database;
-  current: number;
-  browserOrigin: string;
-}>;
 type ReviewFailure =
   | BootstrapInvalid
   | BootstrapUnavailable
@@ -49,8 +26,6 @@ type ReviewFailure =
   | ResourceAdmissionRefused
   | ResourceAdmissionUnavailable;
 const successStatus = 200;
-const unauthorizedStatus = 401;
-const forbiddenStatus = 403;
 const Row = Schema.Struct({
   request_json: Schema.String,
   metadata_json: Schema.String,
@@ -70,39 +45,6 @@ export const readReference = (
     ? decodePayload({ request, schema: Reference, onExcessProperty: "error" })
     : decodePayload({ request, schema: OAuthReviewChoice, onExcessProperty: "error" });
 };
-const bindPending = (
-  input: ReviewInput & Readonly<{ requestId: string; session: FreshSessionSubject }>
-): Effect.Effect<typeof Row.Type, ReviewFailure> =>
-  Effect.gen(function* () {
-    const guard = freshSessionConditions(input);
-    const bound = yield* dbWork(() =>
-      input.db.batch([
-        input.db
-          .prepare(
-            `UPDATE oauth_review_requests SET user_id = ? WHERE id = ? AND state = 'pending' AND expires_at_ms > ? AND (user_id = ? OR (user_id IS NULL AND (SELECT count(*) FROM oauth_review_requests WHERE user_id = ? AND state = 'pending' AND expires_at_ms > ?) < 5)) AND ${guard.sql}`
-          )
-          .bind(
-            input.session.user_id,
-            input.requestId,
-            input.current,
-            input.session.user_id,
-            input.session.user_id,
-            input.current,
-            ...guard.params
-          ),
-        input.db
-          .prepare(
-            `SELECT r.request_json, c.metadata_json, r.expires_at_ms FROM oauth_review_requests r JOIN oauth_public_clients c ON c.id = r.client_id WHERE r.id = ? AND r.user_id = ? AND r.state = 'pending' AND r.expires_at_ms > ? AND ${guard.sql}`
-          )
-          .bind(input.requestId, input.session.user_id, input.current, ...guard.params),
-      ])
-    );
-    const raw = bound[1]?.results[0];
-    if (raw === undefined) return yield* new BootstrapInvalid();
-    return yield* Schema.decodeUnknownEffect(Row)(raw).pipe(
-      Effect.mapError(() => new BootstrapUnavailable())
-    );
-  });
 export const projectReview = (
   input: Readonly<{ row: typeof Row.Type; requestId: string; scopes: PATScopes; current: number }>
 ): Effect.Effect<Response, Schema.SchemaError> =>
@@ -127,68 +69,4 @@ export const projectReview = (
       body: yield* Schema.encodeEffect(OAuthReview)(review),
       status: successStatus,
     });
-  });
-const cancelPending = (
-  input: ReviewInput & Readonly<{ requestId: string; session: FreshSessionSubject }>
-): Effect.Effect<Response, BootstrapUnavailable> =>
-  Effect.gen(function* () {
-    const guard = freshSessionConditions(input);
-    const cancelled = yield* dbWork(() =>
-      input.db
-        .prepare(
-          `UPDATE oauth_review_requests SET state = 'cancelled' WHERE id = ? AND user_id = ? AND state = 'pending' AND expires_at_ms > ? AND ${guard.sql}`
-        )
-        .bind(input.requestId, input.session.user_id, input.current, ...guard.params)
-        .run()
-    );
-    return cancelled.meta.changes === 1
-      ? response({ body: { cancelled: true }, status: successStatus })
-      : invalidRequest();
-  });
-const processReview = (
-  input: ReviewInput & Readonly<{ session: FreshSessionSubject }>
-): Effect.Effect<Response, ReviewFailure> =>
-  Effect.gen(function* () {
-    const payload = yield* readReference(input.request);
-    const bound = { ...input, requestId: payload.requestId };
-    const row = yield* bindPending(bound);
-    const pending = yield* Schema.decodeEffect(Schema.fromJsonString(OAuthAuthorization))(
-      row.request_json
-    );
-    const scopes = requestedScopes(Option.fromUndefinedOr(pending.scope));
-    if (Option.isNone(scopes)) return invalidRequest();
-    const path = new URL(input.request.url).pathname;
-    if (path === oauthPaths.cancel) return yield* cancelPending(bound);
-    if (path === oauthPaths.connect) {
-      if (
-        !("scopes" in payload) ||
-        !payload.scopes.every((scope) => scopes.value.includes(scope))
-      ) {
-        return invalidRequest();
-      }
-      const client = yield* Schema.decodeEffect(Schema.fromJsonString(OAuthRegistration))(
-        row.metadata_json
-      );
-      return yield* approveRequest({ ...input, pending, client, choice: payload });
-    }
-    return yield* projectReview({
-      row,
-      requestId: payload.requestId,
-      scopes: scopes.value,
-      current: input.current,
-    });
-  });
-export const reviewRequest = (input: ReviewInput): Effect.Effect<Response, ReviewFailure> =>
-  Effect.gen(function* () {
-    if (input.request.headers.get("origin") !== input.browserOrigin) {
-      return response({ body: { error: "forbidden_origin" }, status: forbiddenStatus });
-    }
-    const query = new URL(input.request.url).searchParams;
-    if (new Set(query.keys()).size !== Array.from(query.keys()).length) return invalidRequest();
-    const session = yield* dbWork(() => freshBrowserSession(input));
-    if (Option.isNone(session)) {
-      return response({ body: { error: "unauthenticated" }, status: unauthorizedStatus });
-    }
-    yield* input.admitUser(session.value.user_id);
-    return yield* processReview({ ...input, session: session.value });
   });

@@ -33,7 +33,7 @@ it.effect("preserves a small shared-string workbook without expanding the source
   })
 );
 
-it.effect("characterizes shared-string row evidence above the D1 string limit", () =>
+it.effect("measures the serialized row evidence from a highly compressed shared string", () =>
   Effect.gen(function* () {
     const source = yield* bytes("shared-string-row-limit");
     const parsed = yield* parseStatementFile(source);

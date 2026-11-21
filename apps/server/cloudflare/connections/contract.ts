@@ -16,19 +16,10 @@ export const ConnectionBrowserAdmission = Schema.Struct({
   deadlineMilliseconds: Schema.Int,
 });
 export type ConnectionBrowserAdmission = typeof ConnectionBrowserAdmission.Type;
-export type ConnectionQueryOperation =
-  | "connections.listInstitutions"
-  | "connections.listConnections"
-  | "connections.listAccounts"
-  | "connections.getConnection";
 
 export const ConnectionSandboxAdmission = Context.Reference<
   Option.Option<Readonly<{ userId: string; startsAt: number; expiresAt: number }>>
 >("@fidy/cloudflare/connections/SandboxAdmission", { defaultValue: Option.none });
-
-export class ConnectionRetentionUnavailable extends Data.TaggedError(
-  "ConnectionRetentionUnavailable"
-) {}
 
 export class ConnectionAuthorizationUnavailable extends Data.TaggedError(
   "ConnectionAuthorizationUnavailable"
@@ -70,11 +61,6 @@ export type ConnectionBankPreparation = Readonly<{
   >;
 }>;
 
-export const ConnectionBank = Context.Reference<Option.Option<ConnectionBankPreparation>>(
-  "@fidy/cloudflare/connections/Bank",
-  { defaultValue: Option.none }
-);
-
 export const connectionCallbackPath = "/connections/bancolombia/sandbox/callback";
 const maximumCodeLength = 4096;
 export const ConnectionCallbackAdmission = Schema.Struct({
@@ -114,14 +100,6 @@ export type ConnectionBankActivation = Readonly<{
     }>
   ) => Effect.Effect<ReadonlyArray<string>, ConnectionAuthorizationUnavailable>;
 }>;
-export const ConnectionActivation = Context.Reference<Option.Option<ConnectionBankActivation>>(
-  "@fidy/cloudflare/connections/Activation",
-  { defaultValue: Option.none }
-);
-export const ConnectionGrantKey = Context.Reference<Option.Option<Redacted.Redacted<string>>>(
-  "@fidy/cloudflare/connections/GrantKey",
-  { defaultValue: Option.none }
-);
 
 export type ConnectionBankCleanup = Readonly<{
   clientId: string;

@@ -1,4 +1,3 @@
-import type { CanonicalReadFinalization } from "../../canonical-admission/contract";
 import { DateTime, Effect, Option, Schema } from "effect";
 import {
   RecurringWorkspace,
@@ -18,22 +17,16 @@ import {
   validRecurringFulfillment,
 } from "../../../src/core/recurring-plans/operations";
 
-import { UserId, UserPreferences } from "../../../src/core/identity/contract";
-import { prepareUserContext } from "../../identity/user-context/operations";
-import {
-  readPlanningTransactionSnapshot,
-  readPlanningTransactions,
-} from "../../transactions/operations";
+import { type UserPreferences } from "../../../src/core/identity/contract";
 import type {
   PlanningTransactionFacts,
   PlanningTransactionRange,
   PlanningTransactionSnapshot,
 } from "../../transactions/contract";
 
-import { linkedTransactionIds, planningFact } from "./facts";
+import { planningFact } from "./facts";
 import { RecurringPlanningUnavailable, type RecurringReadProjection } from "../contract";
 import { workspaceMonths } from "./read-projection";
-import { displayDocument } from "./display";
 import { type Transaction } from "../../../src/core/transactions/contract";
 
 type Query = typeof RecurringWorkspaceQuery.Type;
@@ -71,14 +64,6 @@ const checkedDocument = ({
     invalid,
   };
 };
-type ProjectionWork = Readonly<{
-  db: D1Database;
-  userId: string;
-  document: RecurringDocument;
-  month: string;
-  now: DateTime.Utc;
-  finalization: Option.Option<CanonicalReadFinalization>;
-}>;
 export type AutomaticProjection = Readonly<{
   document: RecurringSchedule;
   matches: (typeof RecurringWorkspace.Type)["matches"];
@@ -126,62 +111,6 @@ export const automaticFromFacts = ({
   const matches = uniqueRecurringMatches(candidates);
   return matchedProjection(document, matches, matches.length === candidates.length);
 };
-export const automaticProjection = ({
-  db,
-  userId,
-  document,
-  month,
-  now,
-}: ProjectionWork): Effect.Effect<AutomaticProjection> =>
-  Effect.gen(function* () {
-    if (document.plans.length === 0) {
-      return { document, complete: true, unambiguous: true, matches: [] };
-    }
-    const selection = yield* readPlanningTransactions({
-      db,
-      userId,
-      selection: {
-        kind: "range",
-        ...matchingRange(month),
-      },
-    });
-    return automaticFromFacts({ document, allocations: document, month, now, selection });
-  });
-
-const workspaceMatching = ({
-  db,
-  userId,
-  document,
-  month,
-  prior,
-  finalization,
-}: Omit<ProjectionWork, "now"> & Readonly<{ prior: string }>): Effect.Effect<
-  PlanningTransactionSnapshot<UserPreferences>,
-  RecurringPlanningUnavailable | Schema.SchemaError
-> =>
-  Effect.gen(function* () {
-    const observed = yield* readPlanningTransactionSnapshot({
-      finalization,
-      db,
-      userId,
-      ranges: document.plans.length === 0 ? [] : [matchingRange(prior), matchingRange(month)],
-      ids: linkedTransactionIds(document),
-      snapshot: {
-        statement: prepareUserContext({
-          db,
-          userId: yield* Schema.decodeEffect(UserId)(userId),
-          statement: {
-            sql: "SELECT locale, timeZone FROM identity_user_context",
-            params: [],
-          },
-        }),
-        decode: (rows) =>
-          rows.length === 1 ? Schema.decodeUnknownOption(UserPreferences)(rows[0]) : Option.none(),
-      },
-    });
-    if (Option.isNone(observed)) return yield* new RecurringPlanningUnavailable();
-    return observed.value;
-  });
 
 const matchCandidates = ({
   document,
@@ -213,36 +142,6 @@ const matchCandidates = ({
 export const automaticMatches = (
   input: Parameters<typeof matchCandidates>[0]
 ): ReturnType<typeof uniqueRecurringMatches> => uniqueRecurringMatches(matchCandidates(input));
-
-type WorkspaceWork = Readonly<{
-  db: D1Database;
-  userId: string;
-  document: RecurringDocument;
-  query: Query;
-  finalization: Option.Option<CanonicalReadFinalization>;
-}>;
-export const workspaceValue = ({
-  db,
-  userId,
-  document,
-  query,
-  finalization,
-}: WorkspaceWork): Effect.Effect<
-  typeof RecurringWorkspace.Type,
-  RecurringPlanningUnavailable | Schema.SchemaError
-> =>
-  Effect.gen(function* () {
-    const now = yield* DateTime.now;
-    const observed = yield* workspaceMatching({
-      db,
-      userId,
-      document,
-      month: query.month,
-      prior: query.previousMonth ?? previousMonth(query.month),
-      finalization,
-    });
-    return yield* workspaceFromSnapshot({ document, query, now, observed });
-  });
 
 const projectWorkspaceSnapshot = ({
   document,
@@ -281,23 +180,6 @@ const projectWorkspaceSnapshot = ({
     matched: projection(query.month, 1),
   };
 };
-
-export const workspaceFromSnapshot = (
-  input: Readonly<{
-    document: RecurringDocument;
-    query: Query;
-    now: DateTime.Utc;
-    observed: PlanningTransactionSnapshot<UserPreferences>;
-  }>
-): Effect.Effect<typeof RecurringWorkspace.Type, Schema.SchemaError> =>
-  workspaceFromFacts({
-    ...input,
-    editing: displayDocument({
-      document: input.document,
-      compact: input.query.view === "compact",
-      now: input.now,
-    }),
-  });
 
 export const workspaceFromReadProjection = ({
   projection,

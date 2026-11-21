@@ -47,7 +47,7 @@ read; never serve the original as active HTML or disclose it to another User or 
 ## Test seam
 
 [Forwarded Email integration tests](../apps/server/cloudflare/ingestion/native-email.test.ts)
-exercise the real parser with native D1/R2: encoded multipart capture and replay, exact raw evidence,
+exercise the real parser with native Durable Object SQLite and R2: encoded multipart capture and replay, exact raw evidence,
 legacy charset decoding, original-material User isolation, aggregate header limits, and plain or
 transfer-encoded RFC822 attachment refusal. The Email interpretation suite separately checks
 canonical extraction and unsupported-content behavior.

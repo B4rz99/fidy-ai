@@ -1,6 +1,6 @@
-import { BootstrapUnavailable, oauthClientIdleMs } from "../contract";
+import { type BootstrapUnavailable } from "../contract";
 import { Data, Effect, Option, Schema } from "effect";
-import { OAuthAuthorization, OAuthRegistration } from "../../../src/shell/oauth-agents/contract";
+import { OAuthRegistration } from "../../../src/shell/oauth-agents/contract";
 import { PATScopes } from "../../../src/core/tokens/contract";
 import { RequestBodyPolicy } from "../../http/contract";
 import { readBoundedRequestBody } from "../../http/operations";
@@ -19,8 +19,6 @@ const invalidStatus = 400;
 export const invalidRequest = (): Response =>
   jsonResponse({ body: { error: "invalid_request" }, status: invalidStatus });
 export class BootstrapInvalid extends Data.TaggedError("BootstrapInvalid") {}
-export const dbWork = <A>(run: () => Promise<A>): Effect.Effect<A, BootstrapUnavailable> =>
-  Effect.uninterruptible(Effect.tryPromise({ try: run, catch: () => new BootstrapUnavailable() }));
 
 export const decodePayload = <Shape extends Schema.ConstraintDecoder<unknown>>(
   input: Readonly<{ request: Request; schema: Shape; onExcessProperty: "ignore" | "error" }>
@@ -84,29 +82,6 @@ export const registerWithStore = Effect.fn(
       ),
   })
 );
-export const registerClient = (input: {
-  request: Request;
-  current: number;
-  db: D1Database;
-}): Effect.Effect<Response, BootstrapUnavailable> =>
-  registerWithStore({
-    ...input,
-    persist: (id, encoded) =>
-      dbWork(() =>
-        input.db.batch([
-          input.db
-            .prepare(
-              "DELETE FROM oauth_public_clients WHERE id IN (SELECT id FROM oauth_public_clients WHERE last_used_at_ms <= ? ORDER BY last_used_at_ms LIMIT 64)"
-            )
-            .bind(input.current - oauthClientIdleMs),
-          input.db
-            .prepare(
-              "INSERT INTO oauth_public_clients(id, metadata_json, created_at_ms, last_used_at_ms) VALUES (?, ?, ?, ?)"
-            )
-            .bind(id, encoded, input.current, input.current),
-        ])
-      ).pipe(Effect.asVoid),
-  });
 export const registeredRedirect = ({
   registered,
   requested,
@@ -129,82 +104,3 @@ export const requestedScopes = (scope: Option.Option<string>): Option.Option<PAT
   if (new Set(scopes).size !== scopes.length) return Option.none();
   return Schema.decodeUnknownOption(PATScopes)(scopes);
 };
-const retainAuthorization = (
-  input: Readonly<{ request: OAuthAuthorization; db: D1Database; current: number; source: string }>
-): Effect.Effect<string, Schema.SchemaError | BootstrapUnavailable> =>
-  Effect.gen(function* () {
-    const id = newId();
-    const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(OAuthAuthorization))(
-      input.request
-    );
-    yield* dbWork(() =>
-      input.db.batch([
-        input.db
-          .prepare(
-            "DELETE FROM oauth_review_requests WHERE id IN (SELECT id FROM oauth_review_requests WHERE expires_at_ms <= ? ORDER BY expires_at_ms LIMIT 64)"
-          )
-          .bind(input.current),
-        input.db
-          .prepare(
-            "INSERT INTO oauth_review_requests(id, client_id, request_json, source_digest, created_at_ms, expires_at_ms) VALUES (?, ?, ?, ?, ?, ?)"
-          )
-          .bind(
-            id,
-            input.request.client_id,
-            encoded,
-            input.source,
-            input.current,
-            input.current + attemptLifetimeMs
-          ),
-        input.db
-          .prepare("UPDATE oauth_public_clients SET last_used_at_ms = ? WHERE id = ?")
-          .bind(input.current, input.request.client_id),
-      ])
-    );
-    return id;
-  });
-export const startAuthorization = (
-  input: Readonly<{
-    request: Request;
-    db: D1Database;
-    current: number;
-    source: string;
-    browserOrigin: string;
-  }>
-): Effect.Effect<Response, Schema.SchemaError | BootstrapUnavailable> =>
-  Effect.gen(function* () {
-    const query = new URL(input.request.url).searchParams;
-    if (new Set(query.keys()).size !== Array.from(query.keys()).length) return invalidRequest();
-    const request = yield* Schema.decodeUnknownEffect(OAuthAuthorization, {
-      onExcessProperty: "error",
-    })(Object.fromEntries(query));
-    const scopes = requestedScopes(Option.fromUndefinedOr(request.scope));
-    if (Option.isNone(scopes)) return invalidRequest();
-    const found = yield* dbWork(() =>
-      input.db
-        .prepare(
-          "SELECT metadata_json FROM oauth_public_clients WHERE id = ? AND last_used_at_ms > ?"
-        )
-        .bind(request.client_id, input.current - oauthClientIdleMs)
-        .first<string>("metadata_json")
-    );
-    const metadata = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(OAuthRegistration))(
-      found
-    );
-    if (
-      !metadata.redirect_uris.some((uri) =>
-        registeredRedirect({ registered: uri, requested: request.redirect_uri })
-      )
-    ) {
-      return invalidRequest();
-    }
-    const id = yield* retainAuthorization({ ...input, request });
-    return new Response(null, {
-      status: 302,
-      headers: {
-        location: `${input.browserOrigin}/oauth/review/${id}`,
-        "cache-control": "no-store",
-        "referrer-policy": "no-referrer",
-      },
-    });
-  });

@@ -316,7 +316,7 @@ const execute = Effect.gen(function* () {
     trustBoundary:
       "OAuth-authorized client-native decision; no independent human-presence attestation",
     actualSeam:
-      "Public ingress → Core → User coordinator → canonical mutation and Audit in native D1",
+      "Public ingress → Core → User coordinator → canonical mutation and Audit in native SQLite",
     fixture:
       "Disposable approved OAuth credential injected by local bridge; no per-operation browser decision; canned model; pinned native CLIs and PTYs. No Production or inference.",
     results,

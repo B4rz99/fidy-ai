@@ -84,7 +84,7 @@ const makeFixture = (overrides: Partial<EffectFixture> = {}): string => {
       effect: effectVersion,
       "@effect/ai": aiVersion,
       "@effect/platform-cloudflare": platformVersion,
-      "@effect/sql-d1": sqlVersion,
+      "@effect/sql-sqlite-do": sqlVersion,
       "@effect/atom-react": atomReactVersion,
     },
     devDependencies: { "@effect/vitest": vitestVersion },
@@ -112,7 +112,7 @@ const makeFixture = (overrides: Partial<EffectFixture> = {}): string => {
       "@effect/ai": [`@effect/ai@${aiVersion}`, ""],
       "@effect/platform-cloudflare": [`@effect/platform-cloudflare@${platformVersion}`, ""],
       "@effect/platform-shared": [`@effect/platform-shared@${transitiveVersion}`, ""],
-      "@effect/sql-d1": [`@effect/sql-d1@${sqlVersion}`, ""],
+      "@effect/sql-sqlite-do": [`@effect/sql-sqlite-do@${sqlVersion}`, ""],
       "@effect/vitest": [`@effect/vitest@${vitestVersion}`, ""],
       "@effect/atom-react": [`@effect/atom-react@${atomReactVersion}`, ""],
       ...qualifiedPackage(Option.fromUndefinedOr(overrides.qualifiedEffectVersion)),
@@ -209,7 +209,7 @@ it("reports an Effect package from a different RC family", () => {
   );
 
   expect(result.exitCode).toBe(1);
-  expect(decode(result.stderr)).toContain("@effect/sql-d1: 4.0.0-rc.4");
+  expect(decode(result.stderr)).toContain("@effect/sql-sqlite-do: 4.0.0-rc.4");
 });
 
 it("reports a directly selected Effect package from another release channel", () => {
@@ -247,7 +247,7 @@ it("requires transitive platform overrides to pin the selected beta exactly", ()
   expect(decode(result.stderr)).toContain("@effect/platform-shared override: ^4.0.0-beta.98");
 });
 
-it.each(["effect", "@effect/sql-d1", "@effect/sql-d1@^4.0.0"])(
+it.each(["effect", "@effect/sql-sqlite-do", "@effect/sql-sqlite-do@^4.0.0"])(
   "rejects a conflicting %s override even when resolved packages still agree",
   (packageName) => {
     const result = checkFixture(
@@ -269,7 +269,7 @@ it("accepts Bun's qualified override objects without ignoring a conflicting fami
       lockedOverrides: {
         "@effect/platform-shared": "4.0.0",
         "undici@^7": { ".": "7.29.1" },
-        "@effect/sql-d1@^4.0.0": { ".": "4.0.0" },
+        "@effect/sql-sqlite-do@^4.0.0": { ".": "4.0.0" },
       },
     })
   );
@@ -278,12 +278,12 @@ it("accepts Bun's qualified override objects without ignoring a conflicting fami
   const rejected = checkFixture(
     makeFixture({
       effectVersion: "4.0.0",
-      lockedOverrides: { "@effect/sql-d1@^4.0.0": { ".": "4.0.0-rc.115" } },
+      lockedOverrides: { "@effect/sql-sqlite-do@^4.0.0": { ".": "4.0.0-rc.115" } },
     })
   );
   expect(rejected.exitCode).toBe(1);
   expect(decode(rejected.stderr)).toContain(
-    "@effect/sql-d1@^4.0.0 override: 4.0.0-rc.115 (bun.lock overrides)"
+    "@effect/sql-sqlite-do@^4.0.0 override: 4.0.0-rc.115 (bun.lock overrides)"
   );
 });
 

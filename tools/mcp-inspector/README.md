@@ -41,7 +41,7 @@ only by each child process; teardown removes its private directory and closes so
 credentials, financial records, model inference, or external network are used.
 
 These tests establish dispatch and synthetic cancellation completion. The Fidy legacy integration
-tests separately cover native accept/cancel/decline with real canonical work and isolated D1 after
+tests separately cover native accept/cancel/decline with real canonical work and isolated User SQLite after
 6 and 30 seconds. The 21 October production rerun subsequently passed: the corrected launcher completed native Cancel
 for the exact synthetic recurring stop-tracking request with `user_action_required`. Its seven-day
 read/write grant was revoked immediately, and independent browser readback retained the plan.

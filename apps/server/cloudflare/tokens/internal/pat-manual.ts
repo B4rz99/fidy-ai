@@ -1,7 +1,4 @@
-import { readConsentStatus } from "../../consent/operations";
-import { type ConsentUnavailable } from "../../consent/contract";
-import { recordSessionPATTransition } from "../../../src/shell/audit/operations";
-import { CreateManualPATPayload, TokenBearer } from "../../../src/core/tokens/contract";
+import { type CreateManualPATPayload, TokenBearer } from "../../../src/core/tokens/contract";
 import {
   IssuedManualPATResponse,
   ManualPATIssuanceConsumed,
@@ -11,60 +8,20 @@ import {
   issuanceLimitedMessage,
   reviewExpiredMessage,
 } from "../../../src/shell/tokens/contract";
-import { UserActionRequired, ValidationFailed } from "../../../src/shell/public-http/contract";
-import { buildPATDisclosure } from "../../../src/core/tokens/operations";
-import { issueManualPAT } from "../../../src/shell/tokens/operations";
-import { type Cause, Clock, DateTime, Effect, Option, Redacted, Result, Schema } from "effect";
-import { grantManualPATConsent } from "../../../src/shell/consent/operations";
+import { DateTime, Option, Redacted, Schema } from "effect";
 import {
   type SessionRow,
   canonical,
   dayMilliseconds,
-  decodeBody,
-  digest,
-  httpBadRequest,
   httpConflict,
   httpReviewExpired,
   httpTooManyRequests,
-  issuanceWindowMilliseconds,
-  maxIssuancesPerUserWindow,
-  newBearer,
-  newShortId,
   pairingMilliseconds,
   patFrom,
   response,
-  unauthorized,
   serviceUnavailable as unavailable,
-  webSession,
 } from "./pat-shared";
-import { newId } from "../../secret-material/operations";
-import { commitPATUnit } from "./pat-unit";
 
-const httpForbidden = 403;
-const consentActionRequired = (): Response =>
-  response({
-    body: Schema.encodeSync(Schema.toCodecJson(UserActionRequired))(
-      UserActionRequired.make({
-        error: {
-          code: "user_action_required",
-          message: "Return to Fidy to review your withdrawn Consent.",
-        },
-        next: [],
-      })
-    ),
-    status: httpForbidden,
-  });
-
-const invalidReview = (): Response =>
-  response({
-    body: Schema.encodeSync(Schema.toCodecJson(ValidationFailed))(
-      ValidationFailed.make({
-        error: { code: "validation_failed", message: "Review the PAT grant again.", fields: [] },
-        next: [],
-      })
-    ),
-    status: httpBadRequest,
-  });
 export const expiredReview = (): Response =>
   response({
     body: Schema.encodeSync(Schema.toCodecJson(ManualPATReviewExpired))(
@@ -104,57 +61,6 @@ type Issuance = Readonly<{
   shortId: string;
   bearer: string;
 }>;
-
-const commitIssuance = (
-  db: D1Database,
-  issue: Issuance
-): Effect.Effect<boolean, Cause.UnknownError> =>
-  Effect.gen(function* () {
-    const { input, session, current, expires, patId, shortId, bearer } = issue;
-    const { grant, requestId } = input;
-    const disclosure = buildPATDisclosure({ grant, expiresAt: DateTime.makeUnsafe(expires) });
-    const bearerDigest = yield* Effect.tryPromise(() => digest(bearer));
-    const committed = yield* Effect.tryPromise(() =>
-      commitPATUnit({
-        db,
-        statements: [
-          issueManualPAT({
-            session,
-            input: {
-              grant,
-              requestId,
-              patId,
-              shortId,
-              bearerDigest,
-              current,
-              expires,
-            },
-          }),
-
-          grantManualPATConsent({
-            session,
-            input: {
-              id: newId(),
-              requestId,
-              disclosure,
-              current,
-            },
-          }),
-
-          recordSessionPATTransition({
-            session,
-            input: {
-              id: newId(),
-              current,
-              patId: Option.some(patId),
-              operation: "pats.createManualPAT",
-            },
-          }),
-        ].map(({ sql, params }) => db.prepare(sql).bind(...params)),
-      })
-    );
-    return committed.every((item) => item.meta.changes === 1);
-  });
 export const issuedResponse = (issue: Issuance): Response => {
   const { input, session, current, expires, patId, shortId, bearer } = issue;
   const pat = patFrom({
@@ -191,80 +97,3 @@ export const expiryFor = ({
     ? Option.some(maximum)
     : Option.none();
 };
-const failedIssuance = (
-  db: D1Database,
-  requestId: string,
-  userId: string
-): Effect.Effect<Response, Cause.UnknownError | ConsentUnavailable> =>
-  Effect.gen(function* () {
-    const prior = yield* Effect.tryPromise(() =>
-      db
-        .prepare("SELECT 1 FROM pats WHERE request_id = ? AND user_id = ?")
-        .bind(requestId, userId)
-        .first()
-    );
-    if (prior !== null) return consumed();
-    const standing = yield* readConsentStatus({ db, userId });
-    if (standing === "Revoked") return consentActionRequired();
-    const current = yield* Clock.currentTimeMillis;
-    const issued = yield* Effect.tryPromise(() =>
-      db
-        .prepare("SELECT count(*) AS total FROM pats WHERE user_id = ? AND issued_at_ms > ?")
-        .bind(userId, current - issuanceWindowMilliseconds)
-        .first<{ total: number }>()
-    );
-    return issued !== null && issued.total >= maxIssuancesPerUserWindow
-      ? issuanceLimit()
-      : unavailable();
-  });
-
-export const createManualPAT = ({
-  request,
-  db,
-}: Readonly<{ request: Request; db: D1Database }>): Effect.Effect<
-  Response,
-  Cause.UnknownError | ConsentUnavailable
-> =>
-  Effect.gen(function* () {
-    const session = yield* webSession({ request, db, fresh: true });
-    if (Option.isNone(session)) {
-      const live = yield* webSession({ request, db, fresh: false });
-      return Option.isNone(live)
-        ? unauthorized()
-        : response({
-            status: httpForbidden,
-            body: {
-              error: {
-                code: "user_action_required",
-                reason: "reauthentication_required",
-                userId: live.value.user_id,
-              },
-              next: [],
-            },
-          });
-    }
-    const input = yield* decodeBody({
-      request,
-      schema: Schema.toCodecJson(CreateManualPATPayload),
-    });
-    if (Option.isNone(input)) return invalidReview();
-    const current = yield* Clock.currentTimeMillis;
-    const expiry = expiryFor({ grant: input.value.grant, current });
-    if (Option.isNone(expiry)) return expiredReview();
-    const shortId = newShortId();
-    const issue = {
-      input: input.value,
-      session: session.value,
-      current,
-      expires: expiry.value,
-      shortId,
-      patId: newId(),
-      bearer: newBearer(shortId),
-    };
-    const committed = yield* commitIssuance(db, issue).pipe(Effect.result);
-    if (Result.isSuccess(committed) && committed.success) {
-      const issued = yield* Effect.try(() => issuedResponse(issue)).pipe(Effect.result);
-      if (Result.isSuccess(issued)) return issued.success;
-    }
-    return yield* failedIssuance(db, input.value.requestId, session.value.user_id);
-  });

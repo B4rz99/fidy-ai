@@ -20,7 +20,7 @@ class DataStore extends Context.Service<
 ```
 
 Provide the real implementation separately through `Layer.effect` or `Layer.succeed`; a placeholder
-success is not a D1 adapter. Use one stable key per service, name meaningful Work with `Effect.fn`,
+success is not a SQLite adapter. Use one stable key per service, name meaningful Work with `Effect.fn`,
 and expose `layer`,
 `layerNoDeps`, `layerTest`, or `layerConfig` deliberately. A `Context.Reference` is appropriate for
 safe defaults such as Clock or ConfigProvider; it is not a substitute for a required authority.

@@ -1,19 +1,14 @@
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { IanaTimeZone } from "../../../src/core/_shared/context";
 import { RecurringTransactionFact, TransactionId } from "../../../src/core/transactions/contract";
 import { UtcTimestamp } from "../../../src/core/_shared/time";
 import { type UserId } from "../../../src/core/identity/contract";
-import { protectConsentStatement } from "../../../src/shell/consent/operations";
-import { prepareConsentAction } from "../../consent/operations";
 import {
   type BudgetContributionCursor,
   type RecurringFactPage,
-  type RecurringFactSnapshot,
   RecurringFactsUnavailable,
 } from "../contract";
-import { effectiveTransactionRelation } from "./effective-transaction";
 
 const pageSize = 128;
 const backfillDays = 30;
@@ -31,36 +26,6 @@ const Row = Schema.Struct({
   occurred_at: Schema.String,
   created_at: Schema.String,
 });
-const snapshotRead = ({
-  db,
-  userId,
-}: Readonly<{ db: D1Database; userId: UserId }>): D1PreparedStatement =>
-  prepareConsentAction({
-    db,
-    subject: { _tag: "User", userId },
-    requirement: "active",
-    statement: {
-      sql: "SELECT fact_revision AS revision, first_captured_at_ms AS firstCapturedAt, time_zone AS timeZone FROM transaction_projection_state WHERE user_id = ? AND fact_revision IS NOT NULL",
-      params: [userId],
-    },
-  });
-export const findSnapshot = (
-  input: Readonly<{ db: D1Database; userId: UserId }>
-): Effect.Effect<Option.Option<RecurringFactSnapshot>, RecurringFactsUnavailable> =>
-  Effect.tryPromise({
-    try: () => snapshotRead(input).first(),
-    catch: () => new RecurringFactsUnavailable(),
-  }).pipe(
-    Effect.flatMap(
-      (raw): Effect.Effect<Option.Option<RecurringFactSnapshot>, RecurringFactsUnavailable> => {
-        if (raw === null) return Effect.succeedNone;
-        const value = Schema.decodeUnknownOption(Snapshot)(raw);
-        return Option.isSome(value)
-          ? Effect.succeed(value)
-          : Effect.fail(new RecurringFactsUnavailable());
-      }
-    )
-  );
 const decodeFact = (raw: unknown): Option.Option<RecurringTransactionFact> =>
   Option.flatMap(Schema.decodeUnknownOption(Row)(raw), (row) => {
     const created = Schema.decodeOption(UtcTimestamp)(row.created_at);
@@ -96,84 +61,6 @@ const decodePage = ({
     complete: rows.length < pageSize,
   });
 };
-export const readFacts = ({
-  db,
-  userId,
-  revision,
-  cursor,
-}: Readonly<{
-  db: D1Database;
-  userId: UserId;
-  revision: number;
-  cursor: BudgetContributionCursor;
-}>): Effect.Effect<Option.Option<RecurringFactPage>, RecurringFactsUnavailable> =>
-  Effect.gen(function* () {
-    const relation = effectiveTransactionRelation(userId);
-    const result = yield* Effect.tryPromise({
-      try: () =>
-        db.batch([
-          snapshotRead({ db, userId }),
-          ((): D1PreparedStatement => {
-            const protectedRead = protectConsentStatement({
-              subject: { _tag: "User", userId },
-              requirement: "active",
-              statement: {
-                sql: `WITH ${relation.sql} SELECT id, amount, currency, counterparty, occurred_at, created_at FROM effective_transaction WHERE user_id = ? AND direction = 'outflow' AND (occurred_at, id) > (?, ?) AND EXISTS (SELECT 1 FROM transaction_projection_state WHERE user_id = ? AND fact_revision = ?)`,
-                params: [
-                  ...relation.bindings,
-                  userId,
-                  cursor.occurredAt,
-                  cursor.transactionId,
-                  userId,
-                  revision,
-                ],
-              },
-            });
-            return db
-              .prepare(`${protectedRead.sql} ORDER BY occurred_at, id LIMIT ${pageSize}`)
-              .bind(...protectedRead.params);
-          })(),
-        ]),
-      catch: () => new RecurringFactsUnavailable(),
-    });
-    const snapshot = result[0]?.results[0];
-    const state = Schema.decodeUnknownOption(Snapshot)(snapshot);
-    if (Option.isNone(state) || state.value.revision !== revision) return Option.none();
-    const rows = result[1]?.results;
-    if (rows === undefined) return yield* new RecurringFactsUnavailable();
-    return Option.some(yield* decodePage({ rows, cursor }));
-  });
-export const revisionGuard = ({
-  db,
-  userId,
-  revision,
-}: Readonly<{ db: D1Database; userId: UserId; revision: number }>): D1PreparedStatement => {
-  const allowed = protectConsentStatement({
-    subject: { _tag: "User", userId },
-    requirement: "active",
-    statement: {
-      sql: "SELECT 1 FROM transaction_projection_state WHERE user_id = ? AND fact_revision = ?",
-      params: [userId, revision],
-    },
-  });
-  return db
-    .prepare(
-      `INSERT INTO sql_assertions (scope, accepted) VALUES ('transaction_fact', CASE WHEN EXISTS (${allowed.sql}) THEN 1 ELSE 0 END) ON CONFLICT(scope) DO UPDATE SET accepted = excluded.accepted`
-    )
-    .bind(...allowed.params);
-};
-export const revisionProjection = ({
-  db,
-  statement,
-}: Readonly<{
-  db: D1Database;
-  statement: OwnedStatement;
-}>): D1PreparedStatement =>
-  db
-    .prepare(
-      `WITH transaction_fact_revisions AS (SELECT user_id AS userId, fact_revision AS revision FROM transaction_projection_state WHERE fact_revision IS NOT NULL) ${statement.sql}`
-    )
-    .bind(...statement.params);
 
 export const localFactSnapshot = Effect.fn(function* (user: UserId) {
   const sql = yield* SqliteClient;

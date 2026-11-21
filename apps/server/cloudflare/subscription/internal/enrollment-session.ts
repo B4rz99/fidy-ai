@@ -10,10 +10,10 @@ import { IanaTimeZone } from "../../../src/core/_shared/context";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
 import type { sessionDigest } from "../../web-session/operations";
 import type { WompiTransportFactory } from "./wompi-runtime";
-import type { EnrollmentEnvironment, WompiBindings } from "../contract";
+import type { WompiBindings } from "../contract";
 
 export type NativeEnrollmentEnv = WompiBindings &
-  Pick<EnrollmentEnvironment, "WOMPI_DAVIPLATA_ACTIVATED"> & {
+  Partial<{ WOMPI_DAVIPLATA_ACTIVATED: string }> & {
     BROWSER_ORIGIN: string;
     PRICING: DurableObjectNamespace;
   };

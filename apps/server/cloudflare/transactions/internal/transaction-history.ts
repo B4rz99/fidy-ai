@@ -1,60 +1,36 @@
 import { SourceAttestationKind } from "../../../src/core/source-attestation/contract";
-import type { HostedCanonicalCaller } from "../../canonical-work/contract";
 import {
   TransactionInspection,
   TransactionListResponse,
 } from "../../../src/shell/transactions/contract";
-import {
-  prepareAuditQueryCall,
-  prepareAuthorizedAuditCall,
-  recordCanonicalPATWork,
-  recordOAuthCall,
-} from "../../../src/shell/audit/operations";
 import { nextTransactionPage } from "../../../src/shell/transactions/operations";
-import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
 import {
   Counterparty,
   Direction,
   Transaction,
   TransactionId,
-  TransactionPresentation,
+  type TransactionPresentation,
   TransactionQueryValues,
   TransactionSearchQuery,
   maximumTransactionPageSize,
 } from "../../../src/core/transactions/contract";
 import { Currency, encodeMoneyAmount } from "../../../src/core/_shared/money";
 import {
-  effectiveHistoryPage,
+  type effectiveHistoryPage,
   effectiveTransactionRelation,
   selectedEffectiveHistoryPage,
 } from "./effective-transaction";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { PrivacyTransactionPage } from "../../../src/shell/processing-consent/contract";
-import {
-  freshSessionConditions,
-  webSessionCredentialAuthority,
-} from "../../../src/shell/web-session/operations";
-import type { PrivacyTransactionsRead } from "../contract";
-import { readPrivacyPreferences } from "../../identity/operations";
-import { listCategories } from "../../categories/operations";
-import type { AuthorizedPAT } from "../../tokens/contract";
-import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
+import type { PrivacyTransactionRequest } from "../../../src/shell/processing-consent/contract";
 import {
   type CanonicalCaller,
   type QueryAuthority,
-  type TransactionSubject,
-  callerAuthority,
-  isHostedCaller,
-  isOAuthCaller,
-  isPATCaller,
   missingTransactionMessage,
   transactionNoStore as noStore,
-  refusedCredentialResponse,
-  refusedPATWork,
   transactionFailure,
   transactionUnavailable as unavailable,
-  transactionId as uuid,
 } from "../../canonical-work/operations";
 
 export const TransactionOutput = Schema.toCodecJson(Transaction);
@@ -104,21 +80,15 @@ const failure = (
 ): Response => transactionFailure({ code, status, message: missingTransactionMessage });
 const HTTP_INVALID = 400;
 const HTTP_NOT_FOUND = 404;
-const HTTP_UNAUTHENTICATED = 401;
 
 export const invalid = (): Response => failure("validation_failed", HTTP_INVALID);
 const notFound = (): Response => failure("not_found", HTTP_NOT_FOUND);
-
-const noSession = (): Response => failure("unauthenticated", HTTP_UNAUTHENTICATED);
-const failedAudit = (): Response => unavailable();
 type Subject = CanonicalCaller;
 type Selection = Readonly<{ request: Request; subject: Subject }> &
   (
     | Readonly<{ search: true; id: Option.Option<never> }>
     | Readonly<{ search: false; id: Option.Option<string> }>
   );
-
-type BrowserSelection = Selection & Readonly<{ subject: TransactionSubject }>;
 
 const decodeCursor = (cursor: string): Option.Option<readonly [string, string, string]> => {
   const pieces = Schema.decodeUnknownOption(
@@ -153,18 +123,6 @@ const validParameters = (params: URLSearchParams, search: boolean, hasId: boolea
   new Set(params.keys()).size === params.size &&
   [...params.keys()].every((key) => filters.has(key) || (search && key === "q"));
 
-const historyOperation = (
-  selection: Pick<Selection, "id" | "search">
-):
-  | "transactions.getTransaction"
-  | "transactions.listTransactions"
-  | "transactions.searchTransactions" => {
-  if (Option.isSome(selection.id)) return "transactions.getTransaction";
-  return selection.search === true
-    ? "transactions.searchTransactions"
-    : "transactions.listTransactions";
-};
-
 const queryValues = (
   params: URLSearchParams,
   search: boolean
@@ -197,12 +155,6 @@ export const parseQuery = (
 };
 
 type AuthorityCondition = Pick<QueryAuthority, "table" | "predicate" | "bindings">;
-type HistoryRow = Readonly<{
-  db: D1Database;
-  userId: string;
-  query: typeof Query.Type;
-  authority: AuthorityCondition;
-}>;
 
 const listFilters = ({
   userId,
@@ -210,7 +162,7 @@ const listFilters = ({
   authority,
 }: Readonly<{
   userId: Option.Option<string>;
-  query: HistoryRow["query"];
+  query: typeof Query.Type;
   authority: Option.Option<AuthorityCondition>;
 }>): Omit<Parameters<typeof effectiveHistoryPage>[0], "userId"> => {
   const conditions = [
@@ -265,21 +217,15 @@ const listFilters = ({
   };
 };
 
-const listStatement = ({ db, userId, query, authority }: HistoryRow): D1PreparedStatement => {
-  const page = effectiveHistoryPage({
-    userId,
-    ...listFilters({ userId: Option.some(userId), query, authority: Option.some(authority) }),
-  });
-  return db.prepare(page.sql).bind(...page.bindings);
-};
-
 export const selectedHistoryPage = ({
   userSelection,
   query,
   authority,
-}: Omit<HistoryRow, "userId" | "db"> & Readonly<{ userSelection: OwnedStatement }>): ReturnType<
-  typeof selectedEffectiveHistoryPage
-> =>
+}: Readonly<{
+  query: typeof Query.Type;
+  authority: AuthorityCondition;
+  userSelection: OwnedStatement;
+}>): ReturnType<typeof selectedEffectiveHistoryPage> =>
   selectedEffectiveHistoryPage({
     taxonomyRevision: true,
     userSelection,
@@ -291,7 +237,7 @@ export const localHistoryPage = ({
   query,
 }: {
   user: string;
-  query: HistoryRow["query"];
+  query: typeof Query.Type;
 }): ReturnType<typeof selectedEffectiveHistoryPage> =>
   selectedEffectiveHistoryPage({
     taxonomyRevision: true,
@@ -299,7 +245,6 @@ export const localHistoryPage = ({
     ...listFilters({ userId: Option.some(user), query, authority: Option.none() }),
   });
 type PresentationSelection = Readonly<{
-  db: D1Database;
   userId: string;
   id: string;
   authority: Option.Option<AuthorityCondition>;
@@ -335,7 +280,7 @@ export const presentationQuery = ({
   userId,
   id,
   authority,
-}: Omit<PresentationSelection, "db">): Readonly<{
+}: PresentationSelection): Readonly<{
   sql: string;
   bindings: ReadonlyArray<string | number | Uint8Array>;
 }> => {
@@ -391,14 +336,6 @@ export const presentationQuery = ({
     ],
   };
 };
-
-const presentationStatement = ({
-  db,
-  ...selection
-}: PresentationSelection): D1PreparedStatement => {
-  const query = presentationQuery(selection);
-  return db.prepare(query.sql).bind(...query.bindings);
-};
 const storedFields = (row: typeof Row.Type): typeof Transaction.Encoded => ({
   id: row.id,
   money: { amount: row.amount, currency: row.currency },
@@ -434,68 +371,7 @@ const presentationMetadata = (row: typeof PresentationRow.Type): PresentationMet
   return { kind: "suppressed-member", requestedId: row.requested_id };
 };
 
-const decodePresentationRow = (raw: unknown): Option.Option<TransactionPresentation> => {
-  const row = Schema.decodeUnknownOption(PresentationRow)(raw);
-  if (Option.isNone(row)) return Option.none();
-  return Schema.decodeOption(TransactionPresentation)({
-    ...storedFields(row.value),
-    presentation: presentationMetadata(row.value),
-  });
-};
-
 export type StoredTransaction = typeof TransactionOutput.Type;
-
-export const findTransaction = ({
-  db,
-  userId,
-  id,
-}: Readonly<{ db: D1Database; userId: string; id: string }>): Promise<
-  Option.Option<StoredTransaction>
-> =>
-  db
-    .prepare(`SELECT id, amount, currency, direction, counterparty, category_id, notes, strftime('%Y-%m-%dT%H:%M:%fZ',occurred_at_ms/1000.0,'unixepoch') AS occurred_at, strftime('%Y-%m-%dT%H:%M:%fZ',created_at_ms/1000.0,'unixepoch') AS created_at, revision
-      FROM transactions WHERE user_id = ? AND id = ? AND deleted_at_ms IS NULL`)
-    .bind(userId, id)
-    .first()
-    .then(decodeTransactionRow);
-
-export const findTransactionPair = ({
-  db,
-  userId,
-  ids,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-  ids: readonly [string, string];
-}>): Promise<Option.Option<readonly [StoredTransaction, StoredTransaction]>> =>
-  db
-    .prepare(`SELECT id, amount, currency, direction, counterparty, category_id, notes,
-      strftime('%Y-%m-%dT%H:%M:%fZ',occurred_at_ms/1000.0,'unixepoch') AS occurred_at,
-      strftime('%Y-%m-%dT%H:%M:%fZ',created_at_ms/1000.0,'unixepoch') AS created_at, revision
-      FROM transactions WHERE user_id = ? AND id IN (?, ?) AND deleted_at_ms IS NULL`)
-    .bind(userId, ...ids)
-    .all()
-    .then((rows) => {
-      const decoded = Option.all(rows.results.map(decodeTransactionRow));
-      return Option.flatMap(decoded, (records) => {
-        const first = records.find((record) => record.id === ids[0]);
-        const second = records.find((record) => record.id === ids[1]);
-        return first === undefined || second === undefined
-          ? Option.none()
-          : Option.some([first, second] as const);
-      });
-    });
-
-export const findTransactionPresentation = ({
-  db,
-  userId,
-  id,
-}: Readonly<{ db: D1Database; userId: string; id: string }>): Promise<
-  Option.Option<TransactionPresentation>
-> =>
-  presentationStatement({ db, userId, id, authority: Option.none() })
-    .first()
-    .then(decodePresentationRow);
 
 const InspectionOriginal = Schema.Struct({
   ...Row.fields,
@@ -616,84 +492,8 @@ export const presentHistory = ({
       );
 };
 
-const invalidQueryAudit = (
-  db: D1Database,
-  selection: BrowserSelection,
-  current: number
-): Promise<Response> => {
-  const { subject } = selection;
-  const invalidGet = Option.isSome(selection.id);
-  const authority = liveWebSessionAuthority({ subject, current });
-  return prepareAuthorizedAuditCall({
-    db,
-    authority,
-    id: uuid(),
-    operation: historyOperation(selection),
-    outcome: invalidGet ? "not_found" : "validation_failed",
-    current,
-    afterOwnerWrite: false,
-  })
-    .run()
-    .then((audit) => {
-      if (audit.meta.changes !== 1) return noSession();
-      return invalidGet ? notFound() : invalid();
-    })
-    .catch(failedAudit);
-};
-
-const historyStatement = (
-  input: Readonly<{
-    db: D1Database;
-    selection: Selection;
-    query: typeof Query.Type;
-    authority: AuthorityCondition;
-  }>
-): D1PreparedStatement => {
-  const { db, selection, query, authority } = input;
-  const userId = selection.subject.userId;
-  return Option.isSome(selection.id)
-    ? presentationStatement({
-        db,
-        userId,
-        id: selection.id.value,
-        authority: Option.some(authority),
-      })
-    : listStatement({ db, userId, query, authority });
-};
-
-const browserHistoryStatements = (
-  db: D1Database,
-  input: Readonly<{ selection: BrowserSelection; query: typeof Query.Type; current: number }>
-): Array<D1PreparedStatement> => {
-  const { selection, query, current } = input;
-  const { subject } = selection;
-  const authority = liveWebSessionAuthority({ subject, current });
-  return [
-    historyStatement({
-      db,
-      selection,
-      query,
-      authority,
-    }),
-    prepareAuditQueryCall({
-      db,
-      authority,
-      id: uuid(),
-      operation: historyOperation(selection),
-      current,
-      missingWhen: Option.match(selection.id, {
-        onNone: () => ({ sql: "SELECT 1 WHERE 0", params: [] }),
-        onSome: (id) => ({
-          sql: "SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM transactions WHERE user_id = ? AND id = ? AND deleted_at_ms IS NULL)",
-          params: [subject.userId, id],
-        }),
-      }),
-    }),
-  ];
-};
-
 export const privacyQuery = Effect.fnUntraced(function* (
-  request: PrivacyTransactionsRead["request"]
+  request: typeof PrivacyTransactionRequest.Type
 ) {
   return yield* Schema.decodeEffect(Query)(
     request.cursor === null
@@ -731,291 +531,3 @@ export const presentPrivacyPage = ({
     });
     return Response.json(page, { headers: noStore });
   }).pipe(Effect.orElseSucceed(unavailable));
-
-export const readPrivacyTransactions = ({
-  db,
-  subject,
-  request,
-}: PrivacyTransactionsRead): Effect.Effect<Response> =>
-  Effect.gen(function* () {
-    const presentation = yield* readPrivacyPreferences({ db, userId: subject.userId });
-    const categories = yield* listCategories({ db });
-    const current = DateTime.toEpochMillis(yield* DateTime.now);
-    const base = webSessionCredentialAuthority({ subject, current });
-    const fresh = freshSessionConditions({
-      session: { id: subject.id, user_id: subject.userId },
-      current,
-    });
-    const authority = {
-      ...base,
-      predicate: `${base.predicate} AND ${fresh.sql}`,
-      bindings: [...base.bindings, ...fresh.params],
-    };
-    const query = yield* privacyQuery(request);
-    const reference = uuid();
-    const [rows, audit] = yield* Effect.uninterruptible(
-      Effect.tryPromise(() =>
-        db.batch([
-          listStatement({ db, userId: subject.userId, query, authority }),
-          prepareAuthorizedAuditCall({
-            db,
-            authority,
-            id: reference,
-            current,
-            operation: "privacy.transactions",
-            outcome: "accepted",
-            afterOwnerWrite: false,
-          }),
-        ])
-      )
-    );
-    if (audit?.meta.changes !== 1) return noSession();
-    if (rows === undefined) return unavailable();
-    return yield* presentPrivacyPage({
-      rows: rows.results,
-      reference,
-      display: { presentation, categories },
-    });
-  }).pipe(Effect.orElseSucceed(unavailable));
-
-type PATSelection = Selection & Readonly<{ subject: AuthorizedPAT }>;
-
-const patHistoryStatements = (
-  db: D1Database,
-  input: Readonly<{
-    selection: PATSelection;
-    query: Option.Option<typeof Query.Type>;
-    current: number;
-  }>
-): Array<D1PreparedStatement> => {
-  const { selection, query, current } = input;
-  const { subject } = selection;
-  const authority = livePATAuthority({ subject, current });
-  const patUseStatement = recordLivePATUse({ subject, current });
-  const auditStatement = recordCanonicalPATWork({
-    authority: livePATAuthority({ subject, current }),
-    input: {
-      id: uuid(),
-      operation: historyOperation(selection),
-      outcome: Option.isSome(query) ? "accepted" : "rejected",
-      afterOwnerWrite: false,
-      current,
-    },
-  });
-  return [
-    db.prepare(patUseStatement.sql).bind(...patUseStatement.params),
-    ...(Option.isSome(query)
-      ? [historyStatement({ db, selection, query: query.value, authority })]
-      : []),
-    db.prepare(auditStatement.sql).bind(...auditStatement.params),
-  ];
-};
-
-const presentPATHistory = (
-  input: Readonly<{
-    db: D1Database;
-    results: ReadonlyArray<D1Result>;
-    selection: PATSelection;
-    query: Option.Option<typeof Query.Type>;
-  }>
-): Promise<Response> => {
-  const { db, results, selection, query } = input;
-  if (results[0]?.meta.changes !== 1 || results.at(-1)?.meta.changes !== 1) {
-    return refusedPATWork({ db, userId: selection.subject.userId });
-  }
-  if (Option.isNone(query)) {
-    return Promise.resolve(Option.isSome(selection.id) ? notFound() : invalid());
-  }
-  const rows = results[1];
-  return Promise.resolve(
-    rows === undefined ? unavailable() : presentHistory({ rows, selection, query: query.value })
-  );
-};
-
-const readOAuthHistory = Effect.fn(function* ({
-  db,
-  selection,
-  query,
-  current,
-}: Readonly<{
-  db: D1Database;
-  selection: Selection;
-  query: Option.Option<typeof Query.Type>;
-  current: number;
-}>) {
-  if (!isOAuthCaller(selection.subject)) return unavailable();
-  const authority = callerAuthority({ subject: selection.subject, current });
-  const results = yield* Effect.uninterruptible(
-    Effect.tryPromise(() => {
-      const auditStatement = recordOAuthCall({
-        authority,
-        id: uuid(),
-        current,
-        operation: historyOperation(selection),
-        outcome: Option.isSome(query) ? "accepted" : "rejected",
-      });
-      return db.batch([
-        ...(Option.isSome(query)
-          ? [historyStatement({ db, selection, query: query.value, authority })]
-          : []),
-        db.prepare(auditStatement.sql).bind(...auditStatement.params),
-      ]);
-    })
-  );
-  if (results.at(-1)?.meta.changes !== 1) {
-    return yield* refusedCredentialResponse({ db, subject: selection.subject });
-  }
-  if (Option.isNone(query)) return invalid();
-  const rows = results[0];
-  return rows === undefined
-    ? unavailable()
-    : presentHistory({ rows, selection, query: query.value });
-});
-
-const readAuthorizedHistory = (
-  db: D1Database,
-  input: Readonly<{
-    selection: Selection;
-    query: Option.Option<typeof Query.Type>;
-    current: number;
-  }>
-): Promise<Response> => {
-  const { selection, query, current } = input;
-  const { subject } = selection;
-  if (isHostedCaller(subject)) return Promise.resolve(unavailable());
-  if (isOAuthCaller(subject)) return Promise.resolve(unavailable());
-  if (isPATCaller(subject)) {
-    const patSelection = { ...selection, subject };
-    return db
-      .batch(patHistoryStatements(db, { selection: patSelection, query, current }))
-      .then((results) => presentPATHistory({ db, results, selection: patSelection, query }));
-  }
-  if (Option.isNone(query)) return Promise.resolve(invalid());
-  return db
-    .batch(
-      browserHistoryStatements(db, {
-        selection: { ...selection, subject },
-        query: query.value,
-        current,
-      })
-    )
-    .then(([rows, audit]) => {
-      if (audit?.meta.changes !== 1) return noSession();
-      return rows === undefined
-        ? unavailable()
-        : presentHistory({ rows, selection, query: query.value });
-    });
-};
-
-const readHostedHistory = ({
-  db,
-  selection,
-  query,
-  current,
-}: Readonly<{
-  db: D1Database;
-  selection: Selection & { subject: HostedCanonicalCaller };
-  query: ReturnType<typeof parseQuery>;
-  current: number;
-}>): Effect.Effect<Response> =>
-  Effect.gen(function* () {
-    const { subject } = selection;
-    const authority = subject.authority;
-    const results = yield* Effect.tryPromise(() =>
-      db.batch([
-        ...(Option.isSome(query)
-          ? [historyStatement({ db, selection, query: query.value, authority })]
-          : []),
-        prepareAuthorizedAuditCall({
-          db,
-          authority,
-          id: uuid(),
-          current,
-          operation: historyOperation(selection),
-          outcome: Option.isSome(query) ? "success" : "validation_failed",
-          afterOwnerWrite: false,
-        }),
-      ])
-    ).pipe(Effect.uninterruptible);
-    if (results.at(-1)?.meta.changes !== 1) return noSession();
-    if (Option.isNone(query)) return invalid();
-    const rows = results[0];
-    return rows === undefined
-      ? unavailable()
-      : presentHistory({ rows, selection, query: query.value });
-  }).pipe(Effect.orElseSucceed(() => failedAudit()));
-
-export const browseTransactions = ({
-  db,
-  selection,
-}: {
-  db: D1Database;
-  selection: Selection;
-}): Effect.Effect<Response> =>
-  Effect.gen(function* () {
-    const query = parseQuery(selection);
-    const current = DateTime.toEpochMillis(yield* DateTime.now);
-    const { subject } = selection;
-    if (isHostedCaller(subject)) {
-      return yield* readHostedHistory({ db, selection: { ...selection, subject }, query, current });
-    }
-    if (Option.isNone(query) && !isPATCaller(subject) && !isOAuthCaller(subject)) {
-      return yield* Effect.tryPromise(() =>
-        invalidQueryAudit(db, { ...selection, subject }, current)
-      );
-    }
-    if (isOAuthCaller(subject)) return yield* readOAuthHistory({ db, selection, query, current });
-    return yield* Effect.tryPromise(() => readAuthorizedHistory(db, { selection, query, current }));
-  }).pipe(Effect.orElseSucceed(() => failedAudit()));
-
-export const prepareBrowserTransactionPage = (
-  input: Readonly<{
-    db: D1Database;
-    request: Request;
-    subject: BrowserSelection["subject"];
-    current: number;
-  }>
-): Option.Option<
-  Readonly<{
-    statements: ReadonlyArray<D1PreparedStatement>;
-    decode: (
-      results: ReadonlyArray<D1Result>
-    ) => Option.Option<typeof TransactionListResponse.Type>;
-  }>
-> => {
-  const selection: BrowserSelection = {
-    request: input.request,
-    subject: input.subject,
-    search: false,
-    id: Option.none(),
-  };
-  const query = parseQuery(selection);
-  return Option.map(query, (query) => ({
-    statements: browserHistoryStatements(input.db, { selection, query, current: input.current }),
-    decode: (
-      results: ReadonlyArray<D1Result>
-    ): Option.Option<typeof TransactionListResponse.Type> =>
-      results[1]?.meta.changes === 1 && results[0] !== undefined
-        ? decodedHistoryPage(results[0], selection, query)
-        : Option.none(),
-  }));
-};
-
-export const readBrowserTransactionPage = (
-  input: Readonly<{
-    db: D1Database;
-    request: Request;
-    subject: BrowserSelection["subject"];
-  }>
-): Effect.Effect<Option.Option<typeof TransactionListResponse.Type>> =>
-  Effect.gen(function* () {
-    const prepared = prepareBrowserTransactionPage({
-      ...input,
-      current: DateTime.toEpochMillis(yield* DateTime.now),
-    });
-    if (Option.isNone(prepared)) return Option.none();
-    const results = yield* Effect.tryPromise(() =>
-      input.db.batch([...prepared.value.statements])
-    ).pipe(Effect.uninterruptible);
-    return prepared.value.decode(results);
-  }).pipe(Effect.orElseSucceed(() => Option.none()));

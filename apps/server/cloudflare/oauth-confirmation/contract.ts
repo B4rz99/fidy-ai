@@ -5,21 +5,8 @@ import {
 } from "../../src/core/canonical-operations/contract";
 
 import { maximumAtomicBatchCalls } from "../../src/shell/operations/contract";
-import type { OAuthConfirmationAttempt } from "../../src/shell/mcp/contract";
 
 const maximumReviewCharacters = 65536;
-
-export type OAuthConfirmationWork = Readonly<{
-  operation: CanonicalOperationId;
-  input: Schema.Json;
-  attempt: OAuthConfirmationAttempt;
-}>;
-
-export type OAuthMutationReview = Readonly<{
-  effect: string;
-  revision: string;
-  guards: ReadonlyArray<D1PreparedStatement>;
-}>;
 
 export const OAuthNativeReview = Schema.Struct({
   reference: Schema.String.check(Schema.isUUID()),

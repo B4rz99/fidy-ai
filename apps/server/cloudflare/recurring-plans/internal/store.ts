@@ -1,12 +1,4 @@
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import type { QueryCaller } from "../../canonical-work/contract";
-import { callerAuthority } from "../../canonical-work/operations";
-import {
-  prepareSelectedUserDocument,
-  prepareUserDocumentWrite,
-  readAuthorizedUserDocumentSnapshot,
-  readUserDocumentSnapshot,
-} from "../../user-documents/operations";
 import { type DateTime, Effect, Option, Schema } from "effect";
 import {
   RecurringDocument,
@@ -15,8 +7,6 @@ import {
   type RecurringSchedule,
 } from "../../../src/core/recurring-plans/contract";
 import { RecurringPlanningUnavailable } from "../contract";
-import { type CanonicalPreparationWork } from "../../canonical-operations/contract";
-import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 
 import { displayDocument } from "./display";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
@@ -139,115 +129,6 @@ const decodeDocument = (
     Effect.mapError(() => new RecurringPlanningUnavailable())
   );
 
-export const readDocument = ({
-  db,
-  userId,
-}: Readonly<{ db: D1Database; userId: string }>): Effect.Effect<
-  RecurringDocument,
-  RecurringPlanningUnavailable
-> =>
-  readUserDocumentSnapshot({
-    db,
-    userId,
-    kind: "recurring-plan",
-    related: selections.map((sql) => db.prepare(sql).bind(userId)),
-  }).pipe(
-    Effect.flatMap(decodeDocument),
-    Effect.mapError(() => new RecurringPlanningUnavailable())
-  );
-
-export const readAuthorizedDocument = ({
-  db,
-  subject,
-  current,
-}: Readonly<{
-  db: D1Database;
-  subject: QueryCaller;
-  current: number;
-}>): Effect.Effect<Option.Option<RecurringDocument>, RecurringPlanningUnavailable> =>
-  Effect.gen(function* () {
-    const authority = callerAuthority({ subject, current });
-    const related = selections.map((sql) =>
-      db
-        .prepare(
-          sql.replace(
-            "WHERE user_id=?",
-            `WHERE user_id=? AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`
-          )
-        )
-        .bind(subject.userId, ...authority.bindings)
-    );
-    const snapshot = yield* readAuthorizedUserDocumentSnapshot({
-      db,
-      subject,
-      current,
-      kind: "recurring-plan",
-      related,
-    });
-    return snapshot.live ? Option.some(yield* decodeDocument(snapshot)) : Option.none();
-  }).pipe(Effect.mapError(() => new RecurringPlanningUnavailable()));
-
-export const prepareSelectedDocument = ({
-  db,
-  users,
-}: Readonly<{ db: D1Database; users: OwnedStatement }>): Readonly<{
-  statements: ReadonlyArray<D1PreparedStatement>;
-  decode: (
-    rows: ReadonlyArray<D1Result>
-  ) => Effect.Effect<RecurringDocument, RecurringPlanningUnavailable>;
-}> => {
-  const selected = preparePlanningRows({ db, users, revisions: Option.none() });
-  return {
-    statements: selected.statements,
-    decode: (rows) =>
-      selected.decode(rows).pipe(
-        Effect.flatMap((value) => Schema.decodeUnknownEffect(JsonDocument)(planningValue(value))),
-        Effect.mapError(() => new RecurringPlanningUnavailable())
-      ),
-  };
-};
-
-export const preparePlanningRows = ({
-  db,
-  users,
-  revisions,
-}: Readonly<{
-  db: D1Database;
-  users: OwnedStatement;
-  revisions: Option.Option<OwnedStatement>;
-}>): Readonly<{
-  statements: ReadonlyArray<D1PreparedStatement>;
-  decode: (
-    rows: ReadonlyArray<D1Result>
-  ) => Effect.Effect<PlanningRows, RecurringPlanningUnavailable>;
-}> => {
-  const root = prepareSelectedUserDocument({ db, users, kind: "recurring-plan" });
-  return {
-    statements: [
-      root.statement,
-      ...selections.map((sql, index) =>
-        index === 1 && Option.isSome(revisions)
-          ? db.prepare(revisions.value.sql).bind(...revisions.value.params)
-          : db
-              .prepare(
-                sql.replace("WHERE user_id=?", `WHERE user_id=(SELECT userId FROM (${users.sql}))`)
-              )
-              .bind(...users.params)
-      ),
-    ],
-    decode: (rows) =>
-      Effect.gen(function* () {
-        if (rows.length !== selections.length + 1 || rows[0] === undefined) {
-          return yield* new RecurringPlanningUnavailable();
-        }
-        return yield* decodeRows({
-          document: yield* root.decode(rows[0].results),
-          related: rows.slice(1),
-        });
-      }).pipe(Effect.mapError(() => new RecurringPlanningUnavailable())),
-  };
-};
-
 export const decodeReadProjection = ({
   rows,
   now,
@@ -277,19 +158,6 @@ export const decodeReadProjection = ({
     });
     return { editing: displayDocument({ document: editing, compact: true, now }), schedule };
   }).pipe(Effect.mapError(() => new RecurringPlanningUnavailable()));
-
-export const planningUsers = (users: OwnedStatement): OwnedStatement => ({
-  sql: `SELECT caller.userId FROM (${users.sql}) caller WHERE EXISTS
-    (SELECT 1 FROM recurring_plans WHERE user_id=caller.userId)`,
-  params: users.params,
-});
-
-export const planningReferences = (users: OwnedStatement): OwnedStatement => ({
-  sql: `SELECT transaction_id AS transactionId,MIN(position) AS position
-    FROM recurring_plan_fulfillments WHERE user_id = (SELECT userId FROM (${users.sql}))
-    AND transaction_id IS NOT NULL GROUP BY transaction_id ORDER BY MIN(position) LIMIT 4097`,
-  params: users.params,
-});
 
 type EncodedDocument = typeof RecurringDocument.Encoded;
 type StoredRow = Readonly<{ key: string; encoded: string }>;
@@ -405,43 +273,6 @@ const collectionWrites = (
   }
   return statements;
 };
-
-export const writeDocument = ({
-  work,
-  base,
-  document,
-}: Readonly<{
-  work: CanonicalPreparationWork;
-  base: RecurringDocument;
-  document: RecurringDocument;
-}>): Effect.Effect<ReadonlyArray<D1PreparedStatement>, RecurringPlanningUnavailable> =>
-  Effect.gen(function* () {
-    const before = yield* Schema.encodeEffect(RecurringDocument)(base);
-    const after = yield* Schema.encodeEffect(RecurringDocument)(document);
-    const encoded = yield* Schema.encodeEffect(RootJson)(document);
-    return yield* Effect.try({
-      try: () => {
-        const statements: D1PreparedStatement[] = [
-          prepareUserDocumentWrite({
-            work,
-            kind: "recurring-plan",
-            encoded,
-            revision: document.revision,
-          }),
-          prepareChangedRowAssertion({ db: work.db, scope: "recurring_plan" }),
-        ];
-        for (const collection of collections) {
-          statements.push(
-            ...collectionWrites(work.subject.userId, collection, { before, after }).map((entry) =>
-              work.db.prepare(entry.sql).bind(...entry.params)
-            )
-          );
-        }
-        return statements;
-      },
-      catch: () => new RecurringPlanningUnavailable(),
-    });
-  }).pipe(Effect.mapError(() => new RecurringPlanningUnavailable()));
 
 const LocalRoot = Schema.Struct({ encoded: Schema.String, revision: Schema.Int });
 const localStoredSelection = Effect.fn(function* (

@@ -5,10 +5,7 @@ import { sessionOwnershipQuery } from "~/shell/web-session/operations";
 import type {
   AuditAuthority,
   AuditCredentialOperation,
-  AuditQueryCall,
   AuthorizedAuditCall,
-  CanonicalAdmissionRefusal,
-  CanonicalReplayAccess,
   OwnerAuditCall,
 } from "~/shell/audit/contract";
 
@@ -60,48 +57,6 @@ const callerOwnership = (input: OwnerAuditCall): OwnedStatement => {
 };
 const authorityCaller = (authority: AuditAuthority): boolean => authority.table === "pats";
 
-const oauthAdmissionStatement = ({
-  authority,
-  id,
-  operation,
-  current,
-  outcome,
-}: CanonicalAdmissionRefusal &
-  Readonly<{
-    authority: AuditAuthority & { table: "oauth_credentials" };
-    outcome: "accepted" | "rejected";
-  }>): OwnedStatement => ({
-  sql: `INSERT INTO audit_entries(record_type,id,user_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms) SELECT 'credential_call',?,?,?,?,?,?,? FROM ${authority.table} WHERE ${authority.predicate}`,
-  params: [
-    id,
-    authority.attribution.userId,
-    authority.attribution.connectionId,
-    authority.attribution.credentialId,
-    operation,
-    outcome,
-    current,
-    ...authority.bindings,
-  ],
-});
-
-const authorityCredentialColumn = (authority: AuditAuthority): string => {
-  if (authority.table === "hosted_turns") return "hosted_turn_id";
-  return authority.table === "pats" ? "pat_id" : "session_id";
-};
-
-export const admissionRefusalStatement = ({
-  authority,
-  id,
-  operation,
-  current,
-}: CanonicalAdmissionRefusal): OwnedStatement =>
-  authority.table === "oauth_credentials"
-    ? oauthAdmissionStatement({ authority, id, operation, current, outcome: "rejected" })
-    : {
-        sql: `INSERT INTO audit_entries(record_type,id,user_id,${authorityCredentialColumn(authority)},operation,outcome,occurred_at_ms) SELECT 'credential_call',?,user_id,id,?,'rejected',? FROM ${authority.table} WHERE ${authority.predicate}`,
-        params: [id, operation, current, ...authority.bindings],
-      };
-
 export const ownerCallStatement = (input: OwnerAuditCall): OwnedStatement => {
   const { operation, when, caller } = input;
   const kind = recordKind(operation, caller._tag === "PAT");
@@ -133,89 +88,6 @@ export const ownerCallStatement = (input: OwnerAuditCall): OwnedStatement => {
     ],
   };
 };
-
-export const queryCallStatement = ({ missingWhen, ...input }: AuditQueryCall): OwnedStatement => {
-  const { authority, id, operation, current } = input;
-  if (authority.table === "oauth_credentials") {
-    return {
-      sql: `INSERT INTO audit_entries(record_type,id,user_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms) SELECT 'credential_call',?,?,?,?,?,CASE WHEN EXISTS (${missingWhen.sql}) THEN 'rejected' ELSE 'accepted' END,?
-        FROM ${authority.table} WHERE ${authority.predicate}`,
-      params: [
-        id,
-        authority.attribution.userId,
-        authority.attribution.connectionId,
-        authority.attribution.credentialId,
-        operation,
-        ...missingWhen.params,
-        current,
-        ...authority.bindings,
-      ],
-    };
-  }
-  if (authority.table === "hosted_turns") {
-    return {
-      sql: `INSERT INTO audit_entries(record_type,id,user_id,hosted_turn_id,operation,outcome,occurred_at_ms) SELECT 'credential_call',?,user_id,id,?,CASE WHEN EXISTS (${missingWhen.sql}) THEN 'rejected' ELSE 'accepted' END,? FROM hosted_turns WHERE ${authority.predicate}`,
-      params: [id, operation, ...missingWhen.params, current, ...authority.bindings],
-    };
-  }
-  const pat = authorityCaller(authority);
-  const kind = recordKind(operation, pat);
-  const credential = credentialColumn(kind, pat);
-  const columns = [
-    "record_type",
-    "id",
-    "user_id",
-    ...credential,
-    "operation",
-    "outcome",
-    "occurred_at_ms",
-  ];
-  const values = [
-    "?",
-    "?",
-    "user_id",
-    ...credential.map(() => "id"),
-    "?",
-    `CASE WHEN EXISTS (${missingWhen.sql}) THEN '${kind === "credential_call" ? "rejected" : "not_found"}' ELSE '${kind === "credential_call" ? "accepted" : "success"}' END`,
-    "?",
-  ];
-  return {
-    sql: `INSERT INTO audit_entries (${columns.join(", ")}) SELECT ${values.join(", ")} FROM ${authority.table} WHERE ${authority.predicate}`,
-    params: [kind, id, operation, ...missingWhen.params, current, ...authority.bindings],
-  };
-};
-
-export const replayAccessStatement = ({
-  authority,
-  id,
-  operation,
-  current,
-  outcome,
-  retainedResponseProof,
-}: CanonicalReplayAccess): OwnedStatement =>
-  authority.table === "oauth_credentials"
-    ? oauthAdmissionStatement({
-        authority: {
-          ...authority,
-          predicate: `${authority.predicate} AND EXISTS (${retainedResponseProof.sql})`,
-          bindings: [...authority.bindings, ...retainedResponseProof.params],
-        },
-        id,
-        operation,
-        current,
-        outcome,
-      })
-    : {
-        sql: `INSERT INTO audit_entries(record_type,id,user_id,pat_id,operation,outcome,occurred_at_ms) SELECT 'credential_call',?,user_id,id,?,?,? FROM pats WHERE ${authority.predicate} AND EXISTS (${retainedResponseProof.sql})`,
-        params: [
-          id,
-          operation,
-          outcome,
-          current,
-          ...authority.bindings,
-          ...retainedResponseProof.params,
-        ],
-      };
 
 const oauthAuthorizedCallStatement = (
   input: Omit<AuthorizedAuditCall, "authority"> & {

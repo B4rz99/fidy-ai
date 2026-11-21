@@ -1,4 +1,4 @@
-import { type Cause, Clock, DateTime, Effect, Option, Schema } from "effect";
+import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { Money } from "../../../src/core/_shared/money";
 import {
   CorrectionTreatment,
@@ -8,14 +8,8 @@ import {
 } from "../../../src/core/subscription/contract";
 import { refundMinorUnits } from "../../../src/core/subscription/operations";
 import { newId } from "../../secret-material/operations";
-import {
-  type RefundAuthority,
-  type RefundReadCall,
-  type RefundStartCall,
-  RefundSupportAdmission,
-} from "../contract";
+import { type RefundAuthority, RefundSupportAdmission } from "../contract";
 
-type NativeRefundError = RefundStartFailure | Schema.SchemaError | Cause.UnknownError;
 export const RefundRow = Schema.Struct({
   id: Schema.String,
   intent_json: Schema.String,
@@ -107,75 +101,11 @@ export const view = (
       ...progress,
     });
   });
-const decodeRow = (
-  row: unknown
-): Effect.Effect<Option.Option<typeof RefundRow.Type>, Schema.SchemaError> =>
-  row === null
-    ? Effect.succeedNone
-    : Schema.decodeUnknownEffect(RefundRow)(row).pipe(Effect.asSome);
-const readRow = (
-  db: D1Database,
-  userId: string,
-  requestId: string
-): Effect.Effect<Option.Option<typeof RefundRow.Type>, Cause.UnknownError | Schema.SchemaError> =>
-  Effect.tryPromise(() =>
-    db
-      .prepare("SELECT * FROM refund_attempt_context r WHERE r.user_id=? AND r.request_id=?")
-      .bind(userId, requestId)
-      .first()
-  ).pipe(Effect.flatMap(decodeRow));
 export const replayView = Effect.fnUntraced(function* (row: typeof RefundRow.Type, intent: string) {
   return row.intent_json === intent ? yield* view(row) : yield* reject("idempotency-conflict");
 });
-export const getRefund = (call: RefundReadCall): Effect.Effect<RefundAttempt, RefundStartFailure> =>
-  Effect.gen(function* () {
-    const current = yield* Clock.currentTimeMillis;
-    if (!liveRefundAuthority({ authority: call.authority, current })) {
-      return yield* reject("unsupported");
-    }
-    const row = yield* Effect.tryPromise(() =>
-      call.db
-        .prepare("SELECT * FROM refund_attempt_context r WHERE r.user_id=? AND r.id=?")
-        .bind(call.userId, call.refundAttemptId)
-        .first()
-    );
-    const decoded = yield* decodeRow(row);
-    if (Option.isNone(decoded)) return yield* reject("charge-unavailable");
-    return yield* view(decoded.value);
-  }).pipe(Effect.mapError(safeFailure));
-
-const loadCharge = (call: RefundStartCall): Effect.Effect<typeof Charge.Type, NativeRefundError> =>
-  Effect.gen(function* () {
-    const charges = yield* Effect.tryPromise(() =>
-      call.db
-        .prepare(`SELECT a.id,a.price_id,a.amount,a.currency,
-    a.tax_treatment,a.wompi_environment,e.transaction_id,p.method FROM billing_attempt_context a
-    JOIN billing_provider_transactions e ON e.attempt_id=a.id AND e.status='APPROVED'
-    JOIN payment_source_context p ON p.id=a.payment_source_id
-    WHERE a.id=? AND a.user_id=? AND a.status='succeeded' AND a.paid_starts_at_ms IS NOT NULL LIMIT 2`)
-        .bind(call.input.billingAttemptId, call.input.userId)
-        .all()
-    );
-    const decoded = yield* Schema.decodeUnknownEffect(Schema.Array(Charge))(charges.results);
-    const charge = decoded[0];
-    if (decoded.length !== 1 || charge === undefined) return yield* reject("charge-unavailable");
-    if (charge.wompi_environment !== "sandbox") return yield* reject("unsupported");
-    if (call.input.intent.kind === "card-void" && charge.method !== "card") {
-      return yield* reject("unsupported");
-    }
-    return charge;
-  });
-
-type PreparedRefund = Readonly<{
-  charge: typeof Charge.Type;
-  requested: number;
-  total: number;
-  id: string;
-  now: number;
-  treatment: string;
-}>;
 export const prepareRefundTerms = Effect.fnUntraced(function* (
-  input: RefundStartCall["input"],
+  input: typeof StartRefundInput.Encoded,
   charge: typeof Charge.Type
 ) {
   const original = yield* Schema.decodeEffect(Money)({
@@ -208,79 +138,3 @@ export const prepareRefundTerms = Effect.fnUntraced(function* (
     treatment,
   };
 });
-const prepareRefund = (call: RefundStartCall): Effect.Effect<PreparedRefund, NativeRefundError> =>
-  loadCharge(call).pipe(Effect.flatMap((charge) => prepareRefundTerms(call.input, charge)));
-
-const reserve = (
-  call: RefundStartCall,
-  prepared: PreparedRefund,
-  intent: string
-): Effect.Effect<void, Cause.UnknownError> => {
-  const { charge, id, treatment, requested, now } = prepared;
-  return Effect.tryPromise(() =>
-    call.db
-      .prepare(`INSERT INTO refund_attempts (id,billing_attempt_id,wompi_environment,transaction_id,
-      request_id,intent_json,treatment_json,amount_in_cents,kind,operator_id,created_at_ms)
-      SELECT ?,?,?,?,?,?,?,?,?,?,? WHERE ? > ?
-      ON CONFLICT(user_id,request_id) DO NOTHING`)
-      .bind(
-        id,
-        charge.id,
-        charge.wompi_environment,
-        charge.transaction_id,
-        call.input.requestId,
-        intent,
-        treatment,
-        requested,
-        call.input.intent.kind,
-        call.authority.operatorId,
-        now,
-        call.authority.expiresAtMs,
-        now
-      )
-      .run()
-  ).pipe(Effect.asVoid);
-};
-const reservationFailure = (
-  db: D1Database,
-  prepared: PreparedRefund
-): Effect.Effect<never, NativeRefundError> =>
-  Effect.gen(function* () {
-    const reserved = yield* Effect.tryPromise(() =>
-      db
-        .prepare(`SELECT COALESCE(SUM(amount_in_cents),0) AS amount
-    FROM refund_attempts WHERE billing_attempt_id=? AND status<>'failed'`)
-        .bind(prepared.charge.id)
-        .first()
-    );
-    const amount = (yield* Schema.decodeUnknownEffect(Schema.Struct({ amount: Schema.Int }))(
-      reserved
-    )).amount;
-    return yield* reject(
-      prepared.requested > prepared.total - amount ? "amount-exceeds-remaining" : "limited"
-    );
-  });
-
-export const startRefund = (
-  call: RefundStartCall
-): Effect.Effect<RefundAttempt, RefundStartFailure> =>
-  Effect.gen(function* () {
-    const current = yield* Clock.currentTimeMillis;
-    if (
-      call.environment !== "sandbox" ||
-      !liveRefundAuthority({ authority: call.authority, current })
-    ) {
-      return yield* reject("unsupported");
-    }
-    const input = yield* Schema.decodeEffect(StartRefundInput)(call.input).pipe(
-      Effect.mapError(() => "unsupported" as const)
-    );
-    const intent = yield* Schema.encodeEffect(Schema.fromJsonString(StartRefundInput))(input);
-    const replay = yield* readRow(call.db, input.userId, input.requestId);
-    if (Option.isSome(replay)) return yield* replayView(replay.value, intent);
-    const prepared = yield* prepareRefund(call);
-    yield* reserve(call, prepared, intent);
-    const accepted = yield* readRow(call.db, input.userId, input.requestId);
-    if (Option.isNone(accepted)) return yield* reservationFailure(call.db, prepared);
-    return yield* replayView(accepted.value, intent);
-  }).pipe(Effect.mapError(safeFailure));

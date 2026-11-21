@@ -5,8 +5,10 @@ import {
   verifyCanonicalSignupRedirects,
 } from "./native-canonical-signup";
 import {
+  type CanonicalDomainPort,
   canonicalDomains,
   checkCanonicalIncumbents,
+  confirmCanonicalDomainMove,
   transferCanonicalDomains,
 } from "./native-canonical-domains";
 import { SuccessorSource } from "./native-fixture-plan";
@@ -1565,6 +1567,63 @@ const verifyTransferredHosts = Effect.fn(function* (
   const hosts = yield* Effect.forEach(canonicalDomains, read);
   return { source, zoneId: edge.zoneId, hosts, website, admission: "closed" };
 });
+const canonicalDomainMover = (
+  env: Config,
+  client: HttpClient.HttpClient,
+  { zoneId, read }: { zoneId: string; read: CanonicalDomainPort["read"] }
+): CanonicalDomainPort["move"] => {
+  const base = "https://api.cloudflare.com/client/v4/accounts/" + env.account + "/workers/scripts/";
+  const headers = { authorization: "Bearer " + env.token };
+  const requestChange = (
+    request: HttpClientRequest.HttpClientRequest
+  ): Effect.Effect<unknown, Error> =>
+    providerJson(request, true).pipe(
+      Effect.provideService(HttpClient.HttpClient, client),
+      checkCanonicalPrerequisite("Worker custom domain request")
+    );
+  return Effect.fn(function* (domain, service) {
+    const domains = base + encodeURIComponent(service) + "/domains";
+    const origins = [
+      {
+        hostname: domain.host,
+        zone_id: zoneId,
+        enabled: true,
+        previews_enabled: false,
+      },
+    ];
+    const changeset = yield* requestChange(
+      HttpClientRequest.post(domains + "/changeset?replace_state=false", {
+        headers,
+        body: HttpBody.text(encodeJson(origins), "application/json"),
+      })
+    );
+    yield* confirmCanonicalDomainMove(changeset, domain, { service, zoneId }).pipe(
+      checkCanonicalPrerequisite("Worker custom domain changeset for " + domain.host)
+    );
+    const current = yield* read(domain);
+    const expectedOwner = service === domain.native ? domain.incumbent : domain.native;
+    if (current.vacant || current.id !== domain.incumbentId || current.service !== expectedOwner) {
+      return yield* new ReleaseFailure({
+        message: "Canonical Worker ownership changed before the update for " + domain.host,
+      });
+    }
+    const result = yield* requestChange(
+      HttpClientRequest.put(domains + "/records", {
+        headers,
+        body: HttpBody.text(
+          encodeJson({
+            origins,
+            override_scope: false,
+            override_existing_origin: true,
+            override_existing_dns_record: false,
+          }),
+          "application/json"
+        ),
+      })
+    );
+    yield* Schema.decodeUnknownEffect(Schema.Struct({ success: Schema.Literal(true) }))(result);
+  });
+};
 const transferHostStage = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
@@ -1576,40 +1635,8 @@ const transferHostStage = Effect.fn(function* (
   if (edge.access.some((row) => row.paths.length !== 2)) {
     return yield* new ReleaseFailure({ message: "Canonical Access policies are incomplete" });
   }
-  const base = "https://api.cloudflare.com/client/v4/accounts/" + env.account + "/workers/domains";
-  const headers = { authorization: "Bearer " + env.token };
-  const confirmed = (
-    request: HttpClientRequest.HttpClientRequest
-  ): Effect.Effect<void, Error | Schema.SchemaError> =>
-    providerJson(request).pipe(
-      Effect.provideService(HttpClient.HttpClient, client),
-      Effect.flatMap(Schema.decodeUnknownEffect(Schema.Struct({ success: Schema.Literal(true) }))),
-      Effect.asVoid
-    );
   yield* transferCanonicalDomains(
-    {
-      read,
-      detach: (_, id) =>
-        confirmed(
-          HttpClientRequest.make("DELETE")(base + "/" + encodeURIComponent(id), { headers })
-        ),
-      attach: (domain, service) =>
-        confirmed(
-          HttpClientRequest.put(base, {
-            headers,
-            body: HttpBody.text(
-              encodeJson({
-                hostname: domain.host,
-                service,
-                zone_id: edge.zoneId,
-                enabled: true,
-                previews_enabled: false,
-              }),
-              "application/json"
-            ),
-          })
-        ),
-    },
+    { read, move: canonicalDomainMover(env, client, { zoneId: edge.zoneId, read }) },
     verifyTransferredHosts(env, client, port).pipe(
       Effect.flatMap((proof) =>
         writeFile(env.smokeAttestationFile + ".canonical-hosts", encodeJson(proof))

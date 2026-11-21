@@ -7,7 +7,7 @@ import { useSession } from "@/session/session-context";
 import { ApplicationSurface } from "@/ui/components/application";
 import { Button } from "@/ui/components/button";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
-import { completeLogoutNavigation, makeLogoutOperation } from "./logout";
+import { completeLogoutNavigation, createLogoutOperation } from "./logout";
 import { SignedInBrand, SignedInNavigation } from "./navigation";
 import { LogoutFailure } from "./logout-failure";
 import { CompactNavigation } from "./compact-navigation";
@@ -82,7 +82,7 @@ export const ApplicationShell = ({
 
   const [logout] = useState(() =>
     router.options.context.webAuthClient.runtime.fn<{ onLoggedOut: () => void }>()(
-      logoutRequest.pipe(makeLogoutOperation)
+      logoutRequest.pipe(createLogoutOperation)
     )
   );
 

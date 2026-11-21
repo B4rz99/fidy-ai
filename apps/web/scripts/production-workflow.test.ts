@@ -43,10 +43,13 @@ describe("protected native releases", () => {
     );
   });
   it("pins every external Action and builds release metadata before the first provider mutation", () => {
-    for (const action of workflow.matchAll(/uses: ([^\s]+)/gu)) {
-      const name = action[1] ?? "";
+    const external = Array.from(
+      workflow.matchAll(/uses: ([^\s]+)/gu),
+      (action) => action[1] ?? ""
+    ).filter((name) => !name.startsWith("./"));
 
-      if (!name.startsWith("./")) expect(name).toMatch(/@[a-f0-9]{40}$/u);
+    for (const name of external) {
+      expect(name).toMatch(/@[a-f0-9]{40}$/u);
     }
 
     ordered(workflow, [

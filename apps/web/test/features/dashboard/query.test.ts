@@ -6,7 +6,7 @@ import { HttpClient, HttpClientResponse } from "effect/http";
 import { expect, vi } from "vitest";
 import { makeFidyClient } from "@/transport/client";
 import { retireQueryLifetime } from "@/transport/query-lifetime";
-import { type DashboardReadAttempt, dashboardQuery } from "./query";
+import { type DashboardReadAttempt, dashboardQuery } from "@/features/dashboard/query";
 
 const view = {
   title: "Mi tablero",
@@ -81,7 +81,9 @@ it.live("only the requested new Dashboard load certifies recovery, even with equ
           const index = reads++;
           const gate = gates[index];
 
-          if (gate === undefined) return Effect.die("Unexpected Dashboard read");
+          if (gate === undefined) {
+            return Effect.die("Unexpected Dashboard read");
+          }
 
           return Deferred.await(gate).pipe(
             Effect.as(

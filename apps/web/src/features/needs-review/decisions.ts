@@ -161,7 +161,7 @@ const dispose = (owner: Owner): void => {
   owner.get.set(owner.command, Atom.Interrupt);
 };
 
-export const makeReviewDecisions = ({
+export const createReviewDecisions = ({
   client,
   query,
   created,

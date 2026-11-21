@@ -1,4 +1,4 @@
-import type { EmailReplacementViewState } from "./view";
+import { EmailReplacementViewState } from "./view-state";
 import {
   clearReplacementAdmission,
   restoreReplacementAdmission,
@@ -19,7 +19,7 @@ import {
 type Work = (get: Atom.FnContext) => Effect.Effect<void>;
 
 type BindingFailure = Effect.Error<
-  ReturnType<Context.Service.Shape<WebAuthClient>["browserSession"]["binding"]>
+  ReturnType<WebAuthClient["Service"]["browserSession"]["binding"]>
 >;
 
 type Dispatch = (input: void | typeof Atom.Interrupt) => void;
@@ -52,7 +52,8 @@ type Replacement = Readonly<{
   actions: (dispatch: Dispatch) => ReplacementActions;
 }>;
 
-const editing: EmailReplacementViewState = { _tag: "Editing", feedback: "none" };
+const editing = (): EmailReplacementViewState =>
+  EmailReplacementViewState.Editing({ feedback: "none", draftEmail: "" });
 
 const live = (owner: Owner, generation: number): boolean =>
   owner.active && owner.generation === generation;
@@ -62,29 +63,31 @@ const change = (owner: Owner, state: EmailReplacementViewState): void => {
   owner.publish(state);
 };
 
-const failureState = (
+const requiresFreshPairing = (failure: unknown): boolean =>
+  Schema.is(EmailReplacementFreshPairingRequiredApi)(failure) ||
+  Predicate.isTagged(failure, "Unauthenticated");
+
+const requestFailureState = (
   cause: Cause.Cause<unknown>,
-  candidateEmail: EmailAddressType,
-  completing: boolean
+  draftEmail: string
+): EmailReplacementViewState =>
+  Option.exists(Cause.findErrorOption(cause), requiresFreshPairing)
+    ? EmailReplacementViewState.FreshPairingRequired()
+    : EmailReplacementViewState.Editing({ feedback: "request-unavailable", draftEmail });
+
+const completionFailureState = (
+  cause: Cause.Cause<unknown>,
+  candidateEmail: EmailAddressType
 ): EmailReplacementViewState => {
   const failure = Cause.findErrorOption(cause);
 
-  if (Option.isSome(failure)) {
-    if (
-      Schema.is(EmailReplacementFreshPairingRequiredApi)(failure.value) ||
-      Predicate.isTagged(failure.value, "Unauthenticated")
-    ) {
-      return { _tag: "FreshPairingRequired" };
-    }
-
-    if (completing && Schema.is(EmailReplacementInvalidApi)(failure.value)) {
-      return { _tag: "InvalidCode", candidateEmail };
-    }
+  if (Option.exists(failure, requiresFreshPairing)) {
+    return EmailReplacementViewState.FreshPairingRequired();
   }
 
-  return completing
-    ? { _tag: "Uncertain" }
-    : { _tag: "Editing", feedback: "request-unavailable", draftEmail: candidateEmail };
+  return Option.exists(failure, Schema.is(EmailReplacementInvalidApi))
+    ? EmailReplacementViewState.InvalidCode({ candidateEmail })
+    : EmailReplacementViewState.Uncertain();
 };
 
 const runRequest = (
@@ -94,7 +97,7 @@ const runRequest = (
 ): void => {
   owner.generation += 1;
   const generation = owner.generation;
-  change(owner, { _tag: "Requesting", candidateEmail });
+  change(owner, EmailReplacementViewState.Requesting({ candidateEmail }));
   owner.pending = Option.some(() =>
     Effect.gen(function* () {
       const result = yield* Effect.exit(
@@ -107,17 +110,15 @@ const runRequest = (
         })
       );
 
-      if (!live(owner, generation)) return;
-
-      const next: EmailReplacementViewState = Exit.isSuccess(result)
-        ? { _tag: "AwaitingCode", candidateEmail }
-        : failureState(result.cause, candidateEmail, false);
+      if (!live(owner, generation)) {
+        return;
+      }
 
       change(
         owner,
-        next._tag === "Editing" && next.feedback === "request-unavailable"
-          ? { ...next, draftEmail }
-          : next
+        Exit.isSuccess(result)
+          ? EmailReplacementViewState.AwaitingCode({ candidateEmail })
+          : requestFailureState(result.cause, draftEmail)
       );
     })
   );
@@ -125,11 +126,17 @@ const runRequest = (
 };
 
 const request = ({ owner, dispatch, generation }: Intent, candidateEmail: string): void => {
-  if (!live(owner, generation) || owner.state._tag !== "Editing") return;
+  if (!live(owner, generation) || !EmailReplacementViewState.$is("Editing")(owner.state)) {
+    return;
+  }
+
   const candidate = Schema.decodeOption(EmailAddress)(candidateEmail);
 
   if (Option.isNone(candidate)) {
-    change(owner, { _tag: "Editing", feedback: "invalid-candidate" });
+    change(
+      owner,
+      EmailReplacementViewState.Editing({ feedback: "invalid-candidate", draftEmail: "" })
+    );
 
     return;
   }
@@ -137,11 +144,19 @@ const request = ({ owner, dispatch, generation }: Intent, candidateEmail: string
   runRequest({ owner, dispatch }, candidate.value, candidateEmail);
 };
 
+const awaitingProof = Predicate.or(
+  EmailReplacementViewState.$is("AwaitingCode"),
+  EmailReplacementViewState.$is("InvalidCode")
+);
+
 const repeat = (owner: Owner, dispatch: Dispatch, generation: number): void => {
-  if (!live(owner, generation)) return;
+  if (!live(owner, generation)) {
+    return;
+  }
+
   const current = owner.state;
 
-  if (current._tag === "AwaitingCode" || current._tag === "InvalidCode") {
+  if (awaitingProof(current)) {
     runRequest({ owner, dispatch }, current.candidateEmail, current.candidateEmail);
   }
 };
@@ -154,7 +169,7 @@ const setUncertain = (owner: Owner, uncertain: boolean): void => {
 const prepareCompletion = (
   { owner, generation }: Intent,
   get: Atom.FnContext
-): Effect.Effect<Context.Service.Shape<FidyClient>, BindingFailure | void> =>
+): Effect.Effect<FidyClient["Service"], BindingFailure | void> =>
   Effect.gen(function* () {
     const context = yield* get.result(owner.webAuthClient.runtime, { suspendOnWaiting: true });
     const authentication = Context.get(context, owner.webAuthClient);
@@ -166,9 +181,14 @@ const prepareCompletion = (
 
     const client = yield* owner.apiClient;
 
-    if (!live(owner, generation)) return yield* Effect.interrupt;
+    if (!live(owner, generation)) {
+      return yield* Effect.interrupt;
+    }
 
-    if (!retainReplacementAdmission(owner.binding)) return yield* Effect.fail(undefined);
+    if (!retainReplacementAdmission(owner.binding)) {
+      return yield* Effect.fail(undefined);
+    }
+
     setUncertain(owner, true);
 
     return client;
@@ -178,7 +198,7 @@ const complete = (intent: Intent, combinedCode: string): void => {
   const { owner, dispatch, generation } = intent;
   const state = owner.state;
 
-  if (!live(owner, generation) || (state._tag !== "AwaitingCode" && state._tag !== "InvalidCode")) {
+  if (!live(owner, generation) || !awaitingProof(state)) {
     return;
   }
 
@@ -186,22 +206,24 @@ const complete = (intent: Intent, combinedCode: string): void => {
   const code = Schema.decodeOption(EmailVerificationCode)(combinedCode);
 
   if (Option.isNone(code)) {
-    change(owner, { _tag: "InvalidCode", candidateEmail });
+    change(owner, EmailReplacementViewState.InvalidCode({ candidateEmail }));
 
     return;
   }
 
-  change(owner, { _tag: "Completing", candidateEmail });
+  change(owner, EmailReplacementViewState.Completing({ candidateEmail }));
   owner.pending = Option.some((get) =>
     Effect.gen(function* () {
       const prepared = yield* Effect.exit(prepareCompletion(intent, get));
 
-      if (!live(owner, generation)) return;
+      if (!live(owner, generation)) {
+        return;
+      }
 
       if (Exit.isFailure(prepared)) {
         clearReplacementAdmission(owner.binding);
         setUncertain(owner, false);
-        change(owner, { _tag: "PreparationUnavailable" });
+        change(owner, EmailReplacementViewState.PreparationUnavailable());
 
         return;
       }
@@ -212,14 +234,21 @@ const complete = (intent: Intent, combinedCode: string): void => {
         })
       );
 
-      if (!live(owner, generation)) return;
+      if (!live(owner, generation)) {
+        return;
+      }
 
       const next = Exit.isSuccess(result)
-        ? { _tag: "Replaced" as const }
-        : failureState(result.cause, candidateEmail, true);
+        ? EmailReplacementViewState.Replaced()
+        : completionFailureState(result.cause, candidateEmail);
 
-      if (next._tag !== "Uncertain") clearReplacementAdmission(owner.binding);
-      setUncertain(owner, next._tag === "Uncertain");
+      const uncertain = EmailReplacementViewState.$is("Uncertain")(next);
+
+      if (!uncertain) {
+        clearReplacementAdmission(owner.binding);
+      }
+
+      setUncertain(owner, uncertain);
       change(owner, next);
     })
   );
@@ -232,13 +261,32 @@ const retire = (owner: Owner, dispatch: Dispatch): void => {
   dispatch(Atom.Interrupt);
 };
 
-const restart = (owner: Owner, dispatch: Dispatch, generation: number): void => {
-  if (!live(owner, generation)) return;
-  const { _tag } = owner.state;
+const settled = Predicate.or(
+  Predicate.or(
+    EmailReplacementViewState.$is("Uncertain"),
+    EmailReplacementViewState.$is("Replaced")
+  ),
+  EmailReplacementViewState.$is("FreshPairingRequired")
+);
 
-  if (_tag === "Uncertain" || _tag === "Replaced" || _tag === "FreshPairingRequired") return;
+const restart = (owner: Owner, dispatch: Dispatch, generation: number): void => {
+  if (!live(owner, generation)) {
+    return;
+  }
+
+  const state = owner.state;
+
+  if (settled(state)) {
+    return;
+  }
+
   retire(owner, dispatch);
-  change(owner, _tag === "Completing" ? { _tag: "Uncertain" } : editing);
+  change(
+    owner,
+    EmailReplacementViewState.$is("Completing")(state)
+      ? EmailReplacementViewState.Uncertain()
+      : editing()
+  );
 };
 
 const mount = (owner: Owner, dispatch: Dispatch): (() => void) => {
@@ -247,13 +295,13 @@ const mount = (owner: Owner, dispatch: Dispatch): (() => void) => {
     const admission = restoreReplacementAdmission(owner.binding);
 
     if (admission === "unavailable") {
-      change(owner, { _tag: "PreparationUnavailable" });
+      change(owner, EmailReplacementViewState.PreparationUnavailable());
 
       return;
     }
 
     setUncertain(owner, owner.uncertain || admission === "uncertain");
-    change(owner, owner.uncertain ? { _tag: "Uncertain" } : { ...editing });
+    change(owner, owner.uncertain ? EmailReplacementViewState.Uncertain() : editing());
   };
 
   resume();
@@ -261,16 +309,18 @@ const mount = (owner: Owner, dispatch: Dispatch): (() => void) => {
   const dispose = (): void => {
     owner.active = false;
     retire(owner, dispatch);
-    owner.state = { _tag: "Disposed" };
+    owner.state = EmailReplacementViewState.Disposed();
   };
 
   const hide = (): void => {
     dispose();
-    owner.publish({ _tag: "Disposed" });
+    owner.publish(EmailReplacementViewState.Disposed());
   };
 
   const restored = (event: PageTransitionEvent): void => {
-    if (event.persisted) resume();
+    if (event.persisted) {
+      resume();
+    }
   };
 
   window.addEventListener("pagehide", hide);
@@ -283,7 +333,7 @@ const mount = (owner: Owner, dispatch: Dispatch): (() => void) => {
   };
 };
 
-export const makeReplacement = ({
+export const createReplacement = ({
   apiClient,
   publish,
   uncertain,
@@ -297,7 +347,7 @@ export const makeReplacement = ({
   const owner: Owner = {
     apiClient,
     publish,
-    state: uncertain ? { _tag: "Uncertain" } : editing,
+    state: uncertain ? EmailReplacementViewState.Uncertain() : editing(),
     uncertain,
     onUncertain,
     binding,

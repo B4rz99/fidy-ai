@@ -1,11 +1,11 @@
-import { reviewPendingCountQuery } from "./navigation-query";
+import { reviewPendingCountQuery } from "@/features/needs-review/navigation-query";
 import { Deferred, Effect, Fiber, Layer } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { AsyncResult, AtomRegistry } from "effect/reactivity";
 import { it } from "@effect/vitest";
 import { afterEach, expect, vi } from "vitest";
 import { type FidyClient, makeFidyClient } from "@/transport/client";
-import { reviewWorkspaceQueries } from "./query";
+import { reviewWorkspaceQueries } from "@/features/needs-review/query";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -33,7 +33,9 @@ it.live.each(["workspace", "count"] as const)(
         Effect.gen(function* () {
           reads += 1;
 
-          if (held) yield* Deferred.await(gate);
+          if (held) {
+            yield* Deferred.await(gate);
+          }
 
           return HttpClientResponse.fromWeb(
             request,
@@ -90,7 +92,10 @@ it.live.each(["workspace", "count"] as const)(
         window.dispatchEvent(new Event("focus"));
         yield* Effect.tryPromise(() => vi.waitFor(() => expect(reads).toBe(3)));
       } finally {
-        for (const dispose of unmount) dispose();
+        for (const dispose of unmount) {
+          dispose();
+        }
+
         registry.dispose();
         vi.unstubAllGlobals();
       }

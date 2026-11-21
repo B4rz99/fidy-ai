@@ -84,6 +84,8 @@ describe("pull-request checks workflow policy", () => {
 
     expect(externalActions.length).toBeGreaterThan(0);
 
-    for (const action of externalActions) expect(action[2]).toMatch(/^[0-9a-f]{40}$/u);
+    for (const action of externalActions) {
+      expect(action[2]).toMatch(/^[0-9a-f]{40}$/u);
+    }
   });
 });

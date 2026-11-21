@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { RegistryContext } from "@effect/atom-react";
 import {
   RouterProvider,
@@ -7,14 +6,14 @@ import {
   createRoute,
   createRouter,
 } from "@tanstack/react-router";
-import { type Cause, DateTime, Deferred, Effect, Layer, Option, Schema } from "effect";
+import { type Cause, DateTime, Deferred, Effect, Layer, Option, Predicate, Schema } from "effect";
 import { HttpClient, HttpClientResponse, UrlParams } from "effect/http";
 import { AtomRegistry } from "effect/reactivity";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import { makeFidyClient } from "@/transport/client";
-import { BudgetScreen } from "./screen";
+import { BudgetScreen } from "@/features/budgets/screen";
 
 const category = {
   id: "24000000-0000-4000-8000-000000000102",
@@ -53,6 +52,9 @@ const profile = {
 
 type TargetChange = "same" | "deleted" | "reassigned";
 
+const validationFailedBody =
+  '{"_tag":"ValidationFailed","error":{"code":"validation_failed","message":"Rejected","fields":[]},"next":[]}';
+
 const report = ({
   month,
   amount,
@@ -63,7 +65,7 @@ const report = ({
   amount: string;
   secondCategory: boolean;
   targetChange: TargetChange;
-}>): unknown => {
+}>): Response => {
   const november = month === "2026-11";
   const from = DateTime.makeUnsafe(`${month}-01T05:00:00Z`);
 
@@ -73,19 +75,14 @@ const report = ({
     timeZone: "America/Bogota",
   };
 
+  const secondBudget = {
+    ...budget("50000"),
+    id: "24000000-0000-4000-8000-000000000103",
+    categoryId: "24000000-0000-4000-8000-000000000104",
+  };
+
   const initialBudgets = november
-    ? [
-        budget(amount),
-        ...(secondCategory
-          ? [
-              {
-                ...budget("50000"),
-                id: "24000000-0000-4000-8000-000000000103",
-                categoryId: "24000000-0000-4000-8000-000000000104",
-              },
-            ]
-          : []),
-      ]
+    ? [budget(amount)].concat(secondCategory ? [secondBudget] : [])
     : [];
 
   const budgets = initialBudgets
@@ -96,20 +93,23 @@ const report = ({
         : value
     );
 
-  return {
-    period,
-    initialized: true,
-    budgets,
-    statuses: budgets.map((value) => ({
-      type: "under",
-      budget: value,
+  return Response.json({
+    data: {
       period,
-      spent: { amount: "0", currency: "COP" },
-      remaining: value.cap,
-    })),
-    unbudgetedExpenses: [],
-    cashFlow: { income: [], expenses: [] },
-  };
+      initialized: true,
+      budgets,
+      statuses: budgets.map((value) => ({
+        type: "under",
+        budget: value,
+        period,
+        spent: { amount: "0", currency: "COP" },
+        remaining: value.cap,
+      })),
+      unbudgetedExpenses: [],
+      cashFlow: { income: [], expenses: [] },
+    },
+    next: [],
+  });
 };
 
 const work = (run: () => void): Promise<void> => Promise.resolve(act(() => Promise.resolve(run())));
@@ -121,7 +121,9 @@ const button = (container: HTMLElement, label: string): HTMLButtonElement => {
     (item) => item.getAttribute("aria-label") === label || item.textContent === label
   );
 
-  if (found === undefined) throw new Error(`Missing ${label}`);
+  if (found === undefined) {
+    throw new Error(`Missing ${label}`);
+  }
 
   return found;
 };
@@ -131,7 +133,9 @@ const input = (container: HTMLElement): HTMLInputElement => {
     'input[aria-label="Presupuesto de Restaurantes (COP)"]'
   );
 
-  if (found === null) throw new Error(`Missing Budget input: ${container.innerHTML}`);
+  if (found === null) {
+    throw new Error(`Missing Budget input: ${container.innerHTML}`);
+  }
 
   return found;
 };
@@ -146,7 +150,7 @@ type TestView = Readonly<{
 
 const setup = (secondCategory = false): Effect.Effect<TestView, Cause.UnknownError> =>
   Effect.gen(function* () {
-    yield* Effect.tryPromise(() => import("./dev-preview"));
+    yield* Effect.tryPromise(() => import("@/features/budgets/dev-preview"));
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(DateTime.makeUnsafe("2026-12-17T12:00:00Z").epochMilliseconds);
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -171,7 +175,7 @@ const setup = (secondCategory = false): Effect.Effect<TestView, Cause.UnknownErr
 
     const http = HttpClient.make((request) => {
       if (request.method === "PUT") {
-        if (request.body._tag === "Uint8Array") {
+        if (Predicate.isTagged(request.body, "Uint8Array")) {
           writes.push(JSON.parse(new TextDecoder().decode(request.body.body)));
         }
 
@@ -180,25 +184,30 @@ const setup = (secondCategory = false): Effect.Effect<TestView, Cause.UnknownErr
         );
       }
 
-      let data: unknown = profile;
+      const secondCategoryEntry = {
+        ...category,
+        id: "24000000-0000-4000-8000-000000000104",
+        label: "Mercado",
+      };
 
-      if (request.url.includes("budget-status")) {
-        data = report({
-          month: Option.getOrElse(UrlParams.getFirst(request.urlParams, "month"), () => "2026-11"),
-          amount,
-          secondCategory,
-          targetChange,
-        });
-      } else if (request.url.endsWith("categories")) {
-        data = [
-          category,
-          ...(secondCategory
-            ? [{ ...category, id: "24000000-0000-4000-8000-000000000104", label: "Mercado" }]
-            : []),
-        ];
-      }
-
-      const response = Effect.succeed(Response.json({ data, next: [] }));
+      const response = Effect.succeed(
+        request.url.includes("budget-status")
+          ? report({
+              month: Option.getOrElse(
+                UrlParams.getFirst(request.urlParams, "month"),
+                () => "2026-11"
+              ),
+              amount,
+              secondCategory,
+              targetChange,
+            })
+          : Response.json({
+              data: request.url.endsWith("categories")
+                ? [category].concat(secondCategory ? [secondCategoryEntry] : [])
+                : profile,
+              next: [],
+            })
+      );
 
       return Effect.map(response, (value) => HttpClientResponse.fromWeb(request, value));
     });
@@ -217,7 +226,7 @@ const setup = (secondCategory = false): Effect.Effect<TestView, Cause.UnknownErr
       path: "/app/budgets",
       component: () => createElement(BudgetScreen, screenProps),
       validateSearch: (search) => ({
-        month: typeof search.month === "string" ? search.month : "2026-11",
+        month: Predicate.isString(search.month) ? search.month : "2026-11",
       }),
     });
 
@@ -254,20 +263,21 @@ const setup = (secondCategory = false): Effect.Effect<TestView, Cause.UnknownErr
           Schema.Struct({ month: Schema.String, cap: Schema.Struct({ amount: Schema.String }) })
         )(writes.at(-1));
 
-        if (committed && written.month === "2026-11") amount = written.cap.amount;
+        if (committed && written.month === "2026-11") {
+          amount = written.cap.amount;
+        }
+
         let response = Response.json({ data: budget(written.cap.amount), next: [] });
 
-        if (outcome === "uncertain") response = Response.json({});
+        if (outcome === "uncertain") {
+          response = Response.json({});
+        }
 
         if (outcome === "failed") {
-          response = Response.json(
-            {
-              _tag: "ValidationFailed",
-              error: { code: "validation_failed", message: "Rejected", fields: [] },
-              next: [],
-            },
-            { status: 400 }
-          );
+          response = new Response(validationFailedBody, {
+            status: 400,
+            headers: { "content-type": "application/json" },
+          });
         }
 
         const waiting = reply;
@@ -374,11 +384,13 @@ it.each([false, true])(
             work(() => button(view.container, "Mes anterior").click())
           );
 
-          if (!committed) {
-            expect(view.container.textContent).toContain("noviembre de 2026");
-            expect(view.writes).toHaveLength(2);
-            yield* Effect.tryPromise(() => view.settle());
-          }
+          yield* committed
+            ? Effect.void
+            : Effect.gen(function* () {
+                expect(view.container.textContent).toContain("noviembre de 2026");
+                expect(view.writes).toHaveLength(2);
+                yield* Effect.tryPromise(() => view.settle());
+              });
 
           yield* Effect.tryPromise(() =>
             check(() => expect(view.container.textContent).toContain("octubre de 2026"))

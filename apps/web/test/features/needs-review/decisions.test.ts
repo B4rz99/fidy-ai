@@ -1,11 +1,11 @@
-import { Clock, DateTime, Deferred, Effect, Fiber, Layer, Option, Schema } from "effect";
+import { Clock, DateTime, Deferred, Effect, Fiber, Layer, Option, Predicate, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { AtomRegistry } from "effect/reactivity";
 import { afterEach, expect, vi } from "vitest";
 import { it } from "@effect/vitest";
 import { ReviewCommand, makeFidyClient } from "@/transport/client";
-import { type ReviewDecisions, makeReviewDecisions } from "./decisions";
-import { type Detail, type Draft, emptyDraft } from "./model";
+import { type ReviewDecisions, createReviewDecisions } from "@/features/needs-review/decisions";
+import { type Detail, type Draft, emptyDraft } from "@/features/needs-review/model";
 
 const firstId = "24000000-0000-4000-8000-000000001350";
 
@@ -94,7 +94,9 @@ const fixture = Effect.fnUntraced(function* (firstExpiry: Option.Option<number> 
 
       if (request.method === "POST") {
         const command = yield* Schema.decodeEffect(Schema.fromJsonString(ReviewCommand))(
-          request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : ""
+          Predicate.isTagged(request.body, "Uint8Array")
+            ? new TextDecoder().decode(request.body.body)
+            : ""
         );
 
         sent.push(command);
@@ -145,7 +147,7 @@ const fixture = Effect.fnUntraced(function* (firstExpiry: Option.Option<number> 
     query: { status: Option.some("pending" as const), offset: Option.none() },
   });
 
-  const atom = makeReviewDecisions({ client, query, created: () => {} });
+  const atom = createReviewDecisions({ client, query, created: () => {} });
   const unmount = registry.mount(atom);
   resources.push(unmount);
   const dispose = registry.get(atom).mount();
@@ -206,7 +208,9 @@ const fixtureResult = (
   data: ReadonlyArray<Saved>,
   mode: Readonly<{ missingResult: boolean; duplicateResult: boolean }>
 ): ReadonlyArray<Saved> => {
-  if (mode.missingResult) return [];
+  if (mode.missingResult) {
+    return [];
+  }
 
   return mode.duplicateResult ? [...data, ...data] : data;
 };
@@ -228,15 +232,21 @@ const applyFixture = (
     entry.revision += 1;
     entry.item = { ...entry.item, revision: entry.revision };
 
-    if (command._tag === "SaveDraft") {
+    if (Predicate.isTagged(command, "SaveDraft")) {
       const encoded = Schema.encodeSync(ReviewCommand)(command);
 
-      if (encoded._tag === "SaveDraft") entry.draft = encoded.draft;
+      if (Predicate.isTagged(encoded, "SaveDraft")) {
+        entry.draft = encoded.draft;
+      }
     }
 
-    if (command._tag === "Skip") entry.item.status = "skipped";
+    if (Predicate.isTagged(command, "Skip")) {
+      entry.item.status = "skipped";
+    }
 
-    if (command._tag === "Restore") entry.item.status = "pending";
+    if (Predicate.isTagged(command, "Restore")) {
+      entry.item.status = "pending";
+    }
 
     return { ...entry };
   });
@@ -257,10 +267,8 @@ it.live(
       expect(test.view().undoCount).toBe(1);
       test.view().undoSkip();
       yield* advance(0);
-      expect(test.sent[2]).toMatchObject({
-        _tag: "Restore",
-        items: [{ id: firstId, revision: 2 }],
-      });
+      expect(test.sent[2]?._tag).toBe("Restore");
+      expect(test.sent[2]).toMatchObject({ items: [{ id: firstId, revision: 2 }] });
       expect(test.entries.get(firstId)?.draft).toMatchObject({ amount: "98765" });
     })
 );
@@ -571,13 +579,14 @@ it.live("confirms localized review Money exactly and blocks invalid amounts", ()
     expect(test.view().editor(test.detail).canCreate).toBe(true);
     test.view().decide(test.detail, "Create");
     yield* advance(0);
-    const command = test.sent.find((sent) => sent._tag === "Create");
+    const command = test.sent.find((sent) => Predicate.isTagged(sent, "Create"));
 
     const encoded =
       command === undefined ? undefined : yield* Schema.encodeEffect(ReviewCommand)(command);
 
+    expect(encoded?._tag).toBe("Create");
+
     expect(encoded).toMatchObject({
-      _tag: "Create",
       extraction: { money: { amount: "12500.5", currency: "COP" } },
     });
   })

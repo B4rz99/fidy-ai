@@ -1,13 +1,13 @@
 import { loadBrowserSessionEntry } from "@/transport/session-entry";
 import { beginInitialBrowserSession } from "@/transport/initial-session";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, assert, expect, it, vi } from "vitest";
 import { Effect, Exit, Option } from "effect";
-import { authenticationEndedEvent } from "./authentication-channel";
+import { authenticationEndedEvent } from "@/session/authentication-channel";
 import {
   type InitialBrowserRequest,
   beginInitialBrowserRequest as prepare,
 } from "@/transport/initial-request";
-import { observeInitialBrowserRequest } from "./initial-request";
+import { observeInitialBrowserRequest } from "@/session/initial-request";
 
 const prepareObservedRequest = (origin: string, context: boolean): InitialBrowserRequest =>
   observeInitialBrowserRequest(
@@ -61,10 +61,9 @@ it("drops all prepared private context when the current cookie's binding changed
       const result = Effect.runSync(Option.getOrThrow(initial.take({})).result);
       expect(Exit.isSuccess(result)).toBe(true);
 
-      if (Exit.isSuccess(result)) {
-        expect(result.value.binding).toBe(second);
-        expect(Option.isNone(result.value.initial)).toBe(true);
-      }
+      assert(Exit.isSuccess(result));
+      expect(result.value.binding).toBe(second);
+      expect(Option.isNone(result.value.initial)).toBe(true);
 
       expect(network).toHaveBeenCalledTimes(2);
     })

@@ -1,11 +1,17 @@
 import { Option, Schema } from "effect";
 import { describe, expect, it } from "vitest";
 import { WidgetId } from "@/transport/client";
-import { dashboardAnnouncementText, dashboardCollisionPriority } from "./drag-accessibility";
-import { dashboardDragData } from "./drag-data";
-import type { DashboardDragSource, DashboardDropTarget } from "./drag-data";
-import type { DashboardCatalogEntry } from "./editor-model";
-import { dashboardTargetAcceptsSource, resolveDashboardDrop } from "./drag-model";
+import {
+  dashboardAnnouncementText,
+  dashboardCollisionPriority,
+} from "@/features/dashboard/drag-accessibility";
+import { dashboardDragData } from "@/features/dashboard/drag-data";
+import type { DashboardDragSource, DashboardDropTarget } from "@/features/dashboard/drag-data";
+import type { DashboardCatalogEntry } from "@/features/dashboard/editor-model";
+import {
+  dashboardTargetAcceptsSource,
+  resolveDashboardDrop,
+} from "@/features/dashboard/drag-model";
 
 const sourceId = Schema.decodeSync(WidgetId)("f1d1a000-0000-4000-8000-000000000801");
 

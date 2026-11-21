@@ -123,9 +123,13 @@ const PlanningProbe = ({
 
           planning.save(submitted, onSaved);
 
-          if (duplicate) planning.save(submitted, onSaved);
+          if (duplicate) {
+            planning.save(submitted, onSaved);
+          }
 
-          if (Option.isNone(edit)) Object.assign(submitted, { action: "stop" });
+          if (Option.isNone(edit)) {
+            Object.assign(submitted, { action: "stop" });
+          }
         },
       },
       "Pause"
@@ -272,7 +276,10 @@ it.each(["confirmed", "rejected", "uncertain"] as const)(
           );
           const pause = container.querySelector("button");
 
-          if (pause === null) throw new Error("Missing pause action");
+          if (pause === null) {
+            throw new Error("Missing pause action");
+          }
+
           yield* Effect.tryPromise(() => reactAssertion(() => expect(pause.disabled).toBe(false)));
           yield* Effect.tryPromise(() => reactWork(() => pause.click()));
           expect(container.textContent).toContain("saving");
@@ -313,10 +320,14 @@ const planningHttp = (
   let submitted = false;
 
   return HttpClient.make((request) => {
-    if (request.method === "POST") submitted = true;
+    if (request.method === "POST") {
+      submitted = true;
+    }
 
     const response = ((): Effect.Effect<Response> => {
-      if (request.method === "POST") return Deferred.await(reply);
+      if (request.method === "POST") {
+        return Deferred.await(reply);
+      }
 
       if (request.url.endsWith("/categories")) {
         return Effect.succeed(Response.json({ data: [], next: [] }));
@@ -471,7 +482,10 @@ it("retains equivalent mounted Recurring queries through collection and rerender
       } finally {
         vi.restoreAllMocks();
 
-        for (const unmount of mounts) unmount();
+        for (const unmount of mounts) {
+          unmount();
+        }
+
         registry.dispose();
       }
     })
@@ -520,7 +534,10 @@ it("snapshots one exact edit before dispatch and contains a throwing visible cal
         );
         const pause = container.querySelector("button");
 
-        if (pause === null) throw new Error("Missing pause action");
+        if (pause === null) {
+          throw new Error("Missing pause action");
+        }
+
         yield* Effect.tryPromise(() => reactAssertion(() => expect(pause.disabled).toBe(false)));
         yield* Effect.tryPromise(() => reactWork(() => pause.click()));
         yield* Effect.tryPromise(() => reactAssertion(() => expect(requests).toHaveLength(1)));
@@ -563,7 +580,9 @@ it.each(["confirmed", "uncertain"] as const)(
           }
 
           const response = ((): Effect.Effect<Response> => {
-            if (request.method === "POST") return Deferred.await(reply);
+            if (request.method === "POST") {
+              return Deferred.await(reply);
+            }
 
             if (request.url.endsWith("/categories")) {
               return Effect.succeed(Response.json(categoryFailure ? {} : { data: [], next: [] }));
@@ -619,7 +638,9 @@ it.each(["confirmed", "uncertain"] as const)(
         const pause = (): HTMLButtonElement => {
           const button = container.querySelector("button");
 
-          if (button === null) throw new Error("Missing pause action");
+          if (button === null) {
+            throw new Error("Missing pause action");
+          }
 
           return button;
         };
@@ -709,7 +730,9 @@ it("rejects obsolete save actions and fences acknowledged completion after dispo
       const base = planningHttp(reply, reread);
 
       const http = HttpClient.make((request) => {
-        if (request.method === "POST") writes += 1;
+        if (request.method === "POST") {
+          writes += 1;
+        }
 
         return base.execute(request);
       });
@@ -834,7 +857,10 @@ it("saves a Money-bearing edit with its exact reviewed facts and confirms its vi
         );
         yield* Effect.tryPromise(() => reactWork(() => current().save(edit, onSaved)));
 
-        if (edit.kind === "edit") Object.assign(edit.plan, { name: "Changed after save" });
+        if (edit.kind === "edit") {
+          Object.assign(edit.plan, { name: "Changed after save" });
+        }
+
         yield* Effect.tryPromise(() => reactAssertion(() => expect(requests).toHaveLength(1)));
         expect(
           yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(requests[0] ?? "")
@@ -1050,7 +1076,10 @@ it.each(["scheduled", "paused"] as const)(
           );
           const button = container.querySelector("button");
 
-          if (button === null) throw new Error("Missing lifecycle action");
+          if (button === null) {
+            throw new Error("Missing lifecycle action");
+          }
+
           yield* Effect.tryPromise(() => reactAssertion(() => expect(button.disabled).toBe(false)));
           yield* Effect.tryPromise(() => reactWork(() => button.click()));
           yield* Effect.tryPromise(() =>

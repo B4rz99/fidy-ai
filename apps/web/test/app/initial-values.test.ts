@@ -6,7 +6,7 @@ import { HttpClient, HttpClientResponse } from "effect/http";
 import { BrowserSessionBindingSchema, makeFidyClient, makeWebAuthClient } from "@/transport/client";
 import { workspaceProfileQuery } from "@/transport/workspace-query";
 import { prepareQuery } from "@/transport/query-preparation";
-import { initialApplicationValues } from "./initial-values";
+import { initialApplicationValues } from "@/app/initial-values";
 import {
   consumeInitialTransactionConsent,
   initialTransactionConsent,

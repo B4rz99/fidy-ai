@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { destinationAfterLogin } from "./login-destination";
+import { destinationAfterLogin } from "@/session/login-destination";
 
 const request = "24000000-0000-4000-8000-000000000123";
 

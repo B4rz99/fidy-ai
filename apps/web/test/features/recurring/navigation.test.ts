@@ -126,7 +126,10 @@ const click = (container: HTMLElement, text: string): Promise<void> =>
       (candidate) => candidate.textContent === text
     );
 
-    if (button === undefined) throw new Error(`Missing ${text}`);
+    if (button === undefined) {
+      throw new Error(`Missing ${text}`);
+    }
+
     button.click();
   });
 

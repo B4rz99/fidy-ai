@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { RegistryContext } from "@effect/atom-react";
 import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
 import { Effect, Layer, Option } from "effect";
@@ -10,20 +9,22 @@ import { expect, it, vi } from "vitest";
 import { type BrowserAuthentication, SessionContext } from "@/session/session-context";
 import { makeFidyClient, makeWebAuthClient } from "@/transport/client";
 import { makeHostedTurnClient } from "@/transport/hosted-turn-client";
-import { createWebRouter } from "./routes";
+import { createWebRouter } from "@/app/routes";
 
 const reactWork = (work: () => void): Promise<void> => Promise.resolve(act(work));
+
+type RefusedPage = Readonly<{
+  router: ReturnType<typeof createWebRouter>;
+  container: HTMLDivElement;
+  render: () => Promise<void>;
+  dispose: () => Promise<void>;
+}>;
 
 const refusedPage = (
   authentication: BrowserAuthentication,
   path: string,
   consent: "Revoked" | "Unavailable" | "Granted" | "Missing" = "Unavailable"
-): Readonly<{
-  router: ReturnType<typeof createWebRouter>;
-  container: HTMLDivElement;
-  render: () => Promise<void>;
-  dispose: () => Promise<void>;
-}> => {
+): RefusedPage => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
   vi.stubGlobal("matchMedia", (query: string) => ({
@@ -166,8 +167,7 @@ it.each(["Unavailable", "Granted", "Missing"] as const)(
           yield* Effect.tryPromise(page.dispose);
         }
       })
-    ),
-  20000
+    )
 );
 
 it.each(["signed-in", "expired"] as const)(
@@ -213,6 +213,5 @@ it.each(["signed-in", "expired"] as const)(
           yield* Effect.tryPromise(page.dispose);
         }
       })
-    ),
-  20000
+    )
 );

@@ -9,20 +9,10 @@
 "apps/server/src/shell/hosted-inference/internal/inference.ts"	XBx6lZbPJgTjPESOGH757ujcztKDMdNu3wFyZ0Kwbog
 "apps/site/src/islands/agent-brands.tsx"	Vuc3sPILk5ePXW-WrY3M7xzoJVrSYqiIS0cdDeyHmyg
 "apps/web/.dependency-cruiser.mjs"	_fjYXwSv3Epcn-68MYINC1rc51l8nAANoyHQNfsMcxg
-"apps/web/src/app/not-found.test.ts"	Ffbo9JDPbbbg6uI72NyOOzXjUSOeUTOcl51FAqoA84s
-"apps/web/src/app/read-only-navigation.test.ts"	Ffbo9JDPbbbg6uI72NyOOzXjUSOeUTOcl51FAqoA84s
-"apps/web/src/app/review-recovery.test.ts"	Ffbo9JDPbbbg6uI72NyOOzXjUSOeUTOcl51FAqoA84s
-"apps/web/src/app/transaction-entry.test.ts"	Ffbo9JDPbbbg6uI72NyOOzXjUSOeUTOcl51FAqoA84s
-"apps/web/src/browser/clipboard.test.ts"	Ffbo9JDPbbbg6uI72NyOOzXjUSOeUTOcl51FAqoA84s
-"apps/web/src/features/budgets/navigation.test.ts"	Ffbo9JDPbbbg6uI72NyOOzXjUSOeUTOcl51FAqoA84s
 "apps/web/src/features/dashboard/spending-chart.tsx"	KyPa859Fmjrme77DeJDTkrdrrTzBNb4j_-KNe9db7X8
-"apps/web/src/features/email-replacement/commands.test.ts"	Ffbo9JDPbbbg6uI72NyOOzXjUSOeUTOcl51FAqoA84s
-"apps/web/src/features/recovery/feature.test.ts"	Ffbo9JDPbbbg6uI72NyOOzXjUSOeUTOcl51FAqoA84s
-"apps/web/src/session/session.test.ts"	Ffbo9JDPbbbg6uI72NyOOzXjUSOeUTOcl51FAqoA84s
 "apps/web/src/ui/components/ai-elements/conversation.tsx"	3Cs8BW5I4RR83-rROqAlD23oSTbXjHmkMaLEarGR5aU	ALwisTCrrQydKoJ7XMDXzJ4NADKy33NI6Ti88Jr7mBA
 "apps/web/src/ui/components/ai-elements/message.tsx"	3Cs8BW5I4RR83-rROqAlD23oSTbXjHmkMaLEarGR5aU	Rb_ujz85EThqDab-27OvIHIphffOnu1MjBILBP-laMM
 "apps/web/src/ui/components/chart.tsx"	KyPa859Fmjrme77DeJDTkrdrrTzBNb4j_-KNe9db7X8
-"apps/web/src/ui/components/choice-dropdown.test.ts"	Ffbo9JDPbbbg6uI72NyOOzXjUSOeUTOcl51FAqoA84s
 "apps/web/src/ui/dashboard-reference.tsx"	KyPa859Fmjrme77DeJDTkrdrrTzBNb4j_-KNe9db7X8
 "infra/cloudflare/diagnose-smoke-routing.ts"	xKvNYaZJh0ym-g8Y3ck3N2xxIa0klLrJrSjVAxcEGi8
 "infra/cloudflare/scripts/check-kapso-launch.test.ts"	xKvNYaZJh0ym-g8Y3ck3N2xxIa0klLrJrSjVAxcEGi8

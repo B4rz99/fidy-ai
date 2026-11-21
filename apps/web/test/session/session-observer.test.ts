@@ -1,9 +1,9 @@
 import { Effect, Option } from "effect";
 import { type Mock, afterEach, expect, it, vi } from "vitest";
-import { authenticationEndedEvent } from "./authentication-events";
+import { authenticationEndedEvent } from "@/session/authentication-events";
 import { beginInitialBrowserRequest } from "@/transport/initial-request";
 import { beginInitialBrowserSession } from "@/transport/initial-session";
-import { type BindingState, observeBinding } from "./session-observer";
+import { type BindingState, observeBinding } from "@/session/session-observer";
 
 const origin = "https://api.test.fidyapp.com";
 
@@ -102,16 +102,20 @@ it("coalesces wake bursts and retains the original lifetime and receipt after sa
       const view = yield* Effect.tryPromise(() => attach(Option.some(binding)));
       const entry = lastUpdate(view);
       const reply = Promise.withResolvers<Response>();
-      view.network.mockImplementation(() => reply.promise);
+      const resumedRead = Promise.withResolvers<void>();
+      view.network.mockImplementation(() => {
+        resumedRead.resolve();
+
+        return reply.promise;
+      });
       entry.session.recheck();
       const restored = new Event("pageshow");
       Object.defineProperty(restored, "persisted", { value: true });
       window.dispatchEvent(restored);
       document.dispatchEvent(new Event("visibilitychange"));
       entry.session.recheck();
-      yield* Effect.tryPromise(() =>
-        vi.waitFor(() => expect(view.network).toHaveBeenCalledTimes(2))
-      );
+      yield* Effect.tryPromise(() => resumedRead.promise);
+      expect(view.network).toHaveBeenCalledTimes(2);
       const checking = lastUpdate(view);
       expect(checking.checking).toBe(true);
       expect(checking.session).toBe(entry.session);
@@ -131,21 +135,29 @@ it("coalesces wake bursts and retains the original lifetime and receipt after sa
     })
   ));
 
-for (const replacement of ["20000000-0000-4000-8000-000000000002", null]) {
-  it(`retires protected work before expiry when the current binding becomes ${replacement ?? "anonymous"}`, () =>
+it.each([
+  {
+    replacement: "20000000-0000-4000-8000-000000000002",
+    label: "20000000-0000-4000-8000-000000000002",
+  },
+  { replacement: null, label: "anonymous" },
+])(
+  "retires protected work before expiry when the current binding becomes $label",
+  ({ replacement }) =>
     Effect.runPromise(
       Effect.gen(function* () {
         const view = yield* Effect.tryPromise(() => attach(Option.some(binding)));
         const entry = lastUpdate(view);
+        const retired = Promise.withResolvers<void>();
         view.expired.mockImplementation(() => {
           expect(entry.session.signal.aborted).toBe(true);
           expect(view.request.signal.aborted).toBe(true);
+          retired.resolve();
         });
         view.network.mockResolvedValue(Response.json({ binding: replacement }));
         entry.session.recheck();
-        yield* Effect.tryPromise(() =>
-          vi.waitFor(() => expect(view.expired).toHaveBeenCalledOnce())
-        );
+        yield* Effect.tryPromise(() => retired.promise);
+        expect(view.expired).toHaveBeenCalledOnce();
         expect(view.update).toHaveBeenCalledTimes(2);
         expect(lastUpdate(view).session).toBe(entry.session);
         expect(lastUpdate(view).initial).toBe(entry.initial);
@@ -155,8 +167,8 @@ for (const replacement of ["20000000-0000-4000-8000-000000000002", null]) {
         yield* Effect.yieldNow;
         expect(view.network).toHaveBeenCalledTimes(2);
       })
-    ));
-}
+    )
+);
 
 it("coalesces wake bursts while the initial public observation is pending", () =>
   Effect.runPromise(
@@ -168,12 +180,15 @@ it("coalesces wake bursts while the initial public observation is pending", () =
       );
 
       const view = observeView(prepared);
+      const published = Promise.withResolvers<void>();
+      view.update.mockImplementation(() => published.resolve());
       document.dispatchEvent(new Event("visibilitychange"));
       document.dispatchEvent(new Event("visibilitychange"));
       expect(view.update).not.toHaveBeenCalled();
       expect(view.network).toHaveBeenCalledOnce();
       reply.resolve(Response.json({ binding: null }));
-      yield* Effect.tryPromise(() => vi.waitFor(() => expect(view.update).toHaveBeenCalledOnce()));
+      yield* Effect.tryPromise(() => published.promise);
+      expect(view.update).toHaveBeenCalledOnce();
       expect(lastUpdate(view).session.binding).toBe("none");
       yield* Effect.yieldNow;
       expect(view.network).toHaveBeenCalledOnce();
@@ -189,7 +204,10 @@ it("closes an unavailable initial observation without admitting anonymous childr
       );
 
       const view = observeView(prepared);
-      yield* Effect.tryPromise(() => vi.waitFor(() => expect(view.failed).toHaveBeenCalledOnce()));
+      const closed = Promise.withResolvers<void>();
+      view.failed.mockImplementation(() => closed.resolve());
+      yield* Effect.tryPromise(() => closed.promise);
+      expect(view.failed).toHaveBeenCalledOnce();
       expect(view.update).not.toHaveBeenCalled();
       expect(view.expired).not.toHaveBeenCalled();
       expect(view.request.signal.aborted).toBe(true);
@@ -205,13 +223,16 @@ it("retires the original lifetime when a resumed binding read is unavailable", (
     Effect.gen(function* () {
       const view = yield* Effect.tryPromise(() => attach(Option.some(binding)));
       const entry = lastUpdate(view);
+      const retired = Promise.withResolvers<void>();
       view.failed.mockImplementation(() => {
         expect(entry.session.signal.aborted).toBe(true);
         expect(view.request.signal.aborted).toBe(true);
+        retired.resolve();
       });
       view.network.mockResolvedValue(Response.json({ binding: 42 }));
       entry.session.recheck();
-      yield* Effect.tryPromise(() => vi.waitFor(() => expect(view.failed).toHaveBeenCalledOnce()));
+      yield* Effect.tryPromise(() => retired.promise);
+      expect(view.failed).toHaveBeenCalledOnce();
       expect(view.expired).not.toHaveBeenCalled();
       expect(view.update).toHaveBeenCalledTimes(2);
       entry.session.recheck();
@@ -222,58 +243,79 @@ it("retires the original lifetime when a resumed binding read is unavailable", (
   ));
 
 const settleReply = (reply: PromiseWithResolvers<Response>, failed: boolean): void => {
-  if (failed) reply.reject(new Error("Late bootstrap failure"));
-  else reply.resolve(Response.json({ binding }));
+  if (failed) {
+    reply.reject(new Error("Late bootstrap failure"));
+  } else {
+    reply.resolve(Response.json({ binding }));
+  }
 };
 
-for (const resumed of [false, true]) {
-  for (const authenticationEnded of [false, true]) {
-    for (const failedReply of [false, true]) {
-      it(`ignores late ${failedReply ? "failure" : "success"} after ${authenticationEnded ? "authentication ends" : "disposal"} during ${resumed ? "resume" : "initial admission"}`, () =>
-        Effect.runPromise(
-          Effect.gen(function* () {
-            const reply = Promise.withResolvers<Response>();
+const lateReplyCases = [false, true].flatMap((resumed) =>
+  [false, true].flatMap((authenticationEnded) =>
+    [false, true].map((failedReply) => ({
+      resumed,
+      authenticationEnded,
+      failedReply,
+      reply: failedReply ? "failure" : "success",
+      ending: authenticationEnded ? "authentication ends" : "disposal",
+      phase: resumed ? "resume" : "initial admission",
+    }))
+  )
+);
 
-            const view = resumed
-              ? yield* Effect.tryPromise(() => attach(Option.some(binding)))
-              : observeView(
-                  prepareView(
-                    vi.fn<typeof globalThis.fetch>().mockImplementation(() => reply.promise)
-                  )
-                );
+it.each(lateReplyCases)(
+  "ignores late $reply after $ending during $phase",
+  ({ resumed, authenticationEnded, failedReply }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const reply = Promise.withResolvers<Response>();
+        const read = Promise.withResolvers<void>();
 
-            const published = Option.fromUndefinedOr(view.update.mock.calls.at(-1)?.[0]);
+        const pendingRead = (): Promise<Response> => {
+          read.resolve();
 
-            if (resumed) {
-              view.network.mockImplementation(() => reply.promise);
-              Option.getOrThrow(published).session.recheck();
-            }
+          return reply.promise;
+        };
 
-            const reads = resumed ? 2 : 1;
-            yield* Effect.tryPromise(() =>
-              vi.waitFor(() => expect(view.network).toHaveBeenCalledTimes(reads))
+        const view = resumed
+          ? yield* Effect.tryPromise(() => attach(Option.some(binding)))
+          : observeView(
+              prepareView(vi.fn<typeof globalThis.fetch>().mockImplementation(pendingRead))
             );
 
-            const pendingSignal = Option.getOrThrow(
-              Option.fromNullishOr(view.network.mock.calls.at(-1)?.[1]?.signal)
-            );
+        const published = Option.fromUndefinedOr(view.update.mock.calls.at(-1)?.[0]);
 
-            if (authenticationEnded) window.dispatchEvent(new Event(authenticationEndedEvent));
-            else view.dispose();
-            expect(pendingSignal.aborted).toBe(true);
-            expect(view.request.signal.aborted).toBe(true);
-            Option.map(published, (entry) => expect(entry.session.signal.aborted).toBe(true));
-            const publications = view.update.mock.calls.length;
-            settleReply(reply, failedReply);
-            document.dispatchEvent(new Event("visibilitychange"));
-            Option.map(published, (entry) => entry.session.recheck());
-            yield* Effect.yieldNow;
-            expect(view.update).toHaveBeenCalledTimes(publications);
-            expect(view.expired).not.toHaveBeenCalled();
-            expect(view.failed).not.toHaveBeenCalled();
-            expect(view.network).toHaveBeenCalledTimes(reads);
-          })
-        ));
-    }
-  }
-}
+        if (resumed) {
+          view.network.mockImplementation(pendingRead);
+          Option.getOrThrow(published).session.recheck();
+        }
+
+        const reads = resumed ? 2 : 1;
+        yield* Effect.tryPromise(() => read.promise);
+        expect(view.network).toHaveBeenCalledTimes(reads);
+
+        const pendingSignal = Option.getOrThrow(
+          Option.fromNullishOr(view.network.mock.calls.at(-1)?.[1]?.signal)
+        );
+
+        if (authenticationEnded) {
+          window.dispatchEvent(new Event(authenticationEndedEvent));
+        } else {
+          view.dispose();
+        }
+
+        expect(pendingSignal.aborted).toBe(true);
+        expect(view.request.signal.aborted).toBe(true);
+        Option.map(published, (entry) => expect(entry.session.signal.aborted).toBe(true));
+        const publications = view.update.mock.calls.length;
+        settleReply(reply, failedReply);
+        document.dispatchEvent(new Event("visibilitychange"));
+        Option.map(published, (entry) => entry.session.recheck());
+        yield* Effect.yieldNow;
+        expect(view.update).toHaveBeenCalledTimes(publications);
+        expect(view.expired).not.toHaveBeenCalled();
+        expect(view.failed).not.toHaveBeenCalled();
+        expect(view.network).toHaveBeenCalledTimes(reads);
+      })
+    )
+);

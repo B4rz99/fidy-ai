@@ -2,7 +2,7 @@ import { Effect } from "effect";
 
 type LogoutTrigger = (input: Readonly<{ onLoggedOut: () => void }>) => void;
 
-export const makeLogoutOperation =
+export const createLogoutOperation =
   <A, E, R>(
     logout: Effect.Effect<A, E, R>
   ): ((input: Readonly<{ onLoggedOut: () => void }>) => Effect.Effect<void, never, R>) =>

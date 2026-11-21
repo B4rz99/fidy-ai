@@ -1,11 +1,13 @@
-// @vitest-environment jsdom
-
 import { Deferred, Effect, Exit, Option, Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { it as effectIt, expect } from "@effect/vitest";
 import { vi } from "vitest";
-import { type BrowserClipboard, ClipboardAccessFailed, writeClipboardText } from "./clipboard";
-import { makeSensitiveClipboard } from "./sensitive-clipboard";
+import {
+  type BrowserClipboard,
+  ClipboardAccessFailed,
+  writeClipboardText,
+} from "@/browser/clipboard";
+import { createSensitiveClipboard } from "@/browser/sensitive-clipboard";
 
 effectIt.effect("writes text through an available browser clipboard", () =>
   Effect.gen(function* () {
@@ -65,7 +67,7 @@ effectIt.effect("expiry clears the matching sensitive clipboard value", () =>
     const stub = clipboardStub();
     const copied = yield* Deferred.make<void>();
     const context = yield* Effect.context<never>();
-    const command = yield* makeSensitiveClipboard(Option.some(stub.clipboard), "10 minutes");
+    const command = yield* createSensitiveClipboard(Option.some(stub.clipboard), "10 minutes");
 
     command.copy("sensitive-value", () =>
       Effect.runSyncWith(context)(Deferred.succeed(copied, undefined))
@@ -83,7 +85,7 @@ effectIt.effect("a replacement copy owns expiry without clearing newer clipboard
     const firstCopied = yield* Deferred.make<void>();
     const secondCopied = yield* Deferred.make<void>();
     const context = yield* Effect.context<never>();
-    const command = yield* makeSensitiveClipboard(Option.some(stub.clipboard), "10 minutes");
+    const command = yield* createSensitiveClipboard(Option.some(stub.clipboard), "10 minutes");
 
     command.copy("first-secret", () =>
       Effect.runSyncWith(context)(Deferred.succeed(firstCopied, undefined))
@@ -116,7 +118,7 @@ effectIt.effect("closing its owner interrupts pending sensitive callbacks immedi
     const context = yield* Effect.context<never>();
     let expired = 0;
 
-    const command = yield* makeSensitiveClipboard(Option.some(stub.clipboard), "10 minutes").pipe(
+    const command = yield* createSensitiveClipboard(Option.some(stub.clipboard), "10 minutes").pipe(
       Scope.provide(owner)
     );
 
@@ -139,7 +141,7 @@ effectIt.effect("denied clipboard access stays silent while the reveal still exp
   Effect.gen(function* () {
     let copied = 0;
     let expired = 0;
-    const command = yield* makeSensitiveClipboard(Option.none(), "10 minutes");
+    const command = yield* createSensitiveClipboard(Option.none(), "10 minutes");
 
     command.reveal(() => {
       expired += 1;
@@ -172,14 +174,17 @@ effectIt.effect("late clipboard completion after disposal preserves unrelated ne
       writeText: (value) => {
         stub.replace(value);
 
-        if (value !== "old-recovery-code") return Promise.resolve();
+        if (value !== "old-recovery-code") {
+          return Promise.resolve();
+        }
+
         Effect.runSyncWith(context)(Deferred.succeed(started, undefined));
 
         return pending.promise;
       },
     };
 
-    const command = yield* makeSensitiveClipboard(Option.some(clipboard), "10 minutes").pipe(
+    const command = yield* createSensitiveClipboard(Option.some(clipboard), "10 minutes").pipe(
       Scope.provide(owner)
     );
 
@@ -200,7 +205,7 @@ effectIt.effect("late clipboard completion after disposal preserves unrelated ne
 effectIt.effect("an exact release cannot erase a newer identical copy", () =>
   Effect.gen(function* () {
     const stub = clipboardStub();
-    const command = yield* makeSensitiveClipboard(Option.some(stub.clipboard), "10 minutes");
+    const command = yield* createSensitiveClipboard(Option.some(stub.clipboard), "10 minutes");
     const first = command.copy("same-secret");
     yield* Effect.yieldNow;
     const second = command.copy("same-secret");
@@ -221,7 +226,7 @@ effectIt.effect("a released copy's delayed read cannot clear a newer identical c
     const reading = yield* Deferred.make<void>();
     const context = yield* Effect.context<never>();
 
-    const command = yield* makeSensitiveClipboard(
+    const command = yield* createSensitiveClipboard(
       Option.some({
         writeText: stub.clipboard.writeText,
         readText: () => {
@@ -269,7 +274,7 @@ effectIt.effect(
         },
       };
 
-      const command = yield* makeSensitiveClipboard(Option.some(clipboard), "10 minutes");
+      const command = yield* createSensitiveClipboard(Option.some(clipboard), "10 minutes");
       command.copy("oldest", callbacks[0]);
       yield* Effect.yieldNow;
       command.copy("middle", callbacks[1]);
@@ -297,7 +302,7 @@ effectIt.effect(
       const pending = Promise.withResolvers<void>();
       const copied = vi.fn();
 
-      const command = yield* makeSensitiveClipboard(
+      const command = yield* createSensitiveClipboard(
         Option.some({
           readText: stub.clipboard.readText,
           writeText: (text) =>
@@ -322,7 +327,7 @@ effectIt.effect("copying does not extend the independent reveal deadline", () =>
   Effect.gen(function* () {
     const stub = clipboardStub();
     const expired = vi.fn();
-    const command = yield* makeSensitiveClipboard(Option.some(stub.clipboard), "10 minutes");
+    const command = yield* createSensitiveClipboard(Option.some(stub.clipboard), "10 minutes");
     command.reveal(expired);
     yield* TestClock.adjust("9 minutes");
     command.copy("secret");
@@ -338,7 +343,7 @@ effectIt.effect("a rejected write never acknowledges Copied and later copy remai
     const stub = clipboardStub();
     const copied = vi.fn();
 
-    const command = yield* makeSensitiveClipboard(
+    const command = yield* createSensitiveClipboard(
       Option.some({
         readText: stub.clipboard.readText,
         writeText: (text) =>
@@ -359,8 +364,9 @@ effectIt.effect("a rejected write never acknowledges Copied and later copy remai
   })
 );
 
-for (const denied of ["read", "clear"] as const) {
-  effectIt.effect(`denied ${denied} drops cleanup authority without a second release attempt`, () =>
+effectIt.effect.each(["read", "clear"] as const)(
+  "denied %s drops cleanup authority without a second release attempt",
+  (denied) =>
     Effect.gen(function* () {
       const stub = clipboardStub();
 
@@ -374,7 +380,7 @@ for (const denied of ["read", "clear"] as const) {
           : stub.clipboard.writeText(text)
       );
 
-      const command = yield* makeSensitiveClipboard(
+      const command = yield* createSensitiveClipboard(
         Option.some({ readText, writeText }),
         "10 minutes"
       );
@@ -389,8 +395,7 @@ for (const denied of ["read", "clear"] as const) {
       expect(readText).toHaveBeenCalledTimes(1);
       expect(writeText).toHaveBeenCalledTimes(denied === "clear" ? 2 : 1);
     })
-  );
-}
+);
 
 effectIt.effect("commands after scope closure admit no native writes or callbacks", () =>
   Effect.gen(function* () {
@@ -401,7 +406,7 @@ effectIt.effect("commands after scope closure admit no native writes or callback
     const writeText = vi.fn(() => Promise.resolve());
     const callback = vi.fn();
 
-    const command = yield* makeSensitiveClipboard(
+    const command = yield* createSensitiveClipboard(
       Option.some({
         readText: () => Promise.resolve(""),
         writeText,
@@ -423,7 +428,7 @@ effectIt.effect("a failed replacement does not strand the prior successful copy"
     const stub = clipboardStub();
     const copied = vi.fn();
 
-    const command = yield* makeSensitiveClipboard(
+    const command = yield* createSensitiveClipboard(
       Option.some({
         readText: stub.clipboard.readText,
         writeText: (text) =>
@@ -451,7 +456,7 @@ effectIt.effect("a replacement's deferred cleanup read cannot erase a later iden
     const pending = Promise.withResolvers<string>();
     let reads = 0;
 
-    const command = yield* makeSensitiveClipboard(
+    const command = yield* createSensitiveClipboard(
       Option.some({
         readText: () => (++reads === 1 ? pending.promise : stub.clipboard.readText()),
         writeText: stub.clipboard.writeText,
@@ -479,7 +484,7 @@ effectIt.effect("a delayed replacement cleanup write repairs to the latest origi
     const pending = Promise.withResolvers<void>();
     let clears = 0;
 
-    const command = yield* makeSensitiveClipboard(
+    const command = yield* createSensitiveClipboard(
       Option.some({
         readText: stub.clipboard.readText,
         writeText: (value) =>

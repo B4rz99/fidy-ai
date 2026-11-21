@@ -2,6 +2,12 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 import { serverClientBoundary } from "./server-client-boundary.ts";
 
+const nodeSessionTests = [
+  "test/session/initial-session.test.ts",
+  "test/session/login-destination.test.ts",
+  "test/session/session-observer.test.ts",
+];
+
 export default defineConfig({
   plugins: [serverClientBoundary(), react()],
   resolve: {
@@ -23,6 +29,7 @@ export default defineConfig({
             "cloudflare/**/*.test.ts",
             "scripts/**/*.test.ts",
             "test/**/*.node.test.ts",
+            ...nodeSessionTests,
           ],
         },
       },
@@ -32,7 +39,7 @@ export default defineConfig({
           name: "dom",
           environment: "jsdom",
           include: ["test/**/*.test.ts"],
-          exclude: ["test/**/*.node.test.ts"],
+          exclude: ["test/**/*.node.test.ts", ...nodeSessionTests],
         },
       },
     ],

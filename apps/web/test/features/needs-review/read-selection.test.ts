@@ -4,9 +4,9 @@ import { AtomRegistry } from "effect/reactivity";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { makeFidyClient } from "@/transport/client";
-import { reviewPageContextQuery } from "./source-context";
-import { reviewNavigationQuery } from "./navigation-query";
-import { reviewWorkspaceQueries } from "./query";
+import { reviewPageContextQuery } from "@/features/needs-review/source-context";
+import { reviewNavigationQuery } from "@/features/needs-review/navigation-query";
+import { reviewWorkspaceQueries } from "@/features/needs-review/query";
 
 it.live("does not fetch source context for an empty page", () =>
   Effect.gen(function* () {

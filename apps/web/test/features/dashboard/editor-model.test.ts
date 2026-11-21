@@ -7,7 +7,7 @@ import {
   type DashboardGesture,
   compileDashboardGesture,
   freshWidgetId,
-} from "./editor-model";
+} from "@/features/dashboard/editor-model";
 
 const firstId = WidgetId.make("f1d1a000-0000-4000-8000-000000000801");
 
@@ -32,7 +32,9 @@ const compile = (
   const result = compileDashboardGesture(gesture);
   expect(Result.isSuccess(result)).toBe(true);
 
-  if (Result.isFailure(result)) throw result.failure;
+  if (Result.isFailure(result)) {
+    throw result.failure;
+  }
 
   return result.success;
 };

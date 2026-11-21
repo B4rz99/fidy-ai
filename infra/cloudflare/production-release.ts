@@ -7,6 +7,7 @@ import { compatibleCategoryReleases } from "../../apps/server/src/core/categorie
 import { ReleaseSmokeFailed } from "./smoke-exchange";
 import { verifyStableWorkerIdentity } from "./stable-worker-identity";
 import { Cause, Data, Effect, Option, Schema, Stream } from "effect";
+import { isDeepStrictEqual } from "node:util";
 import {
   FetchHttpClient,
   HttpBody,
@@ -21,6 +22,8 @@ import { verifiedVersionResources } from "./rollback-compatibility";
 import {
   type Deployment,
   type ReleasePort,
+  type ReleaseSnapshot,
+  type StableRestoration,
   releaseController,
   type releaseSchemas,
 } from "./release-controller";
@@ -89,12 +92,24 @@ const DeploymentRejection = Schema.Struct({
     })
   ),
 });
+const badRequest = 400;
+const modifiedSecretsCode = 10220;
+const ModifiedSecretsRejection = Schema.is(
+  Schema.Struct({
+    success: Schema.Literal(false),
+    errors: Schema.Tuple([Schema.Struct({ code: Schema.Literal(modifiedSecretsCode) })]),
+  })
+);
+class ModifiedDeploymentSecrets extends Data.TaggedError("ModifiedDeploymentSecrets") {}
 export class ReleaseFailure extends Data.TaggedError("ReleaseFailure")<{ message: string }> {}
 
 export const releaseFailureMessage = (cause: Cause.Cause<unknown>): string => {
   for (const reason of cause.reasons) {
     if (Cause.isFailReason(reason) && reason.error instanceof ReleaseFailure) {
       return reason.error.message;
+    }
+    if (Cause.isFailReason(reason) && reason.error instanceof ModifiedDeploymentSecrets) {
+      return `Cloudflare deployment rejected (HTTP ${badRequest}; code ${modifiedSecretsCode})`;
     }
   }
   return "Production release routing failed; inspect Worker deployment state before recovery.";
@@ -242,6 +257,20 @@ const config = (): Config => {
   };
 };
 
+const deploymentRefusal = (status: number, text: string): Error => {
+  const payload = Schema.decodeOption(Json)(text);
+  if (status === badRequest && Option.exists(payload, ModifiedSecretsRejection)) {
+    return new ModifiedDeploymentSecrets();
+  }
+  const rejection = Option.flatMap(payload, Schema.decodeUnknownOption(DeploymentRejection));
+  const code = Option.flatMap(rejection, (value) => Option.fromNullishOr(value.errors[0]?.code));
+  return new ReleaseFailure({
+    message: `Cloudflare deployment rejected (HTTP ${status}${Option.match(code, {
+      onNone: () => "",
+      onSome: (value) => `; code ${value}`,
+    })})`,
+  });
+};
 const boundedJson = Effect.fn(function* (
   response: HttpClientResponse.HttpClientResponse,
   reportDeploymentRejection: boolean
@@ -273,20 +302,7 @@ const boundedJson = Effect.fn(function* (
     offset += chunk.byteLength;
   }
   const text = new TextDecoder().decode(bytes);
-  if (rejected) {
-    const rejection = Option.flatMap(
-      Schema.decodeOption(Json)(text),
-      Schema.decodeUnknownOption(DeploymentRejection)
-    );
-    const code = Option.flatMap(rejection, (value) => Option.fromNullishOr(value.errors[0]?.code));
-    return yield* new ReleaseFailure({
-      message: `Cloudflare deployment rejected (HTTP ${response.status}${Option.match(code, {
-        onNone: () => "",
-        onSome: (value) => `; code ${value}`,
-      })})`,
-    });
-  }
-  return yield* decodeJson(text);
+  return yield* rejected ? Effect.fail(deploymentRefusal(response.status, text)) : decodeJson(text);
 });
 export class WorkerVersionReadUnavailable extends Data.TaggedError("WorkerVersionReadUnavailable")<{
   status: number;
@@ -846,6 +862,8 @@ const createDeployment = Effect.fn(function* (
   const response = yield* Schema.decodeUnknownEffect(CreateResponse)(raw);
   return asDeployment(response.result);
 });
+const deploymentUrl = (env: Config, name: string): string =>
+  `https://api.cloudflare.com/client/v4/accounts/${env.account}/workers/scripts/${encodeURIComponent(name)}/deployments`;
 const readTrunk = Effect.fn(function* (env: Config) {
   const raw = yield* providerJson(
     HttpClientRequest.get(`https://api.github.com/repos/${env.repository}/git/ref/heads/trunk`, {
@@ -890,11 +908,11 @@ export const releasePort = ({
     providerJson(request, request.method === "POST").pipe(
       Effect.provideService(HttpClient.HttpClient, client)
     );
-  const url = (name: string): string =>
-    `https://api.cloudflare.com/client/v4/accounts/${env.account}/workers/scripts/${encodeURIComponent(name)}/deployments`;
   const recentDeployments = Effect.fn(function* (name: string) {
     const raw = yield* json(
-      HttpClientRequest.get(url(name), { headers: { authorization: `Bearer ${env.token}` } })
+      HttpClientRequest.get(deploymentUrl(env, name), {
+        headers: { authorization: `Bearer ${env.token}` },
+      })
     );
     const response = yield* Schema.decodeUnknownEffect(ListResponse)(raw);
     return response.result.deployments.map(asDeployment);
@@ -926,7 +944,11 @@ export const releasePort = ({
           });
           return yield* current(name);
         }
-        return yield* createDeployment(json, { url: url(name), token: env.token, versions });
+        return yield* createDeployment(json, {
+          url: deploymentUrl(env, name),
+          token: env.token,
+          versions,
+        });
       }),
   };
 };
@@ -1162,6 +1184,97 @@ const rollbackPort = (
       );
       return versions.result.items.some((item) => item.id === id);
     }),
+});
+
+type CanonicalRestoration = Readonly<{
+  port: RollbackPort;
+  env: Config;
+  client: HttpClient.HttpClient;
+  snapshot: ReleaseSnapshot;
+  verifyClosedPair: Effect.Effect<void, Error>;
+}>;
+
+const requireRestorationHistory = Effect.fn(function* (
+  port: RollbackPort,
+  { name, previous }: StableRestoration["companion"]
+) {
+  const history = yield* port.recentDeployments(name);
+  const current = history.at(0);
+  const sameVersions =
+    current !== undefined &&
+    current.versions.length === previous.versions.length &&
+    previous.versions.every((version) =>
+      current.versions.some(
+        (actual) => actual.id === version.id && actual.percentage === version.percentage
+      )
+    );
+  if (current?.id !== previous.id || !sameVersions) {
+    return yield* Effect.fail(Error("Canonical restoration requires the proved live pair"));
+  }
+  return history;
+});
+const readCanonicalRestorationHistory = Effect.fn(function* (
+  { port, snapshot }: CanonicalRestoration,
+  { target, companion }: StableRestoration
+) {
+  const histories = yield* Effect.forEach([target, companion], (worker) =>
+    requireRestorationHistory(port, worker)
+  );
+  yield* releaseController.requireTrunk(port, snapshot.revision);
+  return histories;
+});
+const retryClosedRestoration = Effect.fn(function* (
+  config: CanonicalRestoration,
+  input: StableRestoration,
+  before: readonly (readonly Deployment[])[]
+) {
+  const { port, env, client, verifyClosedPair } = config;
+  const { target } = input;
+  yield* verifyClosedPair;
+  if (!(yield* port.deployable(target.name, target.stableVersionId))) {
+    return yield* Effect.fail(Error("Captured closed Worker is no longer deployable"));
+  }
+  const after = yield* readCanonicalRestorationHistory(config, input);
+  if (!isDeepStrictEqual(before, after)) {
+    return yield* Effect.fail(Error("Canonical restoration history changed after refusal"));
+  }
+  return yield* createDeployment(
+    (request) =>
+      providerJson(request, true).pipe(Effect.provideService(HttpClient.HttpClient, client)),
+    {
+      url: deploymentUrl(env, target.name) + "?force=true",
+      token: env.token,
+      versions: [{ id: target.stableVersionId, percentage: 100 }],
+    }
+  );
+});
+const restoreCanonicalStable = Effect.fn(function* (
+  config: CanonicalRestoration,
+  input: StableRestoration
+) {
+  const { port, snapshot } = config;
+  const { target, companion } = input;
+  const workers = [snapshot.public, snapshot.core];
+  const captured = workers.find((worker) => worker.name === target.name);
+  if (
+    captured?.stableVersionId !== target.stableVersionId ||
+    !workers.some((worker) => worker.name === companion.name && worker.name !== target.name)
+  ) {
+    return yield* Effect.fail(
+      Error("Canonical restoration target differs from the closed capture")
+    );
+  }
+  const before = yield* readCanonicalRestorationHistory(config, input);
+  return yield* port.deploy(target.name, [{ id: captured.stableVersionId, percentage: 100 }]).pipe(
+    Effect.catchIf(
+      (error) => error instanceof ModifiedDeploymentSecrets,
+      () => retryClosedRestoration(config, input, before)
+    )
+  );
+});
+export const canonicalRestorePort = (config: CanonicalRestoration): RollbackPort => ({
+  ...config.port,
+  restoreStable: (input) => restoreCanonicalStable(config, input),
 });
 
 export const releaseEvidence = {

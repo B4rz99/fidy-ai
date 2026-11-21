@@ -36,6 +36,11 @@ export const releaseSchemas = {
   staged: StagedReleaseSchema,
 };
 
+export type StableRestoration = Readonly<{
+  target: Readonly<{ name: string; stableVersionId: string; previous: Deployment }>;
+  companion: Readonly<{ name: string; previous: Deployment }>;
+}>;
+
 export type ReleasePort = Readonly<{
   trunk(): Effect.Effect<string, Error>;
   current(name: string): Effect.Effect<Deployment, Error>;
@@ -43,6 +48,7 @@ export type ReleasePort = Readonly<{
     name: string,
     versions: ReadonlyArray<{ id: string; percentage: number }>
   ): Effect.Effect<Deployment, Error>;
+  restoreStable?(input: StableRestoration): Effect.Effect<Deployment, Error>;
 }>;
 
 const servingVersion = Effect.fn(function* (deployment: Deployment) {
@@ -239,8 +245,24 @@ const restoreCore = Effect.fn(function* (
     .current(snapshot.core.name)
     .pipe(Effect.catch(() => Effect.void));
   if (observedPublic?.id === input.publicStaged.id && observedCore?.id === input.corePromoted.id) {
+    const restoreStable = port.restoreStable;
+    const restorationPort =
+      restoreStable === undefined
+        ? port
+        : {
+            ...port,
+            deploy: (): Effect.Effect<Deployment, Error> =>
+              restoreStable({
+                target: {
+                  name: snapshot.core.name,
+                  stableVersionId: snapshot.core.stableVersionId,
+                  previous: input.corePromoted,
+                },
+                companion: { name: snapshot.public.name, previous: input.publicStaged },
+              }),
+          };
     const restored = yield* deployExact(
-      port,
+      restorationPort,
       snapshot.core.name,
       stable(snapshot.core).versions
     ).pipe(Effect.isSuccess);

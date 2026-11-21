@@ -21,9 +21,11 @@ export const mountIndicator = (list: HTMLDivElement): (() => void) => {
   };
 
   const focus = (event: FocusEvent): void => {
-    if (event.target instanceof HTMLButtonElement) {
-      moveIndicator({ tab: event.target, instant: true });
-    }
+    const tab = Array.from(list.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button === event.target
+    );
+
+    if (tab !== undefined) moveIndicator({ tab, instant: true });
   };
 
   position();

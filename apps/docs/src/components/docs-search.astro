@@ -92,8 +92,10 @@ const documents = (await getCollection("docs", ({ data }) => !data.draft)).map((
 <script>
   import { Option, Schema } from "effect";
 
+  const SearchDocument = Schema.Struct({ url: Schema.String });
+
   type PagefindResult = {
-    data: () => Promise<unknown>;
+    data: () => Promise<typeof SearchDocument.Encoded>;
   };
 
   type PagefindClient = {
@@ -101,11 +103,11 @@ const documents = (await getCollection("docs", ({ data }) => !data.draft)).map((
     search: (term: string) => Promise<{ results: ReadonlyArray<PagefindResult> }>;
   };
 
-  const SearchDocument = Schema.Struct({ url: Schema.String });
-
   const decodeDocument = Schema.decodeUnknownSync(SearchDocument);
 
-  const mountDocsSearch = (searchRoot: Element): { dispose(): void } => {
+  type DocsSearch = { dispose(): void };
+
+  const mountDocsSearch = (searchRoot: Element): DocsSearch => {
     const dialog = searchRoot?.querySelector("dialog");
     const openButton = searchRoot?.querySelector<HTMLButtonElement>(".docs-search-trigger");
     const input = dialog?.querySelector("input");

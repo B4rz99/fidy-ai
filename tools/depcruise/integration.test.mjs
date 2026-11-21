@@ -19,11 +19,14 @@ const inspect = (
   const temporary = mkdtempSync(join(tmpdir(), "fidy-architecture-"));
   const root = join(temporary, "apps", application);
   const config = application === "server" ? serverConfig : webConfig;
+  const options = { ...config.options, tsConfig: { fileName: "tsconfig.json" } };
+
+  if (exclude !== undefined) options.exclude = { path: exclude };
 
   const fixtureFiles = {
     "schema.d.ts": "declare const placeholder: string;",
     ...files,
-    ".dependency-cruiser.mjs": `export default ${JSON.stringify({ ...config, options: { ...config.options, tsConfig: { fileName: "tsconfig.json" }, ...(exclude === undefined ? {} : { exclude: { path: exclude } }) } })};`,
+    ".dependency-cruiser.mjs": `export default ${JSON.stringify({ ...config, options })};`,
     "tsconfig.json": JSON.stringify({
       compilerOptions: { paths: { "~/*": ["./src/*"], "@/*": ["./src/*"] } },
     }),
@@ -36,13 +39,10 @@ const inspect = (
       writeFileSync(target, source);
     }
 
-    const result = spawnSync(
-      "bun",
-      [join(toolsRoot, entrypoint), root, "src", ...(publication ? ["--publication"] : [])],
-      {
-        encoding: "utf8",
-      }
-    );
+    const commandArguments = [join(toolsRoot, entrypoint), root, "src"];
+
+    if (publication) commandArguments.push("--publication");
+    const result = spawnSync("bun", commandArguments, { encoding: "utf8" });
 
     assert.equal(result.error, undefined);
 

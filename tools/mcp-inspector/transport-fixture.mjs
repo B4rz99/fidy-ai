@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { readFile } from "node:fs/promises";
 import { createSecureServer } from "node:http2";
+import { Predicate } from "effect";
 
 await fetch("data:text/plain,initialize-native-fetch");
 
@@ -179,7 +180,7 @@ client.setRequestHandler("elicitation/create", async () => {
 
 const address = server.address();
 
-assert.ok(address && typeof address === "object");
+assert.ok(address !== null && !Predicate.isString(address));
 
 const transport = new StreamableHTTPClientTransport(
   new URL(`https://127.0.0.1:${address.port}/mcp`),

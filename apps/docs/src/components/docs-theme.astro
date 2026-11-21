@@ -85,8 +85,12 @@ const themes = [
   applyTheme(selected);
 
   themeRoot?.addEventListener("change", (event) => {
-    if (!(event.target instanceof HTMLInputElement)) return;
-    const theme = parseTheme(event.target.value);
+    const input = Array.from(themeRoot?.querySelectorAll<HTMLInputElement>("input") ?? []).find(
+      (item) => item === event.target
+    );
+
+    if (input === undefined) return;
+    const theme = parseTheme(input.value);
     applyTheme(theme);
 
     try {

@@ -50,8 +50,8 @@ const { label, placeholder } = Astro.props;
 
         if (matches) count += 1;
 
-        if (item instanceof HTMLDetailsElement) {
-          item.open = matches && (query.length > 0 || count === 1);
+        if (item.matches("details")) {
+          item.toggleAttribute("open", matches && (query.length > 0 || count === 1));
         }
       });
       catalog.querySelectorAll<HTMLElement>("[data-reference-group]").forEach((group) => {

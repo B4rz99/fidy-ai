@@ -44,26 +44,20 @@ await Promise.all(
   ["cancel", "concurrent"].map((mode) =>
     test(`Inspector HTTP/2 ${mode} settles with the isolated dispatcher`, () => {
       const baseline = process.env.FIDY_INSPECTOR_BASELINE === "1";
+      const childArguments = ["./transport-fixture.mjs", fixture, mode];
 
-      const result = spawnSync(
-        process.execPath,
-        [
-          ...(baseline ? [] : ["--import", "./fetch-dispatcher.mjs"]),
-          "./transport-fixture.mjs",
-          fixture,
-          mode,
-        ],
-        {
-          cwd: directory,
-          timeout: 10_000,
-          encoding: "utf8",
-          env: {
-            PATH: process.env.PATH,
-            NODE_EXTRA_CA_CERTS: join(fixture, "cert.pem"),
-            NODE_OPTIONS: "",
-          },
-        }
-      );
+      if (!baseline) childArguments.unshift("--import", "./fetch-dispatcher.mjs");
+
+      const result = spawnSync(process.execPath, childArguments, {
+        cwd: directory,
+        timeout: 10_000,
+        encoding: "utf8",
+        env: {
+          PATH: process.env.PATH,
+          NODE_EXTRA_CA_CERTS: join(fixture, "cert.pem"),
+          NODE_OPTIONS: "",
+        },
+      });
 
       assert.equal(
         result.error,

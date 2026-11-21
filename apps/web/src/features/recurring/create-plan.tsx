@@ -1,5 +1,5 @@
-import { browserSecureRandom } from "@/browser/crypto";
-import { Effect, Option } from "effect";
+import { SecureRandom } from "effect/crypto";
+import { Option } from "effect";
 import { type JSX, useState } from "react";
 import { RecurringPlanId } from "@/transport/client";
 import { DeferredDisclosure } from "@/ui/components/disclosure";
@@ -31,9 +31,7 @@ export const CreatePlan = (props: Props): JSX.Element => {
   const [draft, setDraft] = useState({ initial, transactionId: Option.none<string>() });
 
   const submit = (plan: PlanInput): void => {
-    const id = RecurringPlanId.make(
-      Effect.runSync(browserSecureRandom.uuidV4().pipe(Effect.orDie))
-    );
+    const id = RecurringPlanId.make(SecureRandom.uuidV4Unsafe());
 
     const source = draft.transactionId;
     save(
@@ -41,7 +39,10 @@ export const CreatePlan = (props: Props): JSX.Element => {
         kind: "create",
         id,
         plan,
-        ...(Option.isSome(seriesId) ? { seriesId: seriesId.value } : {}),
+        ...Option.match(seriesId, {
+          onNone: () => ({}),
+          onSome: (series) => ({ seriesId: series }),
+        }),
       },
       Option.isSome(source)
         ? (): void => created({ planId: id, date: plan.firstDate, transactionId: source.value })

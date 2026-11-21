@@ -1,5 +1,5 @@
-import { browserSecureRandom } from "@/browser/crypto";
-import { BigDecimal, Effect, Option, Schema } from "effect";
+import { SecureRandom } from "effect/crypto";
+import { BigDecimal, Option, Predicate, Schema } from "effect";
 import { type FormEvent, type JSX, useId, useRef, useState } from "react";
 import { RecurringCommand } from "@/transport/client";
 import { Button } from "@/ui/components/button";
@@ -265,15 +265,21 @@ const paymentCommand = (form: FormData, item: Occurrence): Option.Option<Recurri
     expectedRevision: 0,
     edit: {
       kind: "fulfill",
-      ...(replaces === "" ? {} : { replaces }),
+      ...Option.match(Option.liftPredicate(replaces, Predicate.isTruthy), {
+        onNone: () => ({}),
+        onSome: (value) => ({ replaces: value }),
+      }),
       fulfillment: {
-        id: Effect.runSync(browserSecureRandom.uuidV4().pipe(Effect.orDie)),
+        id: SecureRandom.uuidV4Unsafe(),
         planId: item.planId,
         date: item.date,
         actualDate: form.get("actualDate"),
         settled: form.get("settlement") === "settled",
         money: { amount: form.get("amount"), currency: item.plan.currency },
-        ...(transactionId === "" ? {} : { transactionId }),
+        ...Option.match(Option.liftPredicate(transactionId, Predicate.isTruthy), {
+          onNone: () => ({}),
+          onSome: (value) => ({ transactionId: value }),
+        }),
       },
     },
   });
@@ -282,5 +288,5 @@ const paymentCommand = (form: FormData, item: Occurrence): Option.Option<Recurri
 const formText = (form: FormData, key: string): string => {
   const entry = form.get(key);
 
-  return typeof entry === "string" ? entry : "";
+  return Option.getOrElse(Schema.decodeUnknownOption(Schema.String)(entry), () => "");
 };

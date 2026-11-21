@@ -1,4 +1,4 @@
-import { Data, DateTime, Effect, Option, Schema } from "effect";
+import { Data, DateTime, Effect, Option, Predicate, Schema } from "effect";
 import { AsyncResult, Atom } from "effect/reactivity";
 import { BillingEmail, type EnrollmentMethod } from "@/transport/client";
 import type { PriceId, SubscriptionOffer, SubscriptionOffers } from "./presentation";
@@ -10,34 +10,33 @@ import {
   type PreparedEnrollment,
   clearNequiPhone,
 } from "./enrollment-gateway";
-import { makeEnrollmentCommand } from "./enrollment-command";
+import { createEnrollmentCommand } from "./enrollment-command";
 import { isAwaitingPaymentStatus, paymentStatusRefreshDelay } from "./payment-status";
 
 const maximumPaymentStatusRefreshes = 65;
 
-type PaymentFlowState =
-  | Readonly<{ _tag: "Enrollment"; value: Enrollment }>
-  | Readonly<{
-      _tag: "PaymentSubmission";
-      value: PaymentSubmission;
-      billingEmail: string;
-      prepared: Option.Option<PreparedEnrollment>;
-    }>;
+type PaymentFlowState = Data.TaggedEnum<{
+  Enrollment: Readonly<{ value: Enrollment }>;
+  PaymentSubmission: Readonly<{
+    value: PaymentSubmission;
+    billingEmail: string;
+    prepared: Option.Option<PreparedEnrollment>;
+  }>;
+}>;
 
-type PaymentSubmissionFlowState = Extract<PaymentFlowState, { _tag: "PaymentSubmission" }>;
+const PaymentFlowState = Data.taggedEnum<PaymentFlowState>();
 
-const enrollmentFlow = (value: Enrollment): PaymentFlowState => ({ _tag: "Enrollment", value });
+type PaymentSubmissionFlowState = Data.TaggedEnum.Value<PaymentFlowState, "PaymentSubmission">;
+
+const enrollmentFlow = (value: Enrollment): PaymentFlowState =>
+  PaymentFlowState.Enrollment({ value });
 
 const submissionFlow = (
   value: PaymentSubmission,
   billingEmail: string,
   prepared: Option.Option<PreparedEnrollment>
-): PaymentSubmissionFlowState => ({
-  _tag: "PaymentSubmission",
-  value,
-  billingEmail,
-  prepared,
-});
+): PaymentSubmissionFlowState =>
+  PaymentFlowState.PaymentSubmission({ value, billingEmail, prepared });
 
 const preparePaymentFlow = Effect.fn(function* (
   gateway: EnrollmentGateway,
@@ -157,7 +156,7 @@ const preparedReadIsInconclusive = (
 
 const recoverEnrollment = Effect.fn(function* (
   gateway: EnrollmentGateway,
-  current: Extract<PaymentFlowState, { _tag: "Enrollment" }>,
+  current: Data.TaggedEnum.Value<PaymentFlowState, "Enrollment">,
   uncertain: boolean
 ) {
   const value = yield* Effect.tryPromise({
@@ -198,7 +197,9 @@ const refreshPaymentFlow = (
   current: PaymentFlowState,
   uncertain: boolean
 ): Effect.Effect<PaymentFlowState, EnrollmentInteractionFailed> => {
-  if (current._tag === "Enrollment") return recoverEnrollment(gateway, current, uncertain);
+  if (Predicate.isTagged(current, "Enrollment")) {
+    return recoverEnrollment(gateway, current, uncertain);
+  }
 
   return Effect.tryPromise({
     try: (signal) => observePayment(gateway, current, signal),
@@ -237,15 +238,14 @@ const submitPaymentFlow = (
 
 type Work = Effect.Effect<PaymentFlowState, EnrollmentInteractionFailed>;
 
-export type PaymentSubmissionView = Readonly<{
-  _tag: "PaymentSubmission";
-  value: PaymentSubmission;
-  canReplaceCard: boolean;
+export type PaymentFlowView = Data.TaggedEnum<{
+  Enrollment: Readonly<{ value: Enrollment }>;
+  PaymentSubmission: Readonly<{ value: PaymentSubmission; canReplaceCard: boolean }>;
 }>;
 
-export type PaymentFlowView =
-  | Extract<PaymentFlowState, { _tag: "Enrollment" }>
-  | PaymentSubmissionView;
+export const PaymentFlowView = Data.taggedEnum<PaymentFlowView>();
+
+export type PaymentSubmissionView = Data.TaggedEnum.Value<PaymentFlowView, "PaymentSubmission">;
 
 export type EnrollmentInteraction = Readonly<{
   selectedId: Option.Option<PriceId>;
@@ -282,7 +282,7 @@ type Owner = {
   offers: SubscriptionOffers;
   authorizationLock: Atom.Atom<boolean>;
   availability: ReturnType<typeof enrollmentAvailability>;
-  command: ReturnType<typeof makeEnrollmentCommand<void, never>>;
+  command: ReturnType<typeof createEnrollmentCommand<void, never>>;
   observation: Atom.AtomResultFn<Effect.Effect<void>, void, never>;
   active: boolean;
   generation: number;
@@ -317,7 +317,7 @@ const notify = (owner: Owner): void => {
 };
 
 const paymentLocked = (flow: PaymentFlowState): boolean =>
-  flow._tag === "Enrollment"
+  Predicate.isTagged(flow, "Enrollment")
     ? flow.value.status === "creating" ||
       flow.value.status === "verifying" ||
       flow.value.status === "available"
@@ -360,7 +360,7 @@ const publish = (owner: Owner, generation: number, flow: PaymentFlowState): void
   if (!owner.active || owner.generation !== generation) return;
   owner.flow = Option.some(flow);
 
-  if (flow._tag !== "PaymentSubmission" || !isAwaitingPaymentStatus(flow.value)) {
+  if (!Predicate.isTagged(flow, "PaymentSubmission") || !isAwaitingPaymentStatus(flow.value)) {
     owner.awaitingObservation = false;
   }
 
@@ -368,7 +368,10 @@ const publish = (owner: Owner, generation: number, flow: PaymentFlowState): void
 };
 
 const observe = (owner: Owner, generation: number, flow: PaymentFlowState): void => {
-  if (flow._tag !== "PaymentSubmission" || !isAwaitingPaymentStatus(flow.value)) return;
+  if (!Predicate.isTagged(flow, "PaymentSubmission") || !isAwaitingPaymentStatus(flow.value)) {
+    return;
+  }
+
   Option.map(owner.gateway, (gateway) =>
     owner.get.set(
       owner.observation,
@@ -440,7 +443,10 @@ const selectMethod = (owner: Owner, method: EnrollmentMethod): void => {
   if (!owner.active || selectionLocked(owner) || method === owner.method) return;
   const availability = owner.get.once(owner.availability);
 
-  if (availability._tag !== "Success" || !present(owner).enabledMethods.includes(method)) {
+  if (
+    !Predicate.isTagged(availability, "Success") ||
+    !present(owner).enabledMethods.includes(method)
+  ) {
     return;
   }
 
@@ -488,7 +494,7 @@ const submit = (owner: Owner, email: string, fields?: PaymentFields): void => {
 
   const current = owner.flow.value;
 
-  if (current._tag !== "Enrollment" || current.value.status !== "prepared") {
+  if (!Predicate.isTagged(current, "Enrollment") || current.value.status !== "prepared") {
     clearNequiPhone(fields);
 
     return;
@@ -531,7 +537,7 @@ const submittedDaviplata = (owner: Owner, email: string, submission: PaymentSubm
   const current = owner.flow.value;
 
   if (
-    current._tag !== "Enrollment" ||
+    !Predicate.isTagged(current, "Enrollment") ||
     current.value.status !== "prepared" ||
     current.value.method !== "daviplata" ||
     current.value.enrollmentId !== submission.enrollmentId
@@ -544,16 +550,15 @@ const submittedDaviplata = (owner: Owner, email: string, submission: PaymentSubm
 };
 
 const viewFlow = (flow: PaymentFlowState): PaymentFlowView =>
-  flow._tag === "Enrollment"
+  Predicate.isTagged(flow, "Enrollment")
     ? flow
-    : {
-        _tag: "PaymentSubmission",
+    : PaymentFlowView.PaymentSubmission({
         value: flow.value,
         canReplaceCard: Option.exists(flow.prepared, (prepared) => prepared.method === "card"),
-      };
+      });
 
 const reviewedPrice = (flow: PaymentFlowState): Option.Option<SubscriptionOffer> => {
-  if (flow._tag === "PaymentSubmission") {
+  if (Predicate.isTagged(flow, "PaymentSubmission")) {
     return Option.map(flow.prepared, (prepared) => prepared.price);
   }
 
@@ -582,12 +587,11 @@ const present = (owner: Owner): EnrollmentInteraction => {
   const selected = owner.offers.find((offer) => Option.contains(owner.selectedId, offer.id));
   const selectedMethods = new Set(selected?.paymentMethods);
 
-  const enabledMethods =
-    availability._tag === "Success"
-      ? availability.value.enabledMethods.filter(
-          (method) => selected === undefined || selectedMethods.has(method)
-        )
-      : [];
+  const enabledMethods = Predicate.isTagged(availability, "Success")
+    ? availability.value.enabledMethods.filter(
+        (method) => selected === undefined || selectedMethods.has(method)
+      )
+    : [];
 
   const disabled = selectionLocked(owner);
   const canContinue = !disabled && selected !== undefined && enabledMethods.includes(owner.method);
@@ -641,7 +645,7 @@ const present = (owner: Owner): EnrollmentInteraction => {
   };
 };
 
-export const makeEnrollmentInteraction = (
+export const createEnrollmentInteraction = (
   input: Readonly<{
     gateway: Option.Option<EnrollmentGateway>;
     offers: SubscriptionOffers;
@@ -653,7 +657,7 @@ export const makeEnrollmentInteraction = (
       ...input,
       get,
       availability: enrollmentAvailability(input.gateway),
-      command: makeEnrollmentCommand<void, never>(),
+      command: createEnrollmentCommand<void, never>(),
       observation: Atom.fn<Effect.Effect<void>>()((work) => work),
       active: false,
       generation: 0,

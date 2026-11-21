@@ -10,7 +10,7 @@ import type { Category, PlanInput } from "./model";
 const value = (form: FormData, key: string): string => {
   const entry = form.get(key);
 
-  return typeof entry === "string" ? entry.trim() : "";
+  return Option.getOrElse(Schema.decodeUnknownOption(Schema.String)(entry), () => "").trim();
 };
 
 const day = (text: string): number | "last" =>
@@ -37,10 +37,20 @@ const parsePlan = (form: FormData, timeZone: PlanInput["timeZone"]): Option.Opti
     firstDate: value(form, "firstDate"),
     cardPayment: value(form, "cardPayment") === "yes",
     ...optional,
-    ...(amountMode === "unknown" ? {} : { money: { amount: value(form, "amount"), currency } }),
-    ...(frequency === "twice-monthly"
-      ? { monthDays: [day(value(form, "day1")), day(value(form, "day2"))] }
-      : {}),
+    ...Option.match(
+      Option.liftPredicate(amountMode, (mode) => mode !== "unknown"),
+      {
+        onNone: () => ({}),
+        onSome: () => ({ money: { amount: value(form, "amount"), currency } }),
+      }
+    ),
+    ...Option.match(
+      Option.liftPredicate(frequency, (cadence) => cadence === "twice-monthly"),
+      {
+        onNone: () => ({}),
+        onSome: () => ({ monthDays: [day(value(form, "day1")), day(value(form, "day2"))] }),
+      }
+    ),
   });
 };
 

@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { RegistryContext } from "@effect/atom-react";
 import {
   RouterProvider,
@@ -6,14 +5,14 @@ import {
   createRootRoute,
   createRouter,
 } from "@tanstack/react-router";
-import { type Cause, Effect, Layer, Option, Schema } from "effect";
+import { type Cause, Effect, Layer, Match, Option, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { AtomRegistry } from "effect/reactivity";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import { makeFidyClient } from "@/transport/client";
-import { RecurringFeature } from "./feature";
+import { RecurringFeature } from "@/features/recurring/feature";
 
 const plans = [
   { id: "24000000-0000-4000-8000-000000017231", name: "Arriendo de prueba", kind: "expense" },
@@ -90,7 +89,7 @@ const searchFor = (container: HTMLElement, search: string): Promise<void> =>
   reactWork(() => {
     const input = container.querySelector('input[name="search"]');
 
-    if (!(input instanceof HTMLInputElement)) {
+    if (!Schema.is(Schema.instanceOf(HTMLInputElement))(input)) {
       throw new Error("Missing recurrentes search");
     }
 
@@ -236,9 +235,12 @@ const checkFilters = (presentation: string, container: HTMLElement): WorkspaceCh
         expect(container.textContent).toContain("Sin resultados para estos filtros");
         expect(button(container, presentation).getAttribute("aria-pressed")).toBe("true");
 
-        if (presentation === "Calendario") {
-          expect(container.querySelector('[aria-label="2026-10-31"]')).not.toBeNull();
-        }
+        Match.value(presentation).pipe(
+          Match.when("Calendario", () =>
+            expect(container.querySelector('[aria-label="2026-10-31"]')).not.toBeNull()
+          ),
+          Match.orElse(() => undefined)
+        );
       })
     );
     yield* Effect.tryPromise(() => click(container, "Limpiar"));
@@ -261,7 +263,9 @@ const checkEarlierDisclosure = (container: HTMLElement): WorkspaceCheck =>
     const panel = (): HTMLDetailsElement => {
       const element = container.querySelector('[data-recurring-slot="previous"]');
 
-      if (!(element instanceof HTMLDetailsElement)) throw Error("Missing earlier-month section");
+      if (!Schema.is(Schema.instanceOf(HTMLDetailsElement))(element)) {
+        throw Error("Missing earlier-month section");
+      }
 
       return element;
     };

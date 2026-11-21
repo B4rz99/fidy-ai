@@ -2,7 +2,7 @@ import { type RecurringNavigation, useRecurringNavigation } from "./navigation";
 import { emptyTransactionFilters } from "./transaction-filters";
 import { PendingRead } from "@/ui/components/pending-read";
 import { lazyRouteComponent, useRouterState } from "@tanstack/react-router";
-import { Array, Option } from "effect";
+import { Array, Option, Predicate } from "effect";
 import {
   type Dispatch,
   type JSX,
@@ -378,7 +378,7 @@ const useWorkspacePanel = (
   const panel = Option.orElse(localPanel, () => navigation.selection);
 
   const setPanel: Dispatch<SetStateAction<Option.Option<Panel>>> = (update) => {
-    if (typeof update === "function") {
+    if (Predicate.isFunction(update)) {
       setLocalPanel(update);
 
       if (Option.isSome(navigation.selection) && Option.isNone(update(navigation.selection))) {

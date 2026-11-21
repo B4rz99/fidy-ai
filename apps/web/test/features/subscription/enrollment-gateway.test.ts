@@ -1,5 +1,3 @@
-// @vitest-environment jsdom
-
 import { it as effectIt } from "@effect/vitest";
 import { TestClock } from "effect/testing";
 import {
@@ -10,7 +8,9 @@ import {
   Deferred,
   Effect,
   Layer,
+  Match,
   Option,
+  Predicate,
   Redacted,
   Schema,
 } from "effect";
@@ -25,12 +25,16 @@ import {
 import { type WompiFetch } from "@/transport/wompi-tokenization";
 import { type ComponentProps, act, createElement } from "react";
 import { createRoot } from "react-dom/client";
-import { PaymentDetails } from "./payment-details";
-import { presentSubscriptionOffer } from "./presentation";
+import { PaymentDetails } from "@/features/subscription/payment-details";
+import { presentSubscriptionOffer } from "@/features/subscription/presentation";
 import { UnknownJsonString } from "@/schema-compatibility";
-import { type DaviplataChallenge } from "./daviplata-challenge";
-import { makeMountedDaviplata } from "./daviplata-task";
-import { type PreparedEnrollment, makeEnrollmentGateway } from "./enrollment-gateway";
+import { type DaviplataChallenge } from "@/features/subscription/daviplata-challenge";
+import { mountDaviplata } from "@/features/subscription/daviplata-task";
+import {
+  type PreparedEnrollment,
+  createEnrollmentGateway,
+} from "@/features/subscription/enrollment-gateway";
+import { PaymentFlowView } from "@/features/subscription/interaction";
 
 const policy = {
   sendUrl: "https://sandbox.wompi.co/synthetic/send",
@@ -137,10 +141,12 @@ it.each(["wrong-method", "reused-source"] as const)(
   (reason) =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const enrollment: PreparedEnrollment = {
-          ...prepared(yield* Clock.currentTimeMillis),
-          ...(reason === "wrong-method" ? { method: "card" } : { paymentSourceMode: "reuse" }),
-        };
+        const base = prepared(yield* Clock.currentTimeMillis);
+
+        const enrollment: PreparedEnrollment =
+          reason === "wrong-method"
+            ? { ...base, method: "card" }
+            : { ...base, paymentSourceMode: "reuse" };
 
         const payloads: Array<unknown> = [];
 
@@ -160,7 +166,7 @@ it.each(["wrong-method", "reused-source"] as const)(
         try {
           const result = yield* Effect.exit(
             Effect.tryPromise(() =>
-              makeEnrollmentGateway(client).startDaviplata(
+              createEnrollmentGateway(client).startDaviplata(
                 enrollment,
                 "synthetic@example.invalid",
                 {
@@ -207,7 +213,7 @@ it.each(["missing-fields", "nequi-fields"] as const)(
         try {
           const result = yield* Effect.exit(
             Effect.tryPromise(() =>
-              makeEnrollmentGateway(client).submit(enrollment, "synthetic@example.invalid", {
+              createEnrollmentGateway(client).submit(enrollment, "synthetic@example.invalid", {
                 fields:
                   fieldsKind === "missing-fields"
                     ? Option.none()
@@ -252,8 +258,9 @@ const submissionBoundary = (
     (effect) =>
       Effect.flatMap(effect, (request) =>
         Effect.gen(function* () {
-          const text =
-            request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : "";
+          const text = Predicate.isTagged(request.body, "Uint8Array")
+            ? new TextDecoder().decode(request.body.body)
+            : "";
 
           payloads.push(yield* Schema.decodeEffect(UnknownJsonString)(text).pipe(Effect.orDie));
 
@@ -306,7 +313,7 @@ const challengeFixture = (
     client,
     controller,
     start: (): Promise<DaviplataChallenge> =>
-      makeEnrollmentGateway(client).startDaviplata(enrollment, "synthetic@example.invalid", {
+      createEnrollmentGateway(client).startDaviplata(enrollment, "synthetic@example.invalid", {
         documentNumber: Redacted.make("1122233"),
         productNumber: Redacted.make("3991111111"),
         signal: controller.signal,
@@ -467,7 +474,7 @@ it("rejects duplicate authorization, never recovers an unapproved token, and rev
 
       const provider = providerFixture();
       vi.stubGlobal("fetch", provider);
-      const gateway = makeEnrollmentGateway(client);
+      const gateway = createEnrollmentGateway(client);
 
       const challenge = yield* Effect.tryPromise(() =>
         gateway.startDaviplata(enrollment, "synthetic@example.invalid", {
@@ -543,7 +550,7 @@ it("submits only approved authority and reuses one PaymentRequestId after an amb
         .mockResolvedValueOnce(otpResponse("PENDING"));
 
       vi.stubGlobal("fetch", provider);
-      const gateway = makeEnrollmentGateway(client);
+      const gateway = createEnrollmentGateway(client);
 
       const challenge = yield* Effect.tryPromise(() =>
         gateway.startDaviplata(enrollment, "synthetic@example.invalid", {
@@ -619,7 +626,7 @@ it.each(["caller", "form"] as const)(
           ),
         });
 
-        const request = makeEnrollmentGateway(client).submit(
+        const request = createEnrollmentGateway(client).submit(
           { ...prepared(yield* Clock.currentTimeMillis), method: "card" },
           "synthetic@example.invalid",
           {
@@ -680,7 +687,7 @@ it("admits card authorization only once even before the first provider response"
         apiOrigin: "https://api.test.fidyapp.com",
       });
 
-      const gateway = makeEnrollmentGateway(client);
+      const gateway = createEnrollmentGateway(client);
       const enrollment = { ...prepared(yield* Clock.currentTimeMillis), method: "card" as const };
 
       const options = {
@@ -746,7 +753,7 @@ it.each(["expiry", "environment"] as const)(
 
         const enrollment = { ...prepared(yield* Clock.currentTimeMillis), method: "card" as const };
 
-        const request = makeEnrollmentGateway(client)
+        const request = createEnrollmentGateway(client)
           .submit(enrollment, enrollment.billingEmail, {
             fields: Option.some({
               number: "4242424242424242",
@@ -788,7 +795,7 @@ const fillCardInput = (
   Effect.gen(function* () {
     const input = container.querySelector(`#${id}`);
 
-    if (!(input instanceof HTMLInputElement)) {
+    if (!Schema.is(Schema.instanceOf(HTMLInputElement))(input)) {
       throw new Error("Missing card input");
     }
 
@@ -808,12 +815,13 @@ const expectBillingEmailFeedback = (container: HTMLElement, invalid: boolean): v
   expect(input.getAttribute("aria-invalid")).toBe(String(invalid));
   const feedback = container.querySelector("#billing-email-error");
 
-  if (invalid) {
-    expect(input.getAttribute("aria-describedby")).toBe("billing-email-error");
-    expect(feedback?.textContent).toContain("nombre@dominio.com");
-  } else {
-    expect(feedback).toBeNull();
-  }
+  Match.value(invalid).pipe(
+    Match.when(true, () => {
+      expect(input.getAttribute("aria-describedby")).toBe("billing-email-error");
+      expect(feedback?.textContent).toContain("nombre@dominio.com");
+    }),
+    Match.orElse(() => expect(feedback).toBeNull())
+  );
 };
 
 it("allows email correction before consuming the mounted card draft once and revokes authorization on departure", () =>
@@ -834,7 +842,7 @@ it("allows email correction before consuming the mounted card draft once and rev
               gateway: Option.none(),
               onDaviplataSubmitted: () => undefined,
               onDaviplataUncertain: () => undefined,
-              enrollment: Option.some({ _tag: "Enrollment" as const, value: enrollment }),
+              enrollment: Option.some(PaymentFlowView.Enrollment({ value: enrollment })),
               busy: false,
               failed: false,
               needsRecovery: false,
@@ -854,7 +862,7 @@ it("allows email correction before consuming the mounted card draft once and rev
           Array.from(container.querySelectorAll('[role="checkbox"]')),
           (checkbox) =>
             reactAct(() => {
-              if (checkbox instanceof HTMLElement) {
+              if (Schema.is(Schema.instanceOf(HTMLElement))(checkbox)) {
                 checkbox.click();
               }
             })
@@ -970,9 +978,9 @@ it("cancels an approved mounted authorization and fences its late submission and
       const uncertain = vi.fn();
       const lock = vi.fn();
 
-      const task = makeMountedDaviplata({
+      const task = mountDaviplata({
         enrollment,
-        start: makeEnrollmentGateway(input.client).startDaviplata,
+        start: createEnrollmentGateway(input.client).startDaviplata,
         publish: (stage) => {
           stages.push(stage);
 
@@ -1013,12 +1021,13 @@ it("cancels an approved mounted authorization and fences its late submission and
     })
   ));
 
-for (const phase of ["idle", "submitting"] as const) {
-  effectIt.effect(`retires mounted DaviPlata at its original deadline while ${phase}`, () =>
+effectIt.effect.each(["idle", "submitting"] as const)(
+  "retires mounted DaviPlata at its original deadline while %s",
+  (phase) =>
     Effect.gen(function* () {
-      const now = yield* Clock.currentTimeMillis;
+      const clock = yield* TestClock.make();
+      const now = clock.currentTimeMillisUnsafe();
       const enrollment = { ...prepared(now), expiresAt: DateTime.makeUnsafe(now + 5_000) };
-      const clock = yield* Clock.Clock;
       const submitting = Promise.withResolvers<void>();
       const pending = Promise.withResolvers<Response>();
 
@@ -1050,9 +1059,9 @@ for (const phase of ["idle", "submitting"] as const) {
       const uncertain = vi.fn();
       const lock = vi.fn();
 
-      const task = makeMountedDaviplata({
+      const task = mountDaviplata({
         enrollment,
-        start: makeEnrollmentGateway(client).startDaviplata,
+        start: createEnrollmentGateway(client).startDaviplata,
         publish,
         lock,
         onSubmitted: submitted,
@@ -1073,7 +1082,7 @@ for (const phase of ["idle", "submitting"] as const) {
         yield* Effect.tryPromise(() => submitting.promise);
       }
 
-      yield* TestClock.adjust("6 seconds");
+      yield* clock.adjust("6 seconds");
       expect(publish).toHaveBeenLastCalledWith(phase === "idle" ? "refused" : "uncertain");
       expect(lock).toHaveBeenLastCalledWith(phase !== "idle");
       expect(uncertain).toHaveBeenCalledTimes(phase === "idle" ? 0 : 1);
@@ -1090,8 +1099,7 @@ for (const phase of ["idle", "submitting"] as const) {
       expect(input.provider).toHaveBeenCalledTimes(phase === "idle" ? 2 : 3);
       unmount();
     })
-  );
-}
+);
 
 it.each(["approved", "declined", "unknown"] as const)(
   "preserves %s confirmation evidence when the mounted provider retires",
@@ -1128,9 +1136,9 @@ it.each(["approved", "declined", "unknown"] as const)(
           if (stage === "refused" || stage === "uncertain") settled.resolve();
         });
 
-        const task = makeMountedDaviplata({
+        const task = mountDaviplata({
           enrollment,
-          start: makeEnrollmentGateway(input.client).startDaviplata,
+          start: createEnrollmentGateway(input.client).startDaviplata,
           publish,
           lock: vi.fn(),
           onSubmitted: submitted,
@@ -1150,11 +1158,14 @@ it.each(["approved", "declined", "unknown"] as const)(
         expect(submitted).toHaveBeenCalledTimes(outcome === "approved" ? 1 : 0);
         expect(uncertain).toHaveBeenCalledTimes(outcome === "unknown" ? 1 : 0);
 
-        if (outcome !== "approved") {
-          expect(publish).toHaveBeenLastCalledWith(
-            outcome === "declined" ? "refused" : "uncertain"
-          );
-        }
+        Match.value(outcome).pipe(
+          Match.when("approved", () => undefined),
+          Match.orElse((failed) =>
+            expect(publish).toHaveBeenLastCalledWith(
+              failed === "declined" ? "refused" : "uncertain"
+            )
+          )
+        );
 
         expect(input.payloads).toHaveLength(outcome === "approved" ? 1 : 0);
         unmount();
@@ -1162,12 +1173,13 @@ it.each(["approved", "declined", "unknown"] as const)(
     )
 );
 
-for (const step of ["tokenization", "first-send"] as const) {
-  effectIt.effect(`keeps expired setup uncertain after dispatched ${step}`, () =>
+effectIt.effect.each(["tokenization", "first-send"] as const)(
+  "keeps expired setup uncertain after dispatched %s",
+  (step) =>
     Effect.gen(function* () {
-      const now = yield* Clock.currentTimeMillis;
+      const clock = yield* TestClock.make();
+      const now = clock.currentTimeMillisUnsafe();
       const enrollment = { ...prepared(now), expiresAt: DateTime.makeUnsafe(now + 5_000) };
-      const clock = yield* Clock.Clock;
       const input = challengeFixture(enrollment);
       const started = Promise.withResolvers<void>();
       const pending = Promise.withResolvers<Response>();
@@ -1195,9 +1207,9 @@ for (const step of ["tokenization", "first-send"] as const) {
       const uncertain = vi.fn();
       const lock = vi.fn();
 
-      const task = makeMountedDaviplata({
+      const task = mountDaviplata({
         enrollment,
-        start: makeEnrollmentGateway(client).startDaviplata,
+        start: createEnrollmentGateway(client).startDaviplata,
         publish: published,
         lock,
         onSubmitted: vi.fn(),
@@ -1215,7 +1227,7 @@ for (const step of ["tokenization", "first-send"] as const) {
 
       task.begin(fields());
       yield* Effect.tryPromise(() => started.promise);
-      yield* TestClock.adjust("6 seconds");
+      yield* clock.adjust("6 seconds");
       yield* Effect.yieldNow;
       expect(published).toHaveBeenLastCalledWith("uncertain");
       expect(uncertain).toHaveBeenCalledTimes(1);
@@ -1231,8 +1243,7 @@ for (const step of ["tokenization", "first-send"] as const) {
       expect(input.payloads).toHaveLength(0);
       unmount();
     })
-  );
-}
+);
 
 it("submits one borrowed Nequi approval and keeps source verification separate from settlement", () =>
   Effect.runPromise(
@@ -1268,7 +1279,7 @@ it("submits one borrowed Nequi approval and keeps source verification separate f
       const awaiting = vi.fn();
 
       const result = yield* Effect.tryPromise(() =>
-        makeEnrollmentGateway(client).submit(enrollment, "synthetic@example.invalid", {
+        createEnrollmentGateway(client).submit(enrollment, "synthetic@example.invalid", {
           fields: Option.some({
             method: "nequi",
             phoneNumber,
@@ -1317,7 +1328,7 @@ it("wipes Nequi fields even when cancellation prevents the client from starting 
       const signal = AbortSignal.abort();
       yield* Effect.exit(
         Effect.tryPromise(() =>
-          makeEnrollmentGateway(client).submit(enrollment, "synthetic@example.invalid", {
+          createEnrollmentGateway(client).submit(enrollment, "synthetic@example.invalid", {
             fields: Option.some({
               method: "nequi",
               phoneNumber,
@@ -1372,7 +1383,7 @@ it.each(["storage", "billing-email"] as const)(
         try {
           const result = yield* Effect.exit(
             Effect.tryPromise(() =>
-              makeEnrollmentGateway(client).submit(
+              createEnrollmentGateway(client).submit(
                 enrollment,
                 failure === "billing-email" ? "invalid-email" : "synthetic@example.invalid",
                 {
@@ -1418,15 +1429,16 @@ it("opens current offers for review when the Price changes on an open form", () 
               method: "card",
               onDaviplataSubmitted: () => undefined,
               onDaviplataUncertain: () => undefined,
-              enrollment: Option.some({
-                _tag: "PaymentSubmission",
-                value: {
-                  status: "refused",
-                  reason: "terms-changed",
-                  enrollmentId: enrollment.enrollmentId,
-                },
-                canReplaceCard: false,
-              } as const),
+              enrollment: Option.some(
+                PaymentFlowView.PaymentSubmission({
+                  value: {
+                    status: "refused",
+                    reason: "terms-changed",
+                    enrollmentId: enrollment.enrollmentId,
+                  },
+                  canReplaceCard: false,
+                })
+              ),
               busy: false,
               failed: false,
               needsRecovery: false,

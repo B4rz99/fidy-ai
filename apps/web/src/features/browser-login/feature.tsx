@@ -1,5 +1,5 @@
 import { EmailAddress, EmailVerificationCode } from "@/transport/client";
-import { Clock, Effect, Option, Schema } from "effect";
+import { DateTime, Option, Predicate, Schema } from "effect";
 import { type FormEvent, type JSX, type ReactNode, useSyncExternalStore } from "react";
 import {
   AccessAction,
@@ -13,6 +13,7 @@ import {
 import { Spinner } from "@/ui/components/spinner";
 import {
   type BrowserLoginPairing as PairingController,
+  BrowserLoginPairingViewState as PairingState,
   invalidPairingMessage,
   useBrowserLoginPairing,
 } from "./pairing-controller";
@@ -31,7 +32,7 @@ const subscribeClock = (changed: () => void): (() => void) => {
 };
 
 const currentSecond = (): number =>
-  Math.floor(Effect.runSync(Clock.currentTimeMillis) / millisecondsPerSecond);
+  Math.floor(DateTime.toEpochMillis(DateTime.nowUnsafe()) / millisecondsPerSecond);
 
 const Remaining = ({ deadline }: Readonly<{ deadline: number }>): JSX.Element => {
   const now = useSyncExternalStore(subscribeClock, currentSecond);
@@ -49,8 +50,8 @@ const Remaining = ({ deadline }: Readonly<{ deadline: number }>): JSX.Element =>
 
 const EmailForm = ({ pairing }: Readonly<{ pairing: BrowserLoginPairing }>): JSX.Element => {
   const busy =
-    pairing.state._tag === "Starting" ||
-    (pairing.state._tag === "AwaitingApproval" && pairing.state.emailStep === "sending");
+    PairingState.$is("Starting")(pairing.state) ||
+    (PairingState.$is("AwaitingApproval")(pairing.state) && pairing.state.emailStep === "sending");
 
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
@@ -114,7 +115,7 @@ const EmailCodeActions = ({
 };
 
 const EmailCodeForm = ({ pairing }: Readonly<{ pairing: BrowserLoginPairing }>): JSX.Element => {
-  if (pairing.state._tag !== "AwaitingApproval") return <></>;
+  if (!PairingState.$is("AwaitingApproval")(pairing.state)) return <></>;
   const { emailStep, emailRetryAt } = pairing.state;
   const busy = emailStep === "submitting" || emailStep === "sending";
 
@@ -194,12 +195,15 @@ const terminalPairingCopy = {
   },
 } as const;
 
+const isTerminalPairing = Predicate.or(
+  PairingState.$is("Expired"),
+  Predicate.or(PairingState.$is("Invalid"), PairingState.$is("Uncertain"))
+);
+
 const TerminalStatus = ({ method, pairing, choose }: PairingViewProps): JSX.Element => {
   const { state } = pairing;
 
-  if (state._tag !== "Expired" && state._tag !== "Invalid" && state._tag !== "Uncertain") {
-    return <></>;
-  }
+  if (!isTerminalPairing(state)) return <></>;
 
   const copy = terminalPairingCopy[state._tag];
 
@@ -207,7 +211,7 @@ const TerminalStatus = ({ method, pairing, choose }: PairingViewProps): JSX.Elem
     <>
       <AccessHeading method={method}>{copy.heading}</AccessHeading>
       <p data-access-intro="">{copy.message}</p>
-      {state._tag === "Expired" && method === "whatsapp" ? (
+      {PairingState.$is("Expired")(state) && method === "whatsapp" ? (
         <AccessCode code={state.publicCode} expired />
       ) : null}
       <AccessAction kind="primary" onClick={() => choose(method)}>
@@ -228,7 +232,7 @@ const WhatsAppStatus = ({ pairing }: Pick<PairingViewProps, "pairing">): JSX.Ele
       <p data-access-intro="">
         Abre el chat de Fidy desde el WhatsApp que ya tienes vinculado y confirma este código.
       </p>
-      {state._tag === "AwaitingApproval" ? (
+      {PairingState.$is("AwaitingApproval")(state) ? (
         <>
           <AccessCode code={state.publicCode} expired={false} />
           <div data-access-meta="">
@@ -265,14 +269,14 @@ const PairingContent = (props: PairingViewProps): JSX.Element => {
   const { method, pairing } = props;
   const { state } = pairing;
 
-  if (state._tag === "Invalid" || state._tag === "Expired" || state._tag === "Uncertain") {
+  if (isTerminalPairing(state)) {
     return <TerminalStatus {...props} />;
   }
 
   if (method === "whatsapp") return <WhatsAppStatus pairing={pairing} />;
 
   if (
-    state._tag === "AwaitingApproval" &&
+    PairingState.$is("AwaitingApproval")(state) &&
     state.emailStep !== "ready" &&
     state.emailStep !== "sending"
   ) {

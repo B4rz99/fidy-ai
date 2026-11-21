@@ -1,8 +1,12 @@
 import { isFunction, isObjectOrArray, isString } from "effect/Predicate";
 /** @typedef {{rowsRead:number,rowsWritten:number}} NativeCursor */
+/** @typedef {(...args:unknown[])=>unknown} NativeMethod */
 /** @typedef {Record<string,unknown> & {sql:{exec:(query:string,...bindings:unknown[])=>NativeCursor}}} NativeStorage */
 /** @typedef {Record<string,unknown>} Bindings */
 /** @typedef {new (state:{storage:NativeStorage}, environment:Bindings)=>{fetch(request:Request):Promise<Response>,alarm(...args:unknown[]):Promise<void>}} OwnerClass */
+
+/** @param {unknown} value Reflective native method. @returns {value is NativeMethod} */
+const isMethod = (value) => isFunction(value);
 
 const empty = () => ({
   fetches: 0,
@@ -42,7 +46,7 @@ const observedCursor = (cursor, counts) => {
         /** @type {unknown} */
         const value = target[property];
 
-        if (!isFunction(value)) return value;
+        if (!isMethod(value)) return value;
 
         return (/** @type {unknown[]} */ ...args) => {
           try {
@@ -94,7 +98,7 @@ const observeStorage = (storage, counts) => {
   ]) {
     const call = storage[key];
 
-    if (!isFunction(call)) throw Error("Missing native storage method");
+    if (!isMethod(call)) throw Error("Missing native storage method");
     Object.defineProperty(storage, key, {
       value: (/** @type {unknown[]} */ ...args) => {
         if (
@@ -136,7 +140,7 @@ export const observedBindings = (environment) => {
         /** @type {unknown} */
         const value = target[key];
 
-        if (!isFunction(value)) return value;
+        if (!isMethod(value)) return value;
 
         if (!isString(key) || !methods.includes(key)) {
           throw Error("Unmeasured R2 binding operation");

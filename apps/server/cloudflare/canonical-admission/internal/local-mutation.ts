@@ -1,3 +1,7 @@
+import {
+  OperationAccessCaller,
+  OperationAccessDecision,
+} from "../../../src/shell/canonical-policy/contract";
 import { confirmLocalOAuth } from "../../oauth-confirmation/operations";
 import { resolveLocalOAuthCaller } from "../../oauth-agents/operations";
 import { CurrentOAuthInvocation, type LocalOAuthInvocation } from "../../oauth-agents/contract";
@@ -16,7 +20,7 @@ import {
   QuotaStatus,
   canonicalRetryLifetimeMs,
 } from "../../../src/core/quotas/contract";
-import { Clock, DateTime, Effect, Option, Schema } from "effect";
+import { Clock, DateTime, Effect, Match, Option, Predicate, Schema } from "effect";
 import { allowancePeriod } from "../../../src/core/quotas/operations";
 import { UserId } from "../../../src/core/identity/contract";
 import type { CatalogOperation } from "../../../src/shell/canonical-catalog/contract";
@@ -78,6 +82,8 @@ export const localStanding = Effect.fn(function* (userId: string, current: numbe
     () => new CanonicalAdmissionUnavailable({ cause: "standing" })
   );
 });
+
+const isResponse = Schema.is(Schema.instanceOf(Response));
 
 const Receipt = Schema.Struct({
   operation: Schema.String,
@@ -250,7 +256,7 @@ export const audit = Effect.fn(function* (
         owns: (user) => user === userId,
       });
 
-      if (typeof currentProof === "string" || deniedAccess({ subject: currentProof, operation })) {
+      if (Predicate.isString(currentProof) || deniedAccess({ subject: currentProof, operation })) {
         return yield* new CanonicalAdmissionUnavailable({
           cause: "PAT authority changed during commit",
         });
@@ -321,13 +327,17 @@ const fullReceiptBody = Effect.fn(function* ({
 
   let next = 0;
 
-  for (const { position, part } of parts) {
-    if (position !== next) {
-      return yield* new CanonicalAdmissionUnavailable({ cause: "incomplete_receipt" });
-    }
+  yield* Effect.forEach(
+    parts,
+    Effect.fnUntraced(function* ({ position, part }) {
+      if (position !== next) {
+        return yield* new CanonicalAdmissionUnavailable({ cause: "incomplete_receipt" });
+      }
 
-    next += part.length;
-  }
+      next += part.length;
+    }),
+    { discard: true }
+  );
 
   if (next !== length) {
     return yield* new CanonicalAdmissionUnavailable({ cause: "incomplete_receipt" });
@@ -386,7 +396,9 @@ export const charge = Effect.fn(function* (call: Call) {
 
   const meter = status.canonicalCalls;
 
-  if (meter._tag !== "Uncapped" && meter.remaining === 0) {
+  if (
+    Match.valueTags(meter, { Uncapped: () => false, Limited: ({ remaining }) => remaining === 0 })
+  ) {
     return Option.some(yield* reject(call, exhausted(current)));
   }
 
@@ -395,7 +407,7 @@ export const charge = Effect.fn(function* (call: Call) {
   const period = DateTime.toEpochMillis(allowancePeriod(DateTime.makeUnsafe(current)).startsAt);
   yield* oneStored(
     yield* sql`INSERT INTO commercial_allowance_consumptions(user_id,allowance,identity,period_start_ms,accepted_at_ms,units)
-    VALUES(${subject.userId},'canonical_call',${identity},${period},${current},${meter._tag === "Uncapped" ? 0 : 1}) RETURNING identity`
+    VALUES(${subject.userId},'canonical_call',${identity},${period},${current},${Match.valueTags(meter, { Uncapped: () => 0, Limited: () => 1 })}) RETURNING identity`
   );
 
   if ("patId" in subject) {
@@ -479,11 +491,9 @@ const writeReceiptParts = Effect.fn(function* (body: string, user: UserId, diges
   }
 });
 
-const receiptStorage = (
-  operation: string,
-  retain: boolean,
-  body: string
-): { parent: Option.Option<string>; agent: boolean; parts: boolean } => {
+type ReceiptStorage = Readonly<{ parent: Option.Option<string>; agent: boolean; parts: boolean }>;
+
+const receiptStorage = (operation: string, retain: boolean, body: string): ReceiptStorage => {
   if (!retain) return { parent: Option.none(), agent: false, parts: false };
 
   if (usesAgentReceiptBody(operation)) return { parent: Option.none(), agent: true, parts: false };
@@ -534,10 +544,14 @@ export const complete = Effect.fn(function* (
 
 const deniedAccess = (call: Pick<Call, "subject" | "operation">): boolean =>
   !("sessionId" in call.subject) &&
-  decideOperationAccess(call.operation.policy.access, {
-    _tag: "oauth" in call.subject ? "OAuthAgent" : "PAT",
-    capabilities: call.subject.scopes,
-  })._tag !== "Allowed";
+  !OperationAccessDecision.$is("Allowed")(
+    decideOperationAccess(
+      call.operation.policy.access,
+      "oauth" in call.subject
+        ? OperationAccessCaller.OAuthAgent({ capabilities: call.subject.scopes })
+        : OperationAccessCaller.PAT({ capabilities: call.subject.scopes })
+    )
+  );
 
 export const localRetryKey = Effect.fnUntraced(function* (request: Request) {
   return request.headers.has("authorization") || Option.isSome(yield* CurrentOAuthInvocation)
@@ -553,7 +567,7 @@ export const localPreparationSubject = Effect.fn(function* (
   const resolve = yield* localProof(request, owns);
   const subject = yield* resolve(yield* Clock.currentTimeMillis);
 
-  return typeof subject === "string" || deniedAccess({ subject, operation })
+  return Predicate.isString(subject) || deniedAccess({ subject, operation })
     ? Option.none<UserId>()
     : Option.some(subject.userId);
 });
@@ -592,7 +606,7 @@ const authorizedWork = Effect.fn(function* <E>({
 }>) {
   const confirmation = yield* confirmCall(call);
 
-  if (confirmation instanceof Response) return attachStanding({ ...call, response: confirmation });
+  if (isResponse(confirmation)) return attachStanding({ ...call, response: confirmation });
   yield* sweepLocalReceipts(call.current);
   const prior = yield* replay(call, invocation);
 

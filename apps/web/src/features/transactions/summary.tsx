@@ -1,4 +1,4 @@
-import { BigDecimal, Option } from "effect";
+import { Array as Arr, BigDecimal, Option } from "effect";
 import type { JSX } from "react";
 import { formatMoney } from "@/transport/money";
 import { type Transaction, formatOccurrence } from "./presentation";
@@ -20,20 +20,21 @@ const SummaryLine = ({ label, value }: Readonly<{ label: string; value: string }
 
 const currencyFigures = (
   transactions: ReadonlyArray<Transaction>,
+  currency: Transaction["money"]["currency"],
   locale: string
 ): ReadonlyArray<Readonly<{ label: string; value: string }>> => {
-  const currency = Option.getOrThrow(Option.fromNullishOr(transactions[0])).money.currency;
   const amounts = transactions.map((transaction) => transaction.money.amount);
   const sum = BigDecimal.sumAll(amounts);
 
   const largest = (records: ReadonlyArray<Transaction>): string => {
-    if (records.length === 0) return "—";
-
     const sorted = records.toSorted((left, right) =>
       BigDecimal.Order(right.money.amount, left.money.amount)
     );
 
-    return formatMoney({ locale, money: Option.getOrThrow(Option.fromNullishOr(sorted[0])).money });
+    return Option.match(Arr.head(sorted), {
+      onNone: () => "—",
+      onSome: (record) => formatMoney({ locale, money: record.money }),
+    });
   };
 
   const total = (direction: Transaction["direction"]): string =>
@@ -70,11 +71,9 @@ const currencyFigures = (
   ];
 };
 
-const dateRange = ({
-  transactions,
-  locale,
-  timeZone,
-}: SummaryProps): Readonly<{ first: string; last: string }> => {
+type DateRange = Readonly<{ first: string; last: string }>;
+
+const dateRange = ({ transactions, locale, timeZone }: SummaryProps): DateRange => {
   const dates = transactions
     .map((transaction) => transaction.occurredAt)
     .toSorted((left, right) => left.epochMilliseconds - right.epochMilliseconds);
@@ -112,7 +111,7 @@ const CurrencySummary = ({
   props: SummaryProps;
 }>): JSX.Element => {
   const transactions = props.transactions.filter((record) => record.money.currency === currency);
-  const figures = currencyFigures(transactions, props.locale);
+  const figures = currencyFigures(transactions, currency, props.locale);
 
   return (
     <div>

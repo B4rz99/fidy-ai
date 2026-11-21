@@ -1,6 +1,6 @@
 import { verifyHostedInferenceConformanceChecks } from "../../src/shell/hosted-inference/operations";
 import { Cause, Effect, Exit, Option } from "effect";
-import { makeCloudflareHostedInference } from "./runtime";
+import { cloudflareHostedInference } from "./runtime";
 import type { OpenAiEnvironment } from "./contract";
 
 const jsonHeaders = {
@@ -16,7 +16,7 @@ const handler = {
       );
     }
 
-    return makeCloudflareHostedInference(environment).pipe(
+    return cloudflareHostedInference(environment).pipe(
       Effect.mapError(() => ({
         check: "configuration" as const,
         category: "ProviderUnavailable" as const,

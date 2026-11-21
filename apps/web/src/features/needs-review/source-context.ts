@@ -1,7 +1,7 @@
 import type { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
-import { DateTime, Option } from "effect";
+import { DateTime, Option, Predicate } from "effect";
 import { AsyncResult, Atom } from "effect/reactivity";
 import type { CanonicalSuccess, FidyApiGroups, FidyClient } from "@/transport/client";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
@@ -27,6 +27,14 @@ type ContextQuery = Atom.Atom<
     HttpApiEndpoint.Errors<ContextEndpoint>
   >
 >;
+
+type PageContextState = Readonly<{
+  contexts: PageContexts;
+  deadlines: ReadonlyMap<string, Item["expiresAt"]>;
+  loading: boolean;
+  failed: boolean;
+  refresh: () => void;
+}>;
 
 const emptyContext: ContextQuery = Atom.make(
   AsyncResult.success<CanonicalSuccess<"ingestion.getReviewPageContext">>({
@@ -63,7 +71,7 @@ const evidenceProjection = Atom.family((query: ContextQuery) =>
     const state = get(query).pipe(presentCanonicalQuery);
     const deadlines = new Map<string, Item["expiresAt"]>();
 
-    if (state._tag === "Ready") {
+    if (Predicate.isTagged(state, "Ready")) {
       for (const entry of state.value.data.items) {
         deadlines.set(entry.id, get(originalDeadlineQuery(entry)));
       }
@@ -81,20 +89,14 @@ export const useReviewPageContext = ({
   filter: Filter;
   page: number;
   items: ReadonlyArray<Item>;
-}>): Readonly<{
-  contexts: PageContexts;
-  deadlines: ReadonlyMap<string, Item["expiresAt"]>;
-  loading: boolean;
-  failed: boolean;
-  refresh: () => void;
-}> => {
+}>): PageContextState => {
   const client = useRouter().options.context.apiClient;
   const query = reviewPageContextQuery({ client, filter, page, ids: items.map((item) => item.id) });
   const projectionQuery = evidenceProjection(query);
   const projection = useAtomValue(projectionQuery);
   const state = projection.state;
   const refresh = useAtomRefresh(query);
-  const entries = state._tag === "Ready" ? state.value.data.items : [];
+  const entries = Predicate.isTagged(state, "Ready") ? state.value.data.items : [];
   const deadlines = projection.deadlines;
   useReviewPageExpiry([...items, ...[...deadlines.values()].map((expiresAt) => ({ expiresAt }))]);
   const current = DateTime.toEpochMillis(DateTime.nowUnsafe());
@@ -120,9 +122,10 @@ export const useReviewPageContext = ({
           : []
       )
     ),
-    loading: state._tag === "Initial",
+    loading: Predicate.isTagged(state, "Initial"),
     failed:
-      state._tag === "Failure" || (state._tag === "Ready" && Option.isSome(state.refreshFailure)),
+      Predicate.isTagged(state, "Failure") ||
+      (Predicate.isTagged(state, "Ready") && Option.isSome(state.refreshFailure)),
     refresh,
   };
 };

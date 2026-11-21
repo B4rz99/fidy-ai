@@ -1,7 +1,16 @@
+import { Data } from "effect";
 import type { DashboardDragSource, DashboardDropTarget } from "./drag-data";
 
 export const sourceLabel = (source: DashboardDragSource): string =>
   source.kind === "widget" ? source.label : source.entry.name;
+
+export type DashboardDragOutcome = Data.TaggedEnum<{
+  Canceled: {};
+  Unplaced: {};
+  Placed: { readonly destination: string };
+}>;
+
+export const DashboardDragOutcome = Data.taggedEnum<DashboardDragOutcome>();
 
 export const dashboardDragAnnouncement = {
   started: (label: string): string => `Moviendo ${label}.`,
@@ -11,17 +20,13 @@ export const dashboardDragAnnouncement = {
     outcome,
   }: Readonly<{
     label: string;
-    outcome: { _tag: "Canceled" } | { _tag: "Unplaced" } | { _tag: "Placed"; destination: string };
-  }>): string => {
-    switch (outcome._tag) {
-      case "Canceled":
-        return `Movimiento de ${label} cancelado.`;
-      case "Unplaced":
-        return `${label} no fue movido.`;
-      case "Placed":
-        return `${label}. ${outcome.destination}.`;
-    }
-  },
+    outcome: DashboardDragOutcome;
+  }>): string =>
+    DashboardDragOutcome.$match(outcome, {
+      Canceled: () => `Movimiento de ${label} cancelado.`,
+      Unplaced: () => `${label} no fue movido.`,
+      Placed: ({ destination }) => `${label}. ${destination}.`,
+    }),
 };
 
 export const dashboardCollisionPriority = (depth: number): number => depth;

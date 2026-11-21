@@ -3,7 +3,7 @@ import { PendingRead } from "@/ui/components/pending-read";
 import { Disclosure } from "@/ui/components/disclosure";
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Link } from "@tanstack/react-router";
-import { Effect, Option } from "effect";
+import { Effect, Option, Predicate } from "effect";
 import { type Atom, Reactivity } from "effect/reactivity";
 import { type JSX, useState } from "react";
 import type { ProcessingAuthorization, WebAuthClient } from "@/transport/client";
@@ -103,7 +103,7 @@ const RenewalChoice = ({
           {result.waiting ? "Registrando autorización…" : "Renovar autorización"}
         </Button>
       </div>
-      {result._tag === "Success" && !result.value ? (
+      {Predicate.isTagged(result, "Success") && !result.value ? (
         <Alert variant="destructive" role="alert">
           <AlertTitle>No pudimos confirmar la renovación</AlertTitle>
           <AlertDescription>
@@ -133,9 +133,11 @@ export const ConsentRenewal = ({
   const status = presentCanonicalQuery(queryResult);
   const refresh = useAtomRefresh(query);
 
-  if (status._tag === "Initial") return <PendingRead label="Consultando aviso para renovar" />;
+  if (Predicate.isTagged(status, "Initial")) {
+    return <PendingRead label="Consultando aviso para renovar" />;
+  }
 
-  if (status._tag === "Failure" || Option.isSome(status.refreshFailure)) {
+  if (Predicate.isTagged(status, "Failure") || Option.isSome(status.refreshFailure)) {
     return (
       <div>
         <p>No pudimos consultar el aviso.</p>

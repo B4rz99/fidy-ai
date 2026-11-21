@@ -2,7 +2,7 @@ import { reviewNavigationQuery } from "./navigation-query";
 import { useAtomValue } from "@effect/atom-react";
 import { useMatch, useRouter } from "@tanstack/react-router";
 import { type JSX } from "react";
-import { Option } from "effect";
+import { Option, Predicate } from "effect";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { Badge } from "@/ui/components/badge";
 
@@ -22,7 +22,7 @@ export const ReviewPendingCount = (): JSX.Element => {
 
   return (
     <span>
-      {state._tag === "Ready" ? (
+      {Predicate.isTagged(state, "Ready") ? (
         <Badge variant="secondary" aria-label={`${state.value.data.pendingCount} pendientes`}>
           {state.value.data.pendingCount}
         </Badge>

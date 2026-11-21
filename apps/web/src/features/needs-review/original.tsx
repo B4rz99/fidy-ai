@@ -1,3 +1,4 @@
+import { Predicate } from "effect";
 import { PendingRead } from "@/ui/components/pending-read";
 import { Input } from "@/ui/components/input";
 
@@ -94,12 +95,11 @@ const RetainedMaterial = ({
 
   if (reviewHasExpired(item)) return <ExpiredOriginal item={item} />;
 
-  const unavailable =
-    state._tag === "Failure" ? (
-      <p className="text-sm text-muted-foreground">No pudimos cargar el original.</p>
-    ) : (
-      <PendingRead label="Cargando original" />
-    );
+  const unavailable = Predicate.isTagged(state, "Failure") ? (
+    <p className="text-sm text-muted-foreground">No pudimos cargar el original.</p>
+  ) : (
+    <PendingRead label="Cargando original" />
+  );
 
   return (
     <details open data-review="original">
@@ -108,12 +108,12 @@ const RetainedMaterial = ({
         <HugeiconsIcon icon={ArrowDown01Icon} size={16} aria-hidden="true" />
       </summary>
       <div data-review="original-body">
-        {state._tag === "Ready" ? (
+        {Predicate.isTagged(state, "Ready") ? (
           <MaterialBody material={state.value.data} item={item} />
         ) : (
           unavailable
         )}
-        {state._tag === "Failure" ? (
+        {Predicate.isTagged(state, "Failure") ? (
           <Button
             type="button"
             variant="outline"

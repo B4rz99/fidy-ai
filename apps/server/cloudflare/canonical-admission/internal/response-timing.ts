@@ -32,13 +32,17 @@ export const appendSnapshotTimings = ({
 }>): Response => {
   const total = Duration.toMillis(duration);
 
-  const phases = {
+  const measured = {
     "canonical-total": total,
     "canonical-storage": timings.storage,
     "canonical-present": timings.presentation,
     "canonical-other": Math.max(0, total - timings.storage - timings.presentation),
-    ...(Option.isSome(timings.sql) ? { "canonical-sql": timings.sql.value } : {}),
   };
+
+  const phases = Option.match(timings.sql, {
+    onNone: () => measured,
+    onSome: (sql) => ({ ...measured, "canonical-sql": sql }),
+  });
 
   const headers = new Headers(response.headers);
   headers.append(

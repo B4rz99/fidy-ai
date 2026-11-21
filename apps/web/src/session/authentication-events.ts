@@ -1,4 +1,5 @@
 import { browserSecureRandom } from "@/browser/crypto";
+import { browserRuntime } from "@/transport/browser-runtime";
 import { Effect, Option, Schema } from "effect";
 
 import {
@@ -8,7 +9,7 @@ import {
 
 export { authenticationEndedEvent } from "./authentication-channel";
 
-const tabId = Effect.runSync(browserSecureRandom.uuidV4().pipe(Effect.orDie));
+const tabId = browserRuntime.runSync(browserSecureRandom.uuidV4().pipe(Effect.orDie));
 
 const Transition = Schema.Struct({ event: Schema.Literal("changed"), sender: Schema.String });
 

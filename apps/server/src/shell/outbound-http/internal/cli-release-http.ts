@@ -90,6 +90,6 @@ export const cliReleaseHttp = (client: HttpClient.HttpClient): CliReleaseHttpSer
   const http = providerTransport("github")(client);
 
   return {
-    readLatest: () => followRelease(http, manifestUrl, maximumRequests),
+    readLatest: followRelease(http, manifestUrl, maximumRequests),
   };
 };

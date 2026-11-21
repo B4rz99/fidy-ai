@@ -1,7 +1,8 @@
 import { BudgetThresholdEvaluation } from "../contract";
 import { commitLocalWrite, prepareLocalWrite } from "../../canonical-admission/operations";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Data, DateTime, Effect, Option, Schema } from "effect";
+import { Array as Arr, Data, DateTime, Effect, Option, Schema } from "effect";
+import type { SqlError } from "effect/sql";
 import { IanaTimeZone } from "../../../src/core/_shared/context";
 import { Currency, Money, encodeMoneyAmount } from "../../../src/core/_shared/money";
 import { Budget, type BudgetId, type UpdateBudgetInput } from "../../../src/core/budgets/contract";
@@ -98,18 +99,22 @@ export const plannedBudgets = Effect.fn(function* (
     )
   )(rows);
 
-  for (const ref of refs) {
-    if (
-      Option.isNone(
-        interpretCategory({
-          release: currentCategoryRelease,
-          reference: { revision: ref.category_revision, categoryId: ref.category_id },
-        })
-      )
-    ) {
-      return yield* budgetUnavailable();
-    }
-  }
+  yield* Effect.forEach(
+    refs,
+    Effect.fnUntraced(function* (ref) {
+      if (
+        Option.isNone(
+          interpretCategory({
+            release: currentCategoryRelease,
+            reference: { revision: ref.category_revision, categoryId: ref.category_id },
+          })
+        )
+      ) {
+        return yield* budgetUnavailable();
+      }
+    }),
+    { discard: true }
+  );
 
   const budgets = yield* budgetsFromRows(rows);
 
@@ -150,24 +155,27 @@ const groupPrecision = Effect.fn(function* (
     UNION SELECT p.cap FROM budget_month_plan_records p JOIN selected s ON s.id=p.budget_id
     WHERE p.kind='cap' AND p.user_id=${user} AND p.month>=${month})`;
 
-  let cursor = Option.none<string>();
+  const capsFitFrom = (
+    after: Option.Option<string>
+  ): Effect.Effect<boolean, SqlError.SqlError | Schema.SchemaError> =>
+    sql`${caps} SELECT cap FROM caps WHERE ${Option.getOrNull(after)} IS NULL OR cap>${Option.getOrNull(after)} ORDER BY cap LIMIT ${maximumBudgets}`.pipe(
+      Effect.flatMap(
+        Schema.decodeUnknownEffect(Schema.Array(Schema.Struct({ cap: Schema.String })))
+      ),
+      Effect.flatMap((rows) => {
+        if (rows.some((row) => Option.isNone(fits({ amount: row.cap, currency })))) {
+          return Effect.succeed(false);
+        }
 
-  for (;;) {
-    const after = Option.getOrNull(cursor);
+        const last = Arr.last(rows);
 
-    const rows = yield* Schema.decodeUnknownEffect(
-      Schema.Array(Schema.Struct({ cap: Schema.String }))
-    )(
-      yield* sql`${caps} SELECT cap FROM caps WHERE ${after} IS NULL OR cap>${after} ORDER BY cap LIMIT ${maximumBudgets}`
+        return rows.length < maximumBudgets || Option.isNone(last)
+          ? Effect.succeed(true)
+          : capsFitFrom(Option.some(last.value.cap));
+      })
     );
 
-    for (const row of rows) {
-      if (Option.isNone(fits({ amount: row.cap, currency }))) return false;
-      cursor = Option.some(row.cap);
-    }
-
-    if (rows.length < maximumBudgets) return true;
-  }
+  return yield* capsFitFrom(Option.none());
 });
 
 const groupDenomination = Effect.fn(function* (user: UserId, name: string, month: string) {
@@ -341,7 +349,9 @@ const checkMonthlyDenominations = Effect.fn(function* (user: UserId) {
 const budgetTargets = ({ id, input }: SaveInput): ReadonlyArray<string> => [
   "budget-category:" + input.categoryId + ":" + input.cap.currency,
   ...Option.toArray(id).map((value) => "budget:" + value),
-  ...(input.groupName === undefined ? [] : ["budget-group:" + input.groupName]),
+  ...Option.toArray(Option.fromUndefinedOr(input.groupName)).map(
+    (value) => "budget-group:" + value
+  ),
   ...(input.groupCategoryIds ?? []).map((value) => "budget-member:" + value),
 ];
 

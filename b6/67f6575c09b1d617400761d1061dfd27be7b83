@@ -1,0 +1,18 @@
+apps/server/cloudflare/erasure/no-charge-sealing.test.ts
+  h_c6d49c804e0ad2 1-63
+apps/server/cloudflare/user-store/internal/erasure-purge.ts
+  h_c6d49c804e0ad2 118
+docs/security/ledger.md
+  h_c6d49c804e0ad2 1-7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b667f6575c09b1d617400761d1061dfd27be7b83",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

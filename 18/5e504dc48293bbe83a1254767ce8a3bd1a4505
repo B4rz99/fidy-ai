@@ -1,0 +1,18 @@
+apps/server/cloudflare/public-worker-refund-origin.test.ts
+  h_c6d49c804e0ad2 1-50
+apps/server/cloudflare/public-worker.ts
+  h_c6d49c804e0ad2 654-655,661-662
+infra/cloudflare/verify-edge-policy.ts
+  h_c6d49c804e0ad2 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "185e504dc48293bbe83a1254767ce8a3bd1a4505",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -50,6 +50,10 @@ by each Durable Object; it is not provisioned as a shared Alchemy database resou
 release checks use the SQLite Durable Object owners and their first-install verifier. See
 [SQL atomicity](sql.md) for runtime operations.
 
+The pinned Alchemy patch drops its unused D1 SQL client dependency. Bun resolves the dependency
+graph from `bun.lock` and applies the package patch during installation. If regenerating the lockfile
+restores the upstream Alchemy dependency edge, remove it and the unused package entry again.
+
 `Cloudflare.R2.Bucket("StatementStagingBucket")` creates the resource used by Core's private byte
 staging binding. Keep `publicAccess` disabled and omit public `domains` for these private buckets.
 `BucketProps.lifecycleRules` can expire objects but does not implement Fidy's authorization,

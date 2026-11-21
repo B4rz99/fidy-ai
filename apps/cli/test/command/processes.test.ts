@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
-import { Clock, Deferred, Effect, Exit, Fiber, Option } from "effect";
-import { type TestProcess, scopedProcess } from "../../test/process.test-fixture";
+import { Clock, Deferred, Duration, Effect, Exit, Fiber, Option } from "effect";
+import { type TestProcess, scopedProcess } from "../process.test-fixture";
 
 it.live("a body deadline escalates a resistant child and completes scoped finalizers", () =>
   Effect.gen(function* () {
@@ -24,7 +24,7 @@ it.live("a body deadline escalates a resistant child and completes scoped finali
 
       owned = Option.some(child);
       expect(Option.isSome(yield* child.read)).toBe(true);
-      yield* child.read.pipe(Effect.timeout(100));
+      yield* child.read.pipe(Effect.timeout(Duration.millis(100)));
     }).pipe(Effect.scoped, Effect.exit);
 
     expect(Exit.isFailure(exit)).toBe(true);

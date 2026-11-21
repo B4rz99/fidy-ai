@@ -13,7 +13,7 @@ import { makePairingClient } from "../../apps/cli/src/direct-client/runtime";
 import type { PublicProgress } from "../../apps/cli/src/login/contract";
 import { runCommand } from "../../apps/cli/src/command/operations";
 import { runOperationCommand } from "../../apps/cli/src/canonical/operations";
-import { makeCanonicalClient } from "../../apps/cli/src/canonical/runtime";
+import { canonicalClientFactory } from "../../apps/cli/src/canonical/runtime";
 import { alice, seed } from "../../apps/server/cloudflare/financial-user-store.test-fixture";
 import { browserOrigins } from "../../apps/server/cloudflare/runtime/contract";
 import { native, nativeUserPlatform } from "../../apps/server/cloudflare/user-store.test-fixture";
@@ -126,7 +126,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       const failed = yield* runOperationCommand(["categories", "listCategories"], {
         store,
         httpClient,
-        clientFactory: makeCanonicalClient,
+        clientFactory: canonicalClientFactory,
         readInput: () => Effect.die("Unexpected file read"),
         stdout: (text) =>
           Effect.sync(() => {

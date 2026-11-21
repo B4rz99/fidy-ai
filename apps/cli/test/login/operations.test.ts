@@ -1,11 +1,10 @@
-import { deepStrictEqual } from "node:assert";
-import { Cause, Effect, Exit, Fiber, Schema } from "effect";
+import { Effect, Exit, Fiber, Option, Schema } from "effect";
 import { TestClock } from "effect/testing";
-import { type PairingClient, PollingDelayed } from "./contract";
+import { type PairingClient, PollingDelayed } from "../../src/login/contract";
 import { makeLoginFixture, privateProof, rawBearer, request, started } from "./login.test-fixture";
 import { expect, it } from "@effect/vitest";
-import { login } from "./operations";
-import { CliFailure } from "../credential/contract";
+import { login } from "../../src/login/operations";
+import { CliFailure } from "../../src/credential/contract";
 
 it.effect(
   "waits the advertised cadence, persists before success and exposes only public progress",
@@ -76,7 +75,8 @@ it.effect("does not replay a claimed bearer or report a failed save as success",
 
     const failedStore: typeof fixture.dependencies.store = {
       ...fixture.dependencies.store,
-      save: () => Effect.fail(new CliFailure({ reason: "StorageUnavailable" })),
+      save: () =>
+        Effect.fail(new CliFailure({ reason: "StorageUnavailable", cause: Option.none() })),
     };
 
     const fiber = yield* login(request, () => Effect.void, {
@@ -86,19 +86,9 @@ it.effect("does not replay a claimed bearer or report a failed save as success",
 
     yield* TestClock.adjust("5 seconds");
     const exit = yield* Fiber.await(fiber);
-    expect(Exit.isFailure(exit)).toBe(true);
-
-    if (Exit.isFailure(exit)) {
-      deepStrictEqual(
-        exit,
-        Exit.failCause(
-          Cause.annotate(
-            Cause.fail(new CliFailure({ reason: "ClaimStorageFailed" })),
-            Cause.annotations(exit.cause)
-          )
-        )
-      );
-    }
+    expect(
+      Option.getOrUndefined(Option.map(Exit.findErrorOption(exit), ({ reason }) => reason))
+    ).toStrictEqual("ClaimStorageFailed");
 
     expect(fixture.claims).toHaveLength(1);
   })
@@ -110,7 +100,9 @@ it.effect("refuses unavailable native storage before starting any pairing", () =
 
     const result = yield* Effect.exit(
       login({ recipientLabel: "Mi agente", scopes: ["read"], lifetimeDays: 7 }, () => Effect.void, {
-        verifyStorage: Effect.fail(new CliFailure({ reason: "StorageUnavailable" })),
+        verifyStorage: Effect.fail(
+          new CliFailure({ reason: "StorageUnavailable", cause: Option.none() })
+        ),
         store: {
           load: Effect.die("not reached"),
           save: () => Effect.die("not reached"),

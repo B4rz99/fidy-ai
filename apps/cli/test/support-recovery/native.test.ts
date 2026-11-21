@@ -1,11 +1,11 @@
 import { BunServices } from "@effect/platform-bun";
 import { expect, it } from "@effect/vitest";
 import { deepStrictEqual } from "node:assert";
-import { type Cause, Effect, Exit, Option, Queue, Redacted, Terminal } from "effect";
+import { type Cause, Effect, Exit, Option, Predicate, Queue, Redacted, Terminal } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { HttpClient, HttpClientResponse } from "effect/http";
-import { makeRecoveryOperator } from "./runtime";
-import { RecoveryFailure } from "./contract";
+import { makeRecoveryOperator } from "../../src/support-recovery/runtime";
+import { RecoveryFailure } from "../../src/support-recovery/contract";
 
 const native = it.layer(BunServices.layer, { excludeTestServices: true });
 
@@ -67,7 +67,7 @@ const authenticate = Effect.fn(function* (tokenOutput: string) {
   const children: Array<ChildProcessSpawner.ChildProcessHandle> = [];
 
   const replacement = ChildProcessSpawner.make((command) => {
-    if (command._tag !== "StandardCommand") return Effect.die("unexpected pipeline");
+    if (!Predicate.isTagged(command, "StandardCommand")) return Effect.die("unexpected pipeline");
     expect(command.command).toBe("cloudflared");
     const login = command.args[1] === "login";
     expect(command.args).toEqual(
@@ -96,16 +96,20 @@ const authenticate = Effect.fn(function* (tokenOutput: string) {
   const operator = yield* makeRecoveryOperator(noHttp, {
     interactive: true,
     write: () => Effect.void,
-  }).pipe(
-    Effect.provideService(Terminal.Terminal, terminal(Effect.die("unused"))),
-    Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, replacement)
+  }).pipe(Effect.provideService(Terminal.Terminal, terminal(Effect.die("unused"))));
+
+  const result = yield* operator.authenticate.pipe(
+    Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, replacement),
+    Effect.exit
   );
 
-  const result = yield* operator.authenticate.pipe(Effect.exit);
-
-  for (const child of children) {
-    expect(yield* child.isRunning).toBe(false);
-  }
+  yield* Effect.forEach(
+    children,
+    Effect.fnUntraced(function* (child) {
+      expect(yield* child.isRunning).toBe(false);
+    }),
+    { discard: true }
+  );
 
   return yield* result;
 });
@@ -125,8 +129,8 @@ native((test) =>
   test.effect(
     "cancelled or oversized hidden input releases the terminal without revealing proof",
     () =>
-      Effect.gen(function* () {
-        for (const event of [
+      Effect.forEach(
+        [
           {
             input: Option.some("ABCDE-".repeat(6)),
             key: { name: "", ctrl: false, meta: false, shift: false },
@@ -135,7 +139,8 @@ native((test) =>
             input: Option.none<string>(),
             key: { name: "c", ctrl: true, meta: false, shift: false },
           },
-        ]) {
+        ],
+        Effect.fnUntraced(function* (event) {
           const events = yield* Queue.make<Terminal.UserInput>();
           yield* Queue.offer(events, event);
           let released = false;
@@ -162,13 +167,17 @@ native((test) =>
           deepStrictEqual(
             result,
             Exit.fail(
-              new RecoveryFailure({ reason: event.key.ctrl ? "Cancelled" : "InvalidInput" })
+              new RecoveryFailure({
+                reason: event.key.ctrl ? "Cancelled" : "InvalidInput",
+                cause: Option.none(),
+              })
             )
           );
           expect(released).toBe(true);
           expect(output.join("")).not.toContain("ABCDE-");
-        }
-      })
+        }),
+        { discard: true }
+      )
   )
 );
 
@@ -176,17 +185,22 @@ native((test) =>
   test.effect(
     "rejects malformed or overflowing Access output as a closed authentication failure",
     () =>
-      Effect.gen(function* () {
-        for (const script of [
+      Effect.forEach(
+        [
           "process.stdout.write('not a token')",
           "process.stdout.write('x'.repeat(9000));setInterval(() => {}, 1000)",
-        ]) {
+        ],
+        Effect.fnUntraced(function* (script) {
           const result = yield* authenticate(script).pipe(
             Effect.match({ onFailure: Exit.fail, onSuccess: Exit.succeed })
           );
 
-          deepStrictEqual(result, Exit.fail(new RecoveryFailure({ reason: "AccessUnavailable" })));
-        }
-      })
+          deepStrictEqual(
+            Exit.mapError(result, ({ reason }) => reason),
+            Exit.fail("AccessUnavailable")
+          );
+        }),
+        { discard: true }
+      )
   )
 );

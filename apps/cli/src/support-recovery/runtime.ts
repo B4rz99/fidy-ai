@@ -1,7 +1,6 @@
-import { Effect, Redacted, Schema, Terminal } from "effect";
-import { type HttpClient, HttpClientRequest } from "effect/http";
-import { ChildProcessSpawner } from "effect/process";
-import { authenticateAccess, makeProtectedClient } from "../direct-client/runtime";
+import { Context, Effect, Layer, Option, Redacted, Schema, Terminal } from "effect";
+import { HttpClient, HttpClientRequest } from "effect/http";
+import { authenticateAccess, protectedHttpClient } from "../direct-client/runtime";
 import {
   RecoveryFailure,
   RecoveryInput,
@@ -31,10 +30,10 @@ const outcomes: Readonly<
   unavailable: { status: 503, outcome: "unavailable" },
 };
 
-export const makeRecoveryClient = (
+export const recoverySubmitter = (
   httpClient: HttpClient.HttpClient
 ): RecoveryOperator["submit"] => {
-  const client = makeProtectedClient({
+  const client = protectedHttpClient({
     client: httpClient,
     allowQuery: false,
     maximumResponseBytes,
@@ -73,13 +72,13 @@ export const makeRecoveryOperator = Effect.fn(function* (
   terminalOutput: Pick<RecoveryOperator, "interactive" | "write">
 ) {
   const terminal = yield* Terminal.Terminal;
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 
   const operator: RecoveryOperator = {
     ...terminalOutput,
     authenticate: authenticateAccess(recoveryOperatorUrl).pipe(
-      Effect.mapError(() => new RecoveryFailure({ reason: "AccessUnavailable" })),
-      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner)
+      Effect.mapError(
+        (cause) => new RecoveryFailure({ reason: "AccessUnavailable", cause: Option.some(cause) })
+      )
     ),
     readPairing: readPrompt({
       terminal,
@@ -93,8 +92,27 @@ export const makeRecoveryOperator = Effect.fn(function* (
       label: "Código de recuperación (oculto): ",
       maximumCharacters: recoveryCharacters,
     }).pipe(Effect.map(Redacted.make)),
-    submit: makeRecoveryClient(httpClient),
+    submit: recoverySubmitter(httpClient),
   };
 
   return operator;
 });
+
+export class RecoveryOperatorService extends Context.Service<
+  RecoveryOperatorService,
+  RecoveryOperator
+>()("@fidy/cli/support-recovery/runtime/RecoveryOperatorService") {
+  static readonly make = Effect.gen(function* () {
+    const terminalOutput = {
+      interactive: process.stdin.isTTY === true && process.stderr.isTTY === true,
+      write: (message: string): Effect.Effect<void> =>
+        Effect.sync(() => {
+          process.stderr.write(message);
+        }),
+    };
+
+    return yield* makeRecoveryOperator(yield* HttpClient.HttpClient, terminalOutput);
+  });
+
+  static readonly layer = Layer.effect(this, this.make);
+}

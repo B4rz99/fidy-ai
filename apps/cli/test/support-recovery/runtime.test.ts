@@ -2,8 +2,8 @@ import { expect, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, Redacted, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { TestClock } from "effect/testing";
-import { RecoveryInput } from "./contract";
-import { makeRecoveryClient } from "./runtime";
+import { RecoveryInput } from "../../src/support-recovery/contract";
+import { recoverySubmitter } from "../../src/support-recovery/runtime";
 
 const input = Schema.decodeSync(RecoveryInput)({
   pairingCode: "BCDF-GHJK",
@@ -12,7 +12,7 @@ const input = Schema.decodeSync(RecoveryInput)({
 
 it.effect("approves only through the fixed Access route without exporting either proof", () =>
   Effect.gen(function* () {
-    const submit = makeRecoveryClient(
+    const submit = recoverySubmitter(
       HttpClient.make((request) => {
         expect(request.url).toBe("https://api.fidyapp.com/internal/support-recovery");
         expect(request.method).toBe("POST");
@@ -38,39 +38,45 @@ it.effect("a lost or contradictory response never approves or retries recovery",
       new Response("x".repeat(2048)),
     ];
 
-    for (const response of cases) {
-      let requests = 0;
+    yield* Effect.forEach(
+      cases,
+      Effect.fnUntraced(function* (response) {
+        let requests = 0;
 
-      const submit = makeRecoveryClient(
-        HttpClient.make((request) => {
-          requests += 1;
+        const submit = recoverySubmitter(
+          HttpClient.make((request) => {
+            requests += 1;
 
-          return Effect.succeed(HttpClientResponse.fromWeb(request, response));
-        })
-      );
+            return Effect.succeed(HttpClientResponse.fromWeb(request, response));
+          })
+        );
 
-      expect(yield* submit(input, Redacted.make("access"))).toBe("uncertain");
-      expect(requests).toBe(1);
-    }
+        expect(yield* submit(input, Redacted.make("access"))).toBe("uncertain");
+        expect(requests).toBe(1);
+      }),
+      { discard: true }
+    );
   })
 );
 
 it.effect("authoritative refusals reveal no claimant match details", () =>
-  Effect.gen(function* () {
-    for (const response of [
+  Effect.forEach(
+    [
       Response.json({ status: "not_approved" }, { status: 400 }),
       Response.json({ status: "unauthorized" }, { status: 401 }),
       Response.json({ status: "limited" }, { status: 429 }),
       Response.json({ status: "unavailable" }, { status: 503 }),
-    ]) {
-      const submit = makeRecoveryClient(
+    ],
+    Effect.fnUntraced(function* (response) {
+      const submit = recoverySubmitter(
         HttpClient.make((request) => Effect.succeed(HttpClientResponse.fromWeb(request, response)))
       );
 
       const outcome = yield* submit(input, Redacted.make("access"));
       expect(outcome).toBe(response.status === 400 ? "not_approved" : "unavailable");
-    }
-  })
+    }),
+    { discard: true }
+  )
 );
 
 it.effect("a response deadline releases owned transport and preserves uncertainty", () =>
@@ -78,7 +84,7 @@ it.effect("a response deadline releases owned transport and preserves uncertaint
     const started = yield* Deferred.make<void>();
     let released = false;
 
-    const submit = makeRecoveryClient(
+    const submit = recoverySubmitter(
       HttpClient.make(() =>
         Deferred.succeed(started, undefined).pipe(
           Effect.andThen(Effect.never),
@@ -104,7 +110,7 @@ it.effect("interruption releases a held response reader without a second decisio
     const started = yield* Deferred.make<void>();
     let cancelled = false;
 
-    const submit = makeRecoveryClient(
+    const submit = recoverySubmitter(
       HttpClient.make((request) =>
         Effect.succeed(
           HttpClientResponse.fromWeb(

@@ -1,7 +1,7 @@
 import { deepStrictEqual } from "node:assert";
 import { IssuedPAT } from "@fidy/server/client";
 import { BunServices } from "@effect/platform-bun";
-import { expect, layer } from "@effect/vitest";
+import { describe, expect, layer } from "@effect/vitest";
 import {
   Deferred,
   Effect,
@@ -13,8 +13,13 @@ import {
   Redacted,
   Schema,
 } from "effect";
-import { CliFailure, type Credential, type NativeSecrets, apiOrigin } from "./contract";
-import { makeCredentialStore } from "./runtime";
+import {
+  CliFailure,
+  type Credential,
+  type NativeSecrets,
+  apiOrigin,
+} from "../../src/credential/contract";
+import { openCredentialStore } from "../../src/credential/runtime";
 
 const secretLength = 43;
 
@@ -41,11 +46,13 @@ const credential: Credential = {
   bearer: issued.bearer,
 };
 
-const nativeFixture = (): Readonly<{
+type NativeFixture = Readonly<{
   native: NativeSecrets;
   values: Map<string, string>;
   calls: Array<string>;
-}> => {
+}>;
+
+const nativeFixture = (): NativeFixture => {
   const values = new Map<string, string>();
   const calls: Array<string> = [];
 
@@ -76,71 +83,67 @@ const nativeFixture = (): Readonly<{
 layer(BunServices.layer)((it) => {
   const unsafePaths = ["linked directory", "linked metadata", "nonregular metadata"] as const;
 
-  for (const unsafePath of unsafePaths) {
-    it.effect(
-      `refuses ${unsafePath} before accessing native credentials or changing link targets`,
-      () =>
+  it.effect.each(unsafePaths)(
+    "refuses %s before accessing native credentials or changing link targets",
+    (unsafePath) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const root = yield* fs.makeTempDirectoryScoped();
+        const directory = `${root}/credentials`;
+        const target = `${root}/target`;
+        yield* fs.makeDirectory(target, { mode: 0o700 });
+        yield* fs.writeFileString(`${target}/sentinel`, "untouched", { mode: 0o600 });
+
+        if (unsafePath === "linked directory") {
+          yield* fs.symlink(target, directory);
+        } else {
+          yield* fs.makeDirectory(directory, { mode: 0o700 });
+
+          if (unsafePath === "linked metadata") {
+            yield* fs.symlink(`${target}/sentinel`, `${directory}/grant.json`);
+          } else {
+            yield* fs.makeDirectory(`${directory}/grant.json`, { mode: 0o700 });
+          }
+        }
+
+        const fixture = nativeFixture();
+        fixture.values.set("login", bearer);
+        const { store } = yield* openCredentialStore(directory, fixture.native);
+        expect(Exit.isFailure(yield* Effect.exit(store.load))).toBe(true);
+        expect(Exit.isFailure(yield* Effect.exit(store.save(credential)))).toBe(true);
+        expect(fixture.calls).toEqual([]);
+        expect(fixture.values.get("login") === bearer).toBe(true);
+        expect(yield* fs.readFileString(`${target}/sentinel`)).toBe("untouched");
+        expect(yield* fs.exists(`${directory}/login.lock`)).toBe(false);
+        expect(yield* fs.readDirectory(target)).toEqual(["sentinel"]);
+      }).pipe(Effect.scoped)
+  );
+
+  describe.skipIf(process.platform === "win32")("nonprivate UNIX storage", () => {
+    it.effect.each(["directory", "metadata"] as const)(
+      "refuses nonprivate UNIX %s without releasing or replacing credentials",
+      (unsafePath) =>
         Effect.gen(function* () {
           const fs = yield* FileSystem.FileSystem;
-          const root = yield* fs.makeTempDirectoryScoped();
-          const directory = `${root}/credentials`;
-          const target = `${root}/target`;
-          yield* fs.makeDirectory(target, { mode: 0o700 });
-          yield* fs.writeFileString(`${target}/sentinel`, "untouched", { mode: 0o600 });
-
-          if (unsafePath === "linked directory") {
-            yield* fs.symlink(target, directory);
-          } else {
-            yield* fs.makeDirectory(directory, { mode: 0o700 });
-
-            if (unsafePath === "linked metadata") {
-              yield* fs.symlink(`${target}/sentinel`, `${directory}/grant.json`);
-            } else {
-              yield* fs.makeDirectory(`${directory}/grant.json`, { mode: 0o700 });
-            }
-          }
-
+          const directory = yield* fs.makeTempDirectoryScoped();
           const fixture = nativeFixture();
-          fixture.values.set("login", bearer);
-          const { store } = yield* makeCredentialStore(directory, fixture.native);
+          const { store } = yield* openCredentialStore(directory, fixture.native);
+          yield* store.save(credential);
+          const metadata = yield* fs.readFileString(`${directory}/grant.json`);
+          fixture.calls.length = 0;
+          yield* fs.chmod(
+            unsafePath === "directory" ? directory : `${directory}/grant.json`,
+            0o755
+          );
           expect(Exit.isFailure(yield* Effect.exit(store.load))).toBe(true);
           expect(Exit.isFailure(yield* Effect.exit(store.save(credential)))).toBe(true);
           expect(fixture.calls).toEqual([]);
           expect(fixture.values.get("login") === bearer).toBe(true);
-          expect(yield* fs.readFileString(`${target}/sentinel`)).toBe("untouched");
+          expect(yield* fs.readFileString(`${directory}/grant.json`)).toBe(metadata);
           expect(yield* fs.exists(`${directory}/login.lock`)).toBe(false);
-          expect(yield* fs.readDirectory(target)).toEqual(["sentinel"]);
         }).pipe(Effect.scoped)
     );
-  }
-
-  if (process.platform !== "win32") {
-    for (const unsafePath of ["directory", "metadata"] as const) {
-      it.effect(
-        `refuses nonprivate UNIX ${unsafePath} without releasing or replacing credentials`,
-        () =>
-          Effect.gen(function* () {
-            const fs = yield* FileSystem.FileSystem;
-            const directory = yield* fs.makeTempDirectoryScoped();
-            const fixture = nativeFixture();
-            const { store } = yield* makeCredentialStore(directory, fixture.native);
-            yield* store.save(credential);
-            const metadata = yield* fs.readFileString(`${directory}/grant.json`);
-            fixture.calls.length = 0;
-            yield* fs.chmod(
-              unsafePath === "directory" ? directory : `${directory}/grant.json`,
-              0o755
-            );
-            expect(Exit.isFailure(yield* Effect.exit(store.load))).toBe(true);
-            expect(Exit.isFailure(yield* Effect.exit(store.save(credential)))).toBe(true);
-            expect(fixture.calls).toEqual([]);
-            expect(fixture.values.get("login") === bearer).toBe(true);
-            expect(yield* fs.readFileString(`${directory}/grant.json`)).toBe(metadata);
-            expect(yield* fs.exists(`${directory}/login.lock`)).toBe(false);
-          }).pipe(Effect.scoped)
-      );
-    }
-  }
+  });
 
   it.effect(
     "stores only metadata in the file and reuses the bearer in a newly constructed store",
@@ -149,13 +152,13 @@ layer(BunServices.layer)((it) => {
         const fs = yield* FileSystem.FileSystem;
         const directory = yield* fs.makeTempDirectoryScoped();
         const fixture = nativeFixture();
-        const first = yield* makeCredentialStore(directory, fixture.native);
+        const first = yield* openCredentialStore(directory, fixture.native);
         yield* first.verifyStorage;
         yield* first.store.save(credential);
         const file = yield* fs.readFileString(`${directory}/grant.json`);
         expect(file).not.toContain(bearer);
         expect(fixture.values.get("login")).toBe(bearer);
-        const second = yield* makeCredentialStore(directory, fixture.native);
+        const second = yield* openCredentialStore(directory, fixture.native);
         const loaded = yield* second.store.load;
         expect(Option.isSome(loaded)).toBe(true);
         yield* second.store.clear;
@@ -170,7 +173,7 @@ layer(BunServices.layer)((it) => {
         const fs = yield* FileSystem.FileSystem;
         const directory = yield* fs.makeTempDirectoryScoped();
         const fixture = nativeFixture();
-        const store = yield* makeCredentialStore(directory, fixture.native);
+        const store = yield* openCredentialStore(directory, fixture.native);
         yield* store.store.save(credential);
         const text = yield* fs.readFileString(`${directory}/grant.json`);
         yield* fs.writeFileString(
@@ -198,10 +201,16 @@ layer(BunServices.layer)((it) => {
           set: (name, value) =>
             fixture.native
               .set(name, value)
-              .pipe(Effect.andThen(Effect.fail(new CliFailure({ reason: "StorageUnavailable" })))),
+              .pipe(
+                Effect.andThen(
+                  Effect.fail(
+                    new CliFailure({ reason: "StorageUnavailable", cause: Option.none() })
+                  )
+                )
+              ),
         };
 
-        const store = yield* makeCredentialStore(directory, broken);
+        const store = yield* openCredentialStore(directory, broken);
         expect(Exit.isFailure(yield* Effect.exit(store.store.save(credential)))).toBe(true);
         expect(yield* fs.exists(`${directory}/grant.json`)).toBe(false);
         expect(Exit.isFailure(yield* Effect.exit(store.store.load))).toBe(true);
@@ -232,7 +241,7 @@ layer(BunServices.layer)((it) => {
             options?.flag === "wx" ? Effect.fail(unavailable) : fs.open(path, options),
         };
 
-        const first = yield* makeCredentialStore(directory, fixture.native).pipe(
+        const first = yield* openCredentialStore(directory, fixture.native).pipe(
           Effect.provideService(FileSystem.FileSystem, failingFs)
         );
 
@@ -241,7 +250,7 @@ layer(BunServices.layer)((it) => {
         expect(yield* fs.exists(`${directory}/grant.json`)).toBe(false);
         expect(Exit.isFailure(yield* Effect.exit(first.store.load))).toBe(true);
         yield* first.store.clear;
-        const normal = yield* makeCredentialStore(directory, fixture.native);
+        const normal = yield* openCredentialStore(directory, fixture.native);
         yield* normal.store.save(credential);
         expect(Exit.isFailure(yield* Effect.exit(normal.store.save(credential)))).toBe(true);
         expect(fixture.values.get("login") === bearer).toBe(true);
@@ -268,12 +277,15 @@ layer(BunServices.layer)((it) => {
               ),
         };
 
-        const first = yield* makeCredentialStore(directory, delayed);
-        const second = yield* makeCredentialStore(directory, fixture.native);
+        const first = yield* openCredentialStore(directory, delayed);
+        const second = yield* openCredentialStore(directory, fixture.native);
         const fiber = yield* first.store.save(credential).pipe(Effect.forkChild);
         yield* Deferred.await(saving);
         const rejected = yield* second.store.save(credential).pipe(Effect.exit);
-        deepStrictEqual(rejected, Exit.fail(new CliFailure({ reason: "StorageUnavailable" })));
+        deepStrictEqual(
+          rejected,
+          Exit.fail(new CliFailure({ reason: "StorageUnavailable", cause: Option.none() }))
+        );
         yield* Deferred.succeed(release, undefined);
         yield* Fiber.join(fiber);
         expect(Option.isSome(yield* second.store.load)).toBe(true);

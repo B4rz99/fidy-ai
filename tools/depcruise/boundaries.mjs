@@ -11,7 +11,7 @@ const testSource = /(?:\.(?:test|spec|fixture)|\.test-fixture)\.[cm]?[jt]sx?$/u;
 const compositionRoots = new Set([
   "cloudflare/recovery/support-recovery.test.ts",
   "../cli/src/direct-client/runtime.ts",
-  "../cli/src/direct-client/resources.test.ts",
+  "../cli/test/direct-client/resources.test.ts",
   "../web/src/transport/browser-http-policy.ts",
   "../web/src/transport/client.test.ts",
   "../../scripts/pro/runtime.ts",

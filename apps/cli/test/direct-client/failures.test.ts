@@ -1,8 +1,9 @@
 import { PATRecipientLabel, StartedPATPairing } from "@fidy/server/client";
 import { expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
+import { PollingDelayed } from "../../src/login/contract";
 import { HttpClient, HttpClientResponse } from "effect/http";
-import { makePairingClient } from "./runtime";
+import { makePairingClient } from "../../src/direct-client/runtime";
 
 const secretCharacters = 43;
 
@@ -51,7 +52,7 @@ it.effect(
       );
 
       expect(yield* Effect.result(slowdown.claim(pairing))).toMatchObject({
-        failure: { _tag: "PollingDelayed", retryAfterSeconds: 10 },
+        failure: new PollingDelayed({ retryAfterSeconds: 10 }),
       });
     })
 );

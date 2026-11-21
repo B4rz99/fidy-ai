@@ -1,12 +1,12 @@
 import { deepStrictEqual } from "node:assert";
 import { StartedPATPairing } from "@fidy/server/client";
-import { expect, it } from "@effect/vitest";
-import { Cause, Deferred, Effect, Exit, Fiber, Schema } from "effect";
+import { assert, expect, it } from "@effect/vitest";
+import { Cause, Deferred, Effect, Exit, Fiber, Option, Schema } from "effect";
 import { TestClock } from "effect/testing";
-import { type PairingClient, PollingDelayed } from "./contract";
-import { CliFailure } from "../credential/contract";
+import { type PairingClient, PollingDelayed } from "../../src/login/contract";
+import { CliFailure } from "../../src/credential/contract";
 import { makeLoginFixture, request } from "./login.test-fixture";
-import { login } from "./operations";
+import { login } from "../../src/login/operations";
 
 it.effect("stops pending polls at the pairing deadline and never persists an expired pairing", () =>
   Effect.gen(function* () {
@@ -64,7 +64,11 @@ it.effect("a lost claim response is non-recoverable and is never replayed", () =
       claim: (): Effect.Effect<never, CliFailure> =>
         Effect.sync(() => {
           claims += 1;
-        }).pipe(Effect.andThen(Effect.fail(new CliFailure({ reason: "ClaimAmbiguous" })))),
+        }).pipe(
+          Effect.andThen(
+            Effect.fail(new CliFailure({ reason: "ClaimAmbiguous", cause: Option.none() }))
+          )
+        ),
     };
 
     const fiber = yield* login(request, () => Effect.void, {
@@ -173,26 +177,24 @@ it.effect("interruption after claim dispatch preserves uncertain consumption wit
     yield* Deferred.await(dispatched);
     yield* Fiber.interrupt(fiber);
     const exit = yield* Fiber.await(fiber);
-    expect(Exit.isFailure(exit)).toBe(true);
+    assert(Exit.isFailure(exit));
 
-    if (Exit.isFailure(exit)) {
-      expect(Cause.hasInterrupts(exit.cause)).toBe(true);
-      expect(exit.cause.reasons.filter(Cause.isFailReason)).toHaveLength(1);
-      deepStrictEqual(
-        exit,
-        Exit.failCause(
-          Cause.fromReasons(
-            exit.cause.reasons.map((reason) =>
-              Cause.isInterruptReason(reason)
-                ? reason
-                : Cause.makeFailReason(new CliFailure({ reason: "ClaimAmbiguous" })).annotate(
-                    Cause.reasonAnnotations(reason)
-                  )
-            )
+    expect(Cause.hasInterrupts(exit.cause)).toBe(true);
+    expect(exit.cause.reasons.filter(Cause.isFailReason)).toHaveLength(1);
+    deepStrictEqual(
+      exit,
+      Exit.failCause(
+        Cause.fromReasons(
+          exit.cause.reasons.map((reason) =>
+            Cause.isInterruptReason(reason)
+              ? reason
+              : Cause.makeFailReason(
+                  new CliFailure({ reason: "ClaimAmbiguous", cause: Option.none() })
+                ).annotate(Cause.reasonAnnotations(reason))
           )
         )
-      );
-    }
+      )
+    );
 
     yield* TestClock.adjust("10 minutes");
     expect(consumed).toBe(1);

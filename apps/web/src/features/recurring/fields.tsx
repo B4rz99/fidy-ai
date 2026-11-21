@@ -43,20 +43,21 @@ export const DefaultChoiceField = ({
   const [value, setValue] = useState(initial);
   return <ChoiceField {...props} value={value} onChange={setValue} />;
 };
-export const RecurringDateField = ({
-  name,
-  label,
-  initial,
-  timeZone,
-  required,
-}: Readonly<{
+type DateFieldProps = Readonly<{
   name: string;
   label: string;
-  initial: string;
   timeZone: string;
   required: boolean;
-}>): JSX.Element => {
-  const [value, setValue] = useState(initial);
+}>;
+export const PlanDateField = ({
+  name,
+  label,
+  value,
+  onChange,
+  timeZone,
+  required,
+}: DateFieldProps &
+  Readonly<{ value: string; onChange: (value: string) => void }>): JSX.Element => {
   const aria = usePlanFieldAria(name);
   const edited = usePlanFieldEdited();
   return (
@@ -73,11 +74,18 @@ export const RecurringDateField = ({
         appearance="field"
         onChange={(next) => {
           edited(name);
-          setValue(next);
+          onChange(next);
         }}
       />
     </>
   );
+};
+export const RecurringDateField = ({
+  initial,
+  ...props
+}: DateFieldProps & Readonly<{ initial: string }>): JSX.Element => {
+  const [value, setValue] = useState(initial);
+  return <PlanDateField {...props} value={value} onChange={setValue} />;
 };
 export const CurrencyField = ({ initial }: Readonly<{ initial: string }>): JSX.Element => {
   const [value, setValue] = useState(initial);

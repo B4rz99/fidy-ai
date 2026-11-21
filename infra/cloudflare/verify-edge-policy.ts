@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "53c281f69eab586a39043b07888c2fc271ad20a1ecabaca9a525dff246795750";
+const expectedEdgePolicyDigest = "c101477ce28b2ca16b124602c199a8680ecbb89bb74333ec4bd1b006530fdc59";
 const securityArtifacts = [
   ...(await Promise.all(
     [
@@ -104,6 +104,16 @@ const securityArtifacts = [
       "./native-graph.ts",
       "./native-host-plan.ts",
       "./native-incumbent-fence.ts",
+      "./native-retirement-fence.ts",
+      "../../.github/workflows/native-incumbent-retirement.yml",
+      "../../scripts/retirement/disposition.py",
+      "../../scripts/retirement/fence_before_transfer.py",
+      "../../scripts/retirement/incumbent.json",
+      "../../scripts/retirement/legacy-inventory.sql",
+      "../../scripts/retirement/provenance.py",
+      "../../scripts/retirement/opening_source.py",
+      "../../scripts/retirement/provider.py",
+      "../../scripts/retirement/run.py",
       "./native-plan-diagnostics.ts",
       "./native-provider-list.ts",
       "./native-recovery-identity.ts",

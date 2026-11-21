@@ -13,6 +13,7 @@ const policyFixture = Effect.gen(function* () {
   yield* fs.copy(`${workspaceRoot}patches`, `${root}/patches`);
   yield* fs.makeDirectory(`${root}/scripts/infra-performance`, { recursive: true });
   yield* fs.copy(`${workspaceRoot}scripts/pro`, `${root}/scripts/pro`);
+  yield* fs.copy(`${workspaceRoot}scripts/retirement`, `${root}/scripts/retirement`);
   for (const owner of ["deployed-fleet", "canonical-fixture", "cells", "hosted-browser"]) {
     const directory = `scripts/infra-performance/${owner}`;
     yield* fs.copy(`${workspaceRoot}${directory}`, `${root}/${directory}`);
@@ -50,7 +51,11 @@ layer(BunFileSystem.layer, { excludeTestServices: true })(
       20_000
     );
 
-    it.effect.each(["worker-observability.ts", "../../scripts/pro/runtime.ts"])(
+    it.effect.each([
+      "worker-observability.ts",
+      "../../scripts/pro/runtime.ts",
+      "../../scripts/retirement/provider.py",
+    ])(
       "refuses changes in %s without disclosing their contents",
       (source) =>
         Effect.gen(function* () {

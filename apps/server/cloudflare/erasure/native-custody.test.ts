@@ -133,7 +133,7 @@ const custodyJourney = Effect.fn(function* () {
     runtime.getDurableObjectNamespace("ERASURE", "core")
   )).getByName(erasureRegistryName);
 
-  const submit = Effect.fn(function* (path: string, data: Schema.JsonObject, instant?: number) {
+  const submit = Effect.fn(function* (path: string, data: Submission, instant?: number) {
     const now = instant ?? (yield* Clock.currentTimeMillis);
 
     return yield* native(() =>
@@ -307,6 +307,13 @@ const caseActionStatus = Effect.fn(function* (
 ) {
   expect((yield* privateCaseAction(runtime, reference, action)).status).toBe(status);
 });
+
+type Submission =
+  | Readonly<{}>
+  | Readonly<{ evidence: Schema.Json }>
+  | Readonly<{ userId: string }>
+  | Readonly<{ custodian: string; after: number }>
+  | Readonly<{ custodian: string; after: number; deadlineMs: number }>;
 
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect("an unresolved custodian remains pending beyond the platform recovery horizon", () =>

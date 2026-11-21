@@ -1,11 +1,14 @@
 import { BackupRecoveryCode } from "./contract";
-import { expect, it } from "@effect/vitest";
+import { assert, expect, it } from "@effect/vitest";
 import { DateTime, Option, Redacted, Result, Schema } from "effect";
 import { BrowserLoginPairingId } from "~/core/browser-login/contract";
 import { UserId } from "~/core/identity/contract";
 import {
+  ActiveBackupRecoveryCredential,
   BackupRecoveryCredential,
   BackupRecoveryDigest,
+  ConsumedBackupRecoveryCredential,
+  OperatorActor,
   SupportOperatorId,
   SupportRecoveryCase,
   SupportRecoveryCaseEvent,
@@ -22,38 +25,42 @@ const createdAt = DateTime.makeUnsafe("2026-08-23T12:00:00Z");
 it("models active and consumed BackupRecoveryCredential authority as exclusive states", () => {
   const raw = Redacted.make(BackupRecoveryCode.make("ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2"));
 
-  const active = BackupRecoveryCredential.make({
-    _tag: "Active",
-    userId,
-    codeDigest: BackupRecoveryDigest.make(new Uint8Array(32)),
-    revision: 1,
-    createdAt,
-  });
-
-  const consumed = BackupRecoveryCredential.make({
-    _tag: "Consumed",
-    userId,
-    consumedAt: createdAt,
-    consumedByCaseId: Option.some(caseId),
-    revision: 1,
-    createdAt,
-  });
-
-  expect(Redacted.value(raw)).toBe("ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2");
-  expect(active._tag).toBe("Active");
-
-  if (active._tag === "Active") expect(active.codeDigest).toHaveLength(32);
-  expect(consumed).not.toHaveProperty("codeDigest");
-  expect(() => BackupRecoveryDigest.make(new Uint8Array(31))).toThrow();
-  expect(() =>
-    BackupRecoveryCredential.make({
-      _tag: "Consumed",
+  const active = BackupRecoveryCredential.make(
+    ActiveBackupRecoveryCredential.make({
       userId,
-      consumedAt: DateTime.add(createdAt, { milliseconds: -1 }),
+      codeDigest: BackupRecoveryDigest.make(new Uint8Array(32)),
+      revision: 1,
+      createdAt,
+    })
+  );
+
+  const consumed = BackupRecoveryCredential.make(
+    ConsumedBackupRecoveryCredential.make({
+      userId,
+      consumedAt: createdAt,
       consumedByCaseId: Option.some(caseId),
       revision: 1,
       createdAt,
     })
+  );
+
+  expect(Redacted.value(raw)).toBe("ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2");
+  expect(active._tag).toBe("Active");
+
+  assert(Schema.is(ActiveBackupRecoveryCredential)(active));
+  expect(active.codeDigest).toHaveLength(32);
+  expect(consumed).not.toHaveProperty("codeDigest");
+  expect(() => BackupRecoveryDigest.make(new Uint8Array(31))).toThrow();
+  expect(() =>
+    BackupRecoveryCredential.make(
+      ConsumedBackupRecoveryCredential.make({
+        userId,
+        consumedAt: DateTime.add(createdAt, { milliseconds: -1 }),
+        consumedByCaseId: Option.some(caseId),
+        revision: 1,
+        createdAt,
+      })
+    )
   ).toThrow();
 });
 
@@ -81,7 +88,7 @@ it("models terminal SupportRecoveryCases and only closed metadata event combinat
     caseId,
     ordinal: 1,
     occurredAt: createdAt,
-    actor: { _tag: "Operator", operatorId },
+    actor: OperatorActor.make({ operatorId }),
     action: "open",
     outcome: "accepted",
   });
@@ -145,16 +152,15 @@ it("models terminal SupportRecoveryCases and only closed metadata event combinat
 });
 
 it("reports the time field that violates the Recovery lifecycle", () => {
-  const credential = {
-    _tag: "Consumed",
+  const credential = ConsumedBackupRecoveryCredential.make({
     userId,
     consumedAt: DateTime.subtract(createdAt, { milliseconds: 1 }),
     consumedByCaseId: Option.none(),
     revision: 1,
     createdAt,
-  };
+  });
 
-  const invalidCredential = Schema.decodeUnknownResult(Schema.toType(BackupRecoveryCredential))(
+  const invalidCredential = Schema.decodeResult(Schema.toType(BackupRecoveryCredential))(
     credential
   );
 

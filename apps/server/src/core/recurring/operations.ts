@@ -31,15 +31,22 @@ export const comparableMoney = ({
     BigDecimal.multiply(reference.amount, tolerancePercent)
   ) <= 0;
 
+type RecurringCounterparty = Option.Option.Value<RecurringFact["counterparty"]>;
+
 type DatedFact = Readonly<{
   fact: RecurringFact;
+  counterparty: RecurringCounterparty;
   key: string;
   month: number;
   day: number;
   lastDay: number;
 }>;
 
-const dated = (fact: RecurringFact, timeZone: IanaTimeZone): DatedFact => {
+const dated = (
+  fact: RecurringFact,
+  counterparty: RecurringCounterparty,
+  timeZone: IanaTimeZone
+): DatedFact => {
   const parts = DateTime.toParts(DateTime.makeZonedUnsafe(fact.occurredAt, { timeZone }));
 
   const lastDay = DateTime.toPartsUtc(
@@ -51,7 +58,8 @@ const dated = (fact: RecurringFact, timeZone: IanaTimeZone): DatedFact => {
 
   return {
     fact,
-    key: normalizeCounterparty(Option.getOrThrow(fact.counterparty)),
+    counterparty,
+    key: normalizeCounterparty(counterparty),
     month: parts.year * monthsPerYear + parts.month,
     day: parts.day,
     lastDay,
@@ -137,10 +145,13 @@ const belongsTo = ({
   normalizeCounterparty(proposal.counterparty) === first.key &&
   comparableMoney({ candidate: first.fact.money, reference: proposal.referenceMoney }) &&
   comparableMoney({ candidate: last.fact.money, reference: proposal.referenceMoney }) &&
-  dateMatches(dated({ ...first.fact, occurredAt: proposal.firstOccurredAt }, timeZone), last);
+  dateMatches(
+    dated({ ...first.fact, occurredAt: proposal.firstOccurredAt }, first.counterparty, timeZone),
+    last
+  );
 
 const proposalFrom = ([first, second, last]: Triple): RecurringProposal => ({
-  counterparty: Option.getOrThrow(last.fact.counterparty),
+  counterparty: last.counterparty,
   money: last.fact.money,
   referenceMoney: first.fact.money,
   firstOccurredAt: first.fact.occurredAt,
@@ -200,7 +211,11 @@ const canExtend = (
   fact: DatedFact,
   timeZone: IanaTimeZone
 ): boolean => {
-  const anchor = dated({ ...fact.fact, occurredAt: proposal.firstOccurredAt }, timeZone);
+  const anchor = dated(
+    { ...fact.fact, occurredAt: proposal.firstOccurredAt },
+    fact.counterparty,
+    timeZone
+  );
 
   return (
     normalizeCounterparty(proposal.counterparty) === fact.key &&
@@ -245,7 +260,7 @@ const extendProposal = ({
   return {
     ...proposal,
     money: last.fact.money,
-    counterparty: Option.getOrThrow(last.fact.counterparty),
+    counterparty: last.counterparty,
     lastOccurredAt: last.fact.occurredAt,
     latestTransactionId: last.fact.id,
   };
@@ -261,8 +276,12 @@ export const detectMonthlySeries = ({
   const unique = new Map(facts.map((fact) => [fact.id, fact]));
 
   const ordered = [...unique.values()]
-    .filter((fact) => Option.isSome(fact.counterparty))
-    .map((fact) => dated(fact, timeZone))
+    .flatMap((fact) =>
+      Option.match(fact.counterparty, {
+        onNone: () => [],
+        onSome: (counterparty) => [dated(fact, counterparty, timeZone)],
+      })
+    )
     .sort(
       (left, right) =>
         left.fact.occurredAt.epochMilliseconds - right.fact.occurredAt.epochMilliseconds ||

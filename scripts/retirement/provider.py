@@ -1,9 +1,13 @@
 """Cloudflare account evidence and exact resource requests for incumbent retirement."""
+from base64 import b64encode, urlsafe_b64encode
+from hashlib import sha256
+import hmac
 from pathlib import Path
 import json
 import os
 import re
 import subprocess
+from time import time
 from urllib.error import HTTPError
 from urllib.parse import quote, urlencode
 from urllib.request import HTTPRedirectHandler, Request, build_opener
@@ -16,6 +20,7 @@ HEX_ID = re.compile(r"[a-f0-9]{32}")
 UUID = re.compile(r"[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}")
 WORKER = re.compile(r"[a-z0-9][a-z0-9-]{1,62}")
 SQL = Path(__file__).with_name("legacy-inventory.sql")
+INCUMBENT_BUCKETS = frozenset(json.loads(Path(__file__).with_name("incumbent.json").read_text())["buckets"])
 CENSUS = {
     "structural_samples", "issued_r2_writers", "forwarded_email_receipts", "statement_staging",
     "upload_admission_events", "wompi_callback_candidates", "billing_attempts", "refund_attempts",
@@ -37,6 +42,34 @@ class NoRedirect(HTTPRedirectHandler):
         return None
 
 
+def multipart_read_session(account, hostname, access, token, bucket):
+    # Cloudflare validates the parent secret hash and the exact action and bucket claims.
+    def encode(value):
+        return urlsafe_b64encode(value).rstrip(b"=")
+
+    issued = int(time())
+    claims = {
+        "bucket": bucket,
+        "actions": ["ListMultipartUploads"],
+        "sub": account,
+        "iss": access,
+        "aud": hostname,
+        "iat": issued,
+        "exp": issued + 120,
+    }
+    header = encode(b'{"alg":"HS256","typ":"JWT"}')
+    payload = encode(json.dumps(claims, separators=(",", ":")).encode())
+    unsigned = header + b"." + payload
+    parent_secret = sha256(token.encode()).hexdigest().encode()
+    signature = encode(hmac.digest(parent_secret, unsigned, "sha256"))
+    jwt = unsigned + b"." + signature
+    return {
+        "AWS_ACCESS_KEY_ID": access,
+        "AWS_SECRET_ACCESS_KEY": sha256(jwt).hexdigest(),
+        "AWS_SESSION_TOKEN": b64encode(b"jwt/" + jwt).decode(),
+    }
+
+
 class Provider:
     def __init__(self, *, account, zone, token, builds_token):
         require(HEX_ID.fullmatch(account) and HEX_ID.fullmatch(zone) and token and builds_token,
@@ -44,16 +77,22 @@ class Provider:
         self.account, self.zone = account, zone
         self.token, self.builds_token = token, builds_token
         self.http = build_opener(NoRedirect())
+        self._r2_parent = None
 
     def request(self, path, *, method="GET", body=None, zone=False, builds=False, absent=False,
                 empty_notifications=False):
         scope = f"zones/{self.zone}/" if zone else f"accounts/{self.account}/"
         require(isinstance(path, str) and not path.startswith("/") and "://" not in path,
                 "Invalid private provider path")
+        return self._request(scope + path, method=method, body=body, builds=builds, absent=absent,
+                             empty_notifications=empty_notifications)
+
+    def _request(self, path, *, method="GET", body=None, builds=False, absent=False,
+                 empty_notifications=False):
         headers = {"Authorization": "Bearer " + (self.builds_token if builds else self.token)}
         if body is not None:
             headers["Content-Type"] = "application/json"
-        request = Request(API + scope + path, headers=headers, method=method,
+        request = Request(API + path, headers=headers, method=method,
                           data=None if body is None else json.dumps(body).encode())
         try:
             with self.http.open(request, timeout=25) as response:
@@ -195,26 +234,54 @@ class Provider:
         require(result.get("status") == "available" and result.get("gitRevision") == opening["revision"] and
                 result.get("contractDigest") == opening["contractDigest"], "Canonical public release changed")
 
+    def r2_parent_access_key(self):
+        if self._r2_parent is None:
+            try:
+                result = self.result("tokens/verify")
+            except Refused:
+                try:
+                    result = self._request("user/tokens/verify")["result"]
+                except Refused:
+                    raise Refused("Protected Cloudflare token could not be verified for R2") from None
+            require(type(result) is dict, "Protected Cloudflare token identity is unavailable for R2")
+            access = result.get("id")
+            require(result.get("status") == "active" and isinstance(access, str) and HEX_ID.fullmatch(access),
+                    "Protected Cloudflare token identity is unavailable for R2")
+            self._r2_parent = access
+        return self._r2_parent
+
     def multipart_clear(self, bucket):
-        access = os.environ.get("RETIREMENT_R2_ACCESS_KEY_ID")
-        secret = os.environ.get("RETIREMENT_R2_SECRET_ACCESS_KEY")
-        if not access or not secret:
-            return None
-        require(WORKER.fullmatch(bucket), "Invalid exact R2 multipart inventory target")
-        credentials = {"PATH": os.environ["PATH"], "HOME": os.environ["HOME"],
-                       "AWS_ACCESS_KEY_ID": access, "AWS_SECRET_ACCESS_KEY": secret,
-                       "AWS_REGION": "auto", "AWS_PAGER": "", "AWS_EC2_METADATA_DISABLED": "true"}
+        require(bucket in INCUMBENT_BUCKETS, "Unreviewed R2 multipart inventory target")
+        access = self.r2_parent_access_key()
+        hostname = f"{self.account}.r2.cloudflarestorage.com"
+        credentials = {
+            "PATH": os.environ["PATH"],
+            "AWS_REGION": "auto",
+            "AWS_PAGER": "",
+            "AWS_EC2_METADATA_DISABLED": "true",
+            "AWS_CONFIG_FILE": os.devnull,
+            "AWS_SHARED_CREDENTIALS_FILE": os.devnull,
+            **multipart_read_session(self.account, hostname, access, self.token, bucket),
+        }
         try:
             reply = subprocess.run(
                 ["aws", "s3api", "list-multipart-uploads", "--bucket", bucket, "--max-uploads", "1",
-                 "--no-paginate", "--endpoint-url", f"https://{self.account}.r2.cloudflarestorage.com"],
+                 "--no-paginate", "--endpoint-url", f"https://{hostname}"],
                 env=credentials, capture_output=True, check=True, timeout=30
             )
+        except subprocess.CalledProcessError as failure:
+            if re.search(rb"\((AccessDenied|InvalidAccessKeyId|InvalidToken|ExpiredToken|SignatureDoesNotMatch)\)",
+                         failure.stderr or b""):
+                raise Refused("Protected Cloudflare token did not authorize scoped R2 multipart inspection") from None
+            raise Refused("Scoped R2 multipart inspection refused") from None
         except (subprocess.SubprocessError, OSError):
-            raise Refused("R2 multipart inspection refused") from None
+            raise Refused("Scoped R2 multipart inspection refused") from None
         result = json.loads(reply.stdout)
-        require(type(result.get("IsTruncated")) is bool, "Incomplete R2 multipart inventory")
-        return not result["IsTruncated"] and result.get("Uploads", []) == []
+        require(type(result) is dict, "Incomplete R2 multipart inventory")
+        uploads = result.get("Uploads", [])
+        require(result.get("Bucket") == bucket and type(result.get("IsTruncated")) is bool and
+                type(uploads) is list and len(uploads) <= 1, "Incomplete R2 multipart inventory")
+        return not result["IsTruncated"] and uploads == []
 
     def delete_object(self, bucket, key):
         require(WORKER.fullmatch(bucket) and isinstance(key, str) and key and

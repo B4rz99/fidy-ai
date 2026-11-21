@@ -69,8 +69,6 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_BUILDS_READ_TOKEN: ${{ secrets.CLOUDFLARE_BUILDS_READ_TOKEN }}
-          RETIREMENT_R2_ACCESS_KEY_ID: ${{ secrets.RETIREMENT_R2_ACCESS_KEY_ID }}
-          RETIREMENT_R2_SECRET_ACCESS_KEY: ${{ secrets.RETIREMENT_R2_SECRET_ACCESS_KEY }}
         run: python3 scripts/retirement/run.py "$RETIREMENT_OPERATION"
       - name: Retain the exact incumbent inventory
         if: success() && inputs.operation == 'inventory'

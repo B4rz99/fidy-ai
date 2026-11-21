@@ -263,7 +263,7 @@ def hold_reasons(snapshot):
             if row["attention_rows"] and row["source"] in BLOCKING_WRITERS:
                 holds.append({"database": database, "source": row["source"], "count": row["attention_rows"]})
     for bucket, observed in snapshot["objects"].items():
-        if observed["multipartClear"] is False or (observed["count"] and observed["multipartClear"] is not True):
+        if observed["multipartClear"] is not True:
             holds.append({"bucket": bucket, "source": "multipart-unverified"})
     return holds
 
@@ -332,7 +332,7 @@ def dispose(provider, opening, approved, record, *, observe=inventory, deleted=r
             if kind == "buckets":
                 before = provider.objects(key)
                 require(sorted(digest(row) for row in before) == observed["objects"][key]["fingerprints"] and
-                        (not before or provider.multipart_clear(key)) and not provider.notification_targets(key),
+                        provider.multipart_clear(key) and not provider.notification_targets(key),
                         "Incumbent R2 contents or writers changed before disposal")
                 if before:
                     record({"status": "object-disposal-offered", "kind": kind, "id": key, "count": len(before)})

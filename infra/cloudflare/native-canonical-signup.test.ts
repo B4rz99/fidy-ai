@@ -93,3 +93,40 @@ it("retains unmodified launch controls when staging ordinary admission", () => {
     })
   ).toThrow("retained bindings or launch controls");
 });
+
+it("requires the ordinary WhatsApp sandbox binding to be a valid ID or empty", () => {
+  const plain = (text: string): { type: string; text: string } => ({ type: "plain_text", text });
+  const secrets = Object.fromEntries(
+    [
+      "GOOGLE_CLIENT_SECRET",
+      "MICROSOFT_CLIENT_SECRET",
+      "KAPSO_WEBHOOK_SECRET",
+      "WOMPI_EVENT_SECRET",
+      "WOMPI_INTEGRITY_SECRET",
+      "OPENAI_API_KEY",
+      "KAPSO_API_KEY",
+      "RESEND_API_KEY",
+      "WOMPI_PRIVATE_KEY",
+    ].map((name) => [name, { type: "secret_text" }])
+  );
+  const before = { ...secrets, WHATSAPP_SANDBOX_PHONE_NUMBER_ID: plain("123456789012345") };
+  const after = {
+    ...secrets,
+    NATIVE_STORAGE_ADMISSION: plain("open"),
+    RECOVERY_ISOLATION: plain(""),
+    BROWSER_ORIGIN: plain("https://app.fidyapp.com"),
+    GOOGLE_CLIENT_ID: plain("google"),
+    GOOGLE_REDIRECT_URI: plain("https://api.fidyapp.com/providers/google/callback"),
+    MICROSOFT_CLIENT_ID: plain("microsoft"),
+    MICROSOFT_REDIRECT_URI: plain("https://api.fidyapp.com/providers/microsoft/callback"),
+    WHATSAPP_SANDBOX_PHONE_NUMBER_ID: plain(""),
+  };
+  requireCanonicalSignupBindings({ before, after, role: "Core" });
+  expect(() =>
+    requireCanonicalSignupBindings({
+      before,
+      after: { ...after, WHATSAPP_SANDBOX_PHONE_NUMBER_ID: plain("invalid-id") },
+      role: "Core",
+    })
+  ).toThrow();
+});

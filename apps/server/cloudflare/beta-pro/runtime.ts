@@ -1,8 +1,7 @@
 import { Clock, Effect, Option, Schema } from "effect";
-import { HttpClient } from "effect/http";
 import type { EmailAddress } from "../../src/core/email-authentication/contract";
 import { UserId } from "../../src/core/identity/contract";
-import { accessSigningKeysOutboundHttp } from "../../src/shell/outbound-http/operations";
+import { AccessSigningKeysHttp } from "../../src/shell/outbound-http/operations";
 import {
   type ProGrantEntry,
   ProOperatorCommand,
@@ -150,7 +149,7 @@ const verifyOperator = Effect.fn(function* (
         environment.PRICING_PUBLISH_AUDIENCE ?? "",
       ],
     },
-    http: accessSigningKeysOutboundHttp({ issuer, httpClient: yield* HttpClient.HttpClient }),
+    http: (yield* AccessSigningKeysHttp.make).forIssuer(issuer),
   });
 });
 
@@ -162,9 +161,13 @@ export const handleBetaPro = Effect.fn(
     if (invalidTransport(request)) return refused(betaStatus.forbidden);
 
     const issuer = environment.CLOUDFLARE_ACCESS_ISSUER,
-      email = environment.BETA_PRO_OPERATOR_EMAIL;
+      configuredEmail = Schema.decodeUnknownOption(Schema.String)(
+        environment.BETA_PRO_OPERATOR_EMAIL
+      );
 
-    if (typeof email !== "string") return refused(betaStatus.unauthenticated);
+    if (Option.isNone(configuredEmail)) return refused(betaStatus.unauthenticated);
+
+    const email = configuredEmail.value;
     const operator = yield* verifyOperator(request, environment, { issuer, email });
 
     if (Option.isNone(operator)) return refused(betaStatus.unauthenticated);

@@ -1,7 +1,7 @@
 import { Digest, SecureRandom } from "effect/crypto";
 import * as assert from "node:assert/strict";
 import { expect, it } from "@effect/vitest";
-import { Cause, Context, DateTime, Effect, Exit, Layer, Redacted, Schema } from "effect";
+import { Cause, Context, DateTime, Effect, Exit, Layer, Predicate, Redacted, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/http";
 import { exportJWK, exportPKCS8, generateKeyPair, jwtVerify } from "jose";
@@ -47,7 +47,7 @@ const verifiedForm = Effect.fn(function* (
   key: CryptoKey,
   assertions: Set<string>
 ) {
-  if (request.body._tag !== "Uint8Array") throw new Error("Expected form");
+  assert.ok(Predicate.isTagged(request.body, "Uint8Array"), "Expected form");
   const form = new URLSearchParams(new TextDecoder().decode(request.body.body));
   const assertion = form.get("client_assertion");
 
@@ -199,8 +199,7 @@ it.effect.each([
         scenario === "endpoint-drift" ? 0 : 1
       );
 
-      if (scenario === "endpoint-drift") {
-        expect(requests).toEqual([`${issuer}/.well-known/openid-configuration`]);
-      }
+      const discoveryOnly = [`${issuer}/.well-known/openid-configuration`];
+      expect(scenario === "endpoint-drift" ? requests : discoveryOnly).toEqual(discoveryOnly);
     })
 );

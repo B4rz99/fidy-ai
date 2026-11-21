@@ -8,7 +8,8 @@ import { sensitiveClipboardLifetime } from "@/browser/sensitive-clipboard";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import { ManualPATCreation } from "./creation";
 import { usePATManagement } from "./management";
-import { type ActivePATManagementState, ActivePATManagementView } from "./management-view";
+import { ActivePATManagementState } from "./management-state";
+import { ActivePATManagementView } from "./management-view";
 
 type PATManagementContentProps = Readonly<{
   children: (
@@ -73,27 +74,26 @@ export const PATManagementFeature = ({
   const queryState = management.query;
   const refreshActivePATs = management.actions.refresh;
 
-  let activePATState: ActivePATManagementState = {
-    _tag: Predicate.isTagged(queryState, "Initial") && !queryState.waiting ? "Initial" : "Loading",
-  };
+  let activePATState: ActivePATManagementState =
+    Predicate.isTagged(queryState, "Initial") && !queryState.waiting
+      ? ActivePATManagementState.Initial()
+      : ActivePATManagementState.Loading();
 
   if (Predicate.isTagged(queryState, "Failure")) {
-    activePATState = {
-      _tag: "LoadFailure",
+    activePATState = ActivePATManagementState.LoadFailure({
       boundaryFailure: !Predicate.isTagged(queryState.failure, "DeclaredFailure"),
       onRetry: refreshActivePATs,
       waiting: queryState.waiting,
-    };
+    });
   }
 
   if (Predicate.isTagged(queryState, "Ready")) {
-    activePATState = {
-      _tag: "Ready",
+    activePATState = ActivePATManagementState.Ready({
       result: queryState.value.data,
       onRetry: refreshActivePATs,
       refreshing: queryState.waiting,
       refreshFailed: Option.isSome(queryState.refreshFailure),
-    };
+    });
   }
 
   const resuming = useRouterState({ select: (state) => state.location.search.resume === "pat" });

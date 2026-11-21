@@ -1,6 +1,7 @@
+import { OperationAccessCaller } from "../../../src/shell/canonical-policy/contract";
 import { localRuleReview } from "./oauth-review";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option, Predicate, Schema } from "effect";
 import {
   type CategoryFailure,
   CategoryKeyword,
@@ -19,7 +20,7 @@ import { NotFound, ValidationFailed } from "../../../src/shell/public-http/contr
 import { prepareLocalWrite } from "../../canonical-admission/operations";
 import type { LocalMutationPlan, LocalMutationResult } from "../../canonical-admission/contract";
 import { newId } from "../../secret-material/operations";
-import { CategoriesUnavailable } from "../contract";
+import { CategoriesUnavailable, KeywordRuleChange, KeywordRuleRemoval } from "../contract";
 import { resolveLocalCategory, retainLocalCategory } from "./native-categorization";
 import { keywordRuleFromRows, keywordRulesFromRows, keywordRulesQuery } from "./keyword-rules";
 
@@ -53,10 +54,10 @@ export const localKeywordRules = Effect.fn(function* (user: UserId) {
 const refusal = (failure: CategoryFailure): LocalMutationResult => {
   const value = toApiFailure({
     failure,
-    caller: { accessCaller: { _tag: "WebSession", fresh: false }, tier: "free" },
+    caller: { accessCaller: OperationAccessCaller.WebSession({ fresh: false }), tier: "free" },
   });
 
-  return value._tag === "NotFound"
+  return Predicate.isTagged(value, "NotFound")
     ? {
         status: 404,
         outcome: "not_found",
@@ -90,11 +91,10 @@ const keywordRemoval = ({
 }): LocalMutationPlan =>
   prepareLocalWrite({
     targets: [target],
-    review: localRuleReview(user, {
-      _tag: "KeywordRule",
-      operation: "categories.deleteKeywordRule",
-      ruleId,
-    }),
+    review: localRuleReview(
+      user,
+      KeywordRuleRemoval.make({ operation: "categories.deleteKeywordRule", ruleId })
+    ),
     commit: Effect.gen(function* () {
       const sql = yield* SqliteClient;
 
@@ -174,13 +174,15 @@ export const prepareLocalKeywordRule = Effect.fn(function* (
 
   return prepareLocalWrite({
     targets: [target, "keyword:" + keyword],
-    review: localRuleReview(user, {
-      _tag: "KeywordRule",
-      operation: change.operation,
-      ruleId,
-      keyword,
-      categoryId: payload.categoryId,
-    }),
+    review: localRuleReview(
+      user,
+      KeywordRuleChange.make({
+        operation: change.operation,
+        ruleId,
+        keyword,
+        categoryId: payload.categoryId,
+      })
+    ),
     commit: Effect.gen(function* () {
       yield* retainLocalCategory(reference.value);
       const create = operation === "categories.createKeywordRule";

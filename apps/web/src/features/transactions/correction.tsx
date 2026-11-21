@@ -56,11 +56,24 @@ const initialDraft = (transaction: Transaction, timeZone: string): CorrectionDra
 type CorrectionChanges = CanonicalInput<"transactions.updateTransaction">["payload"]["changes"];
 
 const textChanges = (draft: CorrectionDraft, original: CorrectionDraft): CorrectionChanges => ({
-  ...(draft.counterparty !== original.counterparty
-    ? { counterparty: draft.counterparty.trim() || null }
-    : {}),
-  ...(draft.notes !== original.notes ? { notes: draft.notes.trim() || null } : {}),
-  ...(draft.direction !== original.direction ? { direction: draft.direction } : {}),
+  ...Option.match(
+    Option.liftPredicate(
+      draft.counterparty,
+      (counterparty) => counterparty !== original.counterparty
+    ),
+    {
+      onNone: () => ({}),
+      onSome: (counterparty) => ({ counterparty: counterparty.trim() || null }),
+    }
+  ),
+  ...Option.match(
+    Option.liftPredicate(draft.notes, (notes) => notes !== original.notes),
+    { onNone: () => ({}), onSome: (notes) => ({ notes: notes.trim() || null }) }
+  ),
+  ...Option.match(
+    Option.liftPredicate(draft.direction, (direction) => direction !== original.direction),
+    { onNone: () => ({}), onSome: (direction) => ({ direction }) }
+  ),
 });
 
 const parseDate = (draft: CorrectionDraft, timeZone: string): Option.Option<DateTime.Zoned> =>
@@ -90,9 +103,18 @@ const correctionChanges = (
 
   const changes: CorrectionChanges = {
     ...textChanges(draft, original),
-    ...(moneyChanged(money.value, props.transaction.money) ? { money: money.value } : {}),
-    ...(draft.categoryId !== original.categoryId ? { categoryId: category.value.id } : {}),
-    ...(draft.date !== original.date ? { occurredAt: DateTime.toUtc(occurredAt.value) } : {}),
+    ...Option.match(
+      Option.filter(money, (value) => moneyChanged(value, props.transaction.money)),
+      { onNone: () => ({}), onSome: (value) => ({ money: value }) }
+    ),
+    ...Option.match(
+      Option.filter(category, () => draft.categoryId !== original.categoryId),
+      { onNone: () => ({}), onSome: (value) => ({ categoryId: value.id }) }
+    ),
+    ...Option.match(
+      Option.filter(occurredAt, () => draft.date !== original.date),
+      { onNone: () => ({}), onSome: (value) => ({ occurredAt: DateTime.toUtc(value) }) }
+    ),
   };
 
   return isCanonicalInput("transactions.updateTransaction", {

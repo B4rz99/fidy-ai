@@ -9,13 +9,13 @@ import {
 } from "./internal/synchronization";
 import { browser } from "./internal/sqlite-browser";
 import {
+  bancolombiaSandboxActivation,
   bancolombiaSandboxAdmission,
-  makeBancolombiaSandboxActivation,
-  makeBancolombiaSandboxCleanup,
-  makeBancolombiaSandboxPreparation,
+  bancolombiaSandboxCleanup,
+  bancolombiaSandboxPreparation,
 } from "../bancolombia-authentication/runtime";
 import type { BancolombiaSandboxEnvironment } from "../bancolombia-authentication/contract";
-import { Effect, Option, Redacted, Schema } from "effect";
+import { Effect, Layer, ManagedRuntime, Option, Redacted, Schema } from "effect";
 import { readBoundWebSessionProof } from "../web-session/operations";
 import {
   type ConnectionAdapters,
@@ -65,14 +65,16 @@ export const callbackResult = (
     return Option.none();
   }
 
-  return Schema.decodeUnknownOption(
-    Schema.Struct({
-      state: ConnectionCallbackAdmission.fields.state,
-      result: ConnectionCallbackAdmission.fields.result,
-    })
-  )({
-    state: query.get("state"),
-    result: query.has("code") ? { _tag: "Code", code: query.get("code") } : { _tag: "Denied" },
+  const [CallbackCode, CallbackDenied] = ConnectionCallbackAdmission.fields.result.members;
+
+  return Option.all({
+    state: Schema.decodeUnknownOption(ConnectionCallbackAdmission.fields.state)(query.get("state")),
+    result: query.has("code")
+      ? Option.map(
+          Schema.decodeUnknownOption(CallbackCode.fields.code)(query.get("code")),
+          (code) => CallbackCode.make({ code })
+        )
+      : Option.some(CallbackDenied.make({})),
   });
 };
 
@@ -83,9 +85,9 @@ export const sandboxConnectionAdapters = ({
   environment: BancolombiaSandboxEnvironment;
   userId: string;
 }): ConnectionAdapters => ({
-  preparation: makeBancolombiaSandboxPreparation({ environment, userId }),
-  activation: makeBancolombiaSandboxActivation({ environment, userId }),
-  cleanup: makeBancolombiaSandboxCleanup(environment),
+  preparation: bancolombiaSandboxPreparation({ environment, userId }),
+  activation: bancolombiaSandboxActivation({ environment, userId }),
+  cleanup: bancolombiaSandboxCleanup(environment),
   grantKey: Option.map(
     Option.fromUndefinedOr(environment.BANCOLOMBIA_SANDBOX_GRANT_KEY),
     Redacted.make
@@ -184,6 +186,8 @@ export const runConnectionWork = Effect.fn(
   Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
 );
 
+const synchronizationRuntime = ManagedRuntime.make(Layer.empty);
+
 export class ConnectionSynchronizationWorkflow extends WorkflowEntrypoint<
   { USER_STORE: DurableObjectNamespace },
   SynchronizationWork
@@ -193,7 +197,7 @@ export class ConnectionSynchronizationWorkflow extends WorkflowEntrypoint<
       "commit-connection-page",
       { retries: { limit: 6, delay: "5 seconds", backoff: "exponential" } },
       () =>
-        Effect.runPromise(
+        synchronizationRuntime.runPromise(
           Effect.gen({ self: this }, function* () {
             const work = yield* Schema.decodeEffect(SynchronizationWork, {
               onExcessProperty: "error",

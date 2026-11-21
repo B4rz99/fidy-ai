@@ -8,7 +8,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { type ComponentProps, type JSX, type ReactNode, type RefCallback, useState } from "react";
-import { Effect, Option } from "effect";
+import { Effect, Option, Predicate } from "effect";
 import { writeClipboardText } from "@/browser/clipboard";
 import { fidyLogoUrl } from "@/ui/brand";
 import { Button } from "./button";
@@ -139,7 +139,7 @@ export const AccessCode = ({
     Effect.runCallback(writeClipboardText(Option.fromUndefinedOr(navigator.clipboard), code), {
       onExit: (outcome): void =>
         setFeedback(
-          outcome._tag === "Success"
+          Predicate.isTagged(outcome, "Success")
             ? "Código copiado"
             : "No pudimos copiarlo. Selecciona el código para copiarlo."
         ),

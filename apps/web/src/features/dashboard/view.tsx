@@ -1,5 +1,5 @@
 import { DashboardSpendingPresentation } from "./chart-renderer";
-import { dashboardResizePreview } from "./resize-presentation";
+import { DashboardResizePreview, dashboardResizePreview } from "./resize-presentation";
 import { PendingRead } from "@/ui/components/pending-read";
 import { Link, lazyRouteComponent } from "@tanstack/react-router";
 import { ConfigureBudgetButton } from "./budget-configuration";
@@ -9,7 +9,7 @@ import { RefreshButton } from "@/ui/components/refresh-button";
 import type { DashboardEditorError } from "./editing";
 import { PencilIcon, Settings01Icon, Tick02Icon, XIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { DateTime, Option } from "effect";
+import { DateTime, Match, Option, Predicate, Schema } from "effect";
 import type { AsyncResult } from "effect/reactivity";
 import {
   type FormEvent,
@@ -544,7 +544,11 @@ type ResizeBoundaryProps = Readonly<{
   label: string;
   onResize: (weight: number) => void;
   siblings: Extract<DashboardLayout, { readonly kind: "split" }>["children"];
+  current: ResizeSibling;
+  following: ResizeSibling;
 }>;
+
+type ResizeSibling = Extract<DashboardLayout, { readonly kind: "split" }>["children"][number];
 
 type ResizeBoundaryEvent = PointerEvent<HTMLHRElement>;
 
@@ -556,9 +560,9 @@ const resizeElements = (event: ResizeBoundaryEvent): Option.Option<ResizeElement
   const child = event.currentTarget.previousElementSibling;
   const adjacent = event.currentTarget.nextElementSibling;
 
-  return child instanceof HTMLElement && adjacent instanceof HTMLElement
-    ? Option.some({ adjacent, child })
-    : Option.none();
+  const isElement = Schema.is(Schema.instanceOf(HTMLElement));
+
+  return isElement(child) && isElement(adjacent) ? Option.some({ adjacent, child }) : Option.none();
 };
 
 const previewResizeWeight = (
@@ -588,12 +592,15 @@ const previewResizeWeight = (
     maximumWeight: maximumSplitWeight,
   });
 
-  if (preview._tag === "Unavailable") return Option.none();
-  const { weight: nextWeight, adjacentWeight } = preview;
-  elements.value.child.style.setProperty("--dashboard-weight", String(nextWeight));
-  elements.value.adjacent.style.setProperty("--dashboard-weight", String(adjacentWeight));
+  return DashboardResizePreview.$match(preview, {
+    Unavailable: () => Option.none(),
+    Available: ({ weight: nextWeight, adjacentWeight }) => {
+      elements.value.child.style.setProperty("--dashboard-weight", String(nextWeight));
+      elements.value.adjacent.style.setProperty("--dashboard-weight", String(adjacentWeight));
 
-  return Option.some({ adjacentWeight, weight: nextWeight });
+      return Option.some({ adjacentWeight, weight: nextWeight });
+    },
+  });
 };
 
 type ResizeBoundaryHandlers = Readonly<{
@@ -620,17 +627,12 @@ const restoreResizePreview = (
   );
 };
 
-const resizeWeightAt = (props: ResizeBoundaryProps, index: number): number =>
-  Option.getOrThrow(
-    Option.map(Option.fromUndefinedOr(props.siblings[index]), ({ weight }) => weight)
-  );
-
 const noPointer = Option.none<number>();
 
 const useResizeBoundary = (props: ResizeBoundaryProps): ResizeBoundaryHandlers => {
   const pointerId = useRef(noPointer);
-  const weight = resizeWeightAt(props, props.childIndex);
-  const adjacentWeight = resizeWeightAt(props, props.childIndex + 1);
+  const weight = props.current.weight;
+  const adjacentWeight = props.following.weight;
 
   const onPointerDown = (event: ResizeBoundaryEvent): void => {
     pointerId.current = Option.some(event.pointerId);
@@ -702,10 +704,8 @@ const DashboardResizeBoundary = (props: ResizeBoundaryProps): JSX.Element => {
       data-dashboard-resize={JSON.stringify({
         axis,
         weight: handlers.weight,
-        adjacentWeight: resizeWeightAt(props, props.childIndex + 1),
-        widgetIds: regionWidgetIds(
-          Option.getOrThrow(Option.fromUndefinedOr(props.siblings[props.childIndex])).node
-        ),
+        adjacentWeight: props.following.weight,
+        widgetIds: regionWidgetIds(props.current.node),
         minimumWeight: minimumSplitWeight,
         maximumWeight: maximumSplitWeight,
       })}
@@ -723,6 +723,43 @@ const DashboardResizeBoundary = (props: ResizeBoundaryProps): JSX.Element => {
     />
   );
 };
+
+type SplitLayout = Extract<DashboardLayout, { readonly kind: "split" }>;
+
+const SplitResizeBoundary = ({
+  childIndex,
+  editor,
+  layout,
+  node,
+  weight,
+}: Readonly<{
+  childIndex: number;
+  editor: DashboardEditor;
+  layout: SplitLayout;
+  node: ResizeSibling["node"];
+  weight: ResizeSibling["weight"];
+}>): JSX.Element =>
+  Option.match(Option.fromUndefinedOr(layout.children[childIndex + 1]), {
+    onNone: () => <Fragment />,
+    onSome: (following) => (
+      <DashboardResizeBoundary
+        axis={layout.axis}
+        childIndex={childIndex}
+        siblings={layout.children}
+        current={{ node, weight }}
+        following={following}
+        disabled={editor.disabled}
+        label={regionLabel(node)}
+        onResize={(nextWeight) =>
+          editor.onGesture({
+            kind: "resize-region",
+            widgetIds: regionWidgetIds(node),
+            weight: nextWeight,
+          })
+        }
+      />
+    ),
+  });
 
 const ResponsiveLayout = ({
   context,
@@ -763,20 +800,13 @@ const ResponsiveLayout = ({
           >
             <ResponsiveLayout context={context} depth={depth + 1} editor={editor} layout={node} />
           </div>
-          {Option.isSome(editor) && childIndex < layout.children.length - 1 ? (
-            <DashboardResizeBoundary
-              axis={layout.axis}
+          {Option.isSome(editor) ? (
+            <SplitResizeBoundary
               childIndex={childIndex}
-              siblings={layout.children}
-              disabled={editor.value.disabled}
-              label={regionLabel(node)}
-              onResize={(nextWeight) =>
-                editor.value.onGesture({
-                  kind: "resize-region",
-                  widgetIds: regionWidgetIds(node),
-                  weight: nextWeight,
-                })
-              }
+              editor={editor.value}
+              layout={layout}
+              node={node}
+              weight={weight}
             />
           ) : null}
         </Fragment>
@@ -1069,26 +1099,23 @@ export const DashboardRouteContent = ({
 }>): JSX.Element => {
   const state = presentCanonicalQuery(result);
 
-  switch (state._tag) {
-    case "Initial":
-      return <PendingRead label="Cargando tablero" />;
-    case "Failure":
-      return (
-        <DashboardError
-          boundaryFailure={state.failure._tag !== "DeclaredFailure"}
-          onRefresh={onRefresh}
-          waiting={state.waiting}
-        />
-      );
-    case "Ready":
-      return (
-        <DashboardViewComponent
-          initialEditing={false}
-          editor={Option.none()}
-          view={state.value.data}
-        />
-      );
-  }
+  return Match.valueTags(state, {
+    Initial: () => <PendingRead label="Cargando tablero" />,
+    Failure: (failed) => (
+      <DashboardError
+        boundaryFailure={!Predicate.isTagged(failed.failure, "DeclaredFailure")}
+        onRefresh={onRefresh}
+        waiting={failed.waiting}
+      />
+    ),
+    Ready: (ready) => (
+      <DashboardViewComponent
+        initialEditing={false}
+        editor={Option.none()}
+        view={ready.value.data}
+      />
+    ),
+  });
 };
 
 DashboardViewComponent.preloadInteractions = (): Promise<void> =>

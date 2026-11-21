@@ -370,27 +370,28 @@ const BudgetGroup = ({
       />
       {open ? (
         <>
-          {statuses.map((status) => {
-            const category = categoryFor({
-              categories: props.categories,
-              id: status.budget.categoryId,
-            });
-
-            return (
-              <BudgetRow
-                key={controller.rowKey(status)}
-                status={status}
-                category={category}
-                user={props.user}
-                disabled={controller.rowDisabled(status)}
-                amount={controller.rowAmount(status)}
-                saveState={controller.saveState}
-                onChange={controller.changeRow}
-                onSave={controller.saveRow}
-                onSettings={() => controller.configureCategory(status)}
-              />
-            );
-          })}
+          {statuses.map((status) =>
+            Option.match(
+              categoryFor({ categories: props.categories, id: status.budget.categoryId }),
+              {
+                onNone: () => null,
+                onSome: (category) => (
+                  <BudgetRow
+                    key={controller.rowKey(status)}
+                    status={status}
+                    category={category}
+                    user={props.user}
+                    disabled={controller.rowDisabled(status)}
+                    amount={controller.rowAmount(status)}
+                    saveState={controller.saveState}
+                    onChange={controller.changeRow}
+                    onSave={controller.saveRow}
+                    onSettings={() => controller.configureCategory(status)}
+                  />
+                ),
+              }
+            )
+          )}
           <Unbudgeted group={group} props={props} controller={controller} />
         </>
       ) : null}

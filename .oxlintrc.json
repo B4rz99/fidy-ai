@@ -900,48 +900,6 @@
     },
     {
       "files": [
-        "apps/server/cloudflare/ai/**",
-        "apps/server/cloudflare/anonymous-admission/**",
-        "apps/server/cloudflare/bancolombia-authentication/**",
-        "apps/server/cloudflare/beta-pro/**",
-        "apps/server/cloudflare/browser-bootstrap.test-fixture.ts",
-        "apps/server/cloudflare/browser-login/**",
-        "apps/server/cloudflare/budgets/**",
-        "apps/server/cloudflare/canonical-admission/**",
-        "apps/server/cloudflare/canonical-operations/**",
-        "apps/server/cloudflare/canonical-work/**",
-        "apps/server/cloudflare/categories/**",
-        "apps/server/cloudflare/cli-distribution.test.ts",
-        "apps/server/cloudflare/cli-distribution/**",
-        "apps/server/cloudflare/connection-worker.test-fixture.ts",
-        "apps/server/cloudflare/connections/**"
-      ],
-      "rules": {
-        "anti-slop-effect/no-manual-tag-comparison": "off",
-        "anti-slop-effect/no-manual-tagged-construction": "off",
-        "anti-slop-effect/no-manual-tagged-type": "off",
-        "anti-slop-effect/no-service-constructor-imports": "off",
-        "anti-slop-effect/no-service-parameters": "off",
-        "anti-slop-effect/require-cause-when-narrowing": "off",
-        "anti-slop/no-conditional-spread": "off",
-        "anti-slop/no-instanceof": "off",
-        "anti-slop/no-known-value-widening": "off",
-        "anti-slop/no-object-parameters": "off",
-        "anti-slop/no-reflect-get": "off",
-        "anti-slop/no-reprovide-ambient-service": "off",
-        "anti-slop/no-runtime-typeof": "off",
-        "anti-slop/no-shape-in-symbol-names": "off",
-        "anti-slop/no-unknown-returns": "off",
-        "anti-slop/no-unsafe-dictionary-type": "off",
-        "enfect/avoid-expect-in-if": "off",
-        "enfect/effect-run-in-body": "off",
-        "enfect/yield-in-for-loop": "off",
-        "landmines/no-flake-masking": "off",
-        "oxc/no-accumulating-spread": "off"
-      }
-    },
-    {
-      "files": [
         "apps/server/cloudflare/consent/**",
         "apps/server/cloudflare/core-http/**",
         "apps/server/cloudflare/core-worker.ts",
@@ -979,54 +937,6 @@
         "enfect/yield-in-for-loop": "off",
         "landmines/no-flake-masking": "off",
         "oxc/no-accumulating-spread": "off"
-      }
-    },
-    {
-      "files": ["apps/web/src/features/pats/**", "apps/web/src/features/transactions/**"],
-      "rules": {
-        "anti-slop-effect/no-manual-tag-comparison": "off",
-        "anti-slop-effect/no-manual-tagged-construction": "off",
-        "anti-slop-effect/no-manual-tagged-type": "off",
-        "anti-slop/no-conditional-spread": "off",
-        "anti-slop/no-known-value-widening": "off",
-        "anti-slop/no-runtime-typeof": "off",
-        "enfect/avoid-option-getorthrow": "off",
-        "enfect/effect-run-in-body": "off",
-        "enfect/yield-in-for-loop": "off"
-      }
-    },
-    {
-      "files": [
-        "apps/web/cloudflare/**",
-        "apps/web/src/app/**",
-        "apps/web/src/browser/**",
-        "apps/web/src/features/agent/**",
-        "apps/web/src/features/budgets/**",
-        "apps/web/src/features/connections/**",
-        "apps/web/src/features/dashboard/**",
-        "apps/web/src/features/needs-review/**",
-        "apps/web/src/features/privacy/**",
-        "apps/web/src/features/provider-authentication/**",
-        "apps/web/src/features/recurring-digest/**",
-        "apps/web/src/features/signed-in/**",
-        "apps/web/src/session/**",
-        "apps/web/src/ui/**"
-      ],
-      "rules": {
-        "anti-slop-effect/no-manual-tag-comparison": "off",
-        "anti-slop-effect/no-manual-tagged-construction": "off",
-        "anti-slop-effect/no-manual-tagged-type": "off",
-        "anti-slop-effect/prefer-tagged-error-handling": "off",
-        "anti-slop/no-array-filter-map": "off",
-        "anti-slop/no-conditional-spread": "off",
-        "anti-slop/no-instanceof": "off",
-        "anti-slop/no-known-value-widening": "off",
-        "anti-slop/no-runtime-typeof": "off",
-        "anti-slop/no-shape-in-symbol-names": "off",
-        "anti-slop/no-unknown-returns": "off",
-        "enfect/avoid-option-getorthrow": "off",
-        "enfect/effect-run-in-body": "off",
-        "enfect/yield-in-for-loop": "off"
       }
     },
     {

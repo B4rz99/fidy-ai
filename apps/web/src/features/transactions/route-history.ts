@@ -2,7 +2,7 @@ import { forwardFreshQuery, freshQuery } from "@/transport/fresh-query";
 import { Data, DateTime, Effect, Option, Predicate } from "effect";
 import { AsyncResult, Atom } from "effect/reactivity";
 import type { CanonicalSuccess, FidyClient } from "@/transport/client";
-import { presentCanonicalQuery } from "@/transport/canonical-query";
+import { type CanonicalQueryFailure, presentCanonicalQuery } from "@/transport/canonical-query";
 import { destinationMonth, transactionDestinationQuery } from "./destination-query";
 import { type HistoryCommand, type HistoryState, transactionHistory } from "./history";
 import { type TransactionSearch, selectedTransactionPeriod } from "./period";
@@ -228,7 +228,7 @@ export const transactionRouteHistory = (input: RouteHistoryInput): TransactionRo
       location:
         Option.isSome(get(owner.locate)) &&
         Option.isSome(owner.destination) &&
-        get(owner.destination.value)._tag === "Failure"
+        Predicate.isTagged(get(owner.destination.value), "Failure")
           ? "LookupFailed"
           : history.location,
     };
@@ -283,7 +283,7 @@ const routeActions = ({
       return;
     }
 
-    if (typeof command === "string") {
+    if (Predicate.isString(command)) {
       const previous = get(state);
       get.set(
         navigation,
@@ -325,8 +325,10 @@ const routeActions = ({
     } else get.set(resource.action, command);
   });
 
+const queryFailure = Data.taggedEnum<CanonicalQueryFailure<unknown>>();
+
 const shouldRetryLookup = (result: AsyncResult.AsyncResult<Page, unknown>): boolean =>
-  presentCanonicalQuery(result)._tag === "Failure";
+  Predicate.isTagged(presentCanonicalQuery(result), "Failure");
 
 const retainHistoryDisplay = (
   current: RouteHistoryState,
@@ -363,13 +365,15 @@ const needsRetainedDisplay = (current: RouteHistoryState, loadedPages: number): 
 
 const retainPendingDisplay = (
   current: RouteHistoryState,
-  previous: RouteHistoryState & { query: Extract<RouteHistoryState["query"], { _tag: "Ready" }> }
+  previous: RouteHistoryState & {
+    query: Data.TaggedEnum.Value<RouteHistoryState["query"], "Ready">;
+  }
 ): RouteHistoryState => {
   const failed = Predicate.isTagged(current.query, "Failure") || current.continuation === "failure";
 
   const refreshFailure = Predicate.isTagged(current.query, "Failure")
     ? Option.some(current.query.failure)
-    : Option.some({ _tag: "BoundaryFailure" as const });
+    : Option.some(queryFailure.BoundaryFailure());
 
   const continuation = failed ? "failure" : "loading";
 

@@ -2,7 +2,7 @@ import { BancolombiaSandboxHttpRequest } from "~/shell/outbound-http/contract";
 import { expect, it } from "@effect/vitest";
 import { Effect, Option, Redacted } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
-import { makeBancolombiaSandboxOutboundHttp } from "~/shell/outbound-http/operations";
+import { BancolombiaSandboxHttp } from "~/shell/outbound-http/operations";
 
 it.effect(
   "keeps Bancolombia assertions at the fixed sandbox token endpoint and refuses redirects",
@@ -28,7 +28,9 @@ it.effect(
         })
       );
 
-      const bank = makeBancolombiaSandboxOutboundHttp(client);
+      const bank = yield* BancolombiaSandboxHttp.make.pipe(
+        Effect.provideService(HttpClient.HttpClient, client)
+      );
 
       const result = yield* bank.execute(
         BancolombiaSandboxHttpRequest.Authenticate({

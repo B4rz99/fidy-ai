@@ -84,21 +84,30 @@ export const monthTitle = ({
 export const categoryFor = ({
   categories,
   id,
-}: Readonly<{ categories: ReadonlyArray<Category>; id: string }>): Category =>
-  Option.getOrThrow(Option.fromUndefinedOr(categories.find((category) => category.id === id)));
+}: Readonly<{ categories: ReadonlyArray<Category>; id: string }>): Option.Option<Category> =>
+  Option.fromUndefinedOr(categories.find((category) => category.id === id));
 
 export const groupFor = ({
   status,
   categories,
 }: Readonly<{ status: BudgetStatus; categories: ReadonlyArray<Category> }>): string =>
   status.budget.groupName ??
-  defaultBudgetGroup(categoryFor({ categories, id: status.budget.categoryId }).label);
+  defaultBudgetGroup(
+    Option.match(categoryFor({ categories, id: status.budget.categoryId }), {
+      onNone: () => "",
+      onSome: (category) => category.label,
+    })
+  );
 
 export const rowDraft = ({
   status,
   categories,
-}: Readonly<{ status: BudgetStatus; categories: ReadonlyArray<Category> }>): BudgetDraft => ({
-  category: categoryFor({ categories, id: status.budget.categoryId }),
-  budget: Option.some(status.budget),
-  groupCategoryIds: Option.none(),
-});
+}: Readonly<{
+  status: BudgetStatus;
+  categories: ReadonlyArray<Category>;
+}>): Option.Option<BudgetDraft> =>
+  Option.map(categoryFor({ categories, id: status.budget.categoryId }), (category) => ({
+    category,
+    budget: Option.some(status.budget),
+    groupCategoryIds: Option.none(),
+  }));

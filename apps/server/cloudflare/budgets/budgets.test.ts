@@ -36,29 +36,26 @@ const request = (
 ): Request => {
   const [method = "GET", body] = args;
 
-  const init: RequestInit = {
-    method,
-    headers: {
-      origin: "https://app.fidyapp.com",
-      "Fidy-Session-Binding": sessions[index] ?? "invalid",
-      cookie: `__Host-fidy_session=${bearer(index)}`,
-      ...(body === undefined ? {} : { "content-type": "application/json" }),
-    },
+  const headers = {
+    origin: "https://app.fidyapp.com",
+    "Fidy-Session-Binding": sessions[index] ?? "invalid",
+    cookie: `__Host-fidy_session=${bearer(index)}`,
   };
 
   return new Request(
     `https://api.fidyapp.com${path}`,
     body === undefined
-      ? init
+      ? { method, headers }
       : {
-          ...init,
+          method,
+          headers: { ...headers, "content-type": "application/json" },
           body: JSON.stringify(body),
         }
   );
 };
 
-const seedMonthlyMovements = (
-  execute: (query: string, ...bindings: Array<string | number>) => Promise<unknown>,
+const seedMonthlyMovements = <Rows>(
+  execute: (query: string, ...bindings: Array<string | number>) => Promise<Rows>,
   input: Readonly<{
     categoryId: string;
     currency: string;
@@ -93,19 +90,32 @@ const patRequest = (
 ): Request => {
   const [method = "GET", body] = args;
 
-  return new Request(`https://api.fidyapp.com${path}`, {
-    method,
-    headers: {
-      origin: "https://app.fidyapp.com",
-      authorization: `Bearer ${token}`,
-      "x-provider-id": users[0],
-      ...(body === undefined ? {} : { "content-type": "application/json" }),
-    },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  });
+  const headers = {
+    origin: "https://app.fidyapp.com",
+    authorization: `Bearer ${token}`,
+    "x-provider-id": users[0],
+  };
+
+  return new Request(
+    `https://api.fidyapp.com${path}`,
+    body === undefined
+      ? { method, headers }
+      : {
+          method,
+          headers: { ...headers, "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }
+  );
 };
 
-const payload = (cap = "100"): object => ({
+type BudgetPayload = Readonly<{
+  categoryId: string;
+  cap: Readonly<{ amount: string; currency: string }>;
+}>;
+
+type BudgetCall = Readonly<{ callId: string; operation: string; input: unknown }>;
+
+const payload = (cap = "100"): BudgetPayload => ({
   categoryId: category,
   cap: { amount: cap, currency: "COP" },
 });
@@ -113,7 +123,7 @@ const payload = (cap = "100"): object => ({
 const budgetBatch = (calls: ReadonlyArray<object>): Request =>
   request(0, "/operations/atomic-batch", "POST", { calls });
 
-const budgetCall = (index: number, operation: string, input: object): object => ({
+const budgetCall = (index: number, operation: string, input: unknown): BudgetCall => ({
   callId: `20000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
   operation,
   input,
@@ -214,22 +224,26 @@ it("combines Category and Currency filters without including other Budgets or Us
       const db = yield* nativeTransactionJourney;
       const otherCategory = "10000000-0000-4000-8000-000000000001";
 
-      for (const { categoryId, currency } of [
-        { categoryId: category, currency: "COP" },
-        { categoryId: category, currency: "USD" },
-        { categoryId: otherCategory, currency: "COP" },
-      ]) {
-        expect(
-          (yield* Effect.tryPromise(() =>
-            db.send(
-              request(0, "/budgets", "POST", {
-                categoryId,
-                cap: { amount: "100", currency },
-              })
-            )
-          )).status
-        ).toBe(201);
-      }
+      yield* Effect.forEach(
+        [
+          { categoryId: category, currency: "COP" },
+          { categoryId: category, currency: "USD" },
+          { categoryId: otherCategory, currency: "COP" },
+        ],
+        Effect.fnUntraced(function* ({ categoryId, currency }) {
+          expect(
+            (yield* Effect.tryPromise(() =>
+              db.send(
+                request(0, "/budgets", "POST", {
+                  categoryId,
+                  cap: { amount: "100", currency },
+                })
+              )
+            )).status
+          ).toBe(201);
+        }),
+        { discard: true }
+      );
 
       const foreign = yield* Effect.tryPromise(() =>
         db.send(request(1, "/budgets", "POST", payload()))
@@ -241,31 +255,35 @@ it("combines Category and Currency filters without including other Budgets or Us
         yield* Effect.tryPromise(() => foreign.json())
       );
 
-      for (const selection of [
-        { query: `categoryId=${category}`, expected: [`${category}:COP`, `${category}:USD`] },
-        { query: "currency=COP", expected: [`${category}:COP`, `${otherCategory}:COP`] },
-        { query: `categoryId=${category}&currency=COP`, expected: [`${category}:COP`] },
-        { query: `categoryId=${otherCategory}&currency=USD`, expected: [] },
-      ]) {
-        const response = yield* Effect.tryPromise(() =>
-          db.send(request(0, `/budget-status?timeZone=America%2FBogota&${selection.query}`))
-        );
+      yield* Effect.forEach(
+        [
+          { query: `categoryId=${category}`, expected: [`${category}:COP`, `${category}:USD`] },
+          { query: "currency=COP", expected: [`${category}:COP`, `${otherCategory}:COP`] },
+          { query: `categoryId=${category}&currency=COP`, expected: [`${category}:COP`] },
+          { query: `categoryId=${otherCategory}&currency=USD`, expected: [] },
+        ],
+        Effect.fnUntraced(function* (selection) {
+          const response = yield* Effect.tryPromise(() =>
+            db.send(request(0, `/budget-status?timeZone=America%2FBogota&${selection.query}`))
+          );
 
-        expect(response.status).toBe(200);
+          expect(response.status).toBe(200);
 
-        const report = yield* Schema.decodeUnknownEffect(Report)(
-          yield* Effect.tryPromise(() => response.json())
-        );
+          const report = yield* Schema.decodeUnknownEffect(Report)(
+            yield* Effect.tryPromise(() => response.json())
+          );
 
-        expect(report.data.statuses.map(({ budget }) => budget.id)).not.toContain(
-          foreignBudget.data.id
-        );
-        expect(
-          report.data.statuses
-            .map(({ budget }) => `${budget.categoryId}:${budget.cap.currency}`)
-            .sort()
-        ).toEqual(selection.expected.toSorted());
-      }
+          expect(report.data.statuses.map(({ budget }) => budget.id)).not.toContain(
+            foreignBudget.data.id
+          );
+          expect(
+            report.data.statuses
+              .map(({ budget }) => `${budget.categoryId}:${budget.cap.currency}`)
+              .sort()
+          ).toEqual(selection.expected.toSorted());
+        }),
+        { discard: true }
+      );
     }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
@@ -379,92 +397,88 @@ it("revises a Budget without changing Currency and deletes only its owner's Budg
     }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
-it(
-  "reads back Budget creation, replacement and removal through the atomic batch without leaking a foreign Budget",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const db = yield* nativeTransactionJourney;
+it("reads back Budget creation, replacement and removal through the atomic batch without leaking a foreign Budget", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* nativeTransactionJourney;
 
-        const call = (operation: string, input: object, index: number): object => ({
-          callId: `30000000-0000-4000-8000-00000000000${index}`,
-          operation,
-          input,
-        });
+      const call = (operation: string, input: unknown, index: number): BudgetCall => ({
+        callId: `30000000-0000-4000-8000-00000000000${index}`,
+        operation,
+        input,
+      });
 
-        const batch = (calls: ReadonlyArray<object>): Promise<Response> =>
-          db.send(request(0, "/operations/atomic-batch", "POST", { calls }));
+      const batch = (calls: ReadonlyArray<object>): Promise<Response> =>
+        db.send(request(0, "/operations/atomic-batch", "POST", { calls }));
 
-        const created = yield* Effect.tryPromise(() =>
-          batch([call("budgets.createBudget", { payload: payload() }, 1)])
-        );
+      const created = yield* Effect.tryPromise(() =>
+        batch([call("budgets.createBudget", { payload: payload() }, 1)])
+      );
 
-        expect(created.status).toBe(200);
-        const result = yield* Effect.tryPromise(() => created.json());
+      expect(created.status).toBe(200);
+      const result = yield* Effect.tryPromise(() => created.json());
 
-        const id = (yield* Schema.decodeUnknownEffect(
-          Schema.Struct({
-            data: Schema.Struct({
-              results: Schema.Array(
-                Schema.Struct({
-                  output: Schema.Struct({ data: Schema.Struct({ id: Schema.String }) }),
-                })
-              ),
-            }),
-          })
-        )(result)).data.results[0]?.output.data.id;
-
-        expect(id).toBeDefined();
-
-        const changed = yield* Effect.tryPromise(() =>
-          batch([
-            call(
-              "budgets.updateBudget",
-              {
-                params: { id },
-                payload: payload("250.25"),
-              },
-              2
+      const id = (yield* Schema.decodeUnknownEffect(
+        Schema.Struct({
+          data: Schema.Struct({
+            results: Schema.Array(
+              Schema.Struct({
+                output: Schema.Struct({ data: Schema.Struct({ id: Schema.String }) }),
+              })
             ),
-          ])
-        );
+          }),
+        })
+      )(result)).data.results[0]?.output.data.id;
 
-        expect(changed.status).toBe(200);
+      expect(id).toBeDefined();
 
-        const updated = yield* Schema.decodeUnknownEffect(
-          Schema.Struct({
-            data: Schema.Struct({
-              results: Schema.Array(
-                Schema.Struct({
-                  output: Schema.Struct({ data: Schema.toCodecJson(Budget) }),
-                })
-              ),
-            }),
-          })
-        )(yield* Effect.tryPromise(() => changed.json()));
+      const changed = yield* Effect.tryPromise(() =>
+        batch([
+          call(
+            "budgets.updateBudget",
+            {
+              params: { id },
+              payload: payload("250.25"),
+            },
+            2
+          ),
+        ])
+      );
 
-        const first = updated.data.results[0];
+      expect(changed.status).toBe(200);
 
-        if (first === undefined) throw new Error("Missing batch Budget result");
-        expect(encodeMoneyAmount(first.output.data.cap.amount)).toBe("250.25");
-        const foreign = yield* Effect.tryPromise(() => db.send(request(1, `/budgets/${id}`)));
-        expect(foreign.status).toBe(404);
+      const updated = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({
+          data: Schema.Struct({
+            results: Schema.Array(
+              Schema.Struct({
+                output: Schema.Struct({ data: Schema.toCodecJson(Budget) }),
+              })
+            ),
+          }),
+        })
+      )(yield* Effect.tryPromise(() => changed.json()));
 
-        const removed = yield* Effect.tryPromise(() =>
-          batch([call("budgets.deleteBudget", { params: { id } }, 3)])
-        );
+      const first = updated.data.results[0];
 
-        expect(removed.status).toBe(200);
-        expect(yield* Effect.tryPromise(() => removed.json())).toMatchObject({
-          data: { results: [{ output: { data: id } }] },
-        });
-        expect((yield* Effect.tryPromise(() => db.send(request(0, `/budgets/${id}`)))).status).toBe(
-          404
-        );
-      }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
-    ),
-  30_000
-);
+      if (first === undefined) throw new Error("Missing batch Budget result");
+      expect(encodeMoneyAmount(first.output.data.cap.amount)).toBe("250.25");
+      const foreign = yield* Effect.tryPromise(() => db.send(request(1, `/budgets/${id}`)));
+      expect(foreign.status).toBe(404);
+
+      const removed = yield* Effect.tryPromise(() =>
+        batch([call("budgets.deleteBudget", { params: { id } }, 3)])
+      );
+
+      expect(removed.status).toBe(200);
+      expect(yield* Effect.tryPromise(() => removed.json())).toMatchObject({
+        data: { results: [{ output: { data: id } }] },
+      });
+      expect((yield* Effect.tryPromise(() => db.send(request(0, `/budgets/${id}`)))).status).toBe(
+        404
+      );
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
+  ));
 
 it("reports only this User's exact same-Currency outflows in the applied half-open month", () =>
   Effect.runPromise(
@@ -572,61 +586,56 @@ it("reports only this User's exact same-Currency outflows in the applied half-op
     }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
-it(
-  "returns complete exact spending for multiple Budgets in the first request",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const db = yield* nativeTransactionJourney;
-        const otherCategory = "10000000-0000-4000-8000-000000000001";
-        expect(
-          (yield* Effect.tryPromise(() => db.send(request(0, "/budgets", "POST", payload()))))
-            .status
-        ).toBe(201);
-        expect(
-          (yield* Effect.tryPromise(() =>
-            db.send(
-              request(0, "/budgets", "POST", {
-                categoryId: otherCategory,
-                cap: { amount: "100", currency: "COP" },
-              })
-            )
-          )).status
-        ).toBe(201);
-        const occurredAt = DateTime.formatIso(DateTime.nowUnsafe());
-        yield* seedMonthlyMovements(db.exec, {
-          categoryId: category,
-          currency: "COP",
-          count: 2500,
-          offset: 0,
-          occurredAt,
-        });
-        yield* seedMonthlyMovements(db.exec, {
-          categoryId: otherCategory,
-          currency: "COP",
-          count: 2500,
-          offset: 2500,
-          occurredAt,
-        });
+it("returns complete exact spending for multiple Budgets in the first request", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* nativeTransactionJourney;
+      const otherCategory = "10000000-0000-4000-8000-000000000001";
+      expect(
+        (yield* Effect.tryPromise(() => db.send(request(0, "/budgets", "POST", payload())))).status
+      ).toBe(201);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db.send(
+            request(0, "/budgets", "POST", {
+              categoryId: otherCategory,
+              cap: { amount: "100", currency: "COP" },
+            })
+          )
+        )).status
+      ).toBe(201);
+      const occurredAt = DateTime.formatIso(DateTime.nowUnsafe());
+      yield* seedMonthlyMovements(db.exec, {
+        categoryId: category,
+        currency: "COP",
+        count: 2500,
+        offset: 0,
+        occurredAt,
+      });
+      yield* seedMonthlyMovements(db.exec, {
+        categoryId: otherCategory,
+        currency: "COP",
+        count: 2500,
+        offset: 2500,
+        occurredAt,
+      });
 
-        const report = yield* Effect.tryPromise(() =>
-          db.send(request(0, "/budget-status?timeZone=America%2FBogota"))
-        );
+      const report = yield* Effect.tryPromise(() =>
+        db.send(request(0, "/budget-status?timeZone=America%2FBogota"))
+      );
 
-        expect(report.status).toBe(200);
+      expect(report.status).toBe(200);
 
-        const statuses = (yield* Schema.decodeUnknownEffect(Report)(
-          yield* Effect.tryPromise(() => report.json())
-        )).data.statuses;
+      const statuses = (yield* Schema.decodeUnknownEffect(Report)(
+        yield* Effect.tryPromise(() => report.json())
+      )).data.statuses;
 
-        expect(statuses.map((status) => encodeMoneyAmount(status.spent.amount))).toEqual([
-          "25",
-          "25",
-        ]);
-      }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
-    ),
-  90000
-);
+      expect(statuses.map((status) => encodeMoneyAmount(status.spent.amount))).toEqual([
+        "25",
+        "25",
+      ]);
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
+  ));
 
 it("denies read-scoped PAT writes and write-scoped PAT reads without disclosure or mutation", () =>
   Effect.runPromise(
@@ -702,26 +711,30 @@ it("exposes spending without a matching Category and Currency cap in the monthly
       ).toBe(201);
       const unbudgetedCategory = "10000000-0000-4000-8000-000000000015";
 
-      for (const [index, categoryId, amount, currency, direction] of [
-        [0, category, "20000", "COP", "outflow"],
-        [0, unbudgetedCategory, "5000", "COP", "outflow"],
-        [0, category, "7.25", "USD", "outflow"],
-        [0, unbudgetedCategory, "90000", "COP", "inflow"],
-        [1, unbudgetedCategory, "999", "COP", "outflow"],
-      ] as const) {
-        expect(
-          (yield* Effect.tryPromise(() =>
-            db.send(
-              request(index, "/transactions", "POST", {
-                money: { amount, currency },
-                categoryId,
-                direction,
-                occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
-              })
-            )
-          )).status
-        ).toBe(201);
-      }
+      yield* Effect.forEach(
+        [
+          [0, category, "20000", "COP", "outflow"],
+          [0, unbudgetedCategory, "5000", "COP", "outflow"],
+          [0, category, "7.25", "USD", "outflow"],
+          [0, unbudgetedCategory, "90000", "COP", "inflow"],
+          [1, unbudgetedCategory, "999", "COP", "outflow"],
+        ] as const,
+        Effect.fnUntraced(function* ([index, categoryId, amount, currency, direction]) {
+          expect(
+            (yield* Effect.tryPromise(() =>
+              db.send(
+                request(index, "/transactions", "POST", {
+                  money: { amount, currency },
+                  categoryId,
+                  direction,
+                  occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
+                })
+              )
+            )).status
+          ).toBe(201);
+        }),
+        { discard: true }
+      );
 
       const response = yield* Effect.tryPromise(() =>
         db.send(request(0, "/budget-status?timeZone=America%2FBogota"))
@@ -749,51 +762,51 @@ it("exposes spending without a matching Category and Currency cap in the monthly
     }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
-it(
-  "freezes monthly plans, inherits forward without rollover, and isolates owners",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const db = yield* nativeTransactionJourney;
+it("freezes monthly plans, inherits forward without rollover, and isolates owners", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* nativeTransactionJourney;
 
-        const response = yield* Effect.tryPromise(() =>
-          db.send(
-            request(0, "/budgets", "POST", { ...payload(), month: "2026-10", groupName: "Hogar" })
-          )
-        );
+      const response = yield* Effect.tryPromise(() =>
+        db.send(
+          request(0, "/budgets", "POST", { ...payload(), month: "2026-10", groupName: "Hogar" })
+        )
+      );
 
-        expect(response.status).toBe(201);
+      expect(response.status).toBe(201);
 
-        const created = yield* Schema.decodeUnknownEffect(Created)(
-          yield* Effect.tryPromise(() => response.json())
-        );
+      const created = yield* Schema.decodeUnknownEffect(Created)(
+        yield* Effect.tryPromise(() => response.json())
+      );
 
-        const report = (
-          month: string,
-          owner = 0
-        ): Effect.Effect<BudgetStatusReport, Cause.UnknownError | Schema.SchemaError> =>
-          Effect.gen(function* () {
-            const res = yield* Effect.tryPromise(() =>
-              db.send(request(owner, `/budget-status?timeZone=America%2FBogota&month=${month}`))
-            );
+      const report = (
+        month: string,
+        owner = 0
+      ): Effect.Effect<BudgetStatusReport, Cause.UnknownError | Schema.SchemaError> =>
+        Effect.gen(function* () {
+          const res = yield* Effect.tryPromise(() =>
+            db.send(request(owner, `/budget-status?timeZone=America%2FBogota&month=${month}`))
+          );
 
-            expect(res.status).toBe(200);
+          expect(res.status).toBe(200);
 
-            return (yield* Schema.decodeUnknownEffect(Report)(
-              yield* Effect.tryPromise(() => res.json())
-            )).data;
-          });
+          return (yield* Schema.decodeUnknownEffect(Report)(
+            yield* Effect.tryPromise(() => res.json())
+          )).data;
+        });
 
-        const preview = yield* report("2026-11");
-        expect(preview.initialized).toBe(false);
-        expect(
-          encodeMoneyAmount(Option.getOrThrow(EffectArray.head(preview.statuses)).budget.cap.amount)
-        ).toBe("100");
+      const preview = yield* report("2026-11");
+      expect(preview.initialized).toBe(false);
+      expect(
+        encodeMoneyAmount(Option.getOrThrow(EffectArray.head(preview.statuses)).budget.cap.amount)
+      ).toBe("100");
 
-        for (const [month, cap] of [
+      yield* Effect.forEach(
+        [
           ["2026-11", "200"],
           ["2026-10", "50"],
-        ]) {
+        ],
+        Effect.fnUntraced(function* ([month, cap]) {
           const saved = yield* Effect.tryPromise(() =>
             db.send(request(0, `/budgets/${created.data.id}`, "PUT", { ...payload(cap), month }))
           );
@@ -806,55 +819,51 @@ it(
               )).data.cap.amount
             )
           ).toBe(cap);
-        }
+        }),
+        { discard: true }
+      );
 
-        expect(
-          encodeMoneyAmount(
-            Option.getOrThrow(EffectArray.head((yield* report("2026-10")).statuses)).budget.cap
-              .amount
-          )
-        ).toBe("50");
-        const november = yield* report("2026-11");
-        expect(november.initialized).toBe(true);
-        expect(
-          encodeMoneyAmount(
-            Option.getOrThrow(EffectArray.head(november.statuses)).budget.cap.amount
-          )
-        ).toBe("200");
-        expect(
-          encodeMoneyAmount(
-            Option.getOrThrow(EffectArray.head((yield* report("2026-12")).statuses)).budget.cap
-              .amount
-          )
-        ).toBe("200");
-        expect((yield* report("2026-09")).statuses).toEqual([]);
-        expect((yield* report("2026-11", 1)).statuses).toEqual([]);
-        yield* Effect.sleep("250 millis");
+      expect(
+        encodeMoneyAmount(
+          Option.getOrThrow(EffectArray.head((yield* report("2026-10")).statuses)).budget.cap.amount
+        )
+      ).toBe("50");
+      const november = yield* report("2026-11");
+      expect(november.initialized).toBe(true);
+      expect(
+        encodeMoneyAmount(Option.getOrThrow(EffectArray.head(november.statuses)).budget.cap.amount)
+      ).toBe("200");
+      expect(
+        encodeMoneyAmount(
+          Option.getOrThrow(EffectArray.head((yield* report("2026-12")).statuses)).budget.cap.amount
+        )
+      ).toBe("200");
+      expect((yield* report("2026-09")).statuses).toEqual([]);
+      expect((yield* report("2026-11", 1)).statuses).toEqual([]);
+      yield* Effect.sleep("250 millis");
 
-        const renamed = yield* Effect.tryPromise(() =>
-          db.send(
-            request(0, `/budgets/${created.data.id}`, "PUT", {
-              ...payload("200"),
-              month: "2026-11",
-              groupName: "Casa",
-              groupCategoryIds: [category],
-            })
-          )
-        );
+      const renamed = yield* Effect.tryPromise(() =>
+        db.send(
+          request(0, `/budgets/${created.data.id}`, "PUT", {
+            ...payload("200"),
+            month: "2026-11",
+            groupName: "Casa",
+            groupCategoryIds: [category],
+          })
+        )
+      );
 
-        expect(renamed.status).toBe(200);
-        expect(
-          Option.getOrThrow(EffectArray.head((yield* report("2026-10")).statuses)).budget.groupName
-        ).toBe("Casa");
-        expect(
-          (yield* Effect.tryPromise(() =>
-            db.send(request(0, "/budget-status?timeZone=America%2FBogota&month=2026-13"))
-          )).status
-        ).toBe(400);
-      }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
-    ),
-  30000
-);
+      expect(renamed.status).toBe(200);
+      expect(
+        Option.getOrThrow(EffectArray.head((yield* report("2026-10")).statuses)).budget.groupName
+      ).toBe("Casa");
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db.send(request(0, "/budget-status?timeZone=America%2FBogota&month=2026-13"))
+        )).status
+      ).toBe(400);
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
+  ));
 
 const groupCurrenciesAt = (
   db: Effect.Success<typeof nativeTransactionJourney>,
@@ -926,19 +935,23 @@ it("versions currency for every group member without changing earlier months or 
       expect(yield* groupCurrenciesAt(db, "2026-12")).toEqual(["USD", "USD"]);
       expect((yield* groupCurrenciesAt(db, "2026-11", 1))[0]).toBe("COP");
 
-      for (const month of ["2026-10", "2026-11"]) {
-        const duplicate = yield* Effect.tryPromise(() =>
-          db.send(
-            request(0, "/budgets", "POST", {
-              categoryId: second,
-              cap: { amount: "100", currency: "USD" },
-              month,
-            })
-          )
-        );
+      yield* Effect.forEach(
+        ["2026-10", "2026-11"],
+        Effect.fnUntraced(function* (month) {
+          const duplicate = yield* Effect.tryPromise(() =>
+            db.send(
+              request(0, "/budgets", "POST", {
+                categoryId: second,
+                cap: { amount: "100", currency: "USD" },
+                month,
+              })
+            )
+          );
 
-        expect(duplicate.status).toBe(400);
-      }
+          expect(duplicate.status).toBe(400);
+        }),
+        { discard: true }
+      );
 
       expect(
         (yield* Effect.tryPromise(() =>

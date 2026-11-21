@@ -157,7 +157,7 @@ describe("Dashboard drag adapter", () => {
     expect(
       resolveDashboardDrop({
         canceled: false,
-        makeWidgetId: () => newId,
+        makeWidgetId: () => Option.some(newId),
         source: Option.some({ kind: "widget", widgetId: sourceId, label: "Gastos" }),
         target: Option.some({ kind: "widget-edge", widgetId: targetId, edge: "right" }),
       })
@@ -174,7 +174,7 @@ describe("Dashboard drag adapter", () => {
     expect(
       resolveDashboardDrop({
         canceled: false,
-        makeWidgetId: () => newId,
+        makeWidgetId: () => Option.some(newId),
         source: Option.some({ kind: "widget", widgetId: sourceId, label: "Gastos" }),
         target: Option.some({ kind: "widget-edge", widgetId: targetId, edge: "center" }),
       })
@@ -195,18 +195,28 @@ describe("Dashboard drag adapter", () => {
     });
 
     expect(
-      resolveDashboardDrop({ canceled: true, makeWidgetId: () => newId, source, target })
+      resolveDashboardDrop({
+        canceled: true,
+        makeWidgetId: () => Option.some(newId),
+        source,
+        target,
+      })
     ).toEqual(Option.none());
     expect(
       resolveDashboardDrop({
         canceled: false,
-        makeWidgetId: () => newId,
+        makeWidgetId: () => Option.some(newId),
         source,
         target: Option.none(),
       })
     ).toEqual(Option.none());
     expect(
-      resolveDashboardDrop({ canceled: false, makeWidgetId: () => newId, source, target })
+      resolveDashboardDrop({
+        canceled: false,
+        makeWidgetId: () => Option.some(newId),
+        source,
+        target,
+      })
     ).toEqual(Option.none());
   });
 });
@@ -216,7 +226,7 @@ describe("Dashboard catalog drag adapter", () => {
     expect(
       resolveDashboardDrop({
         canceled: false,
-        makeWidgetId: () => newId,
+        makeWidgetId: () => Option.some(newId),
         source: Option.some({ kind: "catalog", entry }),
         target: Option.some({ kind: "dashboard-edge", edge: "bottom" }),
       })

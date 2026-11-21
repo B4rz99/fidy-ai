@@ -47,7 +47,7 @@ import { Cause, Effect, Option, Schema } from "effect";
 import { type CatalogOperation } from "../../src/shell/canonical-catalog/contract";
 import { atomicBatchOperation } from "../../src/shell/operations/contract";
 import { operationCatalog } from "../../src/shell/api";
-import { decideOperationAccess } from "../../src/shell/canonical-policy/operations";
+import { isHostedVisible } from "../../src/shell/canonical-policy/operations";
 import { getCanonicalOperationInput } from "../../src/shell/canonical-operations/operations";
 
 const successfulMutationStatus = 200;
@@ -281,10 +281,8 @@ export const nativeCanonicalOperations = (): ReadonlyArray<CatalogOperation> =>
 export const localHostedCatalog = (
   authorityRoot: CanonicalAuthorityRoot
 ): ReadonlyArray<CatalogOperation> =>
-  nativeCanonicalOperations().filter(
-    (operation) =>
-      decideOperationAccess(operation.policy.access, { _tag: "HostedAgentSession", authorityRoot })
-        ._tag === "Allowed"
+  nativeCanonicalOperations().filter((operation) =>
+    isHostedVisible(operation.policy.access, authorityRoot)
   );
 
 const readParameter = Effect.fn(function* (

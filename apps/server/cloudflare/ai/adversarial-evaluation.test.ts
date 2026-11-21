@@ -7,13 +7,13 @@ import {
   type OpenAiTransportRun,
   approvedOpenAiModel,
 } from "../../src/shell/hosted-inference/contract";
-import { makeOpenAiRun } from "./runtime";
+import { openAiRun } from "./runtime";
 import { makeHostedEvaluationHandler } from "./openai-evaluation-worker";
 import {
   type EvaluationBudget,
   type EvaluationEnvironment,
+  evaluationBudget,
   evaluationLimits,
-  makeEvaluationBudget,
 } from "./internal/evaluation-budget";
 
 const token = "a".repeat(64);
@@ -30,9 +30,9 @@ const environment = (
 });
 
 const budgetFor = (environment: EvaluationEnvironment): EvaluationBudget =>
-  makeEvaluationBudget({
+  evaluationBudget({
     environment,
-    execute: makeOpenAiRun(Redacted.make(environment.OPENAI_API_KEY)),
+    execute: openAiRun(Redacted.make(environment.OPENAI_API_KEY)),
   });
 
 const request: OpenAiRequest = {
@@ -191,9 +191,13 @@ it.live(
         localRequest(1),
       ];
 
-      for (const input of requests) {
-        expect((yield* Effect.tryPromise(() => handler.fetch(input, env))).status).not.toBe(200);
-      }
+      yield* Effect.forEach(
+        requests,
+        Effect.fnUntraced(function* (input) {
+          expect((yield* Effect.tryPromise(() => handler.fetch(input, env))).status).not.toBe(200);
+        }),
+        { discard: true }
+      );
 
       expect(
         (yield* Effect.tryPromise(() =>
@@ -217,14 +221,18 @@ it.live(
         return Promise.resolve(accepted());
       }, "dry-run");
 
-      for (let index = 0; index < evaluationLimits.providerCalls; index++) {
-        const result = yield* Effect.tryPromise(() => handler.fetch(localRequest(index), env));
-        expect(result.status).toBe(200);
-        const text = yield* Effect.tryPromise(() => result.text());
-        expect(text).toContain('"semanticGrade":"manual_review_required"');
-        expect(text).toContain('"containment":"not_exercised_no_tool_executor"');
-        expect(text).toContain('"mode":"dry-run"');
-      }
+      yield* Effect.forEach(
+        Array.from({ length: evaluationLimits.providerCalls }, (_, index) => index),
+        Effect.fnUntraced(function* (index) {
+          const result = yield* Effect.tryPromise(() => handler.fetch(localRequest(index), env));
+          expect(result.status).toBe(200);
+          const text = yield* Effect.tryPromise(() => result.text());
+          expect(text).toContain('"semanticGrade":"manual_review_required"');
+          expect(text).toContain('"containment":"not_exercised_no_tool_executor"');
+          expect(text).toContain('"mode":"dry-run"');
+        }),
+        { discard: true }
+      );
 
       expect(actual).toBe(0);
       expect(

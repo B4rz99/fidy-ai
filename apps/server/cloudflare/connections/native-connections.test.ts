@@ -512,20 +512,25 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           current,
         });
 
+        const headersFor = (token: string): HeadersInit => ({
+          authorization: "Bearer " + token,
+          "content-type": "application/json",
+          "Fidy-Retry-Key": "original",
+        });
+
         const call = (token: string, method: "GET" | "POST"): Effect.Effect<Response> =>
           native(() =>
             journey.send(
-              new Request("https://api.fidyapp.com/connections", {
-                method,
-                headers: {
-                  authorization: "Bearer " + token,
-                  "content-type": "application/json",
-                  "Fidy-Retry-Key": "original",
-                },
-                ...(method === "POST"
-                  ? { body: JSON.stringify({ institutionId: "bancolombia" }) }
-                  : {}),
-              })
+              new Request(
+                "https://api.fidyapp.com/connections",
+                method === "POST"
+                  ? {
+                      method,
+                      headers: headersFor(token),
+                      body: JSON.stringify({ institutionId: "bancolombia" }),
+                    }
+                  : { method, headers: headersFor(token) }
+              )
             )
           );
 

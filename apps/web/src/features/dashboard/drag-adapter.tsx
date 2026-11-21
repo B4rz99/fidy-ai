@@ -56,7 +56,7 @@ export const DashboardDragProvider = ({
   ): Option.Option<DashboardGesture> =>
     resolveDashboardDrop({
       canceled,
-      makeWidgetId: () => Option.getOrThrow(candidateId.current),
+      makeWidgetId: () => candidateId.current,
       source: decodeDashboardDragSource(event.operation.source?.data),
       target: resolvedTarget(event),
     });

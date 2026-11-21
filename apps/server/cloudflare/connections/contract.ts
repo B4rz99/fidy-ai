@@ -1,3 +1,4 @@
+import type { SecureRandom } from "effect/crypto";
 import { Context, Data, type Effect, Option, type Redacted, Schema } from "effect";
 import { WebSessionId } from "../../src/core/web-session/contract";
 import { UserId } from "../../src/core/identity/contract";
@@ -25,7 +26,7 @@ export const ConnectionSandboxAdmission = Context.Reference<
 
 export class ConnectionAuthorizationUnavailable extends Data.TaggedError(
   "ConnectionAuthorizationUnavailable"
-) {}
+)<{ readonly cause: unknown }> {}
 
 const maximumPermissionCount = 5;
 
@@ -104,9 +105,13 @@ export type ConnectionBankActivation = Readonly<{
       expiresAtMilliseconds: number;
       retainGrant: (
         grant: ConnectionBankGrant
-      ) => Effect.Effect<void, ConnectionAuthorizationUnavailable>;
+      ) => Effect.Effect<void, ConnectionAuthorizationUnavailable, SecureRandom.SecureRandom>;
     }>
-  ) => Effect.Effect<ReadonlyArray<string>, ConnectionAuthorizationUnavailable>;
+  ) => Effect.Effect<
+    ReadonlyArray<string>,
+    ConnectionAuthorizationUnavailable,
+    SecureRandom.SecureRandom
+  >;
 }>;
 
 export type ConnectionBankCleanup = Readonly<{

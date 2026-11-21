@@ -1,4 +1,4 @@
-import { dashboardDragAnnouncement, sourceLabel } from "./drag-presentation";
+import { DashboardDragOutcome, dashboardDragAnnouncement, sourceLabel } from "./drag-presentation";
 import type { Accessibility, DragEndEvent, DragOverEvent, DragStartEvent } from "@dnd-kit/dom";
 import { Option } from "effect";
 import { dashboardDragData } from "./drag-data";
@@ -62,7 +62,7 @@ export const dashboardAnnouncementText = {
       if (canceled) {
         return dashboardDragAnnouncement.ended({
           label: sourceLabel(source),
-          outcome: { _tag: "Canceled" },
+          outcome: DashboardDragOutcome.Canceled(),
         });
       }
 
@@ -70,7 +70,7 @@ export const dashboardAnnouncementText = {
         onNone: () =>
           dashboardDragAnnouncement.ended({
             label: sourceLabel(source),
-            outcome: { _tag: "Unplaced" },
+            outcome: DashboardDragOutcome.Unplaced(),
           }),
         onSome: (target) =>
           dashboardDragAnnouncement.over(

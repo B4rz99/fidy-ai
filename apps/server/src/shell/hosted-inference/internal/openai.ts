@@ -1,4 +1,4 @@
-import { type Duration, Effect, Option, Schema } from "effect";
+import { type Duration, Effect, Option, Predicate, Schema } from "effect";
 import { type Prompt, Tool } from "effect/ai";
 import { type TranscriptEntry, maximumModelRoundMillis } from "~/core/agent/contract";
 import { operationCatalog } from "~/shell/api";
@@ -9,7 +9,9 @@ import {
 } from "~/shell/canonical-operations/operations";
 import {
   type ApprovedOpenAiModel,
+  HostedActiveRequest,
   HostedInferenceError,
+  HostedInferenceFailureReason,
   type HostedInferenceService,
   type HostedInvalidOutputDescription,
   type HostedTextResult,
@@ -22,7 +24,7 @@ import type {
   HostedPromptProjection,
   HostedStructuredAdapter,
 } from "./adapter";
-import { makeHostedInferenceInternal } from "./inference";
+import { hostedInferenceInternal } from "./inference";
 import { hostedOutputTokenReserve } from "./limits";
 import { exactTranscriptPromptInternal } from "./prompt";
 import { openAiProviderSchema } from "./provider-schema";
@@ -72,28 +74,28 @@ const structuredExecutionTimeout = "30 seconds";
 
 const providerUnavailable = (retryable: boolean): HostedInferenceError =>
   new HostedInferenceError({
-    reason: { _tag: "ProviderUnavailable" },
+    reason: HostedInferenceFailureReason.ProviderUnavailable(),
     retryable,
     retryAfter: Option.none(),
   });
 
 const invalidProviderOutput = (description: HostedInvalidOutputDescription): HostedInferenceError =>
   new HostedInferenceError({
-    reason: { _tag: "InvalidOutput", description },
+    reason: HostedInferenceFailureReason.InvalidOutput({ description }),
     retryable: false,
     retryAfter: Option.none(),
   });
 
 const structuredOutputExceeded = (): HostedInferenceError =>
   new HostedInferenceError({
-    reason: { _tag: "StructuredOutputExceeded" },
+    reason: HostedInferenceFailureReason.StructuredOutputExceeded(),
     retryable: false,
     retryAfter: Option.none(),
   });
 
 const structuredOutputTimedOut = (): HostedInferenceError =>
   new HostedInferenceError({
-    reason: { _tag: "StructuredOutputTimedOut" },
+    reason: HostedInferenceFailureReason.StructuredOutputTimedOut(),
     retryable: false,
     retryAfter: Option.none(),
   });
@@ -167,7 +169,7 @@ const tokenUpperBound = (value: string): number => byteLength(value);
 const promptParts = (
   content: string | ReadonlyArray<Prompt.PartEncoded>
 ): ReadonlyArray<Prompt.PartEncoded> =>
-  typeof content === "string" ? [{ type: "text", text: content }] : content;
+  Predicate.isString(content) ? [{ type: "text", text: content }] : content;
 
 const projectAssistant = (
   message: Prompt.AssistantMessageEncoded
@@ -191,12 +193,12 @@ const projectAssistant = (
     throw new Error("Hosted context contains unsupported assistant content");
   }
 
+  const content = text.length > 0 ? text.join("\n") : null;
+
   return [
-    {
-      role: "assistant",
-      content: text.length > 0 ? text.join("\n") : null,
-      ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
-    },
+    toolCalls.length > 0
+      ? { role: "assistant", content, tool_calls: toolCalls }
+      : { role: "assistant", content },
   ];
 };
 
@@ -319,7 +321,7 @@ const capacityCheck = (request: OpenAiRequest): Effect.Effect<number, HostedInfe
   return inputTokens + hostedOutputTokenReserve > hostedContextTokens
     ? Effect.fail(
         new HostedInferenceError({
-          reason: { _tag: "CapacityExceeded", inputTokens },
+          reason: HostedInferenceFailureReason.CapacityExceeded({ inputTokens }),
           retryable: false,
           retryAfter: Option.none(),
         })
@@ -353,32 +355,38 @@ const releaseReader = (reader: ReadableStreamDefaultReader<unknown>): Effect.Eff
     )
   );
 
-const collectResponseBody = Effect.fnUntraced(function* (
+const collectResponseBody = (
   reader: ReadableStreamDefaultReader<unknown>,
   overflow: () => HostedInferenceError
-) {
+): Effect.Effect<string, HostedInferenceError> => {
   const chunks: Array<Uint8Array> = [];
-  let size = 0;
 
-  for (;;) {
-    const chunk = yield* Effect.tryPromise({
+  const readFrom = (size: number): Effect.Effect<string, HostedInferenceError> =>
+    Effect.tryPromise({
       try: () => reader.read(),
       catch: () => invalidProviderOutput("Hosted provider response was invalid"),
-    });
+    }).pipe(
+      Effect.flatMap((chunk) =>
+        chunk.done
+          ? Effect.succeed(decodeChunks(chunks, size))
+          : Schema.decodeUnknownEffect(Schema.Uint8Array)(chunk.value).pipe(
+              Effect.mapError(() => invalidProviderOutput("Hosted provider response was invalid")),
+              Effect.flatMap((bytes) => {
+                if (size + bytes.byteLength > providerResponseMaximumBytes) {
+                  return Effect.fail(overflow());
+                }
 
-    if (chunk.done) return decodeChunks(chunks, size);
+                if (bytes.byteLength === 0) return readFrom(size);
+                chunks.push(bytes);
 
-    const bytes = yield* Schema.decodeUnknownEffect(Schema.Uint8Array)(chunk.value).pipe(
-      Effect.mapError(() => invalidProviderOutput("Hosted provider response was invalid"))
+                return readFrom(size + bytes.byteLength);
+              })
+            )
+      )
     );
 
-    if (size + bytes.byteLength > providerResponseMaximumBytes) return yield* overflow();
-
-    if (bytes.byteLength === 0) continue;
-    chunks.push(bytes);
-    size += bytes.byteLength;
-  }
-});
+  return readFrom(0);
+};
 
 const readBoundedBody = (
   response: Response,
@@ -464,7 +472,7 @@ const providerRefusal = (response: Response): Effect.Effect<never, HostedInferen
     Effect.map((body) =>
       body.error.code === "insufficient_quota"
         ? new HostedInferenceError({
-            reason: { _tag: "ProviderQuotaExceeded" },
+            reason: HostedInferenceFailureReason.ProviderQuotaExceeded(),
             retryable: false,
             retryAfter: Option.none(),
           })
@@ -484,9 +492,7 @@ const invoke = ({
   timeoutFailure,
 }: InvokeInput): Effect.Effect<ProviderResponse, HostedInferenceError> =>
   run(model, request).pipe(
-    Effect.mapError((failure) =>
-      failure instanceof HostedInferenceError ? failure : providerUnavailable(true)
-    ),
+    Effect.catchTag("UnknownError", () => Effect.fail(providerUnavailable(true))),
     Effect.flatMap((response) =>
       response.status >= HTTP_OK_MINIMUM && response.status < HTTP_REDIRECTION_MINIMUM
         ? readBoundedBody(response, overflow)
@@ -517,12 +523,11 @@ const decodeToolCall = (
     try: () => Tool.unsafeSecureJsonParse(item.function.arguments),
     catch: () => invalidProviderOutput("Hosted tool arguments were invalid"),
   }).pipe(
-    Effect.flatMap(Schema.decodeUnknownEffect(binding.operation.input)),
-    Effect.flatMap(Schema.encodeEffect(binding.operation.input)),
-    Effect.mapError((error) =>
-      error instanceof HostedInferenceError
-        ? error
-        : invalidProviderOutput("Hosted tool arguments were invalid")
+    Effect.flatMap((parsed) =>
+      Schema.decodeUnknownEffect(binding.operation.input)(parsed).pipe(
+        Effect.flatMap(Schema.encodeEffect(binding.operation.input)),
+        Effect.mapError(() => invalidProviderOutput("Hosted tool arguments were invalid"))
+      )
     ),
     Effect.map((params) => ({ id: item.id, operation: binding.operation.id, params }))
   );
@@ -587,7 +592,7 @@ const makeStructuredAdapter = (
           prefix: input.messages,
           continuationTail: [],
           suffix: [],
-          activeRequest: { _tag: "Absent" },
+          activeRequest: HostedActiveRequest.Absent(),
         },
         Option.none()
       );
@@ -639,11 +644,9 @@ const continuationItems = (response: ProviderResponse): ReadonlyArray<OpenAiInpu
   if (message === undefined) return [];
 
   return [
-    {
-      role: "assistant",
-      content: message.content,
-      ...(message.tool_calls === undefined ? {} : { tool_calls: message.tool_calls }),
-    },
+    message.tool_calls === undefined
+      ? { role: "assistant", content: message.content }
+      : { role: "assistant", content: message.content, tool_calls: message.tool_calls },
   ];
 };
 
@@ -665,7 +668,7 @@ export const makeOpenAiInferenceServiceInternal = ({
           prefix: exactTranscriptPromptInternal(entries),
           continuationTail: [],
           suffix: [],
-          activeRequest: { _tag: "Absent" },
+          activeRequest: HostedActiveRequest.Absent(),
         },
         Option.none()
       ).pipe(
@@ -712,5 +715,5 @@ export const makeOpenAiInferenceServiceInternal = ({
     structured: makeStructuredAdapter(run, model),
   };
 
-  return makeHostedInferenceInternal(adapter);
+  return hostedInferenceInternal(adapter);
 };

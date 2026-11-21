@@ -15,7 +15,7 @@ export type InitialSessionWork = Readonly<{
 export type InitialBrowserSession = Readonly<{
   apiOrigin: string;
   ready: Promise<void>;
-  take: (owner: object) => Option.Option<InitialSessionWork>;
+  take: (owner: WeakKey) => Option.Option<InitialSessionWork>;
   cancel: () => void;
 }>;
 
@@ -89,7 +89,7 @@ export const beginInitialBrowserSession = ({
 
   const prepared = preparedResult(() => completed, result);
   work = Option.some({ result: prepared, cancel });
-  let owner = Option.none<object>();
+  let owner = Option.none<WeakKey>();
 
   return {
     apiOrigin,

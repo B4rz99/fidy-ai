@@ -178,7 +178,20 @@ type EnrollmentApiClient = HttpApiClient.Client<SubscriptionEnrollmentApiGroups,
 class EnrollmentClientService extends Context.Service<
   EnrollmentClientService,
   EnrollmentApiClient
->()("@fidy/web/transport/client/EnrollmentClientService") {}
+>()("@fidy/web/transport/client/EnrollmentClientService") {
+  static readonly make = (
+    apiOrigin: string
+  ): Effect.Effect<EnrollmentApiClient, never, HttpClient.HttpClient> =>
+    HttpApiClient.make(SubscriptionEnrollmentApi, {
+      baseUrl: apiOrigin,
+      transformResponse: observeBrowserDecode,
+    });
+
+  static readonly layer = (
+    apiOrigin: string
+  ): Layer.Layer<EnrollmentClientService, never, HttpClient.HttpClient> =>
+    Layer.effect(this, this.make(apiOrigin));
+}
 
 class EnrollmentClientDisposed extends Data.TaggedError("EnrollmentClientDisposed")<{}> {}
 
@@ -194,13 +207,9 @@ export type SubscriptionEnrollmentClient = Readonly<{
 export const makeSubscriptionEnrollmentClient = (
   options: BrowserClientOptions
 ): SubscriptionEnrollmentClient => {
-  const live = Layer.effect(
-    EnrollmentClientService,
-    HttpApiClient.make(SubscriptionEnrollmentApi, {
-      baseUrl: options.apiOrigin,
-      transformResponse: observeBrowserDecode,
-    })
-  ).pipe(Layer.provide(browserClientLayer({ ...options, boundary: "enrollment" })));
+  const live = EnrollmentClientService.layer(options.apiOrigin).pipe(
+    Layer.provide(browserClientLayer({ ...options, boundary: "enrollment" }))
+  );
 
   const runtime = ManagedRuntime.make(live);
   const lifetime = new AbortController();
@@ -212,7 +221,7 @@ export const makeSubscriptionEnrollmentClient = (
     execute: (use, execution) =>
       available
         ? runtime.runPromise(Effect.flatMap(EnrollmentClientService, use), execution)
-        : Effect.runPromise(Effect.fail(new EnrollmentClientDisposed())),
+        : Promise.reject(new EnrollmentClientDisposed()),
     dispose: () =>
       Option.match(disposal, {
         onNone: () => {

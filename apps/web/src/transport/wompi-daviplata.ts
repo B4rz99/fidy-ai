@@ -1,5 +1,6 @@
 import { Clock, Data, Effect, Option, Redacted, Schema } from "effect";
 import { Hex } from "effect/encoding";
+import { browserRuntime } from "./browser-runtime";
 import { type DaviplataOtpPolicy } from "./client";
 import { UnknownJsonString, jsonStringSchema } from "@/schema-compatibility";
 import {
@@ -14,6 +15,9 @@ export class DaviplataAuthorizationFailed extends Data.TaggedError("DaviplataAut
 
 const failure = (): DaviplataAuthorizationFailed =>
   new DaviplataAuthorizationFailed({ status: "uncertain" });
+
+const refused = (): DaviplataAuthorizationFailed =>
+  new DaviplataAuthorizationFailed({ status: "refused" });
 
 const maximumSecretLength = 4096;
 
@@ -124,11 +128,11 @@ const isSandboxOtpEndpoint = (url: string, origin: string, allowAction: boolean)
 const checkEndpoint = (
   url: string,
   origin: string,
-  allowAction = false
+  endpoint: Readonly<{ allowAction: boolean; refusal: () => DaviplataAuthorizationFailed }>
 ): Effect.Effect<void, DaviplataAuthorizationFailed> =>
   Effect.try({
     try: () => {
-      if (isSandboxOtpEndpoint(url, origin, allowAction)) return;
+      if (isSandboxOtpEndpoint(url, origin, endpoint.allowAction)) return;
       const parsed = new URL(url);
       const clean = `${parsed.username}${parsed.password}${parsed.search}${parsed.hash}` === "";
 
@@ -139,10 +143,10 @@ const checkEndpoint = (
         parsed.port !== "" ||
         parsed.href !== url
       ) {
-        throw failure();
+        throw endpoint.refusal();
       }
     },
-    catch: failure,
+    catch: endpoint.refusal,
   });
 
 const awaitAbort = (signal: AbortSignal): Effect.Effect<never, DaviplataAuthorizationFailed> =>
@@ -170,7 +174,7 @@ const postDaviplataOtp = <Decoder extends Schema.ConstraintDecoder<unknown>>(
 ): Effect.Effect<Decoder["Type"], DaviplataAuthorizationFailed, Decoder["DecodingServices"]> => {
   const request = Effect.gen(function* () {
     const origin = yield* wompiTokenizationOrigin(input.publicKey).pipe(Effect.mapError(failure));
-    yield* checkEndpoint(input.url, origin, true);
+    yield* checkEndpoint(input.url, origin, { allowAction: true, refusal: failure });
 
     if (
       Option.isSome(input.body) &&
@@ -284,7 +288,7 @@ const makeAuthority = (
     input.signal.removeEventListener("abort", abort);
   };
 
-  const timer = Effect.runFork(
+  const timer = browserRuntime.runFork(
     Effect.sleep(deadline - now).pipe(
       Effect.tap(() => Effect.sync(() => dispose("expired"))),
       Effect.provideService(Clock.Clock, clock)
@@ -433,11 +437,13 @@ const sendWithBearer = (
     if (action.type === "send") state.sends += 1;
     else state.validates += 1;
 
+    const token = yield* Effect.fromOption(state.token).pipe(Effect.orDie);
+
     const response = yield* postDaviplataOtp({
       publicKey: input.publicKey,
       url: otpEndpoint(
         action.type === "send" ? input.policy.sendUrl : input.policy.confirmUrl,
-        Redacted.value(Option.getOrThrow(state.token)),
+        Redacted.value(token),
         action.type
       ),
       authorization,
@@ -576,12 +582,8 @@ export const startDaviplataWithWompi = (
 ): Effect.Effect<DaviplataProviderChallenge, DaviplataAuthorizationFailed> =>
   Effect.gen(function* () {
     const origin = yield* wompiTokenizationOrigin(input.publicKey).pipe(Effect.mapError(failure));
-    yield* checkEndpoint(input.policy.sendUrl, origin).pipe(
-      Effect.mapError(() => new DaviplataAuthorizationFailed({ status: "refused" }))
-    );
-    yield* checkEndpoint(input.policy.confirmUrl, origin).pipe(
-      Effect.mapError(() => new DaviplataAuthorizationFailed({ status: "refused" }))
-    );
+    yield* checkEndpoint(input.policy.sendUrl, origin, { allowAction: false, refusal: refused });
+    yield* checkEndpoint(input.policy.confirmUrl, origin, { allowAction: false, refusal: refused });
     const now = yield* Clock.currentTimeMillis;
     const deadline = Math.min(input.expiresAt, now + maximumLifetimeMilliseconds);
 

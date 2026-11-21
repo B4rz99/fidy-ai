@@ -156,10 +156,13 @@ export type AuditQueryCall = Readonly<{
   missingWhen: OwnedStatement;
 }>;
 
-export type AuditActor =
-  | Readonly<{ _tag: "WebSession"; id: string }>
-  | Readonly<{ _tag: "PAT"; id: string }>
-  | Readonly<{ _tag: "Publication" }>;
+export type AuditActor = Data.TaggedEnum<{
+  WebSession: { readonly id: string };
+  PAT: { readonly id: string };
+  Publication: {};
+}>;
+
+export const AuditActor = Data.taggedEnum<AuditActor>();
 
 export type OwnerAuditCall = Readonly<{
   id: string;
@@ -170,18 +173,18 @@ export type OwnerAuditCall = Readonly<{
 }> &
   (
     | Readonly<{
-        caller: Exclude<AuditActor, { _tag: "Publication" }>;
+        caller: Data.TaggedEnum.Value<AuditActor, "WebSession" | "PAT">;
         operation: AcceptedSessionOperation;
         outcome: AcceptedOutcome;
       }>
     | Readonly<{
-        caller: Extract<AuditActor, { _tag: "PAT" }>;
+        caller: Data.TaggedEnum.Value<AuditActor, "PAT">;
         operation: AuditCredentialOperation;
         outcome: AcceptedOutcome;
       }>
-    | (Readonly<{ caller: Extract<AuditActor, { _tag: "WebSession" }> }> & SessionDecision)
+    | (Readonly<{ caller: Data.TaggedEnum.Value<AuditActor, "WebSession"> }> & SessionDecision)
     | Readonly<{
-        caller: Extract<AuditActor, { _tag: "Publication" }>;
+        caller: Data.TaggedEnum.Value<AuditActor, "Publication">;
         operation: AuditPublicationOperation;
         outcome: "success";
       }>
@@ -189,7 +192,9 @@ export type OwnerAuditCall = Readonly<{
 
 export type AuditQuery = Readonly<{ userId: string; limit: number }>;
 
-export class AuditUnavailable extends Data.TaggedError("AuditUnavailable") {}
+export class AuditUnavailable extends Data.TaggedError("AuditUnavailable")<{
+  readonly cause: unknown;
+}> {}
 
 export const AuditPublicationEvidence = AuditLogEntry.mapFields(Struct.omit(["caller"])).annotate({
   identifier: "AuditPublicationEvidence",

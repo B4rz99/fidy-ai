@@ -1,0 +1,486 @@
+import {
+  makeTestOutboundTransport,
+  testOutboundTransportResponse,
+} from "../../../support/outbound-http";
+import { makeLifecycleVerifier } from "~/shell/channels/whatsapp/runtime";
+import { expect, it } from "@effect/vitest";
+import { Cause, Data, DateTime, Effect, Exit, Option, Predicate, Redacted, Schema } from "effect";
+import assert from "node:assert/strict";
+import { UnknownJsonString } from "~/shell/schema-codecs/contract";
+import { expectNotInspected } from "~/shell/testing/credential-evidence-harness";
+import {
+  InvalidWhatsAppSignature,
+  maxWhatsAppWebhookBytes,
+} from "~/shell/channels/whatsapp/contract";
+import {
+  authenticateDisclosureStatus,
+  authenticateHostedStatus,
+} from "~/shell/channels/whatsapp/operations";
+
+const secret = `kapso-webhook-secret-${"f1d7c0de".repeat(2)}`;
+
+const correlationToken = "11111111-1111-4111-8111-111111111111";
+
+const providerMessageId = "wamid.lifecycle-test";
+
+const receivedAt = DateTime.makeUnsafe("2026-04-03T12:10:00.000Z");
+
+const encodedBody = (statuses: ReadonlyArray<unknown>, messageId = providerMessageId): Uint8Array =>
+  new TextEncoder().encode(
+    Schema.encodeSync(UnknownJsonString)({
+      message: { id: messageId, kapso: { statuses } },
+      phone_number_id: "123456789",
+    })
+  );
+
+type ProviderErrors = ReadonlyArray<{ readonly code: number }>;
+
+type ProviderStatusSnapshot = Readonly<{
+  id: string;
+  status: "delivered" | "failed" | "sent";
+  timestamp: string;
+  biz_opaque_callback_data: string;
+}>;
+
+type ProviderStatus =
+  | ProviderStatusSnapshot
+  | (ProviderStatusSnapshot & Readonly<{ errors: ProviderErrors }>);
+
+const status = (
+  providerStatus: ProviderStatusSnapshot["status"],
+  timestamp: string,
+  errors: Option.Option<ProviderErrors> = Option.none()
+): ProviderStatus => {
+  const snapshot = {
+    id: providerMessageId,
+    status: providerStatus,
+    timestamp,
+    biz_opaque_callback_data: correlationToken,
+  };
+
+  return Option.match(errors, {
+    onNone: () => snapshot,
+    onSome: (value) => ({ ...snapshot, errors: value }),
+  });
+};
+
+type DecodeOverride = Data.TaggedEnum<{
+  None: {};
+  Body: { readonly value: Uint8Array };
+  MessageId: { readonly value: string };
+  Secret: { readonly value: string };
+  Signature: { readonly value: string };
+}>;
+
+const DecodeOverride = Data.taggedEnum<DecodeOverride>();
+
+const decode = (
+  eventName: string,
+  statuses: ReadonlyArray<unknown>,
+  override: DecodeOverride = DecodeOverride.None()
+): ReturnType<typeof authenticateDisclosureStatus> => {
+  const webhookSecret = Predicate.isTagged(override, "Secret") ? override.value : secret;
+  const messageId = Predicate.isTagged(override, "MessageId") ? override.value : undefined;
+
+  const body = Predicate.isTagged(override, "Body")
+    ? override.value
+    : encodedBody(statuses, messageId);
+
+  const signature = Predicate.isTagged(override, "Signature")
+    ? override.value
+    : new Bun.CryptoHasher("sha256", webhookSecret).update(body).digest("hex");
+
+  return authenticateDisclosureStatus({
+    rawBody: body,
+    secret: Redacted.make(webhookSecret),
+    signature,
+    eventName,
+    receivedAt,
+  });
+};
+
+it.effect(
+  "projects an authenticated hosted delivered status without treating a sent status as delivery",
+  () =>
+    Effect.gen(function* () {
+      const body = encodedBody([status("delivered", "1775217960")]);
+
+      const evidence = yield* authenticateHostedStatus({
+        rawBody: body,
+        secret: Redacted.make(secret),
+        signature: new Bun.CryptoHasher("sha256", secret).update(body).digest("hex"),
+        eventName: "whatsapp.message.delivered",
+        receivedAt,
+      });
+
+      expect(evidence.outcome).toBe("delivered");
+      expect(evidence.messageEvidence.providerMessageId).toBe(providerMessageId);
+      expect(evidence.correlationToken).toBe(correlationToken);
+
+      const forged = yield* Effect.exit(
+        authenticateHostedStatus({
+          rawBody: body,
+          secret: Redacted.make(secret),
+          signature: "00".repeat(32),
+          eventName: "whatsapp.message.delivered",
+          receivedAt,
+        })
+      );
+
+      expect(Exit.isFailure(forged)).toBe(true);
+      const sent = encodedBody([status("sent", "1775217960")]);
+
+      const sentEvidence = yield* authenticateHostedStatus({
+        rawBody: sent,
+        secret: Redacted.make(secret),
+        signature: new Bun.CryptoHasher("sha256", secret).update(sent).digest("hex"),
+        eventName: "whatsapp.message.sent",
+        receivedAt,
+      });
+
+      expect(sentEvidence.outcome).toBe("sent");
+
+      const mismatchedEvent = yield* Effect.exit(
+        authenticateHostedStatus({
+          rawBody: sent,
+          secret: Redacted.make(secret),
+          signature: new Bun.CryptoHasher("sha256", secret).update(sent).digest("hex"),
+          eventName: "whatsapp.message.delivered",
+          receivedAt,
+        })
+      );
+
+      expect(Exit.isFailure(mismatchedEvent)).toBe(true);
+    })
+);
+
+it.effect("selects the latest chronological lifecycle status rather than array position", () =>
+  Effect.gen(function* () {
+    const evidence = yield* decode("whatsapp.message.delivered", [
+      status("delivered", "1775217960"),
+      status("sent", "1775217900"),
+    ]);
+
+    expect(evidence.outcome).toBe("accepted");
+    expect(evidence.correlationToken).toBe(correlationToken);
+    expect(evidence.messageEvidence.providerMessageId).toBe(providerMessageId);
+
+    expect(
+      (yield* decode("whatsapp.message.delivered", [
+        status("sent", "1775217900"),
+        status("delivered", "1775217960"),
+      ])).outcome
+    ).toBe("accepted");
+  })
+);
+
+it.effect(
+  "accepts delivery tied with sent at provider timestamp precision in either array order",
+  () =>
+    Effect.gen(function* () {
+      yield* Effect.forEach(
+        [
+          [status("sent", "1775217960"), status("delivered", "1775217960")],
+          [status("delivered", "1775217960"), status("sent", "1775217960")],
+        ],
+        (statuses) =>
+          Effect.gen(function* () {
+            const evidence = yield* decode("whatsapp.message.delivered", statuses);
+            expect(evidence.outcome).toBe("accepted");
+            expect(evidence.correlationToken).toBe(correlationToken);
+            expect(evidence.messageEvidence.providerMessageId).toBe(providerMessageId);
+          }),
+        { discard: true }
+      );
+
+      const stale = yield* Effect.flip(
+        decode("whatsapp.message.delivered", [
+          status("delivered", "1775217900"),
+          status("sent", "1775217960"),
+        ])
+      );
+
+      expect(stale._tag).toBe("InvalidWhatsAppPayload");
+    })
+);
+
+it.effect("projects sent and allowlisted or terminal failed lifecycle evidence", () =>
+  Effect.gen(function* () {
+    const cases = [
+      {
+        eventName: "whatsapp.message.sent",
+        providerStatus: status("sent", "1775217900"),
+        expected: { outcome: "sent" },
+      },
+      {
+        eventName: "whatsapp.message.failed",
+        providerStatus: status("failed", "1775217900", Option.some([{ code: 130_429 }])),
+        expected: { outcome: "failed", reason: "rate_limited", automaticRetry: true },
+      },
+      {
+        eventName: "whatsapp.message.failed",
+        providerStatus: status("failed", "1775217900", Option.some([{ code: 131_000 }])),
+        expected: { outcome: "failed", reason: "provider_unavailable", automaticRetry: true },
+      },
+      {
+        eventName: "whatsapp.message.failed",
+        providerStatus: status("failed", "1775217900", Option.some([{ code: 131_016 }])),
+        expected: { outcome: "failed", reason: "provider_unavailable", automaticRetry: true },
+      },
+      {
+        eventName: "whatsapp.message.failed",
+        providerStatus: status("failed", "1775217900", Option.some([{ code: 999_999 }])),
+        expected: { outcome: "failed", reason: "invalid_response", automaticRetry: false },
+      },
+      {
+        eventName: "whatsapp.message.failed",
+        providerStatus: status("failed", "1775217900"),
+        expected: { outcome: "failed", reason: "invalid_response", automaticRetry: false },
+      },
+    ] as const;
+
+    yield* Effect.forEach(
+      cases,
+      (testCase) =>
+        Effect.gen(function* () {
+          expect(yield* decode(testCase.eventName, [testCase.providerStatus])).toMatchObject(
+            testCase.expected
+          );
+        }),
+      { discard: true }
+    );
+  })
+);
+
+it.effect("rejects lifecycle proof that does not identify one valid latest event", () =>
+  Effect.gen(function* () {
+    const invalid = [
+      decode("whatsapp.message.delivered", []),
+      decode("whatsapp.message.delivered", [status("sent", "1775217900")]),
+      decode(
+        "whatsapp.message.delivered",
+        [status("delivered", "1775217900")],
+        DecodeOverride.MessageId({ value: "wamid.different-envelope" })
+      ),
+      decode(
+        "whatsapp.message.delivered",
+        [status("delivered", "1775217900")],
+        DecodeOverride.Signature({ value: "0".repeat(64) })
+      ),
+      decode(
+        "whatsapp.message.delivered",
+        [status("delivered", "1775217900")],
+        DecodeOverride.Secret({ value: "short" })
+      ),
+      decode("unsupported.event", [status("delivered", "1775217900")]),
+      decode("whatsapp.message.delivered", [status("delivered", "9999999999999999")]),
+      decode("whatsapp.message.delivered", [status("delivered", "8640000000001")]),
+      decode(
+        "whatsapp.message.delivered",
+        [status("delivered", "1775217900")],
+        DecodeOverride.Signature({ value: "not-hexadecimal" })
+      ),
+      decode(
+        "whatsapp.message.delivered",
+        [],
+        DecodeOverride.Body({ value: new TextEncoder().encode("not-json") })
+      ),
+      decode("whatsapp.message.delivered", [
+        status(
+          "delivered",
+          String(
+            Math.floor(DateTime.toEpochMillis(DateTime.add(receivedAt, { minutes: 10 })) / 1_000)
+          )
+        ),
+      ]),
+    ];
+
+    yield* Effect.forEach(
+      invalid,
+      (effect) =>
+        Effect.gen(function* () {
+          expect((yield* Effect.flip(effect))._tag).toBeDefined();
+        }),
+      { discard: true }
+    );
+  })
+);
+
+it.effect("keeps the webhook secret out of authentication failures", () =>
+  Effect.gen(function* () {
+    const failure = yield* decode(
+      "whatsapp.message.delivered",
+      [status("delivered", "1775217900")],
+      DecodeOverride.Signature({ value: "0".repeat(64) })
+    ).pipe(Effect.flip);
+
+    expect(failure._tag).toBe("InvalidWhatsAppSignature");
+    expectNotInspected(failure, secret);
+  })
+);
+
+it.effect("rejects oversized lifecycle bytes before decoding", () =>
+  Effect.gen(function* () {
+    const body = new Uint8Array(maxWhatsAppWebhookBytes + 1);
+
+    const failure = yield* decode(
+      "whatsapp.message.delivered",
+      [],
+      DecodeOverride.Body({ value: body })
+    ).pipe(Effect.flip);
+
+    expect(failure._tag).toBe("WhatsAppPayloadTooLarge");
+  })
+);
+
+const vectorSecret = "test-webhook-secret-32-characters";
+
+const vectorBody = new TextEncoder().encode(
+  '{"message":{"id":"wamid.lifecycle-test","kapso":{"statuses":[{"id":"wamid.lifecycle-test","status":"delivered","timestamp":"1775217900","biz_opaque_callback_data":"11111111-1111-4111-8111-111111111111"}]}},"phone_number_id":"123456789"}'
+);
+
+const vectorSignature = "5b1babb145b0a2550a9788dceaf627582c55be37590c7f3c8e38e421339ded42";
+
+const decodeVector = (
+  signature: string,
+  rawBody: Uint8Array = vectorBody
+): ReturnType<typeof authenticateDisclosureStatus> =>
+  authenticateDisclosureStatus({
+    rawBody,
+    secret: Redacted.make(vectorSecret),
+    signature,
+    eventName: "whatsapp.message.delivered",
+    receivedAt,
+  });
+
+it.effect("authenticates a known HMAC-SHA256 vector and rejects malformed signatures", () =>
+  Effect.gen(function* () {
+    expect(yield* decodeVector(vectorSignature)).toMatchObject({
+      outcome: "accepted",
+      correlationToken,
+    });
+    expect((yield* decodeVector(vectorSignature.toUpperCase())).outcome).toBe("accepted");
+
+    const altered = `${vectorSignature.slice(0, -1)}${vectorSignature.endsWith("2") ? "3" : "2"}`;
+
+    const malformed = [
+      altered,
+      vectorSignature.slice(0, -1),
+      `${vectorSignature}00`,
+      "z".repeat(64),
+      "a".repeat(63),
+      "",
+    ];
+
+    yield* Effect.forEach(
+      malformed,
+      (signature) =>
+        Effect.gen(function* () {
+          assert.deepStrictEqual(
+            Exit.match(yield* decodeVector(signature).pipe(Effect.exit), {
+              onFailure: (cause) => Exit.fail(Cause.squash(cause)),
+              onSuccess: Exit.succeed,
+            }),
+            Exit.fail(new InvalidWhatsAppSignature())
+          );
+        }),
+      { discard: true }
+    );
+
+    assert.deepStrictEqual(
+      Exit.match(
+        yield* decodeVector("not-hexadecimal", new TextEncoder().encode("not-json")).pipe(
+          Effect.exit
+        ),
+        {
+          onFailure: (cause) => Exit.fail(Cause.squash(cause)),
+          onSuccess: Exit.succeed,
+        }
+      ),
+      Exit.fail(new InvalidWhatsAppSignature())
+    );
+  })
+);
+
+it.effect.each([
+  { lookup: false, phone: false },
+  { lookup: false, phone: true },
+  { lookup: true, phone: false },
+  { lookup: true, phone: true },
+])("preserves verified recipient from raw status history (%o)", ({ lookup, phone }) =>
+  Effect.gen(function* () {
+    const recipient = phone
+      ? { recipient_id: "573001234567" }
+      : { recipient_user_id: "CO.13491208655302741918" };
+
+    const statuses = [{ ...status("delivered", "1775217960"), ...recipient }];
+
+    const body = lookup
+      ? new TextEncoder().encode(
+          yield* Schema.encodeEffect(UnknownJsonString)({
+            phone_number_id: "123456789",
+            message: {
+              id: providerMessageId,
+              kapso: { direction: "outbound", status: "delivered" },
+            },
+          })
+        )
+      : encodedBody(statuses);
+
+    let reads = 0;
+
+    const verifier = makeLifecycleVerifier({
+      apiKey: Redacted.make("test-kapso-key"),
+      admitLookup: () => Effect.void,
+      httpClient: makeTestOutboundTransport((request) => {
+        reads++;
+
+        return Effect.succeed(
+          testOutboundTransportResponse(
+            request,
+            Response.json({
+              id: providerMessageId,
+              kapso: { direction: "outbound", phone_number_id: "123456789", statuses },
+            })
+          )
+        );
+      }),
+    });
+
+    const result = yield* verifier({
+      rawBody: body,
+      secret: Redacted.make(secret),
+      signature: new Bun.CryptoHasher("sha256", secret).update(body).digest("hex"),
+      eventName: "whatsapp.message.delivered",
+      receivedAt,
+    });
+
+    expect(Option.isSome(result) && result.value).toMatchObject(
+      phone
+        ? { recipientPhone: Option.some("+573001234567") }
+        : { recipientUserId: Option.some("CO.13491208655302741918") }
+    );
+    expect(reads).toBe(lookup ? 1 : 0);
+  })
+);
+
+it.effect("refuses contradictory recipient identities within authenticated message history", () =>
+  Effect.gen(function* () {
+    const body = encodedBody([
+      { ...status("sent", "1775217959"), recipient_user_id: "CO.13491208655302741918" },
+      { ...status("delivered", "1775217960"), recipient_user_id: "CO.13491208655302741919" },
+    ]);
+
+    const result = yield* Effect.exit(
+      authenticateHostedStatus({
+        rawBody: body,
+        secret: Redacted.make(secret),
+        signature: new Bun.CryptoHasher("sha256", secret).update(body).digest("hex"),
+        eventName: "whatsapp.message.delivered",
+        receivedAt,
+      })
+    );
+
+    expect(Exit.isFailure(result)).toBe(true);
+  })
+);

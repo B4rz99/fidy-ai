@@ -1,17 +1,17 @@
-import { Option } from "effect";
+import { Match, Option } from "effect";
 import { erasureAdmissionCondition } from "~/shell/erasure/operations";
 import type { OwnedStatement } from "~/shell/owner-write/contract";
-import type {
-  ConsentStandingRequirement,
+import {
+  type ConsentStandingRequirement,
   ConsentSubject,
-  PATRevocationProtection,
+  type PATRevocationProtection,
 } from "~/shell/consent/contract";
 
 const subjectExpression = (subject: ConsentSubject): string =>
-  subject._tag === "User" ? "?" : subject.column;
+  ConsentSubject.$is("User")(subject) ? "?" : subject.column;
 
 const subjectBindings = (subject: ConsentSubject): ReadonlyArray<string> =>
-  subject._tag === "User" ? [subject.userId] : [];
+  ConsentSubject.$is("User")(subject) ? [subject.userId] : [];
 
 export const consentConditions = ({
   subject,
@@ -45,33 +45,28 @@ export const consentConditions = ({
   };
 };
 
-export const revocationEvidence = (evidence: PATRevocationProtection): OwnedStatement => {
-  switch (evidence._tag) {
-    case "UserPAT":
-      return {
-        sql: `EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') r WHERE r.pat_id = pats.id
-          AND r.session_id = ?${Option.isSome(evidence.occurredAtMs) ? " AND r.occurred_at_ms = ?" : ""})`,
-        params: [evidence.sessionId, ...Option.toArray(evidence.occurredAtMs)],
-      };
-    case "UserPairing":
-      return {
-        sql: `EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') r WHERE r.pairing_id = pat_pairings.id AND r.session_id = ?)`,
-        params: [evidence.sessionId],
-      };
-    case "ExpiredPAT":
-      return {
-        sql: `EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') r WHERE r.pat_id = pats.id
+export const revocationEvidence = (evidence: PATRevocationProtection): OwnedStatement =>
+  Match.valueTags(evidence, {
+    UserPAT: (pat): OwnedStatement => ({
+      sql: `EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') r WHERE r.pat_id = pats.id
+          AND r.session_id = ?${Option.isSome(pat.occurredAtMs) ? " AND r.occurred_at_ms = ?" : ""})`,
+      params: [pat.sessionId, ...Option.toArray(pat.occurredAtMs)],
+    }),
+    UserPairing: (pairing): OwnedStatement => ({
+      sql: `EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') r WHERE r.pairing_id = pat_pairings.id AND r.session_id = ?)`,
+      params: [pairing.sessionId],
+    }),
+    ExpiredPAT: (): OwnedStatement => ({
+      sql: `EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') r WHERE r.pat_id = pats.id
           AND r.reason = 'pat-fixed-lifetime-expiry')`,
-        params: [],
-      };
-    case "ExpiredPairing":
-      return {
-        sql: `EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') r WHERE r.pairing_id = pat_pairings.id
+      params: [],
+    }),
+    ExpiredPairing: (): OwnedStatement => ({
+      sql: `EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') r WHERE r.pairing_id = pat_pairings.id
           AND r.reason = 'pat-approved-unclaimed-expiry')`,
-        params: [],
-      };
-  }
-};
+      params: [],
+    }),
+  });
 
 export const fixedExpiryEvidenceStatement = (current: number): OwnedStatement => ({
   sql: `SELECT pat_id AS id FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') AS pat_revocation_consents

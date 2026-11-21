@@ -1,4 +1,4 @@
-import { Option } from "effect";
+import { Option, Predicate } from "effect";
 
 const noContentStatus = 204;
 
@@ -67,7 +67,7 @@ const ownBody = (
               release(false);
               value.close();
             } else {
-              if (!(next.value instanceof Uint8Array)) {
+              if (!Predicate.isUint8Array(next.value)) {
                 throw new TypeError("Response chunk must be Uint8Array");
               }
 
@@ -121,7 +121,7 @@ export const ownNativeFetch = (native: typeof globalThis.fetch): typeof globalTh
     (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
       let signal = Option.fromNullishOr(init?.signal);
 
-      if (init?.signal === undefined && input instanceof Request) {
+      if (init?.signal === undefined && Predicate.hasProperty(input, "signal")) {
         signal = Option.some(input.signal);
       }
 

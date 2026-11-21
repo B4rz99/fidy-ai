@@ -26,10 +26,12 @@ export const buildInsightTemplateSender = (
 
   const prepare: InsightTemplateSender["prepare"] = (summary) =>
     Effect.gen(function* () {
-      if (Option.isNone(configuration)) return yield* new InsightTemplateUnavailable();
+      if (Option.isNone(configuration)) {
+        return yield* new InsightTemplateUnavailable({ cause: undefined });
+      }
 
       const decoded = yield* Schema.decodeUnknownEffect(InsightTemplateSummary)(summary).pipe(
-        Effect.mapError(() => new InsightTemplateUnavailable())
+        Effect.mapError((cause) => new InsightTemplateUnavailable({ cause }))
       );
 
       const parameter = [
@@ -43,7 +45,7 @@ export const buildInsightTemplateSender = (
         text.length > maximumTemplateLength ||
         new TextEncoder().encode(text).byteLength > maximumTemplateBytes
       ) {
-        return yield* new InsightTemplateUnavailable();
+        return yield* new InsightTemplateUnavailable({ cause: undefined });
       }
 
       return { parameter, text: TranscriptText.make(text) };
@@ -55,7 +57,9 @@ export const buildInsightTemplateSender = (
       Effect.gen(function* () {
         const prepared = yield* prepare(request.summary);
 
-        if (Option.isNone(configuration)) return yield* new InsightTemplateUnavailable();
+        if (Option.isNone(configuration)) {
+          return yield* new InsightTemplateUnavailable({ cause: undefined });
+        }
 
         const body = yield* Schema.encodeEffect(UnknownJsonString)({
           messaging_product: "whatsapp",
@@ -70,7 +74,7 @@ export const buildInsightTemplateSender = (
               { type: "body", parameters: [{ type: "text", text: prepared.parameter }] },
             ],
           },
-        }).pipe(Effect.mapError(() => new InsightTemplateUnavailable()));
+        }).pipe(Effect.mapError((cause) => new InsightTemplateUnavailable({ cause })));
 
         return yield* sendKapsoMessage({
           outboundHttp: input.outboundHttp,

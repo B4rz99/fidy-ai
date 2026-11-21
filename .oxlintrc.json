@@ -807,34 +807,6 @@
       }
     },
     {
-      "files": ["apps/server/src/shell/**"],
-      "rules": {
-        "anti-slop-effect/no-manual-effect-error-tag": "off",
-        "anti-slop-effect/no-manual-tag-comparison": "off",
-        "anti-slop-effect/no-manual-tagged-construction": "off",
-        "anti-slop-effect/no-manual-tagged-type": "off",
-        "anti-slop-effect/no-service-constructor-imports": "off",
-        "anti-slop-effect/no-service-parameters": "off",
-        "anti-slop-effect/no-test-code-in-src": "off",
-        "anti-slop-effect/require-cause-when-narrowing": "off",
-        "anti-slop-effect/require-service-make-layer": "off",
-        "anti-slop/no-array-filter-map": "off",
-        "anti-slop/no-conditional-spread": "off",
-        "anti-slop/no-instanceof": "off",
-        "anti-slop/no-known-value-widening": "off",
-        "anti-slop/no-object-parameters": "off",
-        "anti-slop/no-reflect-apply": "off",
-        "anti-slop/no-reflect-get": "off",
-        "anti-slop/no-runtime-typeof": "off",
-        "anti-slop/no-shape-in-symbol-names": "off",
-        "anti-slop/no-unknown-returns": "off",
-        "anti-slop/no-unsafe-dictionary-type": "off",
-        "enfect/avoid-expect-in-if": "off",
-        "enfect/avoid-option-getorthrow": "off",
-        "enfect/yield-in-for-loop": "off"
-      }
-    },
-    {
       "files": ["apps/server/src/core/**/*.test.ts"],
       "rules": {
         "anti-slop-effect/no-manual-tag-comparison": "off",
@@ -1010,34 +982,17 @@
       }
     },
     {
-      "files": [
-        "apps/web/src/features/pats/**",
-        "apps/web/src/features/transactions/**",
-        "apps/web/src/transport/**"
-      ],
+      "files": ["apps/web/src/features/pats/**", "apps/web/src/features/transactions/**"],
       "rules": {
-        "ai-guard/no-undeclared-import": "off",
-        "anti-slop-effect/no-manual-effect-error-tag": "off",
         "anti-slop-effect/no-manual-tag-comparison": "off",
         "anti-slop-effect/no-manual-tagged-construction": "off",
         "anti-slop-effect/no-manual-tagged-type": "off",
-        "anti-slop-effect/no-service-constructor-imports": "off",
-        "anti-slop-effect/no-test-code-in-src": "off",
-        "anti-slop-effect/require-cause-when-narrowing": "off",
-        "anti-slop-effect/require-service-make-layer": "off",
         "anti-slop/no-conditional-spread": "off",
-        "anti-slop/no-instanceof": "off",
         "anti-slop/no-known-value-widening": "off",
-        "anti-slop/no-object-parameters": "off",
         "anti-slop/no-runtime-typeof": "off",
-        "anti-slop/no-shape-in-symbol-names": "off",
-        "anti-slop/no-unknown-returns": "off",
-        "anti-slop/no-unsafe-dictionary-type": "off",
-        "enfect/avoid-expect-in-if": "off",
         "enfect/avoid-option-getorthrow": "off",
         "enfect/effect-run-in-body": "off",
-        "enfect/yield-in-for-loop": "off",
-        "landmines/no-unsignaled-poll": "off"
+        "enfect/yield-in-for-loop": "off"
       }
     },
     {

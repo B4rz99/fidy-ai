@@ -5,12 +5,11 @@ import { OutboundHttp } from "../../../src/shell/outbound-http/operations";
 import {
   type TestOutboundTransportRequest,
   testOutboundTransportLayer,
-} from "../../../src/shell/outbound-http/testing";
+} from "../../../test/support/outbound-http";
 import { UnknownJsonString } from "../../../src/shell/schema-codecs/contract";
 import { BillingEmail } from "../../../src/core/subscription/contract";
 import { WompiSourceId, WompiTransactionId, WompiTransactionReference } from "./wompi-model";
 import {
-  buildLayerExit,
   exitFailure,
   expectNotInspected,
   renderedFailure,
@@ -380,8 +379,12 @@ const describeInvalidSecret = ([
   it.effect(`rejects invalid Wompi ${name} without echoing the candidate`, () =>
     Effect.gen(function* () {
       const failure = yield* exitFailure(
-        yield* buildLayerExit(
-          clientLayer(successResponse, invalidConfiguration(privateKey, integritySecret))
+        yield* Effect.exit(
+          Effect.scoped(
+            Layer.build(
+              clientLayer(successResponse, invalidConfiguration(privateKey, integritySecret))
+            )
+          )
         )
       );
 
@@ -401,16 +404,20 @@ invalidSecretCases.forEach(describeInvalidSecret);
 it.effect("rejects missing Wompi credentials with value-safe diagnostics", () =>
   Effect.gen(function* () {
     const failure = yield* exitFailure(
-      yield* buildLayerExit(
-        clientLayer(
-          successResponse,
-          ConfigProvider.layer(
-            ConfigProvider.fromUnknown({
-              ...sharedProviderConfig,
-              WOMPI_ENVIRONMENT: "sandbox",
-              WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
-              WOMPI_INTEGRITY_SECRET: integritySecretFixture,
-            })
+      yield* Effect.exit(
+        Effect.scoped(
+          Layer.build(
+            clientLayer(
+              successResponse,
+              ConfigProvider.layer(
+                ConfigProvider.fromUnknown({
+                  ...sharedProviderConfig,
+                  WOMPI_ENVIRONMENT: "sandbox",
+                  WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
+                  WOMPI_INTEGRITY_SECRET: integritySecretFixture,
+                })
+              )
+            )
           )
         )
       )

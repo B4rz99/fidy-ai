@@ -13,7 +13,8 @@ import type { OperationId } from "~/shell/api";
 
 import { type CanonicalInput } from "./contract";
 import {
-  type OperationAccessCaller,
+  OperationAccessCaller,
+  OperationAccessDecision,
   type OperationPolicyValue,
 } from "~/shell/canonical-policy/contract";
 import { decideOperationAccess, isHostedVisible } from "~/shell/canonical-policy/operations";
@@ -51,7 +52,10 @@ export type SuggestedOperationCaller = {
 
 export const freePatCaller = (
   capabilities: ReadonlyArray<CanonicalCapability>
-): SuggestedOperationCaller => ({ accessCaller: { _tag: "PAT", capabilities }, tier: "free" });
+): SuggestedOperationCaller => ({
+  accessCaller: OperationAccessCaller.PAT({ capabilities }),
+  tier: "free",
+});
 
 export const grantsRequiredTier = (input: {
   readonly requiredTier: AccessTier;
@@ -64,8 +68,9 @@ export const canCallOperation: {
 } = Function.dual(
   2,
   (self: OperationPolicyValue, caller: SuggestedOperationCaller): boolean =>
-    decideOperationAccess(self.access, caller.accessCaller)._tag === "Allowed" &&
-    grantsRequiredTier({ requiredTier: self.requiredTier, callerTier: caller.tier })
+    OperationAccessDecision.$is("Allowed")(
+      decideOperationAccess(self.access, caller.accessCaller)
+    ) && grantsRequiredTier({ requiredTier: self.requiredTier, callerTier: caller.tier })
 );
 
 const validationOptions = {

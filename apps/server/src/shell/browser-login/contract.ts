@@ -13,6 +13,7 @@ import {
   type CanonicalRejectedFailure,
   NextOperations,
   OperationResponse,
+  omittedTag,
 } from "~/shell/public-http/contract";
 import { operationPolicy, verifiedWhatsAppHostedOnly } from "~/shell/canonical-policy/contract";
 
@@ -29,7 +30,7 @@ export class BrowserLoginPairingApprovalRejected
     Brand.Brand<"BrowserLoginPairingApprovalRejected">
   >("BrowserLoginPairingApprovalRejected")(
     {
-      _tag: Schema.tagDefaultOmit("BrowserLoginPairingApprovalRejected"),
+      ...omittedTag("BrowserLoginPairingApprovalRejected"),
       error: Schema.Struct({
         code: Schema.Literal("validation_failed"),
         message: Schema.Literal(browserLoginApprovalGenericMessage),
@@ -49,7 +50,7 @@ export class BrowserLoginPairingApprovalRateLimited
     Brand.Brand<"BrowserLoginPairingApprovalRateLimited">
   >("BrowserLoginPairingApprovalRateLimited")(
     {
-      _tag: Schema.tagDefaultOmit("BrowserLoginPairingApprovalRateLimited"),
+      ...omittedTag("BrowserLoginPairingApprovalRateLimited"),
       error: Schema.Struct({
         code: Schema.Literal("rate_limited"),
         message: Schema.Literal(browserLoginApprovalGenericMessage),

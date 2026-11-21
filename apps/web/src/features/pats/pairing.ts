@@ -1,5 +1,5 @@
 import { useAtomSet } from "@effect/atom-react";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option, Predicate, Schema } from "effect";
 import type { Atom } from "effect/reactivity";
 import { type Dispatch, type RefCallback, type SetStateAction, useCallback, useState } from "react";
 import { type FidyClient, PATPairingPublicCode, type PATPairingReview } from "@/transport/client";
@@ -77,7 +77,7 @@ const inspectPairing = (owner: PairingOwner, inspect: (command: InspectCommand) 
 
   if (
     !owner.lifetime.active ||
-    previous._tag !== "Entering" ||
+    !Predicate.isTagged(previous, "Entering") ||
     previous.publicCode.trim().length === 0
   ) {
     return;
@@ -107,7 +107,7 @@ const inspectPairing = (owner: PairingOwner, inspect: (command: InspectCommand) 
 const approvePairing = (owner: PairingOwner, approve: (command: ApproveCommand) => void): void => {
   const previous = owner.current.value;
 
-  if (!owner.lifetime.active || previous._tag !== "Reviewing") return;
+  if (!owner.lifetime.active || !Predicate.isTagged(previous, "Reviewing")) return;
   const pending: PairingState = { ...previous, _tag: "Approving" };
   owner.change(pending);
 
@@ -185,7 +185,7 @@ export const usePATPairing = ({
     lifecycleRef,
     actions: {
       update: (value) => {
-        if (owner.lifetime.active && owner.current.value._tag === "Entering") {
+        if (owner.lifetime.active && Predicate.isTagged(owner.current.value, "Entering")) {
           owner.change({ _tag: "Entering", publicCode: value });
         }
       },

@@ -301,8 +301,14 @@ export {
 
 export { StatementSubmissionId, StatementSourceFormat } from "~/core/ingestion/contract";
 
+export const StatementParseFailureReason = Schema.Literals([
+  "unsupported-format",
+  "resource-limit",
+  "malformed-file",
+]);
+
 export class StatementParseFailed extends Data.TaggedError("StatementParseFailed")<{
-  readonly safeReason: "unsupported-format" | "resource-limit" | "malformed-file";
+  readonly safeReason: typeof StatementParseFailureReason.Type;
 }> {}
 
 export type ParsedStatement = Readonly<{
@@ -337,23 +343,26 @@ export const NotificationEmailInterpretationEvidence = Schema.Struct({
 export type NotificationEmailInterpretationEvidence =
   typeof NotificationEmailInterpretationEvidence.Type;
 
-export type NotificationEmailInterpretation =
-  | Readonly<{
-      _tag: "Interpreted";
-      extraction: TransactionExtraction;
-      evidence: NotificationEmailInterpretationEvidence;
-    }>
-  | Readonly<{
-      _tag: "NeedsReview";
-      reason: EmailInterpretationReviewReason;
-    }>;
+type InterpretedNotificationEmail = {
+  readonly extraction: TransactionExtraction;
+  readonly evidence: NotificationEmailInterpretationEvidence;
+};
 
-export type NotificationEmailOutcome =
-  | NotificationEmailInterpretation
-  | Readonly<{
-      _tag: "NeedsReview";
-      reason: "canonical-validation-failed";
-    }>;
+export type NotificationEmailInterpretation = Data.TaggedEnum<{
+  Interpreted: InterpretedNotificationEmail;
+  NeedsReview: { readonly reason: EmailInterpretationReviewReason };
+}>;
+
+export const NotificationEmailInterpretation = Data.taggedEnum<NotificationEmailInterpretation>();
+
+export type NotificationEmailOutcome = Data.TaggedEnum<{
+  Interpreted: InterpretedNotificationEmail;
+  NeedsReview: {
+    readonly reason: EmailInterpretationReviewReason | "canonical-validation-failed";
+  };
+}>;
+
+export const NotificationEmailOutcome = Data.taggedEnum<NotificationEmailOutcome>();
 
 export class EmailCatalogGenerationFailed extends Data.TaggedError("EmailCatalogGenerationFailed")<{
   readonly reason: "missing-formats" | "missing-fixture" | "stale-catalog";

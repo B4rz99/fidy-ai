@@ -32,11 +32,14 @@ export const TransactionDestinationFailure = ({
   state: Exclude<ReturnType<typeof presentCanonicalQuery>, { _tag: "Initial" }>;
   refresh: () => void;
 }>): JSX.Element => {
-  const failure = state._tag === "Failure" ? Option.some(state.failure) : state.refreshFailure;
+  const failure = Predicate.isTagged(state, "Failure")
+    ? Option.some(state.failure)
+    : state.refreshFailure;
 
   const unavailable = Option.exists(
     failure,
-    (error) => error._tag === "DeclaredFailure" && Predicate.isTagged(error.error, "NotFound")
+    (error) =>
+      Predicate.isTagged(error, "DeclaredFailure") && Predicate.isTagged(error.error, "NotFound")
   );
 
   return (

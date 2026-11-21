@@ -1,3 +1,4 @@
+import { WebSessionAuditCaller } from "~/core/audit/contract";
 import type {
   CanonicalImplementationCaller,
   CanonicalInput,
@@ -14,11 +15,15 @@ import {
   emailReplacementInvalidBody,
 } from "./contract";
 import { emailPairingAllowsUser as compatibleSubject } from "~/shell/email-authentication/internal/pairing-subject";
-import { Context, Effect, Option } from "effect";
+import { Context, Effect, Option, Predicate } from "effect";
 import { UserId } from "~/core/identity/contract";
 import { WebSessionId } from "~/core/web-session/contract";
 import { decideOperationAccess } from "~/shell/canonical-policy/operations";
-import { getOperationPolicy } from "~/shell/canonical-policy/contract";
+import {
+  OperationAccessCaller,
+  OperationAccessDecision,
+  getOperationPolicy,
+} from "~/shell/canonical-policy/contract";
 
 export type { EmailReplacementMutationService } from "./contract";
 
@@ -86,7 +91,7 @@ export const browserReplacementCaller = (session: {
     subjectUserId: UserId.make(session.user_id),
     capabilities: [],
     authorityRoot: "no-verified-whatsapp-authority",
-    auditCaller: { _tag: "WebSession", webSessionId: WebSessionId.make(session.id) },
+    auditCaller: WebSessionAuditCaller.make({ webSessionId: WebSessionId.make(session.id) }),
     fresh: true,
   },
   accessTier: "free",
@@ -99,8 +104,10 @@ export const permitsFreshBrowserReplacement = (operation: ReplacementOperation):
   const { access } = getOperationPolicy(emailReplacementOperations[operation]);
 
   return (
-    access._tag === "FreshWebSessionOnly" &&
-    decideOperationAccess(access, { _tag: "WebSession", fresh: true })._tag === "Allowed"
+    Predicate.isTagged(access, "FreshWebSessionOnly") &&
+    OperationAccessDecision.$is("Allowed")(
+      decideOperationAccess(access, OperationAccessCaller.WebSession({ fresh: true }))
+    )
   );
 };
 

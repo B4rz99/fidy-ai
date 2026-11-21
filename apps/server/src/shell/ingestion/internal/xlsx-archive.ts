@@ -147,7 +147,9 @@ const assertLocalEntry = (
 const unsafeName = (name: string): boolean =>
   name.includes("..") || name.startsWith("/") || name.includes("\\");
 
-const directory = (view: DataView, end: number): Readonly<{ count: number; start: number }> => {
+type CentralDirectory = Readonly<{ count: number; start: number }>;
+
+const directory = (view: DataView, end: number): CentralDirectory => {
   const count = view.getUint16(end + endCountOffset, true);
 
   if (count > maximumEntries) resourceLimit();

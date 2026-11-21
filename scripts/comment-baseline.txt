@@ -17,17 +17,8 @@
 "apps/web/src/features/budgets/navigation.test.ts"	Ffbo9JDPbbbg6uI72NyOOzXjUSOeUTOcl51FAqoA84s
 "apps/web/src/features/dashboard/spending-chart.tsx"	KyPa859Fmjrme77DeJDTkrdrrTzBNb4j_-KNe9db7X8
 "apps/web/src/features/email-replacement/commands.test.ts"	Ffbo9JDPbbbg6uI72NyOOzXjUSOeUTOcl51FAqoA84s
-"apps/web/src/features/pats/creation.test.ts"	Ffbo9JDPbbbg6uI72NyOOzXjUSOeUTOcl51FAqoA84s
-"apps/web/src/features/pats/reauthentication-draft.test.ts"	Ffbo9JDPbbbg6uI72NyOOzXjUSOeUTOcl51FAqoA84s
 "apps/web/src/features/recovery/feature.test.ts"	Ffbo9JDPbbbg6uI72NyOOzXjUSOeUTOcl51FAqoA84s
-"apps/web/src/features/transactions/scroll-continuation.test.ts"	Ffbo9JDPbbbg6uI72NyOOzXjUSOeUTOcl51FAqoA84s
 "apps/web/src/session/session.test.ts"	Ffbo9JDPbbbg6uI72NyOOzXjUSOeUTOcl51FAqoA84s
-"apps/web/src/transport/browser-defects.test.ts"	Ffbo9JDPbbbg6uI72NyOOzXjUSOeUTOcl51FAqoA84s
-"apps/web/src/transport/browser-diagnostics.test.ts"	6JvMKTrfwrQCfnJng3KBGZSlDi2m-MHoHogXqcwFNmM
-"apps/web/src/transport/browser-http-entry.test.ts"	6JvMKTrfwrQCfnJng3KBGZSlDi2m-MHoHogXqcwFNmM
-"apps/web/src/transport/client.test.ts"	6JvMKTrfwrQCfnJng3KBGZSlDi2m-MHoHogXqcwFNmM
-"apps/web/src/transport/session-binding.test.ts"	6JvMKTrfwrQCfnJng3KBGZSlDi2m-MHoHogXqcwFNmM
-"apps/web/src/transport/wompi-daviplata.test.ts"	Ffbo9JDPbbbg6uI72NyOOzXjUSOeUTOcl51FAqoA84s
 "apps/web/src/ui/components/ai-elements/conversation.tsx"	3Cs8BW5I4RR83-rROqAlD23oSTbXjHmkMaLEarGR5aU	ALwisTCrrQydKoJ7XMDXzJ4NADKy33NI6Ti88Jr7mBA
 "apps/web/src/ui/components/ai-elements/message.tsx"	3Cs8BW5I4RR83-rROqAlD23oSTbXjHmkMaLEarGR5aU	Rb_ujz85EThqDab-27OvIHIphffOnu1MjBILBP-laMM
 "apps/web/src/ui/components/chart.tsx"	KyPa859Fmjrme77DeJDTkrdrrTzBNb4j_-KNe9db7X8

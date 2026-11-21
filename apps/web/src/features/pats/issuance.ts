@@ -1,5 +1,5 @@
 import { useAtomSet } from "@effect/atom-react";
-import { DateTime, Duration, Effect, type Exit, Option, Redacted, Schema } from "effect";
+import { DateTime, Duration, Effect, type Exit, Option, Predicate, Redacted, Schema } from "effect";
 import { type Atom, Reactivity } from "effect/reactivity";
 import { type Dispatch, type RefCallback, type SetStateAction, useCallback, useState } from "react";
 import { browserSecureRandom } from "@/browser/crypto";
@@ -151,11 +151,14 @@ const refusalTags: Readonly<
 };
 
 const classifyIssueError = (error: ManualPATError): IssuanceFailure => {
-  if (error._tag === "ManualPATReauthenticationRequired") {
+  if (Predicate.isTagged(error, "ManualPATReauthenticationRequired")) {
     return { _tag: "IdentityConfirmation", userId: error.error.userId };
   }
 
-  if (error._tag === "ManualPATIssuanceRateLimited" || error._tag === "ResourceLimited") {
+  if (
+    Predicate.isTagged(error, "ManualPATIssuanceRateLimited") ||
+    Predicate.isTagged(error, "ResourceLimited")
+  ) {
     return {
       _tag: "Refused",
       refusal: {
@@ -226,7 +229,7 @@ type DisclosureBinding = Readonly<{ owner: IssuanceOwner; generation: number; pa
 const currentDisclosure = ({ owner, generation, patId }: DisclosureBinding): boolean =>
   owner.lifetime.active &&
   owner.lifetime.generation === generation &&
-  owner.current.value._tag === "Issued" &&
+  Predicate.isTagged(owner.current.value, "Issued") &&
   owner.current.value.issued.pat.id === patId;
 
 const expireDisclosure =
@@ -249,7 +252,14 @@ const confirmPAT = (
   const { owner, state: previous } = binding;
   const { current, lifetime, change } = owner;
 
-  if (!lifetime.active || current.value !== previous || previous._tag !== "Reviewing") return;
+  if (
+    !lifetime.active ||
+    current.value !== previous ||
+    !Predicate.isTagged(previous, "Reviewing")
+  ) {
+    return;
+  }
+
   const generation = lifetime.generation;
   const { grant, requestId } = previous;
   const issuing = { _tag: "Issuing" as const, grant, requestId };
@@ -262,7 +272,7 @@ const confirmPAT = (
   const fail = (failure: IssuanceFailure): void => {
     if (!live()) return;
 
-    if (failure._tag === "IdentityConfirmation") {
+    if (Predicate.isTagged(failure, "IdentityConfirmation")) {
       change({
         _tag: "IdentityConfirmation",
         userId: failure.userId,
@@ -273,7 +283,7 @@ const confirmPAT = (
         },
         preservationFailed: false,
       });
-    } else if (failure._tag === "Refused") {
+    } else if (Predicate.isTagged(failure, "Refused")) {
       change({ _tag: "Refused", grant, requestId, refusal: failure.refusal });
     } else change({ _tag: "Uncertain", grant, requestId });
   };
@@ -294,7 +304,7 @@ const confirmPAT = (
 };
 
 const reviewDraft = ({ owner, state }: CreationBinding): void => {
-  if (state._tag !== "Editing") return;
+  if (!Predicate.isTagged(state, "Editing")) return;
   const draft = { ...state, recipientLabel: state.recipientLabel.trim() };
 
   if (Schema.is(PATRecipientLabel)(draft.recipientLabel) && Schema.is(PATScopes)(draft.scopes)) {
@@ -310,11 +320,11 @@ const editingDraft = (draft: PATDraft): Extract<ManualPATCreationState, { _tag: 
 });
 
 const prepareReview = ({ owner, state }: CreationBinding): void => {
-  if (state._tag !== "Uncertain" && state._tag !== "Refused") return;
+  if (!Predicate.isTagged(state, "Uncertain") && !Predicate.isTagged(state, "Refused")) return;
 
   if (
-    state._tag === "Refused" &&
-    state.refusal._tag === "RateLimited" &&
+    Predicate.isTagged(state, "Refused") &&
+    Predicate.isTagged(state.refusal, "RateLimited") &&
     DateTime.isLessThan(Effect.runSync(DateTime.now), state.refusal.retryAt)
   ) {
     return;
@@ -334,7 +344,7 @@ const creationActions = (
 
   return {
     update: (draft) => {
-      if (live() && state._tag === "Editing") change(draft);
+      if (live() && Predicate.isTagged(state, "Editing")) change(draft);
     },
     review: () => {
       if (live()) reviewDraft(binding);
@@ -342,9 +352,9 @@ const creationActions = (
     edit: () => {
       if (!live()) return;
 
-      if (state._tag === "Reviewing") {
+      if (Predicate.isTagged(state, "Reviewing")) {
         change(editingDraft(state.grant));
-      } else if (state._tag === "IdentityConfirmation") {
+      } else if (Predicate.isTagged(state, "IdentityConfirmation")) {
         change(editingDraft(state.draft));
       }
     },
@@ -357,7 +367,7 @@ const creationActions = (
     confirmIdentity: () => {
       if (!live()) return;
 
-      if (state._tag !== "IdentityConfirmation") return;
+      if (!Predicate.isTagged(state, "IdentityConfirmation")) return;
 
       if (preservePATDraft({ userId: state.userId, draft: state.draft })) {
         window.location.assign("/login?resume=pat");
@@ -369,7 +379,7 @@ const creationActions = (
     copy: (onCopied) => {
       if (!live()) return;
 
-      if (state._tag === "Issued") {
+      if (Predicate.isTagged(state, "Issued")) {
         owner.current.copyRelease = Option.some(
           clipboard.copy(
             Redacted.value(state.issued.bearer),
@@ -434,7 +444,7 @@ const mountIssuance =
       lifetime.generation += 1;
       window.removeEventListener("pagehide", hide);
 
-      if (current.value._tag === "Issued") clear();
+      if (Predicate.isTagged(current.value, "Issued")) clear();
     };
   };
 

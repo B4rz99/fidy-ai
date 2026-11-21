@@ -12,7 +12,9 @@ import {
   Exit,
   Function,
   Layer,
+  Match,
   Option,
+  Predicate,
   type Scope,
   Semaphore,
   Stream,
@@ -26,6 +28,7 @@ import {
   HttpClientResponse,
 } from "effect/http";
 import { ownNativeFetch } from "@fidy/server/native-http";
+import { browserRuntime } from "./browser-runtime";
 
 const ownNativeResponses = (client: HttpClient.HttpClient): HttpClient.HttpClient =>
   HttpClient.transformResponse(client, (response) =>
@@ -87,7 +90,7 @@ const maximumResourceDelaySeconds = 5;
 const millisecondsPerSecond = 1_000;
 
 const retrySeconds = (input: unknown): Option.Option<number> => {
-  if (typeof input !== "string") return Option.none();
+  if (!Predicate.isString(input)) return Option.none();
   const value = Number(input);
 
   return Number.isInteger(value) && value > 0 && value <= maximumResourceDelaySeconds
@@ -98,7 +101,7 @@ const retrySeconds = (input: unknown): Option.Option<number> => {
 const traceIdPattern = new RegExp(telemetryTraceIdPatternSource, "u");
 
 const traceId = (input: unknown): Option.Option<string> =>
-  typeof input === "string" && traceIdPattern.test(input) ? Option.some(input) : Option.none();
+  Predicate.isString(input) && traceIdPattern.test(input) ? Option.some(input) : Option.none();
 
 const redirectStatusMinimum = 300;
 
@@ -170,40 +173,35 @@ const sanitizeHttpClientError = (
 ): HttpClientError.HttpClientError => {
   const request = diagnosticsRequest(error.request);
   const reason = error.reason;
-  let sanitizedReason: HttpClientError.HttpClientError["reason"];
 
-  switch (reason._tag) {
-    case "TransportError":
-      sanitizedReason = new HttpClientError.TransportError({ request });
-      break;
-    case "EncodeError":
-      sanitizedReason = new HttpClientError.EncodeError({ request });
-      break;
-    case "InvalidUrlError":
-      sanitizedReason = new HttpClientError.InvalidUrlError({ request });
-      break;
-    case "StatusCodeError":
-      sanitizedReason = new HttpClientError.StatusCodeError({
-        request,
-        response: diagnosticsResponse(request, reason.response),
-        ...responseTraceDescription(reason.response),
-      });
-      break;
-    case "DecodeError":
-      sanitizedReason = new HttpClientError.DecodeError({
-        request,
-        response: diagnosticsResponse(request, reason.response),
-        ...responseTraceDescription(reason.response),
-      });
-      break;
-    case "EmptyBodyError":
-      sanitizedReason = new HttpClientError.EmptyBodyError({
-        request,
-        response: diagnosticsResponse(request, reason.response),
-        ...responseTraceDescription(reason.response),
-      });
-      break;
-  }
+  const sanitizedReason = Match.value(reason).pipe(
+    Match.tagsExhaustive({
+      TransportError: (): HttpClientError.HttpClientError["reason"] =>
+        new HttpClientError.TransportError({ request }),
+      EncodeError: (): HttpClientError.HttpClientError["reason"] =>
+        new HttpClientError.EncodeError({ request }),
+      InvalidUrlError: (): HttpClientError.HttpClientError["reason"] =>
+        new HttpClientError.InvalidUrlError({ request }),
+      StatusCodeError: ({ response }): HttpClientError.HttpClientError["reason"] =>
+        new HttpClientError.StatusCodeError({
+          request,
+          response: diagnosticsResponse(request, response),
+          ...responseTraceDescription(response),
+        }),
+      DecodeError: ({ response }): HttpClientError.HttpClientError["reason"] =>
+        new HttpClientError.DecodeError({
+          request,
+          response: diagnosticsResponse(request, response),
+          ...responseTraceDescription(response),
+        }),
+      EmptyBodyError: ({ response }): HttpClientError.HttpClientError["reason"] =>
+        new HttpClientError.EmptyBodyError({
+          request,
+          response: diagnosticsResponse(request, response),
+          ...responseTraceDescription(response),
+        }),
+    })
+  );
 
   return new HttpClientError.HttpClientError({ reason: sanitizedReason });
 };
@@ -259,12 +257,7 @@ const collectBoundedBytes = Effect.fn(function* (
 
       return true;
     })
-  ).pipe(
-    Effect.catchIf(
-      (error: HttpClientError.HttpClientError) => error.reason._tag === "EmptyBodyError",
-      () => Effect.void
-    )
-  );
+  ).pipe(Effect.catchReason("HttpClientError", "EmptyBodyError", () => Effect.void));
 
   if (byteLength > maximumBytes) {
     return yield* responseFailure(response.request, response, "response body too large");
@@ -329,7 +322,7 @@ const isSafeRetryRequest = (request: HttpClientRequest.HttpClientRequest): boole
   request.method === "GET" || request.method === "HEAD";
 
 const isRetryableTransportFailure = (error: HttpClientError.HttpClientError): boolean =>
-  error.reason._tag === "TransportError";
+  Predicate.isTagged(error.reason, "TransportError");
 
 const resourceRefusalDelay = (
   response: HttpClientResponse.HttpClientResponse
@@ -361,18 +354,27 @@ const resourceRefusalDelay = (
 
 const retryResourceRefusals = (
   attempt: Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError.HttpClientError>
-): Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError.HttpClientError> =>
-  Effect.gen(function* () {
-    for (let retried = 0; retried < maximumResourceRetries; retried++) {
-      const response = yield* attempt;
-      const delay = yield* resourceRefusalDelay(response);
+): Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError.HttpClientError> => {
+  const retry = (
+    retried: number
+  ): Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError.HttpClientError> =>
+    retried >= maximumResourceRetries
+      ? attempt
+      : attempt.pipe(
+          Effect.flatMap((response) =>
+            resourceRefusalDelay(response).pipe(
+              Effect.flatMap(
+                Option.match({
+                  onNone: () => Effect.succeed(response),
+                  onSome: (delay) => Effect.sleep(delay).pipe(Effect.andThen(retry(retried + 1))),
+                })
+              )
+            )
+          )
+        );
 
-      if (Option.isNone(delay)) return response;
-      yield* Effect.sleep(delay.value);
-    }
-
-    return yield* attempt;
-  });
+  return retry(0);
+};
 
 const maximumDiagnosticMilliseconds = 86_400_000;
 
@@ -459,15 +461,19 @@ const exportTransportDiagnostic = ({
       maximumDiagnosticMilliseconds,
       Math.max(0, Math.floor(durationMilliseconds))
     ),
-    ...(Option.isSome(observation.traceId) ? { traceId: observation.traceId.value } : {}),
-    ...(Option.isSome(observation.statusClass)
-      ? { statusClass: observation.statusClass.value }
-      : {}),
+    ...Option.match(observation.traceId, {
+      onNone: () => ({}),
+      onSome: (traceId) => ({ traceId }),
+    }),
+    ...Option.match(observation.statusClass, {
+      onNone: () => ({}),
+      onSome: (statusClass) => ({ statusClass }),
+    }),
     ...diagnosticError(observation, exit),
   };
 
   try {
-    Effect.runSync(Console.info("fidy.browser.transport", record));
+    browserRuntime.runSync(Console.info("fidy.browser.transport", record));
   } catch {}
 };
 

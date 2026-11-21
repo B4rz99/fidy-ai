@@ -1,5 +1,5 @@
 import { useRouter, useRouterState } from "@tanstack/react-router";
-import { Option } from "effect";
+import { Option, Predicate } from "effect";
 import { type JSX, type ReactNode } from "react";
 import { SensitiveClipboardBoundary } from "@/browser/use-sensitive-clipboard";
 import { type BrowserAuthentication, useSession } from "@/session/session-context";
@@ -74,19 +74,19 @@ export const PATManagementFeature = ({
   const refreshActivePATs = management.actions.refresh;
 
   let activePATState: ActivePATManagementState = {
-    _tag: queryState._tag === "Initial" && !queryState.waiting ? "Initial" : "Loading",
+    _tag: Predicate.isTagged(queryState, "Initial") && !queryState.waiting ? "Initial" : "Loading",
   };
 
-  if (queryState._tag === "Failure") {
+  if (Predicate.isTagged(queryState, "Failure")) {
     activePATState = {
       _tag: "LoadFailure",
-      boundaryFailure: queryState.failure._tag !== "DeclaredFailure",
+      boundaryFailure: !Predicate.isTagged(queryState.failure, "DeclaredFailure"),
       onRetry: refreshActivePATs,
       waiting: queryState.waiting,
     };
   }
 
-  if (queryState._tag === "Ready") {
+  if (Predicate.isTagged(queryState, "Ready")) {
     activePATState = {
       _tag: "Ready",
       result: queryState.value.data,
@@ -103,9 +103,9 @@ export const PATManagementFeature = ({
       activePATState={activePATState}
       refreshPATs={refreshActivePATs}
       refreshing={
-        (management.task._tag !== "Uncertain" && queryState.waiting) ||
-        management.task._tag === "Revoking" ||
-        management.task._tag === "Refreshing"
+        (!Predicate.isTagged(management.task, "Uncertain") && queryState.waiting) ||
+        Predicate.isTagged(management.task, "Revoking") ||
+        Predicate.isTagged(management.task, "Refreshing")
       }
       authentication={authentication}
       apiClient={router.options.context.apiClient}

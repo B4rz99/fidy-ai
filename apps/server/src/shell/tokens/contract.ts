@@ -5,7 +5,7 @@ import {
   type CanonicalCapability,
   CanonicalOperationId,
 } from "~/core/canonical-operations/contract";
-import { type Brand, type Option, Schema } from "effect";
+import { type Brand, Data, type Option, Schema } from "effect";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api";
 import {
   ActivePATList,
@@ -32,6 +32,7 @@ import {
   NotFound,
   OperationResponse,
   Unavailable,
+  omittedTag,
 } from "~/shell/public-http/contract";
 import {
   freshWebOrVerifiedWhatsAppHosted,
@@ -48,7 +49,7 @@ export class ManualPATReauthenticationRequired
     Brand.Brand<"ManualPATReauthenticationRequired">
   >("ManualPATReauthenticationRequired")(
     {
-      _tag: Schema.tagDefaultOmit("ManualPATReauthenticationRequired"),
+      ...omittedTag("ManualPATReauthenticationRequired"),
       error: Schema.Struct({
         code: Schema.Literal("user_action_required"),
         reason: Schema.Literal("reauthentication_required"),
@@ -71,7 +72,7 @@ export class ManualPATIssuanceConsumed
     "ManualPATIssuanceConsumed"
   )(
     {
-      _tag: Schema.tagDefaultOmit("ManualPATIssuanceConsumed"),
+      ...omittedTag("ManualPATIssuanceConsumed"),
       error: Schema.Struct({
         code: Schema.Literal("user_action_required"),
         message: Schema.Literal(issuanceConsumedMessage),
@@ -93,7 +94,7 @@ export class ManualPATIssuanceRateLimited
     "ManualPATIssuanceRateLimited"
   )(
     {
-      _tag: Schema.tagDefaultOmit("ManualPATIssuanceRateLimited"),
+      ...omittedTag("ManualPATIssuanceRateLimited"),
       error: Schema.Struct({
         code: Schema.Literal("rate_limited"),
         message: Schema.Literal(issuanceLimitedMessage),
@@ -116,7 +117,7 @@ export class ManualPATReviewExpired
     "ManualPATReviewExpired"
   )(
     {
-      _tag: Schema.tagDefaultOmit("ManualPATReviewExpired"),
+      ...omittedTag("ManualPATReviewExpired"),
       error: Schema.Struct({
         code: Schema.Literal("user_action_required"),
         message: Schema.Literal(reviewExpiredMessage),
@@ -267,7 +268,7 @@ export class PATPairingReviewRejected
     "PATPairingReviewRejected"
   )(
     {
-      _tag: Schema.tagDefaultOmit("PATPairingReviewRejected"),
+      ...omittedTag("PATPairingReviewRejected"),
       error: Schema.Struct({
         code: Schema.Literal("validation_failed"),
         message: Schema.Literal(patPairingGenericMessage),
@@ -286,7 +287,7 @@ export class PATPairingReviewRateLimited
     "PATPairingReviewRateLimited"
   )(
     {
-      _tag: Schema.tagDefaultOmit("PATPairingReviewRateLimited"),
+      ...omittedTag("PATPairingReviewRateLimited"),
       error: Schema.Struct({
         code: Schema.Literal("rate_limited"),
         message: Schema.Literal(patPairingGenericMessage),
@@ -478,6 +479,14 @@ export class PATPairingApi extends HttpApi.make("patPairingApi")
   .add(PATPairingDirectGroup)
   .annotate(OpenApi.Title, "fidy-ai PATPairing API") {}
 
-export type PATGrantSelection = Readonly<{ _tag: "PATGrants"; statement: OwnedStatement }>;
+export type PATGrantSelection = Data.TaggedEnum<{
+  PATGrants: { readonly statement: OwnedStatement };
+}>;
 
-export type PairingGrantSelection = Readonly<{ _tag: "PairingGrants"; statement: OwnedStatement }>;
+export const PATGrantSelection = Data.taggedEnum<PATGrantSelection>();
+
+export type PairingGrantSelection = Data.TaggedEnum<{
+  PairingGrants: { readonly statement: OwnedStatement };
+}>;
+
+export const PairingGrantSelection = Data.taggedEnum<PairingGrantSelection>();

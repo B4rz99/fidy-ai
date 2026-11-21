@@ -4,7 +4,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   resolve: { alias: { "~": fileURLToPath(new URL("./src", import.meta.url)) } },
   test: {
-    include: ["src/shell/channels/whatsapp/**/*.test.ts"],
+    include: ["test/shell/channels/whatsapp/**/*.test.ts"],
     clearMocks: true,
     environment: "node",
     pool: "forks",

@@ -1,4 +1,4 @@
-import { Option } from "effect";
+import { Option, Predicate } from "effect";
 import { type JSX, use, useState } from "react";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
@@ -54,10 +54,10 @@ type InspectedProps = DetailProps &
   }>;
 
 const relationshipLocked = (mode: DetailMode): boolean =>
-  mode._tag === "Reconciling" && reconciliationLocked(mode);
+  Predicate.isTagged(mode, "Reconciling") && reconciliationLocked(mode);
 
 const TransactionRelationship = ({ props }: Readonly<{ props: InspectedProps }>): JSX.Element => {
-  if (props.mode._tag === "Reconciling" || !props.inspectable) {
+  if (Predicate.isTagged(props.mode, "Reconciling") || !props.inspectable) {
     return <></>;
   }
 
@@ -91,19 +91,20 @@ const TransactionRelationship = ({ props }: Readonly<{ props: InspectedProps }>)
           disabled={
             props.inspectionWaiting ||
             relationshipLocked(props.mode) ||
-            (props.mode._tag === "Deleting" && !["idle", "rejected"].includes(props.mode.status))
+            (Predicate.isTagged(props.mode, "Deleting") &&
+              !["idle", "rejected"].includes(props.mode.status))
           }
           onClick={() =>
             props.onMode({
               _tag: "Reconciling",
               pair,
               sources: props.sources,
-              deleting: props.mode._tag === "Deleting",
+              deleting: Predicate.isTagged(props.mode, "Deleting"),
               status: "review",
             })
           }
         >
-          {props.mode._tag === "Deleting" ? "Revisar vínculo" : "Ver vínculo"}
+          {Predicate.isTagged(props.mode, "Deleting") ? "Revisar vínculo" : "Ver vínculo"}
         </Button>
       </div>
     ),
@@ -191,16 +192,18 @@ const DetailDeleteButton = ({ props }: Readonly<{ props: InspectedProps }>): JSX
 };
 
 const DetailDeleteAction = ({ props }: Readonly<{ props: InspectedProps }>): JSX.Element =>
-  props.editable && props.mode._tag !== "Deleting" && props.mode._tag !== "Reconciling" ? (
+  props.editable &&
+  !Predicate.isTagged(props.mode, "Deleting") &&
+  !Predicate.isTagged(props.mode, "Reconciling") ? (
     <DetailDeleteButton props={props} />
   ) : (
     <></>
   );
 
 const detailTitle = (mode: DetailMode): string => {
-  if (mode._tag === "Reconciling") return "Revisar vínculo";
+  if (Predicate.isTagged(mode, "Reconciling")) return "Revisar vínculo";
 
-  return mode._tag === "Deleting" ? "Eliminar transacción" : "Detalle de transacción";
+  return Predicate.isTagged(mode, "Deleting") ? "Eliminar transacción" : "Detalle de transacción";
 };
 
 const DetailClose = ({ props }: Readonly<{ props: InspectedProps }>): JSX.Element => {
@@ -220,7 +223,7 @@ const DetailClose = ({ props }: Readonly<{ props: InspectedProps }>): JSX.Elemen
       aria-label="Cerrar detalle"
       disabled={
         relationshipLocked(props.mode) ||
-        (props.mode._tag === "Deleting" && props.mode.status === "saving") ||
+        (Predicate.isTagged(props.mode, "Deleting") && props.mode.status === "saving") ||
         busy
       }
     >
@@ -243,10 +246,10 @@ const DetailFrame = ({
         Desde Historial de revisión
       </Badge>
     ) : null}
-    {props.mode._tag !== "Reconciling" ? <DetailIdentity {...props} /> : null}
-    {props.mode._tag === "Deleting" ||
-    props.mode._tag === "Viewing" ||
-    (props.mode._tag === "Editing" && !props.correctionReady) ? (
+    {!Predicate.isTagged(props.mode, "Reconciling") ? <DetailIdentity {...props} /> : null}
+    {Predicate.isTagged(props.mode, "Deleting") ||
+    Predicate.isTagged(props.mode, "Viewing") ||
+    (Predicate.isTagged(props.mode, "Editing") && !props.correctionReady) ? (
       <p data-transaction-slot="transaction-detail-value">{detailRow(props).moneyText}</p>
     ) : null}
     <TransactionRelationship props={props} />
@@ -315,7 +318,7 @@ const DeletionPanel = ({
 
 const useEditingAdmission = (input: InspectedProps): boolean => {
   const [admitted, setAdmitted] = useState(false);
-  const editing = input.mode._tag === "Editing";
+  const editing = Predicate.isTagged(input.mode, "Editing");
 
   if (editing && input.correctionReady && !admitted) setAdmitted(true);
 
@@ -325,7 +328,7 @@ const useEditingAdmission = (input: InspectedProps): boolean => {
 };
 
 const DetailEditAction = ({ props }: Readonly<{ props: InspectedProps }>): JSX.Element =>
-  props.mode._tag === "Viewing" && props.editable && props.correctionReady ? (
+  Predicate.isTagged(props.mode, "Viewing") && props.editable && props.correctionReady ? (
     <Button variant="outline" onClick={() => props.onMode({ _tag: "Editing" })}>
       Editar transacción
     </Button>
@@ -337,15 +340,15 @@ const InspectedDetail = (input: InspectedProps): JSX.Element => {
   const editing = useEditingAdmission(input);
 
   const props =
-    input.mode._tag === "Deleting" && Option.isSome(input.mode.original)
+    Predicate.isTagged(input.mode, "Deleting") && Option.isSome(input.mode.original)
       ? { ...input, transaction: input.mode.original.value }
       : input;
 
-  if (props.mode._tag === "Reconciling") {
+  if (Predicate.isTagged(props.mode, "Reconciling")) {
     return <ReconciliationPanel props={{ ...props, mode: props.mode }} />;
   }
 
-  if (props.mode._tag === "Deleting") {
+  if (Predicate.isTagged(props.mode, "Deleting")) {
     return <DeletionPanel props={{ ...props, mode: props.mode }} />;
   }
 
@@ -381,15 +384,16 @@ const InspectedDetail = (input: InspectedProps): JSX.Element => {
 };
 
 const inspectionFresh = (state: CanonicalQueryState<unknown, unknown>): boolean =>
-  state._tag === "Ready" && !state.waiting && Option.isNone(state.refreshFailure);
+  Predicate.isTagged(state, "Ready") && !state.waiting && Option.isNone(state.refreshFailure);
 
 const inspectionFailed = (state: CanonicalQueryState<unknown, unknown>): boolean =>
-  state._tag === "Failure" || (state._tag === "Ready" && Option.isSome(state.refreshFailure));
+  Predicate.isTagged(state, "Failure") ||
+  (Predicate.isTagged(state, "Ready") && Option.isSome(state.refreshFailure));
 
 const inspectionPair = (
   state: CanonicalQueryState<CanonicalSuccess<"transactions.getTransaction">, unknown>
 ): Option.Option<LinkedPair> =>
-  state._tag === "Ready" && state.value.data.reconciliation.kind === "linked"
+  Predicate.isTagged(state, "Ready") && state.value.data.reconciliation.kind === "linked"
     ? Option.some(state.value.data.reconciliation)
     : Option.none();
 
@@ -405,7 +409,7 @@ const InspectableDetail = (props: DetailProps): JSX.Element => {
   const state = useAtomValue(query).pipe(presentCanonicalQuery);
   const refreshInspection = useAtomRefresh(query);
   const fresh = inspectionFresh(state);
-  const transaction = state._tag === "Ready" ? state.value.data : props.transaction;
+  const transaction = Predicate.isTagged(state, "Ready") ? state.value.data : props.transaction;
 
   const changed =
     transaction.id !== props.transaction.id || transaction.revision !== props.transaction.revision;
@@ -422,8 +426,8 @@ const InspectableDetail = (props: DetailProps): JSX.Element => {
       correctionReady={fresh && !changed}
       inspectionChanged={fresh && changed}
       pair={pair}
-      sources={state._tag === "Ready" ? state.value.data.sources : []}
-      inspectionWaiting={state._tag === "Initial" || state.waiting}
+      sources={Predicate.isTagged(state, "Ready") ? state.value.data.sources : []}
+      inspectionWaiting={Predicate.isTagged(state, "Initial") || state.waiting}
       inspectionFailed={inspectionFailed(state)}
       refreshInspection={refreshInspection}
     />

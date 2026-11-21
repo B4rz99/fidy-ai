@@ -1,3 +1,14 @@
+import {
+  addedSignupStore,
+  requireCanonicalSignupBindings,
+  signupUserCensus,
+  verifyCanonicalSignupRedirects,
+} from "./native-canonical-signup";
+import {
+  canonicalDomains,
+  checkCanonicalIncumbents,
+  transferCanonicalDomains,
+} from "./native-canonical-domains";
 import { SuccessorSource } from "./native-fixture-plan";
 import { resourceFailureMessage } from "./resource-failure";
 import {
@@ -43,7 +54,12 @@ import { isDeepStrictEqual } from "node:util";
 import { verifyIncumbentFence, verifyIncumbentMail } from "./native-incumbent-fence";
 import { readProviderList } from "./native-provider-list";
 import { verifyInstalledWebsite } from "./native-deployed-web";
-import { inspectDeployedEdge, requireClosedIngressDomains } from "./native-deployed-edge";
+import {
+  canonicalDomainReader,
+  inspectDeployedEdge,
+  requireClosedIngressDomains,
+  requireStagedHostDomains,
+} from "./native-deployed-edge";
 import {
   NativeInventoryRefused,
   inspectNativeResources,
@@ -60,6 +76,7 @@ import { verifyNativeEdge } from "./native-edge";
 import {
   Clock,
   Context,
+  DateTime,
   Effect,
   FileSystem,
   Layer,
@@ -859,6 +876,9 @@ const verifyInstalledTopology = Effect.fn(function* (
       () => new ReleaseFailure({ message: "Native DNS, host or Access inventory differs" })
     )
   );
+  yield* requireStagedHostDomains(accountReader(env, client), edge.zoneId, input.staging).pipe(
+    Effect.when(Effect.succeed(input.hosts === "staged"))
+  );
   const website = yield* Effect.forEach(
     nativeHostPairs(input.staging ? "acceptance" : input.hosts),
     (pair) =>
@@ -1218,6 +1238,221 @@ const requiredStaging = Effect.fn(function* () {
     return yield* Effect.fail(Error("Requires protected closed host staging"));
   }
 });
+const CanonicalHostSource = Schema.Struct({
+  revision: SmokeIdentity.fields.gitRevision,
+  verifierRevision: SmokeIdentity.fields.gitRevision,
+  source: Schema.Struct({ artifactId: artifactNumber, sha256: evidenceDigest }),
+  smoke: Schema.Struct({
+    artifactId: artifactNumber,
+    sha256: evidenceDigest,
+    runId: artifactNumber,
+    revision: SmokeIdentity.fields.gitRevision,
+  }),
+  versions: Schema.Struct({ core: Schema.NonEmptyString, ingress: Schema.NonEmptyString }),
+  deployments: Schema.Struct({ core: Schema.NonEmptyString, ingress: Schema.NonEmptyString }),
+  namespaces: Schema.Tuple([
+    Schema.NonEmptyString,
+    Schema.NonEmptyString,
+    Schema.NonEmptyString,
+    Schema.NonEmptyString,
+    Schema.NonEmptyString,
+  ]),
+  website: Schema.Struct({
+    revision: SmokeIdentity.fields.gitRevision,
+    contractDigest: evidenceDigest,
+    version: Schema.NonEmptyString,
+    deployment: Schema.NonEmptyString,
+  }),
+});
+const zoneReader = (env: Config, client: HttpClient.HttpClient, zoneId: string) => {
+  const base = "https://api.cloudflare.com/client/v4/zones/" + zoneId + "/";
+  return (path: string): Effect.Effect<unknown, Error> =>
+    providerJson(
+      HttpClientRequest.get(base + path, { headers: { authorization: "Bearer " + env.token } })
+    ).pipe(Effect.provideService(HttpClient.HttpClient, client));
+};
+const inspectIncumbentWriters = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  zoneId: string
+) {
+  const account = accountReader(env, client);
+  const writers = yield* verifyIncumbentFence(account);
+  yield* verifyIncumbentMail(account, zoneReader(env, client, zoneId));
+  return writers;
+});
+const readCanonicalSource = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  port: ReleasePort
+) {
+  yield* requiredStaging();
+  yield* releaseController.requireTrunk(port, env.revision);
+  const directory = yield* ReleaseConfig.String("RUNNER_TEMP");
+  const source = yield* Schema.decodeUnknownEffect(CanonicalHostSource)(
+    yield* readFile(directory + "/native-canonical-host-source.json")
+  );
+  if (source.verifierRevision !== env.revision) {
+    return yield* new ReleaseFailure({
+      message: "Canonical host source differs from the verifier",
+    });
+  }
+  const core = yield* port.current(installationNames.Core);
+  const ingress = yield* port.current(installationNames.Ingress);
+  if (
+    core.id !== source.deployments.core ||
+    ingress.id !== source.deployments.ingress ||
+    core.versions.length !== 1 ||
+    ingress.versions.length !== 1 ||
+    (yield* releaseController.servingVersion(core)) !== source.versions.core ||
+    (yield* releaseController.servingVersion(ingress)) !== source.versions.ingress
+  ) {
+    return yield* new ReleaseFailure({ message: "Canonical host source routing changed" });
+  }
+  const { bindings } = yield* versionResources(env, client, {
+    name: installationNames.Core,
+    id: source.versions.core,
+    revision: source.revision,
+  });
+  return { source, bindings };
+});
+const checkCanonicalHosts = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  { port, mode }: { port: ReleasePort; mode: "plan" | "transfer" | "transferred" }
+) {
+  const transferring = mode !== "transferred";
+  const { source, bindings } = yield* readCanonicalSource(env, client, port);
+  yield* verifyNativeEdge(env, client, "verify");
+  const edge = yield* inspectDeployedEdge(env, client, {
+    installed: true,
+    bindings,
+    hosts: "staged",
+    staging: transferring,
+    incumbentTransfer: transferring,
+  }).pipe(
+    Effect.mapError(
+      () => new ReleaseFailure({ message: "Canonical DNS, host or Access inventory differs" })
+    )
+  );
+  const read = canonicalDomainReader({
+    readAccount: accountReader(env, client),
+    readZone: zoneReader(env, client, edge.zoneId),
+    zoneId: edge.zoneId,
+  });
+  if (transferring) yield* checkCanonicalIncumbents(read);
+  yield* requireStagedHostDomains(accountReader(env, client), edge.zoneId, transferring);
+  yield* inspectIncumbentWriters(env, client, edge.zoneId).pipe(
+    Effect.mapError(
+      () => new ReleaseFailure({ message: "Incumbent writer or email fence remains unverified" })
+    ),
+    Effect.when(Effect.succeed(mode !== "plan"))
+  );
+  return { source, edge, read };
+});
+const planHostStage = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  port: ReleasePort
+) {
+  const operation = yield* ReleaseConfig.Literals(
+    ["plan-stage-hosts", "transfer-canonical-hosts"],
+    "FIXTURE_RELEASE_OPERATION"
+  );
+  yield* checkCanonicalHosts(env, client, {
+    port,
+    mode: operation === "plan-stage-hosts" ? "plan" : "transfer",
+  });
+});
+const requireRetainedCanonicalWeb = (
+  port: ReleasePort,
+  worker: { deployment: string; version: string }
+): ReturnType<typeof releaseController.requireCapturedWorker> =>
+  releaseController.requireCapturedWorker(port, {
+    name: installationNames.Web,
+    deploymentId: worker.deployment,
+    stableVersionId: worker.version,
+  });
+const verifyTransferredHosts = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  port: ReleasePort
+) {
+  const { source, edge, read } = yield* checkCanonicalHosts(env, client, {
+    port,
+    mode: "transferred",
+  });
+  yield* requireRetainedCanonicalWeb(port, source.website);
+  const website = yield* Effect.forEach(nativeHostPairs("staged"), (pair) =>
+    verifyInstalledWebsite(client, source.website.revision, {
+      ...pair,
+      contractDigest: source.website.contractDigest,
+    })
+  );
+  const refusal = yield* client.execute(
+    HttpClientRequest.get(installedOrigins.production.api + "/transactions")
+  );
+  const unavailable = 503;
+  if (
+    refusal.status !== unavailable ||
+    refusal.headers["x-fidy-recovery-isolation"] !== "isolated"
+  ) {
+    return yield* new ReleaseFailure({ message: "Canonical API did not retain closed admission" });
+  }
+  const hosts = yield* Effect.forEach(canonicalDomains, read);
+  return { source, zoneId: edge.zoneId, hosts, website, admission: "closed" };
+});
+const transferHostStage = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  port: ReleasePort
+) {
+  yield* ReleaseConfig.Literal("transfer-canonical-hosts", "FIXTURE_RELEASE_OPERATION");
+  const { edge, read } = yield* checkCanonicalHosts(env, client, { port, mode: "transfer" });
+  if (edge.access.some((row) => row.paths.length !== 2)) {
+    return yield* new ReleaseFailure({ message: "Canonical Access policies are incomplete" });
+  }
+  const base = "https://api.cloudflare.com/client/v4/accounts/" + env.account + "/workers/domains";
+  const headers = { authorization: "Bearer " + env.token };
+  const confirmed = (
+    request: HttpClientRequest.HttpClientRequest
+  ): Effect.Effect<void, Error | Schema.SchemaError> =>
+    providerJson(request).pipe(
+      Effect.provideService(HttpClient.HttpClient, client),
+      Effect.flatMap(Schema.decodeUnknownEffect(Schema.Struct({ success: Schema.Literal(true) }))),
+      Effect.asVoid
+    );
+  yield* transferCanonicalDomains(
+    {
+      read,
+      detach: (_, id) =>
+        confirmed(
+          HttpClientRequest.make("DELETE")(base + "/" + encodeURIComponent(id), { headers })
+        ),
+      attach: (domain, service) =>
+        confirmed(
+          HttpClientRequest.put(base, {
+            headers,
+            body: HttpBody.text(
+              encodeJson({
+                hostname: domain.host,
+                service,
+                zone_id: edge.zoneId,
+                enabled: true,
+                previews_enabled: false,
+              }),
+              "application/json"
+            ),
+          })
+        ),
+    },
+    verifyTransferredHosts(env, client, port).pipe(
+      Effect.flatMap((proof) =>
+        writeFile(env.smokeAttestationFile + ".canonical-hosts", encodeJson(proof))
+      )
+    )
+  );
+});
 const inspectHostStage = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
@@ -1225,18 +1460,11 @@ const inspectHostStage = Effect.fn(function* (
 ) {
   yield* requiredStaging();
   const installed = yield* installedRelease(env, client, {
-      port,
-      staging: true,
-      verifierRevision: env.revision,
-    }),
-    account = accountReader(env, client);
-  const writers = yield* verifyIncumbentFence(account);
-  const zonePath = "https://api.cloudflare.com/client/v4/zones/" + installed.edge.zoneId + "/";
-  yield* verifyIncumbentMail(account, (path) =>
-    providerJson(
-      HttpClientRequest.get(zonePath + path, { headers: { authorization: "Bearer " + env.token } })
-    ).pipe(Effect.provideService(HttpClient.HttpClient, client))
-  );
+    port,
+    staging: true,
+    verifierRevision: env.revision,
+  });
+  const writers = yield* inspectIncumbentWriters(env, client, installed.edge.zoneId);
   return { installed, writers };
 });
 const captureHostStage = Effect.fn(function* (
@@ -1382,7 +1610,7 @@ const requireTestedStorage = Effect.fn(function* (
     ingressName: string;
     coreName: string;
     owners: ReadonlyMap<string, ReturnType<typeof verifiedStoragePair>["description"]>;
-  }
+  } & (Readonly<Record<never, never>> | { api: string })
 ) {
   const headers = smokeHeaders({
     config: {
@@ -1393,8 +1621,9 @@ const requireTestedStorage = Effect.fn(function* (
     },
     publicVersion: Option.some(input.ingress),
   });
+  const api = "api" in input ? input.api : origin;
   const response = yield* client.execute(
-    HttpClientRequest.get(origin + "/internal/release-smoke" + compatibilityQuery, { headers })
+    HttpClientRequest.get(api + "/internal/release-smoke" + compatibilityQuery, { headers })
   );
   const observation = yield* decodePinnedStorageEvidence(response, input.ingress);
   if (
@@ -2082,6 +2311,445 @@ const uploadedNativePair = Effect.gen(function* () {
     publicVersionId: workers.public.versionId.value,
     coreVersionId: workers.core.versionId.value,
   };
+});
+const CanonicalTransfer = Schema.Struct({
+  source: CanonicalHostSource,
+  zoneId: Schema.NonEmptyString,
+  hosts: Schema.Tuple([
+    Schema.Struct({
+      vacant: Schema.Literal(false),
+      id: Schema.NonEmptyString,
+      service: Schema.NonEmptyString,
+    }),
+    Schema.Struct({
+      vacant: Schema.Literal(false),
+      id: Schema.NonEmptyString,
+      service: Schema.NonEmptyString,
+    }),
+  ]),
+  admission: Schema.Literal("closed"),
+});
+const requiredSignupOpening = ReleaseConfig.Literal(
+  "open-canonical-signup",
+  "FIXTURE_RELEASE_OPERATION"
+);
+const readCanonicalTransfer = Effect.gen(function* () {
+  const directory = yield* ReleaseConfig.String("RUNNER_TEMP");
+  return yield* Schema.decodeUnknownEffect(CanonicalTransfer)(
+    yield* readFile(directory + "/native-canonical-host-transfer.json")
+  );
+});
+const CanonicalCensus = Schema.Struct({ count: Schema.Int, sha256: evidenceDigest });
+const captureCanonicalSignup = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  port: ReleasePort
+) {
+  yield* requiredSignupOpening;
+  const { source, hosts, zoneId } = yield* verifyTransferredHosts(env, client, port);
+  const approved = yield* readCanonicalTransfer;
+  if (
+    zoneId !== approved.zoneId ||
+    !isDeepStrictEqual(hosts, approved.hosts) ||
+    !isDeepStrictEqual(source, approved.source)
+  ) {
+    return yield* new ReleaseFailure({
+      message: "Live closed canonical transfer differs from the protected evidence",
+    });
+  }
+  const { bindings } = yield* versionResources(env, client, {
+    name: installationNames.Core,
+    id: source.versions.core,
+    revision: source.revision,
+  });
+  const digest = yield* Schema.decodeUnknownEffect(Schema.Struct({ text: evidenceDigest }))(
+    bindings.CONTRACT_DIGEST
+  );
+  const snapshot = yield* releaseController.captureRelease(port, {
+    revision: env.revision,
+    stableRevision: source.revision,
+    stableContractDigest: digest.text,
+    publicName: installationNames.Ingress,
+    coreName: installationNames.Core,
+  });
+  if (
+    snapshot.core.deploymentId !== source.deployments.core ||
+    snapshot.public.deploymentId !== source.deployments.ingress ||
+    snapshot.core.stableVersionId !== source.versions.core ||
+    snapshot.public.stableVersionId !== source.versions.ingress
+  ) {
+    return yield* new ReleaseFailure({
+      message: "Closed canonical deployment changed during opening capture",
+    });
+  }
+  const users = signupUserCensus(
+    yield* readUserObjects(accountReader(env, client), source.namespaces[0])
+  );
+  yield* writeFile(env.file + ".canonical-census", encodeJson(users));
+  yield* writeFile(env.file, encodeJson(snapshot));
+});
+const canonicalOpeningStorage = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  release: StorageTransition
+) {
+  const storage = yield* deployedStorage({ env, client, release });
+  yield* requireClosedWorkers([storage.core.stable, storage.ingress.stable]);
+  const compatibility = compatibleStoragePairs(storage.descriptions);
+  if (!compatibility.forward || !compatibility.rollback) {
+    return yield* new ReleaseFailure({
+      message: "Canonical signup cannot preserve storage compatibility in both directions",
+    });
+  }
+  yield* Effect.try(() => {
+    requireCanonicalSignupBindings({
+      before: storage.core.stable.bindings,
+      after: storage.core.candidate.bindings,
+      role: "Core",
+    });
+    requireCanonicalSignupBindings({
+      before: storage.ingress.stable.bindings,
+      after: storage.ingress.candidate.bindings,
+      role: "Ingress",
+    });
+    for (const { stable, candidate } of [storage.core, storage.ingress]) {
+      if (
+        stable.migrationTag !== candidate.migrationTag ||
+        !isDeepStrictEqual(stable.exports, candidate.exports) ||
+        !isDeepStrictEqual(stable.runtime, candidate.runtime)
+      ) {
+        throw Error("Canonical signup alters Worker migration, handler or compatibility runtime");
+      }
+    }
+  });
+  return storage.descriptions;
+});
+const targetSignupCandidates = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  port: ReleasePort
+) {
+  yield* requiredSignupOpening;
+  const snapshot = yield* Schema.decodeUnknownEffect(releaseSchemas.snapshot)(
+    yield* readFile(env.file)
+  );
+  yield* Effect.try(() => requireNativeTarget(snapshot));
+  const candidate = yield* uploadedNativePair;
+  yield* canonicalOpeningStorage(env, client, { snapshot, ...candidate });
+  yield* writeFile(
+    env.file,
+    encodeJson(yield* releaseController.stageRelease(port, snapshot, candidate))
+  );
+});
+const probeSignupStorage = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  { release, descriptions }: { release: StorageTransition; descriptions: Descriptions }
+) {
+  const owners = storageProbeOwners(release, descriptions);
+  const shared = {
+    core: release.coreVersionId,
+    revision: release.snapshot.revision,
+    ingressName: release.snapshot.public.name,
+    coreName: release.snapshot.core.name,
+    owners,
+    api: installedOrigins.production.api,
+  };
+  yield* requireTestedStorage(env, client, { ...shared, ingress: release.publicVersionId });
+  yield* requireTestedStorage(env, client, {
+    ...shared,
+    ingress: release.snapshot.public.stableVersionId,
+  });
+});
+type CanonicalPromotion = {
+  port: ReleasePort;
+  release: typeof releaseSchemas.staged.Type;
+  promoted: typeof RollbackReceipt.Type.promoted;
+};
+const readOpenedCanonical = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  input: CanonicalPromotion
+) {
+  const { port, release, promoted } = input;
+  const { zoneId, hosts, source } = yield* readCanonicalTransfer;
+  const read = canonicalDomainReader({
+    readAccount: accountReader(env, client),
+    readZone: zoneReader(env, client, zoneId),
+    zoneId,
+  });
+  const positions = yield* Effect.forEach(canonicalDomains, read);
+  if (!isDeepStrictEqual(positions, hosts)) {
+    return yield* new ReleaseFailure({
+      message: "Canonical domain identity changed during signup promotion",
+    });
+  }
+  yield* releaseController.requireCapturedWorker(port, {
+    ...release.snapshot.core,
+    deploymentId: promoted.coreDeploymentId,
+    stableVersionId: release.coreVersionId,
+  });
+  yield* releaseController.requireCapturedWorker(port, {
+    ...release.snapshot.public,
+    deploymentId: promoted.publicDeploymentId,
+    stableVersionId: release.publicVersionId,
+  });
+  yield* requireRetainedCanonicalWeb(port, source.website);
+  yield* proveRecoveryCorePrivate(env, client, installationNames.Core);
+  return { hosts, source, zoneId };
+});
+const verifyOpenCanonical = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  input: CanonicalPromotion
+) {
+  const { release, promoted } = input;
+  const { source, hosts, zoneId } = yield* readOpenedCanonical(env, client, input);
+  const redirects = yield* verifyCanonicalSignupRedirects(client);
+  const alternate = yield* client.execute(
+    HttpClientRequest.get(installedOrigins.acceptance.api + "/transactions", {
+      headers: { origin: installedOrigins.production.browser },
+    })
+  );
+  const unavailable = 503;
+  if (
+    alternate.status !== unavailable ||
+    alternate.headers["x-fidy-recovery-isolation"] !== "isolated"
+  ) {
+    return yield* new ReleaseFailure({ message: "Acceptance API allowed ordinary admission" });
+  }
+  const contractDigest = yield* ReleaseConfig.String("CONTRACT_DIGEST");
+  const usersBefore = yield* Schema.decodeUnknownEffect(CanonicalCensus)(
+    yield* readFile(env.file + ".canonical-census")
+  );
+  return {
+    revision: env.revision,
+    contractDigest,
+    admission: "open",
+    providerRedirects: redirects,
+    openedAt: DateTime.formatIso(yield* DateTime.now),
+    source,
+    zoneId,
+    usersBefore,
+    workers: {
+      [installationNames.Web]: {
+        deployment: source.website.deployment,
+        version: source.website.version,
+      },
+      [installationNames.Core]: {
+        deployment: promoted.coreDeploymentId,
+        version: release.coreVersionId,
+      },
+      [installationNames.Ingress]: {
+        deployment: promoted.publicDeploymentId,
+        version: release.publicVersionId,
+      },
+    },
+    hosts: { [canonicalDomains[0].host]: hosts[0].id, [canonicalDomains[1].host]: hosts[1].id },
+    namespaces: Object.fromEntries(
+      source.namespaces.map((id, index) => [
+        id,
+        ["UserStore", "Directory", "Pricing", "Maintenance", "Erasure"][index],
+      ])
+    ),
+  };
+});
+const promoteCanonicalSignup = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  port: ReturnType<typeof releasePort>
+) {
+  yield* requiredSignupOpening;
+  const release = yield* Schema.decodeUnknownEffect(releaseSchemas.staged)(
+    yield* readFile(env.file)
+  );
+  const descriptions = yield* canonicalOpeningStorage(env, client, release);
+  yield* probeSignupStorage(env, client, { release, descriptions });
+  const promoted = yield* releaseController.promoteRelease(port, release, {
+    exactPairPassed: true,
+    middlePairPassed: true,
+    rollbackEligible: true,
+  });
+  yield* writeFile(env.file + ".canonical-promoted", encodeJson({ release, promoted })).pipe(
+    Effect.andThen(verifyOpenCanonical(env, client, { port, release, promoted })),
+    Effect.flatMap((proof) =>
+      writeFile(env.smokeAttestationFile + ".canonical-open", encodeJson(proof))
+    ),
+    Effect.onError(() =>
+      releaseRollback
+        .restore(releaseEvidence.rollbackPort(port, env, client), {
+          release,
+          promoted,
+          compatible: true,
+        })
+        .pipe(
+          Effect.tapError(() => Effect.logError("Canonical opening restoration needs inspection")),
+          Effect.ignore
+        )
+    ),
+    Effect.uninterruptible
+  );
+});
+const OpeningWorker = Schema.Struct({
+  deployment: Schema.NonEmptyString,
+  version: Schema.NonEmptyString,
+});
+const CanonicalActivity = Schema.Struct({
+  opening: Schema.Struct({
+    revision: SmokeIdentity.fields.gitRevision,
+    contractDigest: evidenceDigest,
+    admission: Schema.Literal("open"),
+    zoneId: Schema.NonEmptyString,
+    hosts: Schema.Record(Schema.String, Schema.NonEmptyString),
+    workers: Schema.Struct({
+      [installationNames.Core]: OpeningWorker,
+      [installationNames.Ingress]: OpeningWorker,
+      [installationNames.Web]: OpeningWorker,
+    }),
+    namespaces: Schema.Record(Schema.String, Schema.NonEmptyString),
+    usersBefore: CanonicalCensus,
+  }),
+  reference: Schema.Struct({ artifactId: artifactNumber, sha256: evidenceDigest }),
+  recovery: Schema.Struct({
+    kind: Schema.Literal("accepted-workerd"),
+    artifactId: artifactNumber,
+    runId: artifactNumber,
+    revision: SmokeIdentity.fields.gitRevision,
+    digest: evidenceDigest,
+  }),
+  activity: Schema.Struct({
+    provider: Schema.Literals(["google", "microsoft"]),
+    signupDigest: evidenceDigest,
+    background: Schema.Struct({
+      watchdogCompleted: Schema.Literal(true),
+      canaryCompleted: Schema.Literal(true),
+      digest: evidenceDigest,
+    }),
+  }),
+});
+type OpeningPositions = typeof CanonicalActivity.Type.opening;
+const verifyCanonicalActivityHosts = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  opening: OpeningPositions
+) {
+  const zoneId = opening.zoneId;
+  const read = canonicalDomainReader({
+    readAccount: accountReader(env, client),
+    readZone: zoneReader(env, client, zoneId),
+    zoneId,
+  });
+  yield* Effect.forEach(
+    canonicalDomains,
+    Effect.fn(function* (domain) {
+      const current = yield* read(domain);
+      if (
+        current.vacant ||
+        current.service !== domain.native ||
+        current.id !== opening.hosts[domain.host]
+      ) {
+        return yield* new ReleaseFailure({
+          message: "Opened canonical domain changed during activity verification",
+        });
+      }
+    }),
+    { discard: true }
+  );
+});
+const currentCanonicalActivity = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  { port, opening }: { port: ReleasePort; opening: OpeningPositions }
+) {
+  yield* releaseController.requireTrunk(port, env.revision);
+  yield* requireRetainedCanonicalWeb(port, opening.workers[installationNames.Web]);
+  const verify = Effect.fn(function* (
+    name: typeof installationNames.Core | typeof installationNames.Ingress
+  ) {
+    const expected = opening.workers[name];
+    yield* releaseController.requireCapturedWorker(port, {
+      name,
+      deploymentId: expected.deployment,
+      stableVersionId: expected.version,
+    });
+    const { bindings } = yield* versionResources(env, client, {
+      name,
+      id: expected.version,
+      revision: opening.revision,
+    });
+    yield* Schema.decodeUnknownEffect(
+      Schema.Struct({
+        NATIVE_STORAGE_ADMISSION: Schema.Struct({ text: Schema.Literal("open") }),
+        RECOVERY_ISOLATION: Schema.Struct({ text: Schema.Literal("") }),
+        CONTRACT_DIGEST: Schema.Struct({ text: Schema.Literal(opening.contractDigest) }),
+      })
+    )(bindings);
+    return bindings;
+  });
+  const core = yield* verify(installationNames.Core);
+  const ingress = yield* verify(installationNames.Ingress);
+  const { namespaces } = yield* Effect.try(() => verifiedStoragePair({ core, ingress }));
+  if (!isDeepStrictEqual(namespaces.toSorted(), Object.keys(opening.namespaces).sort())) {
+    return yield* new ReleaseFailure({
+      message: "Opened native namespaces changed during activity verification",
+    });
+  }
+  yield* verifyCanonicalActivityHosts(env, client, opening);
+  yield* proveRecoveryCorePrivate(env, client, installationNames.Core);
+  return (yield* Schema.decodeUnknownEffect(UserNamespace)(core.USER_STORE)).namespace_id;
+});
+const verifyCanonicalActivity = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  port: ReleasePort
+) {
+  yield* ReleaseConfig.Literal("verify-canonical-activity", "FIXTURE_RELEASE_OPERATION");
+  const directory = yield* ReleaseConfig.String("RUNNER_TEMP");
+  const { opening, activity, reference, recovery } = yield* Schema.decodeUnknownEffect(
+    CanonicalActivity
+  )(yield* readFile(directory + "/native-canonical-observations.json"));
+  const userNamespace = yield* currentCanonicalActivity(env, client, { port, opening });
+  const post = yield* readUserObjects(accountReader(env, client), userNamespace);
+  const maintenanceNamespace = Object.entries(opening.namespaces).find(
+    ([, owner]) => owner === "Maintenance"
+  )?.[0];
+  if (
+    Option.isNone(addedSignupStore({ objects: post, prior: opening.usersBefore })) ||
+    maintenanceNamespace === undefined
+  ) {
+    return yield* new ReleaseFailure({
+      message:
+        "Ordinary provider completion lacks one new native User Store or exact Maintenance namespace",
+    });
+  }
+  const digest = new Bun.CryptoHasher("sha256")
+    .update(activity.signupDigest)
+    .update(signupUserCensus(post).sha256)
+    .digest("hex");
+  yield* writeFile(
+    env.smokeAttestationFile + ".canonical-activity",
+    encodeJson({
+      ...opening,
+      openingArtifact: reference.artifactId,
+      openingSha256: reference.sha256,
+      signup: {
+        provider: activity.provider,
+        outcome: "created",
+        synthetic: false,
+        origin: installedOrigins.production.api,
+        coreVersion: opening.workers[installationNames.Core].version,
+        userNamespace,
+        proof: { kind: "new-userstore", digest },
+      },
+      background: activity.background,
+      recovery: {
+        owner: "Maintenance",
+        namespace: maintenanceNamespace,
+        outcome: "recovered",
+        ...recovery,
+      },
+    })
+  );
 });
 const stageCapturedPair = Effect.fn(function* (input: {
   env: Config;
@@ -3169,6 +3837,12 @@ const commands = {
   "continue-ten-cleanup": tenCommand("continue-ten-cleanup"),
   "fleet-pilot": fleetVerification("fleet-pilot"),
   "continue-fleet-cleanup": fleetVerification("continue-fleet-cleanup"),
+  "verify-canonical-activity": verifyCanonicalActivity,
+  "capture-canonical-signup": captureCanonicalSignup,
+  "stage-canonical-signup": targetSignupCandidates,
+  "promote-canonical-signup": promoteCanonicalSignup,
+  "transfer-hosts": transferHostStage,
+  "plan-hosts": planHostStage,
   "capture-hosts": captureHostStage,
   "attach-hosts": attachCanonicalHosts,
   "prepare-diagnostics": prepareDiagnostics,
@@ -3205,6 +3879,12 @@ if (import.meta.main) {
         "continue-ten-cleanup",
         "fleet-pilot",
         "continue-fleet-cleanup",
+        "verify-canonical-activity",
+        "capture-canonical-signup",
+        "stage-canonical-signup",
+        "promote-canonical-signup",
+        "transfer-hosts",
+        "plan-hosts",
         "capture-hosts",
         "attach-hosts",
         "prepare-diagnostics",

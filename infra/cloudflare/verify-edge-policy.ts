@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "561b11b0e3660181c86dfe1da1df3e5ad058aecc0ebbf262abb7a79a5e47fefd";
+const expectedEdgePolicyDigest = "55d759ebf96bd36ef9b7ad7c11f89c96cca3827d98326e6a60b67acd71677b8f";
 const securityArtifacts = [
   ...(await Promise.all(
     [
@@ -103,6 +103,11 @@ const securityArtifacts = [
       "../../scripts/infra-performance/deployed-fleet/observations.py",
       "./native-graph.ts",
       "./native-host-plan.ts",
+      "./native-canonical-domains.ts",
+      "./native-canonical-signup.ts",
+      "../../apps/server/cloudflare/directory/internal/signup-observation.ts",
+      "../../scripts/infra-performance/canonical-fixture/canonical_activity.py",
+      "../../scripts/infra-performance/canonical-fixture/canonical_host_source.py",
       "./native-incumbent-fence.ts",
       "./native-retirement-fence.ts",
       "../../.github/workflows/native-incumbent-retirement.yml",

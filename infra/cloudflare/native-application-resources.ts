@@ -1,3 +1,4 @@
+import { installedOrigins } from "@fidy/server/browser-transport";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { Effect } from "effect";
 import { freeTierWorkerObservability } from "./worker-observability";
@@ -79,7 +80,7 @@ export const nativeWorkflows = Effect.sync(() => ({
 const smokeIdentity = (
   release: NativeRelease
 ): Pick<NativeRelease["shared"], "RELEASE_GIT_SHA" | "CONTRACT_DIGEST"> =>
-  release.accountingRollout
+  release.accountingRollout || release.signupOpening
     ? {
         RELEASE_GIT_SHA: accountingFixture.revision,
         CONTRACT_DIGEST: accountingFixture.contractDigest,
@@ -104,8 +105,12 @@ export const nativeSmokeExecutor = Effect.fn(function* (input: {
     observability: freeTierWorkerObservability,
     env: {
       SMOKE_BUCKET: input.buckets.SMOKE_BUCKET,
-      NATIVE_STORAGE_ADMISSION: input.release.shared.NATIVE_STORAGE_ADMISSION,
-      ACCEPTANCE_API_ORIGIN: input.release.origin.api,
+      NATIVE_STORAGE_ADMISSION: input.release.signupOpening
+        ? "closed"
+        : input.release.shared.NATIVE_STORAGE_ADMISSION,
+      ACCEPTANCE_API_ORIGIN: input.release.signupOpening
+        ? installedOrigins.acceptance.api
+        : input.release.origin.api,
       ACCEPTANCE_CODE_KEY: input.release.fixtureSecret("oidc-code", "", revision),
       ACCEPTANCE_GOOGLE_SECRET: input.release.fixtureSecret("google", "", revision),
       ACCEPTANCE_MICROSOFT_SECRET: input.release.fixtureSecret("microsoft", "", revision),

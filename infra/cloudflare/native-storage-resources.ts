@@ -1,10 +1,12 @@
+import { isDeepStrictEqual } from "node:util";
 import {
   SuccessorSource,
-  applySuccessorPlan,
+  applyScopedNativePlan,
   nativePlanOptions,
   projectFixtureInventory,
   projectSuccessorInventory,
   requireActiveSuccessorLifecycle,
+  requireSafeScopedNativePlan,
   requireSameSuccessorPlan,
   requireSmokeConsumerReconciliation,
   requireSuccessorLifecycle,
@@ -29,7 +31,7 @@ import {
 } from "./native-plan-diagnostics";
 import { firstInstallEdge } from "./native-storage-release";
 import { confirmInterruptedSmokeConsumer } from "./native-smoke-consumer-recovery";
-import { requireNativeResourcePlan } from "./native-graph";
+import { nativeResourceInventory, requireNativeResourcePlan } from "./native-graph";
 import { type Plan, describePlan, describeResource } from "alchemy/Plan";
 import { Config, Effect, Option, Schema } from "effect";
 import { HttpClient, HttpClientRequest } from "effect/http";
@@ -51,7 +53,13 @@ import {
 const Phase = Schema.Literals(["first-install", "upload", "stage-hosts"]);
 const Operation = Schema.Union([
   Phase,
-  Schema.Literals(["plan-first-install", "plan-fixture-fallback"]),
+  Schema.Literals([
+    "plan-first-install",
+    "plan-fixture-fallback",
+    "plan-stage-hosts",
+    "apply-canonical-access",
+    "upload-canonical-signup",
+  ]),
 ]);
 const requireProtectedDispatch = Effect.gen(function* () {
   const actions = yield* Config.String("GITHUB_ACTIONS");
@@ -152,8 +160,12 @@ const preflight = Effect.fn(function* (phase: typeof Phase.Type, preview: boolea
     );
   }
   yield* releaseCommand({
-    args: ["bun", "native-storage-release.ts", releaseChecks[phase]],
-    lifetime: phase === "upload" ? "read-only" : "started-write",
+    args: [
+      "bun",
+      "native-storage-release.ts",
+      phase === "stage-hosts" && preview ? "plan-hosts" : releaseChecks[phase],
+    ],
+    lifetime: phase === "stage-hosts" && !preview ? "started-write" : "read-only",
   }).pipe(nativeResourceStage(phase === "upload" ? "upload verification" : "host capture"));
 });
 const recordFixturePreview = Effect.fn(function* (input: {
@@ -201,9 +213,65 @@ const verifyPreparedPlan = Effect.fn(function* (
     }
   }
   yield* verification;
-  if (preview) {
+  if (phase === "first-install" && preview) {
     yield* Effect.logInfo("Verified the fresh native first-install plan and closed edge.");
   }
+});
+const requiredHosts: Partial<Record<typeof Phase.Type, NativeHostMode>> = {
+  "first-install": "acceptance",
+  "stage-hosts": "staged",
+};
+const canonicalAccess = Effect.fn(function* (apply: boolean) {
+  yield* requireProtectedDispatch;
+  yield* Config.Literal("true", "GITHUB_REF_PROTECTED");
+  yield* Config.Literal("1", "GITHUB_RUN_ATTEMPT");
+  yield* Config.Literal("staged", "NATIVE_STORAGE_HOSTS");
+  yield* Config.Literal(
+    apply ? "transfer-canonical-hosts" : "plan-stage-hosts",
+    "FIXTURE_RELEASE_OPERATION"
+  );
+  const revision = yield* Config.String("RELEASE_GIT_SHA");
+  const profile = yield* Config.String("ALCHEMY_PROFILE");
+  const directory = yield* Config.String("RUNNER_TEMP");
+  const pin = yield* protectedRecoveryPin.pipe(nativeResourceStage("account recovery PIN"));
+  const snapshot = yield* Alchemist.Stack.plan({
+    ...nativePlanOptions({ profile, preview: true, fingerprint: "" }),
+    include: stagedAccessApplications,
+  }).pipe(diagnoseNativePlan(revision));
+  yield* verifyPreparedPlan({
+    phase: "stage-hosts",
+    preview: true,
+    plan: snapshot.native,
+    revision,
+    hosts: "staged",
+    pin,
+  });
+  const observed = {
+    verifierRevision: revision,
+    applied: false,
+    resources: projectFixtureInventory(describePlan(snapshot.native).resources),
+  };
+  if (apply) {
+    const approved = yield* releaseEvidence.readFile(
+      directory + "/native-canonical-host-approved.json"
+    );
+    if (!isDeepStrictEqual(approved, observed)) {
+      return yield* Effect.fail(Error("Approved canonical Access plan differs from the live plan"));
+    }
+    yield* applyScopedNativePlan(snapshot.native).pipe(
+      Effect.provide(snapshot.session.context),
+      Effect.uninterruptible,
+      nativeResourceStage("provider apply")
+    );
+    return;
+  }
+  yield* requireSafeScopedNativePlan(snapshot.native).pipe(
+    Effect.provide(snapshot.session.context)
+  );
+  yield* releaseEvidence.writeFile(
+    directory + "/native-canonical-host-plan.json",
+    releaseEvidence.encodeJson(observed)
+  );
 });
 const resourceRelease = Effect.fn(function* (phase: typeof Phase.Type, preview: boolean) {
   yield* requireProtectedDispatch;
@@ -212,14 +280,16 @@ const resourceRelease = Effect.fn(function* (phase: typeof Phase.Type, preview: 
   const hosts = yield* Config.Literals(["acceptance", "staged"], "NATIVE_STORAGE_HOSTS").pipe(
     Config.withDefault("acceptance")
   );
-  if (
-    (phase === "stage-hosts" && hosts !== "staged") ||
-    (phase === "first-install" && hosts !== "acceptance")
-  ) {
+  const required = requiredHosts[phase];
+  if (required !== undefined && hosts !== required) {
     return yield* Effect.fail(Error("Unexpected native host selection"));
   }
   const pin = yield* protectedRecoveryPin.pipe(nativeResourceStage("account recovery PIN"));
-  const input = nativePlanOptions({ profile, preview, fingerprint: yield* expectedFixtureSigner });
+  const input = nativePlanOptions({
+    profile,
+    preview: preview || phase === "stage-hosts",
+    fingerprint: yield* expectedFixtureSigner,
+  });
   const snapshot = yield* (
     phase === "stage-hosts"
       ? Alchemist.Stack.plan({ ...input, include: stagedAccessApplications })
@@ -227,7 +297,11 @@ const resourceRelease = Effect.fn(function* (phase: typeof Phase.Type, preview: 
   ).pipe(diagnoseNativePlan(revision));
   yield* verifyPreparedPlan({ phase, preview, plan: snapshot.native, revision, hosts, pin });
   if (preview) return;
-  return yield* Apply.apply(snapshot.native, { deletions: "defer" }).pipe(
+  const apply =
+    phase === "stage-hosts"
+      ? applyScopedNativePlan(snapshot.native)
+      : Apply.apply(snapshot.native, { deletions: "defer" });
+  return yield* apply.pipe(
     Effect.provide(snapshot.session.context),
     Effect.uninterruptible,
     Effect.asVoid,
@@ -401,7 +475,7 @@ const reconcileAccountingSmokeConsumer = Effect.gen(function* () {
   );
   if (action === "noop") return;
   yield* confirmInterruptedSmokeConsumer;
-  yield* applySuccessorPlan(snapshot.native).pipe(
+  yield* applyScopedNativePlan(snapshot.native).pipe(
     diagnoseSuccessorApply(revision),
     Effect.provide(snapshot.session.context),
     Effect.uninterruptible
@@ -473,13 +547,56 @@ const planFixtureSuccessor = Effect.fn(function* (action: SuccessorAction) {
     })(yield* releaseEvidence.readFile(directory + "/fixture-successor-approved.json"));
     yield* Effect.try(() => requireSameSuccessorPlan({ approved, observed: observedPlan }));
   }
-  yield* applySuccessorPlan(snapshot.native).pipe(
+  yield* applyScopedNativePlan(snapshot.native).pipe(
     diagnoseSuccessorApply(revision),
     Effect.provide(snapshot.session.context),
     Effect.uninterruptible
   );
 });
 
+const requireCanonicalOpeningPlan = (plan: Plan): void => {
+  const inventory = nativeResourceInventory(accountingFixture.revision);
+  const changes = new Set(["Core", "Ingress"]);
+  for (const row of describePlan(plan).resources) {
+    if (
+      inventory.get(row.logicalId) !== row.resourceType ||
+      row.action !== (changes.has(row.logicalId) ? "update" : "noop")
+    ) {
+      throw Error("Canonical signup plan changes an unapproved resource or retained dependency");
+    }
+    changes.delete(row.logicalId);
+  }
+  if (changes.size !== 0) throw Error("Canonical signup requires both existing Worker versions");
+};
+const uploadCanonicalSignup = Effect.fn(function* () {
+  yield* Config.Literal("open-canonical-signup", "FIXTURE_RELEASE_OPERATION");
+  yield* Config.Literal("open", "NATIVE_STORAGE_ADMISSION");
+  yield* Config.Literal("staged", "NATIVE_STORAGE_HOSTS");
+  yield* Config.Literal("true", "GITHUB_REF_PROTECTED");
+  yield* Config.Literal("1", "GITHUB_RUN_ATTEMPT");
+  const revision = yield* Config.String("RELEASE_GIT_SHA");
+  const captured = yield* Config.String("RELEASE_SNAPSHOT_FILE");
+  yield* releaseEvidence.readFile(captured);
+  const profile = yield* Config.String("ALCHEMY_PROFILE");
+  const snapshot = yield* Alchemist.Stack.plan({
+    ...nativePlanOptions({ profile, preview: true, fingerprint: "" }),
+    include: ["Core", "Ingress"],
+  }).pipe(diagnoseNativePlan(revision));
+  yield* Effect.try(() => requireCanonicalOpeningPlan(snapshot.native));
+  yield* applyScopedNativePlan(snapshot.native).pipe(
+    Effect.provide(snapshot.session.context),
+    Effect.uninterruptible,
+    nativeResourceStage("provider apply")
+  );
+});
+const dispatchResourceRelease = Effect.fn(function* (operation: typeof Operation.Type) {
+  if (operation === "plan-fixture-fallback") return yield* resourceRelease("upload", true);
+  if (operation === "plan-stage-hosts") return yield* canonicalAccess(false);
+  if (operation === "apply-canonical-access") return yield* canonicalAccess(true);
+  if (operation === "upload-canonical-signup") return yield* uploadCanonicalSignup();
+  if (operation === "plan-first-install") return yield* resourceRelease("first-install", true);
+  return yield* resourceRelease(operation, false);
+});
 if (import.meta.main) {
   const ordinary = Effect.gen(function* () {
     if (process.argv[2] === "plan-fixture-successor") return yield* planFixtureSuccessor("plan");
@@ -492,9 +609,7 @@ if (import.meta.main) {
     }
     if (process.argv[2] === "publish-site") return yield* publishSite;
     const operation = yield* Schema.decodeUnknownEffect(Operation)(process.argv[2]);
-    if (operation === "plan-fixture-fallback") return yield* resourceRelease("upload", true);
-    if (operation === "plan-first-install") return yield* resourceRelease("first-install", true);
-    return yield* resourceRelease(operation, false);
+    return yield* dispatchResourceRelease(operation);
   });
   const program = (
     process.argv[2] === "reconcile-accounting-consumer"

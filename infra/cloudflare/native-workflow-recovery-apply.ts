@@ -4,7 +4,7 @@ import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
 import { State } from "alchemy/State";
 import { Config, Effect, ManagedRuntime, Schema } from "effect";
-import { applySuccessorPlan } from "./native-fixture-plan";
+import { applyScopedNativePlan } from "./native-fixture-plan";
 import { diagnoseSuccessorApply } from "./native-plan-diagnostics";
 import {
   WorkflowPlanEvidence,
@@ -106,7 +106,7 @@ const applyWorkflowRecovery = Effect.fn("applyWorkflowRecovery")(function* () {
       message: "Tracked Workflow instance changed before apply",
     });
   }
-  const raw = yield* applySuccessorPlan(snapshot.native).pipe(
+  const raw = yield* applyScopedNativePlan(snapshot.native).pipe(
     diagnoseSuccessorApply(interruptedRevision),
     Effect.andThen(persistedWorkflow),
     Effect.provide(snapshot.session.context),

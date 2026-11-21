@@ -1,6 +1,6 @@
 import { betaProPath } from "../src/shell/pro-grants/contract";
 import { installedOrigins } from "../src/shell/browser-transport/contract";
-import { isStorageProbe } from "./storage-bootstrap/contract";
+import { isStorageCompatibility, isStorageProbe } from "./storage-bootstrap/contract";
 import {
   browserSessionBindingHeader,
   browserSessionBindingPath,
@@ -942,9 +942,16 @@ const annotateSmokeVersion = (
   return new Response(response.body, { status: response.status, headers });
 };
 
+const storageProofAllowed = (request: Request, environment: PublicEnvironment): boolean =>
+  environment.RECOVERY_ISOLATION === "isolated" ||
+  (environment.NATIVE_STORAGE_ADMISSION === "open" &&
+    environment.RECOVERY_ISOLATION === "" &&
+    new URL(request.url).origin === installedOrigins.production.api &&
+    isStorageCompatibility(request));
+
 const forwardStorageProbe = Effect.fn(function* (request: Request, environment: PublicEnvironment) {
   if (
-    environment.RECOVERY_ISOLATION !== "isolated" ||
+    !storageProofAllowed(request, environment) ||
     !smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" })
   ) {
     return new Response(null, { status: 404 });

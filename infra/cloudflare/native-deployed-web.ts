@@ -18,16 +18,28 @@ const requestedFiles = (html: string): ReadonlyArray<string> => {
   }
   return files;
 };
-const installedHeaders = (
-  headers: Readonly<Record<string, string>>,
-  origins: (typeof installedOrigins)[keyof typeof installedOrigins]
-): boolean => {
+const canonicalConnectSources = [
+  installedOrigins.production.api,
+  "https://sandbox.wompi.co",
+  "https://production.wompi.co",
+  "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox",
+].join(" ");
+
+export const installedHeaders = ({
+  headers,
+  origins,
+}: {
+  headers: Readonly<Record<string, string>>;
+  origins: (typeof installedOrigins)[keyof typeof installedOrigins];
+}): boolean => {
   const directives = (headers["content-security-policy"] ?? "")
     .split(";")
     .map((item) => item.trim());
+  const expectedConnect =
+    origins.api === installedOrigins.production.api ? canonicalConnectSources : origins.api;
   return (
     directives.filter((item) => item.startsWith("connect-src ")).join("") ===
-      "connect-src " + origins.api &&
+      "connect-src " + expectedConnect &&
     directives.includes("default-src 'none'") &&
     directives.includes("frame-ancestors 'none'") &&
     headers.link === "<" + origins.api + ">; rel=preconnect; crossorigin=use-credentials" &&
@@ -38,12 +50,19 @@ const installedHeaders = (
 export const verifyInstalledWebsite = Effect.fn(function* (
   client: HttpClient.HttpClient,
   revision: string,
-  origins: (typeof installedOrigins)[keyof typeof installedOrigins] = installedOrigins.acceptance
+  selected: (typeof installedOrigins)[keyof typeof installedOrigins] &
+    (Readonly<Record<never, never>> | { contractDigest: string }) = installedOrigins.acceptance
 ) {
+  const origins = selected;
   const operation = yield* Config.String("FIXTURE_RELEASE_OPERATION").pipe(Config.withDefault(""));
-  const verified = yield* Config.String(
-    operation === "rollout-fixture-successor" ? "FIXTURE_WEB_CONTRACT_DIGEST" : "CONTRACT_DIGEST"
-  );
+  const verified =
+    "contractDigest" in selected
+      ? selected.contractDigest
+      : yield* Config.String(
+          operation === "rollout-fixture-successor"
+            ? "FIXTURE_WEB_CONTRACT_DIGEST"
+            : "CONTRACT_DIGEST"
+        );
   const local = (path: string): Effect.Effect<string, Error> =>
     Effect.tryPromise(() => Bun.file(new URL(path, bundle)).text());
   const compare = Effect.fn(function* (path: string, localPath: string) {
@@ -60,7 +79,7 @@ export const verifyInstalledWebsite = Effect.fn(function* (
     return { headers: response.headers, expected };
   });
   const root = yield* compare("", "index.html");
-  if (!installedHeaders(root.headers, origins)) {
+  if (!installedHeaders({ headers: root.headers, origins })) {
     return yield* Effect.fail(
       Error("Installed frontend lacks host-specific CSP or API preconnect")
     );

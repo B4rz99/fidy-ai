@@ -68,8 +68,8 @@ export class FixturePlanRefused extends Data.TaggedError("FixturePlanRefused")<{
     | "successor scope has a pending replacement";
 }> {}
 
-export const applySuccessorPlan = Effect.fn("applySuccessorPlan")(function* <Output>(
-  plan: Plan<Output>
+export const requireSafeScopedNativePlan = Effect.fn("requireSafeScopedNativePlan")(function* (
+  plan: Plan
 ) {
   const selected = plan.selectedFqns;
   if (
@@ -98,6 +98,11 @@ export const applySuccessorPlan = Effect.fn("applySuccessorPlan")(function* <Out
   if (saved.some((row) => row?.status === "replacing" || row?.status === "replaced")) {
     return yield* new FixturePlanRefused({ reason: "successor scope has a pending replacement" });
   }
+});
+export const applyScopedNativePlan = Effect.fn("applyScopedNativePlan")(function* <Output>(
+  plan: Plan<Output>
+) {
+  yield* requireSafeScopedNativePlan(plan);
   return yield* Apply.apply(plan);
 });
 export const requireFixtureLifecycle = ({

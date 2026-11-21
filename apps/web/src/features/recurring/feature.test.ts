@@ -109,7 +109,10 @@ const Workspace = (): ReturnType<typeof createElement> => {
 };
 
 const withWorkspace = (
-  check: (container: HTMLElement) => Effect.Effect<void, Cause.UnknownError>
+  check: (
+    container: HTMLElement,
+    location: () => unknown
+  ) => Effect.Effect<void, Cause.UnknownError>
 ): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -197,7 +200,7 @@ const withWorkspace = (
         yield* Effect.tryPromise(() =>
           reactAssertion(() => expect(container.textContent).toContain("Ingreso de prueba"))
         );
-        yield* check(container);
+        yield* check(container, () => router.latestLocation.search);
       } finally {
         yield* Effect.tryPromise(() => reactWork(() => root.unmount()));
         registry.dispose();
@@ -258,6 +261,48 @@ it.each(["Calendario", "Lista", "Todos los recurrentes"])(
   "applying and clearing recurring filters preserves %s and updates its results",
   (presentation) => withWorkspace((container) => checkFilters(presentation, container))
 );
+
+const monthChoice = (label: string): HTMLButtonElement => {
+  const found = document.body.querySelector(`button[aria-label="${label}"]`);
+  if (!(found instanceof HTMLButtonElement)) throw Error(`Missing ${label}`);
+  return found;
+};
+const checkMonthPicker = (container: HTMLElement, location: () => unknown): WorkspaceCheck =>
+  Effect.gen(function* () {
+    expect(container.querySelector('button[aria-label="Mes anterior"]')).toBeNull();
+    expect(container.querySelector('button[aria-label="Mes siguiente"]')).toBeNull();
+    const trigger = container.querySelector('[data-recurring-slot="month-picker"]');
+    if (!(trigger instanceof HTMLButtonElement)) throw Error("Missing month picker");
+    expect(trigger.getAttribute("aria-label")).toBe("Elegir mes, octubre de 2026");
+    expect(trigger.closest("h2")).not.toBeNull();
+    yield* Effect.tryPromise(() => reactWork(() => trigger.click()));
+    yield* Effect.tryPromise(() =>
+      reactAssertion(() => {
+        expect(monthChoice("octubre de 2026").getAttribute("aria-pressed")).toBe("true");
+        expect(monthChoice("octubre de 2026").getAttribute("aria-current")).toBe("date");
+        expect(monthChoice("octubre de 2026").textContent).toBe("oct");
+      })
+    );
+    yield* Effect.tryPromise(() => reactWork(() => monthChoice("Año siguiente").click()));
+    yield* Effect.tryPromise(() => reactWork(() => monthChoice("Año siguiente").click()));
+    yield* Effect.tryPromise(() => reactWork(() => monthChoice("Año anterior").click()));
+    yield* Effect.tryPromise(() =>
+      reactAssertion(() => {
+        expect(monthChoice("marzo de 2027").getAttribute("aria-pressed")).toBe("false");
+        expect(monthChoice("marzo de 2027").hasAttribute("aria-current")).toBe(false);
+      })
+    );
+    yield* Effect.tryPromise(() => reactWork(() => monthChoice("marzo de 2027").click()));
+    yield* Effect.tryPromise(() =>
+      reactAssertion(() => {
+        expect(location()).toEqual({ month: "2027-03" });
+        expect(document.body.querySelector('button[aria-label="marzo de 2027"]')).toBeNull();
+      })
+    );
+  });
+
+it("jumps directly to a month of another year from the month heading", () =>
+  withWorkspace(checkMonthPicker));
 
 const checkEarlierDisclosure = (container: HTMLElement): WorkspaceCheck =>
   Effect.gen(function* () {

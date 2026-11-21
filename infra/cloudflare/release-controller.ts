@@ -2,6 +2,9 @@ import { Cause, Effect, Option, Schedule, Schema } from "effect";
 import { gitRevisionPattern } from "../../apps/server/cloudflare/runtime/contract";
 import { SmokeIdentity } from "../../apps/server/cloudflare/runtime/release-smoke/contract";
 
+const logUnobservedDeployment = (error: Error): Effect.Effect<void> =>
+  Effect.logWarning("Deployment observation failed", { reason: error.name });
+
 const VersionId = SmokeIdentity.fields.workerVersionId;
 
 const Revision = Schema.String.check(Schema.isPattern(gitRevisionPattern));
@@ -276,8 +279,13 @@ const restoreCore = Effect.fn(function* (
 ) {
   const { snapshot } = input.release;
 
-  const observedPublic = yield* port.current(snapshot.public.name).pipe(Effect.option);
-  const observedCore = yield* port.current(snapshot.core.name).pipe(Effect.option);
+  const observedPublic = yield* port
+    .current(snapshot.public.name)
+    .pipe(Effect.tapError(logUnobservedDeployment), Effect.option);
+
+  const observedCore = yield* port
+    .current(snapshot.core.name)
+    .pipe(Effect.tapError(logUnobservedDeployment), Effect.option);
 
   if (
     Option.exists(observedPublic, (deployment) => deployment.id === input.publicStaged.id) &&

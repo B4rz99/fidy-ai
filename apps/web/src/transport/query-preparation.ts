@@ -1,4 +1,5 @@
-import { Effect, Option } from "effect";
+import { Effect, Function, Option } from "effect";
+import { reportBrowserFailure } from "./browser-defects";
 import { browserRuntime } from "./browser-runtime";
 import { AsyncResult, type Atom, AtomRegistry } from "effect/reactivity";
 
@@ -15,7 +16,7 @@ export const prepareQuery = <A, E>({
   }>;
 }>): Promise<void> =>
   browserRuntime
-    .runPromise(
+    .runPromiseExit(
       Effect.gen(function* () {
         const current = registry.get(query);
 
@@ -32,9 +33,9 @@ export const prepareQuery = <A, E>({
         }
 
         yield* AtomRegistry.getResult(registry, query, { suspendOnWaiting: true });
-      }).pipe(Effect.ignoreCause),
+      }).pipe(Effect.catchCause(reportBrowserFailure("preparation_failed"))),
       { signal: Option.getOrUndefined(options.signal) }
     )
-    .catch(() => undefined);
+    .then(Function.constVoid);
 
 export const preparationActive = (signal: AbortSignal): boolean => !signal.aborted;

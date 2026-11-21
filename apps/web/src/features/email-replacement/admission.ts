@@ -1,5 +1,6 @@
 import { Option, Schema } from "effect";
 import { BrowserSessionBindingSchema } from "@/transport/client";
+import { reportBrowserDefect } from "@/transport/browser-defects";
 
 const StoredAdmission = Schema.Struct({
   version: Schema.Literal(1),
@@ -25,6 +26,8 @@ export const retainReplacementAdmission = (binding: string): boolean => {
 
     return window.sessionStorage.getItem(key) === encoded;
   } catch {
+    reportBrowserDefect("storage_failed");
+
     return false;
   }
 };
@@ -58,6 +61,8 @@ export const restoreReplacementAdmission = (
 
     return "clear";
   } catch {
+    reportBrowserDefect("storage_failed");
+
     return "unavailable";
   }
 };
@@ -76,6 +81,8 @@ export const clearReplacementAdmission = (binding: string): void => {
       window.sessionStorage.removeItem(key);
     }
   } catch {
+    reportBrowserDefect("storage_failed");
+
     return undefined;
   }
 };

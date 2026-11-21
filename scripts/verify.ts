@@ -262,7 +262,12 @@ const runCheck = (check: Check): Effect.Effect<void> =>
     const exitCode = yield* Effect.tryPromise({
       try: () => child.exited,
       catch: () => new VerificationProcessFailure({ label: check.label }),
-    }).pipe(Effect.orElseSucceed(() => 1));
+    }).pipe(
+      Effect.tapError((error) =>
+        Effect.sync(() => process.stderr.write(`Verification process failed: ${error.label}\n`))
+      ),
+      Effect.orElseSucceed(() => 1)
+    );
 
     const elapsedMilliseconds = Math.round(performance.now() - started);
     timings.push({ label: check.label, elapsedMilliseconds, exitCode });

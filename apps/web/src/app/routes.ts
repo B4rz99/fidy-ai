@@ -1,4 +1,5 @@
 import { browserRuntime } from "@/transport/browser-runtime";
+import { reportBrowserDefect } from "@/transport/browser-defects";
 import { TransactionCaptureFeature, TransactionSearch } from "@/features/transactions/feature";
 import { Effect, Option, Schema } from "effect";
 import { BudgetRoute, RecurringRoute } from "./destination-components";
@@ -187,7 +188,7 @@ const needsReviewRoute = createRoute({
                 filter: deps.filter,
                 page: deps.page,
                 signal: abortController.signal,
-              }).catch(() => undefined);
+              }).catch(() => reportBrowserDefect("preparation_failed"));
 
           yield* Effect.tryPromise(() => ReviewWorkspace.preload());
 

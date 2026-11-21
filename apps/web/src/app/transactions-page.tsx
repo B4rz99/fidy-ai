@@ -21,9 +21,10 @@ import {
   type TransactionSearch,
 } from "@/features/transactions/feature";
 import { preparationActive, prepareQuery } from "@/transport/query-preparation";
+import { reportBrowserDefect } from "@/transport/browser-defects";
 import type { WebRouterContext } from "./router-context";
 
-TransactionListFeature.preload().catch(() => undefined);
+TransactionListFeature.preload().catch(() => reportBrowserDefect("preparation_failed"));
 
 const currentConsent = <E,>(
   state: CanonicalQueryState<ProcessingConsentStatus, E>
@@ -121,7 +122,7 @@ TransactionsPage.prepareEntry = ({
             apiClient: context.apiClient,
             registry: context.registry,
             signal,
-          }).catch(() => undefined),
+          }).catch(() => reportBrowserDefect("preparation_failed")),
         };
       }
 

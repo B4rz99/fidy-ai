@@ -185,6 +185,8 @@ class StaleContractArtifacts extends Data.TaggedError("StaleContractArtifacts")<
   readonly message: string;
 }> {}
 
+const artifactCheckConcurrency = 8;
+
 const main = Effect.gen(function* () {
   const { check, outputDirectory } = parseArguments(Bun.argv.slice(2));
   const artifacts = makeContractArtifacts();
@@ -193,7 +195,7 @@ const main = Effect.gen(function* () {
   const stale = yield* Effect.forEach(
     files,
     (file) => checkArtifact(file, outputDirectory, check),
-    { concurrency: files.length }
+    { concurrency: artifactCheckConcurrency }
   );
 
   const stalePaths = files

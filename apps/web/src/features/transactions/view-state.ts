@@ -1,6 +1,7 @@
 import { type RegisteredRouter, useRouter, useRouterState } from "@tanstack/react-router";
 import { DateTime, Option, Schema } from "effect";
 import type { Transaction } from "./presentation";
+import { reportBrowserDefect } from "@/transport/browser-defects";
 
 export const transactionSearchLimit = 500;
 
@@ -83,7 +84,7 @@ const saveTransactionView = (
         },
       }),
     })
-    .catch(() => undefined);
+    .catch(() => reportBrowserDefect("navigation_failed"));
 };
 
 export const matchesTransactionFilters = ({

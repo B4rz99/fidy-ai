@@ -34,17 +34,14 @@ export const localTransactionRefusal = ({
   },
 });
 
-const captureDecisions = (input: CreateTransactionInput): Readonly<Record<string, boolean>> => ({
-  money: true,
-  direction: true,
-  occurredAt: true,
-  ...Option.match(input.categoryId, { onNone: () => ({}), onSome: () => ({ categoryId: true }) }),
-  ...Option.match(input.counterparty, {
-    onNone: () => ({}),
-    onSome: () => ({ counterparty: true }),
-  }),
-  ...Option.match(input.notes, { onNone: () => ({}), onSome: () => ({ notes: true }) }),
-});
+const captureDecisionKeys = (input: CreateTransactionInput): ReadonlyArray<string> => [
+  "money",
+  "direction",
+  "occurredAt",
+  ...Option.match(input.categoryId, { onNone: () => [], onSome: () => ["categoryId"] }),
+  ...Option.match(input.counterparty, { onNone: () => [], onSome: () => ["counterparty"] }),
+  ...Option.match(input.notes, { onNone: () => [], onSome: () => ["notes"] }),
+];
 
 type CaptureSource = Readonly<{ context: UserContext; revision: string }> &
   (
@@ -78,7 +75,7 @@ const sourceFields = Effect.fnUntraced(function* (
         review_item_id: value.reviewId,
         user_provided_fields: yield* Schema.encodeEffect(
           Schema.fromJsonString(Schema.Array(Schema.String))
-        )(Object.keys(captureDecisions(input))),
+        )(captureDecisionKeys(input)),
       };
     case "statement-line":
       return {
@@ -184,7 +181,7 @@ const prepareCapture = Effect.fn(function* (
       yield* retainLocalCategory(reference.value);
       const id = Option.getOrElse(movementId, newId);
       yield* sql`INSERT INTO transactions(id,user_id,amount,currency,direction,counterparty,category_id,category_revision,notes,occurred_at_ms,created_at_ms,user_decisions)
-    VALUES (${id},${userId},${encodeMoneyAmount(input.money.amount)},${input.money.currency},${input.direction},${Option.getOrNull(input.counterparty)},${reference.value.categoryId},${reference.value.revision},${Option.getOrNull(input.notes)},${occurredAt},${current},${yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Boolean)))(kind === "manual" ? captureDecisions(input) : {})})`;
+    VALUES (${id},${userId},${encodeMoneyAmount(input.money.amount)},${input.money.currency},${input.direction},${Option.getOrNull(input.counterparty)},${reference.value.categoryId},${reference.value.revision},${Option.getOrNull(input.notes)},${occurredAt},${current},${yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Boolean)))(kind === "manual" ? Object.fromEntries(captureDecisionKeys(input).map((key) => [key, true])) : {})})`;
 
       const sources =
         yield* sql`INSERT INTO source_attestations ${sql.insert({ id: newId(), user_id: userId, transaction_id: id, kind, service_market: context.serviceMarket, locale: context.locale, time_zone: context.timeZone, interpretation_revision: revision, created_at_ms: current, ...evidence })} RETURNING id`;

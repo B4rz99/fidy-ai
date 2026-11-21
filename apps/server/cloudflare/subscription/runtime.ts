@@ -58,19 +58,27 @@ import { observeCancellation, pendingCancellation } from "./internal/local-cance
 import { RequestBodyPolicy } from "../http/contract";
 import { boundedJsonBody } from "../http/operations";
 import { publishPrice } from "./internal/publish-price";
-import { makeWompiTransport } from "./internal/wompi-runtime";
+import { wompiTransport } from "./internal/wompi-runtime";
 import { OutboundHttpLive, installedProviderFetch } from "../outbound-http/runtime";
 import {
   receiveRefunds as receiveCorrections,
   isRefundWork as recognizesRefund,
 } from "./internal/refund-workflow";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
-import { Cause, Clock, Context, Effect, Layer, Match, Option, Result, Schema } from "effect";
-import { FetchHttpClient, HttpClient } from "effect/http";
 import {
-  makeAccessSigningKeysOutboundHttp,
-  type makeWompiOutboundHttp,
-} from "../../src/shell/outbound-http/operations";
+  Cause,
+  Clock,
+  Context,
+  Effect,
+  Layer,
+  ManagedRuntime,
+  Match,
+  Option,
+  Result,
+  Schema,
+} from "effect";
+import { FetchHttpClient, HttpClient } from "effect/http";
+import { OutboundHttp, type OutboundHttpService } from "../../src/shell/outbound-http/operations";
 import { handleRefundSupport as supportRefund } from "./internal/refund-support";
 import {
   cloudflareWorkerTelemetry,
@@ -94,8 +102,13 @@ import {
 import { nativeEnrollment } from "./internal/native-enrollment";
 import type { EnrollmentContext } from "./internal/enrollment-session";
 
+const boundaryRuntime = ManagedRuntime.make(Layer.empty);
+
 export const offerLocalBilling = Effect.fn(function* (context: Omit<BillingRecovery, "transport">) {
-  return yield* recoverLocalBilling({ ...context, transport: wompiOutboundHttp });
+  return yield* recoverLocalBilling({
+    ...context,
+    transport: wompiOutboundHttp,
+  });
 });
 
 export const handleLocalEnrollment = Effect.fn(function* (
@@ -117,9 +130,7 @@ export const billingWake = Effect.fn(function* (storage: DurableObjectStorage) {
   return yield* withStoreCapacity("required")(inspectBillingAlarm(storage));
 });
 
-export const wompiOutboundHttp = (
-  environment: WompiBindings
-): Effect.Effect<ReturnType<typeof makeWompiOutboundHttp>> =>
+export const wompiOutboundHttp = (environment: WompiBindings): Effect.Effect<OutboundHttpService> =>
   Effect.scoped(
     Effect.gen(function* () {
       const fetcher = yield* installedProviderFetch({
@@ -132,7 +143,7 @@ export const wompiOutboundHttp = (
         Effect.provideService(FetchHttpClient.Fetch, fetcher)
       );
 
-      return makeWompiTransport({
+      return wompiTransport({
         environment,
         httpClient: Context.get(clients, HttpClient.HttpClient),
       });
@@ -152,7 +163,7 @@ export const isRefundWork = (body: unknown): boolean => recognizesRefund(body);
 export const handleRefundSupport = (
   input: Readonly<{ request: Request; environment: RefundSupportEnvironment }>
 ): Promise<Response> =>
-  Effect.runPromise(
+  boundaryRuntime.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
         const clients = yield* Layer.build(OutboundHttpLive).pipe(
@@ -166,7 +177,7 @@ export const handleRefundSupport = (
           )
         );
 
-        const http = makeAccessSigningKeysOutboundHttp({
+        const http = OutboundHttp.accessSigningKeys({
           issuer: input.environment.CLOUDFLARE_ACCESS_ISSUER,
           httpClient: Context.get(clients, HttpClient.HttpClient),
         });
@@ -186,7 +197,7 @@ export class BillingRefundWorkflowV1 extends WorkflowEntrypoint<
   unknown
 > {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    return Effect.runPromise(backgroundWorkAllowed(this.env)).then((allowed) => {
+    return boundaryRuntime.runPromise(backgroundWorkAllowed(this.env)).then((allowed) => {
       if (!allowed) throw Error("Billing execution is closed");
 
       return this.execute(event, step);
@@ -201,7 +212,7 @@ export class BillingRefundWorkflowV1 extends WorkflowEntrypoint<
             retries: { limit: 0, delay: "1 second", backoff: "constant" },
             timeout: "30 seconds",
           },
-          () => Effect.runPromise(runRefundStep(event.payload, this.env.USER_STORE))
+          () => boundaryRuntime.runPromise(runRefundStep(event.payload, this.env.USER_STORE))
         ),
       {
         environment: workerRelease(this.env),
@@ -227,7 +238,7 @@ export class BillingCollectionWorkflowV1 extends WorkflowEntrypoint<
   unknown
 > {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    return Effect.runPromise(backgroundWorkAllowed(this.env)).then((allowed) => {
+    return boundaryRuntime.runPromise(backgroundWorkAllowed(this.env)).then((allowed) => {
       if (!allowed) throw Error("Billing execution is closed");
 
       return this.execute(event, step);
@@ -261,7 +272,10 @@ export const runBillingCollectionWorkflow = (
   }> &
     (
       | Readonly<{ activity: BillingWorkflowActivity }>
-      | Readonly<{ activity: BillingWorkflowActivity; observe: BillingWorkflowActivity<boolean> }>
+      | Readonly<{
+          activity: BillingWorkflowActivity;
+          observe: BillingWorkflowActivity<boolean>;
+        }>
     )
 ): Promise<void> =>
   runWorkflow({
@@ -281,7 +295,12 @@ export class Pricing {
     state: DurableObjectState,
     env: StoreReleaseEnvironment &
       AcceptanceWindowBindings &
-      Partial<Readonly<{ USER_STORE: DurableObjectNamespace; ERASURE: DurableObjectNamespace }>>
+      Partial<
+        Readonly<{
+          USER_STORE: DurableObjectNamespace;
+          ERASURE: DurableObjectNamespace;
+        }>
+      >
   ) {
     this.state = state;
     this.window = env;
@@ -304,7 +323,7 @@ export class Pricing {
   }
 
   alarm(): Promise<void> {
-    return Effect.runPromise(backgroundWorkAllowed(this.window)).then((allowed) =>
+    return boundaryRuntime.runPromise(backgroundWorkAllowed(this.window)).then((allowed) =>
       allowed
         ? Option.match(this.users, {
             onNone: () => Promise.resolve(),
@@ -382,7 +401,7 @@ export const handlePricePublication = (
   input: Readonly<{ request: Request; environment: PricingEnvironment }>
 ): Effect.Effect<Response, never, HttpClient.HttpClient> =>
   Effect.gen(function* () {
-    const http = makeAccessSigningKeysOutboundHttp({
+    const http = OutboundHttp.accessSigningKeys({
       issuer: input.environment.CLOUDFLARE_ACCESS_ISSUER,
       httpClient: yield* HttpClient.HttpClient,
     });
@@ -429,13 +448,18 @@ export const handleSourceCancellationWork = Effect.fnUntraced(function* (
 
   const pending = yield* pendingCancellation(body.value);
 
-  return new Response(null, { status: pending ? workPendingStatus : workAbsentStatus });
+  return new Response(null, {
+    status: pending ? workPendingStatus : workAbsentStatus,
+  });
 });
 
 export const handleNativeBillingCallback = Effect.fn(function* (
   input: Omit<Parameters<typeof nativeBillingRequest>[0], "transport">
 ) {
-  return yield* nativeBillingRequest({ ...input, transport: wompiOutboundHttp });
+  return yield* nativeBillingRequest({
+    ...input,
+    transport: wompiOutboundHttp,
+  });
 });
 
 const callbackWorkflowId = Effect.fn(function* (event: typeof WompiBillingEvent.Type) {

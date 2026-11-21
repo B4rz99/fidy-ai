@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { Config, Data, Effect } from "effect";
-import { expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 class PortFixtureFailure extends Data.TaggedError("PortFixtureFailure") {}
 
@@ -18,41 +18,14 @@ const listeners = (): string =>
     Bun.spawnSync(["lsof", "-t", "-iTCP:4173", "-iTCP:4174", "-iTCP:4175", "-sTCP:LISTEN"]).stdout
   );
 
-const timeoutMilliseconds = 90_000;
+const startupMilliseconds = 90_000;
 
-it.runIf(enabled)(
-  "keeps trusted HTTPS alive after startup exits, reuses it, and releases every listener on stop",
-  () => {
-    expect(run("stop").exitCode).toBe(0);
-    expect(listeners()).toBe("");
-    expect(run("status").exitCode).toBe(1);
+describe.runIf(enabled)("local browser stack", () => {
+  afterAll(() => {
     expect(run("start").exitCode).toBe(0);
-    const first = listeners();
-    expect(first).not.toBe("");
-    expect(run("start").exitCode).toBe(0);
-    expect(listeners()).toBe(first);
-    expect(run("status").exitCode).toBe(0);
-    expect(
-      Bun.spawnSync([
-        "curl",
-        "--fail",
-        "--silent",
-        "--max-time",
-        "2",
-        "https://127.0.0.1:4174/health",
-      ]).exitCode
-    ).toBe(0);
-    expect(run("stop").exitCode).toBe(0);
-    expect(listeners()).toBe("");
-    expect(run("status").exitCode).toBe(1);
-    expect(run("start").exitCode).toBe(0);
-  },
-  timeoutMilliseconds
-);
+  }, startupMilliseconds);
 
-it.runIf(enabled)(
-  "refuses an occupied port without claiming readiness or killing its unrelated owner",
-  () =>
+  it("refuses an occupied port without claiming readiness or killing its unrelated owner", () =>
     Effect.runPromise(
       Effect.gen(function* () {
         expect(run("stop").exitCode).toBe(0);
@@ -86,9 +59,37 @@ it.runIf(enabled)(
             try: () => blocker.exited,
             catch: () => new PortFixtureFailure(),
           });
-          expect(run("start").exitCode).toBe(0);
         }
       })
-    ),
-  timeoutMilliseconds
-);
+    ));
+
+  describe("after a cold start", () => {
+    beforeAll(() => {
+      expect(run("stop").exitCode).toBe(0);
+      expect(listeners()).toBe("");
+      expect(run("status").exitCode).toBe(1);
+      expect(run("start").exitCode).toBe(0);
+    }, startupMilliseconds);
+
+    it("keeps trusted HTTPS alive after startup exits, reuses it, and releases every listener on stop", () => {
+      const first = listeners();
+      expect(first).not.toBe("");
+      expect(run("start").exitCode).toBe(0);
+      expect(listeners()).toBe(first);
+      expect(run("status").exitCode).toBe(0);
+      expect(
+        Bun.spawnSync([
+          "curl",
+          "--fail",
+          "--silent",
+          "--max-time",
+          "2",
+          "https://127.0.0.1:4174/health",
+        ]).exitCode
+      ).toBe(0);
+      expect(run("stop").exitCode).toBe(0);
+      expect(listeners()).toBe("");
+      expect(run("status").exitCode).toBe(1);
+    });
+  });
+});

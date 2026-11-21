@@ -129,9 +129,7 @@ it.live("preserves statement bytes and explicit content type through the local H
 it.live("returns a readable DevTools target with the inspector's request lifetime", () =>
   Effect.gen(function* () {
     const port = serve(() => Response.json([{ webSocketDebuggerUrl: "ws://127.0.0.1:1234" }]));
-    expect(yield* Effect.tryPromise(() => inspectorTarget({ port, signal: Option.none() }))).toBe(
-      "ws://127.0.0.1:1234"
-    );
+    expect(yield* inspectorTarget({ port, signal: Option.none() })).toBe("ws://127.0.0.1:1234");
   })
 );
 

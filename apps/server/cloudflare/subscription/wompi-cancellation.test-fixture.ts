@@ -124,6 +124,8 @@ const createSource = Effect.fn(function* (request: Request, db: SqlStorage) {
   });
 });
 
+type PresignedAcceptance = Readonly<{ permalink: string; acceptance_token: string }>;
+
 const enrollmentProvider = Effect.fn(function* (request: Request, path: string, db: SqlStorage) {
   if (path.startsWith("/v1/tokens/nequi/")) {
     return Response.json({
@@ -141,7 +143,7 @@ const enrollmentProvider = Effect.fn(function* (request: Request, path: string, 
   }
 
   if (path.startsWith("/v1/merchants/")) {
-    const accepted = (name: string): { permalink: string; acceptance_token: string } => {
+    const accepted = (name: string): PresignedAcceptance => {
       const permalink = "https://wompi.example/" + name + ".pdf";
 
       return {

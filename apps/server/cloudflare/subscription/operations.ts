@@ -103,7 +103,9 @@ export const subscriptionReadResult = (data: Schema.Json): LocalMutationResult =
   body: { data, next: [] },
 });
 
-export const upgradeLocation = (origin: string): { url: string } => ({
+type UpgradeLocation = Readonly<{ url: string }>;
+
+export const upgradeLocation = (origin: string): UpgradeLocation => ({
   url: new URL("/upgrade", origin).href,
 });
 

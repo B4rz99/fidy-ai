@@ -350,12 +350,10 @@ const waitReady = Effect.fn(function* (target: Option.Option<HostedWorkerProof>)
 
 const waitInspector = Effect.fn(function* () {
   const target = yield* Effect.result(
-    Effect.tryPromise(() =>
-      inspectorTarget({
-        port: inspectorPort,
-        signal: Option.some(AbortSignal.timeout(requestTimeout)),
-      })
-    )
+    inspectorTarget({
+      port: inspectorPort,
+      signal: Option.some(AbortSignal.timeout(requestTimeout)),
+    })
   ).pipe(
     Effect.tap((result) => (Result.isSuccess(result) ? Effect.void : Effect.sleep(readinessDelay))),
     Effect.repeat({ until: Result.isSuccess, times: readinessAttempts - 1 })
@@ -378,9 +376,7 @@ const measure = Effect.fn(function* (
     0
   );
 
-  const before = remote
-    ? undefined
-    : yield* Effect.tryPromise(() => heapUsage({ debuggerUrl, signal: Option.none() }));
+  const before = remote ? undefined : yield* heapUsage({ debuggerUrl, signal: Option.none() });
 
   const startedAt = performance.now();
 
@@ -391,20 +387,16 @@ const measure = Effect.fn(function* (
         ),
         cpuMilliseconds: undefined,
       }
-    : yield* Effect.tryPromise(() =>
-        profileWorkerRequest({
-          debuggerUrl,
-          signal: Option.none(),
-          sendRequest: (signal) => send(fixture, signal, target),
-        })
-      );
+    : yield* profileWorkerRequest({
+        debuggerUrl,
+        signal: Option.none(),
+        sendRequest: (signal) => send(fixture, signal, target),
+      });
 
   const result = yield* readProofResponse(profiled.response);
   const requestRoundTripMilliseconds = performance.now() - startedAt;
 
-  const after = remote
-    ? undefined
-    : yield* Effect.tryPromise(() => heapUsage({ debuggerUrl, signal: Option.none() }));
+  const after = remote ? undefined : yield* heapUsage({ debuggerUrl, signal: Option.none() });
 
   const output = yield* Schema.encodeEffect(measurementCodec)({
     baseline,
@@ -538,7 +530,7 @@ const overlapRequests = Effect.fn(function* (
 
   const retainedHeapAfterBytes = remote
     ? undefined
-    : yield* Effect.tryPromise(() => heapUsage({ debuggerUrl, signal: Option.none() }));
+    : yield* heapUsage({ debuggerUrl, signal: Option.none() });
 
   const output = yield* Schema.encodeEffect(overlapCodec)({
     baseline,

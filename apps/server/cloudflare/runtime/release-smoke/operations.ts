@@ -18,12 +18,14 @@ import {
 } from "./contract";
 import { initializeSharedStores } from "../../storage-bootstrap/operations";
 import { releaseProbeName, storeTransactionUrl } from "../sqlite/contract";
-import { Clock, Effect, Option, Result, Schema } from "effect";
+import { Clock, Effect, Layer, ManagedRuntime, Option, Predicate, Result, Schema } from "effect";
 
 import { RequestBodyPolicy } from "../../http/contract";
 import { boundedJsonBody } from "../../http/operations";
 import { SmokeWork, smokeExecutionId, smokeLifetimeMs, smokeMarkerKey } from "./internal/protocol";
 import { SmokeBindingFailed, platform } from "./internal/platform";
+
+const boundaryRuntime = ManagedRuntime.make(Layer.empty);
 
 export const verifySmokeIdentity = ({
   expected,
@@ -88,11 +90,12 @@ const checkBindings = Effect.fn(function* (environment: SmokeEnvironment, work: 
     environment.WOMPI_EVENT_SECRET,
   ];
 
-  if (secrets.some((secret) => typeof secret !== "string" || secret.length === 0)) {
+  if (secrets.some((secret) => !Predicate.isString(secret) || secret.length === 0)) {
     return yield* new SmokeBindingFailed({ stage: "secrets" });
   }
 
   yield* initializeSharedStores(environment).pipe(
+    Effect.tapError(Effect.logDebug),
     Effect.mapError(() => new SmokeBindingFailed({ stage: "schema" }))
   );
   const store = environment.USER_STORE;
@@ -290,7 +293,7 @@ export const handleSmoke = ({
   environment: SmokeEnvironment;
   bankAuthentication: Option.Option<Effect.Effect<void, BancolombiaAuthenticationFailed>>;
 }>): Promise<Response> =>
-  Effect.runPromise(
+  boundaryRuntime.runPromise(
     Effect.gen(function* () {
       if (!smokeProofAccepted({ request, secret: environment.SMOKE_PROOF })) return refused();
 
@@ -351,7 +354,7 @@ export const receiveSmoke = ({
   batch,
   environment,
 }: Readonly<{ batch: MessageBatch<unknown>; environment: SmokeQueueEnvironment }>): Promise<void> =>
-  Effect.runPromise(
+  boundaryRuntime.runPromise(
     Effect.gen(function* () {
       if (batch.queue !== environment.SMOKE_QUEUE_NAME) {
         return yield* new SmokeBindingFailed({ stage: "platform" });

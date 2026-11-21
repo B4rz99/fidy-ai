@@ -105,13 +105,13 @@ const recentCategoryPage = ({ userId, categories, limit }: ListInput): OwnedStat
   };
 };
 
-const searchPage = ({ userId, categories, search, limit }: ListInput): OwnedStatement => {
+const searchPage = ({ userId, categories, limit }: ListInput, search: string): OwnedStatement => {
   const categoryPredicate =
     categories.length === 0
       ? ""
       : `AND effective.category_id IN (${categories.map(() => "?").join(",")})`;
 
-  const text = Option.getOrThrow(search).toLocaleLowerCase("es-CO");
+  const text = search.toLocaleLowerCase("es-CO");
 
   return {
     sql: `SELECT ${selectedColumns}
@@ -129,7 +129,7 @@ export const dashboardListStatement = ({
   search,
   limit,
 }: ListInput): OwnedStatement => {
-  if (Option.isSome(search)) return searchPage({ userId, categories, search, limit });
+  if (Option.isSome(search)) return searchPage({ userId, categories, search, limit }, search.value);
 
   if (categories.length > 0) return recentCategoryPage({ userId, categories, search, limit });
 

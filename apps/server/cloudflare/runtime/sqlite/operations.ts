@@ -122,7 +122,7 @@ const migrate = Effect.fnUntraced(function* (
       yield* Effect.forEach(
         step.statements,
         Effect.fnUntraced(function* (statement) {
-          if (typeof statement === "string") yield* sql.unsafe(statement);
+          if (Predicate.isString(statement)) yield* sql.unsafe(statement);
           else yield* sql.unsafe(statement.sql, statement.bindings);
         }),
         { discard: true }
@@ -243,7 +243,7 @@ export const openSqliteStore = Effect.fnUntraced(
     yield* capacity.observe;
   },
   Effect.mapError((error) =>
-    error instanceof MigrationUnavailable
+    Schema.is(Schema.instanceOf(MigrationUnavailable))(error)
       ? error
       : new MigrationUnavailable({ reason: "metadata_unavailable" })
   ),

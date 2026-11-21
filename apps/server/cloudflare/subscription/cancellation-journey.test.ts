@@ -178,8 +178,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         ).toEqual([{ operation: "subscription.cancelSubscription", count: 1 }]);
         yield* paid.exec("UPDATE pats SET revoked_at_ms=? WHERE short_id='abcdefgh'", paid.now + 1);
         expect((yield* cancel(key)).status).toBe(401);
-      }),
-    25000
+      })
   );
   test.effect(
     "a browser cancellation detaches the card and preserves the paid-through instant",
@@ -245,8 +244,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             paidThrough: DateTime.formatIso(DateTime.makeUnsafe(expires)),
           },
         });
-      }),
-    25000
+      })
   );
   test.effect(
     "duplicate Queue delivery restarts the failed cancellation Workflow and the User verifies one source void",
@@ -322,8 +320,8 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           "SELECT void_started_at_ms,void_verified_at_ms,verification_count,next_offer_at_ms FROM subscription_cancellations"
         );
 
-        expect(typeof evidence?.["void_started_at_ms"]).toBe("number");
-        expect(typeof evidence?.["void_verified_at_ms"]).toBe("number");
+        expect(evidence?.["void_started_at_ms"]).toEqual(expect.any(Number));
+        expect(evidence?.["void_verified_at_ms"]).toEqual(expect.any(Number));
         expect(evidence).toMatchObject({
           verification_count: 1,
           next_offer_at_ms: null,
@@ -331,7 +329,6 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(
           yield* native(() => provider.exec("SELECT COUNT(*) AS total FROM received_voids"))
         ).toEqual([{ total: 1 }]);
-      }),
-    25000
+      })
   );
 });

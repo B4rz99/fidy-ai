@@ -297,6 +297,7 @@ const makeContracts =
         })
       ),
       Effect.flatMap((merchant) => contractsFromMerchant(merchant, publicKey, observedAt)),
+      Effect.tapError(Effect.logDebug),
       Effect.mapError(() => new WompiContractsUnavailable()),
       Effect.provideService(Digest.Digest, digest),
       Effect.withSpan("Wompi.contracts", { attributes: { provider: "wompi" } })
@@ -339,6 +340,7 @@ const makeVerifyWalletApproval =
           () => "token-mismatch" as const
         ),
         Effect.map((response) => response.data.status === "APPROVED"),
+        Effect.tapError(Effect.logDebug),
         Effect.mapError(() => new WompiSourceLookupFailed()),
         Effect.withSpan("Wompi.walletApproval", { attributes: { provider: "wompi", method } })
       );
@@ -364,6 +366,7 @@ const makeVerifyPaymentSource =
               : Effect.fail("provider-source-mismatch" as const),
         })
       ),
+      Effect.tapError(Effect.logDebug),
       Effect.mapError(() => new WompiSourceLookupFailed()),
       Effect.withSpan("Wompi.verifyPaymentSource", { attributes: { provider: "wompi" } })
     );
@@ -409,6 +412,7 @@ const makeCreatePaymentSource =
 
           if (successful) {
             return responseJson(response).pipe(
+              Effect.tapError(Effect.logDebug),
               Effect.mapError(() => new WompiSourceCreationFailed({ certainty: "ambiguous" }))
             );
           }
@@ -443,27 +447,21 @@ export class WompiEnrollmentClient extends Context.Service<
   WompiEnrollmentClient,
   WompiEnrollmentClientService
 >()("@fidy/server/cloudflare/subscription/internal/wompi-client/WompiEnrollmentClient") {
-  static readonly layer = Layer.effect(
-    WompiEnrollmentClient,
-    Effect.gen(function* () {
-      const outboundHttp = yield* OutboundHttp;
-      const hashing = yield* Digest.Digest;
-      const environment = yield* Config.schema(WompiEnvironment, "WOMPI_ENVIRONMENT");
-      const prefixes = wompiCredentialPrefixes(environment);
+  static readonly make = Effect.gen(function* () {
+    const outboundHttp = yield* OutboundHttp;
+    const digest = yield* Digest.Digest;
+    const environment = yield* Config.schema(WompiEnvironment, "WOMPI_ENVIRONMENT");
+    const prefixes = wompiCredentialPrefixes(environment);
 
-      const publicKey = yield* Config.schema(
-        PublicKey.check(Schema.isStartingWith(prefixes.publicKey)),
-        "WOMPI_PUBLIC_KEY"
-      );
+    const publicKey = yield* Config.schema(
+      PublicKey.check(Schema.isStartingWith(prefixes.publicKey)),
+      "WOMPI_PUBLIC_KEY"
+    );
 
-      return WompiEnrollmentClient.of({
-        publicKey,
-        verifyNequiApproval: makeVerifyWalletApproval(outboundHttp, "nequi"),
-        verifyDaviplataApproval: makeVerifyWalletApproval(outboundHttp, "daviplata"),
-        contracts: makeContracts({ outboundHttp, digest: hashing, publicKey }),
-        createPaymentSource: makeCreatePaymentSource(outboundHttp),
-        verifyPaymentSource: makeVerifyPaymentSource(outboundHttp),
-      });
-    })
-  );
+    return WompiEnrollmentClient.of(makeWompiEnrollmentClient({ outboundHttp, digest, publicKey }));
+  });
+
+  static readonly layer = Layer.effect(this, this.make);
+
+  static readonly fromOutboundHttp = makeWompiEnrollmentClient;
 }

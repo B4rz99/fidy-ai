@@ -6,6 +6,19 @@ import { alice, nativeTransactionJourney } from "../financial-user-store.test-fi
 import { native } from "../user-store.test-fixture";
 import { batchCallId } from "./statement-batch.test-fixture";
 
+type CreationCall = Readonly<{
+  callId: string;
+  operation: "transactions.createTransaction";
+  input: Readonly<{
+    payload: Readonly<{
+      direction: "outflow";
+      money: Readonly<{ amount: string; currency: string }>;
+      occurredAt: string;
+      notes: string;
+    }>;
+  }>;
+}>;
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "registers forwarding before batch disclosure and rejects oversized children, envelopes and browser publication without partial effects",
@@ -65,7 +78,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(result.data.results.map((item) => item.output.data.address)).toHaveLength(1);
         expect(result.data.results[0]?.output.data.address).toMatch(/@fidyapp\.com$/u);
 
-        const call = (suffix: number, notes: string): object => ({
+        const call = (suffix: number, notes: string): CreationCall => ({
           callId: batchCallId(suffix),
           operation: "transactions.createTransaction",
           input: {

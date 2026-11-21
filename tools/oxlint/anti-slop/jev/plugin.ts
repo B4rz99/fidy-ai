@@ -15,6 +15,6 @@ import {
 export default createJevPlugin({
   ...effectJevOptions,
   name: effectJevPluginName,
-  ci: "skip",
+  ci: "fail",
   rules: [...effectSourceJevRules, ...effectTestJevRules],
 });

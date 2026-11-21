@@ -2,6 +2,8 @@ import { BootstrapUnavailable, oauthTokenDestinationUrl } from "../contract";
 import type { UserStoreBindings } from "../../directory/contract";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Clock, Effect, Option, Redacted, Schema } from "effect";
+import { isResponse } from "./bootstrap";
+import { ConsentSubject } from "./consent-subject";
 import { Base64Url, Hex } from "effect/encoding";
 import { OAuthClientId } from "../../../src/core/oauth-agents/contract";
 import { PATScopes } from "../../../src/core/tokens/contract";
@@ -124,14 +126,14 @@ const revokeReplay = Effect.fn(function* (input: LocalProof, digest: Uint8Array,
   });
 
   if ((yield* sql.unsafe(consent.sql + " RETURNING id", consent.params)).length !== 1) {
-    return yield* new BootstrapUnavailable();
+    return yield* new BootstrapUnavailable({ cause: Option.none() });
   }
 
   if (
     (yield* sql`UPDATE oauth_connections SET revoked_at_ms=${current} WHERE id=${connection} AND user_id=${user} AND revoked_at_ms IS NULL RETURNING id`)
       .length !== 1
   ) {
-    return yield* new BootstrapUnavailable();
+    return yield* new BootstrapUnavailable({ cause: Option.none() });
   }
 });
 
@@ -201,7 +203,7 @@ const observe = Effect.fn(function* (input: LocalProof, digest: Uint8Array, curr
   if (found.token_expiry <= current) return invalidGrant();
 
   const allowed = protectConsentStatement({
-    subject: { _tag: "User", userId: user },
+    subject: ConsentSubject.User({ userId: user }),
     requirement: "active",
     statement: {
       sql: "SELECT 1 WHERE EXISTS(SELECT 1 FROM consent_history WHERE record_type='oauth_grant' AND connection_id=? AND user_id=?)",
@@ -232,32 +234,36 @@ const commitTokens = Effect.fn(function* ({
   const user = input.user_id,
     connection = input.connection_id;
 
-  for (const token of [
-    {
-      kind: "access",
-      id: accessId,
-      digest: issuance.accessDigest,
-      expires: issuance.accessExpiresAt,
-    },
-    {
-      kind: "refresh",
-      id: issuance.refreshId,
-      digest: issuance.refreshDigest,
-      expires: issuance.refreshExpiresAt,
-    },
-  ]) {
-    const inserted =
-      yield* sql`INSERT INTO oauth_credentials(kind,id,user_id,connection_id,digest,issued_at_ms,expires_at_ms,scopes_json) VALUES(${token.kind},${token.id},${user},${connection},${token.digest},${current},${token.expires},${issuance.scopesJson}) RETURNING id`;
+  yield* Effect.forEach(
+    [
+      {
+        kind: "access",
+        id: accessId,
+        digest: issuance.accessDigest,
+        expires: issuance.accessExpiresAt,
+      },
+      {
+        kind: "refresh",
+        id: issuance.refreshId,
+        digest: issuance.refreshDigest,
+        expires: issuance.refreshExpiresAt,
+      },
+    ],
+    Effect.fnUntraced(function* (token) {
+      const inserted =
+        yield* sql`INSERT INTO oauth_credentials(kind,id,user_id,connection_id,digest,issued_at_ms,expires_at_ms,scopes_json) VALUES(${token.kind},${token.id},${user},${connection},${token.digest},${current},${token.expires},${issuance.scopesJson}) RETURNING id`;
 
-    if (inserted.length !== 1) return yield* new BootstrapUnavailable();
-  }
+      if (inserted.length !== 1) return yield* new BootstrapUnavailable({ cause: Option.none() });
+    }),
+    { discard: true }
+  );
 
   const used =
     input.proof.kind === "code"
       ? yield* sql`UPDATE oauth_connections SET code_consumed_at_ms=${current} WHERE id=${connection} AND user_id=${user} AND code_digest=${digest} AND code_consumed_at_ms IS NULL RETURNING id`
       : yield* sql`UPDATE oauth_credentials SET consumed_at_ms=${current},replacement_refresh_id=${issuance.refreshId} WHERE kind='refresh' AND id=${input.record_id} AND connection_id=${connection} AND user_id=${user} AND digest=${digest} AND consumed_at_ms IS NULL RETURNING id`;
 
-  if (used.length !== 1) return yield* new BootstrapUnavailable();
+  if (used.length !== 1) return yield* new BootstrapUnavailable({ cause: Option.none() });
 
   return oauthResponse({ body: issuance.body, status: 200 });
 });
@@ -268,7 +274,7 @@ const admitExchange = Effect.fn(function* (input: LocalProof, digest: Uint8Array
   if (
     input.proof.kind === "refresh" &&
     checked !== "family-revoked" &&
-    !(checked instanceof Response) &&
+    !isResponse(checked) &&
     !(yield* admitUserOAuth)
   ) {
     return oauthResponse({ body: { error: "slow_down" }, status: 429 });
@@ -305,7 +311,7 @@ export const exchangeLocalToken = Effect.fn(
 
     if (found === "family-revoked") return yield* retired;
 
-    if (found instanceof Response) return found;
+    if (isResponse(found)) return found;
     const issuance = yield* prepareIssuance({ current: initial, ...found });
     const accessId = newId();
 
@@ -334,7 +340,7 @@ export const exchangeLocalToken = Effect.fn(
       Schema.Boolean
     );
 
-    if (Option.isNone(reserve)) return yield* new BootstrapUnavailable();
+    if (Option.isNone(reserve)) return yield* new BootstrapUnavailable({ cause: Option.none() });
 
     const result = yield* withStoreAdmission((admitGrowth) =>
       Effect.gen(function* () {
@@ -343,7 +349,7 @@ export const exchangeLocalToken = Effect.fn(
         if (input.deadline <= current || request.signal.aborted) return invalidGrant();
         const live = yield* observe(input, digest, current);
 
-        if (live === "family-revoked" || live instanceof Response) return live;
+        if (live === "family-revoked" || isResponse(live)) return live;
 
         if (!permitsScopes(live.scopes, found.scopes)) return invalidGrant();
         yield* admitGrowth;

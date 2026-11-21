@@ -1,17 +1,19 @@
+import { Data } from "effect";
 import type { ErasureProjection } from "../../erasure-store/contract";
+
+const Quiescence = Data.taggedEnum<ErasureProjection["quiescence"]>();
 
 export const projections: ReadonlyArray<ErasureProjection> = [
   {
     id: "browser_pairing_email_proofs",
     dataClass: "credentials",
     dependencies: [],
-    quiescence: {
-      _tag: "Durable",
+    quiescence: Quiescence.Durable({
       select: ({ current, userId }) => ({
         sql: "SELECT 1 FROM (SELECT rowid,id AS pairing_id,email_work_id AS work_id,email_user_id AS user_id,email_address,email_credential_verified_at_ms AS credential_verified_at_ms,email_state AS state,email_public_code AS public_code,email_proof_digest AS proof_digest,email_proof_expires_at_ms AS proof_expires_at_ms,email_expires_at_ms AS expires_at_ms,email_generation AS generation,email_wrong_attempts AS wrong_attempts,email_last_requested_at_ms AS last_requested_at_ms,email_dispatch_attempted_at_ms AS dispatch_attempted_at_ms FROM browser_login_pairings WHERE email_work_id IS NOT NULL) AS browser_pairing_email_proofs WHERE user_id=? AND state IN('awaiting_delivery','sending') AND expires_at_ms>?",
         params: [userId, current],
       }),
-    },
+    }),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT rowid,id AS pairing_id,email_work_id AS work_id,email_user_id AS user_id,email_address,email_credential_verified_at_ms AS credential_verified_at_ms,email_state AS state,email_public_code AS public_code,email_proof_digest AS proof_digest,email_proof_expires_at_ms AS proof_expires_at_ms,email_expires_at_ms AS expires_at_ms,email_generation AS generation,email_wrong_attempts AS wrong_attempts,email_last_requested_at_ms AS last_requested_at_ms,email_dispatch_attempted_at_ms AS dispatch_attempted_at_ms FROM browser_login_pairings WHERE email_work_id IS NOT NULL) r WHERE r.user_id=?",
@@ -32,13 +34,12 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "email_replacements",
     dataClass: "credentials",
     dependencies: [],
-    quiescence: {
-      _tag: "Durable",
+    quiescence: Quiescence.Durable({
       select: ({ current, userId }) => ({
         sql: "SELECT 1 FROM email_replacements WHERE user_id=? AND state IN('awaiting_delivery','sending') AND expires_at_ms>?",
         params: [userId, current],
       }),
-    },
+    }),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM email_replacements r WHERE r.user_id=?",
@@ -59,7 +60,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "verified_email_credentials",
     dataClass: "credentials",
     dependencies: [],
-    quiescence: { _tag: "Synchronous" },
+    quiescence: Quiescence.Synchronous(),
 
     candidates: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM verified_email_credentials r WHERE r.user_id=?",

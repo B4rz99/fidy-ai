@@ -1,6 +1,6 @@
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import type { LocalMutationResult } from "../../canonical-admission/contract";
-import { Effect, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import {
   InsightEvent,
   type InsightEventId,
@@ -54,7 +54,7 @@ export const readLocalReport = Effect.fn(function* (
     report.payload.confirmationDay.timeZone !== event.timeZone ||
     report.scheduledAt.epochMilliseconds !== event.scheduledAt.epochMilliseconds
   ) {
-    return yield* new InsightUnavailable();
+    return yield* new InsightUnavailable({ cause: Option.none() });
   }
 
   const response: LocalMutationResult = {

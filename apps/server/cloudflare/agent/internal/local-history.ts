@@ -1,11 +1,16 @@
-import { Clock, DateTime, Effect } from "effect";
+import { Clock, Data, DateTime, Effect } from "effect";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import type { CanonicalToolResultEntry } from "../../../src/core/agent/contract";
+import type {
+  CanonicalToolOutcome,
+  CanonicalToolResultEntry,
+} from "../../../src/core/agent/contract";
 import { freeAllowanceLimits } from "../../../src/core/quotas/contract";
 import { allowancePeriod } from "../../../src/core/quotas/operations";
 import { activeProUserCondition } from "../../../src/shell/access-tier/operations";
 import { loadsSavedHistory } from "./history-allowance";
 import { type LocalTurn } from "./local-turn";
+
+const Outcome = Data.taggedEnum<CanonicalToolOutcome>();
 
 export const meterHistory = Effect.fn(function* (turn: LocalTurn, entry: CanonicalToolResultEntry) {
   if (!loadsSavedHistory(entry)) return entry.outcome;
@@ -40,8 +45,7 @@ export const meterHistory = Effect.fn(function* (turn: LocalTurn, entry: Canonic
 
   return rows.length === 1
     ? entry.outcome
-    : {
-        _tag: "CanonicalOperationFailed" as const,
+    : Outcome.CanonicalOperationFailed({
         failure: {
           error: {
             code: "quota_exhausted",
@@ -50,5 +54,5 @@ export const meterHistory = Effect.fn(function* (turn: LocalTurn, entry: Canonic
           },
           next: [],
         },
-      };
+      });
 });

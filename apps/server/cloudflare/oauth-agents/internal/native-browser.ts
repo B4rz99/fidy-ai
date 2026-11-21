@@ -21,7 +21,7 @@ import { withStoreCapacity } from "../../runtime/sqlite/operations";
 import { BootstrapUnavailable } from "../contract";
 import { projectReview, readReference } from "./review";
 import { grantStatement } from "./approval";
-import { invalidRequest, requestedScopes } from "./bootstrap";
+import { invalidRequest, isResponse, requestedScopes } from "./bootstrap";
 import { oauthResponse } from "./response";
 import { type Directory, FrozenReview, register } from "./native-registration";
 
@@ -53,7 +53,7 @@ export const oauthSession = Effect.fn(function* ({
     lookup.statement.sql +
       " AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE user_id=web_sessions.user_id)" +
       (fresh ? " AND fresh_until_ms>?" : ""),
-    [...lookup.statement.params, ...(fresh ? [current] : [])]
+    fresh ? [...lookup.statement.params, current] : lookup.statement.params
   );
 
   const session = resolveBoundCanonicalWebSession({ lookup, row });
@@ -261,7 +261,7 @@ const reserveGrant = Effect.fn(function* ({
     Schema.Boolean
   );
 
-  if (Option.isNone(route)) return yield* new BootstrapUnavailable();
+  if (Option.isNone(route)) return yield* new BootstrapUnavailable({ cause: Option.none() });
   const scopesJson = yield* Schema.encodeEffect(Schema.fromJsonString(PATScopes))(choice.scopes);
 
   return { connectionId, code, digest, codeExpires, reviewed, expiresAt, scopesJson };
@@ -275,7 +275,7 @@ const connectReview = Effect.fn(function* (
   const { user, session, active, finish, pending, client } = review;
   const reserved = yield* reserveGrant({ directory, user, choice, active });
 
-  if (reserved instanceof Response) return reserved;
+  if (isResponse(reserved)) return reserved;
   const { connectionId, code, digest, codeExpires, reviewed, expiresAt, scopesJson } = reserved;
   const sql = yield* SqliteClient;
 
@@ -303,7 +303,7 @@ const connectReview = Effect.fn(function* (
     });
 
     if ((yield* sql.unsafe(evidence.sql + " RETURNING id", evidence.params)).length !== 1) {
-      return yield* new BootstrapUnavailable();
+      return yield* new BootstrapUnavailable({ cause: Option.none() });
     }
 
     yield* sql`UPDATE oauth_connections SET code_digest=${digest},code_challenge=${pending.code_challenge},code_expires_at_ms=${codeExpires} WHERE id=${connectionId}`;
@@ -328,7 +328,7 @@ export const nativeOAuthBrowser = Effect.fn(
   function* (input: BrowserInput) {
     const context = yield* prepareBrowser(input);
 
-    if (context instanceof Response) return context;
+    if (isResponse(context)) return context;
 
     if (context.url.pathname === oauthPaths.review || context.url.pathname === oauthPaths.cancel) {
       return yield* inspectReview(context);

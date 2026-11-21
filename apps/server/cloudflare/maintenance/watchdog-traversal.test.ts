@@ -199,28 +199,32 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         );
         const start = yield* Clock.currentTimeMillis;
 
-        for (let minute = 0; minute < 10; minute++) {
-          yield* fixture.exec("UPDATE watchdog_progress SET minute=minute-1");
-          const result = yield* Effect.exit(fixture.tick(start + minute * 60000));
-          expect(result._tag).toBe("Failure");
-          const ends = [2, 258, 514, 770, 0, 256, 512, 768, 0, 256];
-          const counts = [2, 256, 256, 256, 230, 256, 256, 256, 232, 256];
-          const end = ends[minute];
-          expect(
-            yield* fixture.exec(
-              "SELECT cursor,halt,attempted,unknown,wraps,defer_fixed FROM watchdog_progress"
-            )
-          ).toEqual([
-            {
-              cursor: end === 0 || end === undefined ? "" : user(end),
-              halt: "cleanup",
-              attempted: (counts[minute] ?? 0) + 3,
-              unknown: 1,
-              wraps: Number(minute >= 4) + Number(minute >= 8),
-              defer_fixed: 1,
-            },
-          ]);
-        }
+        yield* Effect.forEach(
+          Array.from({ length: 10 }, (_, minute) => minute),
+          Effect.fnUntraced(function* (minute) {
+            yield* fixture.exec("UPDATE watchdog_progress SET minute=minute-1");
+            const result = yield* Effect.exit(fixture.tick(start + minute * 60000));
+            expect(result._tag).toBe("Failure");
+            const ends = [2, 258, 514, 770, 0, 256, 512, 768, 0, 256];
+            const counts = [2, 256, 256, 256, 230, 256, 256, 256, 232, 256];
+            const end = ends[minute];
+            expect(
+              yield* fixture.exec(
+                "SELECT cursor,halt,attempted,unknown,wraps,defer_fixed FROM watchdog_progress"
+              )
+            ).toEqual([
+              {
+                cursor: end === 0 || end === undefined ? "" : user(end),
+                halt: "cleanup",
+                attempted: (counts[minute] ?? 0) + 3,
+                unknown: 1,
+                wraps: Number(minute >= 4) + Number(minute >= 8),
+                defer_fixed: 1,
+              },
+            ]);
+          }),
+          { discard: true }
+        );
       }),
     35000
   );
@@ -237,19 +241,23 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const windows: string[][] = [];
         let offset = 0;
 
-        for (let minute = 0; minute < 10; minute++) {
-          yield* fixture.exec("UPDATE watchdog_progress SET minute=minute-1");
-          expect(yield* fixture.tick(start + minute * 60000)).toBe(204);
-          const ledger = yield* fixture.ledger;
-          const names = ledger.names.slice(offset);
-          offset = ledger.names.length;
-          expect(names.slice(0, 3)).toEqual(["directory-v1", "pricing", "erasure-registry-v1"]);
-          expect(names.length).toBeLessThanOrEqual(259);
-          expect(ledger.peak).toBe(5);
-          windows.push(names.slice(3));
+        yield* Effect.forEach(
+          Array.from({ length: 10 }, (_, minute) => minute),
+          Effect.fnUntraced(function* (minute) {
+            yield* fixture.exec("UPDATE watchdog_progress SET minute=minute-1");
+            expect(yield* fixture.tick(start + minute * 60000)).toBe(204);
+            const ledger = yield* fixture.ledger;
+            const names = ledger.names.slice(offset);
+            offset = ledger.names.length;
+            expect(names.slice(0, 3)).toEqual(["directory-v1", "pricing", "erasure-registry-v1"]);
+            expect(names.length).toBeLessThanOrEqual(259);
+            expect(ledger.peak).toBe(5);
+            windows.push(names.slice(3));
 
-          if (windows.length >= 5) expect(new Set(windows.slice(-5).flat()).size).toBe(1000);
-        }
+            if (windows.length >= 5) expect(new Set(windows.slice(-5).flat()).size).toBe(1000);
+          }),
+          { discard: true }
+        );
       }),
     30000
   );

@@ -1,7 +1,7 @@
 import { type WeeklyLimits, countWeekly } from "./native-weekly";
 import { countDeliveredReminder } from "./local-reminder-attention";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, DateTime, Effect, Schema } from "effect";
+import { Clock, DateTime, Effect, Predicate, Schema } from "effect";
 import { type DeliverySend } from "../../whatsapp/contract";
 import { decideInsightDelivery } from "../../../src/core/insights/operations";
 import {
@@ -41,12 +41,15 @@ export const claimPurpose = Effect.fn(function* (
   if (
     !(event.kind === "weekly-summary" ? enabled.weekly : enabled.category) ||
     event.lifecycleState !== "pending" ||
-    decideInsightDelivery({
-      scheduledAt: event.scheduledAt,
-      expiresAt: DateTime.makeUnsafe(work.deadline),
-      timeZone: event.timeZone,
-      now: DateTime.makeUnsafe(now),
-    })._tag !== "Ready"
+    !Predicate.isTagged(
+      decideInsightDelivery({
+        scheduledAt: event.scheduledAt,
+        expiresAt: DateTime.makeUnsafe(work.deadline),
+        timeZone: event.timeZone,
+        now: DateTime.makeUnsafe(now),
+      }),
+      "Ready"
+    )
   ) {
     return false;
   }
@@ -78,20 +81,24 @@ const retainReceipts = Effect.fn(function* (
     ...siblings.map((child) => child.event_id),
   ]);
 
-  for (const id of ids) {
-    const receipt = yield* Schema.encodeEffect(
-      Schema.fromJsonString(Schema.toCodecJson(InsightDeliveryAttempt))
-    )({
-      id: DeliveryAttemptId.make(newId()),
-      insightEventId: id,
-      sentAt: DateTime.makeUnsafe(seen.started_ms),
-      channel: "whatsapp",
-      provider: "kapso",
-      providerMessageId: seen.provider_message_id,
-    });
+  yield* Effect.forEach(
+    ids,
+    Effect.fnUntraced(function* (id) {
+      const receipt = yield* Schema.encodeEffect(
+        Schema.fromJsonString(Schema.toCodecJson(InsightDeliveryAttempt))
+      )({
+        id: DeliveryAttemptId.make(newId()),
+        insightEventId: id,
+        sentAt: DateTime.makeUnsafe(seen.started_ms),
+        channel: "whatsapp",
+        provider: "kapso",
+        providerMessageId: seen.provider_message_id,
+      });
 
-    yield* sql`UPDATE insight_events SET receipt_json=${receipt},event_json=CASE WHEN json_extract(event_json,'$.lifecycleState')='pending' THEN json_set(event_json,'$.lifecycleState','delivered') ELSE event_json END WHERE user_id=${user} AND id=${id} AND receipt_json IS NULL`;
-  }
+      yield* sql`UPDATE insight_events SET receipt_json=${receipt},event_json=CASE WHEN json_extract(event_json,'$.lifecycleState')='pending' THEN json_set(event_json,'$.lifecycleState','delivered') ELSE event_json END WHERE user_id=${user} AND id=${id} AND receipt_json IS NULL`;
+    }),
+    { discard: true }
+  );
 });
 
 const receiptAgrees = Effect.fn(function* (receipt: unknown, provider: string) {
@@ -142,13 +149,14 @@ export const reconcileReceipt = Effect.fn(function* (
 
   const retained = yield* Schema.encodeEffect(
     Schema.fromJsonString(Schema.toCodecJson(ProactiveInsightTranscriptEntry))
-  )({
-    _tag: "ProactiveInsightTranscriptEntry",
-    id: TranscriptEntryId.make(newId()),
-    insightEventId: event.id,
-    occurredAt: DateTime.makeUnsafe(seen.delivered_at_ms),
-    text: seen.body.text,
-  });
+  )(
+    ProactiveInsightTranscriptEntry.make({
+      id: TranscriptEntryId.make(newId()),
+      insightEventId: event.id,
+      occurredAt: DateTime.makeUnsafe(seen.delivered_at_ms),
+      text: seen.body.text,
+    })
+  );
 
   const inserted =
     yield* sql`INSERT INTO proactive_transcript VALUES(${id},${user},${seen.delivered_at_ms},${retained}) ON CONFLICT(id) DO NOTHING RETURNING id`;

@@ -141,5 +141,6 @@ export const nativeCaller = Effect.fn(
       grantExpiresAt: value.grant_expiry,
     });
   },
+  Effect.tapError(Effect.logDebug),
   Effect.mapError(() => new OAuthMcpCallerUnavailable())
 );

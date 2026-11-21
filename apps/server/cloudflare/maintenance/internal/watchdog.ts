@@ -1,6 +1,6 @@
 import { watchdogCoverage } from "./coverage";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, Effect, Option, Schema } from "effect";
+import { Clock, Effect, Option, Predicate, Schema } from "effect";
 import { directoryName } from "../../directory/contract";
 import { erasureRegistryName } from "../../erasure/contract";
 import type { SharedBindings } from "../../storage-bootstrap/contract";
@@ -93,11 +93,14 @@ const probe = Effect.fnUntraced(function* (target: Target, pending: Set<Promise<
 
       const work = Promise.resolve()
         .then(() =>
-          binding.getByName(target.name).fetch(ownerCheckUrl, {
-            method: "POST",
-            signal,
-            ...(target.sampleWork === true ? { headers: { "fidy-workflow-sample": "1" } } : {}),
-          })
+          binding
+            .getByName(target.name)
+            .fetch(
+              ownerCheckUrl,
+              target.sampleWork === true
+                ? { method: "POST", signal, headers: { "fidy-workflow-sample": "1" } }
+                : { method: "POST", signal }
+            )
         )
         .then((response) => {
           sample = sampleFrom(response);
@@ -192,14 +195,19 @@ const reportSamples = Effect.fnUntraced(function* (
     inspected.set(key, group);
   }
 
-  for (const group of inspected.values()) {
-    const severity = { normal: "none", warning: "warning", restricted: "critical" }[group.band];
-    yield* Effect.logInfo({
-      ...group,
-      uncertain: group.measuredUncertainty > 0 ? group.uncertain : null,
-      message: `fidy.operational component=sqlite operation=${group.owner} state=${group.band} severity=${severity}`,
-    });
-  }
+  yield* Effect.forEach(
+    inspected.values(),
+    (group) => {
+      const severity = { normal: "none", warning: "warning", restricted: "critical" }[group.band];
+
+      return Effect.logInfo({
+        ...group,
+        uncertain: group.measuredUncertainty > 0 ? group.uncertain : null,
+        message: `fidy.operational component=sqlite operation=${group.owner} state=${group.band} severity=${severity}`,
+      });
+    },
+    { discard: true }
+  );
 });
 
 const saveUserObservations = Effect.fnUntraced(function* (
@@ -209,12 +217,11 @@ const saveUserObservations = Effect.fnUntraced(function* (
 ) {
   const sql = yield* SqliteClient;
 
-  const successfulUsers = batch
-    .filter(
-      (target, index) =>
-        target.family === "user" && Option.isSome(replies[index]?.sample ?? Option.none())
-    )
-    .map((target) => target.name);
+  const successfulUsers = batch.flatMap((target, index) =>
+    target.family === "user" && Option.isSome(replies[index]?.sample ?? Option.none())
+      ? [target.name]
+      : []
+  );
 
   if (successfulUsers.length > 0) {
     const ids = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Array(Schema.String)))(
@@ -229,13 +236,13 @@ const reportShared = Effect.fnUntraced(function* (
   batch: ReadonlyArray<Target>,
   replies: ReadonlyArray<Probe>
 ) {
-  let shared = 0;
+  return yield* Effect.reduce(
+    batch.entries(),
+    () => 0,
+    (shared, [index, target]) => {
+      const reply = replies[index];
 
-  for (const [index, target] of batch.entries()) {
-    const reply = replies[index];
-
-    if (target.family !== "user" && reply !== undefined) {
-      if (Option.isSome(reply.sample)) shared++;
+      if (target.family === "user" || reply === undefined) return Effect.succeed(shared);
       const outcome = reply.outcome;
 
       const severity =
@@ -243,16 +250,14 @@ const reportShared = Effect.fnUntraced(function* (
           ? "none"
           : "critical";
 
-      yield* Effect.logInfo({
+      return Effect.logInfo({
         message: `fidy.operational component=watchdog operation=${target.family} state=${outcome} severity=${severity}`,
         component: "watchdog",
         owner: target.family,
         outcome,
-      });
+      }).pipe(Effect.as(Option.isSome(reply.sample) ? shared + 1 : shared));
     }
-  }
-
-  return shared;
+  );
 });
 
 const inspectBatch = Effect.fnUntraced(function* (
@@ -305,21 +310,31 @@ const inspectPage = Effect.fnUntraced(function* ({
   deadline: number;
   pending: Set<Promise<unknown>>;
 }>) {
-  let cursor = startCursor;
+  const probeFrom = (
+    offset: number,
+    cursor: string
+  ): Effect.Effect<
+    "deadline" | "cleanup" | { cursor: string },
+    Effect.Error<ReturnType<typeof inspectBatch>>,
+    Effect.Services<ReturnType<typeof inspectBatch>>
+  > =>
+    offset >= targets.length
+      ? Effect.succeed({ cursor })
+      : Effect.gen(function* () {
+          if ((yield* Clock.currentTimeMillis) + probeMs > deadline) return "deadline" as const;
+          const batch = targets.slice(offset, offset + concurrency);
+          const last = batch.at(-1);
+          const checkpoint = last?.family === "user" ? Option.some(last.name) : Option.none();
+          const nextCursor = Option.getOrElse(checkpoint, () => cursor);
 
-  for (let offset = 0; offset < targets.length; offset += concurrency) {
-    if ((yield* Clock.currentTimeMillis) + probeMs > deadline) return "deadline" as const;
-    const batch = targets.slice(offset, offset + concurrency);
-    const last = batch.at(-1);
-    const checkpoint = last?.family === "user" ? Option.some(last.name) : Option.none();
-    cursor = Option.getOrElse(checkpoint, () => cursor);
+          if (yield* inspectBatch(checkpoint, batch, pending)) {
+            return "cleanup" as const;
+          }
 
-    if (yield* inspectBatch(checkpoint, batch, pending)) {
-      return "cleanup" as const;
-    }
-  }
+          return yield* probeFrom(offset + concurrency, nextCursor);
+        });
 
-  return { cursor };
+  return yield* probeFrom(0, startCursor);
 });
 
 const scanUsers = Effect.fnUntraced(function* ({
@@ -364,7 +379,7 @@ const scanUsers = Effect.fnUntraced(function* ({
       pending,
     });
 
-    if (typeof next === "string") return next;
+    if (Predicate.isString(next)) return next;
     cursor = next.cursor;
     remaining -= page.length;
 
@@ -416,7 +431,7 @@ export const runWatchdog = Effect.fn(function* (
     pending,
   });
 
-  return typeof fixed === "string" ? fixed : halt;
+  return Predicate.isString(fixed) ? fixed : halt;
 });
 
 export const reportWatchdog = Effect.fnUntraced(function* (

@@ -1,4 +1,4 @@
-import { Effect, Schedule } from "effect";
+import { Effect, Schedule, Schema } from "effect";
 import { installedOrigins } from "@fidy/server/browser-transport";
 import { installationNames } from "./storage-installation";
 
@@ -23,9 +23,48 @@ type DomainState =
 
 export type CanonicalDomainPort = Readonly<{
   read: (domain: CanonicalDomain) => Effect.Effect<DomainState, Error>;
-  detach: (domain: CanonicalDomain, id: string) => Effect.Effect<void, Error>;
-  attach: (domain: CanonicalDomain, service: string) => Effect.Effect<void, Error>;
+  move: (
+    domain: CanonicalDomain,
+    service: string
+  ) => Effect.Effect<void, Error | Schema.SchemaError>;
 }>;
+
+const domainChangeset = Schema.Struct({
+  success: Schema.Literal(true),
+  result: Schema.Struct({
+    added: Schema.Tuple([]),
+    conflicting: Schema.Tuple([]),
+    removed: Schema.Tuple([]),
+    updated: Schema.Tuple([
+      Schema.Struct({
+        id: Schema.NonEmptyString,
+        hostname: Schema.NonEmptyString,
+        zone_id: Schema.NonEmptyString,
+        service: Schema.NonEmptyString,
+        enabled: Schema.Literal(true),
+        previews_enabled: Schema.Literal(false),
+        modified: Schema.Literal(true),
+      }),
+    ]),
+  }),
+});
+
+export const confirmCanonicalDomainMove = Effect.fn(function* (
+  raw: unknown,
+  domain: CanonicalDomain,
+  target: { service: string; zoneId: string }
+) {
+  const { result } = yield* Schema.decodeUnknownEffect(domainChangeset)(raw);
+  const [change] = result.updated;
+  if (
+    change.id !== domain.incumbentId ||
+    change.hostname !== domain.host ||
+    change.zone_id !== target.zoneId ||
+    change.service !== target.service
+  ) {
+    return yield* Effect.fail(Error("Cloudflare preview differs for " + domain.host));
+  }
+});
 
 const requireIncumbent = Effect.fn(function* (
   port: Pick<CanonicalDomainPort, "read">,
@@ -35,7 +74,6 @@ const requireIncumbent = Effect.fn(function* (
   if (current.vacant || current.id !== domain.incumbentId || current.service !== domain.incumbent) {
     return yield* Effect.fail(Error("Canonical incumbent identity changed for " + domain.host));
   }
-  return current.id;
 });
 export const checkCanonicalIncumbents = (
   read: CanonicalDomainPort["read"]
@@ -45,38 +83,33 @@ export const checkCanonicalIncumbents = (
   });
 
 const providerPropagation = { times: 6, schedule: Schedule.spaced("1 second") };
-const requireVacant = Effect.fn(function* (port: CanonicalDomainPort, domain: CanonicalDomain) {
-  if (!(yield* port.read(domain)).vacant) {
-    return yield* Effect.fail(Error("Canonical hostname remains occupied for " + domain.host));
-  }
-});
 const requireAttachment = Effect.fn(function* (
   port: CanonicalDomainPort,
   domain: CanonicalDomain,
   service: string
 ) {
   const current = yield* port.read(domain);
-  if (current.vacant || current.service !== service) {
+  if (current.vacant || current.id !== domain.incumbentId || current.service !== service) {
     return yield* Effect.fail(
       Error("Canonical attachment could not be verified for " + domain.host)
     );
   }
-  return current;
 });
 
 const restore = Effect.fn(function* (port: CanonicalDomainPort, domain: CanonicalDomain) {
   const current = yield* port.read(domain).pipe(Effect.retry(providerPropagation));
-  if (!current.vacant) {
-    if (current.service === domain.incumbent) return;
-    if (current.service !== domain.native) {
-      return yield* Effect.fail(
-        Error("Unexpected canonical owner during recovery for " + domain.host)
-      );
-    }
-    yield* port.detach(domain, current.id);
+  if (current.vacant || current.id !== domain.incumbentId) {
+    return yield* Effect.fail(
+      Error("Unexpected canonical domain during recovery for " + domain.host)
+    );
   }
-  yield* requireVacant(port, domain).pipe(Effect.retry(providerPropagation));
-  yield* port.attach(domain, domain.incumbent);
+  if (current.service === domain.incumbent) return;
+  if (current.service !== domain.native) {
+    return yield* Effect.fail(
+      Error("Unexpected canonical owner during recovery for " + domain.host)
+    );
+  }
+  yield* port.move(domain, domain.incumbent);
   yield* requireAttachment(port, domain, domain.incumbent).pipe(Effect.retry(providerPropagation));
 });
 export const transferCanonicalDomains = Effect.fn(function* <A, E, R>(
@@ -98,12 +131,11 @@ export const transferCanonicalDomains = Effect.fn(function* <A, E, R>(
   );
   return yield* Effect.gen(function* () {
     for (const domain of canonicalDomains) {
-      const id = yield* requireIncumbent(port, domain);
+      yield* requireIncumbent(port, domain);
       attempted.unshift(domain);
-      yield* port.detach(domain, id);
-      yield* requireVacant(port, domain).pipe(Effect.retry(providerPropagation));
-      yield* port.attach(domain, domain.native);
+      yield* port.move(domain, domain.native);
       yield* requireAttachment(port, domain, domain.native).pipe(Effect.retry(providerPropagation));
+      yield* Effect.logInfo("Verified canonical domain transfer for " + domain.host);
     }
     return yield* verify;
   }).pipe(

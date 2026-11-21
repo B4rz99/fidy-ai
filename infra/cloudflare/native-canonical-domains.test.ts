@@ -4,6 +4,7 @@ import { expect } from "vitest";
 import {
   type CanonicalDomainPort,
   canonicalDomains,
+  confirmCanonicalDomainMove,
   transferCanonicalDomains,
 } from "./native-canonical-domains";
 
@@ -30,15 +31,10 @@ const testPort = (
         const attachment = rows.get(domain.host);
         return attachment !== undefined ? { ...attachment, vacant: false } : { vacant: true };
       }),
-    detach: (domain, id) =>
-      Effect.sync(() => {
-        writes.push("detach " + domain.host + " " + id);
-        rows.delete(domain.host);
-      }),
-    attach: (domain, service) =>
+    move: (domain, service) =>
       Effect.gen(function* () {
-        writes.push("attach " + domain.host + " " + service);
-        rows.set(domain.host, { id: "new-" + domain.host, service });
+        writes.push("move " + domain.host + " " + service);
+        rows.set(domain.host, { id: domain.incumbentId, service });
         if (
           interfere === "second-attachment" &&
           domain.host === "app.fidyapp.com" &&
@@ -62,7 +58,7 @@ it.effect("moves both exact incumbent domains and retains their verified Native 
       "fidy-native-storage-ingress",
       "fidy-native-web",
     ]);
-    expect(writes).toHaveLength(4);
+    expect(writes).toHaveLength(2);
   })
 );
 
@@ -75,16 +71,49 @@ it.effect("restores both incumbents after a lost successful attachment response"
       "fidycloudflare-ingress-production-hf6ajjsszff23h5z",
       "fidy-web",
     ]);
-    expect(writes).toHaveLength(8);
+    expect(writes).toHaveLength(4);
   })
 );
 
-it.effect("refuses foreign incumbent identity before detaching either host", () =>
+it.effect("refuses foreign incumbent identity before moving either host", () =>
   Effect.gen(function* () {
     const { port, writes } = testPort("foreign-before");
     expect(
       Result.isFailure(yield* Effect.result(transferCanonicalDomains(port, Effect.void)))
     ).toBe(true);
     expect(writes).toEqual([]);
+  })
+);
+
+it.effect("allows only an in-place change to the pinned canonical domain", () =>
+  Effect.gen(function* () {
+    const [domain] = canonicalDomains;
+    const zoneId = "fidy-zone";
+    const result = {
+      added: [],
+      conflicting: [],
+      removed: [],
+      updated: [
+        {
+          id: domain.incumbentId,
+          hostname: domain.host,
+          zone_id: zoneId,
+          service: domain.native,
+          enabled: true,
+          previews_enabled: false,
+          modified: true,
+        },
+      ],
+    };
+    const target = { service: domain.native, zoneId };
+    yield* confirmCanonicalDomainMove({ success: true, result }, domain, target);
+    const removesAcceptanceHost = {
+      ...result,
+      removed: [{ hostname: "storage-acceptance.fidyapp.com" }],
+    };
+    const rejected = yield* Effect.result(
+      confirmCanonicalDomainMove({ success: true, result: removesAcceptanceHost }, domain, target)
+    );
+    expect(Result.isFailure(rejected)).toBe(true);
   })
 );

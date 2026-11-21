@@ -20,7 +20,7 @@ const checkBatchEffects = Effect.fnUntraced(function* (
   owner: Effect.Success<ReturnType<typeof seed>>,
   turnId: string
 ) {
-  if (mode === "batch-stale") {
+  yield* Effect.gen(function* () {
     expect(
       yield* owner.exec(
         "SELECT count(*) AS n FROM hosted_batch_child_audit WHERE turn_id=? AND outcome='success'",
@@ -30,9 +30,9 @@ const checkBatchEffects = Effect.fnUntraced(function* (
     expect(
       yield* owner.exec("SELECT count(*) AS n FROM user_documents WHERE kind='dashboard'")
     ).toEqual([{ n: 0 }]);
-  }
+  }).pipe(Effect.when(Effect.succeed(mode === "batch-stale")));
 
-  if (mode === "batch") {
+  yield* Effect.gen(function* () {
     expect(
       yield* owner.exec("SELECT count(*) AS n FROM user_documents WHERE kind='dashboard'")
     ).toEqual([{ n: 1 }]);
@@ -46,7 +46,7 @@ const checkBatchEffects = Effect.fnUntraced(function* (
       { operation: "dashboard.initializeDashboard", outcome: "success" },
       { operation: "ingestion.enableEmailForwarding", outcome: "success" },
     ]);
-  }
+  }).pipe(Effect.when(Effect.succeed(mode === "batch")));
 });
 
 const financialQueries = [
@@ -202,7 +202,7 @@ const verifyQueryTools = Effect.fnUntraced(function* (
     runtime: HostedRuntime;
   }
 ) {
-  if (["planning", "account"].includes(mode)) {
+  yield* Effect.gen(function* () {
     if (mode === "planning") yield* comparePublishedSeries(owner, runtime);
     const listing = yield* native(() => provider.fetch("https://fixture.invalid/tools"));
     expect(yield* native(() => listing.json())).toEqual(
@@ -229,7 +229,7 @@ const verifyQueryTools = Effect.fnUntraced(function* (
         .sort((left, right) => left.operation.localeCompare(right.operation, "en-US"))
     );
 
-    if (mode === "account") {
+    yield* Effect.gen(function* () {
       expect(
         yield* owner.exec(
           "SELECT json_extract(entry_json,'$.outcome.output.data.url') AS url FROM hosted_transcript WHERE json_extract(entry_json,'$.operation')='subscription.getUpgradeUrl' AND json_extract(entry_json,'$._tag')='CanonicalToolResultEntry'"
@@ -244,12 +244,12 @@ const verifyQueryTools = Effect.fnUntraced(function* (
         { operation: "pats.getPATActivity", outcome: "rejected" },
         { operation: "pats.listPATs", outcome: "accepted" },
       ]);
-    }
+    }).pipe(Effect.when(Effect.succeed(mode === "account")));
+  }).pipe(Effect.when(Effect.succeed(["planning", "account"].includes(mode))));
 
-    return true;
-  }
+  if (["planning", "account"].includes(mode)) return true;
 
-  if (mode === "connection") {
+  yield* Effect.gen(function* () {
     expect(proposal.text).toMatch(/https:\/\/app\.fidyapp\.com\/connections\/continue\?attempt=/u);
     expect(yield* owner.exec("SELECT public_reference FROM connection_attempts")).toEqual([
       { public_reference: proposal.text.split("attempt=")[1] },
@@ -261,9 +261,9 @@ const verifyQueryTools = Effect.fnUntraced(function* (
     ).toEqual([{ availability: "available" }]);
     const state = yield* native(() => provider.fetch("https://fixture.invalid/waiting"));
     expect(yield* native(() => state.json())).toMatchObject({ rounds: 1 });
+  }).pipe(Effect.when(Effect.succeed(mode === "connection")));
 
-    return true;
-  }
+  if (mode === "connection") return true;
 
   return false;
 });
@@ -406,7 +406,9 @@ const nativeTurnJourney = Effect.fnUntraced(function* (
     { times: 50, schedule: Schedule.spaced("50 millis") }
   );
 
-  if (["ordinary", "withdraw"].includes(mode)) expect(proposal.text).toBe("Listo.");
+  yield* Effect.sync(() => expect(proposal.text).toBe("Listo.")).pipe(
+    Effect.when(Effect.succeed(["ordinary", "withdraw"].includes(mode)))
+  );
   const redelivery = yield* post(alice, "/progress", { turnId: identity.turnId });
   expect(yield* native(() => redelivery.json())).toMatchObject({
     receipt: proposal.receipt,
@@ -422,65 +424,61 @@ const nativeTurnJourney = Effect.fnUntraced(function* (
 
   if (yield* verifyQueryTools(mode, proposal, { owner, provider, runtime })) return;
 
-  if (mode === "withdraw") {
+  yield* Effect.gen(function* () {
     expect(yield* owner.exec("SELECT outcome FROM hosted_tool_calls")).toEqual([
       { outcome: "CanonicalOperationFailed" },
     ]);
     expect((yield* post(alice, "", { text: "Otro turno" })).status).toBe(403);
+  }).pipe(Effect.when(Effect.succeed(mode === "withdraw")));
 
-    return;
-  }
+  if (mode === "withdraw") return;
 
-  if (["confirm", "stale", "batch", "batch-stale"].includes(mode)) {
-    const assertReviewed = Effect.fnUntraced(function* () {
-      expect(proposal.text).toContain("Preparo almuerzos");
-      expect(proposal.confirmation?.command).toMatch(/^CONFIRMAR [a-f0-9]{64}$/u);
-      expect(yield* owner.exec("SELECT count(*) AS n FROM memories")).toEqual([{ n: 1 }]);
+  const assertReviewed = Effect.fnUntraced(function* () {
+    expect(proposal.text).toContain("Preparo almuerzos");
+    expect(proposal.confirmation?.command).toMatch(/^CONFIRMAR [a-f0-9]{64}$/u);
+    expect(yield* owner.exec("SELECT count(*) AS n FROM memories")).toEqual([{ n: 1 }]);
 
-      if (["stale", "batch-stale"].includes(mode)) {
-        yield* owner.exec("UPDATE memories SET text='Estado nuevo' WHERE id=?", id);
-      }
+    if (["stale", "batch-stale"].includes(mode)) {
+      yield* owner.exec("UPDATE memories SET text='Estado nuevo' WHERE id=?", id);
+    }
 
-      if (mode.startsWith("batch")) {
-        expect(proposal.text).toContain("Activar tu dirección de correo");
-        expect(
-          yield* owner.exec("SELECT count(*) AS n FROM user_documents WHERE kind='dashboard'")
-        ).toEqual([{ n: 0 }]);
-      }
-
-      const confirmed = yield* post(alice, "", { text: proposal.confirmation?.command });
-
-      const accepted = yield* Schema.decodeUnknownEffect(HostedTurnProcessing)(
-        yield* native(() => confirmed.json())
-      );
-
-      yield* Effect.retry(
-        Effect.gen(function* () {
-          const res = yield* post(alice, "/progress", { turnId: accepted.turnId });
-
-          return yield* Schema.decodeUnknownEffect(HostedTurnProposal)(
-            yield* native(() => res.json())
-          );
-        }),
-        { times: 50, schedule: Schedule.spaced("50 millis") }
-      );
-      expect(yield* owner.exec("SELECT count(*) AS n FROM memories")).toEqual([
-        { n: ["stale", "batch-stale"].includes(mode) ? 1 : 0 },
-      ]);
-      yield* checkBatchEffects(mode, owner, accepted.turnId);
+    yield* Effect.gen(function* () {
+      expect(proposal.text).toContain("Activar tu dirección de correo");
       expect(
-        yield* owner.exec("SELECT outcome FROM hosted_tool_calls WHERE turn_id=?", accepted.turnId)
-      ).toEqual([
-        {
-          outcome: ["stale", "batch-stale"].includes(mode)
-            ? "CanonicalOperationFailed"
-            : "Succeeded",
-        },
-      ]);
-    });
+        yield* owner.exec("SELECT count(*) AS n FROM user_documents WHERE kind='dashboard'")
+      ).toEqual([{ n: 0 }]);
+    }).pipe(Effect.when(Effect.succeed(mode.startsWith("batch"))));
 
-    return yield* assertReviewed();
-  }
+    const confirmed = yield* post(alice, "", { text: proposal.confirmation?.command });
+
+    const accepted = yield* Schema.decodeUnknownEffect(HostedTurnProcessing)(
+      yield* native(() => confirmed.json())
+    );
+
+    yield* Effect.retry(
+      Effect.gen(function* () {
+        const res = yield* post(alice, "/progress", { turnId: accepted.turnId });
+
+        return yield* Schema.decodeUnknownEffect(HostedTurnProposal)(
+          yield* native(() => res.json())
+        );
+      }),
+      { times: 50, schedule: Schedule.spaced("50 millis") }
+    );
+    expect(yield* owner.exec("SELECT count(*) AS n FROM memories")).toEqual([
+      { n: ["stale", "batch-stale"].includes(mode) ? 1 : 0 },
+    ]);
+    yield* checkBatchEffects(mode, owner, accepted.turnId);
+    expect(
+      yield* owner.exec("SELECT outcome FROM hosted_tool_calls WHERE turn_id=?", accepted.turnId)
+    ).toEqual([
+      {
+        outcome: ["stale", "batch-stale"].includes(mode) ? "CanonicalOperationFailed" : "Succeeded",
+      },
+    ]);
+  });
+
+  if (["confirm", "stale", "batch", "batch-stale"].includes(mode)) return yield* assertReviewed();
 
   yield* owner.exec("ALTER TABLE unavailable_reminder_schedules RENAME TO reminder_schedules");
   expect(

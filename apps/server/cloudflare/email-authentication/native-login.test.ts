@@ -158,8 +158,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       })
   );
 
-  for (const change of ["mailbox", "pairing", "expiry", "work deadline", "erase"] as const) {
-    test.effect("rechecks " + change + " immediately before the one-shot claim", () =>
+  test.effect.each(["mailbox", "pairing", "expiry", "work deadline", "erase"] as const)(
+    "rechecks %s immediately before the one-shot claim",
+    (change) =>
       Effect.gen(function* () {
         const { owner, start, pairing, work, deliver, inbox, hold } =
           yield* setup("revoked@example.test");
@@ -182,29 +183,21 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(yield* deliver(identity)).toBe(204);
         expect(yield* inbox()).toEqual([]);
 
-        if (change === "expiry" || change === "work deadline") {
-          expect(
-            yield* owner.exec(
-              "SELECT count(*) AS usable FROM login_email_proofs WHERE state <> 'rejected' OR selector IS NOT NULL OR digest IS NOT NULL"
-            )
-          ).toEqual([{ usable: 0 }]);
-        } else {
-          expect(yield* owner.exec("SELECT state FROM login_email_proofs")).toEqual([
-            { state: "rejected" },
-          ]);
-        }
-      })
-    );
-  }
+        const expired = change === "expiry" || change === "work deadline";
 
-  for (const outcome of [
-    "accepted",
-    "lost",
-    "limited",
-    "settlement",
-    "revoked-after-claim",
-  ] as const) {
-    test.effect("keeps duplicate delivery secret-free and one-shot after " + outcome, () =>
+        expect(
+          yield* owner.exec(
+            expired
+              ? "SELECT count(*) AS usable FROM login_email_proofs WHERE state <> 'rejected' OR selector IS NOT NULL OR digest IS NOT NULL"
+              : "SELECT state FROM login_email_proofs"
+          )
+        ).toEqual(expired ? [{ usable: 0 }] : [{ state: "rejected" }]);
+      })
+  );
+
+  test.effect.each(["accepted", "lost", "limited", "settlement", "revoked-after-claim"] as const)(
+    "keeps duplicate delivery secret-free and one-shot after %s",
+    (outcome) =>
       Effect.gen(function* () {
         const { owner, start, pairing, hold, work, deliver, inbox, logs, post, address } =
           yield* setup(outcome + "@example.test");
@@ -258,18 +251,19 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           yield* owner.exec("SELECT *,hex(digest) AS retained FROM login_email_proofs")
         );
 
+        const encodedIdentity = yield* Schema.encodeEffect(
+          Schema.fromJsonString(NativeLoginEmailWork)
+        )(identity);
+
         for (const secret of [code, code.slice(10), proof.privateVerifier]) {
           expect(retained).not.toContain(secret);
-          expect(
-            yield* Schema.encodeEffect(Schema.fromJsonString(NativeLoginEmailWork))(identity)
-          ).not.toContain(secret);
+          expect(encodedIdentity).not.toContain(secret);
           expect(logs.join(" ")).not.toContain(secret);
         }
 
         expect(logs.join(" ")).not.toContain(address);
       })
-    );
-  }
+  );
 
   test.effect("the watchdog reoffers an admitted intent after a missed scheduling hint", () =>
     Effect.gen(function* () {

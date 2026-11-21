@@ -123,7 +123,6 @@ const describeBatchChild = Effect.fnUntraced(function* (
   storage: DurableObjectStorage,
   current: number
 ) {
-  const client = yield* SqliteClient;
   const user = yield* liveTurn(turn, current);
   const allowed = localHostedCatalog(channelAuthority(turn));
 
@@ -144,12 +143,12 @@ const describeBatchChild = Effect.fnUntraced(function* (
       const result = yield* commitLocalWrite(prepared.value);
 
       return result.outcome === "success" ? Option.some(result.body) : Option.none();
-    }).pipe(
-      Effect.provideService(SqliteClient, client),
-      Effect.orElseSucceed(() => Option.none())
-    );
+    }).pipe(Effect.orElseSucceed(() => Option.none()));
 
-  return (operation: string, input: Schema.Json): Effect.Effect<Option.Option<string>> =>
+  return (
+    operation: string,
+    input: Schema.Json
+  ): Effect.Effect<Option.Option<string>, never, SqliteClient> =>
     describeConfirmation({ context: { timeZone: user.timeZone, read }, operation, input });
 });
 

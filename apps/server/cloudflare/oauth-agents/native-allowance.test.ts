@@ -179,17 +179,25 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
 
         const response = yield* native(() => agent.json());
 
-        if (direct.status === 201) {
-          expect(response).toMatchObject({
-            result: { isError: true, structuredContent: { error: { code: "quota_exhausted" } } },
-          });
-        } else {
-          expect(direct.status).toBe(429);
-          expect(yield* native(() => direct.json())).toMatchObject({
-            error: { code: "quota_exhausted" },
-          });
-          expect(response).toMatchObject({ result: { isError: false } });
-        }
+        const directWon = direct.status === 201;
+        const directBody = directWon ? null : yield* native(() => direct.json());
+
+        expect({ status: direct.status, direct: directBody, agent: response }).toMatchObject(
+          directWon
+            ? {
+                agent: {
+                  result: {
+                    isError: true,
+                    structuredContent: { error: { code: "quota_exhausted" } },
+                  },
+                },
+              }
+            : {
+                status: 429,
+                direct: { error: { code: "quota_exhausted" } },
+                agent: { result: { isError: false } },
+              }
+        );
 
         const standing = yield* protocol(pair.access_token, "tools/call", {
           name: "quota.getQuota",

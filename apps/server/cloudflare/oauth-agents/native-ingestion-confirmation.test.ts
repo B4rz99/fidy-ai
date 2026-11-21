@@ -1,10 +1,13 @@
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Data, Effect, Schema } from "effect";
 import { expect } from "vitest";
 import { nativeGrant, protocolFor } from "./native-grant.test-fixture";
 import { native } from "../user-store.test-fixture";
 import { alice } from "../financial-user-store.test-fixture";
+import type { ReviewCommand } from "../../src/core/ingestion/contract";
+
+const ReviewWire = Data.taggedEnum<typeof ReviewCommand.Encoded>();
 
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
@@ -34,8 +37,8 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const invoke = (revision: number, state?: string): ReturnType<typeof protocol> =>
           protocol(credential.access_token, "tools/call", {
             name: "ingestion.applyReviewEdit",
-            args: { payload: { _tag: "Skip", items: [{ id, revision }] } },
-            ...(state === undefined ? {} : { continuation: state }),
+            args: { payload: ReviewWire.Skip({ items: [{ id, revision }] }) },
+            continuation: state,
           });
 
         const form = Schema.Struct({
@@ -136,7 +139,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               },
             },
           },
-          ...(state === undefined ? {} : { continuation: state }),
+          continuation: state,
         });
 
       const form = Schema.Struct({

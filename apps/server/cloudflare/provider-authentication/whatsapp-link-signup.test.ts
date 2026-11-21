@@ -1,6 +1,7 @@
 import { it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import { NodeFileSystem } from "@effect/platform-node";
+import type { Miniflare } from "miniflare";
 import { expect } from "vitest";
 import { browser, chatWith, signedChat } from "../browser-bootstrap.test-fixture";
 import { native, nativeBrowserPlatform } from "../user-store.test-fixture";
@@ -12,6 +13,39 @@ const caller = "CO.Original";
 const complete = "/web/providers/google/complete";
 
 const start = "/web/providers/google/start";
+
+type ChatChange = Partial<Parameters<typeof chatWith>[1]>;
+
+const refusedChange =
+  (
+    runtime: Miniflare,
+    text: string
+  ): ((change: ChatChange) => Effect.Effect<boolean, Schema.SchemaError>) =>
+  (change) =>
+    chatWith(runtime, { caller, text, ...change }).pipe(
+      Effect.tap((refused) => native(() => refused.arrayBuffer())),
+      Effect.map(({ ok }) => ok)
+    );
+
+const refusedAdmission = (
+  runtime: Miniflare,
+  directory: Awaited<ReturnType<Miniflare["unsafeGetDurableObjectStorage"]>>,
+  limitedCaller: string
+): ((admission: readonly [string, number]) => Effect.Effect<number, Schema.SchemaError>) =>
+  Effect.fnUntraced(function* ([scope, limit]) {
+    yield* native(() =>
+      directory.exec(
+        "WITH RECURSIVE n(i) AS(VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<?) INSERT INTO bootstrap_admissions(scope,expires_at_ms) SELECT ?,4102444800000 FROM n",
+        limit,
+        scope
+      )
+    );
+    const refused = yield* signedChat(runtime, "Hola", limitedCaller);
+    yield* native(() => refused.arrayBuffer());
+    yield* native(() => directory.exec("DELETE FROM bootstrap_admissions WHERE scope=?", scope));
+
+    return refused.status;
+  });
 
 const Review = Schema.Struct({ confirmationText: Schema.String, associationCode: Schema.String });
 
@@ -89,24 +123,20 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         yield* native(() => before.arrayBuffer());
         yield* Effect.sleep("1100 millis");
 
-        for (const change of [
-          { text: " " + review.confirmationText },
-          { text: review.confirmationText + " " },
-          { text: review.confirmationText.replace("Google", "Microsoft") },
-          { caller: "CO.Other" },
-          { endpoint: "999999999999999" },
-          { occurredMs: 1 },
-          { secret: "incorrect" },
-        ]) {
-          const refused = yield* chatWith(runtime, {
-            caller,
-            text: review.confirmationText,
-            ...change,
-          });
-
-          expect(refused.ok).toBe(false);
-          yield* native(() => refused.arrayBuffer());
-        }
+        expect(
+          yield* Effect.forEach(
+            [
+              { text: " " + review.confirmationText },
+              { text: review.confirmationText + " " },
+              { text: review.confirmationText.replace("Google", "Microsoft") },
+              { caller: "CO.Other" },
+              { endpoint: "999999999999999" },
+              { occurredMs: 1 },
+              { secret: "incorrect" },
+            ],
+            refusedChange(runtime, review.confirmationText)
+          )
+        ).toEqual([false, false, false, false, false, false, false]);
 
         const declined = yield* signedChat(
           runtime,
@@ -314,24 +344,15 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
 
       const caller = "CO.Limited";
 
-      for (const [scope, limit] of [
-        ["wa:9:portfolio" + caller, 6],
-        ["whatsapp-sends", 1000],
-      ] as const) {
-        yield* native(() =>
-          directory.exec(
-            "WITH RECURSIVE n(i) AS(VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<?) INSERT INTO bootstrap_admissions(scope,expires_at_ms) SELECT ?,4102444800000 FROM n",
-            limit,
-            scope
-          )
-        );
-        const refused = yield* signedChat(runtime, "Hola", caller);
-        expect(refused.status).toBe(429);
-        yield* native(() => refused.arrayBuffer());
-        yield* native(() =>
-          directory.exec("DELETE FROM bootstrap_admissions WHERE scope=?", scope)
-        );
-      }
+      expect(
+        yield* Effect.forEach(
+          [
+            ["wa:9:portfolio" + caller, 6],
+            ["whatsapp-sends", 1000],
+          ] as const,
+          refusedAdmission(runtime, directory, caller)
+        )
+      ).toEqual([429, 429]);
 
       yield* native(() =>
         directory.exec(

@@ -81,7 +81,7 @@ restore environment/configuration in teardown.
 
 Register cleanup before assertions or interruptible work. Acquire an explicit test Scope with
 `Effect.acquireRelease` when an early close is itself under test, so failure still closes it;
-see [the clipboard tests](../apps/web/src/browser/clipboard.test.ts). Coordinate races with
+see [the clipboard tests](../apps/web/test/browser/clipboard.test.ts). Coordinate races with
 Deferreds or controlled transport settlement, then assert both the result and owner disposal.
 An abort test must abort the real request while the competing operation is blocked.
 

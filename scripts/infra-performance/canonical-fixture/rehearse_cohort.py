@@ -1,15 +1,12 @@
 """Interrupt the native collector after issuance, discard the controller, then recover against workerd."""
 import argparse
-from contextlib import closing, contextmanager
+from contextlib import contextmanager
 from email.message import Message
 import json
 import os
 from pathlib import Path
 import secrets
-from shutil import copyfile
-import sqlite3
 import subprocess
-from tempfile import TemporaryDirectory
 import time
 
 from cohort import Cohort
@@ -17,8 +14,7 @@ from cohort_runner import BrowserPort, collect_owned, commands
 from fixture import digest, write
 from hosted import ROOT, private_file
 from protected_cohort import HostedPort
-from browser_window import native_delta, route_counts
-from native_smoke import reserve_smoke
+from native_smoke import native_delta, reserve_smoke, route_counts
 
 
 class LocalCustody:
@@ -84,26 +80,6 @@ def controller(directory, coords, path):
         yield port
 
 
-def native_accounts(directory, physical, session, user):
-    database, = directory.rglob(physical + ".sqlite")
-    with TemporaryDirectory() as temporary:
-        snapshot = Path(temporary) / "audit.sqlite"
-        copyfile(database, snapshot)
-        wal = Path(str(database) + "-wal")
-        if wal.exists():
-            copyfile(wal, str(snapshot) + "-wal")
-        with closing(sqlite3.connect(snapshot)) as db:
-            return session_accounts(db, session, user)
-
-
-def session_accounts(db, session, user):
-    audit = dict((operation+"."+outcome, count) for operation,outcome,count in db.execute(
-            "SELECT operation,outcome,count(*) FROM audit_entries WHERE user_id=? AND session_id=? AND operation IS NOT NULL GROUP BY operation,outcome",
-            (user,session["binding"])))
-    units,receipts = db.execute("SELECT (SELECT coalesce(sum(units),0) FROM commercial_allowance_consumptions WHERE user_id=?1 AND allowance='canonical_call'),(SELECT count(*) FROM canonical_request_receipts WHERE user_id=?1)",(user,)).fetchone()
-    return {**audit,"canonicalUnits":units,"receipts":receipts}
-
-
 def rehearse_native_smoke(directory, path, coords, proof, out):
     manifest = private_file(directory, "manifest.json")
     expected = {key: manifest[key] for key in ("history", "workspace")}
@@ -135,15 +111,11 @@ def rehearse_native_smoke(directory, path, coords, proof, out):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", required=True, type=Path)
-    parser.add_argument("--d1",type=Path)
-    parser.add_argument("--calibration",type=Path)
     parser.add_argument("--second-member", action="store_true")
     parser.add_argument("--native-smoke", action="store_true")
     args = parser.parse_args()
-    if bool(args.d1) != bool(args.calibration):
-        parser.error("The paired browser requires both frozen checkouts")
-    if args.native_smoke and (args.d1 or not args.second_member):
-        parser.error("Native-only smoke needs the second member and no comparator")
+    if args.native_smoke and not args.second_member:
+        parser.error("Native smoke needs the second member")
     out = args.out.resolve()
     os.umask(0o077)
     out.mkdir(parents=True, exist_ok=False)
@@ -162,29 +134,10 @@ def main():
     with controller(directory, coords, path) as port:
         port.runtime("seed-survivors")
         port.owner.enroll()
-        proof = collect_owned(port.owner, port, browser=bool(args.d1) or args.native_smoke)
+        proof = collect_owned(port.owner, port, browser=args.native_smoke)
     if args.native_smoke:
         try:
             rehearse_native_smoke(directory, path, coords, proof, out)
-        finally:
-            with controller(directory, coords, path) as port:
-                port.owner.cleanup()
-    if args.d1:
-        import sys
-        sys.path.insert(0,str(ROOT/"scripts/infra-performance/cells"))
-        from rehearse_browser import paired
-        session=json.loads((directory/"native-session.json").read_bytes())
-        user=json.loads((directory/"manifest.json").read_bytes())["workspace"]["profile"]["data"]["id"]
-        physical=json.loads(path.read_bytes())["physical"]
-        before=native_accounts(out/"workerd",physical,session,user)
-        try:
-            paired(out,proof,session,revision,coords["prefix"],args.d1,args.calibration)
-            after=native_accounts(out/"workerd",physical,session,user)
-            delta={k:after.get(k,0)-before.get(k,0) for k in after.keys()|before.keys()}
-            write(out/"native-window-audit.json",delta)
-            expected={"transactions.listTransactions.success":33,"transactions.updateTransaction.success":1,"transactions.updateTransaction.validation_failed":1,"canonicalUnits":0,"receipts":0}
-            if any(delta.get(k,0)!=v for k,v in expected.items()):
-                raise ValueError("Original native Session Audit or commercial accounting differs")
         finally:
             with controller(directory, coords, path) as port:
                 port.owner.cleanup()

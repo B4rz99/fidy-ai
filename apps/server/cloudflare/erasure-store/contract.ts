@@ -1,7 +1,7 @@
 import { UserId } from "../../src/core/identity/contract";
 import { type ErasureClass, ErasureReference } from "../../src/core/erasure/contract";
 import { Data, Schema } from "effect";
-import type { Effect, Option } from "effect";
+import type { Effect } from "effect";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 
 export class ErasureUnavailable extends Data.TaggedError("ErasureUnavailable") {}
@@ -10,12 +10,6 @@ export type ErasureOriginals = Readonly<{
   discard: (scope: ErasureScope) => Effect.Effect<"Done" | "Continue", ErasureUnavailable>;
 }>;
 
-export type ErasureOriginalConfiguration = Readonly<{
-  db: D1Database;
-  email: Option.Option<R2Bucket>;
-  statement: Option.Option<R2Bucket>;
-  registry: Option.Option<R2Bucket>;
-}>;
 export type ErasureStore = Readonly<{
   id: string;
   dataClass: ErasureClass;

@@ -19,7 +19,6 @@ from successor_source import cloudflare
 WORKFLOW_REF = "B4rz99/fidy-ai/.github/workflows/native-storage-release.yml@refs/heads/trunk"
 PLAN = "native-canonical-host-plan.json"
 SOURCE = "native-canonical-host-source.json"
-APPROVAL = "native-canonical-host-approved.json"
 OPENING_ROLLBACK_STEPS = {
     "Authenticate the exact closed active source for canonical host planning": "success",
     "Capture exact closed canonical versions and the protected User Store census": "success",
@@ -43,7 +42,7 @@ def require_protected_preview(env, git=git_read):
         "NATIVE_STORAGE_ADMISSION": "closed",
         "NATIVE_STORAGE_HOSTS": "staged",
     }
-    if (env.get("FIXTURE_RELEASE_OPERATION") not in ("plan-stage-hosts", "transfer-canonical-hosts", "open-canonical-signup")
+    if (env.get("FIXTURE_RELEASE_OPERATION") != "open-canonical-signup"
             or any(env.get(key) != value for key, value in expected.items())
             or re.fullmatch(r"[a-f0-9]{40}", verifier) is None
             or git("rev-parse", "HEAD") != verifier):
@@ -160,8 +159,9 @@ def verified_smoke(reference, source, verifier, get=actions_get, git=git_read):
         "Retain only aggregate observations": "success",
     }
     observed = [(step["name"], step["conclusion"]) for step in job["steps"] if step["name"] in required]
+    current = [(step, result) for step, result in required.items() if result != "skipped"]
     if (inventory["total_count"] != 1 or job["name"] != "cohort" or job["conclusion"] != "success"
-            or observed != list(required.items())):
+            or observed not in (list(required.items()), current)):
         raise ValueError("Protected native smoke did not finish correctness and disposal")
     with ZipFile(BytesIO(body)) as archive:
         entries = archive.infolist()
@@ -196,34 +196,6 @@ def verified_smoke(reference, source, verifier, get=actions_get, git=git_read):
                       for role in ("api", "browser"))):
         raise ValueError("Native correctness lacks the verified browser, atomic rollback or persisted accounting")
     return {"runId": run, "revision": producer, **reference}
-
-
-def approved_plan(reference, source, verifier, get=actions_get):
-    run, body = protected_archive(verifier, reference["artifactId"], reference["sha256"],
-                                  prefix="native-canonical-host-plan-", conclusions={"success"}, get=get)
-    job = protected_release_job(run, get)
-    required = {
-        "Authenticate the exact closed active source for canonical host planning": "success",
-        "Verify the scoped Access plan and closed canonical cutover prerequisites": "success",
-        "Retain the verified read-only canonical host plan": "success",
-        "Fence the exact incumbent writers before transferring canonical hosts": "skipped",
-        "Apply the approved canonical Access changes": "skipped",
-        "Transfer and verify the two closed canonical hosts": "skipped",
-    }
-    observed = [(step["name"], step["conclusion"]) for step in job["steps"] if step["name"] in required]
-    if observed != list(required.items()):
-        raise ValueError("Canonical host plan has unexpected protected step outcomes")
-    with ZipFile(BytesIO(body)) as archive:
-        entries = archive.infolist()
-        if (len(entries) != 2 or {entry.filename for entry in entries} != {PLAN, SOURCE}
-                or any(not 0 < entry.file_size <= 8192 for entry in entries)):
-            raise ValueError("Unexpected canonical host plan evidence")
-        installed = json.loads(archive.read(SOURCE))
-        plan = json.loads(archive.read(PLAN))
-    if (installed != source or plan.get("applied") is not False
-            or plan.get("verifierRevision") != verifier):
-        raise ValueError("Approved canonical plan differs from the current protected release")
-    return plan
 
 
 def protected_release_job(run, get):
@@ -387,11 +359,6 @@ def main():
     smoke = {"artifactId": env["CANONICAL_SMOKE_ARTIFACT"], "sha256": env["CANONICAL_SMOKE_SHA256"]}
     source["smoke"] = verified_smoke(smoke, source, verifier)
     directory = Path(env["RUNNER_TEMP"])
-    if env["FIXTURE_RELEASE_OPERATION"] == "transfer-canonical-hosts":
-        approval = {"artifactId": env["CANONICAL_PLAN_ARTIFACT"], "sha256": env["CANONICAL_PLAN_SHA256"]}
-        plan = approved_plan(approval, source, verifier)
-        with (directory / APPROVAL).open("x") as evidence:
-            json.dump(plan, evidence)
     if env["FIXTURE_RELEASE_OPERATION"] == "open-canonical-signup":
         require_ordinary_source(source["revision"], verifier)
         receipt = {"artifactId": env["CANONICAL_TRANSFER_ARTIFACT"], "sha256": env["CANONICAL_TRANSFER_SHA256"]}

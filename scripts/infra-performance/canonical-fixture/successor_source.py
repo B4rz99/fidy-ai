@@ -7,14 +7,9 @@ import re
 import sys
 from zipfile import ZipFile
 
-from hosted import HERE
 from installation import validate_candidate, validate_qualification
+from native_custody import Cloud, CustodyObject, cloudflare
 from qualified_release import actions_get, artifact, protected_archive, serving_graph
-
-sys.path.insert(0, str(HERE.parent / "cells"))
-from owner_cloud import Cloud
-from owner_state import CustodyObject
-from owner_transport import cloudflare
 
 ORIGINAL_REVISION = "0ba692ff68c1d63da1f4a7fdb8d6df5ff1566287"
 ACTIVE_ARTIFACT = "14645515552"
@@ -148,7 +143,7 @@ def verified_predecessor(revision, account, public_key, *, read=cloudflare):
                               ("skipped", "skipped", "skipped", "success", "success"), "cleanup.json")
     actual = verify_live_predecessor(read, account, promotion, installed, public_key)
     prefix = original["resourcePrefix"]
-    cloud = Cloud(account, prefix)
+    cloud = Cloud(account)
     store = CustodyObject(account, cloud, native_revision=ORIGINAL_REVISION, read_only=True)
     marker = CustodyObject(account, cloud, native_revision=ORIGINAL_REVISION, receipt_marker=True)
     coordinates = dict(**actual, account=account, prefix=prefix, archive=ACTIVE_DIGEST)

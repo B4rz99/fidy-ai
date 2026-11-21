@@ -100,10 +100,8 @@ const serveAsset = async (request, url, { assets, assetsDelivered }) => {
   return new Response(file);
 };
 /** @param {Config} config Admitted browser workload. @param {AssetsDelivered} assetsDelivered Observed asset totals. */
-const webTransport = ({ variant, origins, forwardWeb }, assetsDelivered) => {
-  const assets = forwardWeb
-    ? ""
-    : resolve(process.env[variant === "d1" ? "D1_WEB_ASSETS" : "NATIVE_WEB_ASSETS"]);
+const webTransport = ({ origins, forwardWeb }, assetsDelivered) => {
+  const assets = forwardWeb ? "" : resolve(process.env.NATIVE_WEB_ASSETS);
   return server(async (request) => {
     const url = new URL(request.url);
     if (request.method !== "GET" || url.origin !== origins.browser) {
@@ -295,7 +293,7 @@ const execute = async (
 };
 /** @param {Config} config Admitted browser workload. */
 export const runBrowser = async (config) => {
-  const { variant, network = "ordinary" } = config;
+  const { network = "ordinary" } = config;
   assert.equal(network, "ordinary");
   const dir = resolve(process.env.FIDY_DIAGNOSTIC_DIR);
   /** @type {CapturedEvent[]} */
@@ -306,8 +304,8 @@ export const runBrowser = async (config) => {
   const assetsDelivered = { rawBytes: 0, encodedBytes: 0, responses: 0, gzip: 0 };
   const report = () =>
     Bun.write(
-      join(dir, "ordinary-" + variant + ".json"),
-      JSON.stringify({ variant, network, events, snapshots, assetsDelivered }, null, 2)
+      join(dir, "ordinary-do.json"),
+      JSON.stringify({ variant: "do", network, events, snapshots, assetsDelivered }, null, 2)
     );
 
   const web = webTransport(config, assetsDelivered);

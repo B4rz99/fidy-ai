@@ -2,9 +2,6 @@ import { offerChannel } from "./internal/local-channel-delivery";
 import { hostedDocument, hostedText } from "./internal/local-whatsapp";
 import { inspectTurns, recoverTurns } from "./internal/local-recovery";
 import { browserHosted, browserHostedPaths } from "./internal/local-hosted";
-import { projections as erasureProjections } from "./internal/erasure";
-import { makeErasureStore } from "../erasure-store/runtime";
-import type { ErasureStore } from "../erasure-store/contract";
 import { Effect } from "effect";
 import {
   type AgentRetention,
@@ -39,9 +36,6 @@ export const makeAgentRetention = ({ db }: Readonly<{ db: D1Database }>): AgentR
       )
     ),
 });
-
-export const makeAgentErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
-  erasureProjections.map((projection) => makeErasureStore({ db, projection }));
 
 export const isLocalHostedPath = (path: string): boolean => browserHostedPaths.includes(path);
 export const handleLocalHosted: typeof browserHosted = (...args) => browserHosted(...args);

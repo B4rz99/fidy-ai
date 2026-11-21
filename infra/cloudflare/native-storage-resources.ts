@@ -1,4 +1,3 @@
-import { isDeepStrictEqual } from "node:util";
 import {
   SuccessorSource,
   applyScopedNativePlan,
@@ -6,7 +5,6 @@ import {
   projectFixtureInventory,
   projectSuccessorInventory,
   requireActiveSuccessorLifecycle,
-  requireSafeScopedNativePlan,
   requireSameSuccessorPlan,
   requireSmokeConsumerReconciliation,
   requireSuccessorLifecycle,
@@ -29,11 +27,7 @@ import {
   diagnoseNativePlan,
   diagnoseSuccessorApply,
 } from "./native-plan-diagnostics";
-import {
-  firstInstallEdge,
-  planCanonicalHostPreview,
-  retireCanonicalIncumbentAccess,
-} from "./native-storage-release";
+import { firstInstallEdge } from "./native-storage-release";
 import { confirmInterruptedSmokeConsumer } from "./native-smoke-consumer-recovery";
 import { nativeResourceInventory, requireNativeResourcePlan } from "./native-graph";
 import { type Plan, describePlan, describeResource } from "alchemy/Plan";
@@ -57,13 +51,7 @@ import {
 const Phase = Schema.Literals(["first-install", "upload", "stage-hosts"]);
 const Operation = Schema.Union([
   Phase,
-  Schema.Literals([
-    "plan-first-install",
-    "plan-fixture-fallback",
-    "plan-stage-hosts",
-    "apply-canonical-access",
-    "upload-canonical-signup",
-  ]),
+  Schema.Literals(["plan-first-install", "plan-fixture-fallback", "upload-canonical-signup"]),
 ]);
 const requireProtectedDispatch = Effect.gen(function* () {
   const actions = yield* Config.String("GITHUB_ACTIONS");
@@ -221,66 +209,6 @@ const requiredHosts: Partial<Record<typeof Phase.Type, NativeHostMode>> = {
   "first-install": "acceptance",
   "stage-hosts": "staged",
 };
-const canonicalAccess = Effect.fn(function* (apply: boolean) {
-  yield* requireProtectedDispatch;
-  yield* Config.Literal("true", "GITHUB_REF_PROTECTED");
-  yield* Config.Literal("1", "GITHUB_RUN_ATTEMPT");
-  yield* Config.Literal("staged", "NATIVE_STORAGE_HOSTS");
-  const operation = apply ? "transfer-canonical-hosts" : "plan-stage-hosts";
-  yield* Config.Literal(operation, "FIXTURE_RELEASE_OPERATION");
-  const revision = yield* Config.String("RELEASE_GIT_SHA");
-  const profile = yield* Config.String("ALCHEMY_PROFILE");
-  const directory = yield* Config.String("RUNNER_TEMP");
-  const pin = yield* protectedRecoveryPin.pipe(nativeResourceStage("account recovery PIN"));
-  const snapshot = yield* Alchemist.Stack.plan({
-    ...nativePlanOptions({ profile, preview: true, fingerprint: "" }),
-    include: stagedAccessApplications,
-  }).pipe(diagnoseNativePlan(revision));
-  yield* verifyResourcePlan({
-    phase: "stage-hosts",
-    plan: snapshot.native,
-    revision,
-    hosts: "staged",
-    pin,
-  });
-  const host = yield* planCanonicalHostPreview.pipe(
-    Effect.provide(ReleaseHttpLive),
-    Effect.timeout("60 seconds"),
-    nativeResourceStage("host capture")
-  );
-  yield* requireSafeScopedNativePlan(snapshot.native).pipe(
-    Effect.provide(snapshot.session.context)
-  );
-  const observed = {
-    verifierRevision: revision,
-    applied: false,
-    resources: projectFixtureInventory(describePlan(snapshot.native).resources),
-    ...host,
-  };
-  if (apply) {
-    const approved = yield* releaseEvidence.readFile(
-      directory + "/native-canonical-host-approved.json"
-    );
-    if (!isDeepStrictEqual(approved, observed)) {
-      return yield* Effect.fail(Error("Approved canonical Access plan differs from the live plan"));
-    }
-    yield* retireCanonicalIncumbentAccess(host).pipe(
-      Effect.provide(ReleaseHttpLive),
-      Effect.uninterruptible,
-      nativeResourceStage("provider apply")
-    );
-    yield* applyScopedNativePlan(snapshot.native).pipe(
-      Effect.provide(snapshot.session.context),
-      Effect.uninterruptible,
-      nativeResourceStage("provider apply")
-    );
-    return;
-  }
-  yield* releaseEvidence.writeFile(
-    directory + "/native-canonical-host-plan.json",
-    releaseEvidence.encodeJson(observed)
-  );
-});
 const resourceRelease = Effect.fn(function* (phase: typeof Phase.Type, preview: boolean) {
   yield* requireProtectedDispatch;
   const revision = yield* Config.String("RELEASE_GIT_SHA");
@@ -615,8 +543,6 @@ const uploadCanonicalSignup = Effect.fn(function* () {
 });
 const dispatchResourceRelease = Effect.fn(function* (operation: typeof Operation.Type) {
   if (operation === "plan-fixture-fallback") return yield* resourceRelease("upload", true);
-  if (operation === "plan-stage-hosts") return yield* canonicalAccess(false);
-  if (operation === "apply-canonical-access") return yield* canonicalAccess(true);
   if (operation === "upload-canonical-signup") return yield* uploadCanonicalSignup();
   if (operation === "plan-first-install") return yield* resourceRelease("first-install", true);
   return yield* resourceRelease(operation, false);

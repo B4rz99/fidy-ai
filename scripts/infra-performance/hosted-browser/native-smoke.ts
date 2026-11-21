@@ -145,7 +145,6 @@ export const runNativeSmoke = Effect.fnUntraced(function* (config: Smoke) {
   const run = Effect.runPromiseWith(yield* Effect.context<never>());
   yield* fromBrowser(() =>
     runBrowser({
-      variant: "do",
       origins,
       cookie: config.native.session.cookie,
       expected: config.expected.history,

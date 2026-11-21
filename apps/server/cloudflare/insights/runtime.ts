@@ -23,9 +23,6 @@ import {
   repairReminder,
 } from "./internal/local-reminder";
 import { evidenceRetentionDue, summariesDue } from "./internal/cadence";
-import { projections as erasureProjections } from "./internal/erasure";
-import { makeErasureStore } from "../erasure-store/runtime";
-import type { ErasureStore } from "../erasure-store/contract";
 import { OutboundHttpLive } from "../outbound-http/runtime";
 import { proactivityWorkflowId } from "./internal/proactivity-workflow";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
@@ -486,9 +483,6 @@ export class ProactivityDeliveryWorkflow extends WorkflowEntrypoint<
     );
   }
 }
-
-export const makeInsightsErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
-  erasureProjections.map((projection) => makeErasureStore({ db, projection }));
 
 const localSender = Effect.fn(function* (env: NativeReminderEnvironment) {
   const config = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(

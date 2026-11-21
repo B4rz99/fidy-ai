@@ -1,9 +1,6 @@
 import { checkLoginMailbox, startLoginEmail } from "./internal/login-admission";
 import { verifyLoginEmail } from "./internal/login-completion";
 import { deliverPendingReplacement as deliverLocal } from "./internal/native-mail-delivery";
-import { projections as erasureProjections } from "./internal/erasure";
-import { makeErasureStore } from "../erasure-store/runtime";
-import type { ErasureStore } from "../erasure-store/contract";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import { Effect, Option, Schema } from "effect";
 import {
@@ -133,7 +130,4 @@ export const runEmailReplacementWorkflow = (input: EmailWorkflowInput): Promise<
   runReplacement(input);
 
 export const isEmailReplacementWork = (value: unknown): boolean => recognizesReplacement(value);
-export const makeEmailAuthenticationErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
-  erasureProjections.map((projection) => makeErasureStore({ db, projection }));
-
 export const deliverPendingReplacement: typeof deliverLocal = (...args) => deliverLocal(...args);

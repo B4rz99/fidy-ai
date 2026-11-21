@@ -13,7 +13,6 @@ type BrowserOptions = Readonly<{
 
 export function runBrowser(
   config: Readonly<{
-    variant: "d1" | "do";
     origins: Readonly<{ api: string; browser: string }>;
     cookie: string;
     expected: unknown;

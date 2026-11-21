@@ -4,9 +4,6 @@ import {
   prepareSelectedProcessingConsentRead,
 } from "../../src/shell/processing-consent/operations";
 import { handleErasureRequest } from "../erasure/runtime";
-import { projections as erasureProjections } from "./internal/erasure";
-import { makeErasureStore } from "../erasure-store/runtime";
-import type { ErasureStore } from "../erasure-store/contract";
 import { Clock, Effect, Option, Schema } from "effect";
 import { processingConsentTransport } from "../../src/shell/processing-consent/runtime";
 import {
@@ -223,9 +220,6 @@ export const sweepProactivityConsentOffers = (
     const nowEpochMs = yield* Clock.currentTimeMillis;
     yield* sweepOffers({ db, nowEpochMs });
   });
-
-export const makeConsentErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
-  erasureProjections.map((projection) => makeErasureStore({ db, projection }));
 
 export const handleLocalProcessingConsent: typeof localProcessingConsent = (...args) =>
   localProcessingConsent(...args);

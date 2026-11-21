@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "9453fcdf8d2fd0f06a88da90643baad10cddf0df253f2ed3535b7cdeeb121b56";
+const expectedEdgePolicyDigest = "6a9d3bb970a16c86d4da105f4b17439d4980bb1a2be2c79df5904b2a2ed09b8d";
 const securityArtifacts = [
   ...(await Promise.all(
     [
@@ -79,21 +79,13 @@ const securityArtifacts = [
       "../../scripts/infra-performance/canonical-fixture/hosted.py",
       "../../scripts/infra-performance/canonical-fixture/installation.py",
       "../../scripts/infra-performance/canonical-fixture/native_budget.py",
+      "../../scripts/infra-performance/canonical-fixture/native_custody.py",
       "../../scripts/infra-performance/canonical-fixture/protected_cohort.py",
       "../../scripts/infra-performance/canonical-fixture/native_smoke.py",
       "../../scripts/infra-performance/canonical-fixture/qualified_release.py",
-      "../../scripts/infra-performance/cells/owner.py",
-      "../../scripts/infra-performance/cells/owner_state.py",
-      "../../scripts/infra-performance/cells/owner_transport.py",
-      "../../scripts/infra-performance/cells/owner_cloud.py",
-      "../../scripts/infra-performance/cells/owner_bundle.py",
-      "../../scripts/infra-performance/cells/browser_window.py",
-      "../../scripts/infra-performance/cells/browser_assets.py",
-      "../../scripts/infra-performance/d1-budget.ts",
       "../../scripts/infra-performance/hosted-browser/origin.mjs",
       "../../scripts/infra-performance/hosted-browser/contracts.ts",
       "../../scripts/infra-performance/hosted-browser/captured-profile.mjs",
-      "../../scripts/infra-performance/hosted-browser/protected-pair.mjs",
       "../../scripts/infra-performance/hosted-browser/native-accounting.ts",
       "../../scripts/infra-performance/hosted-browser/native-smoke.ts",
       "../../scripts/infra-performance/hosted-browser/scoped-correction.mjs",
@@ -109,16 +101,6 @@ const securityArtifacts = [
       "../../scripts/infra-performance/canonical-fixture/canonical_activity.py",
       "../../scripts/infra-performance/canonical-fixture/canonical_host_source.py",
       "./native-incumbent-fence.ts",
-      "./native-retirement-fence.ts",
-      "../../.github/workflows/native-incumbent-retirement.yml",
-      "../../scripts/retirement/disposition.py",
-      "../../scripts/retirement/fence_before_transfer.py",
-      "../../scripts/retirement/incumbent.json",
-      "../../scripts/retirement/legacy-inventory.sql",
-      "../../scripts/retirement/provenance.py",
-      "../../scripts/retirement/opening_source.py",
-      "../../scripts/retirement/provider.py",
-      "../../scripts/retirement/run.py",
       "./native-plan-diagnostics.ts",
       "./native-provider-list.ts",
       "./native-recovery-identity.ts",

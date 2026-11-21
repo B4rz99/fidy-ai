@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest";
-import { Effect, Option, Schema } from "effect";
+import { type Cause, Effect, Option, Schema } from "effect";
 import { describe, expect } from "vitest";
 import {
   handleSmoke,
@@ -11,6 +11,15 @@ import {
 } from "../../apps/server/cloudflare/runtime/release-smoke/contract";
 import publicWorker from "../../apps/server/cloudflare/public-worker";
 import { smokeEnvironment } from "./incomplete-platform-fixture";
+
+const fetchPublic = (
+  request: Request,
+  environment: Parameters<typeof publicWorker.fetch>[1]
+): Effect.Effect<Response, Cause.UnknownError> =>
+  Effect.tryPromise(() => publicWorker.fetch(request, environment));
+
+const responseText = (response: Response): Effect.Effect<string, Cause.UnknownError> =>
+  Effect.tryPromise(() => response.text());
 
 const revision = "0123456789abcdef0123456789abcdef01234567";
 
@@ -52,9 +61,10 @@ describe("production smoke identity", () => {
         CF_VERSION_METADATA: { id: version },
       };
 
-      for (const proof of ["", "invalid", "a".repeat(64)]) {
-        const response = yield* Effect.tryPromise(() =>
-          publicWorker.fetch(
+      yield* Effect.forEach(
+        ["", "invalid", "a".repeat(64)],
+        Effect.fnUntraced(function* (proof) {
+          const response = yield* fetchPublic(
             new Request("https://api.fidyapp.com/.well-known/oauth-protected-resource/mcp", {
               headers: {
                 "x-fidy-smoke-proof": proof,
@@ -63,11 +73,12 @@ describe("production smoke identity", () => {
               },
             }),
             environment
-          )
-        );
+          );
 
-        expect(response.status).toBe(proof === "a".repeat(64) ? 200 : 503);
-      }
+          expect(response.status).toBe(proof === "a".repeat(64) ? 200 : 503);
+        }),
+        { discard: true }
+      );
     })
   );
   it("refuses a healthy stable Worker when the requested candidate override was ignored", () => {
@@ -128,40 +139,38 @@ describe("production smoke ingress", () => {
         CF_VERSION_METADATA: { id: version },
       };
 
-      for (const path of ["/web/providers/disclosure", "/providers/google/callback", "/mcp"]) {
-        const response = yield* Effect.tryPromise(() =>
-          publicWorker.fetch(
+      yield* Effect.forEach(
+        ["/web/providers/disclosure", "/providers/google/callback", "/mcp"],
+        Effect.fnUntraced(function* (path) {
+          const response = yield* fetchPublic(
             new Request(`https://api.fidyapp.com${path}`, {
               headers: { "x-fidy-smoke-proof": "a".repeat(64) },
             }),
             environment
-          )
-        );
+          );
 
-        expect(response.status).toBe(503);
-        expect(response.headers.get("cache-control")).toBe("no-store");
-        expect(response.headers.get("x-fidy-recovery-isolation")).toBe("isolated");
-      }
+          expect(response.status).toBe(503);
+          expect(response.headers.get("cache-control")).toBe("no-store");
+          expect(response.headers.get("x-fidy-recovery-isolation")).toBe("isolated");
+        }),
+        { discard: true }
+      );
 
       expect(coreCalls).toBe(0);
 
-      const unauthorized = yield* Effect.tryPromise(() =>
-        publicWorker.fetch(
-          new Request("https://api.fidyapp.com/internal/release-smoke"),
-          environment
-        )
+      const unauthorized = yield* fetchPublic(
+        new Request("https://api.fidyapp.com/internal/release-smoke"),
+        environment
       );
 
       expect(unauthorized.status).toBe(503);
       expect(coreCalls).toBe(0);
 
-      const authorized = yield* Effect.tryPromise(() =>
-        publicWorker.fetch(
-          new Request("https://api.fidyapp.com/internal/release-smoke", {
-            headers: { "x-fidy-smoke-proof": "a".repeat(64) },
-          }),
-          environment
-        )
+      const authorized = yield* fetchPublic(
+        new Request("https://api.fidyapp.com/internal/release-smoke", {
+          headers: { "x-fidy-smoke-proof": "a".repeat(64) },
+        }),
+        environment
       );
 
       expect(authorized.status).toBe(200);
@@ -219,18 +228,16 @@ describe("production smoke ingress", () => {
 
         expect(coreCalls).toBe(0);
 
-        const authorized = yield* Effect.tryPromise(() =>
-          publicWorker.fetch(
-            new Request("https://api.fidyapp.com/internal/release-smoke", {
-              method: "POST",
-              headers: {
-                "x-fidy-smoke-proof": "a".repeat(64),
-                "cloudflare-workers-version-overrides":
-                  'fidy-core="dc8dcd28-271b-4367-9840-6c244f84cb40"',
-              },
-            }),
-            environment
-          )
+        const authorized = yield* fetchPublic(
+          new Request("https://api.fidyapp.com/internal/release-smoke", {
+            method: "POST",
+            headers: {
+              "x-fidy-smoke-proof": "a".repeat(64),
+              "cloudflare-workers-version-overrides":
+                'fidy-core="dc8dcd28-271b-4367-9840-6c244f84cb40"',
+            },
+          }),
+          environment
         );
 
         expect(authorized.status).toBe(200);
@@ -240,29 +247,34 @@ describe("production smoke ingress", () => {
           core: candidate,
         });
 
-        const failed = yield* Effect.tryPromise(() =>
-          publicWorker.fetch(
-            new Request("https://api.fidyapp.com/internal/release-smoke", {
-              method: "POST",
-              headers: { "x-fidy-smoke-proof": "a".repeat(64) },
-            }),
-            { ...environment, CORE: { fetch: () => Promise.reject(Error("secret-provider-body")) } }
-          )
+        const failed = yield* fetchPublic(
+          new Request("https://api.fidyapp.com/internal/release-smoke", {
+            method: "POST",
+            headers: { "x-fidy-smoke-proof": "a".repeat(64) },
+          }),
+          { ...environment, CORE: { fetch: () => Promise.reject(Error("secret-provider-body")) } }
         );
 
         expect(failed.status).toBe(503);
         expect(failed.headers.get("x-fidy-smoke-failure")).toBe("public_forwarding");
-        expect(yield* Effect.tryPromise(() => failed.text())).not.toContain("secret-provider-body");
+        expect(yield* responseText(failed)).not.toContain("secret-provider-body");
 
-        for (const [stage, equality, expectedEquality, observedVersion, expectedVersion] of [
-          ["identity", "011", "011", version, version],
-          ["identity", "secret-provider-body", null, "secret-provider-body", null],
-          ["schema", "011", null, version, null],
-          ["secret-provider-body", "011", null, version, null],
-          ["", "011", null, version, null],
-        ]) {
-          const sanitized = yield* Effect.tryPromise(() =>
-            publicWorker.fetch(
+        yield* Effect.forEach(
+          [
+            ["identity", "011", "011", version, version],
+            ["identity", "secret-provider-body", null, "secret-provider-body", null],
+            ["schema", "011", null, version, null],
+            ["secret-provider-body", "011", null, version, null],
+            ["", "011", null, version, null],
+          ],
+          Effect.fnUntraced(function* ([
+            stage,
+            equality,
+            expectedEquality,
+            observedVersion,
+            expectedVersion,
+          ]) {
+            const sanitized = yield* fetchPublic(
               new Request("https://api.fidyapp.com/internal/release-smoke", {
                 method: "POST",
                 headers: { "x-fidy-smoke-proof": "a".repeat(64) },
@@ -283,19 +295,18 @@ describe("production smoke ingress", () => {
                     ),
                 },
               }
-            )
-          );
+            );
 
-          expect(sanitized.status).toBe(503);
-          expect(sanitized.headers.get("x-fidy-smoke-failure")).toBe(
-            stage === "schema" || stage === "identity" ? stage : "core_response"
-          );
-          expect(sanitized.headers.get("x-fidy-smoke-identity")).toBe(expectedEquality);
-          expect(sanitized.headers.get("x-fidy-smoke-core-version")).toBe(expectedVersion);
-          expect(yield* Effect.tryPromise(() => sanitized.text())).not.toContain(
-            "secret-provider-body"
-          );
-        }
+            expect(sanitized.status).toBe(503);
+            expect(sanitized.headers.get("x-fidy-smoke-failure")).toBe(
+              stage === "schema" || stage === "identity" ? stage : "core_response"
+            );
+            expect(sanitized.headers.get("x-fidy-smoke-identity")).toBe(expectedEquality);
+            expect(sanitized.headers.get("x-fidy-smoke-core-version")).toBe(expectedVersion);
+            expect(yield* responseText(sanitized)).not.toContain("secret-provider-body");
+          }),
+          { discard: true }
+        );
       })
   );
 
@@ -343,57 +354,57 @@ describe("production smoke ingress", () => {
           expectedContractDigest: digest,
         });
 
-        for (const method of ["GET", "POST"]) {
-          const response = yield* Effect.tryPromise(() =>
-            publicWorker.fetch(
-              new Request("https://api.fidyapp.com/internal/release-smoke?readiness=1", {
-                method,
-                headers: {
-                  "x-fidy-smoke-proof": "a".repeat(64),
-                  "cloudflare-workers-version-overrides": overrides,
-                },
-                ...(method === "POST" ? { body } : {}),
-              }),
+        yield* Effect.forEach(
+          ["GET", "POST"],
+          Effect.fnUntraced(function* (method) {
+            const headers = {
+              "x-fidy-smoke-proof": "a".repeat(64),
+              "cloudflare-workers-version-overrides": overrides,
+            };
+
+            const response = yield* fetchPublic(
+              new Request(
+                "https://api.fidyapp.com/internal/release-smoke?readiness=1",
+                method === "POST" ? { method, headers, body } : { method, headers }
+              ),
               environment
-            )
-          );
+            );
 
-          expect(response.status).toBe(method === "GET" ? 200 : 503);
-
-          if (method === "POST") {
-            expect(response.headers.get("x-fidy-smoke-failure")).toBe("identity");
-          }
-        }
+            expect(response.status).toBe(method === "GET" ? 200 : 503);
+            expect(
+              method === "POST" ? response.headers.get("x-fidy-smoke-failure") : "identity"
+            ).toBe("identity");
+          }),
+          { discard: true }
+        );
       })
   );
 
   it.effect("reports the public digest independently rather than copying the Core digest", () =>
     Effect.gen(function* () {
-      const response = yield* Effect.tryPromise(() =>
-        publicWorker.fetch(
-          new Request("https://api.fidyapp.com/internal/release-smoke", {
-            headers: { "x-fidy-smoke-proof": "a".repeat(64) },
-          }),
-          {
-            BROWSER_ORIGIN: "https://app.fidyapp.com",
-            CORE: {
-              fetch: (): Promise<Response> =>
-                Promise.resolve(
-                  Response.json({
-                    status: "passed",
-                    core: candidate,
-                    manifest: { protocolVersion: 1, asyncWorkVersion: 1 },
-                  })
-                ),
-            },
-            LOCAL_CANONICAL_READ_BEARER: "",
-            PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
-            RELEASE_GIT_SHA: revision,
-            CONTRACT_DIGEST: "0".repeat(64),
-            SMOKE_PROOF: "a".repeat(64),
-            CF_VERSION_METADATA: { id: version },
-          }
-        )
+      const response = yield* fetchPublic(
+        new Request("https://api.fidyapp.com/internal/release-smoke", {
+          headers: { "x-fidy-smoke-proof": "a".repeat(64) },
+        }),
+        {
+          BROWSER_ORIGIN: "https://app.fidyapp.com",
+          CORE: {
+            fetch: (): Promise<Response> =>
+              Promise.resolve(
+                Response.json({
+                  status: "passed",
+                  core: candidate,
+                  manifest: { protocolVersion: 1, asyncWorkVersion: 1 },
+                })
+              ),
+          },
+          LOCAL_CANONICAL_READ_BEARER: "",
+          PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
+          RELEASE_GIT_SHA: revision,
+          CONTRACT_DIGEST: "0".repeat(64),
+          SMOKE_PROOF: "a".repeat(64),
+          CF_VERSION_METADATA: { id: version },
+        }
       );
 
       expect(response.status).toBe(200);

@@ -5,7 +5,7 @@ import { Schema } from "effect";
 export const nativeResourceInventory = (revision: string): ReadonlyMap<string, string> => {
   if (!/^[a-f0-9]{40}$/u.test(revision)) throw Error("Missing native release revision");
 
-  const resources: Readonly<Record<string, ReadonlyArray<string>>> = {
+  const resources = {
     "Cloudflare.Access.Group": ["RecoveryOperators"],
     "Cloudflare.Access.Application": [
       "SupportRecoveryAccess",
@@ -225,19 +225,20 @@ const requireClosedRole = (
   bindings: ReadonlyArray<NativeBinding>,
   fingerprint: string
 ): void => {
-  const text = (name: string): unknown => bindings.find((binding) => binding.name === name)?.text;
+  const textIs = (name: string, expected: string): boolean =>
+    bindings.find((binding) => binding.name === name)?.text === expected;
 
   if (
     fingerprint !== "" &&
     role === "Core" &&
-    (text("ACCEPTANCE_PROVIDER_REVISION") !== retainedProvider.revision ||
-      text("NATIVE_FIXTURE_SIGNER_SHA256") !== fingerprint ||
-      text("BROWSER_ORIGIN") !== installedOrigins.acceptance.browser)
+    (!textIs("ACCEPTANCE_PROVIDER_REVISION", retainedProvider.revision) ||
+      !textIs("NATIVE_FIXTURE_SIGNER_SHA256", fingerprint) ||
+      !textIs("BROWSER_ORIGIN", installedOrigins.acceptance.browser))
   ) {
     throw Error("Actual candidate receipt signer or closed acceptance origin differs");
   }
 
-  if (text("RECOVERY_ISOLATION") !== "isolated" || text("NATIVE_STORAGE_ADMISSION") !== "closed") {
+  if (!textIs("RECOVERY_ISOLATION", "isolated") || !textIs("NATIVE_STORAGE_ADMISSION", "closed")) {
     throw Error("Closed admission is required");
   }
 };

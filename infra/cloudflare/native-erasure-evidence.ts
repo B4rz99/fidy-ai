@@ -35,32 +35,42 @@ const appendRows = (objects: Map<string, boolean>, page: typeof Page.Type): void
 
 export const readUserObjects = Effect.fn(function* (read: ProviderRead, namespace: string) {
   const objects = new Map<string, boolean>();
-  const seen = new Set<string>();
-  let cursor = "";
 
-  for (let page = 0; page < limit; page++) {
-    const query = new URLSearchParams({ limit: String(limit) });
+  const readFrom = (
+    page: number,
+    cursor: string,
+    seen: ReadonlySet<string>
+  ): Effect.Effect<Map<string, boolean>, Error> =>
+    page >= limit
+      ? Effect.fail(Error("Physical User inventory exceeds the release budget"))
+      : Effect.gen(function* () {
+          const query = new URLSearchParams({ limit: String(limit) });
 
-    if (cursor !== "") query.set("cursor", cursor);
+          if (cursor !== "") query.set("cursor", cursor);
 
-    const response = yield* read(
-      "workers/durable_objects/namespaces/" + encodeURIComponent(namespace) + "/objects?" + query
-    );
+          const response = yield* read(
+            "workers/durable_objects/namespaces/" +
+              encodeURIComponent(namespace) +
+              "/objects?" +
+              query
+          );
 
-    const data = yield* Schema.decodeUnknownEffect(Page)(response);
-    yield* Effect.try(() => appendRows(objects, data));
-    cursor = pageCursor(data);
+          const data = yield* Schema.decodeUnknownEffect(Page)(response);
 
-    if (cursor === "" && data.result.length < limit) return objects;
+          yield* Effect.try(() => appendRows(objects, data));
 
-    if (cursor === "" || seen.has(cursor)) {
-      return yield* Effect.fail(Error("Incomplete physical User inventory"));
-    }
+          const next = pageCursor(data);
 
-    seen.add(cursor);
-  }
+          if (next === "" && data.result.length < limit) return objects;
 
-  return yield* Effect.fail(Error("Physical User inventory exceeds the release budget"));
+          if (next === "" || seen.has(next)) {
+            return yield* Effect.fail(Error("Incomplete physical User inventory"));
+          }
+
+          return yield* readFrom(page + 1, next, new Set([...seen, next]));
+        });
+
+  return yield* readFrom(0, "", new Set());
 });
 
 const unchanged = (before: UserObjects, current: UserObjects): void => {

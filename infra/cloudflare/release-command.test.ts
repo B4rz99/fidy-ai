@@ -1,5 +1,5 @@
 import { BunFileSystem } from "@effect/platform-bun";
-import { Data, Deferred, Effect, Fiber, FileSystem } from "effect";
+import { Data, Deferred, Effect, Fiber, FileSystem, Match } from "effect";
 import { expect, layer } from "@effect/vitest";
 import { releaseCommand } from "./production-release";
 
@@ -8,9 +8,15 @@ class FixtureFailure extends Data.TaggedError("FixtureFailure")<{ cause: unknown
 const wait = <A>(thunk: () => Promise<A>): Effect.Effect<A, FixtureFailure> =>
   Effect.tryPromise({ try: thunk, catch: (cause) => new FixtureFailure({ cause }) });
 
+const fileExists = (path: string): Effect.Effect<boolean, FixtureFailure> =>
+  wait(() => Bun.file(path).exists());
+
+const writeFile = (path: string, text: string): Effect.Effect<number, FixtureFailure> =>
+  wait(() => Bun.write(path, text));
+
 const awaitFile = (path: string): Effect.Effect<void, FixtureFailure> =>
   Effect.gen(function* () {
-    while (!(yield* wait(() => Bun.file(path).exists()))) yield* Effect.sleep("10 millis");
+    while (!(yield* fileExists(path))) yield* Effect.sleep("10 millis");
   });
 
 const exercise = Effect.fn(function* (
@@ -47,21 +53,29 @@ const exercise = Effect.fn(function* (
       Fiber.interrupt(child).pipe(Effect.andThen(Deferred.succeed(interruptionFinished, undefined)))
     );
 
-    if (lifetime === "read-only") {
-      yield* Fiber.join(interruption);
-      expect(yield* wait(() => Bun.file(terminated).exists())).toBe(!ignoreTermination);
-      expect(yield* wait(() => Bun.file(finished).exists())).toBe(false);
-    } else {
-      yield* Effect.sleep("30 millis");
-      expect(yield* Deferred.isDone(interruptionFinished)).toBe(false);
-      expect(yield* wait(() => Bun.file(terminated).exists())).toBe(false);
-      yield* wait(() => Bun.write(release, "release"));
-      yield* Fiber.join(interruption);
-      expect(yield* wait(() => Bun.file(finished).exists())).toBe(true);
-      expect(yield* wait(() => Bun.file(terminated).exists())).toBe(false);
-    }
+    yield* Match.value(lifetime).pipe(
+      Match.when("read-only", () =>
+        Effect.gen(function* () {
+          yield* Fiber.join(interruption);
+          expect(yield* fileExists(terminated)).toBe(!ignoreTermination);
+          expect(yield* fileExists(finished)).toBe(false);
+        })
+      ),
+      Match.when("started-write", () =>
+        Effect.gen(function* () {
+          yield* Effect.sleep("30 millis");
+          expect(yield* Deferred.isDone(interruptionFinished)).toBe(false);
+          expect(yield* fileExists(terminated)).toBe(false);
+          yield* writeFile(release, "release");
+          yield* Fiber.join(interruption);
+          expect(yield* fileExists(finished)).toBe(true);
+          expect(yield* fileExists(terminated)).toBe(false);
+        })
+      ),
+      Match.exhaustive
+    );
   }).pipe(
-    Effect.ensuring(wait(() => Bun.write(release, "release")).pipe(Effect.orDie)),
+    Effect.ensuring(writeFile(release, "release").pipe(Effect.orDie)),
     Effect.scoped,
     Effect.ensuring(fs.remove(directory, { recursive: true, force: true }).pipe(Effect.orDie))
   );
@@ -75,7 +89,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })((it) => {
   }
 });
 
-for (const lifetime of ["read-only", "started-write"] as const) {
+(["read-only", "started-write"] as const).forEach((lifetime) => {
   layer(BunFileSystem.layer, { excludeTestServices: true })((it) => {
     it.effect(`rejects oversized output while respecting ${lifetime} settlement`, () =>
       Effect.gen(function* () {
@@ -95,4 +109,4 @@ for (const lifetime of ["read-only", "started-write"] as const) {
       }).pipe(Effect.scoped, Effect.timeout("10 seconds"))
     );
   });
-}
+});

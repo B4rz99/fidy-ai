@@ -56,11 +56,13 @@ const stage: FallbackStage = {
   },
 };
 
-const harness = (): {
+type RecoveryHarness = {
   port: FallbackRepairPort;
   deployments: (name: string) => Deployment[];
   writes: string[];
-} => {
+};
+
+const harness = (): RecoveryHarness => {
   const history = new Map<string, Deployment[]>([
     [
       core,

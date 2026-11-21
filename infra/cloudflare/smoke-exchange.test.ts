@@ -27,7 +27,7 @@ const identity = {
   contractDigest: "a".repeat(64),
 };
 
-for (const method of ["readiness", "synthetic"] as const) {
+(["readiness", "synthetic"] as const).forEach((method) => {
   const body = method === "readiness" ? Option.none<string>() : Option.some("{}");
   describe(`${method} smoke exchange`, () => {
     it.effect("rejects actual streamed overflow and cancels the owned reader before decoding", () =>
@@ -70,7 +70,11 @@ for (const method of ["readiness", "synthetic"] as const) {
           expect(Option.isNone(result.failureStage)).toBe(true);
 
           const checked = yield* Effect.exit(
-            checkSmokeExchange(result, { public: identity, core: identity, replayIdentity: false })
+            checkSmokeExchange(result, {
+              public: identity,
+              core: identity,
+              replayIdentity: false,
+            })
           );
 
           expect(Exit.isFailure(checked)).toBe(true);
@@ -128,7 +132,7 @@ for (const method of ["readiness", "synthetic"] as const) {
         })
     );
   });
-}
+});
 
 it.effect("allows bounded sandbox authentication to exceed the ordinary release deadline", () =>
   Effect.gen(function* () {

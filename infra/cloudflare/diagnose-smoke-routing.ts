@@ -41,7 +41,9 @@ type RoutingSample = Pick<
   "round" | "pairing" | "method" | "replica" | "window"
 >;
 
-class RoutingDiagnosticFailed extends Data.TaggedError("RoutingDiagnosticFailed")<{}> {}
+class RoutingDiagnosticFailed extends Data.TaggedError("RoutingDiagnosticFailed")<{
+  readonly cause: unknown;
+}> {}
 
 const rounds = 6;
 
@@ -96,7 +98,7 @@ const observeRouting = Effect.fn(
   },
   Effect.scoped,
   Effect.timeout("8 seconds"),
-  Effect.mapError(() => new RoutingDiagnosticFailed())
+  Effect.mapError((cause) => new RoutingDiagnosticFailed({ cause }))
 );
 
 const routingSamples = (
@@ -156,27 +158,30 @@ export const settledRoutingAccepted = ({
 };
 
 export const diagnoseSmokeRouting = Effect.fn(function* (env: unknown) {
-  const decoded = Schema.decodeUnknownOption(RoutingConfig)(env);
+  const config = yield* Schema.decodeUnknownEffect(RoutingConfig)(env).pipe(
+    Effect.mapError((cause) => new RoutingDiagnosticFailed({ cause }))
+  );
 
-  if (Option.isNone(decoded)) return yield* new RoutingDiagnosticFailed();
-  const window = decoded.value.SMOKE_ROUTING_WINDOW ?? "early";
+  const window = config.SMOKE_ROUTING_WINDOW ?? "early";
 
   if (window === "settled") yield* Effect.sleep("60 seconds");
-  const observations: RoutingObservation[] = [];
 
-  for (let round = 1; round <= rounds; round++) {
-    const samples = yield* Effect.forEach(
-      routingSamples(round, window),
-      (sample) => observeRouting(decoded.value, sample),
-      { concurrency: ordinarySamplesPerRound }
-    );
+  const observations = yield* Effect.forEach(
+    Array.from({ length: rounds }, (_, index) => index + 1),
+    Effect.fnUntraced(function* (round) {
+      const samples = yield* Effect.forEach(
+        routingSamples(round, window),
+        (sample) => observeRouting(config, sample),
+        { concurrency: ordinarySamplesPerRound }
+      );
 
-    observations.push(...samples);
+      if (round < rounds) yield* Effect.sleep("1500 millis");
 
-    if (round < rounds) yield* Effect.sleep("1500 millis");
-  }
+      return samples;
+    })
+  );
 
-  const result: ReadonlyArray<RoutingObservation> = observations;
+  const result: ReadonlyArray<RoutingObservation> = observations.flat();
 
   return result;
 }, Effect.timeout("125 seconds"));

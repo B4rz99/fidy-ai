@@ -15,7 +15,14 @@ const latest = edgeSecurityPolicy.rulesets.customFirewall.rules.map((rule, index
   action_parameters: rule.actionParameters,
 }));
 
-const custom = (rules: ReadonlyArray<unknown>): unknown => ({
+type CustomRuleset = Readonly<{
+  id: string;
+  kind: string;
+  phase: string;
+  rules: ReadonlyArray<unknown>;
+}>;
+
+const custom = (rules: ReadonlyArray<unknown>): CustomRuleset => ({
   id: "a".repeat(32),
   kind: "zone",
   phase: "http_request_firewall_custom",

@@ -15,6 +15,7 @@ import {
   maximumSearchLength,
   transactionSearch,
 } from "./transaction-filters";
+import { currencyChoices } from "@/ui/currency-choices";
 
 type Props = Readonly<{
   draft: TransactionFilters;
@@ -24,7 +25,7 @@ type Props = Readonly<{
 }>;
 const currencyOptions = [
   { value: "", label: "Todas las monedas" },
-  ...Currency.literals.map((value) => ({ value, label: value })),
+  ...currencyChoices(Currency.literals),
 ];
 export const TransactionSearchForm = ({ draft, setDraft, timeZone, apply }: Props): JSX.Element => {
   const [invalid, setInvalid] = useState(false);

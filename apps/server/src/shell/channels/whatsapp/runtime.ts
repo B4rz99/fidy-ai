@@ -2,6 +2,7 @@ import { buildProactivityTemplateSender } from "~/shell/channels/whatsapp/intern
 import type { ProactivityTemplateSender } from "./contract";
 import { buildWeeklyQuestionSender } from "~/shell/channels/whatsapp/internal/weekly-question";
 import { Context, Effect, Layer, Option, type Redacted } from "effect";
+import type { HttpClient } from "effect/http";
 import {
   LookupCorrelation,
   decodeLifecycleStatus,
@@ -9,7 +10,6 @@ import {
   projectHostedStatus,
 } from "~/shell/channels/whatsapp/internal/kapso-webhook";
 import { buildInsightTemplateSender } from "~/shell/channels/whatsapp/internal/insight-template";
-import { HttpClient } from "effect/http";
 import { type E164PhoneNumber, type WhatsAppBusinessScopedUserId } from "~/core/identity/contract";
 import { TranscriptText } from "~/core/agent/contract";
 import { makeWhatsAppDelivery as buildDelivery } from "~/shell/channels/whatsapp/internal/kapso-client";
@@ -184,19 +184,13 @@ export class HostedSender extends Context.Service<
   ReturnType<typeof makeHostedSender>
 >()("@fidy/server/shell/channels/whatsapp/runtime/HostedSender") {
   static readonly make = (
-    input: Readonly<{
-      apiKey: Redacted.Redacted<string>;
-      sandboxPhoneNumberId: Option.Option<string>;
-    }>
-  ): Effect.Effect<ReturnType<typeof makeHostedSender>, never, HttpClient.HttpClient> =>
-    Effect.map(Effect.service(HttpClient.HttpClient), (httpClient) =>
-      makeHostedSender({ ...input, httpClient })
-    );
+    input: Parameters<typeof makeHostedSender>[0]
+  ): Effect.Effect<ReturnType<typeof makeHostedSender>> =>
+    Effect.sync(() => makeHostedSender(input));
 
   static readonly layer = (
-    input: Parameters<typeof HostedSender.make>[0]
-  ): Layer.Layer<HostedSender, never, HttpClient.HttpClient> =>
-    Layer.effect(HostedSender, HostedSender.make(input));
+    input: Parameters<typeof makeHostedSender>[0]
+  ): Layer.Layer<HostedSender> => Layer.effect(HostedSender, HostedSender.make(input));
 }
 
 type TemplateSendersService = Readonly<{

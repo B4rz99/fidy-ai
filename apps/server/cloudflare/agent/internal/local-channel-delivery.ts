@@ -62,9 +62,8 @@ const hostedSender = Effect.fn(function* (env: ChannelEnvironment) {
   return yield* HostedSender.make({
     apiKey: Redacted.make(env.KAPSO_API_KEY),
     sandboxPhoneNumberId: Option.fromUndefinedOr(env.WHATSAPP_SANDBOX_PHONE_NUMBER_ID),
-  }).pipe(
-    Effect.provideService(HttpClient.HttpClient, Context.get(clients, HttpClient.HttpClient))
-  );
+    httpClient: Context.get(clients, HttpClient.HttpClient),
+  });
 });
 
 export const offerChannel = Effect.fn(function* (

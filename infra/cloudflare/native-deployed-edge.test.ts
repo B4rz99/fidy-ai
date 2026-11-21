@@ -2,8 +2,12 @@ import { it } from "@effect/vitest";
 import { ConfigProvider, Effect, Result } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { expect } from "vitest";
-import { nativeIngressHost } from "./storage-installation";
-import { inspectDeployedEdge, requireClosedIngressDomains } from "./native-deployed-edge";
+import { nativeIngressHost, nativeWebHost } from "./storage-installation";
+import {
+  inspectDeployedEdge,
+  requireClosedIngressDomains,
+  requireStagedHostDomains,
+} from "./native-deployed-edge";
 
 const account = "a".repeat(32);
 const zone = {
@@ -114,6 +118,48 @@ it.effect("refuses an extra Ingress domain before reconciling the closed version
       expect(Result.isSuccess(accepted)).toBe(
         rows.length === 1 && rows[0]?.previews_enabled === false
       );
+    }
+  })
+);
+
+it.effect("admits only the closed acceptance and canonical hosts during staged transfer", () =>
+  Effect.gen(function* () {
+    const attachment = (hostname: string, service: string): Record<string, string | boolean> => ({
+      hostname,
+      service,
+      zone_id: zone.id,
+      enabled: true,
+      previews_enabled: false,
+    });
+    const web = "fidy-native-web";
+    const ingress = "fidy-native-storage-ingress";
+    const inspectDomains = (
+      webHosts: readonly unknown[],
+      staging: boolean
+    ): ReturnType<typeof requireStagedHostDomains> =>
+      requireStagedHostDomains(
+        (path) =>
+          Effect.succeed({
+            success: true,
+            result:
+              new URL(path, "https://example.invalid").searchParams.get("service") === ingress
+                ? [attachment(nativeIngressHost, ingress), attachment("api.fidyapp.com", ingress)]
+                : webHosts,
+          }),
+        zone.id,
+        staging
+      );
+    const acceptance = attachment(nativeWebHost, web);
+    const canonical = attachment("app.fidyapp.com", web);
+    yield* inspectDomains([acceptance], true);
+    yield* inspectDomains([acceptance, canonical], false);
+    for (const hosts of [
+      [canonical],
+      [acceptance],
+      [acceptance, { ...canonical, zone_id: "foreign" }],
+      [acceptance, canonical, attachment("other.fidyapp.com", web)],
+    ]) {
+      expect(Result.isFailure(yield* Effect.result(inspectDomains(hosts, false)))).toBe(true);
     }
   })
 );

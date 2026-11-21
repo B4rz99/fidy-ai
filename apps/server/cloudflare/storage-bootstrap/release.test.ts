@@ -45,6 +45,30 @@ const identity = {
   RELEASE_GIT_SHA: text("a".repeat(40)),
 };
 
+const openStorageProof = Effect.fn(function* (runtime: Miniflare) {
+  const ingress = yield* native(() => runtime.getWorker("ingress"));
+  const headers = { [smokeProofHeader]: proof };
+  const compatible = yield* native(() =>
+    ingress.fetch(origin + smokePath + compatibilityQuery, { headers })
+  );
+  expect(compatible.status).toBe(200);
+  yield* Schema.decodeUnknownEffect(
+    Schema.Struct({ core: SmokeIdentity, markers: SharedStoreMarkers })
+  )(yield* native(() => compatible.json()));
+  const bootstrap = yield* native(() =>
+    ingress.fetch(origin + smokePath + bootstrapQuery, { method: "POST", headers })
+  );
+  expect(bootstrap.status).toBe(404);
+  const unproved = yield* native(() => ingress.fetch(origin + smokePath + compatibilityQuery));
+  expect(unproved.status).toBe(404);
+  const alias = yield* native(() =>
+    ingress.fetch("https://storage-acceptance.fidyapp.com" + smokePath + compatibilityQuery, {
+      headers,
+    })
+  );
+  expect(alias.status).toBe(503);
+});
+
 const rehearse = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* fs.makeTempDirectoryScoped({ prefix: "fidy-storage-release-" });
@@ -62,8 +86,12 @@ const rehearse = Effect.gen(function* () {
       advancedState,
       first,
       readable,
-    }: { advancedState: boolean; first: boolean; readable: boolean }
+      opening,
+    }: { advancedState: boolean; first: boolean; readable: boolean; opening: boolean }
   ) {
+    const releaseIdentity = opening
+      ? { ...identity, RECOVERY_ISOLATION: text(""), NATIVE_STORAGE_ADMISSION: text("open") }
+      : identity;
     const mf = yield* Effect.acquireRelease(
       Effect.sync(
         () =>
@@ -76,7 +104,7 @@ const rehearse = Effect.gen(function* () {
                   ...common,
                   name: "ingress",
                   manifest: ingress,
-                  env: { ...identity, CORE: { type: "worker", worker: "core" } },
+                  env: { ...releaseIdentity, CORE: { type: "worker", worker: "core" } },
                 },
               },
               {
@@ -84,7 +112,7 @@ const rehearse = Effect.gen(function* () {
                   ...common,
                   name: "core",
                   manifest: core,
-                  env: { ...identity, ...objects },
+                  env: { ...releaseIdentity, ...objects },
                 },
               },
               {
@@ -94,7 +122,7 @@ const rehearse = Effect.gen(function* () {
                   manifest: ownerModule,
                   exports: classes,
                   env: {
-                    ...identity,
+                    ...releaseIdentity,
                     ...objects,
                     SQLITE_STORE_CAPACITY_BYTES: text("1000000000"),
                   },
@@ -121,6 +149,10 @@ const rehearse = Effect.gen(function* () {
       ),
       (mf) => native(() => mf.dispose())
     );
+    if (opening) {
+      yield* openStorageProof(mf);
+      return;
+    }
     if (first) {
       const readiness = yield* native(() =>
         mf.dispatchFetch(origin + smokePath + "?readiness=1", {
@@ -199,21 +231,28 @@ const rehearse = Effect.gen(function* () {
     return { mapping, markers: body.markers.directory.history };
   });
   const initial = yield* Effect.scoped(
-    phase(core, { advancedState: false, first: true, readable: true })
+    phase(core, { advancedState: false, first: true, readable: true, opening: false })
   );
   const compatible = yield* Effect.scoped(
-    phase(core, { advancedState: false, first: false, readable: true })
+    phase(core, { advancedState: false, first: false, readable: true, opening: false })
   );
   expect(compatible).toEqual(initial);
   const upgrade = yield* Effect.scoped(
-    phase(advanced, { advancedState: true, first: false, readable: true })
+    phase(advanced, { advancedState: true, first: false, readable: true, opening: false })
   );
   expect(upgrade?.mapping).toBe(initial?.mapping);
   expect(upgrade?.markers.slice(0, -1)).toEqual(initial?.markers);
-  yield* Effect.scoped(phase(core, { advancedState: true, first: false, readable: false }));
+  yield* Effect.scoped(
+    phase(core, { advancedState: true, first: false, readable: false, opening: false })
+  );
   expect(
-    yield* Effect.scoped(phase(advanced, { advancedState: true, first: false, readable: true }))
+    yield* Effect.scoped(
+      phase(advanced, { advancedState: true, first: false, readable: true, opening: false })
+    )
   ).toEqual(upgrade);
+  yield* Effect.scoped(
+    phase(advanced, { advancedState: true, first: false, readable: true, opening: true })
+  );
 });
 
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {

@@ -1,3 +1,4 @@
+import { type CanonicalDomainPort, canonicalDomains } from "./native-canonical-domains";
 import { installedOrigins } from "@fidy/server/browser-transport";
 import { inspectNativeAccess } from "./native-deployed-access";
 import { Config, Effect, Schema } from "effect";
@@ -8,6 +9,7 @@ import {
   installationNames,
   nativeHostPairs,
   nativeIngressHost,
+  nativeWebHost,
 } from "./storage-installation";
 
 import { type ProviderRead as Read, readProviderList as readList } from "./native-provider-list";
@@ -96,6 +98,7 @@ const inspectBuilds = Effect.fn(function* ({
   );
 });
 const domain = Schema.Struct({
+  id: Schema.optional(Schema.NonEmptyString),
   hostname: Schema.NonEmptyString,
   service: Schema.NonEmptyString,
   zone_id: Schema.NonEmptyString,
@@ -121,6 +124,42 @@ export const requireClosedIngressDomains = Effect.fn(function* (read: Read) {
       Error("Native Ingress domain inventory differs from closed acceptance")
     );
   }
+});
+export const requireStagedHostDomains = Effect.fn(function* (
+  read: Read,
+  zoneId: string,
+  staging: boolean
+) {
+  const hosts = [
+    [
+      installationNames.Ingress,
+      nativeIngressHost,
+      new URL(installedOrigins.production.api).hostname,
+    ],
+    [installationNames.Web, nativeWebHost, new URL(installedOrigins.production.browser).hostname],
+  ] as const;
+  yield* Effect.forEach(
+    hosts,
+    Effect.fn(function* ([service, acceptance, canonical]) {
+      const rows = yield* readList(read, "workers/domains?service=" + service, domain);
+      const names = new Set(rows.map((row) => row.hostname));
+      if (
+        rows.some(
+          (row) =>
+            row.service !== service ||
+            row.zone_id !== zoneId ||
+            !row.enabled ||
+            row.previews_enabled
+        ) ||
+        names.size !== rows.length ||
+        !names.has(acceptance) ||
+        (names.size === 1 ? !staging : names.size !== 2 || !names.has(canonical))
+      ) {
+        return yield* Effect.fail(Error("Unexpected installed domain inventory for " + service));
+      }
+    }),
+    { discard: true }
+  );
 });
 const record = Schema.Struct({
   name: Schema.NonEmptyString,
@@ -149,12 +188,58 @@ const attachedTo = (
   rows[0].zone_id === target.zone &&
   rows[0].enabled &&
   !rows[0].previews_enabled;
+export const canonicalDomainReader = ({
+  readAccount,
+  readZone,
+  zoneId,
+}: {
+  readAccount: Read;
+  readZone: Read;
+  zoneId: string;
+}): CanonicalDomainPort["read"] =>
+  Effect.fn(function* (route) {
+    const hosts = yield* readList(
+      readAccount,
+      "workers/domains?" + new URLSearchParams({ hostname: route.host, zone_id: zoneId }),
+      domain
+    );
+    const dns = yield* readList(
+      readZone,
+      "dns_records?" + new URLSearchParams({ "name.exact": route.host }),
+      record
+    );
+    if (hosts.length === 0 && dns.length === 0) return { vacant: true } as const;
+    const [current] = hosts;
+    if (
+      current?.id === undefined ||
+      !attachedTo(hosts, route.host, { worker: current.service, zone: zoneId }) ||
+      !dnsConfirmed(dns, route.host)
+    ) {
+      return yield* Effect.fail(Error("Unverified canonical attachment or DNS for " + route.host));
+    }
+    return { vacant: false, id: current.id, service: current.service } as const;
+  });
 const hostStateAllowed = (state: {
   expected: boolean;
   vacant: boolean;
   installed: boolean;
   stagingAlias: boolean;
 }): boolean => state.expected || (state.vacant && (!state.installed || state.stagingAlias));
+const matchesCanonicalIncumbent = (
+  host: string,
+  observed: {
+    attachments: ReadonlyArray<typeof domain.Type>;
+    dns: ReadonlyArray<typeof record.Type>;
+    zoneId: string;
+  }
+): boolean =>
+  canonicalDomains.some(
+    (route) =>
+      route.host === host &&
+      observed.attachments[0]?.id === route.incumbentId &&
+      attachedTo(observed.attachments, host, { worker: route.incumbent, zone: observed.zoneId }) &&
+      dnsConfirmed(observed.dns, host)
+  );
 const inspectHosts = Effect.fn(function* (input: {
   read: Read;
   account: string;
@@ -163,6 +248,7 @@ const inspectHosts = Effect.fn(function* (input: {
   installed: boolean;
   hosts: ReturnType<typeof hostWorkers>;
   staging: boolean;
+  incumbentTransfer: boolean;
 }) {
   const { read, account, zone, zoneId, installed, hosts } = input;
   const routes = yield* readList(
@@ -198,6 +284,9 @@ const inspectHosts = Effect.fn(function* (input: {
         attachedTo(attachments, host, { worker: target, zone: zoneId }) &&
         dnsConfirmed(dns, host);
       if (
+        !(
+          input.incumbentTransfer && matchesCanonicalIncumbent(host, { attachments, dns, zoneId })
+        ) &&
         !hostStateAllowed({ expected, vacant, installed, stagingAlias: input.staging && canonical })
       ) {
         return yield* Effect.fail(Error("Unexpected DNS or Worker attachment for " + host));
@@ -233,7 +322,7 @@ export const inspectDeployedEdge = Effect.fn(function* (
     bindings: Readonly<Record<string, unknown>>;
     hosts: NativeHostMode;
     staging: boolean;
-  }
+  } & (Readonly<Record<never, never>> | { incumbentTransfer: boolean })
 ) {
   const { installed } = stage;
   const read: Read = (path) =>
@@ -252,6 +341,7 @@ export const inspectDeployedEdge = Effect.fn(function* (
     zoneId: zone.id,
     hosts,
     staging: stage.staging === true,
+    incumbentTransfer: "incumbentTransfer" in stage && stage.incumbentTransfer,
     installed,
   });
   const builds = yield* inspectBuilds({ read, account, installed, client });

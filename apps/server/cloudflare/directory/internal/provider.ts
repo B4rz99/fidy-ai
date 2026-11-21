@@ -1,3 +1,5 @@
+import { observeCanonicalSignup } from "./signup-observation";
+import type { NativeAcceptanceSettings } from "../../release-isolation/contract";
 import { proofPolicy } from "../../browser-login/contract";
 import { invitationStatus } from "./whatsapp";
 import { chargeBootstrapWindows } from "./admission";
@@ -30,6 +32,7 @@ import { DirectoryWriteUnavailable, FrozenBrowserHandoff, bootstrapCompleteUrl }
 import { digestVerifier, invalidProvider, unavailable } from "../../browser-login/operations";
 
 type Environment = ProviderConfiguration &
+  NativeAcceptanceSettings &
   Readonly<{ USER_STORE: Pick<DurableObjectNamespace, "getByName"> }>;
 const json = (body: object): Response =>
   Response.json(body, {
@@ -271,7 +274,11 @@ const routeProvider = Effect.fn(function* (
     );
     if (fenced) return invalidProvider();
   }
-  return yield* Effect.fromResult(response);
+  const completed = yield* Effect.fromResult(response);
+  yield* observeCanonicalSignup({ environment, request, provider, response: completed }).pipe(
+    Effect.when(Effect.succeed(complete))
+  );
+  return completed;
 });
 
 const getProvider = Effect.fn(function* (

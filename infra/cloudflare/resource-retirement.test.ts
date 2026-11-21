@@ -11,7 +11,7 @@ import { it } from "@effect/vitest";
 import { BunServices } from "@effect/platform-bun";
 import { Data, Effect, Exit, FileSystem, Layer } from "effect";
 import { afterAll, beforeAll, expect, vi } from "vitest";
-import { applySuccessorPlan } from "./native-fixture-plan";
+import { applyScopedNativePlan } from "./native-fixture-plan";
 
 let profileDirectory = "";
 beforeAll(() =>
@@ -110,7 +110,7 @@ const fixture = Effect.gen(function* () {
           if (typeof mode !== "string" && mode.deletions === "successor") {
             yield* mode.beforeApply;
           }
-          return yield* applySuccessorPlan(plan).pipe(Effect.provide(stack.services));
+          return yield* applyScopedNativePlan(plan).pipe(Effect.provide(stack.services));
         }
         const plan = yield* Plan.make(stack);
         return yield* Apply.apply(plan, { deletions }).pipe(Effect.provide(stack.services));

@@ -140,9 +140,22 @@ const requireAccountingRollout = Effect.fn(function* (revision: string) {
   }
 });
 
-export const fixtureArtifacts = Effect.fn(function* (revision: string) {
+const requireSignupOpening = Effect.fn(function* (revision: string) {
+  yield* Config.Literal("open", "NATIVE_STORAGE_ADMISSION");
+  yield* Config.Literal("staged", "NATIVE_STORAGE_HOSTS");
+  yield* Config.Literal("true", "GITHUB_ACTIONS");
+  yield* Config.Literal("true", "GITHUB_REF_PROTECTED");
+  yield* Config.Literal("refs/heads/trunk", "GITHUB_REF");
+  yield* Config.Literal("workflow_dispatch", "GITHUB_EVENT_NAME");
+  yield* Config.Literal("1", "GITHUB_RUN_ATTEMPT");
+  yield* Config.Literal(revision, "GITHUB_SHA");
+  yield* Config.Literal(
+    "B4rz99/fidy-ai/.github/workflows/native-storage-release.yml@refs/heads/trunk",
+    "GITHUB_WORKFLOW_REF"
+  );
+});
+const closedFixtureArtifacts = Effect.fn(function* (revision: string, operation: string) {
   const retainProvider = (yield* expectedFixtureSigner) !== "";
-  const operation = yield* Config.String("FIXTURE_RELEASE_OPERATION").pipe(Config.withDefault(""));
   const accountingRollout = yield* accountingRolloutEnabled;
   if (accountingRollout) yield* requireAccountingRollout(revision);
   const successorPlan = successorOperations.has(operation);
@@ -159,7 +172,24 @@ export const fixtureArtifacts = Effect.fn(function* (revision: string) {
     retainProvider,
     successorPlan,
     accountingRollout,
+    signupOpening: false,
     resourceRevision: accountingRollout ? accountingFixture.revision : generation,
     supportRevision,
   };
+});
+export const fixtureArtifacts = Effect.fn(function* (revision: string) {
+  const operation = yield* Config.String("FIXTURE_RELEASE_OPERATION").pipe(Config.withDefault(""));
+  if (operation === "open-canonical-signup") {
+    yield* requireSignupOpening(revision);
+    return {
+      fallback: false,
+      retainProvider: true,
+      successorPlan: false,
+      accountingRollout: false,
+      signupOpening: true,
+      resourceRevision: accountingFixture.revision,
+      supportRevision: fixtureUpload.revision,
+    };
+  }
+  return yield* closedFixtureArtifacts(revision, operation);
 });

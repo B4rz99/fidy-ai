@@ -95,11 +95,13 @@ const readinessPath = (request: Request, url: URL): boolean =>
 const storageProbe = Effect.fn(function* (request: Request, environment: CoreHttpEnvironment) {
   if (isPerformanceEvidence(request)) return yield* performanceProbe(request, environment);
   const url = new URL(request.url);
-  if (
-    environment.RECOVERY_ISOLATION === "isolated" &&
-    environment.MAINTENANCE !== undefined &&
-    readinessPath(request, url)
-  ) {
+  const readable =
+    environment.RECOVERY_ISOLATION === "isolated"
+      ? readinessPath(request, url)
+      : environment.NATIVE_STORAGE_ADMISSION === "open" &&
+        environment.RECOVERY_ISOLATION === "" &&
+        isStorageCompatibility(request);
+  if (environment.MAINTENANCE !== undefined && readable) {
     return Option.some(yield* sharedReadiness(request, environment));
   }
   return Option.none<Response>();

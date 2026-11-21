@@ -1,4 +1,4 @@
-import { Option } from "effect";
+import { Option, Schema } from "effect";
 import { type RefCallback, createContext, useCallback, useRef, useState } from "react";
 import type { PlanInput } from "./model";
 import { restoredPlan } from "./plan-fields";
@@ -17,19 +17,22 @@ export const CreationDraftContext = createContext<CreationDraftControl>({
 
 const snapshot = (form: HTMLFormElement): string =>
   JSON.stringify(
-    Array.from(new FormData(form), ([key, entry]) => [key, typeof entry === "string" ? entry : ""])
+    Array.from(new FormData(form), ([key, entry]) => [
+      key,
+      Option.getOrElse(Schema.decodeUnknownOption(Schema.String)(entry), () => ""),
+    ])
   );
 
 const noForm: Option.Option<HTMLFormElement> = Option.none();
 
-export const useCreationDraft = (
-  timeZone: PlanInput["timeZone"]
-): Readonly<{
+export type CreationDraft = Readonly<{
   kept: Option.Option<Initial>;
   track: RefCallback<HTMLElement>;
   keep: () => void;
   clear: () => void;
-}> => {
+}>;
+
+export const useCreationDraft = (timeZone: PlanInput["timeZone"]): CreationDraft => {
   const form = useRef(noForm);
   const baseline = useRef("");
   const [kept, setKept] = useState<Option.Option<Initial>>(() => Option.none());

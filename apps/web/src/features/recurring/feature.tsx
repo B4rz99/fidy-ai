@@ -1,6 +1,6 @@
 import { PendingRead } from "@/ui/components/pending-read";
 
-import { DateTime, Effect, Option } from "effect";
+import { type Cause, DateTime, Effect, Option, Predicate } from "effect";
 import { preparationActive, prepareQuery } from "@/transport/query-preparation";
 import type { AtomRegistry } from "effect/reactivity";
 import type { FidyClient } from "@/transport/client";
@@ -69,7 +69,10 @@ const Resources = (props: Props): JSX.Element => {
       month: props.month,
       view: "compact",
       ...props.filters,
-      ...(Option.isSome(props.previous) ? { previousMonth: props.previous.value } : {}),
+      ...Option.match(props.previous, {
+        onNone: () => ({}),
+        onSome: (previousMonth) => ({ previousMonth }),
+      }),
     },
   });
 
@@ -95,16 +98,13 @@ const Resources = (props: Props): JSX.Element => {
 
 const noRequestedDisclosure = Option.none<string>();
 
-const useEarlierDisclosure = ({
-  month,
-  filters,
-  previous,
-  earlier,
-}: Props): Readonly<{
+type EarlierDisclosure = Readonly<{
   key: string;
   request: Props["earlier"];
   reveal: RefCallback<HTMLDetailsElement>;
-}> => {
+}>;
+
+const useEarlierDisclosure = ({ month, filters, previous, earlier }: Props): EarlierDisclosure => {
   const scope = `${month}:${JSON.stringify(filters)}:`;
   const key = scope + Option.getOrElse(previous, () => "");
   const requested = useRef(noRequestedDisclosure);
@@ -147,13 +147,13 @@ const ResourceContent = ({
   const disclosure = useEarlierDisclosure(props);
   const { state, categoryState, waiting, retry } = planning;
 
-  if (state._tag === "Failure" || categoryState._tag === "Failure") {
+  if (Predicate.isTagged(state, "Failure") || Predicate.isTagged(categoryState, "Failure")) {
     return (
       <RecurringQueryFailure states={[state, categoryState]} waiting={waiting} retry={retry} />
     );
   }
 
-  if (state._tag !== "Ready" || categoryState._tag !== "Ready") {
+  if (!Predicate.isTagged(state, "Ready") || !Predicate.isTagged(categoryState, "Ready")) {
     return <PendingRead label="Cargando recurrentes" />;
   }
 
@@ -210,7 +210,7 @@ export const RecurringFeature = ({
   const now = useAtomValue(clock);
   const { filters, applyFilters, previous, earlier, selectMonth } = useRecurringWorkspaceView();
 
-  if (state._tag === "Failure") {
+  if (Predicate.isTagged(state, "Failure")) {
     return (
       <Button contentLayout="wrap" focusAppearance="subtle" onClick={refresh}>
         Reintentar recurrentes
@@ -218,7 +218,7 @@ export const RecurringFeature = ({
     );
   }
 
-  if (state._tag !== "Ready") {
+  if (!Predicate.isTagged(state, "Ready")) {
     return <PendingRead label="Cargando recurrentes" />;
   }
 
@@ -331,7 +331,7 @@ const preparedClients = Atom.family((_client: FidyClient) => Atom.make(false).pi
 
 const monthLabelLength = 7;
 
-RecurringRoute.preloadData = ({
+RecurringRoute.preloadData = Effect.fnUntraced(function* ({
   apiClient,
   registry,
   month: selectedMonth,
@@ -343,48 +343,49 @@ RecurringRoute.preloadData = ({
   month: Option.Option<string>;
   signal: AbortSignal;
   intent: boolean;
-}>): Promise<void> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      if (!preparationActive(signal) || registry.get(preparedClients(apiClient))) {
-        return;
-      }
+}>): Effect.fn.Return<void, Cause.UnknownError> {
+  if (!preparationActive(signal) || registry.get(preparedClients(apiClient))) {
+    return;
+  }
 
-      yield* Effect.tryPromise(() =>
-        prepareQuery({
-          registry,
-          query: workspaceProfileQuery(apiClient),
-          options: {
-            mode: "cached",
-            signal: Option.some(signal),
-          },
-        })
-      );
-      const profile = presentCanonicalQuery(registry.get(workspaceProfileQuery(apiClient)));
-
-      if (profile._tag !== "Ready" || profile.waiting || Option.isSome(profile.refreshFailure)) {
-        return;
-      }
-
-      const month = Option.getOrElse(selectedMonth, () =>
-        DateTime.formatIsoDate(
-          DateTime.makeZonedUnsafe(DateTime.nowUnsafe(), { timeZone: profile.value.data.timeZone })
-        ).slice(0, monthLabelLength)
-      );
-
-      yield* Effect.tryPromise(() =>
-        prepareQuery({
-          registry,
-          query: recurringWorkspaceQuery({
-            apiClient,
-            query: { month, view: "compact" },
-          }).view,
-          options: { mode: "display", signal: Option.some(signal) },
-        })
-      );
-
-      if (!intent && preparationActive(signal)) {
-        registry.set(preparedClients(apiClient), true);
-      }
+  yield* Effect.tryPromise(() =>
+    prepareQuery({
+      registry,
+      query: workspaceProfileQuery(apiClient),
+      options: {
+        mode: "cached",
+        signal: Option.some(signal),
+      },
     })
   );
+  const profile = presentCanonicalQuery(registry.get(workspaceProfileQuery(apiClient)));
+
+  if (
+    !Predicate.isTagged(profile, "Ready") ||
+    profile.waiting ||
+    Option.isSome(profile.refreshFailure)
+  ) {
+    return;
+  }
+
+  const month = Option.getOrElse(selectedMonth, () =>
+    DateTime.formatIsoDate(
+      DateTime.makeZonedUnsafe(DateTime.nowUnsafe(), { timeZone: profile.value.data.timeZone })
+    ).slice(0, monthLabelLength)
+  );
+
+  yield* Effect.tryPromise(() =>
+    prepareQuery({
+      registry,
+      query: recurringWorkspaceQuery({
+        apiClient,
+        query: { month, view: "compact" },
+      }).view,
+      options: { mode: "display", signal: Option.some(signal) },
+    })
+  );
+
+  if (!intent && preparationActive(signal)) {
+    registry.set(preparedClients(apiClient), true);
+  }
+});

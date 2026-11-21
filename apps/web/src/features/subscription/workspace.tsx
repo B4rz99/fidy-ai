@@ -30,12 +30,8 @@ import {
   type SubscriptionOfferPresentation,
   paymentMethodCopy,
 } from "./presentation";
+import { StandingViewState } from "./view-state";
 import "@/ui/components/subscription.css";
-
-export type StandingViewState =
-  | Readonly<{ _tag: "Initial" }>
-  | Readonly<{ _tag: "Failure" }>
-  | Readonly<{ _tag: "Ready"; standing: SubscriptionStatus }>;
 
 export const SubscriptionWorkspace = ({
   children,
@@ -311,22 +307,19 @@ const RecentAttempts = ({
 export const SubscriptionStandingView = ({
   state,
   onRetry,
-}: Readonly<{ state: StandingViewState; onRetry: () => void }>): JSX.Element => {
-  if (state._tag === "Initial") return <PendingRead label="Cargando suscripción" />;
-
-  if (state._tag === "Failure") {
-    return (
+}: Readonly<{ state: StandingViewState; onRetry: () => void }>): JSX.Element =>
+  StandingViewState.$match(state, {
+    Initial: () => <PendingRead label="Cargando suscripción" />,
+    Failure: () => (
       <PaymentFeedback tone="unavailable" title="Estado no disponible">
         <p>No pudimos consultar tu suscripción. Tus datos siguen disponibles.</p>
         <Button contentLayout="wrap" type="button" variant="outline" onClick={onRetry}>
           Reintentar
         </Button>
       </PaymentFeedback>
-    );
-  }
-
-  return <ReadyStanding standing={state.standing} onRetry={onRetry} />;
-};
+    ),
+    Ready: ({ standing }) => <ReadyStanding standing={standing} onRetry={onRetry} />,
+  });
 
 const StandingAccessPeriod = ({
   standing,

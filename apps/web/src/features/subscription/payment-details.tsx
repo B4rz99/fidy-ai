@@ -3,7 +3,7 @@ import { SubscriptionIntroduction } from "@/ui/components/subscription-introduct
 import { SubscriptionInputDecoration } from "@/ui/components/subscription-input-decoration";
 import { Input } from "@/ui/components/input";
 import { Button } from "@/ui/components/button";
-import { DateTime, Option, Redacted, Schema } from "effect";
+import { DateTime, Option, Predicate, Redacted, Schema } from "effect";
 import { type PaymentFlowView, type PaymentSubmissionView } from "./interaction";
 import { DaviplataEnrollmentForm } from "./daviplata-form";
 import { BillingEmailField, EnrollmentConsent } from "./enrollment-controls";
@@ -380,12 +380,12 @@ const NequiFormContents = ({
   </form>
 );
 
-const useCardAuthorizationLifetime = (
-  clear: () => void
-): Readonly<{
+type CardAuthorizationLifetime = Readonly<{
   admit: () => Option.Option<AbortSignal>;
   formLifetimeRef: RefCallback<HTMLFormElement>;
-}> => {
+}>;
+
+const useCardAuthorizationLifetime = (clear: () => void): CardAuthorizationLifetime => {
   const authorization = useRef(noPendingAuthorization);
   const mounted = useRef(false);
 
@@ -414,12 +414,12 @@ const useCardAuthorizationLifetime = (
   };
 };
 
-const useBillingEmailDraft = (
-  initial: string
-): Readonly<{
+type BillingEmailDraft = Readonly<{
   binding: Pick<ComponentProps<typeof BillingEmailField>, "email" | "invalid" | "setEmail">;
   validate: () => Option.Option<string>;
-}> => {
+}>;
+
+const useBillingEmailDraft = (initial: string): BillingEmailDraft => {
   const [email, setEmail] = useState(initial);
   const [attempted, setAttempted] = useState(false);
   const normalized = email.trim().toLowerCase();
@@ -689,7 +689,7 @@ const renderPaymentEnrollment = (
 ): JSX.Element => {
   const { current, busy, prepare, submit, refresh } = input;
 
-  if (current._tag === "PaymentSubmission") {
+  if (Predicate.isTagged(current, "PaymentSubmission")) {
     if (!isAwaitingPaymentStatus(current.value)) {
       return <TerminalPaymentFeedback current={current} busy={busy} prepare={prepare} />;
     }

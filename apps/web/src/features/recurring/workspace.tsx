@@ -7,7 +7,7 @@ import {
 } from "./creation-draft";
 import { PendingRead } from "@/ui/components/pending-read";
 import { lazyRouteComponent, useRouterState } from "@tanstack/react-router";
-import { Array, Option } from "effect";
+import { Array, Option, Predicate } from "effect";
 import {
   type Dispatch,
   type JSX,
@@ -385,7 +385,7 @@ const useWorkspacePanel = (
   const panel = Option.orElse(localPanel, () => navigation.selection);
 
   const setPanel: Dispatch<SetStateAction<Option.Option<Panel>>> = (update) => {
-    if (typeof update === "function") {
+    if (Predicate.isFunction(update)) {
       setLocalPanel(update);
 
       if (Option.isSome(navigation.selection) && Option.isNone(update(navigation.selection))) {
@@ -444,7 +444,7 @@ const useDraftingPanel = (
   const workspace = useWorkspacePanel(props.view, props.filters, props.previous);
 
   const setPanel: Dispatch<SetStateAction<Option.Option<Panel>>> = (update) => {
-    const leaving = typeof update === "function" || !isCreation(update);
+    const leaving = Predicate.isFunction(update) || !isCreation(update);
 
     if (leaving && Option.exists(workspace.panel, isFreshCreation)) draft.keep();
     workspace.setPanel(update);

@@ -1,16 +1,5 @@
 import { RegistryContext, useAtomSet, useAtomValue } from "@effect/atom-react";
-import {
-  Cause,
-  type Context,
-  Data,
-  Effect,
-  Equal,
-  Exit,
-  Option,
-  Predicate,
-  Schema,
-  Stream,
-} from "effect";
+import { Cause, Data, Effect, Equal, Exit, Option, Predicate, Schema, Stream } from "effect";
 import { AsyncResult, Atom, type AtomRegistry, Reactivity } from "effect/reactivity";
 import { type RefCallback, useCallback, useContext, useState } from "react";
 import {
@@ -116,7 +105,7 @@ const confirmedPlanStatus =
     receipt: Option.Option<LifecycleConfirmation>
   ): typeof planStatus =>
   (plan) => {
-    if (Option.isNone(receipt) || state._tag !== "Ready") return planStatus(plan);
+    if (Option.isNone(receipt) || !Predicate.isTagged(state, "Ready")) return planStatus(plan);
 
     if (
       receipt.value.planId !== plan.id ||
@@ -128,7 +117,7 @@ const confirmedPlanStatus =
     return planStatus(receipt.value.plan);
   };
 
-type Client = Context.Service.Shape<FidyClient>;
+type Client = FidyClient["Service"];
 
 type WorkspaceError = Effect.Error<ReturnType<Client["recurringPlans"]["getRecurringWorkspace"]>>;
 
@@ -217,13 +206,8 @@ const makeCommands = (apiClient: FidyClient): Commands => {
             editConfirmation: editConfirmation(result.data, input.payload.edit),
           } as const;
         }).pipe(
-          Effect.catch((failure) =>
-            Effect.succeed(
-              Predicate.isTagged(failure, "ValidationFailed")
-                ? ({ state: "rejected" } as const)
-                : ({ state: "uncertain" } as const)
-            )
-          ),
+          Effect.catchTag("ValidationFailed", () => Effect.succeed({ state: "rejected" } as const)),
+          Effect.orElseSucceed(() => ({ state: "uncertain" }) as const),
           Effect.catchCause((cause) =>
             Cause.hasInterruptsOnly(cause)
               ? Effect.interrupt
@@ -262,15 +246,15 @@ const writesDisabled = ({
   stale,
   saveState,
 }: Pick<PlanningState, "state" | "categoryState" | "waiting" | "stale" | "saveState">): boolean =>
-  state._tag !== "Ready" ||
-  categoryState._tag !== "Ready" ||
+  !Predicate.isTagged(state, "Ready") ||
+  !Predicate.isTagged(categoryState, "Ready") ||
   waiting ||
   stale ||
   saveState === "saving" ||
   saveState === "uncertain";
 
 const queryStale = (state: CanonicalQueryState<unknown, unknown>): boolean =>
-  state._tag === "Ready" && Option.isSome(state.refreshFailure);
+  Predicate.isTagged(state, "Ready") && Option.isSome(state.refreshFailure);
 
 const useSaveFeedback = (): Pick<PlanningState, "confirmation" | "editConfirmation"> &
   Readonly<{
@@ -441,7 +425,7 @@ const planningActions = (options: Actions): Pick<PlanningState, "save" | "retry"
 });
 
 const freshQuery = (state: CanonicalQueryState<unknown, unknown>): boolean =>
-  state._tag === "Ready" && !state.waiting && !queryStale(state);
+  Predicate.isTagged(state, "Ready") && !state.waiting && !queryStale(state);
 
 const admittedRevision = ({
   commands,
@@ -464,7 +448,9 @@ const admittedRevision = ({
   const freshState = presentCanonicalQuery(registry.get(source));
   const freshCategories = presentCanonicalQuery(registry.get(commands.queries.categories.source));
 
-  if (state._tag !== "Ready" || freshState._tag !== "Ready") return Option.none();
+  if (!Predicate.isTagged(state, "Ready") || !Predicate.isTagged(freshState, "Ready")) {
+    return Option.none();
+  }
 
   if (
     ![freshState, freshCategories].every(freshQuery) ||

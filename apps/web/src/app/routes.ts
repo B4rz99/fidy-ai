@@ -225,15 +225,13 @@ const recurringPlansRoute = createRoute({
           () => import("@/features/recurring/feature")
         );
 
-        yield* Effect.tryPromise(() =>
-          RecurringRoute.preloadData({
-            apiClient: context.apiClient,
-            registry: context.registry,
-            month: Option.fromUndefinedOr(deps.month),
-            signal: abortController.signal,
-            intent: false,
-          })
-        );
+        yield* RecurringRoute.preloadData({
+          apiClient: context.apiClient,
+          registry: context.registry,
+          month: Option.fromUndefinedOr(deps.month),
+          signal: abortController.signal,
+          intent: false,
+        });
       })
     ),
   component: RecurringRoute,

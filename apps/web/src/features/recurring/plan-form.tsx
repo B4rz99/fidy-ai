@@ -54,7 +54,7 @@ export const PlanForm = ({
     <form
       onSubmit={submit}
       onChange={(event) => {
-        if (event.target instanceof HTMLInputElement) edited(event.target.name);
+        if (Schema.is(Schema.instanceOf(HTMLInputElement))(event.target)) edited(event.target.name);
       }}
       data-recurring-slot="plan-form"
       className="grid gap-4"

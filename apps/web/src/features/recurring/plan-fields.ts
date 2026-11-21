@@ -6,7 +6,7 @@ import { type PlanDraft, parseMonthDay } from "./plan-validation";
 const formValue = (form: FormData, key: string): string => {
   const entry = form.get(key);
 
-  return typeof entry === "string" ? entry.trim() : "";
+  return Option.getOrElse(Schema.decodeUnknownOption(Schema.String)(entry), () => "").trim();
 };
 
 export const planDraft = (form: FormData): PlanDraft => ({
@@ -42,19 +42,27 @@ export const planFields = ({ form, timeZone }: FormPlan): Schema.JsonObject => {
     firstDate: formValue(form, "firstDate"),
     cardPayment: formValue(form, "cardPayment") === "yes",
     ...optional,
-    ...(amountMode === "unknown" ? {} : { money: { amount: formValue(form, "amount"), currency } }),
-    ...(frequency === "twice-monthly"
-      ? Option.match(
+    ...Option.match(
+      Option.liftPredicate(amountMode, (mode) => mode !== "unknown"),
+      {
+        onNone: () => ({}),
+        onSome: () => ({ money: { amount: formValue(form, "amount"), currency } }),
+      }
+    ),
+    ...Option.match(
+      Option.flatMap(
+        Option.liftPredicate(frequency, (cadence) => cadence === "twice-monthly"),
+        () =>
           Option.all([
             parseMonthDay(formValue(form, "day1")),
             parseMonthDay(formValue(form, "day2")),
-          ]),
-          {
-            onNone: () => ({}),
-            onSome: (monthDays) => ({ monthDays }),
-          }
-        )
-      : {}),
+          ])
+      ),
+      {
+        onNone: () => ({}),
+        onSome: (monthDays) => ({ monthDays }),
+      }
+    ),
   };
 };
 

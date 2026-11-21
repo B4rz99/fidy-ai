@@ -1,4 +1,4 @@
-import { BigDecimal } from "effect";
+import { BigDecimal, Option } from "effect";
 import {
   Category as CategorySchema,
   Currency,
@@ -173,16 +173,38 @@ const references = (
   categories: ReadonlyArray<Category>,
   index: number
 ): Partial<PlanInput> => ({
-  ...(seed.category && categories.length > 0
-    ? { categoryId: categories[index % categories.length]?.id }
-    : {}),
-  ...(seed.account ? { accountId: uid(planLimit + index) } : {}),
-  ...(seed.category ? { counterparty: seed.name } : {}),
+  ...Option.match(
+    Option.liftPredicate(categories, () => seed.category && categories.length > 0),
+    {
+      onNone: () => ({}),
+      onSome: (available) => ({ categoryId: available[index % available.length]?.id }),
+    }
+  ),
+  ...Option.match(
+    Option.liftPredicate(seed, () => seed.account),
+    {
+      onNone: () => ({}),
+      onSome: () => ({ accountId: uid(planLimit + index) }),
+    }
+  ),
+  ...Option.match(
+    Option.liftPredicate(seed, () => seed.category),
+    {
+      onNone: () => ({}),
+      onSome: ({ name }) => ({ counterparty: name }),
+    }
+  ),
 });
 
 const lifecycle = (seed: Seed): Pick<Plan, "pauses" | "stoppedOn"> => ({
   pauses: seed.lifecycle === "paused" ? [{ from: "2026-10-01" }] : [],
-  ...(seed.lifecycle === "stopped" ? { stoppedOn: "2026-10-01" } : {}),
+  ...Option.match(
+    Option.liftPredicate(seed.lifecycle, (lifecycle) => lifecycle === "stopped"),
+    {
+      onNone: () => ({}),
+      onSome: () => ({ stoppedOn: "2026-10-01" }),
+    }
+  ),
 });
 
 const makePlan = ({
@@ -203,7 +225,13 @@ const makePlan = ({
     cardPayment: seed.card,
     currency: seed.currency,
     amountMode: seed.mode,
-    ...(seed.mode === "unknown" ? {} : { money: moneyFor(seed.currency, seed.amount) }),
+    ...Option.match(
+      Option.liftPredicate(seed.mode, (mode) => mode !== "unknown"),
+      {
+        onNone: () => ({}),
+        onSome: () => ({ money: moneyFor(seed.currency, seed.amount) }),
+      }
+    ),
     frequency: many ? "weekly" : "monthly",
     firstDate: many ? "2026-10-01" : seed.date.replace("2026-10", "2026-09"),
     timeZone: RecurringPlanInput.fields.timeZone.make("America/Bogota"),

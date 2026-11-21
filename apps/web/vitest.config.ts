@@ -10,10 +10,26 @@ export default defineConfig({
     },
   },
   test: {
-    environment: "node",
     clearMocks: true,
     maxWorkers: 4,
-    include: ["src/**/*.test.ts", "cloudflare/**/*.test.ts", "scripts/**/*.test.ts"],
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: "node",
+          environment: "node",
+          include: ["src/**/*.test.ts", "cloudflare/**/*.test.ts", "scripts/**/*.test.ts"],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "dom",
+          environment: "jsdom",
+          include: ["test/**/*.test.ts"],
+        },
+      },
+    ],
     coverage: {
       provider: "istanbul",
       reportsDirectory: "coverage",

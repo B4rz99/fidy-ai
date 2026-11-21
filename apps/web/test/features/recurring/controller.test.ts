@@ -1,6 +1,16 @@
-// @vitest-environment jsdom
 import { expect, it, vi } from "vitest";
-import { Clock, DateTime, Deferred, Effect, Layer, Option, Schema } from "effect";
+import {
+  type Cause,
+  Clock,
+  DateTime,
+  Deferred,
+  Effect,
+  Layer,
+  Match,
+  Option,
+  Predicate,
+  Schema,
+} from "effect";
 import { RegistryContext } from "@effect/atom-react";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
@@ -12,8 +22,14 @@ import {
   RecurringPlanInput,
   makeFidyClient,
 } from "@/transport/client";
-import { type Edit, type Plan, currentPlan, planStatus, planToday } from "./model";
-import { recurringWorkspaceQuery, useRecurringPlanning } from "./controller";
+import {
+  type Edit,
+  type Plan,
+  currentPlan,
+  planStatus,
+  planToday,
+} from "@/features/recurring/model";
+import { recurringWorkspaceQuery, useRecurringPlanning } from "@/features/recurring/controller";
 
 const planId = RecurringPlanId.make("23200000-0000-4000-8000-000000000001");
 
@@ -133,7 +149,6 @@ const saveResponse = (outcome: Outcome): Response => {
   if (outcome === "rejected") {
     return Response.json(
       {
-        _tag: "ValidationFailed",
         error: { code: "validation_failed", message: "Rejected", fields: [] },
         next: [],
       },
@@ -143,6 +158,77 @@ const saveResponse = (outcome: Outcome): Response => {
 
   return Response.json({});
 };
+
+type SaveProbe = Readonly<{
+  container: HTMLElement;
+  onSaved: ReturnType<typeof vi.fn>;
+}>;
+
+const confirmLifecycleRecovery = Effect.fnUntraced(function* ({
+  container,
+  pause,
+  reread,
+  onSaved,
+}: SaveProbe &
+  Readonly<{
+    pause: HTMLButtonElement;
+    reread: { current: Deferred.Deferred<Response> };
+  }>): Effect.fn.Return<void, Cause.UnknownError> {
+  yield* Effect.tryPromise(() => failReread(reread.current));
+  yield* Effect.tryPromise(() => reactAssertion(() => expect(pause.disabled).toBe(true)));
+  expect(onSaved).not.toHaveBeenCalled();
+  reread.current = Deferred.makeUnsafe<Response>();
+  yield* Effect.tryPromise(() => reactWork(() => container.querySelectorAll("button")[1]?.click()));
+  yield* Effect.tryPromise(() => settleReread(reread.current));
+  yield* Effect.tryPromise(() => reactAssertion(() => expect(onSaved).toHaveBeenCalledOnce()));
+});
+
+const confirmRefreshedSave = Effect.fnUntraced(function* ({
+  container,
+  pause,
+  origin,
+  onSaved,
+}: SaveProbe &
+  Readonly<{
+    pause: () => HTMLButtonElement;
+    origin: { current: Deferred.Deferred<Response> };
+  }>): Effect.fn.Return<void, Cause.UnknownError> {
+  yield* Effect.tryPromise(() => reactWork(() => container.querySelectorAll("button")[1]?.click()));
+  yield* Effect.tryPromise(() => reactAssertion(() => expect(pause().disabled).toBe(false)));
+  expect(onSaved).not.toHaveBeenCalled();
+  yield* Effect.tryPromise(() => settleReread(origin.current));
+  yield* Effect.tryPromise(() => reactAssertion(() => expect(onSaved).toHaveBeenCalledOnce()));
+});
+
+const recoverUncertainSave = Effect.fnUntraced(function* ({
+  container,
+  pause,
+  render,
+  failCategories,
+}: Readonly<{
+  container: HTMLElement;
+  pause: () => HTMLButtonElement;
+  render: (month: string, profileStale?: boolean) => Promise<void>;
+  failCategories: (failed: boolean) => void;
+}>): Effect.fn.Return<void, Cause.UnknownError> {
+  expect(pause().disabled).toBe(true);
+  failCategories(true);
+  yield* Effect.tryPromise(() => reactWork(() => container.querySelectorAll("button")[1]?.click()));
+  yield* Effect.tryPromise(() =>
+    reactAssertion(() => expect(container.textContent).toContain("uncertain"))
+  );
+  expect(pause().disabled).toBe(true);
+  failCategories(false);
+  yield* Effect.tryPromise(() => render("2026-11", true));
+  yield* Effect.tryPromise(() => reactWork(() => container.querySelectorAll("button")[1]?.click()));
+  yield* Effect.tryPromise(() =>
+    reactAssertion(() => expect(container.textContent).toContain("idle"))
+  );
+  expect(pause().disabled).toBe(true);
+  expect(container.textContent).not.toContain("Internet QA:pause");
+  yield* Effect.tryPromise(() => render("2026-11"));
+  yield* Effect.tryPromise(() => reactAssertion(() => expect(pause().disabled).toBe(false)));
+});
 
 it.each(["confirmed", "rejected", "uncertain"] as const)(
   "publishes lifecycle feedback only for a confirmed save: %s",
@@ -198,25 +284,18 @@ it.each(["confirmed", "rejected", "uncertain"] as const)(
           );
           expect(onSaved).not.toHaveBeenCalled();
 
-          if (outcome === "confirmed") {
-            yield* Effect.tryPromise(() => failReread(reread.current));
-            yield* Effect.tryPromise(() => reactAssertion(() => expect(pause.disabled).toBe(true)));
-            expect(onSaved).not.toHaveBeenCalled();
-            reread.current = Deferred.makeUnsafe<Response>();
-            yield* Effect.tryPromise(() =>
-              reactWork(() => container.querySelectorAll("button")[1]?.click())
-            );
-            yield* Effect.tryPromise(() => settleReread(reread.current));
-            yield* Effect.tryPromise(() =>
-              reactAssertion(() => expect(onSaved).toHaveBeenCalledOnce())
-            );
-          }
-
-          if (outcome !== "confirmed") {
-            expect(container.textContent).not.toContain("Internet QA:pause");
-          }
-
-          if (outcome === "uncertain") expect(pause.disabled).toBe(true);
+          yield* Match.value(outcome).pipe(
+            Match.when("confirmed", () =>
+              confirmLifecycleRecovery({ container, pause, reread, onSaved })
+            ),
+            Match.orElse(() =>
+              Effect.sync(() => expect(container.textContent).not.toContain("Internet QA:pause"))
+            )
+          );
+          yield* Match.value(outcome).pipe(
+            Match.when("uncertain", () => Effect.sync(() => expect(pause.disabled).toBe(true))),
+            Match.orElse(() => Effect.void)
+          );
         } finally {
           yield* Effect.tryPromise(() => reactWork(() => root.unmount()));
           registry.dispose();
@@ -252,15 +331,20 @@ const planningHttp = (
   });
 };
 
+type RecordedPlanningHttp = Readonly<{
+  http: HttpClient.HttpClient;
+  requests: ReadonlyArray<string>;
+}>;
+
 const recordedPlanningHttp = (
   reply: Deferred.Deferred<Response>,
   reread: { current: Deferred.Deferred<Response> }
-): Readonly<{ http: HttpClient.HttpClient; requests: ReadonlyArray<string> }> => {
+): RecordedPlanningHttp => {
   const requests: string[] = [];
   const base = planningHttp(reply, reread);
 
   const http = HttpClient.make((request) => {
-    if (request.method === "POST" && request.body._tag === "Uint8Array") {
+    if (request.method === "POST" && Predicate.isTagged(request.body, "Uint8Array")) {
       requests.push(new TextDecoder().decode(request.body.body));
     }
 
@@ -360,10 +444,10 @@ it("retains equivalent mounted Recurring queries through collection and rerender
         yield* AtomRegistry.getResult(registry, view);
         expect(reads).toBe(1);
 
-        for (let turn = 0; turn < 5; turn += 1) {
-          yield* Effect.sleep("20 millis");
-          Bun.gc(true);
-        }
+        yield* Effect.sleep("20 millis").pipe(
+          Effect.andThen(Effect.sync(() => Bun.gc(true))),
+          Effect.repeat({ times: 4 })
+        );
 
         const now = yield* Clock.currentTimeMillis;
         vi.spyOn(Date, "now").mockReturnValue(now + 6000);
@@ -558,43 +642,21 @@ it.each(["confirmed", "uncertain"] as const)(
           expect(onSaved).not.toHaveBeenCalled();
           expect(writes).toBe(1);
 
-          if (outcome === "confirmed") {
-            yield* Effect.tryPromise(() =>
-              reactWork(() => container.querySelectorAll("button")[1]?.click())
-            );
-            yield* Effect.tryPromise(() =>
-              reactAssertion(() => expect(pause().disabled).toBe(false))
-            );
-            expect(onSaved).not.toHaveBeenCalled();
-            yield* Effect.tryPromise(() => settleReread(origin.current));
-            yield* Effect.tryPromise(() =>
-              reactAssertion(() => expect(onSaved).toHaveBeenCalledOnce())
-            );
-          } else {
-            expect(pause().disabled).toBe(true);
-            categoryFailure = true;
-            yield* Effect.tryPromise(() =>
-              reactWork(() => container.querySelectorAll("button")[1]?.click())
-            );
-            yield* Effect.tryPromise(() =>
-              reactAssertion(() => expect(container.textContent).toContain("uncertain"))
-            );
-            expect(pause().disabled).toBe(true);
-            categoryFailure = false;
-            yield* Effect.tryPromise(() => render("2026-11", true));
-            yield* Effect.tryPromise(() =>
-              reactWork(() => container.querySelectorAll("button")[1]?.click())
-            );
-            yield* Effect.tryPromise(() =>
-              reactAssertion(() => expect(container.textContent).toContain("idle"))
-            );
-            expect(pause().disabled).toBe(true);
-            expect(container.textContent).not.toContain("Internet QA:pause");
-            yield* Effect.tryPromise(() => render("2026-11"));
-            yield* Effect.tryPromise(() =>
-              reactAssertion(() => expect(pause().disabled).toBe(false))
-            );
-          }
+          yield* Match.value(outcome).pipe(
+            Match.when("confirmed", () =>
+              confirmRefreshedSave({ container, pause, origin, onSaved })
+            ),
+            Match.orElse(() =>
+              recoverUncertainSave({
+                container,
+                pause,
+                render,
+                failCategories: (failed) => {
+                  categoryFailure = failed;
+                },
+              })
+            )
+          );
 
           expect(writes).toBe(1);
         } finally {

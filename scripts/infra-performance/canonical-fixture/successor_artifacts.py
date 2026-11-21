@@ -27,6 +27,14 @@ STAGED_ACCOUNTING_COORDINATES = {
     "publicVersionId": "0c6ed781-9239-4359-98e9-7bff67f80c59",
     "publicDeploymentId": "9f91c7a5-b0fe-4c86-a507-dae8476f597e",
 }
+ACCOUNTING_FORWARD_RUN = "44843968980"
+ACCOUNTING_FORWARD_VERIFIER = "1971ae57c272bff814839026b606e01b14356ec4"
+ACCOUNTING_FORWARD_FILE = "fixture-successor-accounting-forward.json"
+ACCOUNTING_FORWARD_PROOF = {
+    "artifactId": "14681664304",
+    "sha256": "3603da988969660966a3b750e9c10536ed05da1c79cf7bed4eeebf82ebbc6f88",
+    "coreDeploymentId": "5d4b1c00-19ca-4695-9c5d-127acd697154",
+}
 OWNERS = ("user", "directory", "pricing", "maintenance", "erasure")
 STAGE_STEPS = {
     "Authenticate the original release, receipt, and exact erasure": "success",
@@ -91,8 +99,25 @@ ACTIVE_STEPS = {
     "Save the active successor release": "success",
 }
 
+ACCOUNTING_FORWARD_STEPS = {
+    "Require closed protected planning": "success",
+    "Check the reviewed edge policy": "success",
+    "Diagnose the exact staged and stable Worker versions": "skipped",
+    SEAL_AUTH_STEP: "success",
+    "Rebuild the original retained Web assets for verification": "success",
+    "Capture the verified successor dormant rollback position": "skipped",
+    "Reconcile the exact existing Smoke Queue consumer": "skipped",
+    "Upload the reviewed active successor pair": "skipped",
+    "Stage the active successor pair at zero traffic": "skipped",
+    "Verify and promote the active successor with its tested return pair": "failure",
+    "Verify the installed successor and retained controls": "skipped",
+    "Restore the sealed dormant pair after failed verification": "skipped",
+    "Save the active successor release": "skipped",
+    "Retain successor active rollout diagnostics": "success",
+}
 
-def artifacts(revision, reference, prefix, expected_steps, filenames, get=actions_get):
+
+def artifacts(revision, reference, prefix, expected_steps, filenames, get=actions_get, *, optional=()):
     run, body = protected_archive(revision, reference["artifactId"], reference["sha256"], prefix=prefix,
                                   conclusions={"success"}, get=get, workflow=WORKFLOW)
     inventory = json.loads(get(f"runs/{run}/attempts/1/jobs?per_page=100"))
@@ -103,7 +128,8 @@ def artifacts(revision, reference, prefix, expected_steps, filenames, get=action
         raise ValueError("Protected successor operation or step outcomes differ")
     with ZipFile(BytesIO(body)) as archive:
         rows = archive.infolist()
-        if (len(rows) != len(filenames) or {row.filename for row in rows} != set(filenames)
+        names = {row.filename for row in rows}
+        if (len(rows) != len(names) or not set(filenames) <= names <= set(filenames) | set(optional)
                 or any(not 0 < row.file_size <= 128_000 for row in rows)):
             raise ValueError("Unexpected protected successor evidence")
         return {row.filename:json.loads(archive.read(row)) for row in rows}
@@ -314,6 +340,45 @@ def staged_accounting_release(recovered, get=actions_get):
     return staged
 
 
+def accounting_forward_receipt(staged, verifier, get=actions_get, git=git_read):
+    if verifier == ACCOUNTING_FORWARD_VERIFIER or git("merge-base", ACCOUNTING_FORWARD_VERIFIER, verifier) != ACCOUNTING_FORWARD_VERIFIER:
+        raise ValueError("Accounting forward receipt is outside the protected verifier lineage")
+    run, body = protected_archive(
+        ACCOUNTING_FORWARD_VERIFIER, ACCOUNTING_FORWARD_PROOF["artifactId"], ACCOUNTING_FORWARD_PROOF["sha256"],
+        prefix="native-fixture-successor-rollout-diagnostics-", conclusions={"failure"},
+        get=get, workflow=WORKFLOW,
+    )
+    if run != ACCOUNTING_FORWARD_RUN:
+        raise ValueError("Unexpected accounting partial rollout")
+    inventory = json.loads(get(f"runs/{run}/attempts/1/jobs?per_page=100"))
+    job, = inventory["jobs"]
+    steps = [(step["name"], step["conclusion"]) for step in job["steps"] if step["name"] in ACCOUNTING_FORWARD_STEPS]
+    if (inventory["total_count"] != 1 or job["name"] != "plan" or job["conclusion"] != "failure"
+            or steps != list(ACCOUNTING_FORWARD_STEPS.items())):
+        raise ValueError("Protected accounting rollout did not stop at promotion")
+    with ZipFile(BytesIO(body)) as archive:
+        file, = archive.infolist()
+        if (file.filename != "native-release.json" or not 0 < file.file_size <= 128_000
+                or json.loads(archive.read(file)) != staged):
+            raise ValueError("Protected accounting partial differs from its exact stage")
+    return ACCOUNTING_FORWARD_PROOF.copy()
+
+
+def require_active_forward(promotion, proof, verifier, get, git):
+    promoted = promotion.get("promoted", {})
+    if promoted.get("coreDeploymentId") != ACCOUNTING_FORWARD_PROOF["coreDeploymentId"]:
+        if proof is not None:
+            raise ValueError("Unexpected accounting partial in a full promotion")
+        return
+    release = promotion["release"]
+    ingress = promoted.get("publicDeploymentId")
+    if (proof != ACCOUNTING_FORWARD_PROOF or not isinstance(ingress, str) or str(UUID(ingress)) != ingress
+            or ingress in (release["publicDeploymentId"], release["snapshot"]["public"]["deploymentId"])):
+        raise ValueError("Forward promotion lacks the authenticated partial or exact new Ingress")
+    if proof != accounting_forward_receipt(release, verifier, get, git):
+        raise ValueError("Active accounting forward proof differs")
+
+
 def accounting_continuation_producer(reference, verifier, get, git):
     artifact_id = reference["artifactId"]
     if not re.fullmatch(r"[1-9][0-9]{0,19}", artifact_id or ""):
@@ -342,7 +407,8 @@ def active_successor(revision, reference, get=actions_get, *, verifier=None, git
         })
     files = artifacts(producer, reference, "native-fixture-successor-active-",
                       continuation_steps(resumed, steps),
-                      [promotion_name, installation_name, seal_name, recovery_name], get)
+                      [promotion_name, installation_name, seal_name, recovery_name], get,
+                      optional=(ACCOUNTING_FORWARD_FILE,) if continuing_accounting else ())
     promotion, installed = files[promotion_name], files[installation_name]
     accounting = installed.get("nativeAccountingWitness", False)
     if (type(accounting) is not bool or (continuing_accounting and not accounting)
@@ -352,8 +418,12 @@ def active_successor(revision, reference, get=actions_get, *, verifier=None, git
     recovered = recovered_successor(support, files[recovery_name], files[seal_name], get, verifier=producer, git=git)
     stage, promoted = recovered["stage"], recovered["promoted"]
     release = promotion["release"]
-    if continuing_accounting and release != staged_accounting_release(recovered, get):
-        raise ValueError("Active accounting release differs from its exact existing stage")
+    if continuing_accounting:
+        if release != staged_accounting_release(recovered, get):
+            raise ValueError("Active accounting release differs from its exact existing stage")
+        if ACCOUNTING_FORWARD_FILE in files and files[ACCOUNTING_FORWARD_FILE] is None:
+            raise ValueError("Invalid accounting partial proof")
+        require_active_forward(promotion, files.get(ACCOUNTING_FORWARD_FILE), producer, get, git)
     snapshot = release["snapshot"]
     smoke, = [worker for worker in installed["workers"] if worker["role"] == "Smoke"]
     if (("resume" in stage) != (resumed or accounting) or promotion["rollbackTested"] is not True or snapshot["revision"] != revision
@@ -386,12 +456,14 @@ def main():
     accounting = accounting_mode == "true"
     continuation = env.get("FIXTURE_ACCOUNTING_CONTINUATION", "false")
     continuing_accounting = continuation == "true"
+    forward = env.get("FIXTURE_ACCOUNTING_FORWARD", "false")
     if (operation not in ("recover-fixture-successor", "rollout-fixture-successor")
             or not re.fullmatch(r"[a-f0-9]{40}", verifier)
             or mode not in ("true", "false") or accounting_mode not in ("true", "false")
             or (accounting and (resumed or revision == REVISION or operation != "rollout-fixture-successor"))
             or (resumed and (revision != REVISION or revision == verifier))
-            or continuation not in ("true", "false")
+            or continuation not in ("true", "false") or forward not in ("true", "false")
+            or (forward == "true" and not continuing_accounting)
             or (continuing_accounting and (not accounting or revision != STAGED_ACCOUNTING_REVISION or revision == verifier))
             or (not resumed and not continuing_accounting and revision != verifier)
             or env.get("GITHUB_ACTIONS") != "true" or env.get("GITHUB_REF_PROTECTED") != "true"
@@ -414,7 +486,11 @@ def main():
         if continuing_accounting:
             if git_read("merge-base", revision, verifier) != revision:
                 raise ValueError("Staged accounting application is outside the protected verifier lineage")
-            files["native-release.json"] = staged_accounting_release(recovered)
+            staged = staged_accounting_release(recovered)
+            files["native-release.json"] = staged
+            files["native-release.json.controls"] = {"digest": stage["controlsDigest"]}
+            if forward == "true":
+                files[ACCOUNTING_FORWARD_FILE] = accounting_forward_receipt(staged, verifier)
     if ("resume" in stage) != (resumed or accounting):
         raise ValueError("Successor seal does not match the protected resume mode")
     files.update({"fixture-successor-seal-reference.json":seal, "fixture-successor-source.json":stage["predecessor"]})

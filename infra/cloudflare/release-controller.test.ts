@@ -100,6 +100,35 @@ const captured = (port: ReleasePort): Effect.Effect<ReleaseSnapshot, Error> =>
     coreName,
   });
 
+it.effect("finishes only Ingress when the exact Core promotion already committed", () =>
+  Effect.gen(function* () {
+    const fixture = harness();
+    const release = yield* releaseController.stageRelease(
+      fixture.port,
+      yield* captured(fixture.port),
+      candidates
+    );
+    const core = yield* fixture.port.deploy(coreName, [
+      { id: versions.coreCandidate, percentage: 100 },
+    ]);
+    const before = [...fixture.changes];
+    const stale = yield* Effect.exit(
+      releaseController.finishIngressPromotion(fixture.port, release, release.coreDeploymentId)
+    );
+    expect(Exit.isFailure(stale)).toBe(true);
+    expect(fixture.changes).toEqual(before);
+
+    const result = yield* releaseController.finishIngressPromotion(fixture.port, release, core.id);
+    expect(fixture.changes).toEqual([...before, `${publicName}:100`]);
+    expect(result.coreDeploymentId).toBe(core.id);
+    const ingress = yield* fixture.port.current(publicName);
+    expect(ingress).toEqual({
+      id: result.publicDeploymentId,
+      versions: [{ id: versions.publicCandidate, percentage: 100 }],
+    });
+  })
+);
+
 it.effect("permits resource retirement only while the promoted pair still owns exact traffic", () =>
   Effect.gen(function* () {
     const fixture = harness();

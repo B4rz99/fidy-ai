@@ -31,6 +31,7 @@ import {
   fixtureArtifacts,
   fixtureBuild,
   resourceRevision,
+  stagedAccountingRevision,
 } from "./native-fixture-signer";
 import { BunFileSystem } from "@effect/platform-bun";
 import type { ErasureProgress } from "./native-erasure-continuation";
@@ -2597,7 +2598,51 @@ const promoteSuccessor = Effect.fn(function* (
       message: "Active successor smoke changed before promotion",
     });
   }
+  const forward = yield* ReleaseConfig.Boolean("FIXTURE_ACCOUNTING_FORWARD").pipe(
+    ReleaseConfig.withDefault(false)
+  );
+  if (forward) return yield* finishAccountingPromotion({ env, client, port, release, directory });
   yield* promoteClosed(env, client, port);
+});
+
+const finishAccountingPromotion = Effect.fn(function* ({
+  env,
+  client,
+  port,
+  release,
+  directory,
+}: {
+  env: Config;
+  client: HttpClient.HttpClient;
+  port: ReleasePort;
+  release: typeof releaseSchemas.staged.Type;
+  directory: string;
+}) {
+  if (env.revision !== stagedAccountingRevision) {
+    return yield* new ReleaseFailure({ message: "Unexpected interrupted accounting revision" });
+  }
+  const { coreDeploymentId } = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({
+      artifactId: Schema.Literal("14681664304"),
+      sha256: SmokeIdentity.fields.contractDigest,
+      coreDeploymentId: SmokeIdentity.fields.workerVersionId,
+    }),
+    { onExcessProperty: "error" }
+  )(yield* readFile(directory + "/fixture-successor-accounting-forward.json"));
+  const [current, staged] = yield* releasePort({ env, client }).recentDeployments(
+    release.snapshot.core.name
+  );
+  if (current?.id !== coreDeploymentId || staged?.id !== release.coreDeploymentId) {
+    return yield* new ReleaseFailure({ message: "Interrupted accounting Core history changed" });
+  }
+  const { rollback } = yield* storageCompatibility({ env, client }, release, "stage");
+  if (!rollback) {
+    return yield* new ReleaseFailure({ message: "Interrupted accounting return pair changed" });
+  }
+  const { descriptions } = yield* deployedStorage({ env, client, release });
+  yield* probePromotionPairs({ env, client }, release, { descriptions, probeOriginal: false });
+  const promoted = yield* releaseController.finishIngressPromotion(port, release, coreDeploymentId);
+  yield* writeFile(env.file + ".promoted", encodeJson({ release, promoted, rollbackTested: true }));
 });
 
 const promoteClosed = Effect.fn(function* (

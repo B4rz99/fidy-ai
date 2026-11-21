@@ -7,6 +7,7 @@ import { SearchableChoiceDropdown } from "@/ui/components/searchable-choice-drop
 import { Input } from "@/ui/components/input";
 import type { Category, Filters } from "./model";
 import { frequencies, kinds, statuses } from "./model";
+import { currencyChoices } from "@/ui/currency-choices";
 
 const searchLimit = 120;
 
@@ -66,10 +67,7 @@ const FilterChoices = ({
       id="recurring-filter-currency"
       label="Filtrar moneda"
       value={props.draft.currency ?? ""}
-      options={[
-        { value: "", label: "Todas las monedas" },
-        ...Currency.literals.map((value) => ({ value, label: value })),
-      ]}
+      options={[{ value: "", label: "Todas las monedas" }, ...currencyChoices(Currency.literals)]}
       disabled={false}
       width="auto"
       onChange={(value) => props.change("currency", value)}

@@ -18,6 +18,7 @@ import type { Category, Transaction } from "./presentation";
 
 import { CalendarField } from "@/ui/components/calendar-field";
 import type { CorrectionStatus } from "./panel-state";
+import { currencyChoices } from "@/ui/currency-choices";
 
 type CorrectionDraft = Readonly<{
   amount: string;
@@ -117,7 +118,7 @@ const DraftInputs = ({
           id="correction-currency"
           label="Moneda"
           value={draft.currency}
-          options={Currency.literals.map((value) => ({ value, label: value }))}
+          options={currencyChoices(Currency.literals)}
           disabled={locked}
           width="full"
           onChange={(value) => {

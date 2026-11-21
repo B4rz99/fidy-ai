@@ -309,6 +309,7 @@
     "test:core": "bun --bun vitest run --config vitest.core.config.ts",
     "test:whatsapp": "bun --bun vitest run --config vitest.whatsapp.config.ts",
     "test:cloudflare": "bun --bun vitest run --config cloudflare/vitest.config.ts",
+    "test:cloudflare:watchdog-measure": "FIDY_MEASURE_WATCHDOG=1 bun --bun vitest run --config cloudflare/vitest.config.ts --testTimeout=65000 --coverage.enabled=false cloudflare/maintenance/watchdog-traversal.test.ts",
     "test:email-interpretation": "bun --bun vitest run --config vitest.email-interpretation.config.ts",
     "test:mutation": "node ../../tools/mutation/run.mjs",
     "check:browser-client": "bun scripts/check-browser-client.ts",

@@ -64,15 +64,15 @@ export type HostedStructuredContext = Readonly<{
   entries: ReadonlyArray<TranscriptEntry>;
 }>;
 
-export type PreparedHostedText = Readonly<{
-  execute: Effect.Effect<HostedTextResult, HostedInferenceError>;
-  repairInvalidOutput: Effect.Effect<PreparedHostedText, HostedInferenceError>;
+export type PreparedHostedText<Requirements = never> = Readonly<{
+  execute: Effect.Effect<HostedTextResult<Requirements>, HostedInferenceError, Requirements>;
+  repairInvalidOutput: Effect.Effect<PreparedHostedText<Requirements>, HostedInferenceError>;
   discard: Effect.Effect<void, HostedInferenceError>;
 }> &
   Brand.Brand<"PreparedHostedText">;
 
-export type PreparedHostedStructured<Output> = Readonly<{
-  execute: Effect.Effect<Output, HostedInferenceError>;
+export type PreparedHostedStructured<Output, Requirements = never> = Readonly<{
+  execute: Effect.Effect<Output, HostedInferenceError, Requirements>;
   discard: Effect.Effect<void, HostedInferenceError>;
 }> &
   Brand.Brand<"PreparedHostedStructured">;
@@ -82,10 +82,10 @@ export type HostedContinuationEvent = Data.TaggedEnum.Value<
   "ToolResult" | "InvalidOutputFeedback"
 >;
 
-export type HostedTextContinuation = Readonly<{
+export type HostedTextContinuation<Requirements = never> = Readonly<{
   prepare: (
     events: ReadonlyArray<HostedContinuationEvent>
-  ) => Effect.Effect<PreparedHostedText, HostedInferenceError>;
+  ) => Effect.Effect<PreparedHostedText<Requirements>, HostedInferenceError>;
 }> &
   Brand.Brand<"HostedTextContinuation">;
 
@@ -184,24 +184,24 @@ export type HostedTextToolCall = Readonly<{
 
 export type HostedFinishReason = Response.FinishReason;
 
-export type HostedTextResult = Readonly<{
+export type HostedTextResult<Requirements = never> = Readonly<{
   text: unknown;
   toolCalls: ReadonlyArray<HostedTextToolCall>;
   finishReason: HostedFinishReason;
   usage: HostedTextUsage;
-  continuation: HostedTextContinuation;
+  continuation: HostedTextContinuation<Requirements>;
 }>;
 
-export type HostedInferenceService = Readonly<{
+export type HostedInferenceService<Requirements = never> = Readonly<{
   countText: (text: string) => Effect.Effect<number>;
   countTranscript: (entries: ReadonlyArray<TranscriptEntry>) => Effect.Effect<number>;
   prepareText: (
     request: HostedTextRequest
-  ) => Effect.Effect<PreparedHostedText, HostedInferenceError>;
+  ) => Effect.Effect<PreparedHostedText<Requirements>, HostedInferenceError>;
   validateText: (request: HostedTextValidationRequest) => Effect.Effect<void, HostedInferenceError>;
   prepareStructured: <Output, Encoded extends Readonly<Record<string, unknown>>>(
     request: HostedStructuredRequest<Output, Encoded>
-  ) => Effect.Effect<PreparedHostedStructured<Output>, HostedInferenceError>;
+  ) => Effect.Effect<PreparedHostedStructured<Output, Requirements>, HostedInferenceError>;
 }>;
 
 export type HostedInferenceStubBehavior = Readonly<{
@@ -289,14 +289,14 @@ export type OpenAiTransportRun = (
   options: Readonly<{ signal: AbortSignal }>
 ) => Promise<Response>;
 
-export type OpenAiRun = (
+export type OpenAiRun<Requirements = never> = (
   model: ApprovedOpenAiModel,
   request: OpenAiRequest
-) => Effect.Effect<Response, HostedInferenceError | Cause.UnknownError>;
+) => Effect.Effect<Response, HostedInferenceError | Cause.UnknownError, Requirements>;
 
-export type OpenAiConfiguration = Readonly<{
+export type OpenAiConfiguration<Requirements = never> = Readonly<{
   model: Option.Option<string>;
-  run: Option.Option<OpenAiRun>;
+  run: Option.Option<OpenAiRun<Requirements>>;
 }>;
 
 export type HostedConformanceCheck =

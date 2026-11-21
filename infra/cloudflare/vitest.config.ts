@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 import { BaseSequencer, type TestSpecification } from "vitest/node";
 
 const nativeFileMilliseconds: ReadonlyMap<string, number> = new Map(
@@ -9,6 +9,8 @@ const nativeFileMilliseconds: ReadonlyMap<string, number> = new Map(
     "diagnose-smoke-routing.test.ts": 7_600,
   })
 );
+
+const nativeProcessTests = ["local-emulation.test.ts", "openai-conformance-script.test.ts"];
 
 class InfrastructureTestSequencer extends BaseSequencer {
   override sort(files: TestSpecification[]): Promise<TestSpecification[]> {
@@ -22,7 +24,23 @@ class InfrastructureTestSequencer extends BaseSequencer {
 }
 
 export default defineConfig({
-  test: { maxConcurrency: 2, sequence: { sequencer: InfrastructureTestSequencer } },
+  test: {
+    maxConcurrency: 2,
+    sequence: { sequencer: InfrastructureTestSequencer },
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: "infrastructure",
+          exclude: [...configDefaults.exclude, ...nativeProcessTests],
+        },
+      },
+      {
+        extends: true,
+        test: { name: "native-process", include: nativeProcessTests, testTimeout: 30_000 },
+      },
+    ],
+  },
   resolve: {
     alias: {
       "~": new URL("../../apps/server/src", import.meta.url).pathname,

@@ -10,6 +10,8 @@ import {
   shouldCompactConversation,
 } from "../../../src/core/agent/operations";
 import type { HostedInferenceService } from "../../../src/shell/hosted-inference/contract";
+import type { SqlClient } from "effect/sql";
+import type { StoreCapacity } from "../../runtime/sqlite/contract";
 import { withStoreCapacity } from "../../runtime/sqlite/operations";
 import { type LocalTurn } from "./local-turn";
 import { liveTurn } from "./local-turn-store";
@@ -71,7 +73,12 @@ const reserve = Effect.fn(function* (turn: LocalTurn) {
   return granted.length === 1;
 });
 
-export const compact = Effect.fn(function* (turn: LocalTurn, inference: HostedInferenceService) {
+export type LocalInferenceServices = SqliteClient | SqlClient.SqlClient | StoreCapacity;
+
+export const compact = Effect.fn(function* (
+  turn: LocalTurn,
+  inference: HostedInferenceService<LocalInferenceServices>
+) {
   const snapshot = yield* Effect.gen(function* () {
     yield* liveTurn(turn, yield* Clock.currentTimeMillis);
 

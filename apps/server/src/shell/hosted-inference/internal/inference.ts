@@ -84,16 +84,16 @@ type ExactPreparation<Continuation> = Readonly<{
   source: Option.Option<ContinuationState<Continuation>>;
 }>;
 
-type TextRuntime<Request, Continuation> = Readonly<{
-  adapter: HostedInferenceAdapter<Request, Continuation>;
+type TextRuntime<Request, Continuation, Requirements> = Readonly<{
+  adapter: HostedInferenceAdapter<Request, Continuation, Requirements>;
   prepareExact: (
     input: ExactPreparation<Continuation>
-  ) => Effect.Effect<PreparedHostedText, HostedInferenceError>;
+  ) => Effect.Effect<PreparedHostedText<Requirements>, HostedInferenceError>;
   makeContinuation: (input: {
     readonly basePrefix: ReadonlyArray<Prompt.MessageEncoded>;
     readonly continuation: Option.Option<Continuation>;
     readonly policy: HostedTextToolPolicy;
-  }) => HostedTextContinuation;
+  }) => HostedTextContinuation<Requirements>;
 }>;
 
 const invalidAuthority = (): HostedInferenceError =>
@@ -112,8 +112,8 @@ const toolPolicy = (policy: HostedTextToolPolicy): HostedTextToolPolicy =>
         availableOperations: freezeDeep([...policy.availableOperations]),
       };
 
-const validateActiveRequest = <Request, Continuation>(
-  adapter: HostedInferenceAdapter<Request, Continuation>,
+const validateActiveRequest = <Request, Continuation, Requirements>(
+  adapter: HostedInferenceAdapter<Request, Continuation, Requirements>,
   projection: HostedPromptProjection
 ): Effect.Effect<void, HostedInferenceError> => {
   const activeRequest = projection.activeRequest;
@@ -138,8 +138,8 @@ const validateActiveRequest = <Request, Continuation>(
       );
 };
 
-const prepareAdapterRequest = <Request, Continuation>(
-  adapter: HostedInferenceAdapter<Request, Continuation>,
+const prepareAdapterRequest = <Request, Continuation, Requirements>(
+  adapter: HostedInferenceAdapter<Request, Continuation, Requirements>,
   input: ExactPreparation<Continuation>
 ): Effect.Effect<Request, HostedInferenceError> =>
   validateActiveRequest(adapter, input.projection).pipe(
@@ -180,18 +180,18 @@ const pureFailure = (
 
 type ExecutionStatus = "Ready" | "Executing" | "Consumed";
 
-type PreparedExecution<Output> = Readonly<{
-  execute: Effect.Effect<Output, HostedInferenceError>;
+type PreparedExecution<Output, Requirements> = Readonly<{
+  execute: Effect.Effect<Output, HostedInferenceError, Requirements>;
   discard: Effect.Effect<void, HostedInferenceError>;
 }>;
 
-const prepareExecution = <Output>(
-  work: Effect.Effect<Output, HostedInferenceError>,
+const prepareExecution = <Output, Requirements>(
+  work: Effect.Effect<Output, HostedInferenceError, Requirements>,
   settled: (
     exit: Exit.Exit<Output, HostedInferenceError>,
     retryable: boolean
   ) => void = (): void => {}
-): PreparedExecution<Output> => {
+): PreparedExecution<Output, Requirements> => {
   let status: ExecutionStatus = "Ready";
   let attempts = 0;
 
@@ -229,11 +229,11 @@ const consumeSource = <Continuation>(source: ExactPreparation<Continuation>): vo
   if (Option.isSome(source.source)) source.source.value.guard.consume();
 };
 
-const textExecution = <Request, Continuation>(
-  runtime: TextRuntime<Request, Continuation>,
+const textExecution = <Request, Continuation, Requirements>(
+  runtime: TextRuntime<Request, Continuation, Requirements>,
   exactRequest: Request,
   input: ExactPreparation<Continuation>
-): Effect.Effect<HostedTextResult, HostedInferenceError> =>
+): Effect.Effect<HostedTextResult<Requirements>, HostedInferenceError, Requirements> =>
   Effect.suspend(() => runtime.adapter.execute(exactRequest)).pipe(
     Effect.map(({ result, continuation }) => {
       consumeSource(input);
@@ -254,11 +254,11 @@ const textExecution = <Request, Continuation>(
 
 type TextRepairStatus = "Pending" | "Available" | "Spent";
 
-const makePreparedText = <Request, Continuation>(
-  runtime: TextRuntime<Request, Continuation>,
+const makePreparedText = <Request, Continuation, Requirements>(
+  runtime: TextRuntime<Request, Continuation, Requirements>,
   exactRequest: Request,
   input: ExactPreparation<Continuation>
-): PreparedHostedText => {
+): PreparedHostedText<Requirements> => {
   let repair: TextRepairStatus = "Pending";
 
   const execution = prepareExecution(
@@ -313,14 +313,16 @@ const makePreparedText = <Request, Continuation>(
   return authorizePreparedText({ execute, repairInvalidOutput, discard });
 };
 
-const prepareContinuation = <Request, Continuation>(
-  runtime: TextRuntime<Request, Continuation>,
+const prepareContinuation = <Request, Continuation, Requirements>(
+  runtime: TextRuntime<Request, Continuation, Requirements>,
   state: ContinuationState<Continuation>,
   next: Readonly<{ context: HostedTextContext; policy: HostedTextToolPolicy }>
-): Effect.Effect<PreparedHostedText, HostedInferenceError> => {
+): Effect.Effect<PreparedHostedText<Requirements>, HostedInferenceError> => {
   const context = projectHostedTextContextInternal(isolateTextContext(next.context));
 
-  const settle = (exit: Exit.Exit<PreparedHostedText, HostedInferenceError>): Effect.Effect<void> =>
+  const settle = (
+    exit: Exit.Exit<PreparedHostedText<Requirements>, HostedInferenceError>
+  ): Effect.Effect<void> =>
     Effect.sync(() => {
       if (Exit.isFailure(exit)) state.guard.restore();
     });
@@ -344,14 +346,14 @@ const prepareContinuation = <Request, Continuation>(
   );
 };
 
-const makeContinuation = <Request, Continuation>(
-  runtime: TextRuntime<Request, Continuation>,
+const makeContinuation = <Request, Continuation, Requirements>(
+  runtime: TextRuntime<Request, Continuation, Requirements>,
   input: Readonly<{
     basePrefix: ReadonlyArray<Prompt.MessageEncoded>;
     continuation: Option.Option<Continuation>;
     policy: HostedTextToolPolicy;
   }>
-): HostedTextContinuation => {
+): HostedTextContinuation<Requirements> => {
   const { basePrefix, continuation, policy } = input;
 
   const state: ContinuationState<Continuation> = {
@@ -385,10 +387,10 @@ const initialPreparation: InitialPreparation = (request) => {
   };
 };
 
-const makeTextRuntime = <Request, Continuation>(
-  adapter: HostedInferenceAdapter<Request, Continuation>
-): Pick<HostedInferenceService, "prepareText" | "validateText"> => {
-  const runtime: TextRuntime<Request, Continuation> = {
+const makeTextRuntime = <Request, Continuation, Requirements>(
+  adapter: HostedInferenceAdapter<Request, Continuation, Requirements>
+): Pick<HostedInferenceService<Requirements>, "prepareText" | "validateText"> => {
+  const runtime: TextRuntime<Request, Continuation, Requirements> = {
     adapter,
     prepareExact: (input) =>
       prepareAdapterRequest(adapter, input).pipe(
@@ -399,7 +401,7 @@ const makeTextRuntime = <Request, Continuation>(
 
   const prepareInitial = (
     request: HostedTextRequest
-  ): Effect.Effect<PreparedHostedText, HostedInferenceError> =>
+  ): Effect.Effect<PreparedHostedText<Requirements>, HostedInferenceError> =>
     runtime.prepareExact(initialPreparation(request));
 
   const validateInitial = (
@@ -413,7 +415,10 @@ const makeTextRuntime = <Request, Continuation>(
   };
 };
 
-type HostedStructuredRuntime = Pick<HostedInferenceService, "prepareStructured">;
+type HostedStructuredRuntime<Requirements> = Pick<
+  HostedInferenceService<Requirements>,
+  "prepareStructured"
+>;
 
 /* istanbul ignore next */
 const invalidStructuredOutput = (): HostedInferenceError =>
@@ -425,10 +430,14 @@ const invalidStructuredOutput = (): HostedInferenceError =>
     retryAfter: Option.none(),
   });
 
-const makeStructuredBehavior = <Output, Encoded extends Readonly<Record<string, unknown>>>(
-  execution: PreparedStructuredExecution<Output>,
+const makeStructuredBehavior = <
+  Output,
+  Encoded extends Readonly<Record<string, unknown>>,
+  Requirements,
+>(
+  execution: PreparedStructuredExecution<Output, Requirements>,
   outputSchema: Schema.Codec<Output, Encoded, never, never>
-): PreparedHostedStructured<Output> => {
+): PreparedHostedStructured<Output, Requirements> => {
   const { execute, discard } = prepareExecution(
     execution.execute.pipe(
       Effect.flatMap((output) =>
@@ -449,9 +458,9 @@ const hostedStructuredObjectNames: Readonly<Record<HostedStructuredPurpose, stri
   "conversation-compaction": hostedStructuredCompactionObjectName,
 };
 
-const makeHostedStructuredRuntime = (
-  adapter: HostedStructuredAdapter
-): HostedStructuredRuntime => ({
+const makeHostedStructuredRuntime = <Requirements>(
+  adapter: HostedStructuredAdapter<Requirements>
+): HostedStructuredRuntime<Requirements> => ({
   prepareStructured: <Output, Encoded extends Readonly<Record<string, unknown>>>(
     request: HostedStructuredRequest<Output, Encoded>
   ) => {
@@ -468,9 +477,9 @@ const makeHostedStructuredRuntime = (
   },
 });
 
-export const hostedInferenceInternal = <Request, Continuation>(
-  adapter: HostedInferenceAdapter<Request, Continuation>
-): HostedInferenceService => {
+export const hostedInferenceInternal = <Request, Continuation, Requirements>(
+  adapter: HostedInferenceAdapter<Request, Continuation, Requirements>
+): HostedInferenceService<Requirements> => {
   const textRuntime = makeTextRuntime(adapter);
   const structuredRuntime = makeHostedStructuredRuntime(adapter.structured);
 

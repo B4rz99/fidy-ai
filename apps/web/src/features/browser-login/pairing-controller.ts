@@ -545,14 +545,14 @@ const isRetiredPairing = (state: BrowserLoginPairingViewState): boolean =>
   BrowserLoginPairingViewState.$is("Expired")(state) ||
   BrowserLoginPairingViewState.$is("Uncertain")(state);
 
+const idlePairingState = BrowserLoginPairingViewState.Idle();
+
 const usePairingPresentation = (retire: () => void): PairingPresentation => {
-  const latestState = useRef<BrowserLoginPairingViewState>(BrowserLoginPairingViewState.Idle());
+  const latestState = useRef<BrowserLoginPairingViewState>(idlePairingState);
   const startBusy = useRef(false);
   const emailBusy = useRef(false);
 
-  const [pairingState, setPairingState] = useState<BrowserLoginPairingViewState>(
-    BrowserLoginPairingViewState.Idle()
-  );
+  const [pairingState, setPairingState] = useState<BrowserLoginPairingViewState>(idlePairingState);
 
   const changeState = (next: BrowserLoginPairingViewState): void => {
     if (isRetiredPairing(next)) retire();

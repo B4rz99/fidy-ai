@@ -22,6 +22,7 @@ import {
   type TransactionCaptureTask,
   makeCaptureRetention,
 } from "./capture-task";
+import { currencyChoices } from "@/ui/currency-choices";
 
 type CaptureInputsProps = Readonly<{
   amount: string;
@@ -54,7 +55,7 @@ const CaptureInputs = ({
               id="transaction-currency"
               label="Moneda"
               value={currency}
-              options={Currency.literals.map((value) => ({ value, label: value }))}
+              options={currencyChoices(Currency.literals)}
               disabled={disabled}
               width="full"
               onChange={(value) => {

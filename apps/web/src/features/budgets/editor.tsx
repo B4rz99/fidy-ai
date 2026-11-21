@@ -11,6 +11,7 @@ import { Label } from "@/ui/components/label";
 import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
 import { type BudgetDraft, type BudgetEdit, type SaveState } from "./model";
 import { defaultBudgetGroup } from "./presentation";
+import { currencyChoices } from "@/ui/currency-choices";
 
 type EditorProps = Readonly<{
   draft: BudgetDraft;
@@ -55,7 +56,7 @@ const GroupCurrencyField = ({
       id="budget-group-currency"
       label="Moneda del grupo"
       value={currency}
-      options={Currency.literals.map((value) => ({ value, label: value }))}
+      options={currencyChoices(Currency.literals)}
       disabled={disabled}
       width="full"
       onChange={onCurrency}

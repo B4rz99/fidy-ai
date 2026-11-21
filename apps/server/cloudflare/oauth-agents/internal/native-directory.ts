@@ -32,6 +32,7 @@ const limits = {
   registrationSource: 10,
   registrationGlobal: 100,
   concurrent: 32,
+  concurrentSource: 8,
 } as const;
 const begin = Effect.fn(function* (source: string, registration: boolean) {
   const sql = yield* SqliteClient;
@@ -40,6 +41,11 @@ const begin = Effect.fn(function* (source: string, registration: boolean) {
     yield* sql`DELETE FROM oauth_leases WHERE expires_at_ms<=${now}`;
     const leases = yield* sql`SELECT 1 FROM oauth_leases LIMIT 1 OFFSET ${limits.concurrent - 1}`;
     if (leases.length !== 0) return Option.none<string>();
+    const sourceLeases =
+      yield* sql`SELECT 1 FROM oauth_leases WHERE source=${source} LIMIT 1 OFFSET ${
+        limits.concurrentSource - 1
+      }`;
+    if (sourceLeases.length !== 0) return Option.none<string>();
     const windows = [
       { key: "oauth/source/" + source, limit: limits.source },
       { key: "oauth/global", limit: limits.global },
@@ -59,7 +65,7 @@ const begin = Effect.fn(function* (source: string, registration: boolean) {
       yield* sql`INSERT INTO bootstrap_admissions(scope,expires_at_ms) VALUES(${key},${now + minute})`;
     }
     const id = newId();
-    yield* sql`INSERT INTO oauth_leases VALUES(${id},${now + leaseMs})`;
+    yield* sql`INSERT INTO oauth_leases(id,expires_at_ms,source) VALUES(${id},${now + leaseMs},${source})`;
     return Option.some(id);
   }).pipe(withStoreCapacity("required"));
 });

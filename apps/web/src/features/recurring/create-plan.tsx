@@ -1,8 +1,11 @@
 import { browserSecureRandom } from "@/browser/crypto";
 import { Effect, Option } from "effect";
-import { type JSX, useState } from "react";
+import { type JSX, use, useState } from "react";
 import { RecurringPlanId } from "@/transport/client";
+import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
+import { Button } from "@/ui/components/button";
 import { DeferredDisclosure } from "@/ui/components/disclosure";
+import { CreationDraftContext } from "./creation-draft";
 import { PlanForm } from "./plan-form";
 import { TransactionPicker } from "./transactions";
 import {
@@ -16,6 +19,7 @@ import {
 type CreationDraft = Readonly<{
   initial: Partial<PlanInput> & Pick<PlanInput, "timeZone">;
   seriesId: Option.Option<string>;
+  restored: boolean;
 }>;
 type Props = CreationDraft &
   Readonly<{
@@ -25,7 +29,8 @@ type Props = CreationDraft &
     created: (receipt: CreationReceipt) => void;
   }>;
 export const CreatePlan = (props: Props): JSX.Element => {
-  const { initial, seriesId, categories, disabled, save, created } = props;
+  const { initial, seriesId, restored, categories, disabled, save, created } = props;
+  const { track, discard } = use(CreationDraftContext);
   const [draft, setDraft] = useState({ initial, transactionId: Option.none<string>() });
   const submit = (plan: PlanInput): void => {
     const id = RecurringPlanId.make(
@@ -46,6 +51,7 @@ export const CreatePlan = (props: Props): JSX.Element => {
   };
   return (
     <>
+      {restored ? <RestoredDraft discard={discard} /> : null}
       <div data-recurring-slot="create-source">
         <DeferredDisclosure title="Crear desde una transacción">
           <TransactionPicker
@@ -67,13 +73,25 @@ export const CreatePlan = (props: Props): JSX.Element => {
           próximos pagos o ingresos, elige una primera fecha futura.
         </p>
       ) : null}
-      <PlanForm
-        key={JSON.stringify(draft)}
-        initial={draft.initial}
-        categories={categories}
-        disabled={disabled}
-        onSubmit={submit}
-      />
+      <div key={JSON.stringify(draft)} ref={track}>
+        <PlanForm
+          initial={draft.initial}
+          categories={categories}
+          disabled={disabled}
+          onSubmit={submit}
+        />
+      </div>
     </>
   );
 };
+const RestoredDraft = ({ discard }: Readonly<{ discard: () => void }>): JSX.Element => (
+  <Alert variant="information" className="mb-5">
+    <AlertTitle>Borrador sin guardar</AlertTitle>
+    <AlertDescription>
+      Recuperamos lo que escribiste antes de abrir otro recurrente.
+    </AlertDescription>
+    <Button variant="destructive" className="mt-3 w-fit" onClick={discard}>
+      Descartar borrador
+    </Button>
+  </Alert>
+);

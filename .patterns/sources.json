@@ -55,7 +55,7 @@
     "patches": [
       {
         "path": "patches/alchemy@2.0.0-beta.80.patch",
-        "sha256": "0a0af471f07e240f52db8e272da023f56bc5cde340b738d37a082405e1903e0f"
+        "sha256": "9f491f8919a1a3a05a18ed3a4e82007eec39e6140d23d10436ae8a1754e278e0"
       }
     ]
   },

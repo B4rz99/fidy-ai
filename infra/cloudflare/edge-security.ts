@@ -149,6 +149,8 @@ const reservedRateLimitPaths = [
   "/internal/support-recovery",
   "/internal/sample-review",
   "/internal/beta-pro",
+  "/internal/titular-erasure",
+  "/internal/support/prices",
   refundSupportBasePath,
   "/user",
   "/pat-pairings",

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { JSX } from "react";
+import type { AriaAttributes, ComponentProps, JSX } from "react";
 import { DateTime, Option } from "effect";
 import { es } from "react-day-picker/locale";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -19,6 +19,7 @@ type DateFieldProps = Readonly<{
   required: boolean;
   onChange: (value: string) => void;
 }> &
+  Pick<AriaAttributes, "aria-invalid" | "aria-describedby"> &
   (
     | Readonly<{ appearance: "filter"; month: Option.Option<string> }>
     | Readonly<{ appearance: "field" | "review" }>
@@ -71,6 +72,15 @@ const filterMonth = (props: DateFieldProps): Option.Option<Date> =>
     ? Option.flatMap(props.month, (value) => localDate(`${value}-01`, props.timeZone))
     : Option.none();
 
+const triggerAttributes = (
+  props: DateFieldProps
+): Pick<ComponentProps<"button">, "id" | "aria-label" | "aria-invalid" | "aria-describedby"> => ({
+  id: props.id,
+  "aria-label": calendarAccessibleLabel(props),
+  "aria-invalid": props["aria-invalid"],
+  "aria-describedby": props["aria-describedby"],
+});
+
 export const CalendarField = (props: DateFieldProps): JSX.Element => {
   const [open, setOpen] = useState(false);
   const visibleLabel = calendarLabel(props);
@@ -78,8 +88,7 @@ export const CalendarField = (props: DateFieldProps): JSX.Element => {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
-        id={props.id}
-        aria-label={calendarAccessibleLabel(props)}
+        {...triggerAttributes(props)}
         render={
           <Button
             contentLayout="wrap"

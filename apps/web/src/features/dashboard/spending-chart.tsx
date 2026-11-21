@@ -9,10 +9,11 @@ import {
   DashboardTooltip,
 } from "@/ui/components/dashboard-chart";
 import { DashboardCurrency } from "@/ui/components/dashboard";
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/ui/components/empty";
+import { Empty, EmptyHeader, EmptyTitle } from "@/ui/components/empty";
 import { exactChartAmount, formatCurrencyAmount } from "./money-presentation";
 import type { DashboardView, DashboardWidgetView } from "./presentation";
 import { periodLabel } from "./period-presentation";
+import { RegisterTransactionAction } from "./register-action";
 
 type SpendingResult = Extract<DashboardWidgetView["result"], { readonly buckets: unknown }>;
 type SpendingCurrency = SpendingResult["buckets"][number]["moneyGroups"][number]["currency"];
@@ -74,9 +75,10 @@ const CurrencySpendingChart = ({
 };
 
 export const SpendingChart = ({
+  card,
   data,
   locale,
-}: Readonly<{ data: SpendingResult; locale: DashboardLocale }>): JSX.Element => {
+}: Readonly<{ card: string; data: SpendingResult; locale: DashboardLocale }>): JSX.Element => {
   const currencySet = new Set<SpendingCurrency>();
   for (const { moneyGroups } of data.buckets) {
     for (const { currency, outflow } of moneyGroups) {
@@ -89,8 +91,8 @@ export const SpendingChart = ({
       <Empty className="border">
         <EmptyHeader>
           <EmptyTitle>No hay transacciones en este periodo</EmptyTitle>
-          <EmptyDescription>El gráfico aparecerá cuando existan datos.</EmptyDescription>
         </EmptyHeader>
+        <RegisterTransactionAction card={card} />
       </Empty>
     );
   }

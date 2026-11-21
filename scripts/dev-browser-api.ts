@@ -8,6 +8,7 @@ import { signedChat } from "../apps/server/cloudflare/signed-whatsapp.test-fixtu
 import { native, nativeBrowserPlatform } from "../apps/server/cloudflare/user-store.test-fixture";
 
 const secondMs = 1000;
+const trialLengthMs = 604800000;
 const noContent = 204;
 const caller = "CO.Recurring";
 const recurringUser = "24000000-0000-4000-8000-000000000401";
@@ -28,9 +29,11 @@ export const prepareBrowserUser = Effect.fn(function* (runtime: Miniflare, subje
   const now = yield* Clock.currentTimeMillis;
   yield* native(() =>
     owner.exec(
-      "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) VALUES(?,'CO','es-CO','America/Bogota',?,'portfolio',?,?)",
+      "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,trial_started_at_ms,trial_ends_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) VALUES(?,'CO','es-CO','America/Bogota',?,?,?,'portfolio',?,?)",
       subject,
       now,
+      now,
+      now + trialLengthMs,
       caller,
       now - secondMs
     )

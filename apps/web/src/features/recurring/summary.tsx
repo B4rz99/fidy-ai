@@ -53,7 +53,10 @@ const SummaryAmounts = ({
     </div>
   </div>
 );
-export const Summary = ({ view }: Readonly<{ view: Workspace }>): JSX.Element => (
+export const Summary = ({
+  view,
+  filtered,
+}: Readonly<{ view: Workspace; filtered: boolean }>): JSX.Element => (
   <div data-recurring-slot="summary">
     {kinds.map(([kind, label]) => (
       <section key={kind} aria-label={label} data-recurring-slot="summary-kind">
@@ -71,7 +74,11 @@ export const Summary = ({ view }: Readonly<{ view: Workspace }>): JSX.Element =>
           ) : null
         )}
         {view.summary.some((group) => group.kind === kind) ? null : (
-          <p className="text-xs text-muted-foreground">Sin recurrentes este mes</p>
+          <p className="text-xs text-muted-foreground">
+            {filtered
+              ? "Sin recurrentes que coincidan con los filtros"
+              : "Sin recurrentes este mes"}
+          </p>
         )}
       </section>
     ))}

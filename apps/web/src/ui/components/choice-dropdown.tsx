@@ -1,5 +1,5 @@
 import { Option } from "effect";
-import type { JSX, ReactNode } from "react";
+import type { AriaAttributes, JSX, ReactNode } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { cn } from "@/ui/class-names";
@@ -22,7 +22,8 @@ type DropdownProps = Readonly<{
   leading: ReactNode;
   onChange: (value: string) => void;
   triggerLabel: Option.Option<string>;
-}>;
+}> &
+  Pick<AriaAttributes, "aria-invalid" | "aria-describedby">;
 
 export const ChoiceDropdown = ({
   id,
@@ -34,6 +35,7 @@ export const ChoiceDropdown = ({
   leading,
   onChange,
   triggerLabel,
+  ...aria
 }: DropdownProps): JSX.Element => {
   const selectedLabel = Option.getOrElse(
     triggerLabel,
@@ -44,6 +46,7 @@ export const ChoiceDropdown = ({
       <DropdownMenuTrigger
         id={id}
         aria-label={`${label}: ${selectedLabel}`}
+        {...aria}
         render={
           <Button
             contentLayout="wrap"

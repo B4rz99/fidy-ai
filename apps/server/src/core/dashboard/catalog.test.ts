@@ -55,3 +55,13 @@ it("creates a valid four-Widget first-use DashboardDocument in a two-by-two layo
   }
   expect(() => Schema.encodeSync(DashboardDocument)(document)).not.toThrow();
 });
+
+it("names the monthly summary preset after the income and expense figures it shows", () => {
+  const entry = makeDashboardCatalog({
+    restaurantCategoryId: CategoryId.make("10000000-0000-4000-8000-000000000001"),
+  }).find(({ widget }) => widget.type === "custom-metric");
+
+  expect(entry?.name).toBe("Ingresos y gastos del mes");
+  expect(entry?.description).toBe("Muestra ingresos y gastos del mes por moneda.");
+  expect(entry?.widget).toMatchObject({ label: "Ingresos y gastos del mes" });
+});

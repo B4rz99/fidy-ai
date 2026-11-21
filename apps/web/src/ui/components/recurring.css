@@ -108,11 +108,26 @@
   flex-wrap: wrap;
 }
 [data-recurring-slot="workspace"] [data-recurring-slot="month-controls"] h2 {
+  flex: none;
+  max-width: 100%;
   font-size: 16px;
   font-weight: 600;
 }
 [data-recurring-slot="workspace"] [data-recurring-slot="month-controls"] h2::first-letter {
   text-transform: uppercase;
+}
+[data-recurring-slot="workspace"] [data-recurring-slot="month-picker"] {
+  margin-left: -10px;
+  justify-content: flex-start;
+  white-space: nowrap;
+  font-size: 16px;
+  font-weight: 600;
+}
+[data-recurring-slot="workspace"] [data-recurring-slot="month-picker"] > span::first-letter {
+  text-transform: uppercase;
+}
+[data-recurring-slot="month-choice"][aria-current="date"] {
+  box-shadow: inset 0 0 0 1px var(--border);
 }
 [data-recurring-slot="workspace"] [data-recurring-slot="month-controls"] > div {
   flex: 1;
@@ -470,6 +485,10 @@
 [data-recurring-slot="plan-form"] fieldset > * {
   grid-column: 1 / -1;
   min-width: 0;
+}
+
+[data-recurring-slot="plan-form"] fieldset > [type="submit"] {
+  margin-top: 4px;
 }
 [data-recurring-slot="plan-form"]
   :is(

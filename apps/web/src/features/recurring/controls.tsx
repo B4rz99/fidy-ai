@@ -1,8 +1,6 @@
 import { type JSX } from "react";
 import {
   Add01Icon,
-  ArrowLeft01Icon,
-  ArrowRight01Icon,
   Calendar03Icon,
   FilterHorizontalIcon,
   Menu01Icon,
@@ -11,7 +9,8 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@/ui/components/button";
 import { Summary } from "./summary";
-import { type Workspace, monthLabel } from "./model";
+import { MonthPicker } from "./month-picker";
+import { type Workspace } from "./model";
 
 type ToolbarProps = Readonly<{
   tab: string;
@@ -99,9 +98,10 @@ const ToolbarTabs = ({ tab, setTab }: Pick<ToolbarProps, "tab" | "setTab">): JSX
 );
 type MonthProps = Readonly<{
   view: Workspace;
+  filtered: boolean;
   calendar: boolean;
   setCalendar: (value: boolean) => void;
-  month: (step: number) => void;
+  selectMonth: (month: string) => void;
 }>;
 export const MonthlyOverview = (props: MonthProps): JSX.Element => (
   <section
@@ -110,35 +110,20 @@ export const MonthlyOverview = (props: MonthProps): JSX.Element => (
     className="@container min-w-0"
   >
     <MonthControls {...props} />
-    <Summary view={props.view} />
+    {props.filtered ? (
+      <p data-recurring-slot="summary-scope" className="text-sm text-muted-foreground">
+        Resumen filtrado: solo incluye los recurrentes que coinciden con los filtros.
+      </p>
+    ) : null}
+    <Summary view={props.view} filtered={props.filtered} />
   </section>
 );
-const MonthControls = ({ view, calendar, setCalendar, month }: MonthProps): JSX.Element => (
+const MonthControls = ({ view, calendar, setCalendar, selectMonth }: MonthProps): JSX.Element => (
   <div data-recurring-slot="month-controls">
-    <h2>{monthLabel(view.month)}</h2>
+    <h2>
+      <MonthPicker key={view.month} month={view.month} today={view.today} select={selectMonth} />
+    </h2>
     <div className="flex flex-wrap items-center gap-3">
-      <div className="flex min-w-0 flex-wrap items-center gap-1">
-        <Button
-          contentLayout="wrap"
-          focusAppearance="subtle"
-          size="icon-sm"
-          variant="ghost"
-          aria-label="Mes anterior"
-          onClick={() => month(-1)}
-        >
-          <HugeiconsIcon icon={ArrowLeft01Icon} />
-        </Button>
-        <Button
-          contentLayout="wrap"
-          focusAppearance="subtle"
-          size="icon-sm"
-          variant="ghost"
-          aria-label="Mes siguiente"
-          onClick={() => month(1)}
-        >
-          <HugeiconsIcon icon={ArrowRight01Icon} />
-        </Button>
-      </div>
       <MonthPresentation calendar={calendar} setCalendar={setCalendar} />
     </div>
   </div>

@@ -1,13 +1,17 @@
 // @vitest-environment jsdom
+import { RegistryContext } from "@effect/atom-react";
 import { it } from "@effect/vitest";
-import { createMemoryHistory } from "@tanstack/react-router";
+import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
 import { type Cause, Deferred, Effect, Layer, Option, Schema } from "effect";
 import { AsyncResult, AtomRegistry } from "effect/reactivity";
 import { HttpClient, HttpClientResponse, UrlParams } from "effect/http";
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, expect, vi } from "vitest";
 import { BrowserSessionBindingSchema, makeFidyClient, makeWebAuthClient } from "@/transport/client";
 import { makeHostedTurnClient } from "@/transport/hosted-turn-client";
 import { PrivacyTransactionFeature, TransactionListFeature } from "@/features/transactions/feature";
+import { SessionContext } from "@/session/session-context";
 import { transactionEntryConsent } from "@/session/transaction-entry";
 import { initialApplicationValues } from "./initial-values";
 import { createWebRouter } from "./routes";
@@ -47,6 +51,7 @@ afterEach(() => vi.useRealTimers());
 type EntryControl = {
   consent: "Granted" | "Revoked" | "Unavailable";
   transactions: Option.Option<Deferred.Deferred<void>>;
+  history: ReadonlyArray<Record<string, unknown>>;
 };
 type EntryFixture = Readonly<{
   router: ReturnType<typeof createWebRouter>;
@@ -56,13 +61,91 @@ type EntryFixture = Readonly<{
   control: EntryControl;
   finishPreparation: () => Effect.Effect<void, Cause.UnknownError>;
 }>;
-const entryFixture = (age: Option.Option<number>): EntryFixture => {
+const emptyPeriod = {
+  requested: "this-month",
+  from: "2026-11-01T05:00:00Z",
+  toExclusive: "2026-12-01T05:00:00Z",
+  timeZone: "America/Bogota",
+};
+const emptyWidget = (
+  widget: Record<string, unknown>,
+  result: Record<string, unknown>
+): Record<string, unknown> => ({
+  weight: 1,
+  node: { kind: "leaf", widget: { widget, result } },
+});
+const emptyDashboard = {
+  title: "Mi tablero",
+  context: {
+    serviceMarket: "CO",
+    locale: "es-CO",
+    timeZone: "America/Bogota",
+    calculatedAt: "2026-11-08T12:00:00Z",
+  },
+  layout: {
+    kind: "split",
+    axis: "row",
+    children: [
+      emptyWidget(
+        {
+          id: "24000000-0000-4000-8000-000000000301",
+          type: "spending-chart",
+          title: "Gastos por categoría",
+          groupBy: "category",
+          period: "this-month",
+        },
+        { appliedPeriod: emptyPeriod, buckets: [] }
+      ),
+      emptyWidget(
+        {
+          id: "24000000-0000-4000-8000-000000000302",
+          type: "budget-bar",
+          categoryId: "24000000-0000-4000-8000-000000000242",
+          currency: "COP",
+        },
+        {
+          availability: "missing-budget",
+          appliedPeriod: emptyPeriod,
+          category: { id: "24000000-0000-4000-8000-000000000242", label: "Restaurantes" },
+          currency: "COP",
+        }
+      ),
+      emptyWidget(
+        {
+          id: "24000000-0000-4000-8000-000000000303",
+          type: "transaction-list",
+          title: "Transacciones recientes",
+          limit: 5,
+        },
+        { transactions: [] }
+      ),
+      emptyWidget(
+        {
+          id: "24000000-0000-4000-8000-000000000304",
+          type: "custom-metric",
+          title: "Ingresos y gastos del mes",
+          label: "Ingresos y gastos del mes",
+          aggregation: "sum",
+          period: "this-month",
+        },
+        { appliedPeriod: emptyPeriod, moneyGroups: [] }
+      ),
+    ],
+  },
+};
+const entryResponse = (path: string, history: ReadonlyArray<Record<string, unknown>>): unknown => {
+  if (path === "/transactions") return { data: history, next: [] };
+  if (path === "/dashboard/view") return { data: emptyDashboard, next: [] };
+  return profile;
+};
+const entryFixture = (age: Option.Option<number>, entry = "/app/transactions"): EntryFixture => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(observedAt + Option.getOrElse(age, () => 0));
   const requests: Array<Readonly<{ method: string; path: string; search: string }>> = [];
   const control: EntryControl = {
     consent: "Granted",
     transactions: Option.none(),
+    history: [],
   };
   const http = HttpClient.make((request) => {
     const url = new URL(request.url);
@@ -87,7 +170,7 @@ const entryFixture = (age: Option.Option<number>): EntryFixture => {
       }
       return HttpClientResponse.fromWeb(
         request,
-        Response.json(url.pathname === "/transactions" ? { data: [], next: [] } : profile)
+        Response.json(entryResponse(url.pathname, control.history))
       );
     });
   });
@@ -116,7 +199,7 @@ const entryFixture = (age: Option.Option<number>): EntryFixture => {
     hostedTurnClient: makeHostedTurnClient(options),
     sessionBinding: initial.binding ?? "none",
     registry,
-    history: Option.some(createMemoryHistory({ initialEntries: ["/app/transactions"] })),
+    history: Option.some(createMemoryHistory({ initialEntries: [entry] })),
   });
   const finishPreparation = (): Effect.Effect<void, Cause.UnknownError> =>
     Effect.gen(function* () {
@@ -270,4 +353,196 @@ it.live(
         registry.dispose();
       }
     })
+);
+
+const historyEntry = (
+  counterparty: string,
+  occurredAt: string,
+  amount: string
+): Record<string, unknown> => ({
+  id: `24000000-0000-4000-8000-${occurredAt.slice(8, 13).replace("T", "0")}0000000`,
+  categoryId: "24000000-0000-4000-8000-000000000242",
+  counterparty,
+  money: { amount, currency: "COP" },
+  direction: "outflow",
+  occurredAt,
+  createdAt: occurredAt,
+  revision: 0,
+});
+
+const renderApplication = (
+  router: EntryFixture["router"],
+  registry: EntryFixture["registry"]
+): Readonly<{
+  container: HTMLDivElement;
+  work: (task: () => void) => Effect.Effect<void, Cause.UnknownError>;
+  render: () => Effect.Effect<void, Cause.UnknownError>;
+  dispose: () => Effect.Effect<void, Cause.UnknownError>;
+}> => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query === "(min-width: 901px)",
+    addEventListener: (): void => undefined,
+    removeEventListener: (): void => undefined,
+  }));
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const work = (task: () => void): Effect.Effect<void, Cause.UnknownError> =>
+    Effect.tryPromise(() => Promise.resolve(act(task)));
+  return {
+    container,
+    work,
+    render: () =>
+      work(() =>
+        root.render(
+          createElement(
+            SessionContext.Provider,
+            {
+              value: Option.some({
+                authentication: "signed-in" as const,
+                completeLogin: (): void => undefined,
+                completeLogout: (): void => undefined,
+                expireAuthentication: (): void => undefined,
+                replaceAuthenticationLifetime: (): void => undefined,
+              }),
+            },
+            createElement(
+              RegistryContext.Provider,
+              { value: registry },
+              createElement(RouterProvider, { router })
+            )
+          )
+        )
+      ),
+    dispose: () =>
+      work(() => root.unmount()).pipe(
+        Effect.andThen(
+          Effect.sync(() => {
+            registry.dispose();
+            container.remove();
+            vi.unstubAllGlobals();
+          })
+        )
+      ),
+  };
+};
+
+const ledgerOrder = (container: HTMLElement): ReadonlyArray<string> =>
+  Array.from(container.querySelectorAll("tbody tr"), (item) =>
+    item.getAttribute("data-date-group") === "true"
+      ? (item.querySelector("span")?.textContent ?? "")
+      : (["Mercado Zeta", "Café Alba", "Uber", "Banco Bogotá"].find((name) =>
+          item.textContent.includes(name)
+        ) ?? "")
+  );
+
+const sortChoices = (): ReadonlyArray<HTMLElement> =>
+  Array.from(document.querySelectorAll<HTMLElement>('[role="menuitemradio"]'));
+
+it.live(
+  "states that a counterparty sort applies inside each day while days stay newest first",
+  () =>
+    Effect.gen(function* () {
+      const { router, registry, control, finishPreparation } = entryFixture(Option.some(0));
+      control.history = [
+        historyEntry("Mercado Zeta", "2026-11-02T20:00:00Z", "84000"),
+        historyEntry("Café Alba", "2026-11-02T15:00:00Z", "12500"),
+        historyEntry("Banco Bogotá", "2026-11-01T20:00:00Z", "9000"),
+        historyEntry("Uber", "2026-11-01T15:00:00Z", "23900"),
+      ];
+      const { container, work, render, dispose } = renderApplication(router, registry);
+      try {
+        yield* Effect.tryPromise(() => router.load());
+        yield* finishPreparation();
+        yield* render();
+        const trigger = yield* Effect.tryPromise(() =>
+          vi.waitFor(() => {
+            const sort = container.querySelector<HTMLElement>("#transaction-sort");
+            expect(ledgerOrder(container)).toHaveLength(6);
+            return sort;
+          })
+        );
+        expect(trigger?.textContent).toBe("Más recientes primero");
+        yield* work(() => trigger?.click());
+        expect(sortChoices().map((item) => item.textContent.trim())).toEqual([
+          "Más recientes primero",
+          "Contraparte A–Z en cada día",
+          "Contraparte Z–A en cada día",
+          "Categoría A–Z en cada día",
+        ]);
+        yield* work(() => sortChoices()[2]?.click());
+        expect(trigger?.textContent).toBe("Contraparte Z–A en cada día");
+        expect(ledgerOrder(container)).toEqual([
+          "2 de noviembre de 2026",
+          "Mercado Zeta",
+          "Café Alba",
+          "1 de noviembre de 2026",
+          "Uber",
+          "Banco Bogotá",
+        ]);
+        expect(
+          Array.from(
+            container.querySelectorAll('[aria-label="Totales del día por moneda"]'),
+            (totals) => totals.textContent
+          )
+        ).toEqual(["COP -96.500,00", "COP -32.900,00"]);
+      } finally {
+        yield* dispose();
+      }
+    })
+);
+
+const panelHeadings = (container: HTMLElement): ReadonlyArray<string> =>
+  Array.from(container.querySelectorAll("h2"), (heading) => heading.textContent);
+
+const emptyCardActions = (container: HTMLElement): ReadonlyArray<HTMLAnchorElement> =>
+  Array.from(container.querySelectorAll<HTMLAnchorElement>("main a")).filter((action) =>
+    action.textContent.includes("Registrar una transacción")
+  );
+
+it.live(
+  "each empty dashboard card offers to register a transaction in its own words",
+  () =>
+    Effect.gen(function* () {
+      const { router, registry } = entryFixture(Option.some(0), "/app/dashboard");
+      const { container, work, render, dispose } = renderApplication(router, registry);
+      try {
+        yield* Effect.tryPromise(() => router.load());
+        yield* render();
+        const actions = yield* Effect.tryPromise(() =>
+          vi.waitFor(
+            () => {
+              const found = emptyCardActions(container);
+              expect(found).toHaveLength(3);
+              return found;
+            },
+            { timeout: 15000 }
+          )
+        );
+        expect(actions.map((action) => action.getAttribute("aria-label"))).toEqual([
+          "Registrar una transacción para Gastos por categoría",
+          "Registrar una transacción para Transacciones recientes",
+          "Registrar una transacción para Ingresos y gastos del mes",
+        ]);
+        expect(container.textContent).not.toContain("El gráfico aparecerá");
+        expect(container.textContent).not.toContain("Restaurantes · COP");
+        expect(container.textContent).not.toContain("Ir a Presupuestos");
+        expect(container.textContent).toContain("No hay presupuesto para este mes");
+        yield* work(() => actions[1]?.click());
+        yield* Effect.tryPromise(() =>
+          vi.waitFor(
+            () => {
+              expect(router.state.location.pathname).toBe("/app/transactions");
+              expect(panelHeadings(container)).toContain("Registrar transacción");
+            },
+            { timeout: 15000 }
+          )
+        );
+      } finally {
+        yield* dispose();
+      }
+    }),
+  20000
 );

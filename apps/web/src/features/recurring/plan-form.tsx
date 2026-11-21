@@ -6,38 +6,11 @@ import { Input } from "@/ui/components/input";
 import { ChoiceField } from "./fields";
 import { Field, IdentityFields, ScheduleFields } from "./form-fields";
 import type { Category, PlanInput } from "./model";
+import { PlanFeedbackContext, type PlanProblem, findPlanProblems } from "./plan-validation";
+import { planDraft, planFields } from "./plan-fields";
 
-const value = (form: FormData, key: string): string => {
-  const entry = form.get(key);
-  return typeof entry === "string" ? entry.trim() : "";
-};
-const day = (text: string): number | "last" =>
-  text === "último" || text === "last" ? "last" : Number(text);
-const parsePlan = (form: FormData, timeZone: PlanInput["timeZone"]): Option.Option<PlanInput> => {
-  const currency = value(form, "currency").toUpperCase();
-  const amountMode = value(form, "amountMode");
-  const frequency = value(form, "frequency");
-  const optional = Object.fromEntries(
-    ["endDate", "counterparty", "categoryId"].flatMap((key) =>
-      value(form, key) === "" ? [] : [[key, value(form, key)]]
-    )
-  );
-  return Schema.decodeOption(Schema.toCodecJson(RecurringPlanInput))({
-    name: value(form, "name"),
-    kind: value(form, "kind"),
-    currency,
-    amountMode,
-    frequency,
-    timeZone,
-    firstDate: value(form, "firstDate"),
-    cardPayment: value(form, "cardPayment") === "yes",
-    ...optional,
-    ...(amountMode === "unknown" ? {} : { money: { amount: value(form, "amount"), currency } }),
-    ...(frequency === "twice-monthly"
-      ? { monthDays: [day(value(form, "day1")), day(value(form, "day2"))] }
-      : {}),
-  });
-};
+const parsePlan = (form: FormData, timeZone: PlanInput["timeZone"]): Option.Option<PlanInput> =>
+  Schema.decodeOption(Schema.toCodecJson(RecurringPlanInput))(planFields({ form, timeZone }));
 export const PlanForm = ({
   initial,
   categories,
@@ -51,27 +24,50 @@ export const PlanForm = ({
 }>): JSX.Element => {
   const [amountMode, setAmountMode] = useState(initial.amountMode ?? "unknown");
   const [invalid, setInvalid] = useState(false);
+  const [problems, setProblems] = useState<ReadonlyArray<PlanProblem>>([]);
+  const edited = (field: string): void =>
+    setProblems((current) =>
+      current.some((problem) => problem.clearedBy.includes(field))
+        ? current.filter((problem) => !problem.clearedBy.includes(field))
+        : current
+    );
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
-    const parsed = parsePlan(new FormData(event.currentTarget), initial.timeZone);
-    setInvalid(Option.isNone(parsed));
+    const form = new FormData(event.currentTarget);
+    const found = findPlanProblems(planDraft(form));
+    const parsed = found.length === 0 ? parsePlan(form, initial.timeZone) : Option.none();
+    setProblems(found);
+    setInvalid(found.length === 0 && Option.isNone(parsed));
+    const first = found[0];
+    if (first !== undefined) {
+      event.currentTarget.querySelector<HTMLElement>(`#recurring-${first.field}`)?.focus();
+    }
     if (Option.isSome(parsed)) onSubmit(parsed.value);
   };
   return (
-    <form onSubmit={submit} data-recurring-slot="plan-form" className="grid gap-4">
-      <fieldset disabled={disabled} className="grid gap-4">
-        <IdentityFields initial={initial} />
-        <AmountFields initial={initial} amountMode={amountMode} setAmountMode={setAmountMode} />
-        <ScheduleFields initial={initial} categories={categories} />
-        {invalid ? (
-          <p role="alert">
-            Revisa la fecha, moneda e importe. Un pago de tarjeta debe ser una transferencia.
-          </p>
-        ) : null}
-        <Button contentLayout="wrap" focusAppearance="subtle" type="submit">
-          Guardar
-        </Button>
-      </fieldset>
+    <form
+      onSubmit={submit}
+      onChange={(event) => {
+        if (event.target instanceof HTMLInputElement) edited(event.target.name);
+      }}
+      data-recurring-slot="plan-form"
+      className="grid gap-4"
+    >
+      <PlanFeedbackContext value={{ problems, edited }}>
+        <fieldset disabled={disabled} className="grid gap-4">
+          <IdentityFields initial={initial} />
+          <AmountFields initial={initial} amountMode={amountMode} setAmountMode={setAmountMode} />
+          <ScheduleFields initial={initial} categories={categories} />
+          {invalid ? (
+            <p role="alert">
+              No pudimos guardar el recurrente. Revisa el nombre, la moneda y el importe.
+            </p>
+          ) : null}
+          <Button contentLayout="wrap" focusAppearance="subtle" type="submit">
+            Guardar
+          </Button>
+        </fieldset>
+      </PlanFeedbackContext>
     </form>
   );
 };

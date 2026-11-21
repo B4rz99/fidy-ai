@@ -944,3 +944,14 @@ diff --git a/src/Util/PlatformServices.ts b/src/Util/PlatformServices.ts
      );
    },
  });
+diff --git a/package.json b/package.json
+--- a/package.json
++++ b/package.json
+@@ -338,7 +338,6 @@
+     "@distilled.cloud/prisma": "1.0.0-rc.13",
+     "@distilled.cloud/railway": "1.0.0-rc.13",
+     "@distilled.cloud/stripe": "1.0.0-rc.13",
+-    "@effect/sql-d1": "^4.0.0",
+     "@effect/sql-sqlite-do": "^4.0.0",
+     "@libsql/client": "^0.17.0",
+     "@neon/functions": "0.11.0",

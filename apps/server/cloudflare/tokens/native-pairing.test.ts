@@ -43,6 +43,44 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         yield* native(() => tooSoon.text());
       })
   );
+  test.effect("revokes an unclaimed pairing after five wrong device proofs", () =>
+    Effect.gen(function* () {
+      const create = yield* nativeUserPlatform;
+      const runtime = yield* create();
+      const post = (path: string, payload: unknown): TransportResult =>
+        native(() =>
+          runtime.dispatchFetch("https://api.fidyapp.com" + path, {
+            method: "POST",
+            headers: { "content-type": "application/json", "cf-connecting-ip": "192.0.2.35" },
+            body: JSON.stringify(payload),
+          })
+        );
+      const started = yield* post("/pat-pairings", {
+        recipientLabel: "CLI",
+        scopes: ["read"],
+        lifetimeDays: 7,
+      });
+      expect(started.status).toBe(200);
+      const proof = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ pairingId: Schema.String, privateDeviceCode: Schema.String })
+      )(yield* native(() => started.json()));
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const wrong = yield* post("/pat-pairings/claim", {
+          pairingId: proof.pairingId,
+          privateDeviceCode: "x".repeat(43),
+        });
+        expect(wrong.status).toBe(400);
+        yield* native(() => wrong.text());
+      }
+      const dead = yield* post("/pat-pairings/claim", proof);
+      expect(dead.status).toBe(400);
+      yield* native(() => dead.text());
+      const directory = yield* native(() =>
+        runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
+      );
+      expect(yield* native(() => directory.exec("SELECT id FROM pat_bootstrap"))).toEqual([]);
+    })
+  );
   test.effect(
     "runs both eligible PAT pairing batch children under the live browser and issues the bearer only to its device",
     () =>

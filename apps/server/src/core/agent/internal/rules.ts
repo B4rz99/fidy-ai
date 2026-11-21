@@ -182,6 +182,8 @@ type ActiveTurnSuffix = {
   stopped: boolean;
 };
 
+type NewestTrailingEntry = Readonly<{ entry: TranscriptWindowEntry; index: number }>;
+
 const boundedActiveTurn = (
   turn: WindowTurn,
   maxCharacters: TranscriptWindowCharacterLimit
@@ -198,7 +200,7 @@ const boundedActiveTurn = (
 
   const [, ...trailing] = turn;
   const newestFirst = trailing.map((entry, offset) => ({ entry, index: offset + 1 })).toReversed();
-  newestFirst.forEach(({ entry, index }) => {
+  newestFirst.forEach(({ entry, index }: NewestTrailingEntry) => {
     if (state.stopped) return;
 
     if (pairedWithFollowingResult(turn, index)) return;

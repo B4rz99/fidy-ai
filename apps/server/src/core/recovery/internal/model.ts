@@ -52,9 +52,11 @@ const BackupRecoveryCredentialVariants = Schema.Union([
   ConsumedBackupRecoveryCredential,
 ]);
 
-const consumedNoEarlierThanCreated = Match.type<
-  typeof BackupRecoveryCredentialVariants.Type
->().pipe(
+type BackupRecoveryCredentialTimes =
+  | Pick<typeof ActiveBackupRecoveryCredential.Type, "_tag">
+  | Pick<typeof ConsumedBackupRecoveryCredential.Type, "_tag" | "createdAt" | "consumedAt">;
+
+const consumedNoEarlierThanCreated = Match.type<BackupRecoveryCredentialTimes>().pipe(
   Match.tag("Active", () => true),
   Match.tag(
     "Consumed",
@@ -63,11 +65,10 @@ const consumedNoEarlierThanCreated = Match.type<
   Match.exhaustive
 );
 
-const validCredentialTimes = Schema.makeFilter<typeof BackupRecoveryCredentialVariants.Type>(
-  (credential) =>
-    consumedNoEarlierThanCreated(credential)
-      ? undefined
-      : { path: ["consumedAt"], issue: "Expected an instant at or after createdAt" }
+const validCredentialTimes = Schema.makeFilter<BackupRecoveryCredentialTimes>((credential) =>
+  consumedNoEarlierThanCreated(credential)
+    ? undefined
+    : { path: ["consumedAt"], issue: "Expected an instant at or after createdAt" }
 );
 
 export const BackupRecoveryCredentialLifecycle = BackupRecoveryCredentialVariants.check(

@@ -153,14 +153,12 @@ export type TokenBearer = typeof TokenBearer.Type;
 
 type TokenInstant = Readonly<{ epochMilliseconds: number }>;
 
-type OptionalTokenInstant = Option.Option<TokenInstant>;
-
 export const PATLifecycleCheck = Schema.makeFilter<
   Readonly<{
     lifetimeDays: PATLifetimeDays;
-    lastUsedAt: OptionalTokenInstant;
+    lastUsedAt: Option.Option<TokenInstant>;
     expiresAt: TokenInstant;
-    revokedAt: OptionalTokenInstant;
+    revokedAt: Option.Option<TokenInstant>;
     createdAt: TokenInstant;
   }>
 >((token) => {

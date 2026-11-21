@@ -1,7 +1,7 @@
 import { SecureRandom } from "effect/crypto";
 import { Effect, Redacted, Schema } from "effect";
 import { HttpClient, HttpClientRequest } from "effect/http";
-import { authenticateAccess, makeProtectedClient } from "../../apps/cli/src/direct-client/runtime";
+import { authenticateAccess, protectedHttpClient } from "../../apps/cli/src/direct-client/runtime";
 import {
   type ProCommand,
   ProGrantEntry,
@@ -32,7 +32,7 @@ export const makeProClient = Effect.fn(function* () {
   const proof = yield* authenticateAccess(url).pipe(Effect.mapError(() => failed("unavailable")));
   yield* Effect.addFinalizer(() => Effect.sync(() => Redacted.wipeUnsafe(proof)));
 
-  const client = makeProtectedClient({
+  const client = protectedHttpClient({
     client: yield* HttpClient.HttpClient,
     allowQuery: false,
     maximumRequestBytes: 1536,

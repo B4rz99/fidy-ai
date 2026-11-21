@@ -1,7 +1,7 @@
 import { BunServices } from "@effect/platform-bun";
 import { IssuedPAT, TokenBearer } from "@fidy/server/client";
-import { Effect, Exit, FileSystem, Option, Redacted, Schema } from "effect";
-import { bunSecrets, makeCredentialStore, supportedBunRevision } from "../src/credential/runtime";
+import { Effect, Exit, FileSystem, Option, Redacted, Result, Schema } from "effect";
+import { bunSecrets, openCredentialStore, supportedBunRevision } from "../src/credential/runtime";
 import {
   CliFailure,
   type Credential,
@@ -12,7 +12,8 @@ import { scopedProcess } from "./process.test-fixture";
 
 const probe = Redacted.make("fidy-native-cross-process-probe");
 
-const failed = (): CliFailure => new CliFailure({ reason: "StorageUnavailable" });
+const failed = (): CliFailure =>
+  new CliFailure({ reason: "StorageUnavailable", cause: Option.none() });
 
 const readProbe = Effect.fn(function* (name: string) {
   const value = yield* bunSecrets.get(name);
@@ -64,10 +65,10 @@ const isolatedSecrets = (prefix: string): NativeSecrets => ({
 });
 
 const competingSave = Effect.fn(function* (directory: string, prefix: string, expected: string) {
-  const { store } = yield* makeCredentialStore(directory, isolatedSecrets(prefix));
+  const { store } = yield* openCredentialStore(directory, isolatedSecrets(prefix));
   const result = yield* store.save(credential).pipe(Effect.result);
 
-  if (result._tag !== "Failure" || result.failure.reason !== expected) return yield* failed();
+  if (!Result.isFailure(result) || result.failure.reason !== expected) return yield* failed();
 });
 
 const verifySaveRace = Effect.fn(function* (prefix: string) {
@@ -78,7 +79,7 @@ const verifySaveRace = Effect.fn(function* (prefix: string) {
   const contender = (expected: string): Effect.Effect<void, CliFailure> =>
     child([process.execPath, import.meta.filename, "compete", directory, prefix, expected]);
 
-  const { store } = yield* makeCredentialStore(directory, {
+  const { store } = yield* openCredentialStore(directory, {
     ...native,
     set: (name, value) =>
       native.set(name, value).pipe(Effect.andThen(contender("StorageUnavailable"))),

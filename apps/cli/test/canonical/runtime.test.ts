@@ -1,13 +1,14 @@
 import { BunFileSystem } from "@effect/platform-bun";
 import { expect, layer } from "@effect/vitest";
-import { Effect, Fiber, FileSystem, Option } from "effect";
+import { Effect, Exit, Fiber, FileSystem, Match, Option, Schema } from "effect";
+import { identity } from "effect/Function";
 import { TestClock } from "effect/testing";
 import { makeCanonicalFixture } from "./canonical.test-fixture";
 import {
-  makeCanonicalClient,
+  canonicalClientFactory,
   makeInputReader,
   readOperationInput as readQueryInput,
-} from "./runtime";
+} from "../../src/canonical/runtime";
 
 layer(BunFileSystem.layer)((it) => {
   it.effect(
@@ -30,74 +31,75 @@ layer(BunFileSystem.layer)((it) => {
       })
   );
 
-  for (const completion of [
+  it.effect.each([
     "overflow",
     "deadline",
     "interruption",
     "success",
     "read failure",
     "invalid chunk",
-  ] as const) {
-    it.effect(`releases input ownership on ${completion} even if cancellation never settles`, () =>
-      Effect.gen(function* () {
-        let cancelled = false;
+  ] as const)("releases input ownership on %s even if cancellation never settles", (completion) =>
+    Effect.gen(function* () {
+      let cancelled = false;
 
-        const body = new ReadableStream<unknown>({
-          start(controller): void {
-            if (completion === "overflow") controller.enqueue(new Uint8Array(65_537));
+      const body = new ReadableStream<unknown>({
+        start(controller): void {
+          if (completion === "overflow") controller.enqueue(new Uint8Array(65_537));
 
-            if (completion === "success") {
-              controller.enqueue(new Uint8Array());
-              controller.enqueue(new TextEncoder().encode("{}"));
-              controller.close();
-            }
-
-            if (completion === "read failure") controller.error(new Error("source unavailable"));
-
-            if (completion === "invalid chunk") controller.enqueue("private invalid bytes");
-          },
-          cancel(): Promise<void> {
-            cancelled = true;
-
-            return Promise.withResolvers<void>().promise;
-          },
-        });
-
-        const input = makeInputReader(() => body)("-");
-
-        if (completion === "interruption") {
-          const fiber = yield* input.pipe(Effect.forkChild);
-          yield* TestClock.adjust("1 second");
-          yield* Fiber.interrupt(fiber);
-        } else if (completion === "deadline") {
-          const fiber = yield* input.pipe(Effect.result, Effect.forkChild);
-          yield* TestClock.adjust("16 seconds");
-          expect(yield* Fiber.join(fiber)).toMatchObject({ failure: { reason: "InvalidInput" } });
-        } else {
-          const result = yield* Effect.result(input);
-
-          if (completion === "success") expect(result).toMatchObject({ success: "{}" });
-          else {
-            expect(result).toMatchObject({
-              failure: { reason: completion === "overflow" ? "InputTooLarge" : "InvalidInput" },
-            });
+          if (completion === "success") {
+            controller.enqueue(new Uint8Array());
+            controller.enqueue(new TextEncoder().encode("{}"));
+            controller.close();
           }
-        }
 
-        expect(body.locked).toBe(false);
-        expect(cancelled).toBe(completion !== "success" && completion !== "read failure");
-      })
-    );
-  }
+          if (completion === "read failure") controller.error(new Error("source unavailable"));
+
+          if (completion === "invalid chunk") controller.enqueue("private invalid bytes");
+        },
+        cancel(): Promise<void> {
+          cancelled = true;
+
+          return Promise.withResolvers<void>().promise;
+        },
+      });
+
+      const input = makeInputReader(() => body)("-");
+
+      const fiber = yield* input.pipe(Effect.result, Effect.forkChild);
+
+      yield* TestClock.adjust(completion === "interruption" ? "1 second" : "16 seconds");
+
+      if (completion === "interruption") yield* Fiber.interrupt(fiber);
+
+      const exit = yield* Fiber.await(fiber);
+
+      expect(Exit.match(exit, { onFailure: () => "interrupted", onSuccess: identity })).toEqual(
+        Match.value(completion).pipe(
+          Match.when("interruption", () => "interrupted"),
+          Match.when("success", () => expect.objectContaining({ success: "{}" })),
+          Match.orElse((failed) =>
+            expect.objectContaining({
+              failure: expect.objectContaining({
+                reason: failed === "overflow" ? "InputTooLarge" : "InvalidInput",
+              }),
+            })
+          )
+        )
+      );
+
+      expect(body.locked).toBe(false);
+      expect(cancelled).toBe(completion !== "success" && completion !== "read failure");
+    })
+  );
 
   it.effect(
     "rejects invalid path, query and payload fields before sending an authenticated request",
     () =>
       Effect.gen(function* () {
-        const fixture = makeCanonicalFixture(makeCanonicalClient)(undefined, ["read", "write"]);
+        const fixture = makeCanonicalFixture(canonicalClientFactory)(undefined, ["read", "write"]);
         const credential = Option.getOrThrow(yield* fixture.dependencies.store.load);
 
-        const client = yield* makeCanonicalClient({
+        const client = yield* canonicalClientFactory({
           httpClient: fixture.dependencies.httpClient,
           credential,
           captureRetry: () => {},
@@ -105,24 +107,28 @@ layer(BunFileSystem.layer)((it) => {
           captureTrace: () => {},
         });
 
-        for (const { name, input } of [
-          { name: "getTransaction", input: { params: { id: "invalid-id" } } },
-          { name: "listTransactions", input: { query: { currency: "invalid-currency" } } },
-          { name: "createTransaction", input: { payload: {} } },
-        ]) {
-          const call = Option.getOrThrow(Option.fromUndefinedOr(client.transactions?.[name]));
-          expect(
-            yield* Effect.result(
-              call({
-                params: undefined,
-                query: undefined,
-                payload: undefined,
-                headers: undefined,
-                ...input,
-              })
-            )
-          ).toMatchObject({ failure: { _tag: "SchemaError" } });
-        }
+        yield* Effect.forEach(
+          [
+            { name: "getTransaction", input: { params: { id: "invalid-id" } } },
+            { name: "listTransactions", input: { query: { currency: "invalid-currency" } } },
+            { name: "createTransaction", input: { payload: {} } },
+          ],
+          Effect.fnUntraced(function* ({ name, input }) {
+            const call = Option.getOrThrow(Option.fromUndefinedOr(client.transactions?.[name]));
+            expect(
+              yield* Effect.result(
+                call({
+                  params: undefined,
+                  query: undefined,
+                  payload: undefined,
+                  headers: undefined,
+                  ...input,
+                })
+              )
+            ).toMatchObject({ failure: expect.any(Schema.SchemaError) });
+          }),
+          { discard: true }
+        );
 
         expect(fixture.requests).toEqual([]);
       }).pipe(Effect.scoped)

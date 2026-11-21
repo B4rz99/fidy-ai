@@ -1,9 +1,13 @@
 import { ownNativeFetch } from "@fidy/server/native-http";
 import { expect, it, layer } from "@effect/vitest";
-import { Effect, Exit, Fiber, Option } from "effect";
+import { Data, Effect, Exit, Fiber, Match, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { FetchHttpClient, HttpBody, HttpClient, HttpClientResponse } from "effect/http";
-import { protectClient } from "./runtime";
+import { protectClient } from "../../src/direct-client/runtime";
+
+class NativeLifetimeTestFailed extends Data.TaggedError("NativeLifetimeTestFailed")<{
+  readonly cause: unknown;
+}> {}
 
 layer(FetchHttpClient.layer)((it) => {
   it.effect(
@@ -72,76 +76,82 @@ layer(FetchHttpClient.layer)((it) => {
       })
   );
 
-  for (const completion of [
+  it.effect.each([
     "overflow",
     "deadline",
     "interruption",
     "success",
     "read failure",
     "invalid chunk",
-  ] as const) {
-    it.effect(
-      `releases the native response reader on ${completion} even if cancel never settles`,
-      () =>
-        Effect.gen(function* () {
-          let cancelled = false;
+  ] as const)(
+    "releases the native response reader on %s even if cancel never settles",
+    (completion) =>
+      Effect.gen(function* () {
+        let cancelled = false;
 
-          const body = new ReadableStream<unknown>({
-            start(controller): void {
-              if (completion === "overflow") controller.enqueue(new Uint8Array(16_385));
+        const body = new ReadableStream<unknown>({
+          start(controller): void {
+            if (completion === "overflow") controller.enqueue(new Uint8Array(16_385));
 
-              if (completion === "success") {
-                controller.enqueue(new Uint8Array());
-                controller.enqueue(new TextEncoder().encode("{}"));
-                controller.close();
-              }
+            if (completion === "success") {
+              controller.enqueue(new Uint8Array());
+              controller.enqueue(new TextEncoder().encode("{}"));
+              controller.close();
+            }
 
-              if (completion === "read failure") controller.error(new Error("source unavailable"));
+            if (completion === "read failure") controller.error(new Error("source unavailable"));
 
-              if (completion === "invalid chunk") controller.enqueue("private invalid bytes");
-            },
-            cancel(): Promise<void> {
-              cancelled = true;
+            if (completion === "invalid chunk") controller.enqueue("private invalid bytes");
+          },
+          cancel(): Promise<void> {
+            cancelled = true;
 
-              return Promise.withResolvers<void>().promise;
-            },
-          });
+            return Promise.withResolvers<void>().promise;
+          },
+        });
 
-          const client = yield* HttpClient.HttpClient;
+        const client = yield* HttpClient.HttpClient;
 
-          const request = protectClient(client)
-            .get("https://api.fidyapp.com/pat-pairings")
-            .pipe(
-              Effect.provideService(
-                FetchHttpClient.Fetch,
-                Object.assign(() => Promise.resolve(new Response(body)), {
-                  preconnect: fetch.preconnect,
-                })
-              )
-            );
+        const request = protectClient(client)
+          .get("https://api.fidyapp.com/pat-pairings")
+          .pipe(
+            Effect.provideService(
+              FetchHttpClient.Fetch,
+              Object.assign(() => Promise.resolve(new Response(body)), {
+                preconnect: fetch.preconnect,
+              })
+            )
+          );
 
-          if (completion === "interruption") {
-            const fiber = yield* request.pipe(Effect.forkChild);
-            yield* TestClock.adjust("1 second");
-            yield* Fiber.interrupt(fiber);
-          } else if (completion === "deadline") {
-            const fiber = yield* request.pipe(Effect.result, Effect.forkChild);
-            yield* TestClock.adjust("16 seconds");
-            expect(yield* Fiber.join(fiber)).toMatchObject({
-              failure: { reason: "TransportUnavailable" },
-            });
-          } else {
-            const result = yield* Effect.result(request);
+        const fiber = yield* request.pipe(Effect.result, Effect.forkChild);
 
-            if (completion === "success") expect(result._tag).toBe("Success");
-            else expect(result).toMatchObject({ failure: { reason: "TransportUnavailable" } });
-          }
+        yield* TestClock.adjust(completion === "interruption" ? "1 second" : "16 seconds");
 
-          expect(body.locked).toBe(false);
-          expect(cancelled).toBe(completion !== "success" && completion !== "read failure");
-        })
-    );
-  }
+        if (completion === "interruption") yield* Fiber.interrupt(fiber);
+
+        const exit = yield* Fiber.await(fiber);
+
+        expect(
+          Exit.match(exit, {
+            onFailure: () => "interrupted",
+            onSuccess: (result) => (Result.isSuccess(result) ? "success" : result),
+          })
+        ).toEqual(
+          Match.value(completion).pipe(
+            Match.when("interruption", () => "interrupted"),
+            Match.when("success", () => "success"),
+            Match.orElse(() =>
+              expect.objectContaining({
+                failure: expect.objectContaining({ reason: "TransportUnavailable" }),
+              })
+            )
+          )
+        );
+
+        expect(body.locked).toBe(false);
+        expect(cancelled).toBe(completion !== "success" && completion !== "read failure");
+      })
+  );
 });
 
 it.effect("cancels a dishonest oversized response before decoding it", () =>
@@ -252,8 +262,9 @@ it.effect(
     })
 );
 
-for (const mode of ["inherited", "undefined", "null", "replacement"] as const) {
-  it.effect(`honors ${mode} Fetch signal precedence`, () => {
+it.effect.each(["inherited", "undefined", "null", "replacement"] as const)(
+  "honors %s Fetch signal precedence",
+  (mode) => {
     const original = new AbortController();
     const replacement = new AbortController();
 
@@ -279,7 +290,7 @@ for (const mode of ["inherited", "undefined", "null", "replacement"] as const) {
 
       const response = yield* Effect.tryPromise({
         try: () => ownNativeFetch(native)(request, init),
-        catch: (error: unknown) => ({ _tag: "NativeLifetimeTestFailed" as const, cause: error }),
+        catch: (cause: unknown) => new NativeLifetimeTestFailed({ cause }),
       });
 
       const reader = Option.getOrThrow(Option.fromNullishOr(response.body)).getReader();
@@ -295,22 +306,23 @@ for (const mode of ["inherited", "undefined", "null", "replacement"] as const) {
       if (mode === "null") {
         yield* Effect.tryPromise({
           try: () => reader.cancel(),
-          catch: (error: unknown) => ({ _tag: "NativeLifetimeTestFailed" as const, cause: error }),
+          catch: (cause: unknown) => new NativeLifetimeTestFailed({ cause }),
         });
       }
 
       if (mode === "replacement") replacement.abort();
       yield* Effect.tryPromise({
         try: () => failed.then(() => undefined),
-        catch: (error: unknown) => ({ _tag: "NativeLifetimeTestFailed" as const, cause: error }),
+        catch: (cause: unknown) => new NativeLifetimeTestFailed({ cause }),
       });
       expect(body.locked).toBe(false);
     });
-  });
-}
+  }
+);
 
-for (const status of [204, 205, 304]) {
-  it.effect(`disposes an anomalous ${status} body immediately without reading bytes`, () =>
+it.effect.each([204, 205, 304])(
+  "disposes an anomalous %s body immediately without reading bytes",
+  (status) =>
     Effect.gen(function* () {
       let reads = 0;
       let cancellations = 0;
@@ -347,7 +359,7 @@ for (const status of [204, 205, 304]) {
           ownNativeFetch(
             Object.assign(() => Promise.resolve(native), { preconnect: fetch.preconnect })
           )("https://api.fidyapp.com/pat-pairings"),
-        catch: (error: unknown) => ({ _tag: "NativeLifetimeTestFailed" as const, cause: error }),
+        catch: (cause: unknown) => new NativeLifetimeTestFailed({ cause }),
       });
 
       expect(response.status).toBe(status);
@@ -358,5 +370,4 @@ for (const status of [204, 205, 304]) {
       expect(cancellations).toBe(1);
       expect(body.locked).toBe(false);
     })
-  );
-}
+);

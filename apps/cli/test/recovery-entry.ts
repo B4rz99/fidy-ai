@@ -1,10 +1,11 @@
-import { Effect, Redacted, Schema } from "effect";
+import { Effect, Option, Predicate, Redacted, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { apiOrigin } from "../src/credential/contract";
 import { readOperationInput } from "../src/canonical/runtime";
 import { RecoveryFailure } from "../src/support-recovery/contract";
 import { runSupportRecovery } from "../src/support-recovery/operations";
-import { makeRecoveryClient } from "../src/support-recovery/runtime";
+import { recoverySubmitter } from "../src/support-recovery/runtime";
+import { processFree } from "./support/processes";
 
 const Premise = Schema.fromJsonString(
   Schema.Struct({
@@ -19,6 +20,12 @@ const Premise = Schema.fromJsonString(
   })
 );
 
+const requestUrl = (input: string | URL | Request): string => {
+  if (Predicate.isString(input)) return input;
+
+  return "url" in input ? input.url : input.href;
+};
+
 await Effect.runPromise(
   Effect.gen(function* () {
     const premise = yield* Schema.decodeEffect(Premise)(yield* readOperationInput("-"));
@@ -26,10 +33,12 @@ await Effect.runPromise(
 
     const loopback = Object.assign(
       (input: Parameters<typeof original>[0], init?: RequestInit): Promise<Response> => {
-        const source = input instanceof Request ? input.url : input.toString();
+        const source = requestUrl(input);
 
         if (source !== `${apiOrigin}/internal/support-recovery`) {
-          return Promise.reject(new RecoveryFailure({ reason: "InvalidInput" }));
+          return Promise.reject(
+            new RecoveryFailure({ reason: "InvalidInput", cause: Option.none() })
+          );
         }
 
         const headers = new Headers(init?.headers);
@@ -52,7 +61,7 @@ await Effect.runPromise(
       authenticate: Effect.succeed(Redacted.make(premise.assertion)),
       readPairing: Effect.succeed(premise.pairingCode),
       readCode: Effect.succeed(Redacted.make(premise.backupRecoveryCode)),
-      submit: makeRecoveryClient(http),
+      submit: recoverySubmitter(http),
       write: (text) =>
         Effect.sync(() => {
           process.stdout.write(text);
@@ -60,5 +69,5 @@ await Effect.runPromise(
     }).pipe(Effect.provideService(FetchHttpClient.Fetch, loopback));
 
     process.exitCode = failed ? 1 : 0;
-  }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer))
+  }).pipe(Effect.scoped, Effect.provide([FetchHttpClient.layer, processFree]))
 );

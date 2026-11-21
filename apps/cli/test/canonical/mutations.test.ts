@@ -5,15 +5,16 @@ import {
   decideOperationAccess,
   operationCatalog,
 } from "@fidy/server/client";
-import { Effect, Fiber, Schema } from "effect";
+import { Data, Effect, Exit, Fiber, Predicate, Schema } from "effect";
+import { identity } from "effect/Function";
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
 import { TestClock } from "effect/testing";
-import { formatFailure } from "../command/operations";
-import { discoverOperations, runOperationCommand } from "./operations";
+import { formatFailure } from "../../src/command/operations";
+import { discoverOperations, runOperationCommand } from "../../src/canonical/operations";
 import { makeCanonicalFixture } from "./canonical.test-fixture";
-import { makeCanonicalClient } from "./runtime";
+import { canonicalClientFactory } from "../../src/canonical/runtime";
 
-const fixture = makeCanonicalFixture(makeCanonicalClient);
+const fixture = makeCanonicalFixture(canonicalClientFactory);
 
 const encode = Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Json));
 
@@ -39,6 +40,12 @@ const input = {
     occurredAt: transaction.occurredAt,
   },
 };
+
+type PATCaller = Data.TaggedEnum<{
+  PAT: { readonly capabilities: ReadonlyArray<"read" | "write" | "dashboard"> };
+}>;
+
+const { PAT } = Data.taggedEnum<PATCaller>();
 
 it.effect(
   "keeps ordered batch correlation and child-specific rollback failures in machine output",
@@ -72,22 +79,28 @@ it.effect(
         next: [],
       };
 
-      for (const [body, status, failed] of [
-        [success, 200, false],
-        [rejection, 400, true],
-      ] as const) {
-        const test = fixture({ body: encode(body), status }, ["write"]);
-        expect(
-          yield* runOperationCommand(["operations", "executeAtomicBatch", "--input", "-"], {
-            ...test.dependencies,
-            readInput: () => Effect.succeed(encode(batch)),
-          })
-        ).toBe(failed);
-        expect(decode(test.stdout.join(""))).toEqual(body);
-        expect(test.requests).toHaveLength(1);
+      yield* Effect.forEach(
+        [
+          [success, 200, false],
+          [rejection, 400, true],
+        ] as const,
+        Effect.fnUntraced(function* ([body, status, failed]) {
+          const test = fixture({ body: encode(body), status }, ["write"]);
+          expect(
+            yield* runOperationCommand(["operations", "executeAtomicBatch", "--input", "-"], {
+              ...test.dependencies,
+              readInput: () => Effect.succeed(encode(batch)),
+            })
+          ).toBe(failed);
+          expect(decode(test.stdout.join(""))).toEqual(body);
+          expect(test.requests).toHaveLength(1);
 
-        if (failed) expect(test.stderr.join("")).toContain("cambios de dominio no se confirmaron");
-      }
+          expect(test.stderr.join("").includes("cambios de dominio no se confirmaron")).toBe(
+            failed
+          );
+        }),
+        { discard: true }
+      );
     })
 );
 
@@ -158,38 +171,42 @@ it.effect(
     Effect.gen(function* () {
       const child = { callId, operation: "transactions.createTransaction", input };
 
-      for (const calls of [
-        null,
-        {},
-        [],
-        Array.from({ length: 13 }, () => child),
-        [{ ...child, operation: "categories.listCategories", input: {} }],
+      yield* Effect.forEach(
         [
-          {
-            ...child,
-            operation: "operations.executeAtomicBatch",
-            input: { payload: { calls: [child] } },
-          },
+          null,
+          {},
+          [],
+          Array.from({ length: 13 }, () => child),
+          [{ ...child, operation: "categories.listCategories", input: {} }],
+          [
+            {
+              ...child,
+              operation: "operations.executeAtomicBatch",
+              input: { payload: { calls: [child] } },
+            },
+          ],
+          [{ ...child, operation: "pats.revokeAllPATs", input: {} }],
+          [
+            {
+              ...child,
+              input: { payload: { ...input.payload, money: { amount: "1e3", currency: "COP" } } },
+            },
+          ],
         ],
-        [{ ...child, operation: "pats.revokeAllPATs", input: {} }],
-        [
-          {
-            ...child,
-            input: { payload: { ...input.payload, money: { amount: "1e3", currency: "COP" } } },
-          },
-        ],
-      ]) {
-        const test = fixture(undefined, ["write", "dashboard"]);
-        expect(
-          yield* Effect.result(
-            runOperationCommand(["operations", "executeAtomicBatch", "--input", "-"], {
-              ...test.dependencies,
-              readInput: () => Effect.succeed(encode({ payload: { calls } })),
-            })
-          )
-        ).toMatchObject({ failure: { reason: "InvalidInput" } });
-        expect(test.requests).toEqual([]);
-      }
+        Effect.fnUntraced(function* (calls) {
+          const test = fixture(undefined, ["write", "dashboard"]);
+          expect(
+            yield* Effect.result(
+              runOperationCommand(["operations", "executeAtomicBatch", "--input", "-"], {
+                ...test.dependencies,
+                readInput: () => Effect.succeed(encode({ payload: { calls } })),
+              })
+            )
+          ).toMatchObject({ failure: { reason: "InvalidInput" } });
+          expect(test.requests).toEqual([]);
+        }),
+        { discard: true }
+      );
     })
 );
 
@@ -200,20 +217,26 @@ it.effect(
       const test = fixture(undefined, ["read", "write", "dashboard"]);
       const visible = discoverOperations(["read", "write", "dashboard"]);
 
-      for (const operation of operationCatalog.operations) {
-        const allowed =
-          decideOperationAccess(operation.policy.access, {
-            _tag: "PAT",
-            capabilities: ["read", "write", "dashboard"],
-          })._tag === "Allowed";
+      yield* Effect.forEach(
+        operationCatalog.operations,
+        Effect.fnUntraced(function* (operation) {
+          const allowed = Predicate.isTagged(
+            decideOperationAccess(
+              operation.policy.access,
+              PAT({ capabilities: ["read", "write", "dashboard"] })
+            ),
+            "Allowed"
+          );
 
-        expect(visible.some(({ id }) => id === operation.id)).toBe(allowed);
+          expect(visible.some(({ id }) => id === operation.id)).toBe(allowed);
 
-        if (allowed) continue;
-        expect(
-          yield* Effect.result(runOperationCommand(operation.id.split("."), test.dependencies))
-        ).toMatchObject({ failure: { reason: "OperationUnavailable" } });
-      }
+          if (allowed) return;
+          expect(
+            yield* Effect.result(runOperationCommand(operation.id.split("."), test.dependencies))
+          ).toMatchObject({ failure: { reason: "OperationUnavailable" } });
+        }),
+        { discard: true }
+      );
 
       expect(test.requests).toEqual([]);
       expect(discoverOperations(["read"]).every(({ policy }) => policy.kind === "query")).toBe(
@@ -257,46 +280,56 @@ it.effect(
       ).toMatchObject({ failure: { reason: "MutationAmbiguous" } });
       expect(calls).toBe(1);
 
-      for (const interrupt of [false, true]) {
-        let cancelled = false;
+      yield* Effect.forEach(
+        [false, true],
+        Effect.fnUntraced(function* (interrupt) {
+          let cancelled = false;
 
-        const pending = HttpClient.make((request) => {
-          calls += 1;
+          const pending = HttpClient.make((request) => {
+            calls += 1;
 
-          return Effect.succeed(
-            HttpClientResponse.fromWeb(
-              request,
-              new Response(
-                new ReadableStream<Uint8Array>({
-                  cancel: (): void => {
-                    cancelled = true;
-                  },
-                })
+            return Effect.succeed(
+              HttpClientResponse.fromWeb(
+                request,
+                new Response(
+                  new ReadableStream<Uint8Array>({
+                    cancel: (): void => {
+                      cancelled = true;
+                    },
+                  })
+                )
               )
-            )
-          );
-        });
-
-        const fiber = yield* Effect.result(
-          runOperationCommand(["dashboard", "initializeDashboard"], {
-            ...test.dependencies,
-            httpClient: pending,
-          })
-        ).pipe(Effect.forkChild);
-
-        yield* TestClock.adjust(interrupt ? "1 second" : "16 seconds");
-
-        if (interrupt) {
-          yield* Fiber.interrupt(fiber);
-          expect(test.stderr.join("")).toContain("servidor puede haber confirmado cambios");
-        } else {
-          expect(yield* Fiber.join(fiber)).toMatchObject({
-            failure: { reason: "MutationAmbiguous" },
+            );
           });
-        }
 
-        expect(cancelled).toBe(true);
-      }
+          const fiber = yield* Effect.result(
+            runOperationCommand(["dashboard", "initializeDashboard"], {
+              ...test.dependencies,
+              httpClient: pending,
+            })
+          ).pipe(Effect.forkChild);
+
+          yield* TestClock.adjust(interrupt ? "1 second" : "16 seconds");
+
+          if (interrupt) yield* Fiber.interrupt(fiber);
+
+          const exit = yield* Fiber.await(fiber);
+
+          expect(test.stderr.join("").includes("servidor puede haber confirmado cambios")).toBe(
+            interrupt
+          );
+          expect(Exit.match(exit, { onFailure: () => "interrupted", onSuccess: identity })).toEqual(
+            interrupt
+              ? "interrupted"
+              : expect.objectContaining({
+                  failure: expect.objectContaining({ reason: "MutationAmbiguous" }),
+                })
+          );
+
+          expect(cancelled).toBe(true);
+        }),
+        { discard: true }
+      );
 
       expect(calls).toBe(3);
       expect(test.stdout).toEqual([]);

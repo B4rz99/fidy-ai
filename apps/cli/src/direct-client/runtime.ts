@@ -10,9 +10,21 @@ import {
   canonicalAllowanceHeaders,
   telemetryTraceHeader,
 } from "@fidy/server/client";
-import { Clock, DateTime, Effect, Option, Redacted, Schema, Stream } from "effect";
+import {
+  Clock,
+  Context,
+  DateTime,
+  Effect,
+  Layer,
+  Match,
+  Option,
+  Redacted,
+  Schema,
+  Stream,
+} from "effect";
 import {
   FetchHttpClient,
+  type HttpBody,
   HttpClient,
   type HttpClientError,
   type HttpClientRequest,
@@ -95,7 +107,7 @@ const collectResponse = Effect.fn(function* (
     size > byteLimit ||
     (response.status >= redirectStatusMinimum && response.status < clientFailureMinimum)
   ) {
-    return yield* new CliFailure({ reason: "TransportUnavailable" });
+    return yield* new CliFailure({ reason: "TransportUnavailable", cause: Option.none() });
   }
 
   const bytes = new Uint8Array(size);
@@ -149,7 +161,14 @@ const projectTrace = (
 ): Option.Option<typeof TelemetryTraceId.Type> =>
   Schema.decodeUnknownOption(TelemetryTraceId)(headers[telemetryTraceHeader.toLowerCase()]);
 
-export const makeProtectedClient = (
+const boundedBody = (body: HttpBody.HttpBody, maximumBytes: number): boolean =>
+  Match.value(body).pipe(
+    Match.tag("Empty", () => true),
+    Match.tag("Uint8Array", (bytes) => bytes.body.byteLength <= maximumBytes),
+    Match.orElse(() => false)
+  );
+
+export const protectedHttpClient = (
   options: Readonly<{
     client: HttpClient.HttpClient;
     allowQuery: boolean;
@@ -161,12 +180,8 @@ export const makeProtectedClient = (
   }>
 ): HttpClient.HttpClient.With<CliFailure | HttpClientError.HttpClientError> =>
   HttpClient.transform(options.client, (execute, request) => {
-    if (
-      request.body._tag !== "Empty" &&
-      (request.body._tag !== "Uint8Array" ||
-        request.body.body.byteLength > options.maximumRequestBytes)
-    ) {
-      return Effect.fail(new CliFailure({ reason: "TransportUnavailable" }));
+    if (!boundedBody(request.body, options.maximumRequestBytes)) {
+      return Effect.fail(new CliFailure({ reason: "TransportUnavailable", cause: Option.none() }));
     }
 
     if (
@@ -174,7 +189,7 @@ export const makeProtectedClient = (
       (!options.allowQuery &&
         (new URL(request.url).search !== "" || request.urlParams.params.length !== 0))
     ) {
-      return Effect.fail(new CliFailure({ reason: "TransportUnavailable" }));
+      return Effect.fail(new CliFailure({ reason: "TransportUnavailable", cause: Option.none() }));
     }
 
     const captureMetadata = (
@@ -198,10 +213,13 @@ export const makeProtectedClient = (
       return yield* execute.pipe(
         Effect.tap(captureMetadata),
         Effect.flatMap((response) => collectResponse(response, options.maximumResponseBytes)),
-        Effect.mapError(() => new CliFailure({ reason: "TransportUnavailable" })),
+        Effect.mapError(
+          (cause) => new CliFailure({ reason: "TransportUnavailable", cause: Option.some(cause) })
+        ),
         Effect.timeoutOrElse({
           duration: requestDeadline,
-          orElse: () => Effect.fail(new CliFailure({ reason: "TransportUnavailable" })),
+          orElse: () =>
+            Effect.fail(new CliFailure({ reason: "TransportUnavailable", cause: Option.none() })),
         }),
         Effect.provideService(FetchHttpClient.RequestInit, {
           redirect: "manual",
@@ -218,7 +236,7 @@ export const makeProtectedClient = (
 export const protectClient = (
   client: HttpClient.HttpClient
 ): HttpClient.HttpClient.With<CliFailure | HttpClientError.HttpClientError> =>
-  makeProtectedClient({
+  protectedHttpClient({
     client,
     allowQuery: false,
     maximumResponseBytes,
@@ -229,17 +247,19 @@ export const protectClient = (
   });
 
 const safeStartFailure = (failure: unknown): CliFailure => {
-  if (Schema.is(PATPairingInvalidApi)(failure)) return new CliFailure({ reason: "PairingInvalid" });
+  if (Schema.is(PATPairingInvalidApi)(failure)) {
+    return new CliFailure({ reason: "PairingInvalid", cause: Option.none() });
+  }
 
   if (Schema.is(PATPairingRateLimitedApi)(failure)) {
-    return new CliFailure({ reason: "SourceLimited" });
+    return new CliFailure({ reason: "SourceLimited", cause: Option.none() });
   }
 
   if (Schema.is(PATPairingUnavailableApi)(failure)) {
-    return new CliFailure({ reason: "DependencyUnavailable" });
+    return new CliFailure({ reason: "DependencyUnavailable", cause: Option.none() });
   }
 
-  return new CliFailure({ reason: "TransportUnavailable" });
+  return new CliFailure({ reason: "TransportUnavailable", cause: Option.none() });
 };
 
 const safeClaimFailure = (failure: unknown): CliFailure | PollingDelayed => {
@@ -250,7 +270,7 @@ const safeClaimFailure = (failure: unknown): CliFailure | PollingDelayed => {
   const closed = safeStartFailure(failure);
 
   return closed.reason === "TransportUnavailable"
-    ? new CliFailure({ reason: "ClaimAmbiguous" })
+    ? new CliFailure({ reason: "ClaimAmbiguous", cause: Option.none() })
     : closed;
 };
 
@@ -276,5 +296,13 @@ export const makePairingClient = Effect.fn(function* (httpClient: HttpClient.Htt
 
   return pairing;
 });
+
+export class PairingService extends Context.Service<PairingService, PairingClient>()(
+  "@fidy/cli/direct-client/runtime/PairingService"
+) {
+  static readonly make = Effect.flatMap(HttpClient.HttpClient, makePairingClient);
+
+  static readonly layer = Layer.effect(this, this.make);
+}
 
 export { authenticateAccess } from "./internal/operator-access";

@@ -1,7 +1,7 @@
 import { ClaimedPATPairing, StartedPATPairing } from "@fidy/server/client";
 import { Effect, Schema } from "effect";
-import { type Credential } from "../credential/contract";
-import { type LoginDependencies } from "./contract";
+import { type Credential } from "../../src/credential/contract";
+import { type LoginDependencies } from "../../src/login/contract";
 
 const secretCharacterCount = 43;
 
@@ -35,11 +35,13 @@ export const started = Schema.decodeSync(Schema.toCodecJson(StartedPATPairing))(
 
 export const request = { recipientLabel: "Mi agente", scopes: ["read"], lifetimeDays: 7 };
 
-export const makeLoginFixture = (): Readonly<{
+export type LoginFixture = Readonly<{
   dependencies: LoginDependencies;
   saved: Array<Credential>;
   claims: Array<number>;
-}> => {
+}>;
+
+export const makeLoginFixture = (): LoginFixture => {
   const saved: Array<Credential> = [];
   const claims: Array<number> = [];
 

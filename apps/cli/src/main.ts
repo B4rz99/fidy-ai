@@ -1,9 +1,8 @@
 #!/usr/bin/env bun
-import { ChildProcessSpawner } from "effect/process";
 import { type PublicOutput } from "./command/contract";
 import { openApprovalBrowser } from "./login/browser";
 import { BunServices } from "@effect/platform-bun";
-import { Effect, Exit, Layer, Option, Path, Schema, Terminal } from "effect";
+import { Effect, Exit, Layer, Option, Terminal } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { installationOutput } from "./command/installation";
 import {
@@ -13,14 +12,14 @@ import {
   runCommand,
 } from "./command/operations";
 import { CliFailure } from "./credential/contract";
-import { makeCredentialStore, supportedBunRevision } from "./credential/runtime";
-import { makePairingClient } from "./direct-client/runtime";
+import { CredentialStorage, supportedBunRevision } from "./credential/runtime";
+import { PairingService } from "./direct-client/runtime";
 import { runOperationCommand } from "./canonical/operations";
-import { makeCanonicalClient, readOperationInput } from "./canonical/runtime";
+import { canonicalClientFactory, readOperationInput } from "./canonical/runtime";
 import { runSampleReview } from "./sample-review/operations";
-import { makeReviewer } from "./sample-review/runtime";
+import { SampleReviewer } from "./sample-review/runtime";
 import { runSupportRecovery } from "./support-recovery/operations";
-import { makeRecoveryOperator } from "./support-recovery/runtime";
+import { RecoveryOperatorService } from "./support-recovery/runtime";
 
 const args = Bun.argv.slice(2);
 
@@ -30,7 +29,7 @@ const commandArgs = args.filter((argument) => argument !== "--json");
 
 const validateFlags = Effect.fn(function* () {
   if (args.filter((argument) => argument === "--json").length > 1) {
-    return yield* new CliFailure({ reason: "InvalidInput" });
+    return yield* new CliFailure({ reason: "InvalidInput", cause: Option.none() });
   }
 
   if (
@@ -38,38 +37,24 @@ const validateFlags = Effect.fn(function* () {
     commandArgs.filter((argument) => argument !== "--no-browser").length === 1 &&
     commandArgs[0] === "login"
   ) {
-    return yield* new CliFailure({ reason: "InvalidInput" });
+    return yield* new CliFailure({ reason: "InvalidInput", cause: Option.none() });
   }
 });
 
 const runOperator = Effect.fn(function* () {
-  const terminalOutput = {
-    interactive: process.stdin.isTTY === true && process.stderr.isTTY === true,
-    write: (message: string): Effect.Effect<void> =>
-      Effect.sync(() => {
-        process.stderr.write(message);
-      }),
-  };
-
   if (commandArgs[0] === "sample-review") {
-    return yield* runSampleReview(args, yield* makeReviewer(terminalOutput));
+    return yield* SampleReviewer.pipe(
+      Effect.flatMap((reviewer) => runSampleReview(args, reviewer)),
+      Effect.provide(SampleReviewer.layer)
+    );
   }
 
-  const operator = yield* makeRecoveryOperator(yield* HttpClient.HttpClient, terminalOutput);
+  const failed = yield* RecoveryOperatorService.pipe(
+    Effect.flatMap((operator) => runSupportRecovery(args, operator)),
+    Effect.provide(RecoveryOperatorService.layer)
+  );
 
-  if (yield* runSupportRecovery(args, operator)) process.exitCode = 1;
-});
-
-const localCredentialStore = Effect.gen(function* () {
-  const home = yield* Schema.decodeUnknownEffect(Schema.NonEmptyString)(
-    process.platform === "win32" ? Bun.env.USERPROFILE : Bun.env.HOME
-  ).pipe(Effect.mapError(() => new CliFailure({ reason: "StorageUnavailable" })));
-
-  const path = yield* Path.Path;
-
-  if (!path.isAbsolute(home)) return yield* new CliFailure({ reason: "StorageUnavailable" });
-
-  return yield* makeCredentialStore(path.join(home, ".fidy", "cli"));
+  if (failed) process.exitCode = 1;
 });
 
 const authenticatedProgram = Effect.gen(function* () {
@@ -79,14 +64,14 @@ const authenticatedProgram = Effect.gen(function* () {
     return yield* runOperator();
   }
 
-  const credential = yield* localCredentialStore;
+  const credential = yield* CredentialStorage.pipe(Effect.provide(CredentialStorage.layer));
   const httpClient = yield* HttpClient.HttpClient;
 
   if (!["login", "status", "logout"].includes(commandArgs[0] ?? "")) {
     const failed = yield* runOperationCommand(commandArgs, {
       store: credential.store,
       httpClient,
-      clientFactory: makeCanonicalClient,
+      clientFactory: canonicalClientFactory,
       readInput: readOperationInput,
       stdout: (text) =>
         Effect.sync(() => {
@@ -104,8 +89,7 @@ const authenticatedProgram = Effect.gen(function* () {
     return;
   }
 
-  const pairing = yield* makePairingClient(httpClient);
-  const browserSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const pairing = yield* PairingService.pipe(Effect.provide(PairingService.layer));
   const terminal = yield* Terminal.Terminal;
   yield* runCommand(
     commandArgs,
@@ -124,17 +108,13 @@ const authenticatedProgram = Effect.gen(function* () {
             (failure) =>
               new CliFailure({
                 reason: Terminal.isQuitError(failure) ? "Cancelled" : "InvalidInput",
+                cause: Option.none(),
               })
           )
         ),
       emit: emitOutput,
     },
-    (url) =>
-      json
-        ? Effect.void
-        : openApprovalBrowser(url).pipe(
-            Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, browserSpawner)
-          )
+    (url) => (json ? Effect.void : openApprovalBrowser(url).pipe(Effect.provide(BunServices.layer)))
   );
 }).pipe(Effect.scoped);
 

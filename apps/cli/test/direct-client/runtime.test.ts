@@ -2,7 +2,7 @@ import { expect, it } from "@effect/vitest";
 import { PATRecipientLabel } from "@fidy/server/client";
 import { Effect } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
-import { makePairingClient } from "./runtime";
+import { makePairingClient } from "../../src/direct-client/runtime";
 
 const clientFor = (body: string, status = 200): HttpClient.HttpClient =>
   HttpClient.make((request) =>

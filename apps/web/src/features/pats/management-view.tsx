@@ -2,7 +2,7 @@ import { PendingRead } from "@/ui/components/pending-read";
 
 import { Key01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { DateTime, Option } from "effect";
+import { DateTime, Match, Option, Predicate } from "effect";
 import { type JSX, type ReactNode, type RefCallback } from "react";
 import { type ActivePATList, type ActivePATMetadata, patScopeCopy } from "@/transport/client";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
@@ -17,25 +17,9 @@ import {
   TableRow,
 } from "@/ui/components/table";
 import { formatPATDate } from "./presentation";
+import type { ActivePATManagementState } from "./management-state";
 import { type PATManagementActions, type PATManagementTask } from "./management";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
-
-export type ActivePATManagementState =
-  | Readonly<{ _tag: "Initial" }>
-  | Readonly<{ _tag: "Loading" }>
-  | Readonly<{
-      _tag: "LoadFailure";
-      boundaryFailure: boolean;
-      onRetry: () => void;
-      waiting: boolean;
-    }>
-  | Readonly<{
-      _tag: "Ready";
-      result: ActivePATList;
-      onRetry: () => void;
-      refreshing: boolean;
-      refreshFailed: boolean;
-    }>;
 
 const patDetails = (
   pat: ActivePATMetadata
@@ -231,10 +215,11 @@ const AllRevocationControl = (props: RevocationActionProps): JSX.Element => (
 type RevocationController = Readonly<{ state: PATManagementTask; actions: PATManagementActions }>;
 
 const selectedAll = (state: PATManagementTask): boolean =>
-  (state._tag === "Reviewing" || state._tag === "Revoking") && state.target._tag === "All";
+  (Predicate.isTagged(state, "Reviewing") || Predicate.isTagged(state, "Revoking")) &&
+  Predicate.isTagged(state.target, "All");
 
 const locked = (state: PATManagementTask): boolean =>
-  state._tag !== "Ready" && state._tag !== "Reviewing";
+  !Predicate.isTagged(state, "Ready") && !Predicate.isTagged(state, "Reviewing");
 
 const PATTableHeader = (): JSX.Element => (
   <>
@@ -274,7 +259,7 @@ const ReadyPATs = ({
   const rows = pats.map((pat) => ({
     pat,
     cancel: controller.actions.cancel,
-    disabled: disabled || controller.state._tag === "Reviewing",
+    disabled: disabled || Predicate.isTagged(controller.state, "Reviewing"),
     revoke: controller.actions.confirm,
     revoking: false,
     select: (): void => controller.actions.reviewOne(pat.shortId),
@@ -321,15 +306,11 @@ const PATQueryContent = ({
 }: Readonly<{
   state: ActivePATManagementState;
   controller: RevocationController;
-}>): JSX.Element => {
-  if (state._tag === "Initial") {
-    return <PendingRead label="Cargando tokens activos" />;
-  }
-
-  if (state._tag === "Loading") return <PendingRead label="Cargando tokens activos" />;
-
-  if (state._tag === "Ready") {
-    return (
+}>): JSX.Element =>
+  Match.valueTags(state, {
+    Initial: () => <PendingRead label="Cargando tokens activos" />,
+    Loading: () => <PendingRead label="Cargando tokens activos" />,
+    Ready: (state) => (
       <>
         {state.refreshFailed ? (
           <CanonicalQueryRetry
@@ -348,22 +329,22 @@ const PATQueryContent = ({
           refreshFailed={state.refreshFailed}
         />
       </>
-    );
-  }
-
-  return (
-    <CanonicalQueryRetry
-      description="Intenta de nuevo en unos momentos."
-      onRetry={state.onRetry}
-      retryLabel="Reintentar carga"
-      retryingLabel="Reintentando…"
-      title={
-        state.boundaryFailure ? "No pudimos comunicarnos con Fidy" : "No pudimos cargar tus tokens"
-      }
-      waiting={state.waiting}
-    />
-  );
-};
+    ),
+    LoadFailure: (state) => (
+      <CanonicalQueryRetry
+        description="Intenta de nuevo en unos momentos."
+        onRetry={state.onRetry}
+        retryLabel="Reintentar carga"
+        retryingLabel="Reintentando…"
+        title={
+          state.boundaryFailure
+            ? "No pudimos comunicarnos con Fidy"
+            : "No pudimos cargar tus tokens"
+        }
+        waiting={state.waiting}
+      />
+    ),
+  });
 
 const ActivePATHeading = ({
   state,
@@ -379,7 +360,7 @@ const ActivePATHeading = ({
     <h2 className="settings-section-title" id="active-pats-title">
       Tokens activos
     </h2>
-    {state._tag === "Ready" ? (
+    {Predicate.isTagged(state, "Ready") ? (
       <div
         className={
           selectedAll(controller.state) ? "settings-access-confirmation" : "settings-access-bulk"
@@ -391,10 +372,12 @@ const ActivePATHeading = ({
             locked(controller.state) ||
             state.refreshing ||
             state.refreshFailed ||
-            (controller.state._tag === "Reviewing" && !selectedAll(controller.state))
+            (Predicate.isTagged(controller.state, "Reviewing") && !selectedAll(controller.state))
           }
           revoke={controller.actions.confirm}
-          revoking={controller.state._tag === "Revoking" && selectedAll(controller.state)}
+          revoking={
+            Predicate.isTagged(controller.state, "Revoking") && selectedAll(controller.state)
+          }
           select={controller.actions.reviewAll}
           selected={selectedAll(controller.state)}
         />
@@ -404,34 +387,33 @@ const ActivePATHeading = ({
 );
 
 const outcomeMessage = (state: PATManagementTask): Option.Option<string> => {
-  if (state._tag === "Revoking") return Option.none();
+  if (Predicate.isTagged(state, "Revoking")) return Option.none();
 
-  if (state._tag === "Uncertain" || state._tag === "Refreshing") {
+  if (Predicate.isTagged(state, "Uncertain") || Predicate.isTagged(state, "Refreshing")) {
     return Option.some(
       "No recibimos un resultado confirmado. Actualiza los tokens antes de revisar otra desactivación. La actualización no repite la solicitud."
     );
   }
 
-  return Option.map(state.outcome, (outcome) => {
-    switch (outcome._tag) {
-      case "One":
-        return `Token desactivado. Dejó de funcionar de inmediato. Identificador: ${outcome.shortId}.`;
-      case "All":
-        return outcome.revokedCount === 1
+  return Option.map(state.outcome, (outcome) =>
+    Match.valueTags(outcome, {
+      One: ({ shortId }) =>
+        `Token desactivado. Dejó de funcionar de inmediato. Identificador: ${shortId}.`,
+      All: ({ revokedCount }) =>
+        revokedCount === 1
           ? "Se desactivó 1 token activo."
-          : `Se desactivaron ${outcome.revokedCount} tokens activos.`;
-      case "Observed": {
-        if (outcome.target._tag === "All") {
+          : `Se desactivaron ${revokedCount} tokens activos.`,
+      Observed: ({ target, active }) => {
+        if (Predicate.isTagged(target, "All")) {
           return "La lista está actualizada. El resultado de la desactivación anterior y su cantidad siguen sin confirmar; la lista no confirma el cierre de autorizaciones pendientes.";
         }
 
-        return outcome.active
+        return active
           ? "El token figura activo. El resultado de la desactivación anterior sigue sin confirmar."
           : "El token ya no figura activo. Esto no confirma el resultado de la desactivación anterior.";
-      }
-
-      case "Refused":
-        return {
+      },
+      Refused: ({ reason }) =>
+        ({
           Authority:
             "No se admitió la desactivación. Confirma tu identidad antes de revisar otra solicitud.",
           Consent:
@@ -440,9 +422,9 @@ const outcomeMessage = (state: PATManagementTask): Option.Option<string> => {
           Limited:
             "No se admitió la desactivación por el límite de solicitudes. Espera antes de revisar otra solicitud.",
           Input: "No se admitió la desactivación. Actualiza la lista y revisa la solicitud.",
-        }[outcome.reason];
-    }
-  });
+        })[reason],
+    })
+  );
 };
 
 const PATManagementFeedback = ({
@@ -454,23 +436,25 @@ const PATManagementFeedback = ({
     onSome: (notice) => (
       <Alert aria-live="polite">
         <AlertTitle>
-          {task._tag === "Uncertain" || task._tag === "Refreshing"
+          {Predicate.isTagged(task, "Uncertain") || Predicate.isTagged(task, "Refreshing")
             ? "Desactivación sin confirmar"
             : "Tokens de acceso"}
         </AlertTitle>
         <AlertDescription>
           <p>{notice}</p>
-          {task._tag === "Uncertain" || task._tag === "Refreshing" ? (
+          {Predicate.isTagged(task, "Uncertain") || Predicate.isTagged(task, "Refreshing") ? (
             <Button
               type="button"
               variant="outline"
               contentLayout="wrap"
               aria-label="Comprobar estado de tokens"
-              aria-busy={task._tag === "Refreshing"}
-              disabled={task._tag === "Refreshing"}
+              aria-busy={Predicate.isTagged(task, "Refreshing")}
+              disabled={Predicate.isTagged(task, "Refreshing")}
               onClick={actions.refresh}
             >
-              {task._tag === "Refreshing" ? "Comprobando…" : "Comprobar estado de tokens"}
+              {Predicate.isTagged(task, "Refreshing")
+                ? "Comprobando…"
+                : "Comprobar estado de tokens"}
             </Button>
           ) : null}
         </AlertDescription>
@@ -499,17 +483,18 @@ export const ActivePATManagementView = ({
     >
       <ActivePATHeading state={state} controller={controller} />
       <PATManagementFeedback task={task} actions={actions} />
-      {(task._tag === "Reviewing" || task._tag === "Revoking") && task.target._tag === "One" ? (
+      {(Predicate.isTagged(task, "Reviewing") || Predicate.isTagged(task, "Revoking")) &&
+      Predicate.isTagged(task.target, "One") ? (
         <OneRevocationControl
           pat={task.target.pat}
           selected
           disabled={
-            task._tag === "Revoking" ||
-            state._tag !== "Ready" ||
+            Predicate.isTagged(task, "Revoking") ||
+            !Predicate.isTagged(state, "Ready") ||
             state.refreshing ||
             state.refreshFailed
           }
-          revoking={task._tag === "Revoking"}
+          revoking={Predicate.isTagged(task, "Revoking")}
           select={actions.confirm}
           cancel={actions.cancel}
           revoke={actions.confirm}

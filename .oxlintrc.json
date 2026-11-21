@@ -1036,20 +1036,6 @@
       }
     },
     {
-      "files": ["apps/web/src/features/pats/**", "apps/web/src/features/transactions/**"],
-      "rules": {
-        "anti-slop-effect/no-manual-tag-comparison": "off",
-        "anti-slop-effect/no-manual-tagged-construction": "off",
-        "anti-slop-effect/no-manual-tagged-type": "off",
-        "anti-slop/no-conditional-spread": "off",
-        "anti-slop/no-known-value-widening": "off",
-        "anti-slop/no-runtime-typeof": "off",
-        "enfect/avoid-option-getorthrow": "off",
-        "enfect/effect-run-in-body": "off",
-        "enfect/yield-in-for-loop": "off"
-      }
-    },
-    {
       "files": [
         "apps/web/cloudflare/**",
         "apps/web/src/app/**",

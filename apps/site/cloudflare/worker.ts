@@ -2,11 +2,15 @@ type SiteEnvironment = {
   ASSETS: { fetch(request: Request): Promise<Response> };
 };
 
+type RenderContext = { environment: SiteEnvironment; headers: Headers };
+
 const notModified = 304;
 
 const notFound = 404;
 
-const specificity = (range: string, media: string): number => {
+type Representation = "text/markdown" | "text/html";
+
+const specificity = (range: string, media: Representation): number => {
   if (range === media) return 2;
 
   if (range === "text/*") return 1;
@@ -16,7 +20,7 @@ const specificity = (range: string, media: string): number => {
   return -1;
 };
 
-const quality = (accept: string, media: string): number => {
+const quality = (accept: string, media: Representation): number => {
   const ranges = accept
     .toLowerCase()
     .split(",")
@@ -38,26 +42,30 @@ const quality = (accept: string, media: string): number => {
   return preferred[0]?.quality ?? 0;
 };
 
-const prefersMarkdown = (request: Request): boolean => {
+const negotiate = (request: Request): Representation => {
   const accept = request.headers.get("accept") ?? "";
   const markdownQuality = quality(accept, "text/markdown");
 
-  return (
-    accept.toLowerCase().includes("text/markdown") &&
+  return accept.toLowerCase().includes("text/markdown") &&
     markdownQuality > 0 &&
     markdownQuality >= quality(accept, "text/html")
-  );
+    ? "text/markdown"
+    : "text/html";
 };
 
+const negotiableMethods = new Set(["GET", "HEAD"]);
+
+const unindexedPaths = new Set(["/terminos", "/404"]);
+
 const canNegotiate = (request: Request, response: Response): boolean =>
-  ["GET", "HEAD"].includes(request.method) &&
+  negotiableMethods.has(request.method) &&
   (response.status === notModified ||
     Boolean(response.headers.get("content-type")?.includes("text/html")));
 
 const renderMarkdown = async (
   request: Request,
   response: Response,
-  context: { environment: SiteEnvironment; headers: Headers }
+  context: RenderContext
 ): Promise<Response> => {
   const { environment, headers } = context;
   const url = new URL(request.url);
@@ -69,7 +77,7 @@ const renderMarkdown = async (
   if (!markdown.ok) return new Response(response.body, { status: response.status, headers });
   headers.set("content-type", "text/markdown; charset=utf-8");
 
-  if (response.status === notFound || ["/terminos", "/404"].includes(path)) {
+  if (response.status === notFound || unindexedPaths.has(path)) {
     headers.set("x-robots-tag", "noindex");
   }
 
@@ -83,16 +91,32 @@ const renderMarkdown = async (
   });
 };
 
+const representations = {
+  "text/html": {
+    revalidated: [],
+    render: (_request: Request, response: Response, context: RenderContext): Promise<Response> =>
+      Promise.resolve(
+        new Response(response.body, { status: response.status, headers: context.headers })
+      ),
+  },
+  "text/markdown": {
+    revalidated: ["if-none-match", "if-modified-since", "range"],
+    render: renderMarkdown,
+  },
+} satisfies Record<
+  Representation,
+  {
+    revalidated: ReadonlyArray<string>;
+    render: (request: Request, response: Response, context: RenderContext) => Promise<Response>;
+  }
+>;
+
 export default {
   async fetch(request: Request, environment: SiteEnvironment): Promise<Response> {
-    const wantsMarkdown = prefersMarkdown(request);
+    const representation = representations[negotiate(request)];
     const assetRequest = new Request(request);
 
-    if (wantsMarkdown) {
-      for (const name of ["if-none-match", "if-modified-since", "range"]) {
-        assetRequest.headers.delete(name);
-      }
-    }
+    for (const name of representation.revalidated) assetRequest.headers.delete(name);
 
     const response = await environment.ASSETS.fetch(assetRequest);
 
@@ -101,8 +125,6 @@ export default {
     const vary = headers.get("vary");
     headers.set("vary", vary ? `${vary}, Accept` : "Accept");
 
-    if (wantsMarkdown) return renderMarkdown(request, response, { environment, headers });
-
-    return new Response(response.body, { status: response.status, headers });
+    return representation.render(request, response, { environment, headers });
   },
 };

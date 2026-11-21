@@ -13,7 +13,7 @@ const prices = [
 
 export const Pricing = (): React.JSX.Element => {
   const [price, setPrice] = useState<(typeof prices)[number]>(prices[1]);
-  const [instant, setInstant] = useState(false);
+  const [transition, setTransition] = useState<"animated" | "instant">("animated");
 
   return (
     <>
@@ -37,15 +37,15 @@ export const Pricing = (): React.JSX.Element => {
               <li>{"Consulta tus cifras en la web app."}</li>
             </ul>
           </div>
-          <div className="price-card" data-instant={instant}>
+          <div className="price-card" data-transition={transition}>
             <h3>{"Fidy Pro"}</h3>
             <fieldset className="price-options" aria-label="Periodicidad de cobro">
               {prices.map((option) => (
                 <button
                   key={option.period}
-                  aria-pressed={option.period === price.period}
+                  aria-pressed={option === price}
                   onClick={(event) => {
-                    setInstant(event.detail === 0);
+                    setTransition(event.detail === 0 ? "instant" : "animated");
                     setPrice(option);
                   }}
                 >
@@ -55,7 +55,7 @@ export const Pricing = (): React.JSX.Element => {
               <span className="price-pill" aria-hidden="true" />
             </fieldset>
             <PriceValue price={price} />
-            <LaunchButton dark={false} arrow />
+            <LaunchButton surface="light" mark="arrow" />
             <p className="price-terms">
               {
                 "Renovación automática. Puedes cancelar futuras renovaciones y conservar el acceso hasta terminar el período pagado."
@@ -74,8 +74,8 @@ const PriceValue = ({ price }: { price: (typeof prices)[number] }): React.JSX.El
       <div
         className="price-frame"
         key={option.period}
-        data-visible={option.period === price.period}
-        aria-hidden={option.period !== price.period}
+        data-visible={option === price}
+        aria-hidden={option !== price}
       >
         <strong data-price-amount="">{option.amount}</strong>
         <span>

@@ -29,3 +29,7 @@ export const ReferenceOperation = Schema.Struct({
   "x-fidy-operation-kind": Schema.Literals(["query", "mutation"]),
   "x-fidy-required-tier": Schema.Literals(["free", "pro"]),
 });
+
+export const ReferencePageId = Schema.TemplateLiteral(["reference/", Schema.String]);
+
+export const ReferencePage = Schema.Union([ReferencePageId, Schema.Literal("referencia/esquemas")]);

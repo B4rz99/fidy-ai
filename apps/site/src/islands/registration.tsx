@@ -1,11 +1,18 @@
+const launchClass: Readonly<Record<"light" | "dark", string>> = { light: "btn green", dark: "btn" };
+
+const launchMark: Readonly<Record<"arrow" | "none", React.JSX.Element>> = {
+  arrow: <span aria-hidden="true">↗</span>,
+  none: <></>,
+};
+
 export const LaunchButton = ({
-  dark,
-  arrow,
+  surface,
+  mark,
 }: {
-  dark: boolean;
-  arrow: boolean;
+  surface: keyof typeof launchClass;
+  mark: keyof typeof launchMark;
 }): React.JSX.Element => (
-  <a className={dark ? "btn" : "btn green"} href="https://app.fidyapp.com/login">
-    Crear mi cuenta {arrow && <span aria-hidden="true">↗</span>}
+  <a className={launchClass[surface]} href="https://app.fidyapp.com/login">
+    Crear mi cuenta {launchMark[mark]}
   </a>
 );

@@ -33,8 +33,12 @@ const guideGroups = [
   { title: "Referencia", links: [{ href: "/reference", label: "Todas las operaciones" }] },
 ] as const;
 
-const pageGroup = (id: string): string =>
-  guideGroups.find((group) => group.links.some((link) => link.href === `/${id}`))?.title ??
-  "Referencia";
+const pageGroups = new Map(
+  guideGroups.flatMap((group) =>
+    group.links.map((link): [string, string] => [link.href, group.title])
+  )
+);
+
+const pageGroup = (id: string): string => pageGroups.get(`/${id}`) ?? "Referencia";
 
 export { guideGroups, pageGroup };

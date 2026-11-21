@@ -17,10 +17,8 @@ const visibilityThreshold = 0.35;
 const easing = (element: Element): string =>
   getComputedStyle(element).getPropertyValue("--ease-out").trim();
 
-const reducedMotion = (): boolean => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
 const fill = (element: Element, axis: "X" | "Y", delay: number): Animation => {
-  const reduced = reducedMotion();
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   return element.animate(
     reduced
@@ -45,7 +43,7 @@ const playConversation = (root: HTMLElement): ReadonlyArray<Animation> => {
   );
   const resultDelay = (bubbles.length - 1) * bubbleStagger + bubbleDuration;
   const note = root.querySelector(".floating-note");
-  const reduced = reducedMotion();
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   if (note !== null) {
     animations.push(

@@ -7,8 +7,6 @@ import {
   ReferenceOperation as Operation,
 } from "../src/lib/reference-contract";
 
-type Operation = typeof Operation.Type;
-
 const args = process.argv.slice(2);
 
 const argument = (name: string, fallback: string): string => {
@@ -113,19 +111,20 @@ for (const name of pending) {
 const fence = (value: Schema.Json): string =>
   `\n\n\`\`\`json\n${JSON.stringify(value, undefined, 2)}\n\`\`\`\n`;
 
-const permission = (declaration: Operation): string =>
-  declaration["x-fidy-access"].scope.evaluation === "children"
-    ? "Se evalúan los permisos de cada operación del lote."
-    : `Permiso: **${declaration["x-fidy-access"].scope.capability}**.`;
-
 const page = (entry: (typeof published)[number]): string => {
   const { declaration, method, path } = entry;
   const id = declaration.operationId;
+  const { scope } = declaration["x-fidy-access"];
+
+  const permission =
+    scope.evaluation === "children"
+      ? "Se evalúan los permisos de cada operación del lote."
+      : `Permiso: **${scope.capability}**.`;
 
   return (
     `---\ntitle: ${id}\ndescription: Contrato, permisos y respuestas de ${id}.\n---\n\n` +
     `Referencia generada. Consulta las [guías](/) para explicaciones y ejemplos en español.\n\n` +
-    `${declaration.description ?? ""}\n\n## Acceso\n\n${permission(declaration)}\n\n` +
+    `${declaration.description ?? ""}\n\n## Acceso\n\n${permission}\n\n` +
     `Plan requerido: **${declaration["x-fidy-required-tier"]}**. Tipo: **${declaration["x-fidy-operation-kind"]}**.\n\n` +
     `Confirmación sensible: **${declaration["x-fidy-agent-confirmation"]}**. ` +
     "\n\n" +

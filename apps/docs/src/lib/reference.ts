@@ -1,6 +1,6 @@
 import { Option, Predicate, Schema } from "effect";
 import referenceText from "../../public/reference/openapi.json?raw";
-import { ReferenceArtifact, ReferenceOperation } from "./reference-contract";
+import { ReferenceArtifact, ReferenceOperation, type ReferencePageId } from "./reference-contract";
 
 const Content = Schema.Record(Schema.String, Schema.Struct({ schema: Schema.JsonObject }));
 
@@ -39,10 +39,19 @@ export const referenceOperations = Object.entries(document.paths)
 
 export const referenceSchemas = Object.entries(document.components.schemas);
 
-export const operationFor = (id: string): (typeof referenceOperations)[number] => {
-  const operation = referenceOperations.find(
-    (entry) => `reference/${entry.declaration.operationId.toLowerCase()}` === id
-  );
+const operationPages = new Map(
+  referenceOperations.map(
+    (entry): [typeof ReferencePageId.Type, (typeof referenceOperations)[number]] => [
+      `reference/${entry.declaration.operationId.toLowerCase()}`,
+      entry,
+    ]
+  )
+);
+
+export const operationFor = (
+  id: typeof ReferencePageId.Type
+): (typeof referenceOperations)[number] => {
+  const operation = operationPages.get(id);
 
   if (!operation) throw new Error(`Missing published operation: ${id}`);
 
